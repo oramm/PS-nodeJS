@@ -1,15 +1,14 @@
 import express from 'express';
+import cors from 'cors';
 
 var app = express();
 const port = process.env.PORT || 3000;
 
-//app.use(express.json);
-app.use((req: any, res: any, next: any) => {
-  //res.header("Access-Control-Allow-Origin", "http://localhost", "http://ps.envi.com.pl", "http://erp.envi.com.pl"); // update to match the domain you will make the request from
-  res.header("Access-Control-Allow-Origin", "http://localhost")
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
-});
+var corsOptions = {
+  origin: ['http://localhost', 'https://erp-envi.herokuapp.com'],
+  optionsSuccessStatus: 200 // For legacy browser support
+}
+app.use(cors(corsOptions));
 
 const personsRouter = require('./persons/PersonsRouters');
 app.use(personsRouter);
