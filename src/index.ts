@@ -5,7 +5,7 @@ var app = express();
 const port = process.env.PORT || 3000;
 
 var corsOptions = {
-  origin: ['http://localhost', 'https://erp-envi.herokuapp.com'],
+  origin: ['http://localhost', 'https://erp-envi.herokuapp.com', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl'],
   optionsSuccessStatus: 200 // For legacy browser support
 }
 app.use(cors(corsOptions));
