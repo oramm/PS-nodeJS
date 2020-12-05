@@ -26,6 +26,6 @@ app.use(invoiceItemsRouter);
 const contratcsRouter = require('./contracts/ContractsRouters');
 app.use(contratcsRouter);
 
-var server = app.listen(3000, () => {
+var server = app.listen(port, () => {
   console.log(`server is listenning on port: ${port}`)
 });
