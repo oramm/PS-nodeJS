@@ -1,10 +1,10 @@
 import mysql from "mysql";
-import conn from "../config/dbConfig";
+import Tools from "../tools/Tools";
 import ToolsDb from '../tools/ToolsDb'
 import Person from "./Person";
 
 export default class PersonsController {
-    static getPersonsList(initParamObject: any, cb: Function) {
+    static async getPersonsList(initParamObject: any) {
         const systemRolecondition = (initParamObject && initParamObject.systemRoleName) ? 'SystemRoles.Name REGEXP "' + initParamObject.systemRoleName + '"' : '1'
         const systemEmailCondition = (initParamObject && initParamObject.systemEmail) ? 'Persons.systemEmail="' + initParamObject.systemEmail + '"' : '1';
         const idCondition = (initParamObject && initParamObject.id) ? 'Persons.Id=' + initParamObject.id : '1';
@@ -26,10 +26,13 @@ export default class PersonsController {
             'WHERE ' + systemRolecondition + ' AND ' + idCondition + ' AND ' + systemEmailCondition + '\n' +
             'ORDER BY Persons.Surname, Persons.Name';
 
-        ToolsDb.getQueryCallback(sql, cb)
+        const result: any[] = <any[]> await ToolsDb.getQueryCallbackAsync(sql);
+        return this.processPersonsResult(result);
+
+
     }
 
-    static processPersonsResult(result: [any]): [Person?] {
+    static processPersonsResult(result: any[]): [Person?] {
         let newResult: [Person?] = [];
 
         for (const row of result) {

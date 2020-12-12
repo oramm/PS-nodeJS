@@ -1,10 +1,10 @@
-import conn from "../config/dbConfig";
+import Setup from "../setup/Setup";
 import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
     static getQueryCallback(sql: string, callbackFn: Function) {
         console.log(sql);
-        conn.query(sql, (err: { message: string; }, rows: any, fields: any) => {
+        Setup.conn.query(sql, (err: { message: string; }, rows: any, fields: any) => {
             if (err) {
                 console.log("Failed to query: " + err.message)
                 //throw err;
@@ -13,6 +13,18 @@ export default class ToolsDb {
             //conn.end();
             // done: call callback with results
             callbackFn(err, rows);
+        });
+    }
+
+    static async getQueryCallbackAsync(sql: string) {
+        return new Promise((resolve, reject) => {
+            Setup.conn.query(sql, (err, rows: any[], fields: any) => {
+                if (err) {
+                    console.log("Failed to query: " + err.message)
+                    reject(err);
+                }
+                resolve(rows);
+            });
         });
     }
 

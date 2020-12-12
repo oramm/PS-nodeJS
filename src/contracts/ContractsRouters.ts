@@ -2,22 +2,24 @@ import express from 'express'
 import ContractsController from './ContractsController'
 var app = express();
 
-app.get('/contracts', (req: any, res: any) => {
-    ContractsController.getContractsList(req.query, (err: any, result: any) => {
-        if (err)
-            res.status(500).send(err.message);
-        else
-            res.send(ContractsController.processContractsResult(result));
-    });
+app.get('/contracts', async (req: any, res: any) => {
+    try {
+        var result = await ContractsController.getContractsList(req.query);
+        res.send(result);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+
+
 });
 
-app.get('/contract/:id', (req: any, res: any) => {
-    ContractsController.getContractsList(req.params, (err: any, result: any) => {
-        if (err)
-            res.status(500).send(err.message);
-        else
-            res.send(ContractsController.processContractsResult(result));
-    });
+app.get('/contract/:id', async (req: any, res: any) => {
+    try {
+        var result = await ContractsController.getContractsList(req.params);
+        res.send(result);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
 });
 
 module.exports = app;

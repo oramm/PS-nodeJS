@@ -1,7 +1,6 @@
 export default class ToolsGd {
-    static createGdFolderUrl(gdFolderId: string): string | undefined {
-        if (gdFolderId)
-            return 'https://drive.google.com/drive/folders/' + gdFolderId;
+    static createGdFolderUrl(gdFolderId: string): string {
+        return 'https://drive.google.com/drive/folders/' + gdFolderId;
     }
 
     static createDocumentOpenUrl(gdDocumentId: string): string | undefined {
