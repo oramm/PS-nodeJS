@@ -4,11 +4,24 @@ import cors from 'cors';
 var app = express();
 const port = process.env.PORT || 3000;
 
+var allowlist = ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl']
+
+var corsOptionsDelegate = (req: any, callback: Function) => {
+  var corsOptions;
+  if (allowlist.indexOf(req.header('Origin')) !== -1) {
+    corsOptions = { origin: true } // reflect (enable) the requested origin in the CORS response
+  } else {
+    corsOptions = { origin: false } // disable CORS for this request
+  }
+  callback(null, corsOptions) // callback expects two parameters: error and options
+}
+
 var corsOptions = {
-  origin: ['http://localhost', 'https://erp-envi.herokuapp.com', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl'],
+  origin: ['https://erp-envi.herokuapp.com','http://localhost',  'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
   optionsSuccessStatus: 200 // For legacy browser support
 }
 app.use(cors(corsOptions));
+//app.use(cors(corsOptionsDelegate));
 
 const personsRouter = require('./persons/PersonsRouters');
 app.use(personsRouter);
