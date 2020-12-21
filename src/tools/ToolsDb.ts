@@ -3,7 +3,6 @@ import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
     static getQueryCallback(sql: string, callbackFn: Function) {
-        console.log(sql);
         Setup.conn.query(sql, (err: { message: string; }, rows: any, fields: any) => {
             if (err) {
                 console.log("Failed to query: " + err.message)

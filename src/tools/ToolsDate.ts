@@ -29,7 +29,7 @@ export default class ToolsDate {
     if (typeof date === 'string' && this.isStringADate(date)) {
       date = new Date(date);
     }
-    else if (this.isValidDate(date as Date))
+    if (this.isValidDate(date as Date))
       (date as Date).setDate((date as Date).getDate() + days / 1);
     return date as Date;
   }
