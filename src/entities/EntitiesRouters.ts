@@ -1,6 +1,11 @@
-import express from 'express'
-import EntitiesController from './EntitiesController'
+import bodyParser from 'body-parser';
+import express from 'express';
+import Joi from 'joi';
+import EntitiesController from './EntitiesController';
+import Entity from './Entity';
 var app = express();
+app.use(express.json());
+
 
 app.get('/entities', async (req: any, res: any) => {
     try {
@@ -9,8 +14,6 @@ app.get('/entities', async (req: any, res: any) => {
     } catch (err) {
         res.status(500).send(err.message);
     }
-
-
 });
 
 app.get('/entity/:id', async (req: any, res: any) => {
@@ -20,8 +23,42 @@ app.get('/entity/:id', async (req: any, res: any) => {
     } catch (err) {
         res.status(500).send(err.message);
     }
-
-
 });
 
+app.post('/entity', async (req: any, res: any) => {
+    try {
+        const schema = {
+            name: Joi.string(),
+        };
+        let item = new Entity(req.body);
+        await item.addInDb();
+        res.send(item);
+    } catch (error) {
+        res.status(500).send(error.message);
+        console.log(error);
+    };
+});
+
+app.put('/entity/:id', async (req: any, res: any) => {
+    try {
+        let item = new Entity(req.body);
+        console.log(req.body);
+        await item.editInDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.delete('/entity/:id', async (req: any, res: any) => {
+    try {
+        let item = new Entity(req.body);
+        console.log('delete');
+        await item.deleteFromDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
 module.exports = app;
+

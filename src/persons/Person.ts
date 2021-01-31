@@ -1,6 +1,7 @@
+import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 
-export default class Person {
+export default class Person extends BusinessObject {
     id?: number;
     entityId: any;
     name: any;
@@ -15,8 +16,8 @@ export default class Person {
     _entity: any;
     _nameSurnameEmail: any;
 
-
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'Persons' });
         if (initParamObject) {
             this.id = initParamObject.id;
             if (initParamObject._entity) this.entityId = initParamObject._entity.id;

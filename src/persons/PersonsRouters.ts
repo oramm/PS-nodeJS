@@ -1,5 +1,8 @@
 import express from 'express'
-import PersonsController from './PersonsController'
+import Joi from 'joi';
+import ToolsDb from '../tools/ToolsDb';
+import Person from './Person';
+import PersonsController from './PersonsController';
 var app = express();
 
 app.get('/persons', async (req: any, res: any) => {
@@ -9,8 +12,6 @@ app.get('/persons', async (req: any, res: any) => {
     } catch (err) {
         res.status(500).send(err.message);
     }
-
-
 });
 
 app.get('/person/:id', async (req: any, res: any) => {
@@ -22,6 +23,40 @@ app.get('/person/:id', async (req: any, res: any) => {
     }
 
 
+});
+
+app.post('/person', async (req: any, res: any) => {
+    try {
+        const schema = {
+            name: Joi.string(),
+        };
+        let item = new Person(req.body);
+        await item.addInDb();
+        res.send(item);
+    } catch (error) {
+        res.status(500).send(error.message);
+        console.log(error);
+    };
+});
+
+app.put('/person/:id', async (req: any, res: any) => {
+    try {
+        let item = new Person(req.body);
+        await item.editInDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.delete('/person/:id', async (req: any, res: any) => {
+    try {
+        let item = new Person(req.body);
+        await item.deleteFromDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
 });
 
 module.exports = app;

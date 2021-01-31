@@ -1,25 +1,26 @@
-import Setup from "../setup/Setup";
+import { ResultSetHeader } from 'mysql2';
+import mysql from 'mysql2/promise';
+import Setup from '../setup/Setup';
+import Tools from './Tools';
 import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
-    static getQueryCallback(sql: string, callbackFn: Function) {
-        Setup.conn.query(sql, (err: { message: string; }, rows: any, fields: any) => {
-            if (err) {
-                console.log("Failed to query: " + err.message)
-                //throw err;
-            }
-            // close connection first
-            //conn.end();
-            // done: call callback with results
-            callbackFn(err, rows);
-        });
+    static pool: mysql.Pool = mysql.createPool(Setup.dbConfig);
+    static async getQueryCallbackAsync(sql: string) {
+        try {
+            return (await this.pool.query(sql))[0];
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+
     }
 
-    static async getQueryCallbackAsync(sql: string) {
+    static async getQueryCallbackAsyncOld(sql: string) {
         return new Promise((resolve, reject) => {
-            Setup.conn.query(sql, (err, rows: any[], fields: any) => {
+            this.pool.query(sql, (err: any, rows: any[], fields: any) => {
                 if (err) {
-                    console.log("Failed to query: " + err.message)
+                    console.log('Failed to query: ' + err.message);
                     reject(err);
                 }
                 resolve(rows);
@@ -31,33 +32,29 @@ export default class ToolsDb {
         if (value !== undefined && value !== null) {
             if (typeof value === 'number' || typeof value === 'boolean')
                 return value;
-            var date = value.split("-");
-            if (value.length == 10 && date.length == 3 && date[2].length == 4) //czy mamy datę
-                return '\'' + ToolsDate.dateJsToSql(value) + '\'';
-            else
-                return '\'' + this.stringToSql(value) + '\'';
-        }
-        else if (value === '')
-            return '""';
-        else
-            return 'null';
+            var date = value.split('-');
+            if (value.length == 10 && date.length == 3 && date[2].length == 4)
+                //czy mamy datę
+                return "'" + ToolsDate.dateJsToSql(value) + "'";
+            else return "'" + this.stringToSql(value) + "'";
+        } else if (value === '') return '""';
+        else return 'null';
     }
 
     static prepareValueToPreparedStmtSql(value: any) {
         //"startDate":"12-06-2018"
-        if (value !== undefined && value !== null) {
-            if (typeof value === 'number' || typeof value === 'boolean')
-                return value;
-            var date = value.split("-");
-            if (value.length == 10 && date.length == 3 && date[2].length == 4) //czy mamy datę
-                return ToolsDate.dateJsToSql(value);
-            else
-                return this.stringToSql(value);
-        }
-        else if (value === '')
-            return '';
-        else
+        if (value === null || value === '' || typeof value === 'number' || typeof value === 'boolean')
+            return value;
+        if (value === undefined)
             return null;
+        if (typeof value === 'string') {
+            if (ToolsDate.isStringADate(value))
+                //czy mamy datę
+                return ToolsDate.dateDMYtoYMD(value);
+            else return this.stringToSql(value);
+        }
+        if (ToolsDate.isValidDate(value))
+            return ToolsDate.dateJsToSql(value);
     }
 
     static stringToSql(string: string): string {
@@ -74,11 +71,157 @@ export default class ToolsDb {
     static sqlToString(sqlString: string): string {
         var string = '';
         if (sqlString && string !== 'LAST_INSERT_ID()') {
-            string = sqlString.replace(/\\'/gi, "\'");
-            string = string.replace(/\\"/gi, '\"');
-            string = string.replace(/\\%/gi, '\%');
+            string = sqlString.replace(/\\'/gi, "'");
+            string = string.replace(/\\"/gi, '"');
+            string = string.replace(/\\%/gi, '%');
             //string = sqlString.replace(/\\_/gi, '\_');
         }
         return string;
+    }
+    //dodaje do bazy obiekt
+    static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn: mysql.PoolConnection = externalConn ? externalConn : <any>await this.pool.getConnection();
+
+        try {
+            delete object.id;
+            var stmt = await this.dynamicInsertPreparedStmt(tableName, object);
+            const result = await conn.execute(stmt.string, stmt.values);
+            object.id = (<any>result)[0].insertId;
+
+            if (!isPartOfTransaction) await conn.commit();
+
+            return object;
+        } catch (e) {
+            if (!isPartOfTransaction) await conn.rollback();
+            console.log(e);
+            throw e;
+        } finally {
+            if (!externalConn && !isPartOfTransaction) await conn.release();
+        }
+    }
+
+    //edytuje obiekt w bazie
+    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection) {
+        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+
+        try {
+            var stmt = await this.dynamicUpdatePreparedStmt(tableName, object);
+            let newObject: any;
+            newObject = (await conn.execute(stmt.string, stmt.values))[0];
+            return newObject;
+        } catch (e) {
+            console.log(e);
+            throw e;
+        }
+    }
+
+    static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+        try {
+            await conn.execute("DELETE FROM " + tableName + " WHERE Id =?", [object.id]);
+            console.log('object deleted');
+            return object;
+        } catch (e) {
+            console.log(e);
+            throw e;
+        }
+    }
+    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+     * * * * * * * * Prepared Statement
+     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+    //tworzy String prepared Statement na podstawie atrybutuów objektu
+    private static dynamicUpdatePreparedStmt(tableName: string, object: any) {
+        if (!object.id)
+            throw new Error('Edytowany obiekt musi mieć atrybut Id!');
+
+        let keys: string[] = Object.keys(object);
+        let stmt: { string: string, values: any[] } = {
+            string: 'UPDATE ' + tableName + ' SET ',
+            values: this.processColls('UPDATE', keys, object)
+        };
+        for (const key of keys) {
+            if (this.isValidDbAttribute(key, object))
+                stmt.string += Tools.capitalizeFirstLetter(key) + '=?, ';
+
+        }
+        //obetnij ostatni przecinek
+        stmt.string = stmt.string.substring(0, stmt.string.length - 2);
+        stmt.string += ' WHERE Id = ?';
+        console.log('stmt: %o', stmt);
+
+        return stmt;
+    }
+
+    private static dynamicInsertPreparedStmt(tableName: string, object: any) {
+        let keys: string[] = Object.keys(object);
+        //INSERT INTO Cases (Name, Description, MilestoneId) values (?, ?, ?)
+        let stmt: { string: string, values: any[] } = {
+            string: 'INSERT INTO ' + tableName + ' (',
+            values: this.processColls('INSERT', keys, object)
+        };
+
+        var questionMarks = '';
+        for (const key of keys) {
+            if (this.isValidDbAttribute(key, object)) {
+                stmt.string += Tools.capitalizeFirstLetter(key) + ', ';
+                questionMarks += '?, ';
+            }
+        }
+        //obetnij ostatni przecinek
+        stmt.string = stmt.string.substring(0, stmt.string.length - 2);
+        questionMarks = questionMarks.substring(0, questionMarks.length - 2);
+
+        stmt.string += ') VALUES (' + questionMarks + ')';
+        console.log('object: %o', object);
+        console.log('stmt: %o', stmt);
+
+        return stmt;
+    }
+    // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
+    private static isValidDbAttribute(key: string, object: any) {
+        if (key === 'id')
+            return (typeof object[key] === 'number') ? false : true;
+        if (!key.includes('_') && object[key] !== undefined)
+            return true;
+        else return false;
+    }
+
+    private static processColls(queryType: 'UPDATE' | 'INSERT', cols: string[], object: any) {
+        let values = [];
+        for (const key of cols) {
+            // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
+            if (this.isValidDbAttribute(key, object)) {
+                console.log(key + ' = ' + object[key]);
+                values.push(this.prepareValueToPreparedStmtSql(object[key]));
+            }
+        }
+        if (queryType === 'UPDATE')
+            values.push(object.id);
+        return values;
+    }
+    /*
+        async useTransaction() {
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await conn.query('...');
+                await conn.query('...');
+            });
+        }
+    */
+    private static async transaction(callback: Function) {
+        const connection = await this.pool.getConnection();
+        await connection.beginTransaction();
+
+        try {
+            await callback(connection);
+            await connection.commit();
+        } catch (err) {
+
+            await connection.rollback();
+            // Throw the error again so others can catch it.
+            throw err;
+        } finally {
+            connection.release();
+        }
     }
 }

@@ -1,4 +1,7 @@
-export default class Entity {
+import BusinessObject from '../BussinesObject';
+import ToolsDb from '../tools/ToolsDb';
+
+export default class Entity extends BusinessObject {
     id?: number;
     name?: string;
     address?: string;
@@ -8,6 +11,7 @@ export default class Entity {
     phone?: string;
     fax?: string;
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'Entities' })
         if (initParamObject) {
             this.id = initParamObject.id;
             if (initParamObject.name)
@@ -23,4 +27,3 @@ export default class Entity {
         }
     }
 }
-

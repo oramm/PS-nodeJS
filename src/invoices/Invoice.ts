@@ -1,8 +1,9 @@
-import InvoiceItem from './InvoiceItem';
-import ToolsDate from '../tools/ToolsDate'
-import ToolsGd from '../tools/ToolsGd'
+import InvoiceItem from "./InvoiceItem";
+import ToolsDate from "../tools/ToolsDate";
+import ToolsGd from "../tools/ToolsGd";
+import BusinessObject from "../BussinesObject";
 
-export default class Invoice {
+export default class Invoice extends BusinessObject {
     id?: any;
     number?: any;
     _entity: any;
@@ -18,7 +19,7 @@ export default class Invoice {
     _editor?: any;
     _owner?: any;
     ownerId?: number;
-    editorId?: number
+    editorId?: number;
     contractId?: number;
     _contract?: any;
     _items?: InvoiceItem[];
@@ -28,6 +29,7 @@ export default class Invoice {
     _value?: number;
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'Invoices' })
         this.daysToPay = initParamObject.daysToPay;
         if (initParamObject) {
             this.id = initParamObject.id;
@@ -35,12 +37,16 @@ export default class Invoice {
             this.description = initParamObject.description;
             this.status = initParamObject.status;
 
-            initParamObject.creationDate = ToolsDate.dateJsToSql(initParamObject.creationDate);
+            initParamObject.creationDate = ToolsDate.dateJsToSql(
+                initParamObject.creationDate
+            );
             this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate);
             this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
 
             this.gdId = initParamObject.gdId;
-            this.paymentDeadline = ToolsDate.dateJsToSql(initParamObject.paymentDeadline);
+            this.paymentDeadline = ToolsDate.dateJsToSql(
+                initParamObject.paymentDeadline
+            );
             //tymczasowa linijka do usunięcia po nadpisaniu złych danych
             this.paymentDeadline = this.countPaymentDeadline();
             this._lastUpdated = initParamObject._lastUpdated;
@@ -55,14 +61,21 @@ export default class Invoice {
             if (initParamObject._owner) {
                 this._owner = initParamObject._owner;
                 this.ownerId = initParamObject._owner.id;
-                this._owner._nameSurnameEmail = this._owner.name + ' ' + this._owner.surname + ' ' + this._owner.email;
+                this._owner._nameSurnameEmail =
+                    this._owner.name +
+                    " " +
+                    this._owner.surname +
+                    " " +
+                    this._owner.email;
             }
             this._contract = initParamObject._contract;
-            this.contractId = this._contract.id
+            this.contractId = this._contract.id;
             this._items = initParamObject._items;
 
             if (initParamObject.gdId) {
-                this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(initParamObject.gdId);
+                this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+                    initParamObject.gdId
+                );
                 this.gdId = initParamObject.gdId;
             }
         }

@@ -5,7 +5,7 @@ import Invoice from "./Invoice";
 
 
 export default class InvoicesController {
-    static getInvoicesList(initParamObject: any, cb: Function) {
+    static async getInvoicesList(initParamObject: any) {
         const projectCondition = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         const contractCondition = (initParamObject && initParamObject.contractId) ? 'Milestones.ContractId=' + initParamObject.contractId : '1';
         initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(initParamObject.endDate) + '"';
@@ -57,10 +57,11 @@ export default class InvoicesController {
             'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + dateCondition + '\n' +
             'ORDER BY Invoices.IssueDate ASC';
 
-        ToolsDb.getQueryCallback(sql, cb)
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return this.processInvoicesResult(result);
     }
 
-    static processInvoicesResult(result: [any]): [Invoice?] {
+    static processInvoicesResult(result: any[]): [Invoice?] {
         let newResult: [Invoice?] = [];
 
         for (const row of result) {

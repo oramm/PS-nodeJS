@@ -103,12 +103,12 @@ export default class Project {
       .filter((item: any) => item._project.id === this.id && item.projectRole == 'ENGINEER')
       .map((item: any) => item._entity);
     if (this._engineers.length === 0)
-      this._engineers.push({
+      this._engineers.push(new Entity({
         id: 1,
         name: 'ENVI',
         address: 'ul. Jana Brzechwy 3, 49-305 Brzeg',
         taxNumber: '747-191-75-75',
-      });
+      }));
   }
   processProjectEntityAssociations(result: any[]): [any?] {
     let newResult: [ProjectEntity?] = [];

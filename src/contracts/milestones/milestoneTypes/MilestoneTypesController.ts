@@ -39,6 +39,12 @@ export default class MilestoneTypesController {
                 id: row.MilestoneTypeId,
                 name: row.MilestoneTypeName,
                 description: row.MilestoneTypeDescription,
+                _contractType: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                    description: row.ContractTypeDescription,
+                },
+                _folderNumber: row.FolderNumber,
                 _isDefault: row.IsDefault,
                 isInScrumByDefault: row.IsInScrumByDefault,
                 isUniquePerContract: row.IsUniquePerContract,

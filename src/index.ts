@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 
 var app = express();
+app.use(express.json())
 const port = process.env.PORT || 3000;
 
 var allowlist = ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl']
@@ -17,7 +18,7 @@ var corsOptionsDelegate = (req: any, callback: Function) => {
 }
 
 var corsOptions = {
-  origin: ['https://erp-envi.herokuapp.com','http://localhost',  'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+  origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
   optionsSuccessStatus: 200 // For legacy browser support
 }
 app.use(cors(corsOptions));
@@ -98,7 +99,18 @@ app.use(materialCardsRouter);
 const projectsRouter = require('./projects/ProjectsRouters');
 app.use(projectsRouter);
 
+import fs from 'fs';
+import ToolsGapi from './tools/ToolsGapi';
+import ToolsGd from './tools/ToolsGd'
 
 var server = app.listen(port, () => {
-  console.log(`server is listenning on port: ${port}`)
+  console.log(`server is listenning on port: ${port}`);
+  /*
+    // Load client secrets from a local file.
+    fs.readFile('credentials.json', (err, content: any) => {
+      if (err) return console.log('Error loading client secret file:', err);
+      // Authorize a client with credentials, then call the Google Drive API.
+      ToolsGapi.authorize(JSON.parse(content), ToolsGd.listFiles);
+    });
+  */
 });

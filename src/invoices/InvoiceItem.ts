@@ -1,4 +1,6 @@
-export default class InvoiceItem {
+import BusinessObject from "../BussinesObject";
+
+export default class InvoiceItem extends BusinessObject {
     id?: number;
     description: string;
     unitPrice: number;
@@ -14,6 +16,7 @@ export default class InvoiceItem {
     editorId: number;
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'InvoiceItems' })
         this.id = initParamObject.id;
         this._parent = initParamObject._parent
         this.parentId = initParamObject._parent.id;
@@ -26,9 +29,10 @@ export default class InvoiceItem {
         this._grossValue = this.getGrossValue();
 
         this._lastUpdated = initParamObject._lastUpdated;
-        this.editorId = initParamObject._editor.id;
         this._editor = initParamObject._editor;
+        this.editorId = initParamObject._editor.id;
     }
+
     getNetValue(): number {
         return Math.round(this.quantity * 100 * this.unitPrice) / 100;
     }

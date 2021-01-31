@@ -9,6 +9,7 @@ export default class MilestoneType {
     isUniquePerContract: any;
     _folderNumber: any;
     _contractType: any;
+    _folderNumber_MilestoneTypeName?: string;
 
     constructor(initParamObject: any) {
         this.id = initParamObject.id;
@@ -21,6 +22,7 @@ export default class MilestoneType {
         //potrzebny przy dodawaniu i edycji milestonów do kontraktu - łatwiej wybrać typ znając nr folderu, przy zarządzaniu typami ignorować ten atrybut
         this._folderNumber = initParamObject._folderNumber;
         this._contractType = initParamObject._contractType;
+        this._folderNumber_MilestoneTypeName = this._folderNumber + ' ' + this.name
     }
 }
 
