@@ -1,5 +1,6 @@
 import mysql from "mysql";
 import Entity from "../entities/Entity";
+import Person from "../persons/Person";
 import Project from "../projects/Project";
 import ToolsDb from '../tools/ToolsDb'
 import Contract from "./Contract";
@@ -94,18 +95,18 @@ export default class ContractsController {
         meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId,
         materialCardsGdFolderId: row.MaterialCardsGdFolderId,
         ourId: row.OurId,
-        _manager: {
+        _manager: new Person({
           id: row.ManagerId,
           name: row.ManagerName,
           surname: row.ManagerSurname,
           email: row.ManagerEmail
-        },
-        _admin: {
+        }),
+        _admin: new Person({
           id: row.AdminId,
           name: row.AdminName,
           surname: row.AdminSurname,
           email: row.AdminEmail
-        },
+        }),
         contractUrl: row.ContractURL,
         _type: {
           id: row.TypeId,

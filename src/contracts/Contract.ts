@@ -50,9 +50,6 @@ export default class Contract {
       //kontrakt na roboty może być obsługiwany przez ourContract
       if (initParamObject._ourContract && initParamObject._ourContract.ourId) {
         if (initParamObject.ourId) throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
-        if (initParamObject._ourContract.ourId.indexOf(' ') > 0)
-          //TODO: linijka do usunięcia chyba
-          initParamObject.ourIdRelated = initParamObject.ourIdRelated.substring(0, initParamObject.ourIdRelated.indexOf(' '));
 
         this._ourContract = initParamObject._ourContract;
         this._ourContract.ourId = initParamObject._ourContract.ourId.toUpperCase();
@@ -64,10 +61,9 @@ export default class Contract {
       }
       if (initParamObject._ourContract) this.ourIdRelated = initParamObject._ourContract.ourId;
       this.projectId = initParamObject.projectId;
+      this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
+      this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
 
-      initParamObject.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
-      initParamObject.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
-      
       this.value = initParamObject.value;
       this.comment = initParamObject.comment;
 
