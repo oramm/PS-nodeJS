@@ -3,6 +3,7 @@ export namespace Envi {
         blobBase64String: string; //base64data,
         name: string; //blob.name,
         mimeType: string; //blob.mimeType
+        parents?: [string]
     }
 
     export interface DocumentTemplate {
@@ -15,10 +16,10 @@ export namespace Envi {
     }
 
     export interface DocumentContents {
-        id?: number, 
+        id?: number,
         gdId: string,
         caseTypeId: number,
-        alias:string,
+        alias: string,
         documentTemplateId?: number
     }
 

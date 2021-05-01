@@ -1,8 +1,19 @@
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
 
-var app = express();
-app.use(express.json())
+export var app = express();
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+app.use(session({
+  //name: 'nazwa test',
+  secret: 'your-random-secret-19890913007',
+  resave: true,
+  saveUninitialized: true,
+  cookie: { path: '/', httpOnly: true, secure: false }
+}));
+
 const port = process.env.PORT || 3000;
 
 var allowlist = ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl']
@@ -24,6 +35,9 @@ var corsOptions = {
 app.use(cors(corsOptions));
 //app.use(cors(corsOptionsDelegate));
 
+const oAuthRouter = require('./setup/GAuth2/Gauth2Routers');
+//app.use(oAuthRouter);
+
 const personsRouter = require('./persons/PersonsRouters');
 app.use(personsRouter);
 
@@ -34,7 +48,7 @@ const entitiesRouter = require('./entities/EntitiesRouters');
 app.use(entitiesRouter);
 
 const invoicesRouter = require('./invoices/InvoicesRouters');
-app.use(invoicesRouter);
+//app.use(invoicesRouter);
 
 const invoiceItemsRouter = require('./invoices/InvoiceItemsRouters');
 app.use(invoiceItemsRouter);
@@ -99,18 +113,6 @@ app.use(materialCardsRouter);
 const projectsRouter = require('./projects/ProjectsRouters');
 app.use(projectsRouter);
 
-import fs from 'fs';
-import ToolsGapi from './tools/ToolsGapi';
-import ToolsGd from './tools/ToolsGd'
-
 var server = app.listen(port, () => {
   console.log(`server is listenning on port: ${port}`);
-  /*
-    // Load client secrets from a local file.
-    fs.readFile('credentials.json', (err, content: any) => {
-      if (err) return console.log('Error loading client secret file:', err);
-      // Authorize a client with credentials, then call the Google Drive API.
-      ToolsGapi.authorize(JSON.parse(content), ToolsGd.listFiles);
-    });
-  */
 });

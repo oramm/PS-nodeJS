@@ -42,6 +42,8 @@ export default class Person extends BusinessObject {
         const sql = 'SELECT \n \t' +
             'Persons.SystemRoleId, \n \t ' +
             'Persons.Id AS PersonId, \n \t ' +
+            'Persons.Id AS GoogleId, \n \t ' +
+            'Persons.Id AS GoogleRefreshToken, \n \t ' +
             'SystemRoles.Name AS SystemRoleName \n' +
             'FROM Persons \n ' +
             'JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id \n' +
@@ -53,7 +55,9 @@ export default class Person extends BusinessObject {
             return {
                 personId: row.PersonId,
                 systemRoleId: row.SystemRoleId,
-                name: row.SystemRoleName
+                name: row.SystemRoleName,
+                googleId: row.GoogleId,
+                googleRefreshToken: row.GoogleRefreshToken
             };
         } catch (err) {
             throw err;
