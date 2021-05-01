@@ -18,8 +18,8 @@ export default class EntitiesController {
             'WHERE ' + projectConditon + ' AND ' + idCondition + '\n' +
             'ORDER BY Entities.Name';
 
-            const result: any[] = <any[]> await ToolsDb.getQueryCallbackAsync(sql);
-            return this.processEntitiesResult(result);
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return this.processEntitiesResult(result);
     }
 
     static processEntitiesResult(result: any[]): [Entity?] {
@@ -28,14 +28,14 @@ export default class EntitiesController {
         for (const row of result) {
             var item = new Entity({
                 id: row.Id,
-                name: row.Name,
-                address: row.Address,
+                name: ToolsDb.sqlToString(row.Name),
+                address: ToolsDb.sqlToString(row.Address),
                 taxNumber: row.TaxNumber,
                 www: row.Www,
                 email: row.Email,
                 phone: row.Phone,
                 fax: row.Fax
-              });
+            });
             newResult.push(item);
         }
         return newResult;
