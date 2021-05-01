@@ -20,15 +20,21 @@
     "dependencies": {
         "@types/body-parser": "^1.19.0",
         "@types/cors": "^2.8.8",
+        "@types/express-session": "^1.17.3",
         "@types/joi": "^14.3.4",
+        "@types/js-base64": "^3.0.0",
         "@types/mysql2": "types/mysql2#",
+        "@types/open": "^6.2.1",
         "body-parser": "^1.19.0",
         "cors": "^2.8.5",
         "express": "^4.17.1",
+        "express-session": "^1.17.1",
         "googleapis": "39",
         "joi": "^17.3.0",
+        "js-base64": "^3.6.0",
         "mysql2": "^2.2.5",
         "nodemon": "^2.0.7",
+        "open": "^7.4.2",
         "types": "^0.1.1"
     },
     "prettier": {

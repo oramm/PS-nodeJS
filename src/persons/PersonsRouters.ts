@@ -4,6 +4,13 @@ import ToolsDb from '../tools/ToolsDb';
 import Person from './Person';
 import PersonsController from './PersonsController';
 var app = express();
+import session from 'express-session'
+
+app.use(session({
+    secret: 'raysources-secret-19890913007',
+    resave: true,
+    saveUninitialized: true
+}));
 
 app.get('/persons', async (req: any, res: any) => {
     try {

@@ -144,12 +144,31 @@ export default class Tools {
   }
 }
 
-namespace Envi {
+export namespace Envi {
   export class ToolsArray {
     static onlyUnique(array: any[]) {
       return array.filter(
         (value, index, self) => self.indexOf(value) === index
       );
+    }
+
+    static equals(a: any[], b: any[]) {
+      return a.length === b.length &&
+        a.every((v, i) => v === b[i]);
+    }
+
+    static equalsIgnoreOrder(a: any[], b: any[]) {
+      //console.log("equalsIgnoreOrder: %o, %o", a, b)
+      if (a.length !== b.length)
+        return false;
+      const uniqueValues: any = new Set([...a, ...b]);
+      for (const v of uniqueValues) {
+        const aCount = a.filter((e: any) => e === v).length;
+        const bCount = b.filter((e: any) => e === v).length;
+        if (aCount !== bCount)
+          return false;
+      }
+      return true;
     }
 
     //https://stackoverflow.com/questions/14446511/most-efficient-method-to-groupby-on-an-array-of-objects?page=1&tab=votes#tab-top

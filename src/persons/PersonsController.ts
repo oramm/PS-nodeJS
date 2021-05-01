@@ -36,8 +36,10 @@ export default class PersonsController {
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processPersonsResult(result);
+    }
 
-
+    static async getPersonBySystemEmail(systemEmail: string) {
+        return (await this.getPersonsList({ systemEmail: systemEmail, showPrivateData: true }))[0];
     }
 
     static processPersonsResult(result: any[]): [Person?] {
