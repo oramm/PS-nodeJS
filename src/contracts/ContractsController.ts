@@ -12,6 +12,7 @@ export default class ContractsController {
     const contractOurIdCondition = (initParamObject && initParamObject.contractOurId) ? 'OurContractsData.OurId="' + initParamObject.contractOurId + '"' : '1';
 
     const onlyOurContractsCondition = (initParamObject && initParamObject.onlyOur) ? 'OurContractsData.OurId IS NOT NULL' : '1';
+    const isArchivedConditon = (initParamObject && initParamObject.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
 
     const sql = 'SELECT mainContracts.Id, \n \t' +
       'mainContracts.Alias, \n \t' +
@@ -50,7 +51,7 @@ export default class ContractsController {
       'LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId \n' +
       'LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id \n' +
       'LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id \n' +
-      'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + onlyOurContractsCondition + ' AND ' + contractOurIdCondition + '\n' +
+      `WHERE ${projectCondition} AND ${contractCondition} AND ${onlyOurContractsCondition} AND ${contractOurIdCondition} AND ${isArchivedConditon}\n` +
       'ORDER BY OurContractsData.OurId DESC, mainContracts.Number';
     const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
     return (initParamObject.onlyKeyData) ? this.processContractsResultKeyData(result, initParamObject) : this.processContractsResult(result, initParamObject);
@@ -175,9 +176,9 @@ export default class ContractsController {
     return newResult;
   }
 
-  static async getContractEntityAssociationsList(initParamObject: { projectId: string; contractId: string; }) {
-    var projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-    var contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
+  static async getContractEntityAssociationsList(initParamObject: { projectId: string, contractId: string, isArchived: string }) {
+    let projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
+    let contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
     const sql = 'SELECT  Contracts_Entities.ContractId, \n \t' +
       'Contracts_Entities.EntityId, \n \t' +
       'Contracts_Entities.ContractRole, \n \t' +

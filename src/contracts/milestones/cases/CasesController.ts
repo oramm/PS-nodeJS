@@ -103,8 +103,13 @@ export default class CasesController {
                 }),
                 _processesInstances: processesInstances.filter((item: any) => item._case.id == row.Id)
             });
-            newResult.push(item);
+            if (this.checkCriteria(item, initParamObject))
+                newResult.push(item);
         }
         return newResult;
+    }
+    private static checkCriteria(caseItem: Case, criteria: any) {
+        let hasProcesses: boolean = criteria.hasProcesses === 'true';
+        return (caseItem._processesInstances && (hasProcesses === caseItem._processesInstances?.length > 0));
     }
 }
