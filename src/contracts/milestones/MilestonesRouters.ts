@@ -1,6 +1,5 @@
-import express from 'express'
-import MilestonesController from './MilestonesController'
-var app = express();
+import MilestonesController from './MilestonesController';
+import { app } from '../../index';
 
 app.get('/milestones', async (req: any, res: any) => {
     try {
@@ -23,5 +22,3 @@ app.get('/milestone/:id', async (req: any, res: any) => {
 
 
 });
-
-module.exports = app;

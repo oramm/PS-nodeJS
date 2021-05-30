@@ -1,6 +1,7 @@
+import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 
-export default class Process {
+export default class Process extends BusinessObject {
     id?: number;
     name: any;
     description: any;
@@ -10,16 +11,17 @@ export default class Process {
     _lastUpdated: any;
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'Processes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;
-        
+
         this._caseType = initParamObject._caseType
         this.caseTypeId = initParamObject._caseType.id
-        
+
         if (initParamObject.status)
-          this.status = 'ACTIVE';
-        
+            this.status = 'ACTIVE';
+
         this._lastUpdated = initParamObject._lastUpdated;
     }
 }

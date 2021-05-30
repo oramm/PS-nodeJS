@@ -1,6 +1,7 @@
 import express from 'express'
 import ContractTypesController from './ContractTypesController'
-var app = express();
+import { app } from '../../index';
+import ContractType from './ContractType';
 
 app.get('/contractTypes', async (req: any, res: any) => {
     try {
@@ -25,4 +26,35 @@ app.get('/contractType/:id', async (req: any, res: any) => {
 
 });
 
-module.exports = app;
+app.post('/contractType', async (req: any, res: any) => {
+    try {
+        let item = new ContractType(req.body);
+        await item.setEditorId();
+        await item.addInDb();
+        res.send(item);
+    } catch (error) {
+        res.status(500).send(error.message);
+        console.log(error);
+    };
+});
+
+app.put('/contractType/:id', async (req: any, res: any) => {
+    try {
+        let item = new ContractType(req.body);
+        await item.setEditorId();
+        await item.editInDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.delete('/contractType/:id', async (req: any, res: any) => {
+    try {
+        let item = new ContractType(req.body);
+        await item.deleteFromDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});

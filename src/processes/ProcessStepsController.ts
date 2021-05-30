@@ -6,32 +6,31 @@ import ProcessStep from "./ProcessStep";
 
 export default class ProcessStepsController {
     static async getProcessStepsList(initParamObject: any) {
-        const processcondition = (initParamObject && initParamObject.processId) ? 'ProcessesSteps.ProcessId=' + initParamObject.processId: '1'
+        const processcondition = (initParamObject && initParamObject.processId) ? 'ProcessesSteps.ProcessId=' + initParamObject.processId : '1'
 
-        const sql = 'SELECT  ProcessesSteps.Id, \n \t' +
-            'ProcessesSteps.Name, \n \t' +
-            'ProcessesSteps.Description, \n \t' +
-            'ProcessesSteps.LastUpdated, \n \t' +
-            'Processes.Id AS ProcessId, \n \t' +
-            'Processes.Name AS ProcessName, \n \t' +
-            'Processes.CaseTypeId AS ProcessCaseTypeId, \n \t' +
-            'DocumentTemplates.Id AS DocumentTemplateId, \n \t' +
-            'DocumentTemplates.Name AS DocumentTemplateName, \n \t' +
-            'DocumentTemplates.Description AS DocumentTemplateDescription, \n \t' +
-            'DocumentTemplates.GdId AS DocumentTemplateGdId, \n \t' +
-            'DocumentTemplatesContents.GdId AS ContentsGdId, \n \t' +
-            'DocumentTemplatesContents.Alias AS ContentsAlias, \n \t' +
-            'DocumentTemplatesContents.CaseTypeId AS ContentsCaseTypeId \n' +
-            'FROM ProcessesSteps \n' +
-            'JOIN Processes ON Processes.Id=ProcessesSteps.ProcessId \n' +
-            'LEFT JOIN DocumentTemplatesContents ON DocumentTemplatesContents.Id = ProcessesSteps.DocumentTemplateContentsId \n' +
-            'LEFT JOIN DocumentTemplates ON DocumentTemplates.Id=DocumentTemplatesContents.TemplateId \n' +
-            'WHERE ' + processcondition;
+        const sql = `SELECT  ProcessesSteps.Id,
+            ProcessesSteps.Name,
+            ProcessesSteps.Description,
+            ProcessesSteps.LastUpdated,
+            Processes.Id AS ProcessId,
+            Processes.Name AS ProcessName,
+            Processes.CaseTypeId AS ProcessCaseTypeId,
+            DocumentTemplates.Id AS DocumentTemplateId,
+            DocumentTemplates.Name AS DocumentTemplateName,
+            DocumentTemplates.Description AS DocumentTemplateDescription,
+            DocumentTemplates.GdId AS DocumentTemplateGdId,
+            DocumentTemplatesContents.Id AS ContentsId,
+            DocumentTemplatesContents.GdId AS ContentsGdId,
+            DocumentTemplatesContents.Alias AS ContentsAlias,
+            DocumentTemplatesContents.CaseTypeId AS ContentsCaseTypeId
+            FROM ProcessesSteps
+            JOIN Processes ON Processes.Id=ProcessesSteps.ProcessId
+            LEFT JOIN DocumentTemplatesContents ON DocumentTemplatesContents.Id = ProcessesSteps.DocumentTemplateContentsId
+            LEFT JOIN DocumentTemplates ON DocumentTemplates.Id=DocumentTemplatesContents.TemplateId
+            WHERE ${processcondition}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProcessStepsResult(result);
-
-
     }
 
     static processProcessStepsResult(result: any[]): [ProcessStep?] {
@@ -43,23 +42,24 @@ export default class ProcessStepsController {
                 name: row.Name,
                 description: row.Description,
                 _documentTemplate: new DocumentTemplate({
-                  name: row.DocumentTemplateName,
-                  description: row.DocumentTemplateDescription,
-                  gdId: row.DocumentTemplateGdId,
-                  _contents: {
-                    gdId: row.ContentsGdId,
-                    alias: row.ContentsAlias,
-                    caseTypeId: row.ContentsCaseTypeId
-                  }
+                    id: row.DocumentTemplateId,
+                    name: row.DocumentTemplateName,
+                    description: row.DocumentTemplateDescription,
+                    gdId: row.DocumentTemplateGdId,
+                    _contents: {
+                        id: row.ContentsId,
+                        gdId: row.ContentsGdId,
+                        alias: row.ContentsAlias,
+                        caseTypeId: row.ContentsCaseTypeId
+                    }
                 }),
-                documentTemplateId: row.DocumentTemplateId,
                 _parent: {
-                  id: row.ProcessId,
-                  name: row.ProcessName,
-                  caseTypeId: row.ProcessCaseTypeId,
+                    id: row.ProcessId,
+                    name: row.ProcessName,
+                    caseTypeId: row.ProcessCaseTypeId,
                 },
                 _lastUpdated: row.LastUpdated
-              });
+            });
             newResult.push(item);
         }
         return newResult;

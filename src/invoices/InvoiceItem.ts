@@ -16,7 +16,7 @@ export default class InvoiceItem extends BusinessObject {
     editorId: number;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'InvoiceItems' })
+        super({ _dbTableName: 'InvoiceItems' });
         this.id = initParamObject.id;
         this._parent = initParamObject._parent
         this.parentId = initParamObject._parent.id;

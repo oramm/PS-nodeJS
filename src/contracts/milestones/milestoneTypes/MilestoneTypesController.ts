@@ -23,9 +23,8 @@ export default class MilestoneTypesController {
             'JOIN ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId = ContractTypes.Id \n' +
             'JOIN Contracts ON Contracts.TypeId = MilestoneTypes_ContractTypes.ContractTypeId \n' +
             'WHERE ' + projectIdCondition + ' \n' +
-            //'GROUP BY MilestoneTypes_ContractTypes.MilestoneTypeId \n' + 
+            'GROUP BY MilestoneTypes_ContractTypes.MilestoneTypeId \n' +
             'ORDER BY ContractTypes.Name, MilestoneTypes.Name';
-
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneTypesResult(result);

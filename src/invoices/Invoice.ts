@@ -21,10 +21,11 @@ export default class Invoice extends BusinessObject {
     ownerId?: number;
     editorId?: number;
     contractId?: number;
+
     _contract?: any;
     _items?: InvoiceItem[];
     _project: any;
-    gdId?: string;
+    gdId?: string | undefined | null;
     _documentOpenUrl?: string;
     _value?: number;
 
@@ -72,14 +73,14 @@ export default class Invoice extends BusinessObject {
             this.contractId = this._contract.id;
             this._items = initParamObject._items;
 
-            if (initParamObject.gdId) {
-                this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
-                    initParamObject.gdId
-                );
-                this.gdId = initParamObject.gdId;
-            }
+            this.setGdIdAndUrl(initParamObject.gdId);
         }
     }
+
+    setGdIdAndUrl(gdId: string | undefined | null) {
+        this._documentOpenUrl = (typeof gdId === 'string') ? ToolsGd.createDocumentOpenUrl(gdId) : undefined;
+        this.gdId = gdId;
+    };
 
     countPaymentDeadline() {
         if (this.sentDate) {

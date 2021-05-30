@@ -1,8 +1,8 @@
+import BusinessObject from '../BussinesObject';
 import DocumentTemplate from '../documentTemplates/DocumentTemplate';
-import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
 
-export default class ProcessStep {
+export default class ProcessStep extends BusinessObject {
     id?: number;
     name?: string;
     description?: string;
@@ -12,10 +12,10 @@ export default class ProcessStep {
     _lastUpdated?: string;
     _documentOpenUrl?: string;
     _documentTemplate?: any
-    documentTemplateId?: number;
+    documentTemplateContentsId?: number | null;
 
     constructor(initParamObject: any) {
-
+        super({ _dbTableName: 'ProcessesSteps' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;
@@ -27,11 +27,23 @@ export default class ProcessStep {
             this.status = initParamObject.status;
 
         this._lastUpdated = initParamObject._lastUpdated;
-        if (initParamObject._documentTemplate && initParamObject._documentTemplate.id) {
-            this._documentTemplate = new DocumentTemplate(initParamObject._documentTemplate)
-            this.documentTemplateId = this._documentTemplate.id;
-            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(initParamObject._documentTemplate.gdId);
+        this._documentTemplate = new DocumentTemplate(initParamObject._documentTemplate);
+        if (this.hasTemplate(initParamObject))
+            this.setDocumentTemplateContentsIdandUrl(initParamObject._documentTemplate._contents.id);
+    }
+
+    setDocumentTemplateContentsIdandUrl(id: number) {
+        if (id) {
+            this.documentTemplateContentsId = this._documentTemplate._contents.id;
+            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(this._documentTemplate.gdId);
+        } else {
+            this.documentTemplateContentsId = null;
+            this._documentOpenUrl = undefined;
         }
+    }
+
+    private hasTemplate(initParamObject: any) {
+        return initParamObject._documentTemplate && initParamObject._documentTemplate._contents;
     }
 
 }

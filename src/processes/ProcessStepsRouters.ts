@@ -1,6 +1,6 @@
-import express from 'express'
 import ProcessStepsController from './ProcessStepsController'
-var app = express();
+import { app } from '../index'
+import ProcessStep from './ProcessStep';
 
 app.get('/processSteps', async (req: any, res: any) => {
     try {
@@ -8,6 +8,8 @@ app.get('/processSteps', async (req: any, res: any) => {
         res.send(result);
     } catch (err) {
         res.status(500).send(err.message);
+        console.error(err);
+        (err)
     }
 
 
@@ -24,4 +26,37 @@ app.get('/processStep/:id', async (req: any, res: any) => {
 
 });
 
-module.exports = app;
+app.post('/processStep', async (req: any, res: any) => {
+    try {
+        let item = new ProcessStep(req.body);
+        await item.setEditorId();
+        await item.addInDb();
+        res.send(item);
+    } catch (error) {
+        res.status(500).send(error.message);
+        console.log(error);
+    };
+});
+
+app.put('/processStep/:id', async (req: any, res: any) => {
+    try {
+        let item = new ProcessStep(req.body);
+
+        console.log(item._documentTemplate)
+        await item.setEditorId();
+        await item.editInDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.delete('/processStep/:id', async (req: any, res: any) => {
+    try {
+        let item = new ProcessStep(req.body);
+        await item.deleteFromDb();
+        res.send(item);
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});

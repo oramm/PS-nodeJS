@@ -1,6 +1,7 @@
+import BusinessObject from '../../../BussinesObject';
 import ToolsDb from '../../../tools/ToolsDb';
 
-export default class MilestoneType {
+export default class MilestoneType extends BusinessObject {
     id?: number;
     name: any;
     description: any;
@@ -12,6 +13,7 @@ export default class MilestoneType {
     _folderNumber_MilestoneTypeName?: string;
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'MilestoneTypes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         if (initParamObject.description)

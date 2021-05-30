@@ -1,32 +1,29 @@
-import express from 'express'
-import CaseType from './CaseType';
-import CaseTypesController from './CaseTypesController';
-import { app } from '../../../../index';
+import TaskTemplatesController from './TaskTemplatesController'
+import { app } from '../../../../../index';
+import TaskTemplate from './TaskTemplate';
 
-app.get('/caseTypes', async (req: any, res: any) => {
+app.get('/taskTemplates', async (req: any, res: any) => {
     try {
-        var result = await CaseTypesController.getCaseTypesList(req.query);
+        var result = await TaskTemplatesController.getTaskTemplatesList(req.query);
         res.send(result);
     } catch (err) {
         console.error(err);
         res.status(500).send(err.message);
     }
-
-
 });
 
-app.get('/caseType/:id', async (req: any, res: any) => {
+app.get('/taskTemplate/:id', async (req: any, res: any) => {
     try {
-        var result = await CaseTypesController.getCaseTypesList(req.params);
+        var result = await TaskTemplatesController.getTaskTemplatesList(req.params);
         res.send(result);
     } catch (err) {
         res.status(500).send(err.message);
     }
 });
 
-app.post('/caseType', async (req: any, res: any) => {
+app.post('/taskTemplate', async (req: any, res: any) => {
     try {
-        let item = new CaseType(req.body);
+        let item = new TaskTemplate(req.body);
         await item.setEditorId();
         await item.addInDb();
         res.send(item);
@@ -36,9 +33,9 @@ app.post('/caseType', async (req: any, res: any) => {
     };
 });
 
-app.put('/caseType/:id', async (req: any, res: any) => {
+app.put('/taskTemplate/:id', async (req: any, res: any) => {
     try {
-        let item = new CaseType(req.body);
+        let item = new TaskTemplate(req.body);
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
@@ -47,9 +44,9 @@ app.put('/caseType/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/caseType/:id', async (req: any, res: any) => {
+app.delete('/taskTemplate/:id', async (req: any, res: any) => {
     try {
-        let item = new CaseType(req.body);
+        let item = new TaskTemplate(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (err) {

@@ -1,6 +1,6 @@
 import express from 'express'
 import CasesController from './CasesController'
-var app = express();
+import { app } from '../../../index';
 
 app.get('/cases', async (req: any, res: any) => {
     try {
@@ -10,8 +10,6 @@ app.get('/cases', async (req: any, res: any) => {
         res.status(500).send(err.message);
         console.error(err);
     }
-
-
 });
 
 app.get('/case/:id', async (req: any, res: any) => {

@@ -87,7 +87,7 @@ export default class ToolsGd {
 
     static async trashFile(auth: OAuth2Client, fileId: string) {
         try {
-            console.log(`Przenoszé do kosza na Gd plik ${fileId} ...`);
+            console.log(`Przenoszę do kosza na Gd plik ${fileId} ...`);
             const drive = google.drive({ version: 'v3', auth });
 
             await drive.files.update({

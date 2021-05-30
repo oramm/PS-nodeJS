@@ -1,34 +1,29 @@
-import express from 'express'
-import MilestoneTypesController from './MilestoneTypesController'
+import MilestoneTemplatesController from './MilestoneTemplatesController'
 import { app } from '../../../index';
-import MilestoneType from './MilestoneType';
+import MilestoneTemplate from './MilestoneTemplate';
 
-app.get('/milestoneTypes', async (req: any, res: any) => {
+app.get('/milestoneTemplates', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.query);
+        var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.query);
         res.send(result);
     } catch (err) {
         console.error(err);
         res.status(500).send(err.message);
     }
-
-
 });
 
-app.get('/milestoneType/:id', async (req: any, res: any) => {
+app.get('/milestoneTemplate/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.params);
+        var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.params);
         res.send(result);
     } catch (err) {
         res.status(500).send(err.message);
     }
-
-
 });
 
-app.post('/milestoneType', async (req: any, res: any) => {
+app.post('/milestoneTemplate', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new MilestoneTemplate(req.body);
         await item.setEditorId();
         await item.addInDb();
         res.send(item);
@@ -38,9 +33,9 @@ app.post('/milestoneType', async (req: any, res: any) => {
     };
 });
 
-app.put('/milestoneType/:id', async (req: any, res: any) => {
+app.put('/milestoneTemplate/:id', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new MilestoneTemplate(req.body);
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
@@ -49,9 +44,9 @@ app.put('/milestoneType/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/milestoneType/:id', async (req: any, res: any) => {
+app.delete('/milestoneTemplate/:id', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new MilestoneTemplate(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (err) {

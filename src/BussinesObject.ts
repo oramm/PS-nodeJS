@@ -10,7 +10,7 @@ export default class BusinessObject {
     }
 
     async setEditorId() {
-        if (!this._editor) throw new Error('Brakuje obiektu _editor!');
+        if (!this._editor) return;// throw new Error('Brakuje obiektu _editor!');
         let editor = new Person(this._editor);
         this.editorId = (await editor.getSystemRole()).personId;
         this._editor.id = this.editorId;

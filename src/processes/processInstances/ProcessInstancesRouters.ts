@@ -1,6 +1,5 @@
-import express from 'express'
 import ProcessInstancesController from './ProcessInstancesController'
-var app = express();
+import { app } from '../../index';
 
 app.get('/processInstances', async (req: any, res: any) => {
     try {

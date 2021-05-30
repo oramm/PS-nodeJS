@@ -1,4 +1,6 @@
-export default class CaseType {
+import BusinessObject from "../../../../BussinesObject";
+
+export default class CaseType extends BusinessObject {
     id?: number;
     name: string;
     folderNumber: string;
@@ -11,6 +13,7 @@ export default class CaseType {
 
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'CaseTypes' });
         this.id = initParamObject.id;
         this.id = initParamObject.id;
         this.name = initParamObject.name;

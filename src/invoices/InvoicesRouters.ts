@@ -1,4 +1,3 @@
-import express from 'express'
 import { drive_v3 } from 'googleapis';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ToolsGd from '../tools/ToolsGd';
@@ -55,11 +54,12 @@ app.post('/copyInvoice', async (req: any, res: any) => {
 app.put('/invoice/:id', async (req: any, res: any) => {
     try {
         let item = new Invoice(req.body);
-        await item.editInDb();
         if (item.gdId && item.status?.match(/Na później|Do zrobienia|/i)) {
             await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId);
-            item.gdId = undefined;
+            item.setGdIdAndUrl(null);
         }
+
+        await item.editInDb();
         res.send(item);
     } catch (err) {
         res.status(500).send(err.message);
@@ -68,6 +68,8 @@ app.put('/invoice/:id', async (req: any, res: any) => {
 
 app.put('/issueInvoice/:id', async (req: any, res: any) => {
     try {
+        req.body._blobEnviObjects[0].parents = ['1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'];
+
         let promises: any[] = await Promise.all(
             [
                 ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFile, req.body._blobEnviObjects),
@@ -76,7 +78,7 @@ app.put('/issueInvoice/:id', async (req: any, res: any) => {
         )
         let item = new Invoice(req.body);
         let fileData: drive_v3.Schema$File = promises[0];
-        item.gdId = fileData.id;
+        item.setGdIdAndUrl(fileData.id);
         item.status = 'Zrobiona';
         await item.editInDb();
         res.send(item);
@@ -129,5 +131,3 @@ app.delete('/invoice/:id', async (req: any, res: any) => {
         res.status(500).send(err.message);
     }
 });
-
-module.exports = app;

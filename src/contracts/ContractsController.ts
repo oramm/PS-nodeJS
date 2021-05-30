@@ -14,45 +14,46 @@ export default class ContractsController {
     const onlyOurContractsCondition = (initParamObject && initParamObject.onlyOur) ? 'OurContractsData.OurId IS NOT NULL' : '1';
     const isArchivedConditon = (initParamObject && initParamObject.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
 
-    const sql = 'SELECT mainContracts.Id, \n \t' +
-      'mainContracts.Alias, \n \t' +
-      'mainContracts.Number, \n \t' +
-      'mainContracts.Name, \n \t' +
-      'mainContracts.ourIdRelated, \n \t' +
-      'mainContracts.ProjectOurId, \n \t ' +
-      'mainContracts.StartDate, \n \t' +
-      'mainContracts.EndDate, \n \t' +
-      'mainContracts.Value, \n \t' +
-      'mainContracts.Comment, \n \t' +
-      'mainContracts.Status, \n \t' +
-      'mainContracts.GdFolderId, \n \t' +
-      'mainContracts.MeetingProtocolsGdFolderId, \n \t' +
-      'mainContracts.MaterialCardsGdFolderId, \n \t' +
-      'OurContractsData.OurId, \n \t' +
-      'OurContractsData.ManagerId, \n \t' +
-      'OurContractsData.AdminId, \n \t' +
-      'OurContractsData.ContractURL, \n \t' +
-      'Admins.Name AS AdminName, \n \t' +
-      'Admins.Surname AS AdminSurname, \n \t' +
-      'Admins.Email AS AdminEmail, \n \t' +
-      'Managers.Name AS ManagerName, \n \t' +
-      'Managers.Surname AS ManagerSurname, \n \t' +
-      'Managers.Email AS ManagerEmail, \n \t' +
-      'relatedContracts.Id AS RelatedId, \n \t' +
-      'relatedContracts.Name AS RelatedName, \n \t' +
-      'relatedContracts.GdFolderId AS RelatedGdFolderId, \n \t' +
-      'ContractTypes.Id AS TypeId, \n \t' +
-      'ContractTypes.Name AS TypeName, \n \t' +
-      'ContractTypes.IsOur AS TypeIsOur, \n \t' +
-      'ContractTypes.Description AS TypeDescription \n' +
-      'FROM Contracts AS mainContracts \n' +
-      'LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id \n' +
-      'LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated) \n' +
-      'LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId \n' +
-      'LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id \n' +
-      'LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id \n' +
-      `WHERE ${projectCondition} AND ${contractCondition} AND ${onlyOurContractsCondition} AND ${contractOurIdCondition} AND ${isArchivedConditon}\n` +
-      'ORDER BY OurContractsData.OurId DESC, mainContracts.Number';
+    const sql = `SELECT mainContracts.Id, 
+        mainContracts.Alias, 
+        mainContracts.Number, 
+        mainContracts.Name, 
+        mainContracts.OurIdRelated, 
+        mainContracts.ProjectOurId,
+        mainContracts.StartDate, 
+        mainContracts.EndDate, 
+        mainContracts.Value, 
+        mainContracts.Comment, 
+        mainContracts.Status, 
+        mainContracts.GdFolderId, 
+        mainContracts.MeetingProtocolsGdFolderId, 
+        mainContracts.MaterialCardsGdFolderId, 
+        OurContractsData.OurId, 
+        OurContractsData.ManagerId, 
+        OurContractsData.AdminId, 
+        OurContractsData.ContractURL, 
+        Admins.Name AS AdminName, 
+        Admins.Surname AS AdminSurname, 
+        Admins.Email AS AdminEmail, 
+        Managers.Name AS ManagerName, 
+        Managers.Surname AS ManagerSurname, 
+        Managers.Email AS ManagerEmail, 
+        relatedContracts.Id AS RelatedId, 
+        relatedContracts.Name AS RelatedName, 
+        relatedContracts.GdFolderId AS RelatedGdFolderId, 
+        ContractTypes.Id AS TypeId, 
+        ContractTypes.Name AS TypeName, 
+        ContractTypes.IsOur AS TypeIsOur, 
+        ContractTypes.Description AS TypeDescription
+      FROM Contracts AS mainContracts
+      LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
+      LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
+      LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
+      LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
+      LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
+      WHERE ${projectCondition} AND ${contractCondition} AND ${onlyOurContractsCondition} AND ${contractOurIdCondition} AND ${isArchivedConditon}
+      ORDER BY OurContractsData.OurId DESC, mainContracts.Number`;
+
     const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
     return (initParamObject.onlyKeyData) ? this.processContractsResultKeyData(result, initParamObject) : this.processContractsResult(result, initParamObject);
   }

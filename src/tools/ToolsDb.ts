@@ -81,7 +81,6 @@ export default class ToolsDb {
     //dodaje do bazy obiekt
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection = externalConn ? externalConn : <any>await this.pool.getConnection();
-
         try {
             delete object.id;
             var stmt = await this.dynamicInsertPreparedStmt(tableName, object);
@@ -118,7 +117,7 @@ export default class ToolsDb {
     static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
         try {
-            await conn.execute("DELETE FROM " + tableName + " WHERE Id =?", [object.id]);
+            await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
             console.log('object deleted');
             return object;
         } catch (e) {
@@ -126,6 +125,19 @@ export default class ToolsDb {
             throw e;
         }
     }
+
+    static async executePreparedStmt(sql: string, params: any[], object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+        try {
+            params = params.map(item => this.prepareValueToPreparedStmtSql(item));
+            await conn.execute(sql, params);
+            return object;
+        } catch (e) {
+            console.log(e);
+            throw e;
+        }
+    }
+
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
      * * * * * * * * Prepared Statement
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -141,9 +153,15 @@ export default class ToolsDb {
             values: this.processColls('UPDATE', keys, object)
         };
         for (const key of keys) {
-            if (this.isValidDbAttribute(key, object))
-                stmt.string += Tools.capitalizeFirstLetter(key) + '=?, ';
-
+            if (this.isValidDbAttribute(key, object)) {
+                //polami w Db sa atrybuty bez _ i z dopiskiem LocalData (jest on usuwany przed wysłąniem SQL do db)
+                const end = key.indexOf('LocalData')
+                let keyWithoutLocalData = key;
+                if (end > 0) {
+                    keyWithoutLocalData = key.substring(0, end);
+                }
+                stmt.string += Tools.capitalizeFirstLetter(keyWithoutLocalData) + '=?, ';
+            }
         }
         //obetnij ostatni przecinek
         stmt.string = stmt.string.substring(0, stmt.string.length - 2);
@@ -178,7 +196,11 @@ export default class ToolsDb {
 
         return stmt;
     }
-    // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
+    /* 
+     *jeśli nie chcę aby zmienna była zmieniana w DB trzeba: 
+     *  dodać znak '_' albo 
+     *  skasować parametr z obiektu: 'delete parametr'
+    */
     private static isValidDbAttribute(key: string, object: any) {
         if (key === 'id')
             return (typeof object[key] === 'number') ? false : true;
