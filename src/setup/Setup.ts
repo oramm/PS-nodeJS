@@ -17,10 +17,12 @@ export default class Setup {
 
     static Gd = {
         meetingProtocoTemlateId: '1B5D2ZUkPgNft0-0JZCtkxSk8eAZa91DnwQY8Bbln9Bo',
-    }; /*
-    conn.connect(function (err: any) {
-        if (err) throw err;
-        console.log("Database Connected!");
-    });
-    */
+    };
+
+    static Sheets = {
+        scrumSheetId: '13j9WZTEJfdjQThxzqd_aQM_1CAnqQPrfQ26v7r4wmBE',
+        scrumSheetFirstDataRow: 4,
+        scrumSheetName: "aktualny sprint",
+        scrumSheetDataName: 'dane'
+    }
 }
