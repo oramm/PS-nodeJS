@@ -3,8 +3,7 @@ import express from 'express';
 import Joi from 'joi';
 import EntitiesController from './EntitiesController';
 import Entity from './Entity';
-var app = express();
-app.use(express.json());
+import { app } from '../index'
 
 
 app.get('/entities', async (req: any, res: any) => {
@@ -60,5 +59,4 @@ app.delete('/entity/:id', async (req: any, res: any) => {
         res.status(500).send(err.message);
     }
 });
-module.exports = app;
 

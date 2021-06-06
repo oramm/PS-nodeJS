@@ -1,16 +1,7 @@
-import express from 'express'
 import Joi from 'joi';
-import ToolsDb from '../tools/ToolsDb';
 import Person from './Person';
 import PersonsController from './PersonsController';
-var app = express();
-import session from 'express-session'
-
-app.use(session({
-    secret: 'raysources-secret-19890913007',
-    resave: true,
-    saveUninitialized: true
-}));
+import { app } from '../index'
 
 app.get('/persons', async (req: any, res: any) => {
     try {
@@ -38,6 +29,8 @@ app.post('/person', async (req: any, res: any) => {
             name: Joi.string(),
         };
         let item = new Person(req.body);
+        delete item.systemRoleId;
+        delete item.systemEmail;
         await item.addInDb();
         res.send(item);
     } catch (error) {
@@ -49,6 +42,8 @@ app.post('/person', async (req: any, res: any) => {
 app.put('/person/:id', async (req: any, res: any) => {
     try {
         let item = new Person(req.body);
+        delete item.systemRoleId;
+        delete item.systemEmail;
         await item.editInDb();
         res.send(item);
     } catch (err) {
@@ -65,5 +60,3 @@ app.delete('/person/:id', async (req: any, res: any) => {
         res.status(500).send(err.message);
     }
 });
-
-module.exports = app;

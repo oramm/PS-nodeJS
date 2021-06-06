@@ -1,4 +1,3 @@
-import mysql from "mysql";
 import ToolsDb from "../../tools/ToolsDb";
 import Person from "../Person";
 
@@ -51,27 +50,27 @@ export default class RolesController {
                 name: row.Name,
                 description: row.Description,
                 _contract: {
-                  id: row.ContractId,
-                  ourId: row.ContractOurId,
-                  number: row.ContractNumber,
+                    id: row.ContractId,
+                    ourId: row.ContractOurId,
+                    number: row.ContractNumber,
                 },
                 _person: new Person({
-                  id: row.PersonId,
-                  name: row.PersonName.trim(),
-                  surname: row.PersonSurName.trim(),
-                  email: row.PersonEmail.trim(),
-                  cellphone: row.PersonCellphone,
-                  phone: row.PersonPhone,
-                  _entity: {
-                    name: (row.SystemRoleName == 'ENVI_COOPERATOR') ? 'ENVI' : row.EntityName.trim()
-                  },
+                    id: row.PersonId,
+                    name: row.PersonName.trim(),
+                    surname: row.PersonSurName.trim(),
+                    email: row.PersonEmail.trim(),
+                    cellphone: row.PersonCellphone,
+                    phone: row.PersonPhone,
+                    _entity: {
+                        name: (row.SystemRoleName == 'ENVI_COOPERATOR') ? 'ENVI' : row.EntityName.trim()
+                    },
                 }),
                 _group: {
-                  id: row.GroupName,
-                  name: row.GroupName
+                    id: row.GroupName,
+                    name: row.GroupName
                 },
                 managerId: row.ManagerId
-              })
+            })
             newResult.push(item);
         }
         return newResult;

@@ -38,15 +38,10 @@ app.use(cors(corsOptions));
 const oAuthRouter = require('./setup/GAuth2/Gauth2Routers');
 //app.use(oAuthRouter);
 
-const personsRouter = require('./persons/PersonsRouters');
-app.use(personsRouter);
+require('./persons/PersonsRouters');
 
-const RolesRouter = require('./persons/projectRoles/RolesRouters');
-app.use(RolesRouter);
-
-const entitiesRouter = require('./entities/EntitiesRouters');
-app.use(entitiesRouter);
-
+require('./persons/projectRoles/RolesRouters');
+require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 
 const invoiceItemsRouter = require('./invoices/InvoiceItemsRouters');

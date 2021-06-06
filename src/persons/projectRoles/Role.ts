@@ -1,5 +1,6 @@
+import BusinessObject from "../../BussinesObject";
 
-export default class Role {
+export default class Role extends BusinessObject {
     id: number;
     projectOurId?: string;
     contractId?: number
@@ -14,6 +15,7 @@ export default class Role {
     _contract: any;
 
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'Roles' })
         this.id = initParamObject.id;
         if (initParamObject.projectOurId)
             this.projectOurId = initParamObject.projectOurId;

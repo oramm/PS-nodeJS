@@ -11,7 +11,7 @@ export default class Entity extends BusinessObject {
     phone?: string;
     fax?: string;
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Entities' })
+        super({ _dbTableName: 'Entities' });
         if (initParamObject) {
             this.id = initParamObject.id;
             if (initParamObject.name)
