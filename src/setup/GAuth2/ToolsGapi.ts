@@ -122,7 +122,7 @@ export default class ToolsGapi {
         //console.log('credentials: %o', oAuthClient.credentials);
         try {
             //result = await gapiFunction(oAuthClient, argObject);
-            result = await (thisObject) ? gapiFunction.apply(thisObject, [oAuthClient, argObject]) : gapiFunction(oAuthClient, argObject);
+            result = (thisObject) ? await gapiFunction.apply(thisObject, [oAuthClient, argObject]) : await gapiFunction(oAuthClient, argObject);
             req.session.userData = await this.getGoogleUserPayload();
 
             let person = new Person({ systemEmail: req.session.userData.email });
