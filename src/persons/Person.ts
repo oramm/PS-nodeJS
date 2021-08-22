@@ -3,36 +3,40 @@ import ToolsDb from '../tools/ToolsDb';
 
 export default class Person extends BusinessObject {
     id?: number;
-    entityId: any;
-    name: any;
-    surname: any;
-    position: any;
-    email: any;
-    cellphone: any;
-    phone: any;
-    comment: any;
-    systemRoleId: any;
-    systemEmail: any;
+    entityId?: number;
+    name: string;
+    surname: string;
+    position: string;
+    email: string;
+    cellphone: string;
+    phone: string;
+    comment: string;
+    systemRoleId?: number;
+    systemEmail?: string;
+    _alias: string;
     _entity: any;
-    _nameSurnameEmail: any;
+    _nameSurnameEmail: string;
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'Persons' });
-        if (initParamObject) {
-            this.id = initParamObject.id;
-            if (initParamObject._entity) this.entityId = initParamObject._entity.id;
-            this.name = initParamObject.name;
-            this.surname = initParamObject.surname;
-            this.position = initParamObject.position;
-            this.email = initParamObject.email;
-            this.cellphone = initParamObject.cellphone;
-            this.phone = initParamObject.phone;
-            this.comment = initParamObject.comment;
-            this.systemRoleId = initParamObject.systemRoleId;
-            this.systemEmail = initParamObject.systemEmail;
-            this._entity = initParamObject._entity;
-            this._nameSurnameEmail = this.name + ' ' + this.surname + ' ' + this.email;
-        }
+
+        this.id = initParamObject.id;
+        if (initParamObject._entity) this.entityId = initParamObject._entity.id;
+        this.name = initParamObject.name;
+        this.surname = initParamObject.surname;
+        this.position = initParamObject.position;
+        this.email = initParamObject.email;
+        this.cellphone = initParamObject.cellphone;
+        this.phone = initParamObject.phone;
+        this.comment = initParamObject.comment;
+        this.systemRoleId = initParamObject.systemRoleId;
+        this.systemEmail = initParamObject.systemEmail;
+        this._entity = initParamObject._entity;
+        this._nameSurnameEmail = this.name + ' ' + this.surname + ' ' + this.email;
+        this._alias = ''
+        if (this.name && this.surname)
+            this._alias = this.name.substr(0, 1) + this.surname.substr(0, 3);
+
     }
 
     async getSystemRole() {
@@ -42,8 +46,8 @@ export default class Person extends BusinessObject {
         const sql = 'SELECT \n \t' +
             'Persons.SystemRoleId, \n \t ' +
             'Persons.Id AS PersonId, \n \t ' +
-            'Persons.Id AS GoogleId, \n \t ' +
-            'Persons.Id AS GoogleRefreshToken, \n \t ' +
+            'Persons.GoogleId AS GoogleId, \n \t ' +
+            'Persons.GoogleRefreshToken AS GoogleRefreshToken, \n \t ' +
             'SystemRoles.Name AS SystemRoleName \n' +
             'FROM Persons \n ' +
             'JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id \n' +
@@ -53,11 +57,11 @@ export default class Person extends BusinessObject {
         try {
             var row = result[0];
             return {
-                personId: row.PersonId,
-                systemRoleId: row.SystemRoleId,
-                name: row.SystemRoleName,
-                googleId: row.GoogleId,
-                googleRefreshToken: row.GoogleRefreshToken
+                personId: <number>row.PersonId,
+                systemRoleId: <number>row.SystemRoleId,
+                name: <string>row.SystemRoleName,
+                googleId: <string | undefined>row.GoogleId,
+                googleRefreshToken: <string | undefined>row.GoogleRefreshToken
             };
         } catch (err) {
             throw err;

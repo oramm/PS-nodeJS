@@ -9,8 +9,10 @@ app.get('/invoices', async (req: any, res: any) => {
     try {
         var result = await InvoicesController.getInvoicesList(req.query);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -18,8 +20,10 @@ app.get('/invoice/:id', async (req: any, res: any) => {
     try {
         var result = await InvoicesController.getInvoicesList(req.params);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -61,8 +65,10 @@ app.put('/invoice/:id', async (req: any, res: any) => {
 
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -82,8 +88,10 @@ app.put('/issueInvoice/:id', async (req: any, res: any) => {
         item.status = 'Zrobiona';
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -93,8 +101,10 @@ app.put('/setAsToMakeInvoice/:id', async (req: any, res: any) => {
         item.status = 'Do zrobienia';
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -104,8 +114,10 @@ app.put('/setAsSentInvoice/:id', async (req: any, res: any) => {
         item.status = 'Wysłana';
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -115,8 +127,10 @@ app.put('/setAsPaidInvoice/:id', async (req: any, res: any) => {
         item.status = 'Zapłacona';
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -127,7 +141,9 @@ app.delete('/invoice/:id', async (req: any, res: any) => {
         if (req.body.gdId)
             await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId);
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });

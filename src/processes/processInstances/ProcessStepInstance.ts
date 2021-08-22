@@ -1,8 +1,9 @@
+import BusinessObject from '../../BussinesObject';
 import ToolsDate from '../../tools/ToolsDate';
 import ToolsGd from '../../tools/ToolsGd';
 
 
-export default class ProcessStepInstance {
+export default class ProcessStepInstance extends BusinessObject {
     id?: number;
     processInstanceId?: number;
     processStepId?: number;
@@ -18,7 +19,7 @@ export default class ProcessStepInstance {
     _extRepoTmpDataObject?: any;
 
     constructor(initParamObject: any) {
-
+        super({ _dbTableName: 'ProcessesStepsInstances' })
         this.id = initParamObject.id;
         this.processInstanceId = initParamObject.processInstanceId;
         if (initParamObject._processStep) {

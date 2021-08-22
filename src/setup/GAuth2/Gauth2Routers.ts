@@ -1,13 +1,34 @@
 import express from 'express'
 import ToolsGd from '../../tools/ToolsGd';
 import ToolsGapi from './ToolsGapi';
-import open from 'open';
-import session from 'express-session';
-import { keys, oAuthClient, refresh_token } from './ToolsGapi'
-import { Envi } from '../../tools/Tools';
+import { oAuthClient } from './ToolsGapi'
 import PersonsController from '../../persons/PersonsController';
 import { app } from '../..';
+import Person from '../../persons/Person';
 
+app.post('/login', async (req: any, res: any) => {
+    try {
+        const ticket = await oAuthClient.verifyIdToken({
+            idToken: req.body.id_token,
+            audience: '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com', // CLIENT_ID starej aplikacji GAS
+        });
+        const payload = ticket.getPayload();
+        if (payload)
+            req.session.userData = { email: payload.email, sub: payload.sub };
+        //poozostawić do czasu uzupełnienia bazy o GoogleId
+        let person = new Person({ systemEmail: req.session.userData.email });
+        let systemRole = await person.getSystemRole();
+
+        if (!systemRole.googleId)
+            ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
+
+        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
+        res.send(req.session);
+    } catch (error) {
+        res.status(500).send(error.message);
+        console.log(error);
+    };
+});
 /*
  * odpalany przez google po przyznaniu dostepu przez użytkownika Google
  */
@@ -18,8 +39,10 @@ app.get('/oauthcallback', async (req: any, res: any) => {
         ToolsGd.listFiles(oAuthClient);
         req.session.userData = await ToolsGapi.getGoogleUserPayload();
         res.send(req.session);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -34,5 +57,3 @@ oAuthClient.on('tokens', async (tokens) => {
     oAuthClient.setCredentials(tokens);
     console.log('tokens event triggered: oAuthClient.credentials %o', oAuthClient.credentials);
 });
-
-module.exports = app;

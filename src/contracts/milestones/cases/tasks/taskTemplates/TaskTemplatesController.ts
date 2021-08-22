@@ -21,7 +21,6 @@ export default class TaskTemplatesController {
         JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
         WHERE ${taskTemplateConditon} AND ${caseTemplateConditon}  AND ${caseTypeConditon}`;
 
-        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processTaskTemplatesResult(result);
     }

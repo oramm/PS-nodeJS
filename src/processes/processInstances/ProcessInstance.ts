@@ -1,6 +1,10 @@
-import ToolsDb from '../../tools/ToolsDb';
+import BusinessObject from '../../BussinesObject';
+import ProcessStep from '../ProcessStep';
+import ProcessStepsController from '../ProcessStepsController';
+import ProcessStepInstance from './ProcessStepInstance';
+import mysql from 'mysql2/promise';
 
-export default class ProcessInstance {
+export default class ProcessInstance extends BusinessObject {
     id?: number;
     processId: number;
     caseId: number;
@@ -11,21 +15,51 @@ export default class ProcessInstance {
     _task: any;
     _process: any;
     _stepsInstances: any[];
-    
+
     constructor(initParamObject: any) {
+        super({ _dbTableName: 'ProcessInstances' });
         this.id = initParamObject.id;
         this.processId = initParamObject._process.id;
-    
+
         this.caseId = initParamObject._case.id;
         this.taskId = initParamObject._task.id;
         this.editorId = initParamObject.editorId;
-    
+
         this._lastUpdated = initParamObject._lastUpdated;
-    
+
         this._case = initParamObject._case;
         this._task = initParamObject._task;
         this._process = initParamObject._process;
         this._stepsInstances = (initParamObject._stepsInstances) ? initParamObject._stepsInstances : [];
-    }   
-}
+    }
+    /*
+     * Jest odpalana przy każdym utworzeniu Sprawy posiadającej ProcessInstance w funkcji ProcessInstance.addInDb();
+     */
+    async createProcessStepsInstances(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const processSteps = await ProcessStepsController.getProcessStepsList({ processId: this.processId });
+        let item;
+        for (const processStep of processSteps) {
+            item = new ProcessStepInstance({
+                processInstanceId: this.id,
+                processStepId: processStep.id,
+                _processStep: {
+                    id: processStep.id,
+                    name: processStep.name,
+                    description: processStep.description,
+                },
+                _case: this._case,
+                editorId: this.editorId
+            });
 
+            await item.addInDb(externalConn, isPartOfTransaction);
+            this._stepsInstances.push(item);
+        }
+        if (item) return item.id;
+    }
+
+    async addInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        await super.addInDb(externalConn, isPartOfTransaction)
+        await this.createProcessStepsInstances(externalConn, isPartOfTransaction);
+        return this;
+    }
+}

@@ -9,7 +9,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(session({
     //name: 'nazwa test',
     secret: 'your-random-secret-19890913007',
-    resave: true,
+    resave: false,
     saveUninitialized: true,
     cookie: { path: '/', httpOnly: true, secure: false }
 }));
@@ -27,10 +27,11 @@ var corsOptionsDelegate = (req: any, callback: Function) => {
     }
     callback(null, corsOptions) // callback expects two parameters: error and options
 }
-
+//https://github.com/expressjs/session/issues/374#issuecomment-405282149
 var corsOptions = {
     origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
-    optionsSuccessStatus: 200 // For legacy browser support
+    optionsSuccessStatus: 200, // For legacy browser support
+    credentials: true,
 }
 app.use(cors(corsOptions));
 //app.use(cors(corsOptionsDelegate));
@@ -43,9 +44,8 @@ require('./persons/PersonsRouters');
 require('./persons/projectRoles/RolesRouters');
 require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
+require('./invoices/InvoiceItemsRouters');
 
-const invoiceItemsRouter = require('./invoices/InvoiceItemsRouters');
-app.use(invoiceItemsRouter);
 
 const contratcsRouter = require('./contracts/ContractsRouters');
 app.use(contratcsRouter);
@@ -66,11 +66,8 @@ app.use(risksRouter);
 const risksReactionsRouter = require('./contracts/milestones/cases/risks/risksReactions/RisksReactionsRouters');
 app.use(risksReactionsRouter);
 
-const tasksRouter = require('./contracts/milestones/cases/tasks/TasksRouters');
-app.use(tasksRouter);
-
+require('./contracts/milestones/cases/tasks/TasksRouters');
 require('./contracts/milestones/cases/tasks/taskTemplates/TaskTemplatesRouters');
-
 
 require('./processes/ProcessesRouters');
 require('./processes/ProcessStepsRouters');

@@ -6,9 +6,10 @@ app.get('/milestoneTemplates', async (req: any, res: any) => {
     try {
         var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.query);
         res.send(result);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -16,8 +17,10 @@ app.get('/milestoneTemplate/:id', async (req: any, res: any) => {
     try {
         var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.params);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -39,8 +42,10 @@ app.put('/milestoneTemplate/:id', async (req: any, res: any) => {
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -49,7 +54,9 @@ app.delete('/milestoneTemplate/:id', async (req: any, res: any) => {
         let item = new MilestoneTemplate(req.body);
         await item.deleteFromDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });

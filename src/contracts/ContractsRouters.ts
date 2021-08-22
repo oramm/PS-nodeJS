@@ -9,8 +9,10 @@ app.get('/contracts', async (req: any, res: any) => {
             req.query.isArchived = req.query.isArchived !== 'true';
         var result = await ContractsController.getContractsList(req.query);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 
 
@@ -20,8 +22,10 @@ app.get('/contract/:id', async (req: any, res: any) => {
     try {
         var result = await ContractsController.getContractsList(req.params);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
