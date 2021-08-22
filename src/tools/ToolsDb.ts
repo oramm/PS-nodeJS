@@ -10,7 +10,7 @@ export default class ToolsDb {
         try {
             return (await this.pool.query(sql))[0];
         } catch (error) {
-            console.error(error);
+            console.log(error);
             throw error;
         }
 
@@ -80,7 +80,7 @@ export default class ToolsDb {
     }
     //dodaje do bazy obiekt
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection = externalConn ? externalConn : <any>await this.pool.getConnection();
+        const conn: mysql.PoolConnection = externalConn ? externalConn : await this.pool.getConnection();
         try {
             delete object.id;
             var stmt = await this.dynamicInsertPreparedStmt(tableName, object);

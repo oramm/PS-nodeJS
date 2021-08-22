@@ -1,37 +1,32 @@
-import express from 'express'
-import MilestoneTypesController from './MilestoneTypesController'
-import { app } from '../../../index';
-import MilestoneType from './MilestoneType';
+import TasksTemplatesForProcessesController from './TasksTemplatesForProcessesController'
+import { app } from '../../../../../index';
+import TasksTemplateForProcess from './TaskTemplateForProcess';
 
-app.get('/milestoneTypes', async (req: any, res: any) => {
+app.get('/tasksTemplatesForProcesses', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.query);
+        var result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.query);
         res.send(result);
     } catch (error) {
         console.log(error);
         res.status(500).send(error.message);
         throw error;
     }
-
-
 });
 
-app.get('/milestoneType/:id', async (req: any, res: any) => {
+app.get('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.params);
+        var result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.params);
         res.send(result);
     } catch (error) {
         console.log(error);
         res.status(500).send(error.message);
         throw error;
     }
-
-
 });
 
-app.post('/milestoneType', async (req: any, res: any) => {
+app.post('/tasksTemplateForProcess', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new TasksTemplateForProcess(req.body);
         await item.setEditorId();
         await item.addInDb();
         res.send(item);
@@ -41,9 +36,9 @@ app.post('/milestoneType', async (req: any, res: any) => {
     };
 });
 
-app.put('/milestoneType/:id', async (req: any, res: any) => {
+app.put('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new TasksTemplateForProcess(req.body);
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
@@ -54,9 +49,9 @@ app.put('/milestoneType/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/milestoneType/:id', async (req: any, res: any) => {
+app.delete('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
     try {
-        let item = new MilestoneType(req.body);
+        let item = new TasksTemplateForProcess(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {

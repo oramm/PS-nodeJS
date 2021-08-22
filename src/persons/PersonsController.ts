@@ -4,7 +4,14 @@ import ToolsDb from '../tools/ToolsDb'
 import Person from "./Person";
 
 export default class PersonsController {
-    static async getPersonsList(initParamObject: any) {
+    static async getPersonsList(initParamObject: {
+        projectId?: string,
+        contractId?: number,
+        systemRoleName?: string,
+        systemEmail?: string,
+        id?: number,
+        showPrivateData?: boolean
+    }) {
         const projectConditon = (initParamObject.projectId) ? 'Roles.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         var contractConditon;
         if (initParamObject.contractId)
@@ -34,7 +41,6 @@ export default class PersonsController {
             WHERE ${projectConditon} AND ${contractConditon} AND ${systemRolecondition} AND ${idCondition} AND ${systemEmailCondition}
             GROUP BY Persons.Id
             ORDER BY Persons.Surname, Persons.Name;`
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processPersonsResult(result);
     }
@@ -43,8 +49,8 @@ export default class PersonsController {
         return (await this.getPersonsList({ systemEmail: systemEmail, showPrivateData: true }))[0];
     }
 
-    static processPersonsResult(result: any[]): [Person?] {
-        let newResult: [Person?] = [];
+    static processPersonsResult(result: any[]): Person[] {
+        const newResult: Person[] = [];
 
         for (const row of result) {
             var item = new Person({

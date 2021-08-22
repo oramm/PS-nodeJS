@@ -1,7 +1,6 @@
 import { OAuth2Client } from 'google-auth-library';
 import url from 'url';
 import Person from '../../persons/Person';
-import PersonsController from '../../persons/PersonsController';
 import { Envi } from '../../tools/Tools';
 import ToolsDb from '../../tools/ToolsDb';
 
@@ -31,7 +30,6 @@ export const keys = {
 };
 
 
-//export let refresh_token_old: string = '1//09njLFzG9LwMrCgYIARAAGAkSNwF-L9IrrqVAZW9D2zALajJuhQKKXnfYu6Ll7UnSnbgdonBvDWH-8agESdjBu1n7V9l-sZhLGmg'
 export let refresh_token: string = '1//09de9o3oImgwxCgYIARAAGAkSNwF-L9IrFqZe55vzOdJThCZGCsxoXU7PKWGxHIuYPLcN5lb6FVlzd2LiHuU1RIMUyxy7Hdfwp7g'
 export const oAuthClient: OAuth2Client = new OAuth2Client(
     keys.installed.client_id,
@@ -104,16 +102,26 @@ export default class ToolsGapi {
     static async gapiReguestHandler(req: any, res: any, gapiFunction: Function, argObject?: any, thisObject?: any) {
         let result;
         console.log('--------------- authenticate ----------------')
+        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
         let credentials: any = req.session.credentials;
-        //pierwsze logowanie nowego użytkownika
-        if (!refresh_token || (credentials && !Envi.ToolsArray.equalsIgnoreOrder(credentials.scope.split(' '), ToolsGapi.scopes))) {
+        let refreshToken: string;
+        //zmieniły się zakresy
+        if (credentials && !Envi.ToolsArray.equalsIgnoreOrder(credentials.scope.split(' '), ToolsGapi.scopes)) {
             let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
-            res.send({ authorizeUrl: authorizeUrl });
-            return;
+            return { authorizeUrl: authorizeUrl };
         }
         //pierwsze logowanie zarejestrowanego użytkownika
-        if (!req.session.credentials || ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2)
-            credentials = { refresh_token: refresh_token }
+        if (!req.session.credentials || ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2) {
+            //pobierzez refreshToken z bazy
+            const user = new Person({ systemEmail: req.session.userData.email });
+            refreshToken = <string>(await user.getSystemRole()).googleRefreshToken;
+            //pierwsze logowanie nowego użytkownika
+            if (!refreshToken) {
+                let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
+                return { authorizeUrl: authorizeUrl };
+            } else
+                credentials = { refresh_token: refreshToken };
+        }
 
         //console.log('\n\n init credentials: %s', credentials);
         console.log('credentials valid for: %d s', ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) / 1000);
@@ -121,18 +129,11 @@ export default class ToolsGapi {
 
         //console.log('credentials: %o', oAuthClient.credentials);
         try {
-            //result = await gapiFunction(oAuthClient, argObject);
-            result = await (thisObject) ? gapiFunction.apply(thisObject, [oAuthClient, argObject]) : gapiFunction(oAuthClient, argObject);
-            req.session.userData = await this.getGoogleUserPayload();
-
-            let person = new Person({ systemEmail: req.session.userData.email });
-            let systemRole = await person.getSystemRole();
-
-            if (!systemRole.googleId)
-                this.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
-            else
-                console.log(`systemRole.googleId: ${systemRole.googleId}`);
-            req.session.credentials = oAuthClient.credentials;
+            result = (thisObject) ? await gapiFunction.apply(thisObject, [oAuthClient, argObject]) : await gapiFunction(oAuthClient, argObject);
+            if (result) {
+                req.session.userData = await this.getGoogleUserPayload();
+                req.session.credentials = oAuthClient.credentials;
+            }
             return result;
         } catch (error) {
             console.log('zły token error');

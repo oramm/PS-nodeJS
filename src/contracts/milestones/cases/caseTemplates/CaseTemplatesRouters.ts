@@ -16,8 +16,10 @@ app.get('/caseTemplate/:id', async (req: any, res: any) => {
     try {
         var result = await CaseTemplatesController.getCaseTemplatesList(req.params);
         res.send(result);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -39,8 +41,10 @@ app.put('/caseTemplate/:id', async (req: any, res: any) => {
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });
 
@@ -49,7 +53,9 @@ app.delete('/caseTemplate/:id', async (req: any, res: any) => {
         let item = new CaseTemplate(req.body);
         await item.deleteFromDb();
         res.send(item);
-    } catch (err) {
-        res.status(500).send(err.message);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
     }
 });

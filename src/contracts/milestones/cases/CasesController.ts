@@ -57,7 +57,7 @@ export default class CasesController {
     }
 
     static async processCasesResult(result: any[], initParamObject: { projectId?: string, contractId?: number, milestoneId?: number }) {
-        let newResult: [Case?] = [];
+        let newResult: Case[] = [];
 
         let [processes, processesInstances] = await Promise.all([
             ProcesesController.getProcessesList(initParamObject),
@@ -109,6 +109,8 @@ export default class CasesController {
         return newResult;
     }
     private static checkCriteria(caseItem: Case, criteria: any) {
+        if (criteria.hasProcesses === undefined)
+            return true;
         let hasProcesses: boolean = criteria.hasProcesses === 'true';
         return (caseItem._processesInstances && (hasProcesses === caseItem._processesInstances?.length > 0));
     }

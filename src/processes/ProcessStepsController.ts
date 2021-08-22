@@ -33,8 +33,8 @@ export default class ProcessStepsController {
         return this.processProcessStepsResult(result);
     }
 
-    static processProcessStepsResult(result: any[]): [ProcessStep?] {
-        let newResult: [ProcessStep?] = [];
+    static processProcessStepsResult(result: any[]): ProcessStep[] {
+        let newResult: ProcessStep[] = [];
 
         for (const row of result) {
             var item = new ProcessStep({
