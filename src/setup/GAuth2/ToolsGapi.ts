@@ -113,8 +113,10 @@ export default class ToolsGapi {
         //pierwsze logowanie zarejestrowanego użytkownika
         if (!req.session.credentials || ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2) {
             //pobierzez refreshToken z bazy
-            const user = new Person({ systemEmail: req.session.userData.email });
-            refreshToken = <string>(await user.getSystemRole()).googleRefreshToken;
+            //----- do przywrócoenia po opanowaniu sesji  CORS
+            //const user = new Person({ systemEmail: req.session.userData.email });
+            //refreshToken = <string>(await user.getSystemRole()).googleRefreshToken;
+            refreshToken = refresh_token;
             //pierwsze logowanie nowego użytkownika
             if (!refreshToken) {
                 let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);

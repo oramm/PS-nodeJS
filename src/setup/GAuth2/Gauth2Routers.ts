@@ -8,6 +8,7 @@ import Person from '../../persons/Person';
 
 app.post('/login', async (req: any, res: any) => {
     try {
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
         const ticket = await oAuthClient.verifyIdToken({
             idToken: req.body.id_token,
             audience: '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com', // CLIENT_ID starej aplikacji GAS

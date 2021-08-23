@@ -59,7 +59,7 @@ app.put('/invoice/:id', async (req: any, res: any) => {
     try {
         let item = new Invoice(req.body);
         if (item.gdId && item.status?.match(/Na później|Do zrobienia|/i)) {
-            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId);
+            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId, ToolsGd);
             item.setGdIdAndUrl(null);
         }
 

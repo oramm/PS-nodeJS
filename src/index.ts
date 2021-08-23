@@ -11,25 +11,16 @@ app.use(session({
     secret: 'your-random-secret-19890913007',
     resave: false,
     saveUninitialized: true,
-    cookie: { path: '/', httpOnly: true, secure: false }
+    rolling: true,
+    cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'none' }
 }));
-
+app.enable('trust proxy');
 const port = process.env.PORT || 3000;
 
-var allowlist = ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'http://ps.envi.com.pl']
-
-var corsOptionsDelegate = (req: any, callback: Function) => {
-    var corsOptions;
-    if (allowlist.indexOf(req.header('Origin')) !== -1) {
-        corsOptions = { origin: true } // reflect (enable) the requested origin in the CORS response
-    } else {
-        corsOptions = { origin: false } // disable CORS for this request
-    }
-    callback(null, corsOptions) // callback expects two parameters: error and options
-}
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
-var corsOptions = {
-    origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+const corsOptions = {
+    //origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+    origin: 'http://erp.envi.com.pl',
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 }
