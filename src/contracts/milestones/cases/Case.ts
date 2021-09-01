@@ -78,10 +78,10 @@ export default class Case extends BusinessObject {
             _displayNumber = this.number;
         _displayNumber = 'S' + _displayNumber;
         this._displayNumber = _displayNumber;
-        this.setGdFolderName();
+        this.gdFolderName();
     }
 
-    setGdFolderName() {
+    gdFolderName() {
         const caseName = (this.name) ? ' ' + this.name : '';
         this._folderName = this._displayNumber + caseName;
 

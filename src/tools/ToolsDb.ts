@@ -100,27 +100,31 @@ export default class ToolsDb {
     }
 
     //edytuje obiekt w bazie
-    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection) {
-        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : await this.pool.getConnection();
 
         try {
             var stmt = await this.dynamicUpdatePreparedStmt(tableName, object);
             let newObject: any;
             newObject = (await conn.execute(stmt.string, stmt.values))[0];
+            if (!isPartOfTransaction) await conn.commit();
             return newObject;
         } catch (e) {
+            if (!isPartOfTransaction) await conn.rollback();
             console.log(e);
             throw e;
         }
     }
 
     static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : await this.pool.getConnection();
         try {
             await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
+            if (!isPartOfTransaction) await conn.commit();
             console.log('object deleted');
             return object;
         } catch (e) {
+            if (!isPartOfTransaction) await conn.rollback();
             console.log(e);
             throw e;
         }

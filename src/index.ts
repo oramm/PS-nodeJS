@@ -9,18 +9,17 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(session({
     //name: 'nazwa test',
     secret: 'your-random-secret-19890913007',
-    resave: false,
+    resave: true,
     saveUninitialized: true,
     rolling: true,
-    cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'none' }
+    cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'lax' }
 }));
 app.enable('trust proxy');
 const port = process.env.PORT || 3000;
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
-    //origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
-    origin: 'http://erp.envi.com.pl',
+    origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 }
@@ -81,8 +80,7 @@ app.use(caseEventsRouter);
 const materialCardsRouter = require('./contracts/materialCards/MaterialCardsRouters');
 app.use(materialCardsRouter);
 
-const projectsRouter = require('./projects/ProjectsRouters');
-app.use(projectsRouter);
+require('./projects/ProjectsRouters');
 
 var server = app.listen(port, () => {
     console.log(`server is listenning on port: ${port}`);
