@@ -71,11 +71,11 @@ export default class Task extends BusinessObject {
                 rangeA1: Setup.ScrumSheet.CurrentSprint.name
             })).values;
 
-            const contractOurIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+            const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
             //dla kontraktu 'Our' bierz dane z ourData, dla kontraktu na roboty bież dane z kolumny OurIdRelated
             const ourContractOurId = (parents.contractOurId) ? parents.contractOurId : parents.contractOurIdRelated;
-            const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColNumber) + 1;
-            const lastContractRow = <number>Tools.findLastInRange(ourContractOurId, currentSprintValues, contractOurIdColNumber) + 1;
+            const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+            const lastContractRow = <number>Tools.findLastInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
             const contractTasksRowsCount = lastContractRow - headerContractRow;
             //wstaw wiersz nowej sprawy
             await ToolsSheets.insertRows(auth, {
@@ -159,13 +159,10 @@ export default class Task extends BusinessObject {
                 values: parentsData
             });
 
-            //var timesRange = SCRUM_SHEET.getRange(lastContractRow + 2, SCRUM_COL_TIMES + 1, 1, SCRUM_SHEET.getLastColumn() - SCRUM_COL_TIMES + 1);
-            //var timesRangeFormulas = timesRange.getFormulas();
             await ScrumSheet.CurrentSprint.setSprintSumsInRows(auth, lastContractRow + 1);
 
             //odtwórz #Times (ostatnie kolumny arkusza)
             await ScrumSheet.CurrentSprint.setSumInContractRow(auth, headerContractRow, contractTasksRowsCount + 1);
-            //timesRange.setFormulas(timesRangeFormulas);
             //odtwórz #TimesSummary
             await ScrumSheet.CurrentSprint.sortContract(auth, ourContractOurId);
             if (lastContractRow < 13 && !skipMakeTimesSummary)
@@ -238,7 +235,8 @@ export default class Task extends BusinessObject {
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
         })).values;
         const taskNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskNameColName) + 1;
-        const taskDataRow = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, taskNameColNumber) + 1;
+        const taskIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskIdColName);
+        const taskDataRow = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, taskIdColIndex) + 1;
         if (taskDataRow) {
             if (await this.shouldBeInScrum(auth)) {
                 const taskData = [[
@@ -268,9 +266,9 @@ export default class Task extends BusinessObject {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
         })).values;
-        const taskIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskIdColName);
+        const taskIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskIdColName);
         //usuń wiersz bazy w arkuszu Data
-        const taskDataRow = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, taskIdColNumber);
+        const taskDataRow = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, taskIdColIndex);
         if (taskDataRow) {
             await ToolsSheets.deleteRows(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetId: Setup.ScrumSheet.CurrentSprint.id, startIndex: taskDataRow, endIndex: taskDataRow + 1 });
         }

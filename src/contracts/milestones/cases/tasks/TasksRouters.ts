@@ -31,10 +31,8 @@ app.get('/task/:id', async (req: any, res: any) => {
 app.post('/task', async (req: any, res: any) => {
     try {
         let item = new Task(req.body);
-        //await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.Planning.refreshTimeAvailable, undefined, Planning);
-        //await item.addInDb();
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.makepersonTimePerTaskFormulas, undefined, CurrentSprint);
-        //await ToolsGapi.gapiReguestHandler(req, res, item.addInScrum, undefined, item);
+        await item.addInDb();
+        await ToolsGapi.gapiReguestHandler(req, res, item.addInScrum, undefined, item);
         res.send(item);
     } catch (error) {
 

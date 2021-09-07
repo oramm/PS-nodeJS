@@ -27,9 +27,9 @@ export default class CaseTypesController {
 
     static async processCaseTypesResult(result: any[]) {
         let newResult: [CaseType?] = [];
-        var processes = await ProcessesController.getProcessesList({});
+        const processes = await ProcessesController.getProcessesList({});
         for (const row of result) {
-            var item = new CaseType({
+            const item = new CaseType({
                 id: row.Id,
                 name: row.Name,
                 description: row.Description,

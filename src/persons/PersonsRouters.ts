@@ -2,6 +2,10 @@ import Joi from 'joi';
 import Person from './Person';
 import PersonsController from './PersonsController';
 import { app } from '../index'
+import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import Planning from '../ScrumSheet/Planning';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
 
 app.get('/persons', async (req: any, res: any) => {
     try {
@@ -49,6 +53,22 @@ app.put('/person/:id', async (req: any, res: any) => {
         delete item.systemRoleId;
         delete item.systemEmail;
         await item.editInDb();
+        res.send(item);
+    } catch (error) {
+        console.log(error);
+        res.status(500).send(error.message);
+        throw error;
+    }
+});
+//TODO: dorobić
+app.put('/user/:id', async (req: any, res: any) => {
+    try {
+        let item = new Person(req.body);
+        await item.editInDb();
+        //jeśłi użytjownik ENVI to trzeba zaktualizować scrumboard
+        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.Planning.refreshTimeAvailable, undefined, Planning);
+        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.makepersonTimePerTaskFormulas, undefined, CurrentSprint);
+
         res.send(item);
     } catch (error) {
         console.log(error);

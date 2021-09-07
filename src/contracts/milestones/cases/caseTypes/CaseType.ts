@@ -10,6 +10,7 @@ export default class CaseType extends BusinessObject {
     _milestoneType: any;
     milestoneTypeId: number;
     _processes: any[];
+    _folderName: string;
 
 
     constructor(initParamObject: any) {
@@ -25,6 +26,11 @@ export default class CaseType extends BusinessObject {
         this._milestoneType = initParamObject._milestoneType;
         this.milestoneTypeId = initParamObject._milestoneType.id;
         this._processes = (initParamObject._processes) ? initParamObject._processes : [];
+        this._folderName = this.setFolderName();
+    }
+
+    setFolderName() {
+        return this._folderName = this.folderNumber + ' ' + this.name;
     }
 }
 

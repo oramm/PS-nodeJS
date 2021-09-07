@@ -9,6 +9,7 @@ import ToolsSheets from '../../../tools/ToolsSheets';
 import Tools from '../../../tools/Tools';
 import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
 import mysql from 'mysql2/promise';
+import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
 
 export default class Case extends BusinessObject {
     id?: number;
@@ -131,9 +132,8 @@ export default class Case extends BusinessObject {
      * Tworzy folder sprawy. 
      * Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym  
      */
-    async createCaseFolder(auth: OAuth2Client) {
+    async createFolder(auth: OAuth2Client) {
         //znajdź (i jak trzeba utwórz) folder typu sprawy
-        //const milestoneFolder = DriveApp.getFolderById(this._parent.gdFolderId);
         const parentFolder = await ToolsGd.setFolder(auth, { parentId: this._parent.gdFolderId, name: this._type.folderNumber + ' ' + this._type.name })
         let caseFolder = parentFolder;
         if (!this._type.isUniquePerMilestone) {
@@ -143,7 +143,7 @@ export default class Case extends BusinessObject {
         return caseFolder;
     }
 
-    async editCaseFolder(auth: OAuth2Client) {
+    async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
         if (this.gdFolderId) {
             //sprawy uniqe nie mają swojego foldera - nie ma czego edytować, chyba, że zostały zmienione na unique
@@ -153,13 +153,13 @@ export default class Case extends BusinessObject {
         }
         //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
         else {
-            const caseFolder = await this.createCaseFolder(auth);
+            const caseFolder = await this.createFolder(auth);
             this.setGdFolderIdAndUrl(caseFolder.id as string);
             return caseFolder;
         }
     }
 
-    async deleteCaseFolder(auth: OAuth2Client) {
+    async deleteFolder(auth: OAuth2Client) {
         //sprawy uniqe nie mają swojego foldera - nie ma czego kasować
         if (!this._type.isUniquePerMilestone && this.gdFolderId) {
             const drive = google.drive({ version: 'v3', auth });
@@ -229,7 +229,7 @@ export default class Case extends BusinessObject {
     async editInScrum(auth: OAuth2Client) {
         await Promise.all([
             this.editInDataSheet(auth),
-            this.editInScrumSheet(auth)
+            this.editInCurrentSprintSheet(auth)
         ]);
     }
 
@@ -256,7 +256,7 @@ export default class Case extends BusinessObject {
         return caseIdColNumber;
     }
 
-    private async editInScrumSheet(auth: OAuth2Client) {
+    private async editInCurrentSprintSheet(auth: OAuth2Client) {
         let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
@@ -327,10 +327,8 @@ export default class Case extends BusinessObject {
                     lastDeletedRow = firstMilestoneRow + 1;
                 }
             }
-            //TODO: dorobić 
             if (lastDeletedRow < 13) {
-                //var headerContractRow = findFirstInRange(ourContractOurId, SCRUM_DATA_VALUES, SCRUM_COL_CONTRACT_OUR_ID) + 1;
-                //scrumMakeTimesSummary();
+                ScrumSheet.CurrentSprint.makeTimesSummary(auth);
             }
         } while (firstMilestoneRow);
     }

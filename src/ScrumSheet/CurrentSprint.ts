@@ -109,7 +109,7 @@ export default class CurrentSprint {
         const firstContractRow = <number>Tools.findFirstInRange(ourId, currentSprintValues, contractOurIdColIndex) + 1;
         if (!firstContractRow)
             throw new Error("sortContract:: w arkuszu scrumboard nie znaleziono kontraktu " + ourId);
-        const lastContractRow = <number>Tools.findLastInRange(ourId, currentSprintValues, contractOurIdColIndex);
+        const lastContractRow = <number>Tools.findLastInRange(ourId, currentSprintValues, contractOurIdColIndex) + 1;
 
         const sortRequest = {
             sortRange: {
