@@ -31,7 +31,6 @@ export default class ContractsController {
         OurContractsData.OurId, 
         OurContractsData.ManagerId, 
         OurContractsData.AdminId, 
-        OurContractsData.ContractURL, 
         Admins.Name AS AdminName, 
         Admins.Surname AS AdminSurname, 
         Admins.Email AS AdminEmail, 
