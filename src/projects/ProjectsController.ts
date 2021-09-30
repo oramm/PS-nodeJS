@@ -34,7 +34,7 @@ export default class ProjectsController {
                 FROM Projects
                 JOIN Roles ON Roles.ProjectOurId = Projects.OurId
                 WHERE ${projectIdCondition} AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${initParamObject.systemEmail}")
-                GROUP BY Projects.Id'`;
+                GROUP BY Projects.Id`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
