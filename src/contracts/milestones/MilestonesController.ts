@@ -37,7 +37,7 @@ export default class MilestonesController {
             'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
             'LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
             'LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId \n' +
+            'LEFT JOIN OurContractsData ON OurContractsData.ContractId=Milestones.ContractId \n' +
             'WHERE ' + projectCondition + ' AND ' + contractCondition + '\n' +
             'ORDER BY MilestoneTypes_ContractTypes.FolderNumber';
 

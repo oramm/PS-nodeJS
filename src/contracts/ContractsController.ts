@@ -45,8 +45,8 @@ export default class ContractsController {
         ContractTypes.IsOur AS TypeIsOur, 
         ContractTypes.Description AS TypeDescription
       FROM Contracts AS mainContracts
-      LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
-      LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
+      LEFT JOIN OurContractsData ON OurContractsData.ContractId=mainContracts.id
+      LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.ContractId FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
       LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
       LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
       LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
@@ -190,7 +190,7 @@ export default class ContractsController {
             'FROM Contracts_Entities \n' +
             'JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id \n' +
             'JOIN Entities ON Contracts_Entities.EntityId=Entities.Id \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id \n' +
+            'LEFT JOIN OurContractsData ON OurContractsData.ContractId=Contracts.Id \n' +
             'WHERE ' + projectConditon + ' AND ' + contractConditon + ' \n' +
             'ORDER BY Contracts_Entities.ContractRole, Entities.Name';
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

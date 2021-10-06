@@ -31,7 +31,7 @@ export default class MeetingsController {
             'Projects.GdFolderId AS ProjectGdFolderId \n' +
             'FROM Meetings \n' +
             'JOIN Contracts ON Contracts.Id=Meetings.ContractId \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id \n' +
+            'LEFT JOIN OurContractsData ON OurContractsData.ContractId=Contracts.id \n' +
             'JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
             'JOIN Projects ON Projects.OurId=Contracts.ProjectOurId \n' +
             'WHERE ' + projectConditon + ' AND ' + contractConditon;
