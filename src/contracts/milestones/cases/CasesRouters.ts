@@ -25,22 +25,22 @@ app.get('/case/:id', async (req: any, res: any) => {
 });
 
 app.post('/case', async (req: any, res: any) => {
-
     try {
-        let item = new Case(req.body);
+        let caseItem = new Case(req.body);
+        let caseData;
         //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Cases
-        await ToolsGapi.gapiReguestHandler(req, res, item.createFolder, undefined, item);
+        await ToolsGapi.gapiReguestHandler(req, res, caseItem.createFolder, undefined, caseItem);
         try {
-            await item.addInDb();
+            caseData = await caseItem.addInDb();
         } catch (err) {
-            ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item);
+            ToolsGapi.gapiReguestHandler(req, res, caseItem.deleteFolder, undefined, caseItem);
             throw err;
         }
         await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.addInScrum, undefined, item),
+            ToolsGapi.gapiReguestHandler(req, res, caseItem.editFolder, undefined, caseItem),
+            ToolsGapi.gapiReguestHandler(req, res, caseItem.addInScrum, { defaultTasks: caseData?.defaultTasksInDb }, caseItem),
         ]);
-        res.send(item);
+        res.send(caseItem);
     } catch (error) {
 
         res.status(500).send(error.message);

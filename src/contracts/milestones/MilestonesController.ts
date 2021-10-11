@@ -2,6 +2,8 @@ import mysql from "mysql";
 import Tools from "../../tools/Tools";
 import ToolsDb from '../../tools/ToolsDb'
 import Contract from "../Contract";
+import ContractOther from "../ContractOther";
+import ContractOur from "../ContractOur";
 import Milestone from "./Milestone";
 
 export default class MilestonesController {
@@ -51,7 +53,22 @@ export default class MilestonesController {
         let newResult: [Milestone?] = [];
 
         for (const row of result) {
-            var item = new Milestone({
+            const contractInitParam = {
+                id: row.ParentId,
+                ourId: row.ParentOurId,
+                number: row.ParentNumber,
+                _ourContract: { ourId: row.ParentOurIdRelated },
+                _manager: { id: row.ParentManagerId },
+                _admin: { id: row.ParentAdminId },
+                projectId: row.ProjectOurId,
+                _type: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                    description: row.ContractTypeDescription,
+                    isOur: row.ContractTypeIsOur
+                }
+            }
+            const item = new Milestone({
                 id: row.Id,
                 _type: {
                     id: row.TypeId,
@@ -67,21 +84,7 @@ export default class MilestonesController {
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
                 //może to być kontrakt na roboty (wtedy ma _ourContract), albo OurContract(wtedy ma OurId)
-                _parent: new Contract({
-                    id: row.ParentId,
-                    ourId: row.ParentOurId,
-                    number: row.ParentNumber,
-                    _ourContract: { ourId: row.ParentOurIdRelated },
-                    _manager: { id: row.ParentManagerId },
-                    _admin: { id: row.ParentAdminId },
-                    projectId: row.ProjectOurId,
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                        description: row.ContractTypeDescription,
-                        isOur: row.ContractTypeIsOur
-                    }
-                })
+                _parent: (row.TypeIsOur) ? new ContractOur(contractInitParam) : new ContractOther(contractInitParam)
             });
             newResult.push(item);
         }

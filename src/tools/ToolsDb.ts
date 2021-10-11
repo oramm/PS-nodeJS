@@ -234,13 +234,14 @@ export default class ToolsDb {
             });
         }
     */
-    private static async transaction(callback: Function) {
+    static async transaction(callback: (conn: mysql.PoolConnection) => Promise<any>) {
         const connection = await this.pool.getConnection();
         await connection.beginTransaction();
 
         try {
-            await callback(connection);
+            const result = await callback(connection);
             await connection.commit();
+            return result;
         } catch (err) {
 
             await connection.rollback();

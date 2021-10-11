@@ -36,11 +36,12 @@ export default class PersonsController {
                 Entities.Name AS EntityName
             FROM Persons
             JOIN Entities ON Persons.EntityId=Entities.Id
-            JOIN Roles ON Roles.PersonId = Persons.Id
+            LEFT JOIN Roles ON Roles.PersonId = Persons.Id
             JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id
             WHERE ${projectConditon} AND ${contractConditon} AND ${systemRolecondition} AND ${idCondition} AND ${systemEmailCondition}
             GROUP BY Persons.Id
             ORDER BY Persons.Surname, Persons.Name;`
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processPersonsResult(result);
     }
@@ -53,19 +54,19 @@ export default class PersonsController {
         const newResult: Person[] = [];
 
         for (const row of result) {
-            var item = new Person({
+            const item = new Person({
                 id: row.Id,
-                name: row.Name.trim(),
-                surname: row.Surname.trim(),
-                position: row.Position.trim(),
-                email: row.Email.trim(),
-                cellphone: row.Cellphone.trim(),
-                phone: row.Phone.trim(),
+                name: row.Name,
+                surname: row.Surname,
+                position: row.Position,
+                email: row.Email,
+                cellphone: row.Cellphone,
+                phone: row.Phone,
                 comment: row.Comment,
-                systemRoleName: row.SystemRoleName.trim(),
+                systemRoleName: row.SystemRoleName,
                 _entity: {
                     id: row.EntityId,
-                    name: row.EntityName.trim()
+                    name: row.EntityName
                 }
             });
             newResult.push(item);

@@ -32,8 +32,8 @@ export default class Project extends BusinessObject {
     _googleCalendarUrl: any;
     _ourId_Alias: string;
     _lastUpdated: any;
-    _engineers?: Entity[];
-    _employers?: Entity[];
+    _engineers: Entity[];
+    _employers: Entity[];
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'Projects' });
@@ -70,10 +70,10 @@ export default class Project extends BusinessObject {
             this._ourId_Alias += ' ' + this.alias;
         this._lastUpdated = initParamObject._lastUpdated;
         this.gdFolderName();
-        if (initParamObject._employers)
-            this._employers = initParamObject._employers;
-        if (initParamObject._engineers)
-            this.setProjectEngineersAssociations(initParamObject._engineers);
+
+        this._employers = (initParamObject._employers) ? initParamObject._employers : [];
+        this._engineers = (initParamObject._engineers) ? initParamObject._engineers : [];
+        this.setProjectEngineersAssociations(this._engineers);
     }
 
     gdFolderName() {
@@ -159,7 +159,7 @@ export default class Project extends BusinessObject {
     }
 
     setProjectEngineersAssociations(engineers: Entity[]) {
-        this._engineers = engineers
+        this._engineers = engineers;
         if (this._engineers.length === 0)
             this._engineers.push(new Entity({
                 id: 1,

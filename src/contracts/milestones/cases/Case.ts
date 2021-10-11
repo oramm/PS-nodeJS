@@ -10,6 +10,8 @@ import Tools from '../../../tools/Tools';
 import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
 import mysql from 'mysql2/promise';
 import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
+import TaskTemplate from './tasks/taskTemplates/TaskTemplate';
+import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class Case extends BusinessObject {
     id?: number;
@@ -59,7 +61,6 @@ export default class Case extends BusinessObject {
         this._processesInstances = (initParamObject._processesInstances) ? initParamObject._processesInstances : [];
     }
 
-
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
@@ -68,6 +69,7 @@ export default class Case extends BusinessObject {
         this.number = undefined;
         this.name = null;
     }
+
     //ustawia numer do wyświetlenia w sytemie na podstawie danych z bazy
     setDisplayNumber() {
         var _displayNumber;
@@ -93,26 +95,27 @@ export default class Case extends BusinessObject {
     }
 
     /*
-     * jest wywoływana w addNewCase()
+     * jest wywoływana w addInDb()
      * tworzy instancję procesu i zadanie do scrumboarda na podstawie szablonu
      */
     async addNewProcessInstancesInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const result = [];
         if (this._type._processes.length > 0) {
             //typ sprawy może mieć wiele procesów - sprawa automatycznie też
-            let item;
             for (const process of this._type._processes) {
                 //dodaj zadanie ramowe z szablonu
                 let processInstanceTask = new Task({ _parent: this });
-                await processInstanceTask.addInDbFromTemplate(process, externalConn, true);
+                await processInstanceTask.addInDbFromTemplateForProcess(process, externalConn, true);
 
-                item = new ProcessInstance({
+                const processInstance = new ProcessInstance({
                     _process: process,
                     _case: this,
                     _task: processInstanceTask
                 });
-                await item.addInDb(externalConn, isPartOfTransaction);
+                await processInstance.addInDb(externalConn, isPartOfTransaction);
+                result.push(processInstance)
             }
-            return item;
+            return result;
         }
     }
     /*
@@ -184,15 +187,52 @@ export default class Case extends BusinessObject {
         }
     }
 
-    async addInDb() {
-        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-        let caseItem = await super.addInDb(conn, true);
-        await this.addNewProcessInstancesInDb(conn, true);
-        await conn.commit();
-        this.number = await this.getNumberFromDb();
-        this.setDisplayNumber();
-        return caseItem;
+    async getTasksTemplates() {
+        return await TaskTemplatesController.getTaskTemplatesList({ caseTypeId: this.typeId });
+    }
+
+    /*
+   * Tworzy domyślne sprawy i zapisuje je w db
+   * argument: {defaultTaskTemplates, externalConn, isPartOfTransaction}
+   */
+    async createDefaultTasksInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const defaultTasks = [];
+        const defaultTaskTemplates = await this.getTasksTemplates();
+        for (const template of defaultTaskTemplates) {
+            const task = new Task({
+                name: template.name,
+                description: template.description,
+                status: (template.status) ? template.status : 'Nie rozpoczęty',
+                //deadline: template.deadline,
+                _parent: this,
+                _owner: (this._parent) ? this._parent._parent._manager : undefined
+            });
+            await task.addInDb(externalConn, isPartOfTransaction);
+            defaultTasks.push(task);
+        }
+        return defaultTasks;
+    }
+
+    async addInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        try {
+            if (!isPartOfTransaction) await conn.beginTransaction();
+            let caseItem: Case = await super.addInDb(conn, true);
+            const result = await Promise.all([
+                this.addNewProcessInstancesInDb(conn, true),
+                this.createDefaultTasksInDb(conn, true)
+            ]);
+            if (!isPartOfTransaction) await conn.commit();
+            this.number = await this.getNumberFromDb();
+            this.setDisplayNumber();
+            return {
+                caseItem,
+                processInstances: result[0],
+                defaultTasksInDb: result[1],
+            };
+        } catch (err) {
+            await conn.rollback();
+        }
     }
 
     async editInDb() {
@@ -207,10 +247,12 @@ export default class Case extends BusinessObject {
         return res[0];
     }
     /**
-     * Dodaje sprawę do arkusza danych
+     * Dodaje sprawę do arkusza danych i domyślne zadania do scrumboarda
      */
-    async addInScrum(auth: OAuth2Client) {
-
+    async addInScrum(auth: OAuth2Client, parameters: {
+        defaultTasks: Task[],
+        isPartOfBatch?: boolean
+    }) {
         const caseData = [
             this.id,
             this.typeId,
@@ -222,8 +264,11 @@ export default class Case extends BusinessObject {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.Data.name
         })).values;
-        if (!Tools.findFirstInRange('' + this.id, scrumDataValues, scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)))
+        if (!Tools.findFirstInRange(<number>this.id, scrumDataValues, scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)))
             ToolsSheets.appendRowsToSpreadSheet(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetName: Setup.ScrumSheet.Data.name, values: [caseData] });
+        //dodaj sprawę do arkusza currentSprint
+        for (const task of parameters.defaultTasks)
+            await task.addInScrum(auth, undefined, parameters.isPartOfBatch);
     }
 
     async editInScrum(auth: OAuth2Client) {
@@ -291,7 +336,7 @@ export default class Case extends BusinessObject {
 
     async deleteFromScrumSheet(auth: OAuth2Client) {
         await Promise.all([
-            this.deleteFromScrumboardSheet(auth),
+            this.deleteFromCurrentSprintSheet(auth),
             this.deleteFromDataSheet(auth)
         ]);
     }
@@ -309,27 +354,10 @@ export default class Case extends BusinessObject {
         }
     }
 
-    private async deleteFromScrumboardSheet(auth: OAuth2Client) {
-        let firstMilestoneRow;
-        do {
-            let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.CurrentSprint.name
-            })).values;
-            const milestoneColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneIdColName);
-            const scrumboardCaseIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseIdColName);
-
-            firstMilestoneRow = Tools.findFirstInRange(<number>this.milestoneId, currentSprintValues, milestoneColIndex);
-            let lastDeletedRow = 999999;
-            if (firstMilestoneRow) {
-                if (currentSprintValues[firstMilestoneRow][scrumboardCaseIdColIndex] == this.id) {
-                    await ToolsSheets.deleteRows(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetId: Setup.ScrumSheet.CurrentSprint.id, startIndex: firstMilestoneRow, endIndex: firstMilestoneRow + 1 });
-                    lastDeletedRow = firstMilestoneRow + 1;
-                }
-            }
-            if (lastDeletedRow < 13) {
-                ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-            }
-        } while (firstMilestoneRow);
+    private async deleteFromCurrentSprintSheet(auth: OAuth2Client) {
+        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+            searchColName: Setup.ScrumSheet.CurrentSprint.caseIdColName,
+            valueToFind: <number>this.id
+        });
     }
 }

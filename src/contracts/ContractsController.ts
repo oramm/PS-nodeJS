@@ -4,6 +4,9 @@ import Person from "../persons/Person";
 import Project from "../projects/Project";
 import ToolsDb from '../tools/ToolsDb'
 import Contract from "./Contract";
+import ContractOther from "./ContractOther";
+import ContractOur from "./ContractOur";
+import ContractType from "./contractTypes/ContractType";
 
 export default class ContractsController {
     static async getContractsList(initParamObject: any) {
@@ -30,7 +33,7 @@ export default class ContractsController {
         mainContracts.MaterialCardsGdFolderId, 
         OurContractsData.OurId, 
         OurContractsData.ManagerId, 
-        OurContractsData.AdminId, 
+        OurContractsData.AdminId,
         Admins.Name AS AdminName, 
         Admins.Surname AS AdminSurname, 
         Admins.Email AS AdminEmail, 
@@ -58,23 +61,23 @@ export default class ContractsController {
     }
 
     private static async processContractsResult(result: any[], initParamObject: any) {
-        let newResult: [Contract?] = [];
+        const newResult: Contract[] = [];
         let entitiesPerProject: any[] = [];
 
         if (initParamObject.projectId)
             entitiesPerProject = await this.getContractEntityAssociationsList(initParamObject);
         for (const row of result) {
 
-            var contractors = entitiesPerProject.filter((item: any) =>
+            const contractors = entitiesPerProject.filter((item: any) =>
                 item._contract.id == row.Id && item.contractRole == 'CONTRACTOR'
             );
-            var engineers = entitiesPerProject.filter((item: any) =>
+            const engineers = entitiesPerProject.filter((item: any) =>
                 item._contract.id == row.Id && item.contractRole == 'ENGINEER'
             );
-            var employers = entitiesPerProject.filter((item: any) =>
+            const employers = entitiesPerProject.filter((item: any) =>
                 item._contract.id == row.Id && item.contractRole == 'EMPLOYER'
             );
-            const item = new Contract({
+            const initParam = {
                 id: row.Id,
                 alias: row.Alias,
                 number: row.Number,
@@ -96,38 +99,39 @@ export default class ContractsController {
                 meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId,
                 materialCardsGdFolderId: row.MaterialCardsGdFolderId,
                 ourId: row.OurId,
-                _manager: new Person({
+                _manager: {
                     id: row.ManagerId,
                     name: row.ManagerName,
                     surname: row.ManagerSurname,
                     email: row.ManagerEmail
-                }),
-                _admin: new Person({
+                },
+                _admin: {
                     id: row.AdminId,
                     name: row.AdminName,
                     surname: row.AdminSurname,
                     email: row.AdminEmail
-                }),
-                _type: {
+                },
+                _type: new ContractType({
                     id: row.TypeId,
                     name: row.TypeName,
                     description: row.TypeDescription,
                     isOur: row.TypeIsOur
-                },
+                }),
                 _contractors: contractors.map((item: any) => item._entity),
                 _engineers: engineers.map((item: any) => item._entity),
                 _employers: employers.map((item: any) => item._entity)
-            });
+            }
+            const item = (row.TypeIsOur) ? new ContractOur(initParam) : new ContractOther(initParam);
             newResult.push(item);
         }
         return newResult;
     }
 
-    private static processContractsResultKeyData(result: any[], initParamObject: any): [Contract?] {
-        let newResult: [Contract?] = [];
+    private static processContractsResultKeyData(result: any[], initParamObject: any): Contract[] {
+        let newResult: Contract[] = [];
 
         for (const row of result) {
-            const item = new Contract({
+            const initParam = {
                 id: row.Id,
                 alias: row.Alias,
                 number: row.Number,
@@ -167,14 +171,15 @@ export default class ContractsController {
                     description: row.TypeDescription,
                     isOur: row.TypeIsOur
                 },
-            });
+            }
+            const item = (row.TypeIsOur) ? new ContractOur(initParam) : new ContractOther(initParam);
 
             newResult.push(item);
         }
         return newResult;
     }
 
-    static async getContractEntityAssociationsList(initParamObject: { projectId: string, contractId: string, isArchived: string }) {
+    static async getContractEntityAssociationsList(initParamObject: { projectId?: string, contractId?: string, isArchived?: string }) {
         let projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         let contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
         const sql = 'SELECT  Contracts_Entities.ContractId, \n \t' +
@@ -198,8 +203,8 @@ export default class ContractsController {
         return this.processContractEntityAssociations(result);
     }
 
-    private static processContractEntityAssociations(result: any[]): [any?] {
-        let newResult: [any?] = [];
+    private static processContractEntityAssociations(result: any[]) {
+        let newResult: any[] = [];
 
         for (const row of result) {
             const item = {

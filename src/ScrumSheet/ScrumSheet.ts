@@ -3,6 +3,8 @@ import Planning from "./Planning";
 import CurrentSprint from "./CurrentSprint";
 import Data from "./Data";
 import { OAuth2Client } from 'google-auth-library';
+import ToolsSheets from "../tools/ToolsSheets";
+import Setup from "../setup/Setup";
 
 export default class ScrumSheet {
     static Planning = Planning;

@@ -35,6 +35,8 @@ app.post('/milestone', async (req: any, res: any) => {
         await ToolsGapi.gapiReguestHandler(req, res, item.createFolders, undefined, item);
         try {
             await item.addInDb();
+            await ToolsGapi.gapiReguestHandler(req, res, item.createDefaultCases, undefined, item);
+
         } catch (err) {
             ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item);
             throw err;

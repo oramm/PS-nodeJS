@@ -1,115 +1,234 @@
 import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
+import { auth, OAuth2Client } from 'google-auth-library';
+import Project from '../projects/Project';
+import Entity from '../entities/Entity';
+import ContractType from './contractTypes/ContractType';
+import mysql from 'mysql2/promise';
+import Person from '../persons/Person';
+import BusinessObject from '../BussinesObject';
+import ToolsDb from '../tools/ToolsDb';
+import ContractEntity from './ContractEntity';
+import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import Milestone from './milestones/Milestone';
+import MilestonesController from './milestones/MilestonesController';
+import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
+import { google } from 'googleapis';
 
-export default class Contract {
+export default abstract class Contract extends BusinessObject {
     id?: number;
     alias?: string;
-    typeId?: number;
-    _type?: any;
+    typeId: number;
+    _type: ContractType;
     _tmpId?: any;
-    number?: string;
-    name?: string;
-    _ourContract?: any;
-    ourIdRelated?: string;
-    projectId?: string;
-    startDate?: string;
-    endDate?: string;
-    value?: any;
-    comment?: string;
-    ourId?: string;
-    _ourType?: any;
+    number: string;
+    name: string;
+    projectOurId: string;
+    startDate: string;
+    endDate: string;
+    value: any;
+    comment: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
     meetingProtocolsGdFolderId?: string;
-    materialCardsGdFolderId?: string;
-    _ourIdName?: string;
-    _numberName?: string;
     _ourIdOrNumber_Name?: string;
     _ourIdOrNumber_Alias?: string;
-    _manager?: any;
-    _admin?: any;
-    _contractors?: any[];
-    _engineers?: any[];
-    _employers?: any[];
-    gdUrl?: string;
-    status?: string;
-    scrumSheet?: any;
-    _parent?: any;
+    _contractors: Entity[];
+    _engineers: Entity[];
+    _employers: Entity[];
+    status: string;
+    _parent: Project;
+    _folderName?: string;
 
-    constructor(initParamObject: any, conn?: GoogleAppsScript.JDBC.JdbcConnection) {
-        if (initParamObject) {
-            this.id = initParamObject.id;
-            this.alias = initParamObject.alias;
-            this.typeId = initParamObject._type.id;
-            this._type = initParamObject._type;
-            //id tworzone tymczasowo po stronie klienta do obsługi tymczasowego wiersza resultsecie
-            this._tmpId = initParamObject._tmpId;
-            this.number = initParamObject.number;
-            this.name = initParamObject.name;
-            //kontrakt na roboty może być obsługiwany przez ourContract
-            if (initParamObject._ourContract && initParamObject._ourContract.ourId) {
-                if (initParamObject.ourId) throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
+    constructor(initParamObject: any, conn?: mysql.PoolConnection) {
+        super({ _dbTableName: 'Contracts' });
+        this.id = initParamObject.id;
+        this.alias = initParamObject.alias;
+        this.typeId = initParamObject._type.id;
+        this._type = initParamObject._type;
+        //id tworzone tymczasowo po stronie klienta do obsługi tymczasowego wiersza resultsecie
+        this._tmpId = initParamObject._tmpId;
+        this.number = initParamObject.number;
+        this.name = initParamObject.name;
 
-                this._ourContract = initParamObject._ourContract;
-                this._ourContract.ourId = initParamObject._ourContract.ourId.toUpperCase();
-                this._ourContract._ourType = this.getType(initParamObject._ourContract.ourId);
-                this._ourContract._gdFolderUrl = ToolsGd.createGdFolderUrl(initParamObject._ourContract.gdFolderId);
-                if (initParamObject._ourContract.name)
-                    this._ourContract._ourIdName = initParamObject._ourContract.ourId + ' ' + initParamObject._ourContract.name.substr(0, 50) + '...';
-                this.ourIdRelated = initParamObject._ourContract.ourId;
-            }
-            if (initParamObject._ourContract) this.ourIdRelated = initParamObject._ourContract.ourId;
-            this.projectId = initParamObject.projectId;
-            this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
-            this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
+        this.projectOurId = initParamObject.projectId;
+        this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
+        this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
 
-            this.value = initParamObject.value;
-            this.comment = initParamObject.comment;
+        this.value = initParamObject.value;
+        this.comment = initParamObject.comment;
 
-            if (initParamObject.ourId) {
-                this.ourId = initParamObject.ourId.toUpperCase();
-                this._ourType = this.getType(this.ourId as string);
-            }
-            if (initParamObject.gdFolderId) {
-                this.gdFolderId = initParamObject.gdFolderId;
-                this._gdFolderUrl = 'https://drive.google.com/drive/folders/' + initParamObject.gdFolderId;
-            }
-            this.meetingProtocolsGdFolderId = initParamObject.meetingProtocolsGdFolderId;
-            this.materialCardsGdFolderId = initParamObject.materialCardsGdFolderId;
-            if (initParamObject.ourId && this.name)
-                this._ourIdName = initParamObject.ourId + ' ' + initParamObject.name.substr(0, 50) + '...';
-            else if (this.name)
-                this._numberName = initParamObject.number + ' ' + initParamObject.name.substr(0, 50) + '...';
+        if (initParamObject.gdFolderId)
+            this.setGdFolderIdAndUrl(initParamObject.gdFolderId);
+        this.meetingProtocolsGdFolderId = initParamObject.meetingProtocolsGdFolderId;
 
-            //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
-            var _ourIdOrNumber = '';
-            if (this.ourId) _ourIdOrNumber = this.ourId;
-            else if (this.number) _ourIdOrNumber = this.number;
+        this._contractors = (initParamObject._contractors) ? initParamObject._contractors : [];
 
-            if (this.name) {
-                this._ourIdOrNumber_Name = _ourIdOrNumber + ' ' + this.name.substr(0, 50) + '...'
-            }
-            this._ourIdOrNumber_Alias = _ourIdOrNumber;
-            if (this.alias)
-                this._ourIdOrNumber_Alias += ' ' + this.alias;
+        this._engineers = (initParamObject._engineers) ? initParamObject._engineers : [];
+        this._employers = (initParamObject._employers) ? initParamObject._employers : [];
 
-            this._manager = (initParamObject._manager) ? initParamObject._manager : {};
-            this._admin = (initParamObject._admin) ? initParamObject._admin : {};
-
-            this._contractors = (initParamObject._contractors) ? initParamObject._contractors : [];
-
-            this._engineers = (initParamObject._engineers) ? initParamObject._engineers : [];
-            this._employers = (initParamObject._employers) ? initParamObject._employers : [];
-
-            this.gdUrl = initParamObject.gdUrl;
-
-            this.status = initParamObject.status;
-
-            //this.scrumSheet = new ScrumSheet();
+        this._parent = initParamObject._parent;
+        this.status = initParamObject.status;
+    }
+    /**batch dla dodawania kontraktów */
+    async initialise(auth: OAuth2Client) {
+        try {
+            await this.createFolders(auth);
+            await this.addInDb();
+            await this.addInScrum(auth);
+            await this.createDefaultMilestones(auth);
+        } catch (error) {
+            //this.deleteFolder(auth);
+            this.deleteFromScrum(auth);
+            throw error;
         }
     }
+    async edit(auth: OAuth2Client) {
 
-    getType(ourId: string): string {
-        return ourId.substring(ourId.indexOf('.') + 1, ourId.lastIndexOf('.'));
     }
+
+    setGdFolderIdAndUrl(gdFolderId: string) {
+        this.gdFolderId = gdFolderId;
+        this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
+    }
+
+    setEntitiesFromParent() {
+        if (this._employers.length == 0)
+            this._employers = this._parent._employers;
+    }
+
+    async createFolders(auth: OAuth2Client) {
+        const folder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent?.gdFolderId, name: <string>this._folderName })
+        this.setGdFolderIdAndUrl(folder.id as string);
+        const meetingNotesFolder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent.gdFolderId, name: 'Notatki ze spotkań' });
+        this.meetingProtocolsGdFolderId = meetingNotesFolder.id;
+    }
+
+    async addEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const entityAssociations: ContractEntity[] = [];
+        this._contractors.map((item) => {
+            entityAssociations.push(new ContractEntity({
+                contractRole: 'CONTRACTOR',
+                _contract: this,
+                _entity: item
+            }));
+        });
+        this._engineers.map((item) => {
+            entityAssociations.push(new ContractEntity({
+                contractRole: 'ENGINEER',
+                _contract: this,
+                _entity: item
+            }));
+        });
+        this._employers.map((item) => {
+            entityAssociations.push(new ContractEntity({
+                contractRole: 'EMPLOYER',
+                _contract: this,
+                _entity: item
+            }));
+        });
+        for (const association of entityAssociations) {
+            association.addInDb(externalConn, isPartOfTransaction);
+        }
+    }
+    /*
+     * jest wywoływana w editCase()
+     * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
+     */
+    async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        await this.deleteEntitiesAssociationsFromDb();
+        await this.addEntitiesAssociationsInDb(externalConn, isPartOfTransaction);
+    }
+
+    async deleteEntitiesAssociationsFromDb() {
+        const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
+        return await ToolsDb.executePreparedStmt(sql, [this.id], this);
+    }
+
+    async createDefaultMilestones(auth: OAuth2Client) {
+        const defaultMilestones: Milestone[] = [];
+
+        const defaultMilestoneTemplates = await MilestoneTemplatesController.getMilestoneTemplatesList({
+            isDefaultOnly: true,
+            contractTypeId: this.typeId
+        });
+        for (const template of defaultMilestoneTemplates) {
+            const milestone = new Milestone({
+                name: template.name,
+                description: template.description,
+                _type: template._milestoneType,
+                _parent: this
+            });
+            //zasymuluj numer kamienia nieunikalnego. 
+            //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
+            if (!milestone._type.isUniquePerContract) {
+                milestone.number = 1;
+            }
+            await milestone.createFolders(auth);
+            defaultMilestones.push(milestone);
+        }
+        await this.addDefaultMilestonesInDb(defaultMilestones);
+        for (const milestone of defaultMilestones)
+            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+    }
+
+    private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        await conn.beginTransaction();
+        const promises = [];
+        for (const milestone of milestones)
+            promises.push(milestone.addInDb(conn, true));
+        await Promise.all(promises)
+        await conn.commit();
+    }
+
+    async addInDb() {
+        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            const contract = await super.addInDb(conn, true);
+            await this.addEntitiesAssociationsInDb(conn, true);
+        });
+    }
+
+    async editInDb() {
+        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
+        await conn.beginTransaction();
+
+        const res = await Promise.all([
+            super.editInDb(conn, true),
+            this.editEntitiesAssociationsInDb(conn, true)
+        ]);
+        await conn.commit();
+        return res[0];
+    }
+    async editFolder(auth: OAuth2Client) {
+        //sytuacja normalna - folder itnieje
+        if (this.gdFolderId) {
+            try {
+                await ToolsGd.getFileOrFolderById(auth, this.gdFolderId);
+            } catch (err) {
+                return await this.createFolders(auth);
+            }
+            return await ToolsGd.updateFolder(auth, { name: this._folderName, id: this.gdFolderId });
+        }
+        //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
+        else
+            return await this.createFolders(auth);
+    }
+
+    async deleteFolder(auth: OAuth2Client) {
+        const drive = google.drive({ version: 'v3', auth });
+        const filesSchema = await drive.files.get({ fileId: this.gdFolderId, fields: 'id, ownedByMe', });
+        console.log(filesSchema.data)
+        if (filesSchema.data.ownedByMe)
+            await ToolsGd.trashFile(auth, filesSchema.data.id as string);
+        else
+            await ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: `${this._folderName} - USUŃ` });
+    }
+
+
+
+    /** dodaje wiesz nagowka kontraktu */
+    abstract deleteFromScrum(auth: OAuth2Client): void
+    abstract addInScrum(auth: OAuth2Client): void
+    abstract setFolderName(): void;
 }

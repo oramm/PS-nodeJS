@@ -50,7 +50,7 @@ export default class Task extends BusinessObject {
     /* Służy do dodowania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
    *
    */
-    async addInDbFromTemplate(process: Process, conn: any, isPartOfTransaction: boolean) {
+    async addInDbFromTemplateForProcess(process: Process, conn: any, isPartOfTransaction: boolean) {
         const taskTemplate = (await TasksTemplateForProcesssController.getTasksTemplateForProcesssList({ processId: process.id }))[0];
         if (taskTemplate) {
             this.status = 'Backlog';
@@ -61,7 +61,7 @@ export default class Task extends BusinessObject {
         }
     }
 
-    async addInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection, skipMakeTimesSummary?: boolean) {
+    async addInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection, isPartOfBatch?: boolean) {
         const conn: mysql.PoolConnection = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
         if (await this.shouldBeInScrum(auth, conn)) {
 
@@ -74,9 +74,9 @@ export default class Task extends BusinessObject {
             const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
             //dla kontraktu 'Our' bierz dane z ourData, dla kontraktu na roboty bież dane z kolumny OurIdRelated
             const ourContractOurId = (parents.contractOurId) ? parents.contractOurId : parents.contractOurIdRelated;
-            const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+            //const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
             const lastContractRow = <number>Tools.findLastInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
-            const contractTasksRowsCount = lastContractRow - headerContractRow;
+            //const contractTasksRowsCount = lastContractRow - headerContractRow;
             //wstaw wiersz nowej sprawy
             await ToolsSheets.insertRows(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -97,7 +97,7 @@ export default class Task extends BusinessObject {
                     },
                     destination: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: lastContractRow + 0,
+                        startRowIndex: lastContractRow,
                         endRowIndex: lastContractRow + 1,
                     },
                     spreadsheetId: Setup.ScrumSheet.GdId,
@@ -113,7 +113,7 @@ export default class Task extends BusinessObject {
                     },
                     destination: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: lastContractRow + 0,
+                        startRowIndex: lastContractRow,
                         endRowIndex: lastContractRow + 1,
                         startColumnIndex: timesColIndex
                     },
@@ -161,12 +161,13 @@ export default class Task extends BusinessObject {
 
             await ScrumSheet.CurrentSprint.setSprintSumsInRows(auth, lastContractRow + 1);
 
-            //odtwórz #Times (ostatnie kolumny arkusza)
-            await ScrumSheet.CurrentSprint.setSumInContractRow(auth, headerContractRow, contractTasksRowsCount + 1);
-            //odtwórz #TimesSummary
-            await ScrumSheet.CurrentSprint.sortContract(auth, ourContractOurId);
-            if (lastContractRow < 13 && !skipMakeTimesSummary)
-                ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+            if (!isPartOfBatch) {
+                //odtwórz #Times (ostatnie kolumny arkusza)
+                await ScrumSheet.CurrentSprint.setSumInContractRow(auth, ourContractOurId);
+                await ScrumSheet.CurrentSprint.sortContract(auth, ourContractOurId);
+                if (lastContractRow < 13)
+                    ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+            }
 
             return {
                 lastContractRow: lastContractRow
@@ -260,22 +261,11 @@ export default class Task extends BusinessObject {
         }
     }
 
-
     async deleteFromScrum(auth: OAuth2Client) {
-        let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            rangeA1: Setup.ScrumSheet.CurrentSprint.name
-        })).values;
-        const taskIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskIdColName);
-        //usuń wiersz bazy w arkuszu Data
-        const taskDataRow = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, taskIdColIndex);
-        if (taskDataRow) {
-            await ToolsSheets.deleteRows(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetId: Setup.ScrumSheet.CurrentSprint.id, startIndex: taskDataRow, endIndex: taskDataRow + 1 });
-        }
-        if (taskDataRow < 13) {
-            //odtwórz #TimesSummary i #Times
-            ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-        }
+        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+            searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
+            valueToFind: <number>this.id
+        });
     }
 
     /**
@@ -284,7 +274,7 @@ export default class Task extends BusinessObject {
      * @returns 
      */
     async shouldBeInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection) {
-        var test = false;
+        let test = false;
         if (this._owner && this._owner.id) {
             let owner = new Person(this._owner);
             test = this.status !== 'Backlog' && (await owner.getSystemRole()).systemRoleId <= 3

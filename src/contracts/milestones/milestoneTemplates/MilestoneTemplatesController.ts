@@ -4,34 +4,34 @@ import ToolsDb from "../../../tools/ToolsDb";
 import MilestoneTemplate from "./MilestoneTemplate";
 
 export default class MilestoneTemplatesController {
-    static async getMilestoneTemplatesList(initParamObject: any) {
+    static async getMilestoneTemplatesList(initParamObject: { isDefaultOnly?: boolean, contractTypeId?: number }) {
         const isDefaultCondition = (initParamObject && initParamObject.isDefaultOnly) ? 'MilestoneTypes_ContractTypes.IsDefault=TRUE' : '1';
-        const condition = (initParamObject && initParamObject.contractTypeId) ? 'MilestoneTypes_ContractTypes.ContractTypeId=' + initParamObject.contractTypeId : '1';
+        const contractTypeCondition = (initParamObject && initParamObject.contractTypeId) ? 'MilestoneTypes_ContractTypes.ContractTypeId=' + initParamObject.contractTypeId : '1';
 
-        const sql = 'SELECT  MilestoneTemplates.Id, \n \t' +
-            'MilestoneTemplates.Name, \n \t' +
-            'MilestoneTemplates.Description, \n \t' +
-            'MilestoneTemplates.StartDateRule, \n \t' +
-            'MilestoneTemplates.EndDateRule, \n \t' +
-            'MilestoneTemplates.LastUpdated, \n \t' +
-            'MilestoneTypes_ContractTypes.FolderNumber, \n \t' +
-            'MilestoneTypes.Id AS MilestoneTypeId, \n \t' +
-            'MilestoneTypes.IsUniquePerContract, \n \t' +
-            'MilestoneTypes.Name AS MilestoneTypeName \n' +
-            'FROM MilestoneTemplates \n' +
-            'JOIN MilestoneTypes ON MilestoneTypes.Id=MilestoneTemplates.MilestoneTypeId \n' +
-            'JOIN MilestoneTypes_ContractTypes ON MilestoneTypes.Id=MilestoneTypes_ContractTypes.MilestoneTypeId \n' +
-            'WHERE ' + isDefaultCondition + ' AND ' + condition + '\n' +
-            'GROUP BY MilestoneTemplates.Id \n' +
-            'ORDER BY MilestoneTemplates.Name';
+        const sql = `SELECT  MilestoneTemplates.Id,
+            MilestoneTemplates.Name,
+            MilestoneTemplates.Description,
+            MilestoneTemplates.StartDateRule,
+            MilestoneTemplates.EndDateRule,
+            MilestoneTemplates.LastUpdated,
+            MilestoneTypes_ContractTypes.FolderNumber,
+            MilestoneTypes.Id AS MilestoneTypeId,
+            MilestoneTypes.IsUniquePerContract,
+            MilestoneTypes.Name AS MilestoneTypeName
+            FROM MilestoneTemplates
+            JOIN MilestoneTypes ON MilestoneTypes.Id=MilestoneTemplates.MilestoneTypeId
+            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes.Id=MilestoneTypes_ContractTypes.MilestoneTypeId
+            WHERE ${isDefaultCondition} AND ${contractTypeCondition}
+            GROUP BY MilestoneTemplates.Id
+            ORDER BY MilestoneTemplates.Name`;
 
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneTemplatesResult(result);
     }
 
-    static processMilestoneTemplatesResult(result: any[]): [MilestoneTemplate?] {
-        let newResult: [MilestoneTemplate?] = [];
+    static processMilestoneTemplatesResult(result: any[]) {
+        let newResult: MilestoneTemplate[] = [];
 
         for (const row of result) {
             const item = new MilestoneTemplate({

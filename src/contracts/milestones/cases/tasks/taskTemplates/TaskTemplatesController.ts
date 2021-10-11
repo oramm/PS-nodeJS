@@ -4,7 +4,7 @@ import ToolsDb from "../../../../../tools/ToolsDb";
 import TaskTemplate from "./TaskTemplate";
 
 export default class TaskTemplatesController {
-    static async getTaskTemplatesList(initParamObject: any) {
+    static async getTaskTemplatesList(initParamObject: { taskTemplateId?: number, caseTemplateId?: number, caseTypeId?: number }) {
         const taskTemplateConditon = (initParamObject && initParamObject.taskTemplateId) ? 'TaskTemplates.TaskTemplateId=' + initParamObject.taskTemplateId : '1';
         const caseTemplateConditon = (initParamObject && initParamObject.caseTemplateId) ? 'TaskTemplates.CaseTemplateId=' + initParamObject.caseTemplateId : '1';
         const caseTypeConditon = (initParamObject && initParamObject.caseTypeId) ? 'CaseTemplates.CaseTypeId=' + initParamObject.caseTypeId : '1';
@@ -25,8 +25,8 @@ export default class TaskTemplatesController {
         return this.processTaskTemplatesResult(result);
     }
 
-    static processTaskTemplatesResult(result: any[]): [TaskTemplate?] {
-        let newResult: [TaskTemplate?] = [];
+    static processTaskTemplatesResult(result: any[]) {
+        let newResult: TaskTemplate[] = [];
 
         for (const row of result) {
             const item = new TaskTemplate({

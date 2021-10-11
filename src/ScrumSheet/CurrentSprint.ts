@@ -6,39 +6,85 @@ import Person from "../persons/Person";
 import ScrumSheet from "./ScrumSheet";
 
 export default class CurrentSprint {
-    //ustawia podsumwanie dla wiersza kontraktu (nagłówka)
-    static async setSumInContractRow(auth: OAuth2Client, rowNumber: number, rowsCount: number) {
+    /** Usuwa usuwa wiersze posiadające tą samą wartość w danej kolumnie currentSprint*/
+    static async deleteRowsByColValue(auth: OAuth2Client, parameters: { searchColName?: string, searchColIndex?: number, valueToFind: string | number }) {
+        const res = await ToolsSheets.deleteRowsByColValue(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            sheetId: Setup.ScrumSheet.CurrentSprint.id,
+            sheetName: Setup.ScrumSheet.CurrentSprint.name,
+            searchColName: parameters.searchColName,
+            searchColIndex: parameters.searchColIndex,
+            valueToFind: parameters.valueToFind
+        })
+        if (res.lastRow < 13) {
+            this.makeTimesSummary(auth);
+        }
+    }
+    /**edytuj wiersze zawierające szukaną wartość w danej kolumnie */
+    static async editRowsByColValue(auth: OAuth2Client, parameters: {
+        searchColName?: string,
+        searchColIndex?: number,
+        valueToFind: string | number,
+        firstColumnNumber?: number,
+        firstColumnName?: string,
+        values: (string | number)[][] | (string | number)[],
+        hasHeaderRow?: boolean,
+        majorDimension?: 'ROWS' | 'COLUMNS'
+    }) {
+        await ToolsSheets.editRowsByColValue(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            sheetName: Setup.ScrumSheet.CurrentSprint.name,
+            valueToFind: parameters.valueToFind,
+            searchColIndex: parameters.searchColIndex,
+            searchColName: parameters.searchColName,
+            firstColumnNumber: parameters.firstColumnNumber,
+            firstColumnName: parameters.firstColumnName,
+            values: parameters.values,
+            hasHeaderRow: parameters.hasHeaderRow,
+            majorDimension: parameters.majorDimension
+        });
+    }
+
+    /** ustawia podsumwanie dla wiersza kontraktu (nagłówka) */
+    static async setSumInContractRow(auth: OAuth2Client, contractOurId: string) {
         const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
         })).values;
         const sprintSumColNumber = currentSprintValues[1].indexOf(Setup.ScrumSheet.CurrentSprint.sprintSumColName) + 1;
         const taskEstimatedColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskEstimatedTimeColName) + 1;
+        const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+
+        const headerContractRow = <number>Tools.findFirstInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+        const lastContractRow = <number>Tools.findLastInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+        const contractTasksRowsCount = lastContractRow - headerContractRow + 1;
+
         await Promise.all(
             [
                 ToolsSheets.updateValues(auth, {
                     spreadsheetId: Setup.ScrumSheet.GdId,
-                    rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(rowNumber, taskEstimatedColNumber)}`,
+                    rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(headerContractRow, taskEstimatedColNumber)}`,
                     //values: [[`=SUM(R[1]C:R[${rowsCount}]C)`]]
                     values: [[
-                        `=SUM(${ToolsSheets.R1C1toA1(rowNumber + 1, taskEstimatedColNumber)}:` +
-                        `${ToolsSheets.R1C1toA1(rowNumber + rowsCount, taskEstimatedColNumber)})`]]
+                        `=SUM(${ToolsSheets.R1C1toA1(headerContractRow + 1, taskEstimatedColNumber)}:` +
+                        `${ToolsSheets.R1C1toA1(headerContractRow + contractTasksRowsCount, taskEstimatedColNumber)})`]]
                 }),
                 ToolsSheets.repeatFormula(auth, {
                     range: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: rowNumber - 1,
-                        endRowIndex: rowNumber,
+                        startRowIndex: headerContractRow - 1,
+                        endRowIndex: headerContractRow,
                         startColumnIndex: sprintSumColNumber - 1,
                         endColumnIndex: sprintSumColNumber + 1
                     },
                     spreadsheetId: Setup.ScrumSheet.GdId,
-                    formula: `=SUM(${ToolsSheets.R1C1toA1(rowNumber + 1, sprintSumColNumber)}:` +
-                        `${ToolsSheets.R1C1toA1(rowNumber + rowsCount, sprintSumColNumber)})`
+                    formula: `=SUM(${ToolsSheets.R1C1toA1(headerContractRow + 1, sprintSumColNumber)}:` +
+                        `${ToolsSheets.R1C1toA1(headerContractRow + contractTasksRowsCount, sprintSumColNumber)})`
                 })
             ]);
     }
-    //ustawia sumy dla wierszy poszczególnych zadań
+
+    /** ustawia sumy dla wierszy poszczególnych zadań */
     static async setSprintSumsInRows(auth: OAuth2Client, rowNumber: number, rowsCount?: number) {
         const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
@@ -115,7 +161,7 @@ export default class CurrentSprint {
             sortRange: {
                 range: {
                     sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                    startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
+                    startRowIndex: firstContractRow,
                     endRowIndex: lastContractRow
                 },
                 sortSpecs: [
@@ -277,7 +323,10 @@ export default class CurrentSprint {
                     startColumnIndex: timesColIndex + i,
                     endColumnIndex: timesColIndex + persons.length + i + 1
                 },
-                formula: this.personTimePerTaskFormula(currentSprintValues, Setup.ScrumSheet.CurrentSprint.firstDataRow + 1, persons[i])
+                formula: this.personTimePerTaskFormula(
+                    currentSprintValues,
+                    Setup.ScrumSheet.CurrentSprint.firstDataRow + 1,
+                    persons[i])
             })
         }
 

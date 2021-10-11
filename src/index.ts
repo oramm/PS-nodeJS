@@ -36,10 +36,7 @@ require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');
 
-
-const contratcsRouter = require('./contracts/ContractsRouters');
-app.use(contratcsRouter);
-
+require('./contracts/ContractsRouters');
 require('./contracts/contractTypes/ContractTypesRouters');
 require('./contracts/milestones/MilestonesRouters');
 require('./contracts/milestones/milestoneTypes/MilestoneTypesRouters');

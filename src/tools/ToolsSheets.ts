@@ -1,8 +1,8 @@
 import { throws } from 'assert';
 import { OAuth2Client } from 'google-auth-library';
 import { sheets_v4, google } from 'googleapis';
-import Setup from '../setup/Setup';
 import { Envi } from './EnviTypes';
+import Tools from './Tools';
 
 export default class ToolsSheets {
     static async getSpreadSheet(auth: OAuth2Client, spreadsheetId: string) {
@@ -34,21 +34,60 @@ export default class ToolsSheets {
         return res.data.values?.length;
     }
 
-    static async updateValues(auth: OAuth2Client, parameters: { spreadsheetId: string, rangeA1: string, values: any[][], majorDimension?: 'ROWS' | 'COLUMNS' }) {
+    static async updateValues(auth: OAuth2Client, parameters: { spreadsheetId: string, rangeA1: string, values: any[][] | any[], majorDimension?: 'ROWS' | 'COLUMNS' }) {
         const sheets = google.sheets({ version: 'v4', auth });
         const resource = {
             values: parameters.values,
             majorDimension: (parameters.majorDimension) ? parameters.majorDimension : 'ROWS'
         };
         const res = await sheets.spreadsheets.values.update({
-            //@ts-ignore
-            resource: resource,
+            requestBody: resource,
             spreadsheetId: parameters.spreadsheetId,
             auth,
             range: parameters.rangeA1,
             valueInputOption: 'USER_ENTERED',//'RAW'
         });
         return res;
+    }
+
+    /**edytuj wiersze zawierające szukaną wartość w danej kolumnie */
+    static async editRowsByColValue(auth: OAuth2Client, parameters: {
+        spreadsheetId: string,
+        sheetName: string,
+        searchColName?: string,
+        searchColIndex?: number,
+        valueToFind: string | number
+        firstColumnNumber?: number,
+        firstColumnName?: string,
+        values: (string | number)[][] | (string | number)[],
+        hasHeaderRow?: boolean,
+        majorDimension?: 'ROWS' | 'COLUMNS'
+    }) {
+        if (parameters.searchColIndex === undefined && parameters.searchColName === undefined)
+            throw new Error('podaj index lub nazwę kolumny do przeszukania!')
+        if (parameters.firstColumnNumber === undefined && parameters.firstColumnName === undefined)
+            throw new Error('podaj numer lub nazwę pierwszej kolumny do edycji!')
+
+        let sheetValues = <any[][]>(await ToolsSheets.getValues(auth, {
+            spreadsheetId: parameters.spreadsheetId,
+            rangeA1: parameters.sheetName
+        })).values;
+        const searchColIndex = (parameters.searchColName) ? sheetValues[0].indexOf(parameters.searchColName) : <number>parameters.searchColIndex;
+        const firstColumnNumber = (parameters.firstColumnName) ? sheetValues[0].indexOf(parameters.firstColumnNumber) : <number>parameters.firstColumnNumber;
+
+        let firstRow = Tools.findFirstInRange(parameters.valueToFind, sheetValues, searchColIndex);
+        let lastRow: number = 0;
+        if (firstRow) {
+            if (parameters.hasHeaderRow) firstRow++;
+            lastRow = <number>Tools.findLastInRange(parameters.valueToFind, sheetValues, searchColIndex);
+            await ToolsSheets.updateValues(auth, {
+                spreadsheetId: parameters.spreadsheetId,
+                rangeA1: `${parameters.sheetName}!${ToolsSheets.R1C1toA1(firstRow + 1, firstColumnNumber)}:` +
+                    `${ToolsSheets.R1C1toA1(lastRow + 1, firstColumnNumber)}`,
+                values: parameters.values,
+                majorDimension: parameters.majorDimension
+            });
+        }
     }
 
     static async clearValues(auth: OAuth2Client, parameters: { spreadsheetId: string, range: string }) {
@@ -269,6 +308,37 @@ export default class ToolsSheets {
             endIndex: parameters.endIndex,
             dimension: 'ROWS'
         });
+    }
+    /** usuwa wiersze posiadające tą samą wartość w danej kolumnie 
+    */
+    static async deleteRowsByColValue(auth: OAuth2Client, parameters: {
+        spreadsheetId: string,
+        sheetId: number,
+        sheetName: string,
+        valueToFind: string | number,
+        searchColName?: string,
+        searchColIndex?: number
+    }) {
+        if (parameters.searchColIndex === undefined && parameters.searchColName === undefined)
+            throw new Error('podaj index lub nazwę kolumny!')
+        let sheetValues = <any[][]>(await ToolsSheets.getValues(auth, {
+            spreadsheetId: parameters.spreadsheetId,
+            rangeA1: parameters.sheetName
+        })).values;
+        const searchColIndex = (parameters.searchColName) ? sheetValues[0].indexOf(parameters.searchColName) : <number>parameters.searchColIndex;
+
+        const firstRow = Tools.findFirstInRange(parameters.valueToFind, sheetValues, searchColIndex);
+        let lastRow: number = 0;
+        if (firstRow) {
+            lastRow = <number>Tools.findLastInRange(parameters.valueToFind, sheetValues, searchColIndex);
+            await ToolsSheets.deleteRows(auth, {
+                spreadsheetId: parameters.spreadsheetId,
+                sheetId: parameters.sheetId,
+                startIndex: firstRow,
+                endIndex: lastRow + 1
+            });
+        }
+        return { firstRow, lastRow }
     }
 
     static async deleteColumns(auth: OAuth2Client, parameters: {

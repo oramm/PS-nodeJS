@@ -5,7 +5,7 @@ export default class ContractType extends BusinessObject {
     name: string;
     description: string;
     isOur: boolean;
-    status?: string;
+    status: string;
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'ContractTypes' });
@@ -13,8 +13,7 @@ export default class ContractType extends BusinessObject {
         this.name = initParamObject.name;
         this.description = initParamObject.description;
         this.isOur = initParamObject.isOur;
-        if (initParamObject.status)
-            this.status = initParamObject.status;
+        this.status = initParamObject.status;
     }
 }
 
