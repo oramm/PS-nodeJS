@@ -2,9 +2,7 @@ import ToolsGapi from '../../../../setup/GAuth2/ToolsGapi';
 import Task from './Task';
 import TasksController from './TasksController'
 import { app } from '../../../../index';
-import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
-import Planning from '../../../../ScrumSheet/Planning';
-import CurrentSprint from '../../../../ScrumSheet/CurrentSprint';
+
 
 app.get('/tasks', async (req: any, res: any) => {
     try {

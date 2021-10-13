@@ -41,7 +41,7 @@ export default class PersonsController {
             WHERE ${projectConditon} AND ${contractConditon} AND ${systemRolecondition} AND ${idCondition} AND ${systemEmailCondition}
             GROUP BY Persons.Id
             ORDER BY Persons.Surname, Persons.Name;`
-        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processPersonsResult(result);
     }

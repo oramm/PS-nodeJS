@@ -45,7 +45,7 @@ export default class TasksController {
             JOIN Milestones ON Milestones.Id=Cases.MilestoneId
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
-            LEFT JOIN OurContractsData ON OurContractsData.ContractId=Contracts.Id
+            LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
             WHERE ${contractCondition} AND ${milestoneCondition} AND ${contractStatusCondition} AND ${ownerCondition}`;

@@ -67,7 +67,7 @@ app.put('/user/:id', async (req: any, res: any) => {
         await item.editInDb();
         //jeśłi użytjownik ENVI to trzeba zaktualizować scrumboard
         await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.Planning.refreshTimeAvailable, undefined, Planning);
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.makepersonTimePerTaskFormulas, undefined, CurrentSprint);
+        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas, undefined, CurrentSprint);
 
         res.send(item);
     } catch (error) {

@@ -24,7 +24,7 @@ export default class RisksReactionsController {
             'JOIN Cases ON Cases.Id=Tasks.CaseId \n' +
             'JOIN Milestones ON Milestones.Id=Cases.MilestoneId \n' +
             'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
-            'JOIN OurContractsData ON Milestones.ContractId = OurContractsData.ContractId \n' +
+            'JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id \n' +
             'LEFT JOIN Persons ON Persons.Id = Tasks.OwnerId \n' +
             'WHERE ' + projectCondition + ' ANY ' + contractCondition;
 

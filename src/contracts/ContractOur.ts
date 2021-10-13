@@ -11,7 +11,6 @@ import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 
 export default class ContractOur extends Contract {
-    id?: number;
     ourId: string;
     managerId?: number;
     adminId?: number;
@@ -59,7 +58,12 @@ export default class ContractOur extends Contract {
     }
 
     private getourContractDbFIelds() {
-        return { contractId: this.id, ourId: this.ourId, adminId: this.adminId, managerId: this.managerId };
+        return {
+            id: this.id,
+            ourId: this.ourId,
+            adminId: this.adminId,
+            managerId: this.managerId
+        };
     }
 
     private preparetoDboperation(datatoDb: any) {
@@ -71,7 +75,7 @@ export default class ContractOur extends Contract {
     async editInDb() {
         let datatoDb = Tools.cloneOfObject(this);
         this.preparetoDboperation(datatoDb);
-        await ToolsDb.editInDb('OurContractsData', datatoDb);
+        await ToolsDb.editInDb('Contracts', datatoDb);
         this.id = datatoDb.id;
         await ToolsDb.editInDb('OurContractsData', this.getourContractDbFIelds());
     }
@@ -145,23 +149,26 @@ export default class ContractOur extends Contract {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
         })).values;
-        const projectIdColIndex = currentSprintValues[1].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
-        const projectIdColNumber = projectIdColIndex + 1;
-        let headerRow = Tools.findFirstInRange(this.ourId, currentSprintValues, projectIdColIndex);
-        if (headerRow) {
+        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
+        const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+
+        let headerRowNumber = <number>Tools.findFirstInRange(this.ourId, currentSprintValues, contractOurIdColIndex) + 1;
+        if (headerRowNumber) {
             //zmień dane w nagłowku
-            const ourId_Alias = `${this.ourId} [${this.alias || ''}]`.trim();
+            const alias = this.alias ? `[${this.alias}] ` : ''
+            const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
+            const headerCaption = this.ourId + ' ' + alias + managerName;
 
             ToolsSheets.updateValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(headerRow, projectIdColNumber)}`,
+                rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(headerRowNumber, projectIdColNumber)}`,
                 //values: [[`=SUM(R[1]C:R[${rowsCount}]C)`]]
                 values: [[
                     this.projectOurId,
                     0,
                     this.ourId, 0, 0, 0, 0,
                     this._manager ? <number>this._manager.id : '', '',
-                    `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? this._manager.name : ''}")`,
+                    `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
                     '', '', '', 'd', 'd', 'd', 'd', 'd'
                 ]]
             })
@@ -170,8 +177,8 @@ export default class ContractOur extends Contract {
                 searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
                 valueToFind: this.ourId,
                 firstColumnName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                values: [this.ourId],
-                majorDimension: 'COLUMNS'
+                values: [[this.ourId]],
+                //majorDimension: 'COLUMNS'
             })
         }
     }
@@ -189,6 +196,6 @@ export default class ContractOur extends Contract {
         await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
 
         await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-        await ScrumSheet.CurrentSprint.makepersonTimePerTaskFormulas(auth);
+        await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
     }
 }

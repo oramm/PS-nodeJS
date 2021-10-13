@@ -86,7 +86,7 @@ export default class ContractOther extends Contract {
             await ScrumSheet.CurrentSprint.sortContract(auth, this.ourIdRelated);
 
             await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-            await ScrumSheet.CurrentSprint.makepersonTimePerTaskFormulas(auth);
+            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
         } else
             throw new Error('Kontrakt nie został przypisany do umowy ENVI');
     }

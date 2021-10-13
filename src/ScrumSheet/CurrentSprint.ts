@@ -57,7 +57,7 @@ export default class CurrentSprint {
 
         const headerContractRow = <number>Tools.findFirstInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
         const lastContractRow = <number>Tools.findLastInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
-        const contractTasksRowsCount = lastContractRow - headerContractRow + 1;
+        const contractTasksRowsCount = lastContractRow - headerContractRow;
 
         await Promise.all(
             [
@@ -91,6 +91,7 @@ export default class CurrentSprint {
             rangeA1: Setup.ScrumSheet.CurrentSprint.name
         })).values;
         const sprintSumColNumber = currentSprintValues[1].indexOf(Setup.ScrumSheet.CurrentSprint.sprintSumColName) + 1;
+        if (sprintSumColNumber === 0) throw new Error('ScrumBoard uszkodzony - brakuje kolumny ' + Setup.ScrumSheet.CurrentSprint.sprintSumColName)
         await ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(rowNumber, sprintSumColNumber)}`,
@@ -303,7 +304,7 @@ export default class CurrentSprint {
         return formula;
     }
 
-    static async makepersonTimePerTaskFormulas(auth: OAuth2Client, persons?: Person[], currentSprintValues?: any[][]) {
+    static async makePersonTimePerTaskFormulas(auth: OAuth2Client, persons?: Person[], currentSprintValues?: any[][]) {
         if (!currentSprintValues)
             currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,

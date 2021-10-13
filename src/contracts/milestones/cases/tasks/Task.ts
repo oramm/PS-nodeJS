@@ -11,6 +11,7 @@ import Tools from '../../../../tools/Tools';
 import Person from '../../../../persons/Person';
 import Case from '../Case';
 import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
+import ToolsGd from '../../../../tools/ToolsGd';
 
 export default class Task extends BusinessObject {
     id?: number;
@@ -120,10 +121,9 @@ export default class Task extends BusinessObject {
                     spreadsheetId: Setup.ScrumSheet.GdId,
                 })
             ]);
-
-            let milestoneNameLabel = parents.milestoneTypeFolderNumber + ' ' + parents.milestoneTypeName;
-            if (parents.milestoneName)
-                milestoneNameLabel += ' | ' + parents.milestoneName;
+            const milestoneGdFolderUrl = ToolsGd.createGdFolderUrl(parents.milestoneGdFolderId);
+            const milestoneNameCaption = (parents.milestoneName) ? ` | ${parents.milestoneName}` : '';
+            let milestoneLabel = `=HYPERLINK("${milestoneGdFolderUrl}";"${parents.milestoneTypeFolderNumber} ${parents.milestoneTypeName}${milestoneNameCaption}")`;
 
             const parentCase = new Case({ number: parents.caseNumber, _type: {} })
             const parentCaseDisplayNumber = (parentCase.number) ? ' | ' + parentCase._displayNumber : '';
@@ -142,7 +142,7 @@ export default class Task extends BusinessObject {
                     (this.ownerId) ? this.ownerId : '',
                     '{"caseSynchronized":true,"taskSynchronized":true}',
                     (!parents.contractOurId) ? contract_Number_Alias : ' ',
-                    milestoneNameLabel,
+                    milestoneLabel,
                     parents.caseTypeFolderNumber + ' ' + parents.caseTypeName + parentCaseDisplayNumber,
                     parents.caseName,
                     this.name,
@@ -166,7 +166,7 @@ export default class Task extends BusinessObject {
                 await ScrumSheet.CurrentSprint.setSumInContractRow(auth, ourContractOurId);
                 await ScrumSheet.CurrentSprint.sortContract(auth, ourContractOurId);
                 if (lastContractRow < 13)
-                    ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
             }
 
             return {
@@ -177,33 +177,33 @@ export default class Task extends BusinessObject {
             console.log('Nie dodaję do Scruma');
     }
 
-    async getParents(conn: mysql.PoolConnection) {
-        const sql = 'SELECT \n \t' +
-            'Cases.Name AS CaseName, \n \t' +
-            'Cases.TypeId AS CaseTypeId, \n \t' +
-            'Cases.Number AS CaseNumber, \n \t' +
-            'CaseTypes.Name AS CaseTypeName, \n \t' +
-            'CaseTypes.FolderNumber AS CaseTypeFolderNumber, \n \t' +
-            'Milestones.Id AS MilestoneId, \n \t' +
-            'Milestones.Name AS MilestoneName, \n \t' +
-            'MilestoneTypes.Name AS MilestoneTypeName, \n \t' +
-            'MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber, \n \t' +
-            'ParentContracts.Id AS ParentContractId, \n \t' +
-            //OurContractsData może dotyczyć _parenta lub kontraktu powiązanego z kontraktem parentem - kolumna 'OurIdRelated'
-            'OurContractsData.OurId AS OurContractsDataOurId, \n \t' +
-            'ParentContracts.OurIdRelated AS ParentContractOurIdRelated, \n \t' +
-            'ParentContracts.Number AS ParentContractNumber, \n \t' +
-            'ParentContracts.Alias AS ParentContractAlias, \n \t' +
-            'ParentContracts.ProjectOurId \n' +
-            'FROM Cases \n' +
-            'LEFT JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId \n' +
-            'JOIN Milestones ON Milestones.Id=Cases.MilestoneId \n' +
-            'LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id \n' +
-            'JOIN Contracts AS ParentContracts ON Milestones.ContractId = ParentContracts.Id \n' +
-            'LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.ContractId \n' +
-            'JOIN ContractTypes ON ContractTypes.Id = ParentContracts.TypeId \n' +
-            'JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId=ContractTypes.Id AND MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id \n' +
-            'WHERE Cases.Id =' + this.caseId + '';
+    private async getParents(conn: mysql.PoolConnection) {
+        const sql = `SELECT
+            Cases.Name AS CaseName,
+            Cases.TypeId AS CaseTypeId,
+            Cases.Number AS CaseNumber,
+            CaseTypes.Name AS CaseTypeName,
+            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+            Milestones.Id AS MilestoneId,
+            Milestones.Name AS MilestoneName,
+            Milestones.GdFolderId AS MilestoneGdFolderId,
+            MilestoneTypes.Name AS MilestoneTypeName,
+            MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
+            ParentContracts.Id AS ParentContractId,
+            OurContractsData.OurId AS OurContractsDataOurId,
+            ParentContracts.OurIdRelated AS ParentContractOurIdRelated,
+            ParentContracts.Number AS ParentContractNumber,
+            ParentContracts.Alias AS ParentContractAlias,
+            ParentContracts.ProjectOurId
+            FROM Cases
+            LEFT JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId
+            JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+            LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            JOIN Contracts AS ParentContracts ON Milestones.ContractId = ParentContracts.Id
+            LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
+            JOIN ContractTypes ON ContractTypes.Id = ParentContracts.TypeId
+            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId=ContractTypes.Id AND MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
+            WHERE Cases.Id =${this.caseId}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {
@@ -218,6 +218,7 @@ export default class Task extends BusinessObject {
                 milestoneName: <string>row.MilestoneName,
                 milestoneTypeName: <string>row.MilestoneTypeName,
                 milestoneTypeFolderNumber: <string>row.MilestoneTypeFolderNumber,
+                milestoneGdFolderId: <string>row.MilestoneGdFolderId,
                 contractId: <number>row.ParentContractId,
                 contractOurId: <string>row.OurContractsDataOurId, //dla ourContracts
                 contractOurIdRelated: <string>row.ParentContractOurIdRelated, //dla kontraktów na roboty
@@ -257,7 +258,7 @@ export default class Task extends BusinessObject {
                 await this.deleteFromScrum(auth);
         }
         else { //zmieniono status z 'Backlog' albo przypisano do pracownika ENVI
-            this.addInScrum(auth);
+            await this.addInScrum(auth);
         }
     }
 

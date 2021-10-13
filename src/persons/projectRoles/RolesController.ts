@@ -30,7 +30,7 @@ export default class RolesController {
             'JOIN Entities ON Entities.Id=Persons.EntityId \n' +
             'JOIN SystemRoles ON SystemRoles.Id=Persons.SystemRoleId \n' +
             'LEFT JOIN Contracts ON Contracts.Id=Roles.ContractId \n' +
-            'LEFT JOIN OurContractsData ON Contracts.Id=OurContractsData.ContractId \n' +
+            'LEFT JOIN OurContractsData ON Contracts.Id=OurContractsData.Id \n' +
             'WHERE ' + projectCondition + ' \n' +
             'ORDER BY Roles.Name';
 

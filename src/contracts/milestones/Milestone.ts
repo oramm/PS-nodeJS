@@ -187,7 +187,7 @@ export default class Milestone extends BusinessObject {
             const lastRow = <number>Tools.findLastInRange(<number>this.id, currentSprintValues, milestoneColNumber);
             for (let i = firstRow; i <= lastRow; i++) {
                 const nameCaption = (this.name) ? ` | ${this.name}` : '';
-                const caption = `=HYPERLINK("${this._gdFolderUrl}";"${this._type._folderNumber} ${this._type.name} ${nameCaption}")`;
+                const caption = `=HYPERLINK("${this._gdFolderUrl}";"${this._type._folderNumber} ${this._type.name}${nameCaption}")`;
                 values.push(caption);
             }
             await ToolsSheets.updateValues(auth, {

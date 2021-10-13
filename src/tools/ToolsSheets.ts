@@ -73,7 +73,7 @@ export default class ToolsSheets {
             rangeA1: parameters.sheetName
         })).values;
         const searchColIndex = (parameters.searchColName) ? sheetValues[0].indexOf(parameters.searchColName) : <number>parameters.searchColIndex;
-        const firstColumnNumber = (parameters.firstColumnName) ? sheetValues[0].indexOf(parameters.firstColumnNumber) : <number>parameters.firstColumnNumber;
+        const firstColumnNumber = (parameters.firstColumnName) ? sheetValues[0].indexOf(parameters.firstColumnName) + 1 : <number>parameters.firstColumnNumber;
 
         let firstRow = Tools.findFirstInRange(parameters.valueToFind, sheetValues, searchColIndex);
         let lastRow: number = 0;

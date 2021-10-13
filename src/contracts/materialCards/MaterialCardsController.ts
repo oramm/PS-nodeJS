@@ -47,7 +47,7 @@ export default class MaterialCardsController {
             'FROM MaterialCards \n' +
             'JOIN Contracts ON Contracts.Id=MaterialCards.ContractId \n' +
             'JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.ContractId = Contracts.Id \n' +
+            'LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id \n' +
             'JOIN Projects ON Projects.OurId=Contracts.ProjectOurId \n' +
             'JOIN Persons AS Editors ON Editors.Id=MaterialCards.EditorId \n' +
             'JOIN Persons AS Owners ON Owners.Id=MaterialCards.OwnerId \n' +
