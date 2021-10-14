@@ -79,7 +79,7 @@ export default abstract class Contract extends BusinessObject {
             await this.addInScrum(auth);
             await this.createDefaultMilestones(auth);
         } catch (error) {
-            //this.deleteFolder(auth);
+            this.deleteFolder(auth);
             this.deleteFromScrum(auth);
             throw error;
         }

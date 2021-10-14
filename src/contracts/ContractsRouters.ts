@@ -72,7 +72,7 @@ app.delete('/contract/:id', async (req: any, res: any) => {
         console.log('delete');
         await item.deleteFromDb();
         await Promise.all([
-            //ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item),
+            ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item),
             ToolsGapi.gapiReguestHandler(req, res, item.deleteFromScrum, undefined, item)
         ]);
         res.send(item);
