@@ -65,7 +65,6 @@ export default class Task extends BusinessObject {
     async addInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection, isPartOfBatch?: boolean) {
         const conn: mysql.PoolConnection = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
         if (await this.shouldBeInScrum(auth, conn)) {
-
             const parents = await this.getParents(conn);
             let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -168,13 +167,11 @@ export default class Task extends BusinessObject {
                 if (lastContractRow < 13)
                     await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
             }
-
-            return {
-                lastContractRow: lastContractRow
-            };
+            return lastContractRow;
         }
-        else
+        else {
             console.log('Nie dodaję do Scruma');
+        }
     }
 
     private async getParents(conn: mysql.PoolConnection) {

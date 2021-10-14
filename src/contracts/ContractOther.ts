@@ -6,6 +6,8 @@ import ContractOur from './ContractOur';
 import { google } from 'googleapis';
 import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import ToolsSheets from '../tools/ToolsSheets';
+import Tools from '../tools/Tools';
 
 export default class ContractOther extends Contract {
 
@@ -57,19 +59,50 @@ export default class ContractOther extends Contract {
         this.materialCardsGdFolderId = materialCardsFolder.id;
     }
 
+    async shouldBeInScrum() {
+        if (this.ourIdRelated)
+            return this.status !== 'Archiwalny'
+        else
+            return false;
+    }
     /** nic nie robi */
     addInScrum(auth: OAuth2Client) {
 
     }
 
-    editInScrum(auth: OAuth2Client): void {
-        ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
-            searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
-            valueToFind: <number>this.id,
-            firstColumnName: Setup.ScrumSheet.CurrentSprint.contractNumberColName,
-            values: [[<string>this._ourIdOrNumber_Alias]],
-            //majorDimension: 'COLUMNS'
-        })
+    async editInScrum(auth: OAuth2Client) {
+        if (await this.shouldBeInScrum()) {
+            const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name
+            })).values;
+            const contractNumberColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractNumberColName);
+            let firstRowNumber = <number>Tools.findFirstInRange(this.number, currentSprintValues, contractNumberColIndex) + 1;
+            if (firstRowNumber) {
+                ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+                    searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
+                    valueToFind: <number>this.id,
+                    firstColumnName: Setup.ScrumSheet.CurrentSprint.contractNumberColName,
+                    values: [[<string>this._ourIdOrNumber_Alias]],
+                    //majorDimension: 'COLUMNS'
+                });
+            }
+            else {
+                await this.addTasksInScrum(auth);
+                //sprawdź czy jest macierzysta umowa ENVI dodana do Scruma
+                const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+                firstRowNumber = <number>Tools.findFirstInRange(<string>this.ourIdRelated, currentSprintValues, contractOurIdColIndex) + 1;
+
+                await ScrumSheet.CurrentSprint.setSumInContractRow(auth, <string>this.ourIdRelated);
+                await ScrumSheet.CurrentSprint.sortContract(auth, <string>this.ourIdRelated);
+                if (firstRowNumber < 13) {
+                    await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+                }
+            }
+        } else
+            this.deleteFromScrum(auth);
+
     }
 
     async deleteFromScrum(auth: OAuth2Client) {

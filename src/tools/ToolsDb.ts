@@ -78,12 +78,16 @@ export default class ToolsDb {
         }
         return string;
     }
-    //dodaje do bazy obiekt
+    /** dodaje do bazy obiekt 
+     * @argument object może mieć atrybut '_isIdNonIncrement' - wtedy id jest trakrowany jak normalne pole
+     * */
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection = externalConn ? externalConn : await this.pool.getConnection();
         try {
-            delete object.id;
-            var stmt = await this.dynamicInsertPreparedStmt(tableName, object);
+            //od klienta przychodzi tmp_id - trzeba się go pozbyć
+            if (!object._isIdNonIncrement)
+                delete object.id;
+            const stmt = await this.dynamicInsertPreparedStmt(tableName, object);
             const result = await conn.execute(stmt.string, stmt.values);
             object.id = (<any>result)[0].insertId;
 
@@ -176,14 +180,14 @@ export default class ToolsDb {
     }
 
     private static dynamicInsertPreparedStmt(tableName: string, object: any) {
-        let keys: string[] = Object.keys(object);
-        //INSERT INTO Cases (Name, Description, MilestoneId) values (?, ?, ?)
-        let stmt: { string: string, values: any[] } = {
-            string: 'INSERT INTO ' + tableName + ' (',
+        const keys: string[] = Object.keys(object);
+        //INSERT INTO tableName (Name, Description, MilestoneId) values (?, ?, ?)
+        const stmt: { string: string, values: any[] } = {
+            string: `INSERT INTO ${tableName} (`,
             values: this.processColls('INSERT', keys, object)
         };
 
-        var questionMarks = '';
+        let questionMarks = '';
         for (const key of keys) {
             if (this.isValidDbAttribute(key, object)) {
                 stmt.string += Tools.capitalizeFirstLetter(key) + ', ';
@@ -194,8 +198,8 @@ export default class ToolsDb {
         stmt.string = stmt.string.substring(0, stmt.string.length - 2);
         questionMarks = questionMarks.substring(0, questionMarks.length - 2);
 
-        stmt.string += ') VALUES (' + questionMarks + ')';
-        console.log('object: %o', object);
+        stmt.string += `) VALUES (${questionMarks})`;
+        //console.log('object: %o', object);
         console.log('stmt: %o', stmt);
 
         return stmt;
@@ -207,14 +211,17 @@ export default class ToolsDb {
     */
     private static isValidDbAttribute(key: string, object: any) {
         if (key === 'id')
-            return (typeof object[key] === 'number') ? false : true;
+            if (object._isIdNonIncrement)
+                return true;
+            else
+                return (typeof object[key] === 'number') ? false : true;
         if (!key.includes('_') && object[key] !== undefined)
             return true;
         else return false;
     }
 
     private static processColls(queryType: 'UPDATE' | 'INSERT', cols: string[], object: any) {
-        let values = [];
+        const values = [];
         for (const key of cols) {
             // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
             if (this.isValidDbAttribute(key, object)) {

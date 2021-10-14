@@ -14,6 +14,7 @@ import Milestone from './milestones/Milestone';
 import MilestonesController from './milestones/MilestonesController';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import { google } from 'googleapis';
+import TasksController from './milestones/cases/tasks/TasksController';
 
 export default abstract class Contract extends BusinessObject {
     id?: number;
@@ -225,10 +226,22 @@ export default abstract class Contract extends BusinessObject {
             await ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: `${this._folderName} - USUŃ` });
     }
 
+    async getTasks() {
+        return await TasksController.getTasksList({ contractId: this.id });
+    }
 
+    async addTasksInScrum(auth: OAuth2Client) {
+        const tasks = await this.getTasks();
+        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
+        for (const task of tasks) {
+            await task.addInScrum(auth, conn, true);
+        }
+        conn.release();
+    }
 
     /** dodaje wiesz nagowka kontraktu */
-    abstract deleteFromScrum(auth: OAuth2Client): void
-    abstract addInScrum(auth: OAuth2Client): void
+    abstract deleteFromScrum(auth: OAuth2Client): void;
+    abstract addInScrum(auth: OAuth2Client): void;
     abstract setFolderName(): void;
+    abstract shouldBeInScrum(): Promise<boolean>;
 }

@@ -7,7 +7,7 @@ import ContractOur from "../ContractOur";
 import Milestone from "./Milestone";
 
 export default class MilestonesController {
-    static async getMilestonesList(initParamObject: any) {
+    static async getMilestonesList(initParamObject: { projectId?: string, contractId?: number }) {
         const projectCondition = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         const contractCondition = (initParamObject && initParamObject.contractId) ? 'Milestones.ContractId=' + initParamObject.contractId : '1';
 
@@ -49,8 +49,8 @@ export default class MilestonesController {
 
     }
 
-    static processMilestonesResult(result: any[]): [Milestone?] {
-        let newResult: [Milestone?] = [];
+    static processMilestonesResult(result: any[]): Milestone[] {
+        let newResult: Milestone[] = [];
 
         for (const row of result) {
             const contractInitParam = {

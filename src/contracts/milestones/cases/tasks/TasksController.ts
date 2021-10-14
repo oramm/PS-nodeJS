@@ -5,7 +5,12 @@ import Case from "../Case";
 import Task from "./Task";
 
 export default class TasksController {
-    static async getTasksList(initParamObject: any) {
+    static async getTasksList(initParamObject: {
+        contractId?: number,
+        milestoneId?: number,
+        contractStatusCondition?: string,
+        ownerCondition?: string
+    }) {
         const contractCondition = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
         const milestoneCondition = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id=' + initParamObject.milestoneId : '1';
         const contractStatusCondition = (initParamObject && initParamObject.contractStatusCondition) ? 'Contracts.Status REGEXP "' + initParamObject.contractStatusCondition + '"' : '1';
@@ -56,8 +61,8 @@ export default class TasksController {
 
     }
 
-    static processTasksResult(result: any[]): [Task?] {
-        let newResult: [Task?] = [];
+    static processTasksResult(result: any[]): Task[] {
+        let newResult: Task[] = [];
 
         for (const row of result) {
             var item = new Task({
