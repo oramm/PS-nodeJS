@@ -1,6 +1,6 @@
 import express from 'express'
 import LettersController from './LettersController'
-var app = express();
+import { app } from '../index';
 
 app.get('/letters', async (req: any, res: any) => {
     try {
@@ -27,5 +27,3 @@ app.get('/letter/:id', async (req: any, res: any) => {
 
 
 });
-
-module.exports = app;
