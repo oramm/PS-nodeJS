@@ -47,8 +47,8 @@ export default class Milestone extends BusinessObject {
         this._folderNumber = initParamObject._folderNumber;
         this.description = initParamObject.description || '';
 
-        this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
-        this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
+        this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate || initParamObject._parent.startDate);
+        this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate || initParamObject._parent.endDate);
         this.status = initParamObject.status;
         if (initParamObject.gdFolderId)
             this.setGdFolderIdAndUrl(initParamObject.gdFolderId);

@@ -25,8 +25,8 @@ export default abstract class Contract extends BusinessObject {
     number: string;
     name: string;
     projectOurId: string;
-    startDate: string;
-    endDate: string;
+    startDate?: string;
+    endDate?: string;
     value: any;
     comment: string;
     gdFolderId?: string;
@@ -158,7 +158,8 @@ export default abstract class Contract extends BusinessObject {
                 name: template.name,
                 description: template.description,
                 _type: template._milestoneType,
-                _parent: this
+                _parent: this,
+                status: 'Nie rozpoczęty'
             });
             //zasymuluj numer kamienia nieunikalnego. 
             //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
@@ -191,14 +192,10 @@ export default abstract class Contract extends BusinessObject {
     }
 
     async editInDb() {
-        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-
-        const res = await Promise.all([
-            super.editInDb(conn, true),
-            this.editEntitiesAssociationsInDb(conn, true)
-        ]);
-        await conn.commit();
+        const res = await ToolsDb.transaction(async conn => {
+            await super.editInDb(conn, true);
+            await this.editEntitiesAssociationsInDb(conn, true)
+        });
         return res[0];
     }
     async editFolder(auth: OAuth2Client) {
@@ -217,13 +214,7 @@ export default abstract class Contract extends BusinessObject {
     }
 
     async deleteFolder(auth: OAuth2Client) {
-        const drive = google.drive({ version: 'v3', auth });
-        const filesSchema = await drive.files.get({ fileId: this.gdFolderId, fields: 'id, ownedByMe', });
-        console.log(filesSchema.data)
-        if (filesSchema.data.ownedByMe)
-            await ToolsGd.trashFile(auth, filesSchema.data.id as string);
-        else
-            await ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: `${this._folderName} - USUŃ` });
+        ToolsGd.deleteFileOrFolder(auth, <string>this.gdFolderId);
     }
 
     async getTasks() {

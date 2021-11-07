@@ -69,53 +69,48 @@ export default class ToolsGd {
     }
 
     //https://stackoverflow.com/questions/13230487/converting-a-buffer-into-a-readablestream-in-node-js/44091532#44091532
-    static async uploadFile(auth: OAuth2Client, files: [Envi._blobEnviObject]) {
+    static async uploadFile(auth: OAuth2Client, file: Envi._blobEnviObject) {
         const drive = google.drive({ version: 'v3', auth });
-        for (const file of files) {
-            const filePath = `tmp/${file.name}`;
-            const fileMetadata = {
-                'name': file.name,
-                parents: file.parents
-            };
-            const buff = Buffer.from(file.blobBase64String, 'base64');
-            fs.writeFileSync(filePath, buff);
-            const content: fs.ReadStream = fs.createReadStream(filePath);
-            //console.log(content);
-            const media = {
-                mimeType: file.mimeType,
-                body: content
-            };
+        const filePath = `tmp/${file.name}`;
+        const fileMetadata = {
+            'name': file.name,
+            parents: file.parent
+        };
+        const buff = Buffer.from(file.blobBase64String, 'base64');
+        fs.writeFileSync(filePath, buff);
+        const content: fs.ReadStream = fs.createReadStream(filePath);
+        //console.log(content);
+        const media = {
+            mimeType: file.mimeType,
+            body: content
+        };
 
-            let filesSchema = await drive.files.create({
-                //@ts-ignore
-                resource: fileMetadata,
-                media: media,
-                fields: 'id'
-            })
-            console.log(`Usuwam: ${filePath}`)
-            fs.unlinkSync(filePath)
-            console.log('New Gd File Id: ', filesSchema.data.id);
-            return filesSchema.data;
-        }
+        let filesSchema = await drive.files.create({
+            //@ts-ignore
+            resource: fileMetadata,
+            media: media,
+            fields: 'id'
+        })
+        console.log(`Usuwam: ${filePath}`)
+        fs.unlinkSync(filePath)
+        console.log('New Gd File Id: ', filesSchema.data.id);
+        return filesSchema.data;
     }
 
-    static async createFolders(auth: OAuth2Client, folderData: [{ name: string, parents: [string] }]) {
+    static async createFolder(auth: OAuth2Client, folderData: { name: string, parents: string[] }) {
         const drive = google.drive({ version: 'v3', auth });
-        for (const folder of folderData) {
-            let fileMetadata = {
-                'name': folder.name,
-                parents: folder.parents,
-                'mimeType': 'application/vnd.google-apps.folder'
+        const fileMetadata = {
+            'name': folderData.name,
+            parents: folderData.parents,
+            'mimeType': 'application/vnd.google-apps.folder'
 
-            };
-            let filesSchema = await drive.files.create({
-                //@ts-ignore
-                resource: fileMetadata,
-                fields: 'id'
-            })
-            console.log('New Gd folder Id: ', filesSchema.data.id);
-            return filesSchema.data;
-        }
+        };
+        const filesSchema = await drive.files.create({
+            requestBody: fileMetadata,
+            fields: 'id'
+        })
+        console.log('New Gd folder Id: ', filesSchema.data.id);
+        return filesSchema.data;
     }
     /**
      * Zwraca isteniejący folder lub tworzy nowy 
@@ -125,7 +120,7 @@ export default class ToolsGd {
 
         let folder: drive_v3.Schema$File | undefined = await this.getFileByName(auth, { fileName: parameters.name, parentId: parameters.parentId });
         if (!folder) {
-            folder = await (this.createFolders(auth, [{ name: parameters.name, parents: [parameters.parentId] }]) as drive_v3.Schema$File);
+            folder = await (this.createFolder(auth, { name: parameters.name, parents: [parameters.parentId] }) as drive_v3.Schema$File);
             await this.createPermissions(auth, { fileId: folder.id as string });
         }
         return folder;
@@ -152,6 +147,24 @@ export default class ToolsGd {
             const filesSchemaData = await this.updateFile(auth, requestBody);
             console.log(`Zaktualizowano folder ${requestBody.id}`);
             return filesSchemaData;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    static async moveFile(auth: OAuth2Client, fileData: drive_v3.Schema$File, newParentFolderId: string) {
+        try {
+            console.log(`Przenoszę do nowego folderu plik ${fileData.id} ...`);
+
+            const drive = google.drive({ version: 'v3', auth });
+            const fileId = <string>fileData.id;
+            const updatedFilesSchema = await drive.files.update({
+                fileId: fileId,
+                removeParents: fileData.parents?.join(','),
+                addParents: newParentFolderId,
+            })
+            console.log(`Plik przeniesiony do ${newParentFolderId}`);
+            return "ok";
         } catch (error) {
             throw error;
         }
@@ -193,7 +206,33 @@ export default class ToolsGd {
         }
     }
 
-    /*
+    static async copyFile(auth: OAuth2Client, fileId: string, copyName: string) {
+        try {
+            const drive = google.drive({ version: 'v3', auth });
+            const newFile = await drive.files.copy({
+                fileId: fileId,
+                requestBody: { name: copyName }
+
+            })
+            console.log(`Skopiowano plik ${fileId}`);
+            return newFile;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    /** usuwa albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
+    static async deleteFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
+        const drive = google.drive({ version: 'v3', auth });
+        const filesSchema = await drive.files.get({ fileId: gdFolderId, fields: 'id, ownedByMe', });
+        console.log(filesSchema.data)
+        if (filesSchema.data.ownedByMe)
+            await ToolsGd.trashFile(auth, filesSchema.data.id as string);
+        else
+            await ToolsGd.updateFolder(auth, { id: gdFolderId, name: `${filesSchema.data.name} - USUŃ` });
+    }
+
+    /** domyślnie ustawia uprawnienia { type: 'anyone', role: 'writer' }
      * https://developers.google.com/drive/api/v3/manage-sharing#create_a_permission
      */
     static async createPermissions(auth: OAuth2Client, parameters: { fileId: string, permissions?: [{ type: string, role: string, emailAddress?: string }] }) {
