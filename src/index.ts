@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
-    origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'http://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+    origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 }
@@ -62,8 +62,7 @@ require('./processes/processInstances/ProcessInstancesRouters'); require('./proc
 
 require('./documentTemplates/DocumentTemplatesRouters');
 
-const lettersRouter = require('./letters/LettersRouters');
-app.use(lettersRouter);
+require('./letters/LettersRouters');
 
 const meetingsRouter = require('./meetings/MeetingsRouters');
 app.use(meetingsRouter);
