@@ -10,7 +10,7 @@ app.post('/login', async (req: any, res: any) => {
     try {
         const ticket = await oAuthClient.verifyIdToken({
             idToken: req.body.id_token,
-            audience: '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com', // CLIENT_ID starej aplikacji GAS
+            audience: '386403657277-9mh2cnqb9dneoh8lc6o2m339eemj24he.apps.googleusercontent.com', // CLIENT_ID starej aplikacji GAS
         });
         const payload = ticket.getPayload();
         if (payload)

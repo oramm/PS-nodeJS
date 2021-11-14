@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 
-export var app = express();
+export const app = express();
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -26,9 +26,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 //app.use(cors(corsOptionsDelegate));
 
-const oAuthRouter = require('./setup/GAuth2/Gauth2Routers');
-//app.use(oAuthRouter);
-
+require('./setup/GAuth2/Gauth2Routers');
 require('./persons/PersonsRouters');
 
 require('./persons/projectRoles/RolesRouters');
