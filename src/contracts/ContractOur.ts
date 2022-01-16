@@ -153,34 +153,37 @@ export default class ContractOur extends Contract {
             })).values;
             const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
             const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+            //zmień dane w nagłowku
+            const alias = this.alias ? `[${this.alias}] ` : ''
+            const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
+            const headerCaption = this.ourId + ' ' + alias + managerName;
 
-            let headerRowNumber = <number>Tools.findFirstInRange(this.ourId, currentSprintValues, contractOurIdColIndex) + 1;
+            const headerRowNumber = await ScrumSheet.CurrentSprint.editRowsByColValue(
+                auth, {
+                searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                valueToFind: this.ourId,
+                firstColumnName: Setup.ScrumSheet.CurrentSprint.projectIdColName,
+                rowValues: [
+                    this.projectOurId,
+                    0,
+                    this.ourId, 0, 0, 0, 0,
+                    this._manager ? <number>this._manager.id : '', '',
+                    `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
+                    '', '', '', 'd', 'd', 'd', 'd', 'd'
+                ],
+                firstRowOnly: true
+            })
+
             if (headerRowNumber) {
-                //zmień dane w nagłowku
-                const alias = this.alias ? `[${this.alias}] ` : ''
-                const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
-                const headerCaption = this.ourId + ' ' + alias + managerName;
-
-                ToolsSheets.updateValues(auth, {
-                    spreadsheetId: Setup.ScrumSheet.GdId,
-                    rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(headerRowNumber, projectIdColNumber)}`,
-                    //values: [[`=SUM(R[1]C:R[${rowsCount}]C)`]]
-                    values: [[
-                        this.projectOurId,
-                        0,
-                        this.ourId, 0, 0, 0, 0,
-                        this._manager ? <number>this._manager.id : '', '',
-                        `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
-                        '', '', '', 'd', 'd', 'd', 'd', 'd'
-                    ]]
-                })
+                ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
 
                 ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
                     searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                    valueToFind: this.ourId,
+                    valueToFind: <number>this.id,
                     firstColumnName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                    values: [[this.ourId]],
-                    //majorDimension: 'COLUMNS'
+                    rowValues: [this.ourId],
+                    majorDimension: 'COLUMNS'
+
                 })
             } else {
                 await this.addInScrum(auth);

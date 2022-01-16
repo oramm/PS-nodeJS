@@ -83,7 +83,7 @@ export default class ContractOther extends Contract {
                     searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
                     valueToFind: <number>this.id,
                     firstColumnName: Setup.ScrumSheet.CurrentSprint.contractNumberColName,
-                    values: [[<string>this._ourIdOrNumber_Alias]],
+                    rowValues: [<string>this._ourIdOrNumber_Alias],
                     //majorDimension: 'COLUMNS'
                 });
             }

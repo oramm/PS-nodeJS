@@ -1,6 +1,7 @@
 import { throws } from 'assert';
 import { OAuth2Client } from 'google-auth-library';
 import { sheets_v4, google } from 'googleapis';
+import Setup from '../setup/Setup';
 import { Envi } from './EnviTypes';
 import Tools from './Tools';
 
@@ -59,9 +60,10 @@ export default class ToolsSheets {
         valueToFind: string | number
         firstColumnNumber?: number,
         firstColumnName?: string,
-        values: (string | number)[][] | (string | number)[],
+        rowValues: (string | number)[],
         hasHeaderRow?: boolean,
         majorDimension?: 'ROWS' | 'COLUMNS'
+        firstRowOnly?: boolean
     }): Promise<number | undefined> {
         if (parameters.searchColIndex === undefined && parameters.searchColName === undefined)
             throw new Error('podaj index lub nazwę kolumny do przeszukania!')
@@ -74,17 +76,21 @@ export default class ToolsSheets {
         })).values;
         const searchColIndex = (parameters.searchColName) ? sheetValues[0].indexOf(parameters.searchColName) : <number>parameters.searchColIndex;
         const firstColumnNumber = (parameters.firstColumnName) ? sheetValues[0].indexOf(parameters.firstColumnName) + 1 : <number>parameters.firstColumnNumber;
-
+        const lastColumnNumber = firstColumnNumber + parameters.rowValues.length;
         let firstRow = Tools.findFirstInRange(parameters.valueToFind, sheetValues, searchColIndex);
         let lastRow: number = 0;
         if (firstRow) {
             if (parameters.hasHeaderRow) firstRow++;
-            lastRow = <number>Tools.findLastInRange(parameters.valueToFind, sheetValues, searchColIndex);
+            if (parameters.firstRowOnly)
+                lastRow = firstRow;
+            else
+                lastRow = <number>Tools.findLastInRange(parameters.valueToFind, sheetValues, searchColIndex);
+
             await ToolsSheets.updateValues(auth, {
                 spreadsheetId: parameters.spreadsheetId,
                 rangeA1: `${parameters.sheetName}!${ToolsSheets.R1C1toA1(firstRow + 1, firstColumnNumber)}:` +
-                    `${ToolsSheets.R1C1toA1(lastRow + 1, firstColumnNumber)}`,
-                values: parameters.values,
+                    `${ToolsSheets.R1C1toA1(lastRow + 1, lastColumnNumber)}`,
+                values: [parameters.rowValues],
                 majorDimension: parameters.majorDimension
             });
         }

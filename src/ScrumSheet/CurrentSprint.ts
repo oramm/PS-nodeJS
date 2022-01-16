@@ -27,9 +27,10 @@ export default class CurrentSprint {
         valueToFind: string | number,
         firstColumnNumber?: number,
         firstColumnName?: string,
-        values: (string | number)[][] | (string | number)[],
+        rowValues: (string | number)[],
         hasHeaderRow?: boolean,
-        majorDimension?: 'ROWS' | 'COLUMNS'
+        majorDimension?: 'ROWS' | 'COLUMNS',
+        firstRowOnly?: boolean;
     }) {
         return await ToolsSheets.editRowsByColValue(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
@@ -39,9 +40,10 @@ export default class CurrentSprint {
             searchColName: parameters.searchColName,
             firstColumnNumber: parameters.firstColumnNumber,
             firstColumnName: parameters.firstColumnName,
-            values: parameters.values,
+            rowValues: parameters.rowValues,
             hasHeaderRow: parameters.hasHeaderRow,
-            majorDimension: parameters.majorDimension
+            majorDimension: parameters.majorDimension,
+            firstRowOnly: parameters.firstRowOnly
         });
     }
 
@@ -72,8 +74,8 @@ export default class CurrentSprint {
                 ToolsSheets.repeatFormula(auth, {
                     range: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: headerContractRow,
-                        endRowIndex: headerContractRow + 1,
+                        startRowIndex: headerContractRow - 1,
+                        endRowIndex: headerContractRow,
                         startColumnIndex: sprintSumColNumber - 1,
                         endColumnIndex: sprintSumColNumber + 1
                     },
