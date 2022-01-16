@@ -62,7 +62,7 @@ export default class ToolsSheets {
         values: (string | number)[][] | (string | number)[],
         hasHeaderRow?: boolean,
         majorDimension?: 'ROWS' | 'COLUMNS'
-    }) {
+    }): Promise<number | undefined> {
         if (parameters.searchColIndex === undefined && parameters.searchColName === undefined)
             throw new Error('podaj index lub nazwę kolumny do przeszukania!')
         if (parameters.firstColumnNumber === undefined && parameters.firstColumnName === undefined)
@@ -88,6 +88,7 @@ export default class ToolsSheets {
                 majorDimension: parameters.majorDimension
             });
         }
+        return firstRow;
     }
 
     static async clearValues(auth: OAuth2Client, parameters: { spreadsheetId: string, range: string }) {

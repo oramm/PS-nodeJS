@@ -31,7 +31,7 @@ export default class CurrentSprint {
         hasHeaderRow?: boolean,
         majorDimension?: 'ROWS' | 'COLUMNS'
     }) {
-        await ToolsSheets.editRowsByColValue(auth, {
+        return await ToolsSheets.editRowsByColValue(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             sheetName: Setup.ScrumSheet.CurrentSprint.name,
             valueToFind: parameters.valueToFind,
@@ -72,8 +72,8 @@ export default class CurrentSprint {
                 ToolsSheets.repeatFormula(auth, {
                     range: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: headerContractRow - 1,
-                        endRowIndex: headerContractRow,
+                        startRowIndex: headerContractRow,
+                        endRowIndex: headerContractRow + 1,
                         startColumnIndex: sprintSumColNumber - 1,
                         endColumnIndex: sprintSumColNumber + 1
                     },
