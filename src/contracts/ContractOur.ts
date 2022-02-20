@@ -100,11 +100,6 @@ export default class ContractOur extends Contract {
     /** wstawia wiersz nagłówka kontratu - bez zadań */
     async addInScrum(auth: OAuth2Client) {
         if (await this.shouldBeInScrum()) {
-            const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.CurrentSprint.name
-            })).values;
-
             await ToolsSheets.insertRows(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
                 sheetId: Setup.ScrumSheet.CurrentSprint.id,
@@ -127,6 +122,10 @@ export default class ContractOur extends Contract {
                 pasteType: 'PASTE_FORMAT'
             })
 
+            const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name
+            })).values;
 
             const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
             const ourId_Alias = `${this.ourId} [${this.alias || ''}]`.trim();

@@ -57,31 +57,23 @@ export default class CurrentSprint {
         const taskEstimatedColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskEstimatedTimeColName) + 1;
         const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
 
-        const headerContractRow = <number>Tools.findFirstInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
-        const lastContractRow = <number>Tools.findLastInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
-        const contractTasksRowsCount = lastContractRow - headerContractRow;
+        const headerContractRowNumber = <number>Tools.findFirstInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+        const lastContractRowNumber = <number>Tools.findLastInRange(contractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+        const contractTasksRowsCount = lastContractRowNumber - headerContractRowNumber;
 
         await Promise.all(
             [
-                ToolsSheets.updateValues(auth, {
-                    spreadsheetId: Setup.ScrumSheet.GdId,
-                    rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(headerContractRow, taskEstimatedColNumber)}`,
-                    //values: [[`=SUM(R[1]C:R[${rowsCount}]C)`]]
-                    values: [[
-                        `=SUM(${ToolsSheets.R1C1toA1(headerContractRow + 1, taskEstimatedColNumber)}:` +
-                        `${ToolsSheets.R1C1toA1(headerContractRow + contractTasksRowsCount, taskEstimatedColNumber)})`]]
-                }),
                 ToolsSheets.repeatFormula(auth, {
                     range: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                        startRowIndex: headerContractRow - 1,
-                        endRowIndex: headerContractRow,
+                        startRowIndex: headerContractRowNumber - 1,
+                        endRowIndex: headerContractRowNumber,
                         startColumnIndex: sprintSumColNumber - 1,
                         endColumnIndex: sprintSumColNumber + 1
                     },
                     spreadsheetId: Setup.ScrumSheet.GdId,
-                    formula: `=SUM(${ToolsSheets.R1C1toA1(headerContractRow + 1, sprintSumColNumber)}:` +
-                        `${ToolsSheets.R1C1toA1(headerContractRow + contractTasksRowsCount, sprintSumColNumber)})`
+                    formula: `=SUM(${ToolsSheets.R1C1toA1(headerContractRowNumber + 1, sprintSumColNumber)}:` +
+                        `${ToolsSheets.R1C1toA1(headerContractRowNumber + contractTasksRowsCount, sprintSumColNumber)})`
                 })
             ]);
     }
@@ -117,8 +109,8 @@ export default class CurrentSprint {
         const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
         const contractOurIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName) + 1;
         const contractDbIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName) + 1;
-        const milestoneIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneIdColName) + 1;
-        const caseTypeColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeIdColName) + 1;
+        const milestoneTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName) + 1;
+        const caseTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName) + 1;
         const taskOwnerNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName) + 1;
 
         const lastsortableRow = <number>Tools.findFirstInRange('ENVI', currentSprintValues, projectIdColNumber - 1);
@@ -134,8 +126,8 @@ export default class CurrentSprint {
                     { dimensionIndex: projectIdColNumber, sortOrder: 'ASCENDING' },
                     { dimensionIndex: contractOurIdColNumber, sortOrder: 'ASCENDING' },
                     { dimensionIndex: contractDbIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: milestoneIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: caseTypeColNumber, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: milestoneTypeNameColNumber, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: caseTypeNameColNumber, sortOrder: 'ASCENDING' },
                     { dimensionIndex: taskOwnerNameColNumber, sortOrder: 'ASCENDING' }
                 ]
             }
@@ -151,8 +143,8 @@ export default class CurrentSprint {
 
         const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
         const contractDbIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName) + 1;
-        const milestoneIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneIdColName) + 1;
-        const caseTypeColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeIdColName) + 1;
+        const milestoneTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName) + 1;
+        const caseTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName) + 1;
         const taskOwnerNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName) + 1;
 
         const firstContractRow = <number>Tools.findFirstInRange(ourId, currentSprintValues, contractOurIdColIndex) + 1;
@@ -169,8 +161,8 @@ export default class CurrentSprint {
                 },
                 sortSpecs: [
                     { dimensionIndex: contractDbIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: milestoneIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: caseTypeColNumber, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: milestoneTypeNameColNumber, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: caseTypeNameColNumber, sortOrder: 'ASCENDING' },
                     { dimensionIndex: taskOwnerNameColNumber, sortOrder: 'ASCENDING' }
                 ]
             }
