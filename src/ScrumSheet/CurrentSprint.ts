@@ -68,12 +68,12 @@ export default class CurrentSprint {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
                         startRowIndex: headerContractRowNumber - 1,
                         endRowIndex: headerContractRowNumber,
-                        startColumnIndex: sprintSumColNumber - 1,
+                        startColumnIndex: sprintSumColNumber - 6,
                         endColumnIndex: sprintSumColNumber + 1
                     },
                     spreadsheetId: Setup.ScrumSheet.GdId,
-                    formula: `=SUM(${ToolsSheets.R1C1toA1(headerContractRowNumber + 1, sprintSumColNumber)}:` +
-                        `${ToolsSheets.R1C1toA1(headerContractRowNumber + contractTasksRowsCount, sprintSumColNumber)})`
+                    formula: `=SUM(${ToolsSheets.R1C1toA1(headerContractRowNumber + 1, sprintSumColNumber - 5)}:` +
+                        `${ToolsSheets.R1C1toA1(headerContractRowNumber + contractTasksRowsCount, sprintSumColNumber - 5)})`
                 })
             ]);
     }

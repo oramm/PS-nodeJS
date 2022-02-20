@@ -136,7 +136,8 @@ export default class ContractOur extends Contract {
                 values: [[this.projectOurId,
                     0,
                 this.ourId, 0, 0, 0, 0,
-                (this._manager) ? this._manager.id : '', '',
+                (this._manager) ? this._manager.id : '',
+                    '{"contractHeader":true}',
                 `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? this._manager.name : ''}")`,
                     '', '', '', 'd', 'd', 'd', 'd', 'd'
                 ]]
@@ -166,7 +167,8 @@ export default class ContractOur extends Contract {
                     this.projectOurId,
                     0,
                     this.ourId, 0, 0, 0, 0,
-                    this._manager ? <number>this._manager.id : '', '',
+                    this._manager ? <number>this._manager.id : '',
+                    '{"contractHeader":true}',
                     `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
                     '', '', '', 'd', 'd', 'd', 'd', 'd'
                 ],
