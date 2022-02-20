@@ -19,7 +19,8 @@ app.get('/case/:id', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -43,7 +44,8 @@ app.post('/case', async (req: any, res: any) => {
         res.send(caseItem);
     } catch (error) {
 
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -60,7 +62,8 @@ app.put('/case/:id', async (req: any, res: any) => {
         ]);
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     }
 });
@@ -77,7 +80,8 @@ app.delete('/case/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

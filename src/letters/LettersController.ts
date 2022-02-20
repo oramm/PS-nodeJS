@@ -50,16 +50,16 @@ export default class LettersController {
     }
 
     static async processLettersResult(result: any[], initParamObject: any) {
-        let newResult: [Letter?] = [];
+        let newResult: Letter[] = [];
         let [_casesAssociationsPerProject, _letterEntitiesPerProject] = await Promise.all([
             LetterCaseAssociationsController.getLetterCaseAssociationsList(initParamObject),
             LetterEntityAssociationsController.getLetterEntityAssociationsList(initParamObject)
         ]);
         for (const row of result) {
-            var _casesAssociationsPerLetter = _casesAssociationsPerProject.filter((item: any) => item.letterId == row.Id);
-            var _letterEntitiesMainPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'MAIN');
-            var _letterEntitiesCcPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'Cc');
-            var initParam: any = {
+            const _casesAssociationsPerLetter = _casesAssociationsPerProject.filter((item: any) => item.letterId == row.Id);
+            const _letterEntitiesMainPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'MAIN');
+            const _letterEntitiesCcPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'Cc');
+            const initParam = {
                 id: row.Id,
                 isOur: row.IsOur,
                 number: row.Number,
@@ -85,7 +85,7 @@ export default class LettersController {
                     surname: row.EditorSurname,
                 }
             }
-            var item: IncomingLetter | OurLetter | OurOldTypeLetter;
+            let item: IncomingLetter | OurLetter | OurOldTypeLetter;
             if (initParam.isOur) {
                 if (initParam.id == initParam.number)
                     item = new OurLetter(initParam);
@@ -97,5 +97,18 @@ export default class LettersController {
             newResult.push(item);
         }
         return newResult;
+    }
+    /** tworzy obiekt odpowiedniej podklasy Letter na podstawie atrybutów */
+    static createProperLetter(initParam: any) {
+        let item: OurLetter | OurOldTypeLetter | IncomingLetter;
+        if (initParam.isOur) {
+            if (initParam.id == initParam.number)
+                item = new OurLetter(initParam);
+            else
+                item = new OurOldTypeLetter(initParam);
+        }
+        else
+            item = new IncomingLetter(initParam);
+        return item;
     }
 }

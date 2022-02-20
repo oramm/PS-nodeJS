@@ -8,7 +8,8 @@ app.get('/milestoneTypeContractTypeAssociations', async (req: any, res: any) => 
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -19,7 +20,8 @@ app.get('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: any) 
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -31,7 +33,8 @@ app.post('/milestoneTypeContractTypeAssociation', async (req: any, res: any) => 
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -44,7 +47,8 @@ app.put('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: any) 
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -56,7 +60,8 @@ app.delete('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: an
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

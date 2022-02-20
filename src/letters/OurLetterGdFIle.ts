@@ -1,5 +1,9 @@
 import DocumentTemplate from "../documentTemplates/DocumentTemplate";
 import OurLetter from "./OurLetter";
+import { OAuth2Client } from 'google-auth-library';
+import DocumentGdFile from "../documentTemplates/DocumentGdFile";
+import { Envi } from "../tools/Tools";
+import ToolsDocs from "../tools/ToolsDocs";
 
 export default class OurLetterGdFile extends DocumentGdFile {
     projectContext: string;
@@ -10,28 +14,24 @@ export default class OurLetterGdFile extends DocumentGdFile {
             this.makeCasesList();
         ;
     }
-    /*
-     * Tworzy zakresy nazwane w szablonie - używać przy dodawaniu naszych pism
-     */
-    public createNamedRanges() {
-        GDocsTools.createNamedRangesByTags(this.document.documentGdId, GDocsTools.getNameRangesTagsFromTemplate(this._template.gdId));
-    }
+
     /*
      * tworzy plik z szablonu w folderze pisma na GD
      */
-    public create(): GoogleAppsScript.Drive.File {
-        super.create();
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'address', this.makeEntitiesDataLabel(this.document._entitiesMain));
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'description', this.description);
+    async create(auth: OAuth2Client) {
+        const gDocument = await super.create(auth);
+        ToolsDocs.fillNamedRange(gDocument, 'address', this.makeEntitiesDataLabel(<any[]>this.document._entitiesMain));
+        ToolsDocs.fillNamedRange(gDocument, 'description', <string>this.description);
         var projectContextStyle = {};
-        projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 9;
-        projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#666666';
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'projectContext', this.projectContext, projectContextStyle);
-        return this.gdFile;
+        //projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 9;
+        //projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#666666';
+        ToolsDocs.fillNamedRange(gDocument, 'projectContext', this.projectContext, projectContextStyle);
+        return gDocument;
     }
 
-    edit() {
-        super.edit();
+    edit(auth: OAuth2Client) {
+        /*
+        super.edit(auth);
         GDocsTools.fillNamedRange(this.document.documentGdId, 'number', '' + this.document.number);
         GDocsTools.fillNamedRange(this.document.documentGdId, 'address', this.makeEntitiesDataLabel(this.document._entitiesMain));
         GDocsTools.fillNamedRange(this.document.documentGdId, 'description', this.description);
@@ -39,10 +39,11 @@ export default class OurLetterGdFile extends DocumentGdFile {
         projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 10;
         projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#b6bbb9';
         GDocsTools.fillNamedRange(this.document.documentGdId, 'projectContext', this.projectContext, projectContextStyle);
+        */
     }
 
     private makeCasesList(): string {
-        var cases = this.document._cases.map(item => {
+        const cases = this.document._cases.map(item => {
             item.contractId = item._parent.contractId;
             return item;
         })
@@ -56,7 +57,7 @@ export default class OurLetterGdFile extends DocumentGdFile {
             for (const caseItem of casesByContracts[contractIdItem])
                 casesLabel += caseItem._typeFolderNumber_TypeName_Number_Name + ', '
         }
-        return casesLabel.substring(0, casesLabel.length - 2)
+        return casesLabel.substring(0, casesLabel.length - 2);
     }
 
     /** tworzy etykietę z danymi address
@@ -73,4 +74,4 @@ export default class OurLetterGdFile extends DocumentGdFile {
         return label;
     }
 
-} x
+}

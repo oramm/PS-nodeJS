@@ -13,7 +13,8 @@ app.get('/persons', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -24,7 +25,8 @@ app.get('/person/:id', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 
@@ -42,7 +44,8 @@ app.post('/person', async (req: any, res: any) => {
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -56,7 +59,8 @@ app.put('/person/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -72,7 +76,8 @@ app.put('/user/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -84,7 +89,8 @@ app.delete('/person/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

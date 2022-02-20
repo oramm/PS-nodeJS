@@ -18,7 +18,8 @@ app.get('/caseTemplate/:id', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -30,7 +31,8 @@ app.post('/caseTemplate', async (req: any, res: any) => {
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -43,7 +45,8 @@ app.put('/caseTemplate/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -55,7 +58,8 @@ app.delete('/caseTemplate/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

@@ -25,7 +25,8 @@ app.post('/login', async (req: any, res: any) => {
         console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
         res.send(req.session);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -41,7 +42,8 @@ app.get('/oauthcallback', async (req: any, res: any) => {
         res.send(req.session);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

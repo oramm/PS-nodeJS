@@ -12,7 +12,8 @@ app.get('/projects/:systemEmail', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 
@@ -27,7 +28,8 @@ app.get('/project/:id/systemEmail/:systemEmail', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -48,7 +50,8 @@ app.post('/project', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
 
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -63,7 +66,8 @@ app.put('/project/:id', async (req: any, res: any) => {
 
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     }
 });
@@ -79,7 +83,8 @@ app.delete('/project/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

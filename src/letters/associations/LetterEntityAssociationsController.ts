@@ -1,6 +1,7 @@
 import Case from "../../contracts/milestones/cases/Case";
 import Entity from "../../entities/Entity";
 import ToolsDb from "../../tools/ToolsDb";
+import Letter from "../Letter";
 import LetterEntity from "./LetterEntity";
 
 
@@ -36,8 +37,8 @@ export default class LetterEntityAssociationsController {
 
     }
 
-    static processLetterEntityAssociationsResult(result: any[]): [LetterEntity?] {
-        let newResult: [LetterEntity?] = [];
+    static processLetterEntityAssociationsResult(result: any[]): LetterEntity[] {
+        let newResult: LetterEntity[] = [];
 
         for (const row of result) {
             const item = new LetterEntity({

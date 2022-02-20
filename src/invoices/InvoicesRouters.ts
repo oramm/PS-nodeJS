@@ -11,7 +11,8 @@ app.get('/invoices', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -22,7 +23,8 @@ app.get('/invoice/:id', async (req: any, res: any) => {
         res.send(result);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -33,7 +35,8 @@ app.post('/invoice', async (req: any, res: any) => {
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -50,7 +53,8 @@ app.post('/copyInvoice', async (req: any, res: any) => {
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         console.log(error);
     };
 });
@@ -67,7 +71,8 @@ app.put('/invoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -90,7 +95,8 @@ app.put('/issueInvoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -103,7 +109,8 @@ app.put('/setAsToMakeInvoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -116,7 +123,8 @@ app.put('/setAsSentInvoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -129,7 +137,8 @@ app.put('/setAsPaidInvoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });
@@ -143,7 +152,8 @@ app.delete('/invoice/:id', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         console.log(error);
-        res.status(500).send(error.message);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
         throw error;
     }
 });

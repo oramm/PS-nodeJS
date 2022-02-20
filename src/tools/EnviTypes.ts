@@ -37,7 +37,7 @@ export namespace Envi {
         _contract?: any;
         _project?: any;
         projectId?: any;
-        _cases?: any[];
+        _cases: any[];
         _entitiesMain?: any[];
         _entitiesCc?: any[];
         letterFilesCount?: number;

@@ -206,15 +206,18 @@ export default class ToolsGd {
         }
     }
 
-    static async copyFile(auth: OAuth2Client, fileId: string, copyName: string) {
+    static async copyFile(auth: OAuth2Client, originFileId: string, destFolderId: string, copyName: string) {
         try {
             const drive = google.drive({ version: 'v3', auth });
             const newFile = await drive.files.copy({
-                fileId: fileId,
-                requestBody: { name: copyName }
+                fileId: originFileId,
+                requestBody: {
+                    name: copyName,
+                    parents: [destFolderId]
+                }
 
             })
-            console.log(`Skopiowano plik ${fileId}`);
+            console.log(`Skopiowano plik ${originFileId}`);
             return newFile;
         } catch (error) {
             throw error;
