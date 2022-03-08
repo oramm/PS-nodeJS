@@ -106,29 +106,29 @@ export default class CurrentSprint {
         })).values;
 
 
-        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
-        const contractOurIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName) + 1;
-        const contractDbIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName) + 1;
-        const milestoneTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName) + 1;
-        const caseTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName) + 1;
-        const taskOwnerNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName) + 1;
+        const projectIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName);
+        const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+        const contractDbIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName);
+        const milestoneTypeNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName);
+        const caseTypeNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName);
+        const taskOwnerNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName);
 
-        const lastsortableRow = <number>Tools.findFirstInRange('ENVI', currentSprintValues, projectIdColNumber - 1);
+        const lastsortableRow = <number>Tools.findFirstInRange('ENVI', currentSprintValues, projectIdColIndex);
 
         const sortRequest = {
             sortRange: {
                 range: {
                     sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                    startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
+                    startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow - 1,
                     endRowIndex: lastsortableRow
                 },
                 sortSpecs: [
-                    { dimensionIndex: projectIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: contractOurIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: contractDbIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: milestoneTypeNameColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: caseTypeNameColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: taskOwnerNameColNumber, sortOrder: 'ASCENDING' }
+                    { dimensionIndex: projectIdColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: contractOurIdColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: contractDbIdColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: milestoneTypeNameColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: caseTypeNameColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: taskOwnerNameColIndex, sortOrder: 'ASCENDING' }
                 ]
             }
         }

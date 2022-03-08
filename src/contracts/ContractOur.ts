@@ -142,6 +142,7 @@ export default class ContractOur extends Contract {
                     '', '', '', 'd', 'd', 'd', 'd', 'd'
                 ]]
             });
+            await ScrumSheet.CurrentSprint.sortProjects(auth);
         }
     }
     /**zmienia dane w nagłówku kontraktu i odnosniki */

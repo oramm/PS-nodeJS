@@ -70,6 +70,18 @@ app.put('/contract/:id', async (req: any, res: any) => {
     }
 });
 
+app.put('/sortProjects', async (req: any, res: any) => {
+    try {
+
+        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.sortProjects);
+        res.send("sorted");
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send(error.message);
+        console.log(error);
+    }
+});
+
 app.delete('/contract/:id', async (req: any, res: any) => {
     try {
         const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
