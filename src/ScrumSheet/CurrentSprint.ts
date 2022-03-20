@@ -142,10 +142,10 @@ export default class CurrentSprint {
         })).values;
 
         const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
-        const contractDbIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName) + 1;
-        const milestoneTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName) + 1;
-        const caseTypeNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName) + 1;
-        const taskOwnerNameColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName) + 1;
+        const contractDbIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName);
+        const milestoneTypeNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.milestoneNameColName);
+        const caseTypeNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.caseTypeColName);
+        const taskOwnerNameColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName);
 
         const firstContractRow = <number>Tools.findFirstInRange(ourId, currentSprintValues, contractOurIdColIndex) + 1;
         if (!firstContractRow)
@@ -160,10 +160,10 @@ export default class CurrentSprint {
                     endRowIndex: lastContractRow
                 },
                 sortSpecs: [
-                    { dimensionIndex: contractDbIdColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: milestoneTypeNameColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: caseTypeNameColNumber, sortOrder: 'ASCENDING' },
-                    { dimensionIndex: taskOwnerNameColNumber, sortOrder: 'ASCENDING' }
+                    { dimensionIndex: contractDbIdColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: milestoneTypeNameColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: caseTypeNameColIndex, sortOrder: 'ASCENDING' },
+                    { dimensionIndex: taskOwnerNameColIndex, sortOrder: 'ASCENDING' }
                 ]
             }
         }
