@@ -54,8 +54,8 @@ export default class ContractOther extends Contract {
     }
 
     async createFolders(auth: OAuth2Client) {
-        super.createFolders(auth);
-        const materialCardsFolder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent.gdFolderId, name: 'Wnioski Materiałowe' });
+        await super.createFolders(auth);
+        const materialCardsFolder = await ToolsGd.setFolder(auth, { parentId: <string>this.gdFolderId, name: 'Wnioski Materiałowe' });
         this.materialCardsGdFolderId = materialCardsFolder.id;
     }
 

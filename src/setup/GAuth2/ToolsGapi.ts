@@ -139,7 +139,8 @@ export default class ToolsGapi {
             return result;
         } catch (error) {
             console.log('zły token error');
-            console.log(error.message);
+            if (error instanceof Error)
+                console.log(error.message);
             throw error;
 
             //await open(authorizeUrl, { wait: false }).then((cp: any) => cp.unref());

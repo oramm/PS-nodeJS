@@ -196,7 +196,6 @@ export default abstract class Contract extends BusinessObject {
             await super.editInDb(conn, true);
             await this.editEntitiesAssociationsInDb(conn, true)
         });
-        return res[0];
     }
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
