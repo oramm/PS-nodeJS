@@ -8,8 +8,10 @@ app.get('/cases', async (req: any, res: any) => {
         var result = await CasesController.getCasesList(req.query);
         res.send(result);
     } catch (err) {
-        res.status(500).send(err.message);
-        console.error(err);
+        if (err instanceof Error) {
+            res.status(500).send(err.message);
+            console.error(err);
+        }
     }
 });
 

@@ -102,7 +102,7 @@ export default abstract class Contract extends BusinessObject {
         const folder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent?.gdFolderId, name: <string>this._folderName })
         this.setGdFolderIdAndUrl(folder.id as string);
         const meetingNotesFolder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent.gdFolderId, name: 'Notatki ze spotkań' });
-        this.meetingProtocolsGdFolderId = meetingNotesFolder.id;
+        this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
     }
 
     async addEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {

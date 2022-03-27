@@ -93,8 +93,10 @@ export default class ToolsGd {
         })
         console.log(`Usuwam: ${filePath}`)
         fs.unlinkSync(filePath)
-        console.log('New Gd File Id: ', filesSchema.id);
-        return filesSchema;
+        //@ts-ignore
+        console.log('New Gd File Id: ', filesSchema.data.id);
+        //@ts-ignore
+        return filesSchema.data;
     }
 
     static async createFolder(auth: OAuth2Client, folderData: { name: string, parents: string[] }) {
@@ -123,19 +125,24 @@ export default class ToolsGd {
             folder = await (this.createFolder(auth, { name: parameters.name, parents: [parameters.parentId] }) as drive_v3.Schema$File);
             await this.createPermissions(auth, { fileId: folder.id as string });
         }
+        if (typeof folder.id != "string") throw new Error('Nie utworzono folderu')
         return folder;
     }
 
     static async updateFile(auth: OAuth2Client, requestBody: drive_v3.Schema$File) {
         try {
             const drive = google.drive({ version: 'v3', auth });
-            const fileId = requestBody.id;
+            const fileId = <string>requestBody.id;
             delete requestBody.id;
-            const filesSchema = await drive.files.update({
-                fileId,
-                requestBody
-            })
+            const filesSchema = await drive.files.update(
+                {
+                    fileId: fileId,
+
+                    requestBody: requestBody,
+
+                })
             console.log(`Zaktualizowano plik ${fileId}`);
+            //@ts-ignore
             return filesSchema.data;
         } catch (error) {
             throw error;

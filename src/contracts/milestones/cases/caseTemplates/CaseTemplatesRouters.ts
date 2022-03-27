@@ -8,7 +8,8 @@ app.get('/caseTemplates', async (req: any, res: any) => {
         res.send(result);
     } catch (err) {
         console.error(err);
-        res.status(500).send(err.message);
+        if (err instanceof Error)
+            res.status(500).send(err.message);
     }
 });
 
