@@ -82,6 +82,18 @@ app.put('/user/:id', async (req: any, res: any) => {
     }
 });
 
+app.get('/personsRefresh', async (req: any, res: any) => {
+    try {
+        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.personsRefresh, undefined, ScrumSheet);
+        res.send('scrum refreshed');
+    } catch (error) {
+        console.log(error);
+        if (error instanceof Error)
+            res.status(500).send(error.message);
+        throw error;
+    }
+});
+
 app.delete('/person/:id', async (req: any, res: any) => {
     try {
         let item = new Person(req.body);

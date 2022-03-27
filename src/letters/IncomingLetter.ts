@@ -47,7 +47,7 @@ export default class IncomingLetter extends Letter {
         if (!this.folderGdId && this.documentGdId) {
             const letterFile = await ToolsGd.getFileOrFolderById(auth, this.documentGdId)
             letterFolder = await this.createLetterFolder(auth, blobEnviObjects);
-            ToolsGd.moveFile(auth, letterFile, <string>letterFolder.id)
+            ToolsGd.moveFileOrFolder(auth, letterFile, <string>letterFolder.id)
 
             this._documentOpenUrl = undefined;
             this.documentGdId = '';

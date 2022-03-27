@@ -16,7 +16,7 @@ export default class ScrumSheet {
 
     static async personsRefresh(auth: OAuth2Client) {
         const persons = await ScrumSheet.scrumGetPersons();
-        await this.Planning.refreshTimeAvailable(auth, persons);
+        //await this.Planning.refreshTimeAvailable(auth, persons);
         await this.CurrentSprint.makeTimesSummary(auth, persons);
         this.CurrentSprint.makePersonTimePerTaskFormulas(auth, persons);
         this.Data.synchronizePersonsInScrum(auth, persons);

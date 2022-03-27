@@ -85,7 +85,7 @@ export default class ToolsGd {
             body: content
         };
 
-        let filesSchema = await drive.files.create({
+        let filesSchema = <drive_v3.Schema$File>await drive.files.create({
             //@ts-ignore
             resource: fileMetadata,
             media: media,
@@ -93,8 +93,8 @@ export default class ToolsGd {
         })
         console.log(`Usuwam: ${filePath}`)
         fs.unlinkSync(filePath)
-        console.log('New Gd File Id: ', filesSchema.data.id);
-        return filesSchema.data;
+        console.log('New Gd File Id: ', filesSchema.id);
+        return filesSchema;
     }
 
     static async createFolder(auth: OAuth2Client, folderData: { name: string, parents: string[] }) {
@@ -152,7 +152,7 @@ export default class ToolsGd {
         }
     }
 
-    static async moveFile(auth: OAuth2Client, fileData: drive_v3.Schema$File, newParentFolderId: string) {
+    static async moveFileOrFolder(auth: OAuth2Client, fileData: drive_v3.Schema$File, newParentFolderId: string) {
         try {
             console.log(`Przenoszę do nowego folderu plik ${fileData.id} ...`);
 
@@ -243,8 +243,7 @@ export default class ToolsGd {
         const drive = google.drive({ version: 'v3', auth });
         for (const permission of parameters.permissions) {
             let permissionSchema = await drive.permissions.create({
-                //@ts-ignore
-                resource: permission,
+                requestBody: permission,
                 fileId: parameters.fileId,
                 fields: 'id'
             })

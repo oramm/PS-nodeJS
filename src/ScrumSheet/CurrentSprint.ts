@@ -193,19 +193,22 @@ export default class CurrentSprint {
             })).values;
 
         const timesSummaryColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.timesSummaryColName) + 1;
+        const timesColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.timesColName) + 1;
         if (!persons)
             persons = await ScrumSheet.scrumGetPersons();
 
-        const summaryTableRange = {
+        await ToolsSheets.deleteColumns(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            sheetId: Setup.ScrumSheet.CurrentSprint.id,
+            startIndex: timesSummaryColNumber,
+            endIndex: timesColNumber - 1
+        });
+        await ToolsSheets.insertCols(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             sheetId: Setup.ScrumSheet.CurrentSprint.id,
             startIndex: timesSummaryColNumber,
             endIndex: timesSummaryColNumber + persons.length
-        }
-        await ToolsSheets.deleteColumns(auth, summaryTableRange);
-        await ToolsSheets.insertCols(auth, summaryTableRange);
-
-        const timesColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.timesColName) + 1;
+        });
 
         const formulas: any[][] = [[], [], [], [], [], [], [], [], [], [], [], []];
         const modeColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.modeColName) + 1;
@@ -213,10 +216,10 @@ export default class CurrentSprint {
         await ToolsSheets.clearValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             range:
-                `'${Setup.ScrumSheet.CurrentSprint.name}'!R${Setup.ScrumSheet.CurrentSprint.firstDataRow}C${timesSummaryColNumber - 1}:` +
+                `'${Setup.ScrumSheet.CurrentSprint.name}'!R${Setup.ScrumSheet.CurrentSprint.firstDataRow}C${timesSummaryColNumber}:` +
                 `R${currentSprintValues.length}C${timesColNumber - 1}`
         });
-        this.printTimesDescriptions(auth, timesSummaryColNumber);
+        this.printTimesDescriptionColumn(auth, timesSummaryColNumber);
 
         for (let i = 0; i < persons.length; i++) {
             let col = timesSummaryColNumber + i + 1;
@@ -229,7 +232,7 @@ export default class CurrentSprint {
             ));
 
             //---------------zaplanowane czasy
-            formulas[2].push(`=planowanie!H${i + 3}`);
+            formulas[2].push(this.timesPlanned(i));
 
             formulas[3].push(`=SUM(${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow, timesColNumber + i)}:` +
                 `${ToolsSheets.R1C1toA1(currentSprintValues.length, timesColNumber + i)})`);
@@ -262,22 +265,25 @@ export default class CurrentSprint {
             values: formulas,
         });
     }
-
-    private static timeLeftFormula(row: number, col: number, modeColNumber: number) {
-        //'=IF(R1C' + modeColNumber + '="Planowanie"; R[1]C-R[2]C;R[2]C-R[9]C)'
-        return `=IF(${ToolsSheets.R1C1toA1(1, modeColNumber + 1, 'RC')}="Planowanie";` +
-            `${ToolsSheets.R1C1toA1(row + 1, col)}-${ToolsSheets.R1C1toA1(row + 2, col)};` +
-            `${ToolsSheets.R1C1toA1(row + 2, col)}-${ToolsSheets.R1C1toA1(row + 9, col)})`;
-    }
-
-    private static printTimesDescriptions(auth: OAuth2Client, timesSummaryColNumber: number) {
-        const desciptions = [['WYKONANO', 'PON.', 'WT.', 'ŚR.', 'CZW.', 'PT.', 'spotk', 'Razem', 'CZAS PRACY']];
+    private static printTimesDescriptionColumn(auth: OAuth2Client, timesSummaryColNumber: number) {
+        const desciptions = [['POZOSTAŁO', 'Cz. dost. og.', 'Przypisano', 'PON.', 'WT.', 'ŚR.', 'CZW.', 'PT.', 'spotk', 'Razem', 'CZ. PRACY']];
         ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
-            rangeA1: `'${Setup.ScrumSheet.CurrentSprint.name}'!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow, timesSummaryColNumber)}`,
+            rangeA1: `'${Setup.ScrumSheet.CurrentSprint.name}'!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow - 2, timesSummaryColNumber)}`,
             values: desciptions,
             majorDimension: 'COLUMNS'
         });
+    }
+
+    private static timeLeftFormula(row: number, col: number, modeColNumber: number) {
+        //'=IF(R1C' + modeColNumber + '="Planowanie"; R[1]C-R[2]C;R[1]C-R[9]C)'
+        return `=IF(${ToolsSheets.R1C1toA1(1, modeColNumber + 1, 'RC')}="Planowanie";` +
+            `${ToolsSheets.R1C1toA1(row + 1, col)}-${ToolsSheets.R1C1toA1(row + 2, col)};` +
+            `${ToolsSheets.R1C1toA1(row + 1, col)}-${ToolsSheets.R1C1toA1(row + 9, col)})`;
+    }
+
+    private static timesPlanned(personIndex: number) {
+        return `=planowanie!H${personIndex + 3}`
     }
 
     static async scrumDailyWorkouts(auth: OAuth2Client, personName: string, dayShift: number, currentSprintValues?: any[][]) {
@@ -316,7 +322,7 @@ export default class CurrentSprint {
                     startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
                     endRowIndex: currentSprintValues.length,
                     startColumnIndex: timesColIndex + i,
-                    endColumnIndex: timesColIndex + persons.length + i + 1
+                    endColumnIndex: timesColIndex + i + 1
                 },
                 formula: this.personTimePerTaskFormula(
                     currentSprintValues,
@@ -336,7 +342,7 @@ export default class CurrentSprint {
         //=IF(AND(($R4="Sylwia Kulczycka");($O4<>""));IF(OR($Q4="Zrobiony";$Q4="Oczekiwanie na odpowiedź - ONI";$Q4="Do weryfikacji - ONI");$X4;MAX($P4;$X4));"")
         //=IF(
         //AND(($R4="Sylwia Kulczycka");($O4<>""));
-        //IF(OR($Q4="Zrobiony";$Q4="Oczekiwanie na odpowiedź - ONI";$Q4="Do weryfikacji - ONI");
+        //IF(OR($Q4="Zrobiony";$Q4="Oczekiwanie na odpowiedź");
         //$X4;MAX($P4;$X4));""
         //)
         const personColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName) + 1;
@@ -357,7 +363,7 @@ export default class CurrentSprint {
         const nameSurname = `${person.name} ${person.surname}`
         return `=IF(` +
             `AND((${personA1}="${nameSurname}");(${deadlineA1}<>""));` +
-            `IF(OR(${statusA1}="Zrobiony"; ${statusA1}="Oczekiwanie na odpowiedź - ONI"; ${statusA1}="Do weryfikacji - ONI");${sprintSumA1}; MAX(${estimatedTimeA1}; ${sprintSumA1}));` +
+            `IF(OR(${statusA1}="Zrobiony"; ${statusA1}="Oczekiwanie na odpowiedź");${sprintSumA1}; MAX(${estimatedTimeA1}; ${sprintSumA1}));` +
             `"")`
     }
 }
