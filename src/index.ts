@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
-    origin: ['https://erp-envi.herokuapp.com', 'http://localhost', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+    origin: true,//['https://erp-envi.herokuapp.com', 'http://localhost', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 }
@@ -27,6 +27,7 @@ app.use(cors(corsOptions));
 //app.use(cors(corsOptionsDelegate));
 
 require('./setup/GAuth2/Gauth2Routers');
+//require('./setup/ServiceAPI/ServiceRouters');
 require('./persons/PersonsRouters');
 
 require('./persons/projectRoles/RolesRouters');
