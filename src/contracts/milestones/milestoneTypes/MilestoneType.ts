@@ -27,4 +27,3 @@ export default class MilestoneType extends BusinessObject {
         this._folderNumber_MilestoneTypeName = this._folderNumber + ' ' + this.name
     }
 }
-

@@ -9,6 +9,8 @@ export default class MilestoneTypeContractTypeAssociationsController {
             'MilestoneTypes_ContractTypes.FolderNumber, \n \t' +
             'MilestoneTypes_ContractTypes.IsDefault, \n \t' +
             'MilestoneTypes.Name AS "MilestoneTypeName", \n \t' +
+            'MilestoneTypes.IsInScrumByDefault, \n \t' +
+            'MilestoneTypes.IsUniquePerContract, \n \t' +
             'MilestoneTypes.Description AS "MilestoneTypeDescription", \n \t' +
             'ContractTypes.Name AS "ContractTypeName", \n \t' +
             'ContractTypes.Description AS ContractTypeDescription \n \t' +
@@ -30,6 +32,8 @@ export default class MilestoneTypeContractTypeAssociationsController {
                     id: row.MilestoneTypeId,
                     name: row.MilestoneTypeName,
                     description: row.MilestoneTypeDescription,
+                    isInScrumByDefault: row.IsInScrumByDefault,
+                    isUniquePerContract: row.IsUniquePerContract
                 },
                 _contractType: {
                     id: row.ContractTypeId,
