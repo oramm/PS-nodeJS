@@ -34,7 +34,7 @@ export default class MilestoneTypesController {
         let newResult: [MilestoneType?] = [];
 
         for (const row of result) {
-            var item = new MilestoneType({
+            const item = new MilestoneType({
                 id: row.MilestoneTypeId,
                 name: row.MilestoneTypeName,
                 description: row.MilestoneTypeDescription,
