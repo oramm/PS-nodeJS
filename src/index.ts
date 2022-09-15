@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
-    origin: true,//['https://erp-envi.herokuapp.com', 'http://localhost', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+    origin: ['http://localhost', 'https://erp-envi.herokuapp.com', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 }
