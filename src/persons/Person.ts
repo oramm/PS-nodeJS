@@ -40,6 +40,7 @@ export default class Person extends BusinessObject {
     }
 
     async getSystemRole() {
+        if (!this.id && !this.systemEmail) throw new Error('Person should have an ID or systemEmail');
         const personIdCondition = (this.id) ? 'Persons.Id=' + this.id : '1';
         const systemEmailCondition = (this.systemEmail) ? 'Persons.SystemEmail = "' + this.systemEmail + '"' : '1';
 
@@ -53,9 +54,9 @@ export default class Person extends BusinessObject {
             'JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id \n' +
             'WHERE ' + systemEmailCondition + ' AND ' + personIdCondition;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {
-            var row = result[0];
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const row = result[0];
             return {
                 personId: <number>row.PersonId,
                 systemRoleId: <number>row.SystemRoleId,

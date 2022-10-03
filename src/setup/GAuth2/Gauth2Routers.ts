@@ -7,8 +7,8 @@ import { app } from '../..';
 import Person from '../../persons/Person';
 
 app.post('/login', async (req: any, res: any) => {
+    console.log(`login`);
     try {
-        console.log(req.body.id_token)
         const ticket = await oAuthClient.verifyIdToken({
             idToken: req.body.id_token,
             audience: [
@@ -17,21 +17,21 @@ app.post('/login', async (req: any, res: any) => {
             ], // CLIENT_ID starej aplikacji GAS i erp-ENVI
         });
         const payload = ticket.getPayload();
+
         if (payload)
-            req.session.userData = { email: payload.email, sub: payload.sub };
-        //poozostawić do czasu uzupełnienia bazy o GoogleId
-        let person = new Person({ systemEmail: req.session.userData.email });
+            req.session.userData = { systemEmail: payload.email, name: payload.given_name, surname: payload.family_name };
+        //pozostawić do czasu uzupełnienia bazy o GoogleId
+        let person = new Person({ systemEmail: req.session.userData.systemEmail });
         let systemRole = await person.getSystemRole();
-
-        if (!systemRole.googleId)
-            ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
-
         console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
+        if (!systemRole.googleId)
+            await ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
+        console.log(`login ok`);
         res.send(req.session);
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 /*

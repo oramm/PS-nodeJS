@@ -13,19 +13,6 @@ export default class ToolsDb {
             console.log(error);
             throw error;
         }
-
-    }
-
-    static async getQueryCallbackAsyncOld(sql: string) {
-        return new Promise((resolve, reject) => {
-            this.pool.query(sql, (err: any, rows: any[], fields: any) => {
-                if (err) {
-                    console.log('Failed to query: ' + err.message);
-                    reject(err);
-                }
-                resolve(rows);
-            });
-        });
     }
 
     static prepareValueToSql(value: any) {
