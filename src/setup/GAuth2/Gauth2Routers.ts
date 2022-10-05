@@ -13,7 +13,8 @@ app.post('/login', async (req: any, res: any) => {
             idToken: req.body.id_token,
             audience: [
                 '246174537725-7t658k3s4u5fsi35jjs4si7ukqlnaujb.apps.googleusercontent.com',
-                '386403657277-9mh2cnqb9dneoh8lc6o2m339eemj24he.apps.googleusercontent.com'
+                '386403657277-9mh2cnqb9dneoh8lc6o2m339eemj24he.apps.googleusercontent.com',
+                '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com'
             ], // CLIENT_ID starej aplikacji GAS i erp-ENVI
         });
         const payload = ticket.getPayload();
