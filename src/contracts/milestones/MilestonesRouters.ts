@@ -5,13 +5,13 @@ import Milestone from './Milestone';
 
 app.get('/milestones', async (req: any, res: any) => {
     try {
-        var result = await MilestonesController.getMilestonesList(req.query);
+        const result = await MilestonesController.getMilestonesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -19,13 +19,13 @@ app.get('/milestones', async (req: any, res: any) => {
 
 app.get('/milestone/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestonesController.getMilestonesList(req.params);
+        const result = await MilestonesController.getMilestonesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -51,7 +51,7 @@ app.post('/milestone', async (req: any, res: any) => {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -67,7 +67,7 @@ app.put('/milestone/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -82,9 +82,9 @@ app.delete('/milestone/:id', async (req: any, res: any) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

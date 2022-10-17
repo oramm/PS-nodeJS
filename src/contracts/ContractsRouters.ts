@@ -11,25 +11,25 @@ app.get('/contracts', async (req: any, res: any) => {
         //odwróć zmienną bo nazwa isArchived czytelniejsza niż isActive
         if (typeof req.query.isArchived === 'string')
             req.query.isArchived = req.query.isArchived !== 'true';
-        var result = await ContractsController.getContractsList(req.query);
+        const result = await ContractsController.getContractsList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/contract/:id', async (req: any, res: any) => {
     try {
-        var result = await ContractsController.getContractsList(req.params);
+        const result = await ContractsController.getContractsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -43,14 +43,14 @@ app.post('/contract', async (req: any, res: any) => {
         try {
             await ToolsGapi.gapiReguestHandler(req, res, item.initialise, undefined, item);
         } catch (err) {
-            throw err;
+            console.error(err);
         }
         res.send(item);
     } catch (error) {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -66,7 +66,7 @@ app.put('/contract/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -78,24 +78,24 @@ app.put('/sortProjects', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
 app.delete('/contract/:id', async (req: any, res: any) => {
     try {
         const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
-        console.log('delete');
         await item.deleteFromDb();
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item),
             ToolsGapi.gapiReguestHandler(req, res, item.deleteFromScrum, undefined, item)
         ]);
         res.send(item);
+        console.log(`Contract ${item.name} deleted`);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

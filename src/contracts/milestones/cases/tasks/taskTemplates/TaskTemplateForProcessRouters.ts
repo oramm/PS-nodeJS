@@ -4,25 +4,25 @@ import TasksTemplateForProcess from './TaskTemplateForProcess';
 
 app.get('/tasksTemplatesForProcesses', async (req: any, res: any) => {
     try {
-        var result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.query);
+        const result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
     try {
-        var result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.params);
+        const result = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -35,7 +35,7 @@ app.post('/tasksTemplateForProcess', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -46,10 +46,10 @@ app.put('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -59,9 +59,9 @@ app.delete('/tasksTemplateForProcess/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

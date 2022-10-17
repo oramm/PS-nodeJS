@@ -3,13 +3,13 @@ import { app } from '../../index';
 
 app.get('/processStepInstances', async (req: any, res: any) => {
     try {
-        var result = await ProcessStepInstancesController.getProcessStepInstancesList(req.query);
+        const result = await ProcessStepInstancesController.getProcessStepInstancesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -17,13 +17,13 @@ app.get('/processStepInstances', async (req: any, res: any) => {
 
 app.get('/processStepInstance/:id', async (req: any, res: any) => {
     try {
-        var result = await ProcessStepInstancesController.getProcessStepInstancesList(req.params);
+        const result = await ProcessStepInstancesController.getProcessStepInstancesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 

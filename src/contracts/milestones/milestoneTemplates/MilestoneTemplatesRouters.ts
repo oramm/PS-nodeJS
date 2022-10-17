@@ -4,25 +4,25 @@ import MilestoneTemplate from './MilestoneTemplate';
 
 app.get('/milestoneTemplates', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.query);
+        const result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/milestoneTemplate/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.params);
+        const result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -35,7 +35,7 @@ app.post('/milestoneTemplate', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -46,10 +46,10 @@ app.put('/milestoneTemplate/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -59,9 +59,9 @@ app.delete('/milestoneTemplate/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

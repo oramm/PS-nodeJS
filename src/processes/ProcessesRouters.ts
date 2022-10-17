@@ -4,13 +4,13 @@ import Process from './Process';
 
 app.get('/processes', async (req: any, res: any) => {
     try {
-        var result = await ProcessesController.getProcessesList(req.query);
+        const result = await ProcessesController.getProcessesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -18,13 +18,13 @@ app.get('/processes', async (req: any, res: any) => {
 
 app.get('/process/:id', async (req: any, res: any) => {
     try {
-        var result = await ProcessesController.getProcessesList(req.params);
+        const result = await ProcessesController.getProcessesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -39,7 +39,7 @@ app.post('/process', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -50,10 +50,10 @@ app.put('/process/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -63,9 +63,9 @@ app.delete('/process/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

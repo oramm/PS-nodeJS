@@ -6,25 +6,25 @@ import { app } from '../../../../index';
 
 app.get('/tasks', async (req: any, res: any) => {
     try {
-        var result = await TasksController.getTasksList(req.query);
+        const result = await TasksController.getTasksList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/task/:id', async (req: any, res: any) => {
     try {
-        var result = await TasksController.getTasksList(req.params);
+        const result = await TasksController.getTasksList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -38,7 +38,7 @@ app.post('/task', async (req: any, res: any) => {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -54,7 +54,7 @@ app.put('/task/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -68,9 +68,9 @@ app.delete('/task/:id', async (req: any, res: any) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

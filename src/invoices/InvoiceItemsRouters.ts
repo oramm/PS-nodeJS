@@ -5,25 +5,25 @@ import { app } from '../index'
 
 app.get('/invoiceItems', async (req: any, res: any) => {
     try {
-        var result = await InvoiceItemsController.getInvoiceItemsList(req.query);
+        const result = await InvoiceItemsController.getInvoiceItemsList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/invoiceItem/:id', async (req: any, res: any) => {
     try {
-        var result = await InvoiceItemsController.getInvoiceItemsList(req.params);
+        const result = await InvoiceItemsController.getInvoiceItemsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 app.post('/invoiceItem', async (req: any, res: any) => {
@@ -35,7 +35,7 @@ app.post('/invoiceItem', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -48,7 +48,7 @@ app.post('/copyInvoiceItem', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -59,10 +59,10 @@ app.put('/invoiceItem/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -72,9 +72,9 @@ app.delete('/invoiceItem/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

@@ -8,25 +8,25 @@ import { app } from '../index'
 
 app.get('/entities', async (req: any, res: any) => {
     try {
-        var result = await EntitiesController.getEntitiesList(req.query);
+        const result = await EntitiesController.getEntitiesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/entity/:id', async (req: any, res: any) => {
     try {
-        var result = await EntitiesController.getEntitiesList(req.params);
+        const result = await EntitiesController.getEntitiesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -41,7 +41,7 @@ app.post('/entity', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -52,10 +52,9 @@ app.put('/entity/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -66,10 +65,10 @@ app.delete('/entity/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 

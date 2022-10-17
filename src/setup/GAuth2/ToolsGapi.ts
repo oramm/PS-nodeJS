@@ -102,7 +102,7 @@ export default class ToolsGapi {
     static async gapiReguestHandler(req: any, res: any, gapiFunction: Function, argObject?: any, thisObject?: any) {
         let result;
         console.log('--------------- authenticate ----------------')
-        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
+        //console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
         let credentials: any = req.session.credentials;
         let refreshToken: string;
         //zmieniły się zakresy

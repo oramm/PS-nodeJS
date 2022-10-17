@@ -12,6 +12,7 @@ import mysql from 'mysql2/promise';
 import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
 import TaskTemplate from './tasks/taskTemplates/TaskTemplate';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
+import { groupCollapsed } from 'console';
 
 export default class Case extends BusinessObject {
     id?: number;
@@ -264,11 +265,16 @@ export default class Case extends BusinessObject {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: Setup.ScrumSheet.Data.name
         })).values;
+
         if (!Tools.findFirstInRange(<number>this.id, scrumDataValues, scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)))
             ToolsSheets.appendRowsToSpreadSheet(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetName: Setup.ScrumSheet.Data.name, values: [caseData] });
+        console.log(`added case ${this._type.name} do sheet "Data"`)
         //dodaj sprawę do arkusza currentSprint
+        console.groupCollapsed('adding default tasks')
         for (const task of parameters.defaultTasks)
             await task.addInScrum(auth, undefined, parameters.isPartOfBatch);
+        console.log('default tasks added');
+        console.groupEnd();
     }
 
     async editInScrum(auth: OAuth2Client) {

@@ -5,7 +5,7 @@ import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
 
 app.get('/cases', async (req: any, res: any) => {
     try {
-        var result = await CasesController.getCasesList(req.query);
+        const result = await CasesController.getCasesList(req.query);
         res.send(result);
     } catch (err) {
         if (err instanceof Error) {
@@ -17,13 +17,13 @@ app.get('/cases', async (req: any, res: any) => {
 
 app.get('/case/:id', async (req: any, res: any) => {
     try {
-        var result = await CasesController.getCasesList(req.params);
+        const result = await CasesController.getCasesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -48,7 +48,7 @@ app.post('/case', async (req: any, res: any) => {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -66,7 +66,7 @@ app.put('/case/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -81,9 +81,9 @@ app.delete('/case/:id', async (req: any, res: any) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

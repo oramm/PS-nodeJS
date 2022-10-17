@@ -9,25 +9,25 @@ import CurrentSprint from '../ScrumSheet/CurrentSprint';
 
 app.get('/persons', async (req: any, res: any) => {
     try {
-        var result = await PersonsController.getPersonsList(req.query);
+        const result = await PersonsController.getPersonsList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/person/:id', async (req: any, res: any) => {
     try {
-        var result = await PersonsController.getPersonsList(req.params);
+        const result = await PersonsController.getPersonsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -46,7 +46,7 @@ app.post('/person', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -58,10 +58,10 @@ app.put('/person/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 //TODO: dorobić
@@ -75,10 +75,10 @@ app.put('/user/:id', async (req: any, res: any) => {
 
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -87,10 +87,10 @@ app.get('/personsRefresh', async (req: any, res: any) => {
         await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.personsRefresh, undefined, ScrumSheet);
         res.send('scrum refreshed');
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -100,9 +100,9 @@ app.delete('/person/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

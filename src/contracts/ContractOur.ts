@@ -22,7 +22,6 @@ export default class ContractOur extends Contract {
         super(initParamObject);
         if (initParamObject._ourContract && initParamObject._ourContract.ourId)
             throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
-        console.log(initParamObject)
         this.ourId = initParamObject.ourId.toUpperCase();
         this._ourType = this.getType(this.ourId);
         if (initParamObject._manager) {

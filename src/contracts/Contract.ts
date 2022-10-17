@@ -74,13 +74,24 @@ export default abstract class Contract extends BusinessObject {
     /**batch dla dodawania kontraktów */
     async initialise(auth: OAuth2Client) {
         try {
+            console.group(`Creating a new Contract ${this.id}`)
             await this.createFolders(auth);
+            console.log('Contract folders created');
             await this.addInDb();
+            console.log('Contract added in db');
             await this.addInScrum(auth);
+            console.log('Contract added in scrum');
+            console.groupCollapsed('Creating default milestones');
             await this.createDefaultMilestones(auth);
+            console.log('Default milestones created');
+            console.groupEnd()
         } catch (error) {
+            console.group('Error while creating contract');
             this.deleteFolder(auth);
+            console.log('folders deleted');
             this.deleteFromScrum(auth);
+            console.log('deleted from scrum');
+            console.groupEnd();
             throw error;
         }
     }
@@ -167,11 +178,16 @@ export default abstract class Contract extends BusinessObject {
                 milestone.number = 1;
             }
             await milestone.createFolders(auth);
+            console.log('folders creataed');
             defaultMilestones.push(milestone);
         }
+        console.log('templates loaded');
         await this.addDefaultMilestonesInDb(defaultMilestones);
+        console.log('milestones saved in db');
+        console.groupCollapsed('creating default cases');
         for (const milestone of defaultMilestones)
             await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+        console.groupEnd();
     }
 
     private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {

@@ -4,7 +4,7 @@ import CaseTemplate from './CaseTemplate';
 
 app.get('/caseTemplates', async (req: any, res: any) => {
     try {
-        var result = await CaseTemplatesController.getCaseTemplatesList(req.query);
+        const result = await CaseTemplatesController.getCaseTemplatesList(req.query);
         res.send(result);
     } catch (err) {
         console.error(err);
@@ -15,13 +15,13 @@ app.get('/caseTemplates', async (req: any, res: any) => {
 
 app.get('/caseTemplate/:id', async (req: any, res: any) => {
     try {
-        var result = await CaseTemplatesController.getCaseTemplatesList(req.params);
+        const result = await CaseTemplatesController.getCaseTemplatesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -34,7 +34,7 @@ app.post('/caseTemplate', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -45,10 +45,10 @@ app.put('/caseTemplate/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -58,9 +58,9 @@ app.delete('/caseTemplate/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

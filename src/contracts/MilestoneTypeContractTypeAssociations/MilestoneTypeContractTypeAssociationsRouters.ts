@@ -4,25 +4,25 @@ import MilestoneTypeContractType from './MilestoneTypeContractType';
 
 app.get('/milestoneTypeContractTypeAssociations', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypeContractTypeAssociationsController.getMilestoneTypeContractTypeAssociationsList(req.query);
+        const result = await MilestoneTypeContractTypeAssociationsController.getMilestoneTypeContractTypeAssociationsList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypeContractTypeAssociationsController.getMilestoneTypeContractTypeAssociationsList(req.params);
+        const result = await MilestoneTypeContractTypeAssociationsController.getMilestoneTypeContractTypeAssociationsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -35,7 +35,7 @@ app.post('/milestoneTypeContractTypeAssociation', async (req: any, res: any) => 
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -46,10 +46,10 @@ app.put('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: any) 
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -59,9 +59,9 @@ app.delete('/milestoneTypeContractTypeAssociation/:id', async (req: any, res: an
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

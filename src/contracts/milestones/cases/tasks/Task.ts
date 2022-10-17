@@ -86,6 +86,7 @@ export default class Task extends BusinessObject {
             });
 
             this.scrumSheetRow = lastContractRow + 1
+            console.log(`new blank row no ${lastContractRow} inserted`)
             //wyełnij danymi https://developers.google.com/sheets/api/samples/data#copy_and_paste_cell_formatting
             const timesColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.timesColName);
             await Promise.all([

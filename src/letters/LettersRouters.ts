@@ -8,26 +8,26 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 
 app.get('/letters', async (req: any, res: any) => {
     try {
-        var result = await LettersController.getLettersList(req.query);
+        const result = await LettersController.getLettersList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
 app.get('/letter/:id', async (req: any, res: any) => {
 
     try {
-        var result = await LettersController.getLettersList(req.params);
+        const result = await LettersController.getLettersList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -59,7 +59,7 @@ app.post('/letter', async (req: any, res: any) => {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -76,7 +76,7 @@ app.put('/letter/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -94,7 +94,7 @@ app.put('/appendAttachments/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -106,9 +106,9 @@ app.delete('/letter/:id', async (req: any, res: any) => {
 
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

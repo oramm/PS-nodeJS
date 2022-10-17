@@ -5,13 +5,13 @@ import MilestoneType from './MilestoneType';
 
 app.get('/milestoneTypes', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.query);
+        const result = await MilestoneTypesController.getMilestoneTypesList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -19,13 +19,13 @@ app.get('/milestoneTypes', async (req: any, res: any) => {
 
 app.get('/milestoneType/:id', async (req: any, res: any) => {
     try {
-        var result = await MilestoneTypesController.getMilestoneTypesList(req.params);
+        const result = await MilestoneTypesController.getMilestoneTypesList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -40,7 +40,7 @@ app.post('/milestoneType', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -51,10 +51,10 @@ app.put('/milestoneType/:id', async (req: any, res: any) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -64,9 +64,9 @@ app.delete('/milestoneType/:id', async (req: any, res: any) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

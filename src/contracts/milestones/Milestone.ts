@@ -127,6 +127,7 @@ export default class Milestone extends BusinessObject {
             'Typ kontraktu, który próbujesz dodać nie ma przypisanego żadnego szablonu sprawy!\n' +
             'Zgłoś administratorowi potrzebę utworzenia szablonów spraw i zadań'
         );
+        console.log('templates loaded');
         for (const template of defaultCaseTemplates) {
             const caseItem = new Case({
                 name: template.name,
@@ -142,11 +143,15 @@ export default class Milestone extends BusinessObject {
             await caseItem.createFolder(auth);
             defaultCaseItems.push(caseItem);
         }
+        console.log('folders created');
         const caseData = await this.addDefaultCasesInDb(defaultCaseItems);
+        console.log('saved in db');
+
         await this.addDefaultCasesInScrum(auth, {
             casesData: <any>caseData,
             isPartOfBatch: parameters?.isPartOfBatch
-        })
+        });
+        console.log('added in scrum');
     }
 
     private async addDefaultCasesInDb(caseItems: Case[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {

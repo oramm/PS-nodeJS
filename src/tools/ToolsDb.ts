@@ -6,13 +6,10 @@ import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig);
+
     static async getQueryCallbackAsync(sql: string) {
-        try {
-            return (await this.pool.query(sql))[0];
-        } catch (error) {
-            console.log(error);
-            throw error;
-        }
+        return (await this.pool.query(sql))[0];
+
     }
 
     static prepareValueToSql(value: any) {
@@ -83,7 +80,6 @@ export default class ToolsDb {
             return object;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
-            console.log(e);
             throw e;
         } finally {
             if (!externalConn && !isPartOfTransaction) await conn.release();
@@ -102,7 +98,6 @@ export default class ToolsDb {
             return newObject;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
-            console.log(e);
             throw e;
         }
     }
@@ -116,7 +111,6 @@ export default class ToolsDb {
             return object;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
-            console.log(e);
             throw e;
         }
     }
@@ -128,7 +122,6 @@ export default class ToolsDb {
             await conn.execute(sql, params);
             return object;
         } catch (e) {
-            console.log(e);
             throw e;
         }
     }
@@ -212,7 +205,7 @@ export default class ToolsDb {
         for (const key of cols) {
             // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
             if (this.isValidDbAttribute(key, object)) {
-                console.log(key + ' = ' + object[key]);
+                //console.log(key + ' = ' + object[key]);
                 values.push(this.prepareValueToPreparedStmtSql(object[key]));
             }
         }

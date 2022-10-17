@@ -46,10 +46,10 @@ app.get('/oauthcallback', async (req: any, res: any) => {
         req.session.userData = await ToolsGapi.getGoogleUserPayload();
         res.send(req.session);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 

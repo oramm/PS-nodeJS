@@ -8,13 +8,13 @@ import Project from './Project';
 
 app.get('/projects/:systemEmail', async (req: any, res: any) => {
     try {
-        var result = await ProjectsController.getProjectsList(req.params);
+        const result = await ProjectsController.getProjectsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -27,10 +27,10 @@ app.get('/project/:id/systemEmail/:systemEmail', async (req: any, res: any) => {
         await result?.setProjectEntityAssociationsFromDb();
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });
 
@@ -52,7 +52,7 @@ app.post('/project', async (req: any, res: any) => {
 
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     };
 });
 
@@ -68,7 +68,7 @@ app.put('/project/:id', async (req: any, res: any) => {
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send(error.message);
-        console.log(error);
+        console.error(error);
     }
 });
 
@@ -82,9 +82,9 @@ app.delete('/project/:id', async (req: any, res: any) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 });

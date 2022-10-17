@@ -4,13 +4,13 @@ var app = express();
 
 app.get('/meetingArrangements', async (req: any, res: any) => {
     try {
-        var result = await MeetingArrangementsController.getMeetingArrangementsList(req.query);
+        const result = await MeetingArrangementsController.getMeetingArrangementsList(req.query);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
@@ -18,13 +18,13 @@ app.get('/meetingArrangements', async (req: any, res: any) => {
 
 app.get('/meetingArrangement/:id', async (req: any, res: any) => {
     try {
-        var result = await MeetingArrangementsController.getMeetingArrangementsList(req.params);
+        const result = await MeetingArrangementsController.getMeetingArrangementsList(req.params);
         res.send(result);
     } catch (error) {
-        console.log(error);
+        console.error(error);
         if (error instanceof Error)
             res.status(500).send(error.message);
-        throw error;
+        console.error(error);
     }
 
 
