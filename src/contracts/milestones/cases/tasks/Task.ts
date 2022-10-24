@@ -86,7 +86,7 @@ export default class Task extends BusinessObject {
             });
 
             this.scrumSheetRow = lastContractRow + 1
-            console.log(`new blank row no ${lastContractRow} inserted`)
+            console.log(`new blank row no ${lastContractRow} inserted`);
             //wyełnij danymi https://developers.google.com/sheets/api/samples/data#copy_and_paste_cell_formatting
             const timesColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.timesColName);
             await Promise.all([
@@ -165,15 +165,18 @@ export default class Task extends BusinessObject {
                 //odtwórz #Times (ostatnie kolumny arkusza)
                 await ScrumSheet.CurrentSprint.setSumInContractRow(auth, ourContractOurId);
                 await ScrumSheet.CurrentSprint.sortContract(auth, ourContractOurId);
-                if (lastContractRow < 13)
+                console.log('tasks rows in contract sorted');
+                if (lastContractRow < 13) {
                     await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    console.log('times Summary table is rebuilt');
+                }
             }
             return lastContractRow;
         }
-        else {
-            console.log('Nie dodaję do Scruma');
-        }
+        else
+            console.log(`Nie dodaję do Scruma zadania: "${this.name}"`);
     }
+
 
     private async getParents(conn: mysql.PoolConnection) {
         const sql = `SELECT
