@@ -216,4 +216,16 @@ export default class ContractOur extends Contract {
         await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
         await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
     }
+
+    async isUnique(): Promise<boolean> {
+        const sql = `SELECT Id FROM OurContractsData WHERE OurId = "${this.ourId}"`
+
+        try {
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            return (result[0]) ? true : false
+
+        } catch (err) {
+            throw err;
+        }
+    }
 }

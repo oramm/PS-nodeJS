@@ -73,6 +73,9 @@ export default abstract class Contract extends BusinessObject {
     }
     /**batch dla dodawania kontraktów */
     async initialise(auth: OAuth2Client) {
+        if (await this.isUnique())
+            throw new Error(`Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`);
+
         try {
             console.group(`Creating a new Contract ${this.id}`)
             await this.createFolders(auth);
@@ -88,7 +91,7 @@ export default abstract class Contract extends BusinessObject {
             console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
         } catch (error) {
             console.group('Error while creating contract');
-            this.deleteFolder(auth);
+            await this.deleteFolder(auth);
             console.log('folders deleted');
             this.deleteFromScrum(auth);
             console.log('deleted from scrum');
@@ -251,4 +254,5 @@ export default abstract class Contract extends BusinessObject {
     abstract addInScrum(auth: OAuth2Client): void;
     abstract setFolderName(): void;
     abstract shouldBeInScrum(): Promise<boolean>;
+    abstract isUnique(): Promise<boolean>;
 }

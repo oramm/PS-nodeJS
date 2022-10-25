@@ -37,14 +37,11 @@ app.post('/contract', async (req: any, res: any) => {
 
     try {
         const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
-        if (!item._parent || !item._parent.id) {
+        if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
-        }
-        try {
-            await ToolsGapi.gapiReguestHandler(req, res, item.initialise, undefined, item);
-        } catch (err) {
-            console.error(err);
-        }
+
+        await ToolsGapi.gapiReguestHandler(req, res, item.initialise, undefined, item);
+
         res.send(item);
     } catch (error) {
 

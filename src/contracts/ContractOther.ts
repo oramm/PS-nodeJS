@@ -8,6 +8,7 @@ import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ToolsSheets from '../tools/ToolsSheets';
 import Tools from '../tools/Tools';
+import ToolsDb from '../tools/ToolsDb';
 
 export default class ContractOther extends Contract {
 
@@ -122,5 +123,18 @@ export default class ContractOther extends Contract {
             await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
         } else
             throw new Error('Kontrakt nie został przypisany do umowy ENVI');
+    }
+
+    async isUnique(): Promise<boolean> {
+        const sql = `SELECT Id FROM Contracts WHERE 
+            Number = ${this.number} AND ProjectOurId = "${this.projectOurId}"`;
+
+        try {
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            return (result[0]) ? true : false
+
+        } catch (err) {
+            throw err;
+        }
     }
 }

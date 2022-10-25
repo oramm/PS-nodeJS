@@ -130,21 +130,13 @@ export default class ToolsGapi {
         oAuthClient.setCredentials(credentials);
 
         //console.log('credentials: %o', oAuthClient.credentials);
-        try {
-            result = (thisObject) ? await gapiFunction.apply(thisObject, [oAuthClient, argObject]) : await gapiFunction(oAuthClient, argObject);
-            if (result) {
-                req.session.userData = await this.getGoogleUserPayload();
-                req.session.credentials = oAuthClient.credentials;
-            }
-            return result;
-        } catch (error) {
-            console.log('zły token error');
-            if (error instanceof Error)
-                console.log(error.message);
-            throw error;
 
-            //await open(authorizeUrl, { wait: false }).then((cp: any) => cp.unref());
-        };
+        result = (thisObject) ? await gapiFunction.apply(thisObject, [oAuthClient, argObject]) : await gapiFunction(oAuthClient, argObject);
+        if (result) {
+            req.session.userData = await this.getGoogleUserPayload();
+            req.session.credentials = oAuthClient.credentials;
+        }
+        return result;
     }
 
     private static async editUserDataInDb(data: { id: number, googleId?: string, googleRefreshToken?: string }) {
