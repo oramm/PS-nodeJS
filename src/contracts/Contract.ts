@@ -81,10 +81,11 @@ export default abstract class Contract extends BusinessObject {
             console.log('Contract added in db');
             await this.addInScrum(auth);
             console.log('Contract added in scrum');
-            console.groupCollapsed('Creating default milestones');
+            console.group('Creating default milestones');
             await this.createDefaultMilestones(auth);
             console.log('Default milestones created');
-            console.groupEnd()
+            console.groupEnd();
+            console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
         } catch (error) {
             console.group('Error while creating contract');
             this.deleteFolder(auth);

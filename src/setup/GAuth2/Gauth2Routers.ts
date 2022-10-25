@@ -24,7 +24,7 @@ app.post('/login', async (req: any, res: any) => {
         //pozostawić do czasu uzupełnienia bazy o GoogleId
         let person = new Person({ systemEmail: req.session.userData.systemEmail });
         let systemRole = await person.getSystemRole();
-        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
+        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.body.id_token}`);
         if (!systemRole.googleId)
             await ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
         console.log(`login ok`);
@@ -54,13 +54,15 @@ app.get('/oauthcallback', async (req: any, res: any) => {
 });
 
 oAuthClient.on('tokens', async (tokens) => {
+    console.log('tokens event triggered: oAuthClient.credentials');
+
+    let userData: any = await ToolsGapi.getGoogleUserPayload(tokens.id_token as string);
+    let userSystemData = await PersonsController.getPersonBySystemEmail(userData.email);
     if (tokens.refresh_token) {
         // store the refresh_token in my database!
-        let userData: any = await ToolsGapi.getGoogleUserPayload(tokens.id_token as string);
-        let userSystemData = await PersonsController.getPersonBySystemEmail(userData.email);
-        ToolsGapi.editUserGoogleRefreshTokenInDb(userSystemData?.id as number, tokens.refresh_token);
+        //ToolsGapi.editUserGoogleRefreshTokenInDb(userSystemData?.id as number, tokens.refresh_token);
         console.log('new refreshToken:' + tokens.refresh_token);
     }
     oAuthClient.setCredentials(tokens);
-    console.log('tokens event triggered: oAuthClient.credentials %o', oAuthClient.credentials);
+    //console.log('tokens event triggered: oAuthClient.credentials %o', oAuthClient.credentials);
 });

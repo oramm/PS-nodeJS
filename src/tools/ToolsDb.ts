@@ -154,7 +154,7 @@ export default class ToolsDb {
         //obetnij ostatni przecinek
         stmt.string = stmt.string.substring(0, stmt.string.length - 2);
         stmt.string += ' WHERE Id = ?';
-        console.log('stmt: %o', stmt);
+        //console.log('stmt: %o', stmt);
 
         return stmt;
     }
@@ -180,7 +180,7 @@ export default class ToolsDb {
 
         stmt.string += `) VALUES (${questionMarks})`;
         //console.log('object: %o', object);
-        console.log('stmt: %o', stmt);
+        //console.log('stmt: %o', stmt);
 
         return stmt;
     }
