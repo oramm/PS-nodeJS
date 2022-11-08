@@ -67,11 +67,12 @@ export default class ToolsDb {
      * */
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection = externalConn ? externalConn : await this.pool.getConnection();
+        let stmt;
         try {
             //od klienta przychodzi tmp_id - trzeba się go pozbyć
             if (!object._isIdNonIncrement)
                 delete object.id;
-            const stmt = await this.dynamicInsertPreparedStmt(tableName, object);
+            stmt = await this.dynamicInsertPreparedStmt(tableName, object);
             const result = await conn.execute(stmt.string, stmt.values);
             object.id = (<any>result)[0].insertId;
 
@@ -80,6 +81,7 @@ export default class ToolsDb {
             return object;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
+            console.log('stmt with Error: %o', stmt);
             throw e;
         } finally {
             if (!externalConn && !isPartOfTransaction) await conn.release();
@@ -89,15 +91,16 @@ export default class ToolsDb {
     //edytuje obiekt w bazie
     static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : await this.pool.getConnection();
-
+        let stmt;
         try {
-            var stmt = await this.dynamicUpdatePreparedStmt(tableName, object);
+            stmt = await this.dynamicUpdatePreparedStmt(tableName, object);
             let newObject: any;
             newObject = (await conn.execute(stmt.string, stmt.values))[0];
             if (!isPartOfTransaction) await conn.commit();
             return newObject;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
+            console.log('stmt with Error: %o', stmt);
             throw e;
         }
     }
@@ -154,8 +157,6 @@ export default class ToolsDb {
         //obetnij ostatni przecinek
         stmt.string = stmt.string.substring(0, stmt.string.length - 2);
         stmt.string += ' WHERE Id = ?';
-        //console.log('stmt: %o', stmt);
-
         return stmt;
     }
 
@@ -179,8 +180,6 @@ export default class ToolsDb {
         questionMarks = questionMarks.substring(0, questionMarks.length - 2);
 
         stmt.string += `) VALUES (${questionMarks})`;
-        //console.log('object: %o', object);
-        //console.log('stmt: %o', stmt);
 
         return stmt;
     }

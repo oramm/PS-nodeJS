@@ -7,7 +7,6 @@ import { app } from '../..';
 import Person from '../../persons/Person';
 
 app.post('/login', async (req: any, res: any) => {
-    console.log(`login`);
     try {
         const ticket = await oAuthClient.verifyIdToken({
             idToken: req.body.id_token,
@@ -24,10 +23,10 @@ app.post('/login', async (req: any, res: any) => {
         //pozostawić do czasu uzupełnienia bazy o GoogleId
         let person = new Person({ systemEmail: req.session.userData.systemEmail });
         let systemRole = await person.getSystemRole();
-        console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.body.id_token}`);
+
         if (!systemRole.googleId)
             await ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
-        console.log(`login ok`);
+        console.log(`user: ${JSON.stringify(req.session.userData)} logged in`);
         res.send(req.session);
     } catch (error) {
         if (error instanceof Error)
