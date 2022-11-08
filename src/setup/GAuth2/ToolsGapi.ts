@@ -94,7 +94,7 @@ export default class ToolsGapi {
                 audience: keys.installed.client_id, // Specify the CLIENT_ID of the app that accesses the backend
             });
             const payload = ticket.getPayload();
-            console.log('setGoogleUserId payload: %o', payload);
+            //console.log('setGoogleUserId payload: %o', payload);
             return payload
         }
     }
