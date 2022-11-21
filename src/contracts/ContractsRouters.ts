@@ -54,6 +54,7 @@ app.post('/contract', async (req: any, res: any) => {
 app.put('/contract/:id', async (req: any, res: any) => {
     try {
         const item = (req.body._type.isOur) ? new ContractOur(req.body) : new ContractOther(req.body);
+        if (!item.id) throw new Error(`Próba edycji kontraktu bez Id`);
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
             ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),

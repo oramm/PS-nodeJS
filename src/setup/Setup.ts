@@ -51,7 +51,7 @@ export default class Setup {
             caseIdColName: "Id sprawy",
             taskIdColName: "Id zadania",
             rowStatusColName: "#ImportStatus",
-            contractNumberColName: "Nr kontraktu na roboty/dostawy",
+            contractNumberColName: "Nr kontraktu na roboty/ dostawy",
             milestoneNameColName: "Typ i nazwa kamienia milowego",
 
             caseTypeColName: "Typ sprawy I numer sprawy",

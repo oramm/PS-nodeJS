@@ -77,8 +77,8 @@ export default class ContractOther extends Contract {
                 spreadsheetId: Setup.ScrumSheet.GdId,
                 rangeA1: Setup.ScrumSheet.CurrentSprint.name
             })).values;
-            const contractNumberColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractNumberColName);
-            let firstRowNumber = <number>Tools.findFirstInRange(this.number, currentSprintValues, contractNumberColIndex) + 1;
+            const contractIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractDbIdColName);
+            let firstRowNumber = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, contractIdColIndex) + 1;
             if (firstRowNumber) {
                 ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
                     searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
@@ -127,7 +127,7 @@ export default class ContractOther extends Contract {
 
     async isUnique(): Promise<boolean> {
         const sql = `SELECT Id FROM Contracts WHERE 
-            Number = ${this.number} AND ProjectOurId = "${this.projectOurId}"`;
+            Number = '${this.number}' AND ProjectOurId = "${this.projectOurId}"`;
 
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

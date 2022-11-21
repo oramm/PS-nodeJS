@@ -8,7 +8,12 @@ export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig);
 
     static async getQueryCallbackAsync(sql: string) {
-        return (await this.pool.query(sql))[0];
+        try {
+            return (await this.pool.query(sql))[0];
+        } catch (error) {
+            console.log(sql);
+            throw (error);
+        }
 
     }
 
