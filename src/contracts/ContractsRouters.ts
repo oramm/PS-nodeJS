@@ -40,7 +40,7 @@ app.post('/contract', async (req: any, res: any) => {
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
 
-        await ToolsGapi.gapiReguestHandler(req, res, item.initialise, undefined, item);
+        await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
         res.send(item);
     } catch (error) {

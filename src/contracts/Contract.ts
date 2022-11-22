@@ -72,7 +72,7 @@ export default abstract class Contract extends BusinessObject {
         this.status = initParamObject.status;
     }
     /**batch dla dodawania kontraktów */
-    async initialise(auth: OAuth2Client) {
+    async addNewController(auth: OAuth2Client) {
         if (await this.isUnique())
             throw new Error(`Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`);
 

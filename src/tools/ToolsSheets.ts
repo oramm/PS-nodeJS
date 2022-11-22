@@ -90,11 +90,19 @@ export default class ToolsSheets {
                 spreadsheetId: parameters.spreadsheetId,
                 rangeA1: `${parameters.sheetName}!${ToolsSheets.R1C1toA1(firstRow + 1, firstColumnNumber)}:` +
                     `${ToolsSheets.R1C1toA1(lastRow + 1, lastColumnNumber)}`,
-                values: [parameters.rowValues],
+                values: this.makeRowsData(lastRow - firstRow, [parameters.rowValues]),
                 majorDimension: parameters.majorDimension
             });
         }
         return firstRow;
+    }
+    /**kopiuje pierwszy wiersz do pozostałych w tabeli*/
+    private static makeRowsData(rowsCount: number, data: any[]) {
+        if (rowsCount === 1 && data.length === 1) return data;
+        const newData = [];
+        for (let i = 0; i <= rowsCount; i++)
+            newData.push(data[0]);
+        return newData;
     }
 
     static async clearValues(auth: OAuth2Client, parameters: { spreadsheetId: string, range: string }) {
