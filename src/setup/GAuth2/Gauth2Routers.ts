@@ -17,15 +17,15 @@ app.post('/login', async (req: any, res: any) => {
             ], // CLIENT_ID starej aplikacji GAS i erp-ENVI
         });
         const payload = ticket.getPayload();
+        if (!(payload)) throw new Error('Account not passed');
 
-        if (payload)
-            req.session.userData = { systemEmail: payload.email, name: payload.given_name, surname: payload.family_name };
+        req.session.userData = { systemEmail: payload.email, name: payload.given_name, surname: payload.family_name };
         //pozostawić do czasu uzupełnienia bazy o GoogleId
         let person = new Person({ systemEmail: req.session.userData.systemEmail });
         let systemRole = await person.getSystemRole();
 
         if (!systemRole.googleId)
-            await ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, req.session.userData.sub);
+            await ToolsGapi.editUserGoogleIdInDb(systemRole.personId as number, payload.sub);
         console.log(`user: ${JSON.stringify(req.session.userData)} logged in`);
         res.send(req.session);
     } catch (error) {
