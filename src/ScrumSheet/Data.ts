@@ -21,8 +21,8 @@ export default class Data {
         await ToolsSheets.clearValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             range:
-                `'${Setup.ScrumSheet.Data.name}'!R${Setup.ScrumSheet.Data.firstDataRow}C${personIdColIndex}:` +
-                `R${dataValues.length + 1}C${personNameColIndex}`
+                `'${Setup.ScrumSheet.Data.name}'!R${Setup.ScrumSheet.Data.firstDataRow}C${personIdColIndex + 1}:` +
+                `R${dataValues.length}C${personNameColIndex + 1}`
         });
         const personsData = persons.map(item => [item.id, `${item.name} ${item.surname}`]);
         personsData.push(['', 'd']);
@@ -30,7 +30,7 @@ export default class Data {
         await ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: `'${Setup.ScrumSheet.Data.name}'!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.Data.firstDataRow, 1)}`,
-            values: [personsData],
+            values: personsData,
             majorDimension: 'ROWS'
         });
     }

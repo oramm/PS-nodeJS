@@ -15,10 +15,22 @@ export default class ScrumSheet {
     }
 
     static async personsRefresh(auth: OAuth2Client) {
-        const persons = await ScrumSheet.scrumGetPersons();
-        //await this.Planning.refreshTimeAvailable(auth, persons);
-        await this.CurrentSprint.makeTimesSummary(auth, persons);
-        this.CurrentSprint.makePersonTimePerTaskFormulas(auth, persons);
-        this.Data.synchronizePersonsInScrum(auth, persons);
+        try {
+            console.group(`personRefresh start`);
+            const persons = await ScrumSheet.scrumGetPersons();
+            await this.Planning.refreshTimeAvailable(auth, persons);
+            console.log('Planning Sheet refreshed');
+            await this.CurrentSprint.makeTimesSummary(auth, persons);
+            console.log('TImes summary refreshed');
+            this.CurrentSprint.makePersonTimePerTaskFormulas(auth, persons);
+            console.log('Person Time Per Task Formulas refreshed');
+            this.Data.synchronizePersonsInScrum(auth, persons);
+            console.log('Data sheet refreshed');
+            console.log('Refresh completed');
+            console.groupEnd();
+        } catch (err) {
+            console.log(err);
+            throw (err);
+        }
     }
 }
