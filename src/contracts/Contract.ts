@@ -77,7 +77,7 @@ export default abstract class Contract extends BusinessObject {
             throw new Error(`Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`);
 
         try {
-            console.group(`Creating a new Contract ${this.id}`)
+            console.group(`Creating a new Contract ${this.id}`);
             await this.createFolders(auth);
             console.log('Contract folders created');
             await this.addInDb();
