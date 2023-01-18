@@ -40,12 +40,14 @@ export default class ToolsGd {
 
     static async getFileOrFolderById(auth: OAuth2Client, id: string) {
         const drive = google.drive({ version: 'v3', auth });
-        return await (await drive.files.get({ fileId: id })).data;
+        const fileSchema = await drive.files.get({ fileId: id });
+        return await fileSchema.data;
 
     }
 
     /**
      * Zwraca folder po jego nazwie.
+     * Do sprawdzenia czy plik istnieje użyj this.fileOrFolderExists()
      * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
      */
     static async getFileByName(auth: OAuth2Client, parameters: { parentId: string, fileName: string, isTrashed?: boolean }) {
@@ -66,6 +68,17 @@ export default class ToolsGd {
             return filesSchema.data.files[0];
         } else
             console.log('No files found.');
+    }
+    /**
+     * Sprawdza czy plik lub folder istnieje
+     */
+    static async fileOrFolderExists(auth: OAuth2Client, fileOrFolderId: string) {
+        try {
+            const fileSchema = await this.getFileOrFolderById(auth, fileOrFolderId);
+            return true;
+        } catch (err) {
+            return false;
+        }
     }
 
     //https://stackoverflow.com/questions/13230487/converting-a-buffer-into-a-readablestream-in-node-js/44091532#44091532
@@ -142,7 +155,6 @@ export default class ToolsGd {
 
                 })
             console.log(`Zaktualizowano plik ${fileId}`);
-            //@ts-ignore
             return filesSchema.data;
         } catch (error) {
             throw error;

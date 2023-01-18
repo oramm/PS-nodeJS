@@ -8,10 +8,16 @@ import ProcessInstancesController from "../../../processes/processInstances/Proc
 import Risk from "./risks/Risk";
 
 export default class CasesController {
-    static async getCasesList(initParamObject: any) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
-        const milestoneCondition = (initParamObject && initParamObject.milestoneId) ? 'Cases.MilestoneId=' + initParamObject.milestoneId : '1';
+    static async getCasesList(initParamObject: {
+        projectId?: string,
+        contractId?: number,
+        milestoneId?: number,
+        caseId?: number,
+    }) {
+        const projectCondition = (initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
+        const contractCondition = (initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
+        const milestoneCondition = (initParamObject.milestoneId) ? 'Cases.MilestoneId=' + initParamObject.milestoneId : '1';
+        const caseCondition = (initParamObject.caseId) ? 'Cases.Id=' + initParamObject.caseId : '1';
 
 
         const sql = 'SELECT Cases.Id, \n \t' +
@@ -47,13 +53,11 @@ export default class CasesController {
             'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id \n' +
             'LEFT JOIN Risks ON Risks.CaseId=Cases.Id \n' +
             'JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId \n' +
-            'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + milestoneCondition + ' \n' +
+            'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + milestoneCondition + ' AND ' + caseCondition + ' \n' +
             'ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber';
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processCasesResult(result, initParamObject);
-
-
     }
 
     static async processCasesResult(result: any[], initParamObject: { projectId?: string, contractId?: number, milestoneId?: number }) {

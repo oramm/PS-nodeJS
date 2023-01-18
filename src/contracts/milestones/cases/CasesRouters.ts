@@ -2,6 +2,7 @@ import CasesController from './CasesController'
 import { app } from '../../../index';
 import Case from './Case';
 import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
+import ToolsGd from '../../../tools/ToolsGd';
 
 app.get('/cases', async (req: any, res: any) => {
     try {

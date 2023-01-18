@@ -9,7 +9,14 @@ import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
 
 export default class ContractsController {
-    static async getContractsList(initParamObject: any) {
+    static async getContractsList(initParamObject: {
+        projectId?: string,
+        contractId?: number
+        contractOurId?: string,
+        onlyOur?: boolean,
+        isArchived?: boolean,
+        onlyKeyData?: boolean
+    }) {
         const projectCondition = (initParamObject && initParamObject.projectId) ? 'mainContracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         const contractCondition = (initParamObject && initParamObject.contractId) ? 'mainContracts.Id=' + initParamObject.contractId : '1';
         const contractOurIdCondition = (initParamObject && initParamObject.contractOurId) ? 'OurContractsData.OurId="' + initParamObject.contractOurId + '"' : '1';

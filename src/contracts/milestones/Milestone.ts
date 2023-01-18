@@ -16,6 +16,7 @@ import CaseTemplate from './cases/caseTemplates/CaseTemplate';
 import mysql from 'mysql2/promise';
 import Task from './cases/tasks/Task';
 import ProcessInstance from '../../processes/processInstances/ProcessInstance';
+import ContractsController from '../ContractsController';
 
 export default class Milestone extends BusinessObject {
     id?: number;
@@ -79,15 +80,31 @@ export default class Milestone extends BusinessObject {
             }
         }
     }
+
+    async getParentContractFromDb() {
+        if (!this._parent.id)
+            throw new Error('parent Contract does not have Id');
+        return (await ContractsController.getContractsList({ contractId: this._parent.id }))[0];
+    }
+
     setFolderName() {
         if (this._type.isUniquePerContract)
             this._folderName = this._type._folderNumber + ' ' + this._type.name;
         else
             this._folderName = this._type._folderNumber + '_' + this.number + ' ' + this._type.name + ' ' + this.name;
     }
+    /** sprawdza czy folder istnieje
+     * 
+     * @param auth 
+     */
+    async checkFolder(auth: OAuth2Client) {
+        return this.gdFolderId != undefined &&
+            this.gdFolderId != "" &&
+            await ToolsGd.fileOrFolderExists(auth, this.gdFolderId);
+    }
 
-    /*
-     * Służy do tworzenia domyślnych folderów przy dodawaniu pojedynczego milesotna 
+    /**
+     * Służy do tworzenia domyślnych folderów przy dodawaniu pojedynczego milestona 
      */
     async createFolders(auth: OAuth2Client) {
         this.number = await this.setNumber();
@@ -106,9 +123,9 @@ export default class Milestone extends BusinessObject {
 
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
-        if (this.gdFolderId) {
+        if (await this.checkFolder(auth)) {
             try {
-                await ToolsGd.getFileOrFolderById(auth, this.gdFolderId);
+                await ToolsGd.getFileOrFolderById(auth, <string>this.gdFolderId);
             } catch (err) {
                 return await this.createFolders(auth);
             }

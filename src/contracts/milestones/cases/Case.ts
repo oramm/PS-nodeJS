@@ -132,6 +132,17 @@ export default class Case extends BusinessObject {
         const sql = `DELETE FROM ProcessInstances WHERE CaseId =?`;
         return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
+
+    /** sprawdza czy folder istnieje
+     * 
+     * @param auth 
+     */
+    async checkFolder(auth: OAuth2Client) {
+        return this.gdFolderId != undefined &&
+            this.gdFolderId != "" &&
+            await ToolsGd.fileOrFolderExists(auth, this.gdFolderId);
+    }
+
     /**
      * Tworzy folder sprawy. 
      * Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym  
@@ -149,7 +160,7 @@ export default class Case extends BusinessObject {
 
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
-        if (this.gdFolderId) {
+        if (await ToolsGd.fileOrFolderExists(auth, this._parent.gdFolderId) && await this.checkFolder(auth)) {
             //sprawy uniqe nie mają swojego foldera - nie ma czego edytować, chyba, że zostały zmienione na unique
             if (this._wasChangedToUniquePerMilestone || !this._type.isUniquePerMilestone) {
                 return await ToolsGd.updateFolder(auth, { name: this._folderName, id: this.gdFolderId });
