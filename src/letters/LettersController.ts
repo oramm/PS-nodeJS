@@ -1,5 +1,6 @@
 import mysql from "mysql";
 import Tools from "../tools/Tools";
+import ToolsDate from "../tools/ToolsDate";
 import ToolsDb from '../tools/ToolsDb'
 import LetterCaseAssociationsController from "./associations/LetterCaseAssociationsController";
 import LetterEntityAssociationsController from "./associations/LetterEntityAssociationsController";
@@ -14,6 +15,9 @@ export default class LettersController {
         const projectConditon = (initParamObject && initParamObject.projectId) ? 'Projects.OurId="' + initParamObject.projectId + '"' : '1';
         const milestoneConditon = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id=' + initParamObject.milestoneId : '1';
         const contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
+        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : `"${ToolsDate.dateDMYtoYMD(initParamObject.endDate)}"`;
+
+        const dateCondition = (initParamObject && initParamObject.startDate) ? `Letters.CreationDate BETWEEN "${ToolsDate.dateDMYtoYMD(initParamObject.startDate)}" AND DATE_ADD(${initParamObject.endDate}, INTERVAL 1 DAY)` : '1';
 
         const sql = 'SELECT  Letters.Id, \n \t' +
             'Letters.IsOur, \n \t' +
@@ -39,7 +43,7 @@ export default class LettersController {
             'JOIN Contracts ON Contracts.Id=Milestones.ContractId \n' +
             'JOIN Projects ON Letters.ProjectId=Projects.Id \n' +
             'JOIN Persons ON Letters.EditorId=Persons.Id \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' AND ' + milestoneConditon + '\n' +
+            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' AND ' + milestoneConditon + ' AND ' + dateCondition + '\n' +
             'GROUP BY Letters.Id \n' +
             'ORDER BY Letters.RegistrationDate, Letters.CreationDate';
 

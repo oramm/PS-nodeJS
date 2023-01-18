@@ -6,11 +6,11 @@ import Invoice from "./Invoice";
 
 export default class InvoicesController {
     static async getInvoicesList(initParamObject: any) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'Milestones.ContractId=' + initParamObject.contractId : '1';
-        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(initParamObject.endDate) + '"';
+        const projectCondition = (initParamObject && initParamObject.projectId) ? `Contracts.ProjectOurId="${initParamObject.projectId}"` : '1';
+        const contractCondition = (initParamObject && initParamObject.contractId) ? `Milestones.ContractId=${initParamObject.contractId}` : '1';
+        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : `"${ToolsDate.dateDMYtoYMD(initParamObject.endDate)}"`;
 
-        const dateCondition = (initParamObject && initParamObject.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(initParamObject.startDate) + '" AND DATE_ADD(' + initParamObject.endDate + ', INTERVAL 1 DAY)' : '1';
+        const dateCondition = (initParamObject && initParamObject.startDate) ? `Invoices.IssueDate BETWEEN "${ToolsDate.dateDMYtoYMD(initParamObject.startDate)}" AND DATE_ADD(${initParamObject.endDate}, INTERVAL 1 DAY)` : '1';
         const sql = 'SELECT Invoices.Id, \n \t' +
             'Invoices.Number, \n \t' +
             'Invoices.Description, \n \t' +
