@@ -42,6 +42,7 @@ export default class CaseTemplatesController {
                 id: row.Id,
                 name: row.Name,
                 description: row.Description,
+                templateComment: "",
                 _caseType: new CaseType({
                     id: row.CaseTypeId,
                     name: row.CaseTypeName,
@@ -55,7 +56,7 @@ export default class CaseTemplatesController {
                         _isDefault: row.MilestoneTypeIsDefault
                     })
                 }),
-
+                caseTypeId: row.CaseTypeId,
             });
             newResult.push(item);
         }

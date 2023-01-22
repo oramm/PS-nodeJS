@@ -68,7 +68,7 @@ export default class CasesController {
             ProcessInstancesController.getProcessInstancesList(initParamObject)
         ]);
         for (const row of result) {
-            var item = new Case({
+            const item = new Case({
                 id: row.Id,
                 _type: {
                     id: row.CaseTypeId,

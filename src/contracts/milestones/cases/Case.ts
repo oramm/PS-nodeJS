@@ -12,7 +12,8 @@ import mysql from 'mysql2/promise';
 import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
 import TaskTemplate from './tasks/taskTemplates/TaskTemplate';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
-import { groupCollapsed } from 'console';
+import CaseType from './caseTypes/CaseType';
+
 
 export default class Case extends BusinessObject {
     id?: number;
@@ -20,7 +21,7 @@ export default class Case extends BusinessObject {
     _wasChangedToUniquePerMilestone?: boolean;
     name?: string | null;
     description?: string;
-    _type?: any;
+    _type: CaseType;
     typeId?: number;
     _typeFolderNumber_TypeName_Number_Name?: string;
     _displayNumber?: string;
@@ -36,6 +37,7 @@ export default class Case extends BusinessObject {
         super({ _dbTableName: 'Cases' });
         this.id = initParamObject.id;
         this.number = initParamObject.number;
+        this._type = initParamObject._type;
         if (initParamObject._type.isUniquePerMilestone && this.number) this._wasChangedToUniquePerMilestone = true;
 
         this.name = (initParamObject.name !== '') ? initParamObject.name : undefined;
@@ -134,8 +136,6 @@ export default class Case extends BusinessObject {
     }
 
     /** sprawdza czy folder istnieje
-     * 
-     * @param auth 
      */
     async checkFolder(auth: OAuth2Client) {
         return this.gdFolderId != undefined &&
@@ -143,9 +143,32 @@ export default class Case extends BusinessObject {
             await ToolsGd.fileOrFolderExists(auth, this.gdFolderId);
     }
 
-    /**
-     * Tworzy folder sprawy. 
-     * Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym  
+    /** sprawdza czy folder typu sprawy istnieje
+     */
+    async checkParentMilestoneFolder(auth: OAuth2Client) {
+        if (!this._parent) throw new Error('No _parent Milestone object found')
+        return this._parent.gdFolderId != undefined &&
+            this._parent.gdFolderId != undefined &&
+            this._parent.gdFolderId != "" &&
+            await ToolsGd.fileOrFolderExists(auth, this._parent.gdFolderId);
+    }
+
+    async checkParentCaseTypeFolder(auth: OAuth2Client) {
+        if (!this._parent) throw new Error('No _parent Milestone object found')
+        return this._parent.gdFolderId != undefined &&
+            this._parent.gdFolderId != undefined &&
+            this._parent.gdFolderId != "" &&
+            await ToolsGd.fileOrFolderExists(auth, this._parent.gdFolderId);
+    }
+
+
+    async checkParentFolder(auth: OAuth2Client): Promise<boolean> {
+        if (!this._parent) throw new Error('No _parent Milestone object found');
+        return (this._type.isUniquePerMilestone) ? await this.checkParentMilestoneFolder(auth) : await this.checkParentCaseTypeFolder(auth);
+    }
+
+    /** Tworzy folder sprawy. 
+     *  Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym  
      */
     async createFolder(auth: OAuth2Client) {
         //znajdź (i jak trzeba utwórz) folder typu sprawy
@@ -160,7 +183,7 @@ export default class Case extends BusinessObject {
 
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
-        if (await ToolsGd.fileOrFolderExists(auth, this._parent.gdFolderId) && await this.checkFolder(auth)) {
+        if (await this.checkParentFolder(auth) && await this.checkFolder(auth)) {
             //sprawy uniqe nie mają swojego foldera - nie ma czego edytować, chyba, że zostały zmienione na unique
             if (this._wasChangedToUniquePerMilestone || !this._type.isUniquePerMilestone) {
                 return await ToolsGd.updateFolder(auth, { name: this._folderName, id: this.gdFolderId });

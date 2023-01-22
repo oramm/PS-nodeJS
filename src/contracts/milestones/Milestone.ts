@@ -93,9 +93,7 @@ export default class Milestone extends BusinessObject {
         else
             this._folderName = this._type._folderNumber + '_' + this.number + ' ' + this._type.name + ' ' + this.name;
     }
-    /** sprawdza czy folder istnieje
-     * 
-     * @param auth 
+    /** sprawdza czy folder istnieje 
      */
     async checkFolder(auth: OAuth2Client) {
         return this.gdFolderId != undefined &&
@@ -152,6 +150,7 @@ export default class Milestone extends BusinessObject {
                 _type: template._caseType,
                 _parent: this
             });
+            if (!caseItem._type) throw new Error('caseItem should have _type')
             //zasymuluj numer sprawy nieunikalnej. UWAGA: założenie, że przy dodawaniu spraw domyślnych nie będzie więcej niż jedna sprawa tego samego typu
             if (!caseItem._type.isUniquePerMilestone) {
                 caseItem.number = 1;
@@ -295,22 +294,22 @@ export default class Milestone extends BusinessObject {
     async getCaseTemplates(initParamObject: { isDefaultOnly?: boolean, isInScrumByDefaultOnly?: boolean }) {
         const isDefaultCondition = (initParamObject.isDefaultOnly) ? 'CaseTypes.IsDefault=TRUE' : '1';
         const isInScrumDefaultCondition = (initParamObject.isInScrumByDefaultOnly) ? 'CaseTypes.IsInScrumByDefault=TRUE' : '1';
-        const sql = 'SELECT CaseTemplates.Id, \n \t' +
-            'CaseTemplates.Name, \n \t' +
-            'CaseTemplates.Description, \n \t' +
-            'CaseTypes.Id AS CaseTypeId, \n \t' +
-            'CaseTypes.Name AS CaseTypeName, \n \t' +
-            'CaseTypes.FolderNumber AS CaseTypeFolderNumber, \n \t' +
-            'CaseTypes.IsInScrumByDefault  AS CaseTypeIsInScrumByDefault, \n \t' +
-            'CaseTypes.IsUniquePerMilestone  AS CaseTypeIsUniquePerMilestone, \n \t' +
-            'CaseTypes.IsDefault AS CaseTypeIsDefault, \n \t' +
-            'MilestoneTypes.Id AS MilestoneTypeId, \n \t' +
-            'MilestoneTypes.Name AS MilestoneTypeName, \n \t' +
-            'NULL AS MilestoneTypeIsDefault \n' + //parametr niedostępny
-            'FROM CaseTemplates \n' +
-            'JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId \n' +
-            'JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id \n' +
-            'WHERE ' + isDefaultCondition + ' AND ' + isInScrumDefaultCondition + ' AND MilestoneTypes.Id=' + this._type.id;
+        const sql = `SELECT CaseTemplates.Id,
+            CaseTemplates.Name,
+            CaseTemplates.Description,
+            CaseTypes.Id AS CaseTypeId,
+            CaseTypes.Name AS CaseTypeName,
+            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+            CaseTypes.IsInScrumByDefault  AS CaseTypeIsInScrumByDefault,
+            CaseTypes.IsUniquePerMilestone  AS CaseTypeIsUniquePerMilestone,
+            CaseTypes.IsDefault AS CaseTypeIsDefault,
+            MilestoneTypes.Id AS MilestoneTypeId,
+            MilestoneTypes.Name AS MilestoneTypeName,
+            NULL AS MilestoneTypeIsDefault --parametr niedostępny
+            FROM CaseTemplates
+            JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
+            JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id
+            WHERE ${isDefaultCondition} AND ${isInScrumDefaultCondition} AND MilestoneTypes.Id=${this._type.id}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {
@@ -320,6 +319,7 @@ export default class Milestone extends BusinessObject {
                     id: row.Id,
                     name: row.Name,
                     description: row.Description,
+                    templateComment: "",
                     _caseType: new CaseType({
                         id: row.CaseTypeId,
                         name: row.CaseTypeName,
@@ -331,10 +331,11 @@ export default class Milestone extends BusinessObject {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
                             _isDefault: row.MilestoneTypeIsDefault
-                        })
+                        }),
                     }),
-
+                    caseTypeId: row.CaseTypeId,
                 });
+
 
                 newResult.push(item);
             }

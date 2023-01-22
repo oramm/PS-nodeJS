@@ -59,11 +59,10 @@ app.put('/milestone/:id', async (req: any, res: any) => {
     try {
         let item = new Milestone(req.body);
         item._parent = await item.getParentContractFromDb();
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
-            item.editInDb()
-        ]);
+        await ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item);
+        await item.editInDb();
+        await ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item);
+
         res.send(item);
     } catch (error) {
         if (error instanceof Error)

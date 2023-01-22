@@ -58,11 +58,10 @@ app.put('/case/:id', async (req: any, res: any) => {
         let item = new Case(req.body);
         if (item._wasChangedToUniquePerMilestone)
             item.setAsUniquePerMilestone();
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
-            item.editInDb()
-        ]);
+        await ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item);
+        await item.editInDb();
+        await ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item);
+
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
