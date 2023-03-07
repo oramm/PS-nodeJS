@@ -214,7 +214,7 @@ export default abstract class Contract extends BusinessObject {
     async editInDb() {
         const res = await ToolsDb.transaction(async conn => {
             await super.editInDb(conn, true);
-            await this.editEntitiesAssociationsInDb(conn, true)
+            await this.editEntitiesAssociationsInDb(conn, true);
         });
     }
     async editFolder(auth: OAuth2Client) {
@@ -233,7 +233,7 @@ export default abstract class Contract extends BusinessObject {
     }
 
     async deleteFolder(auth: OAuth2Client) {
-        ToolsGd.deleteFileOrFolder(auth, <string>this.gdFolderId);
+        ToolsGd.trashFileOrFolder(auth, <string>this.gdFolderId);
     }
 
     async getTasks() {

@@ -2,6 +2,7 @@ import { drive_v3, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import fs from 'fs';
 import { Envi } from './EnviTypes';
+import { Readable } from 'stream';
 
 export default class ToolsGd {
     static createGdFolderUrl(gdFolderId: string): string {
@@ -81,7 +82,7 @@ export default class ToolsGd {
         }
     }
 
-    //https://stackoverflow.com/questions/13230487/converting-a-buffer-into-a-readablestream-in-node-js/44091532#44091532
+    /**https://stackoverflow.com/questions/13230487/converting-a-buffer-into-a-readablestream-in-node-js/44091532#44091532 */
     static async uploadFile(auth: OAuth2Client, file: Envi._blobEnviObject) {
         const drive = google.drive({ version: 'v3', auth });
         const filePath = `tmp/${file.name}`;
@@ -112,6 +113,44 @@ export default class ToolsGd {
         return filesSchema.data;
     }
 
+    /**wgrywa plik na serwer
+     * @param auth 
+     * @param file - blob64 do wgrania
+     * @param options - paramentry pliku wg api
+     * @param parentFolderId - opcjonalny jeśłi nie podany parent jest brany z bloba - file
+     */
+    static async uploadFileGPT(auth: OAuth2Client,
+        file: Envi._blobEnviObject,
+        options: drive_v3.Params$Resource$Files$Create = {},
+        parentFolderId?: string
+    ) {
+        const drive = google.drive({ version: 'v3', auth });
+        let { name, mimeType, parent } = file;
+        const { fields = 'id', ...otherOptions } = options;
+
+        if (parentFolderId) parent = parentFolderId;
+        const media = {
+            mimeType,
+            body: Readable.from(Buffer.from(file.blobBase64String, 'base64')),
+        };
+        let x: drive_v3.Params$Resource$Files$Create = { media }
+        try {
+            const res = await drive.files.create({
+                requestBody: {
+                    name: name,
+                    parents: parent ? [parent] : [],
+                },
+                media,
+                fields,
+                ...otherOptions,
+            });
+            return res.data;
+        } catch (err) {
+            console.error(`Failed to upload file ${name}`, err);
+            throw err;
+        }
+    }
+
     static async createFolder(auth: OAuth2Client, folderData: { name: string, parents: string[] }) {
         const drive = google.drive({ version: 'v3', auth });
         const fileMetadata = {
@@ -127,8 +166,8 @@ export default class ToolsGd {
         console.log('New Gd folder Id: ', filesSchema.data.id);
         return filesSchema.data;
     }
-    /**
-     * Zwraca isteniejący folder lub tworzy nowy 
+
+    /** Zwraca istniejący folder lub tworzy nowy 
      */
     static async setFolder(auth: OAuth2Client, parameters: { parentId: string, name: string, id?: string }) {
         parameters.name = parameters.name.trim();
@@ -144,13 +183,13 @@ export default class ToolsGd {
 
     static async updateFile(auth: OAuth2Client, requestBody: drive_v3.Schema$File) {
         try {
+            if (!requestBody.id) throw new Error('ToolsGd.updateFile:: no fileId given in requestBody');
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>requestBody.id;
             delete requestBody.id;
             const filesSchema = await drive.files.update(
                 {
                     fileId: fileId,
-
                     requestBody: requestBody,
 
                 })
@@ -177,7 +216,7 @@ export default class ToolsGd {
 
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>fileData.id;
-            const updatedFilesSchema = await drive.files.update({
+            await drive.files.update({
                 fileId: fileId,
                 removeParents: fileData.parents?.join(','),
                 addParents: newParentFolderId,
@@ -243,8 +282,8 @@ export default class ToolsGd {
         }
     }
 
-    /** usuwa albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
-    static async deleteFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
+    /** przenosi do kosza albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
+    static async trashFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
         const drive = google.drive({ version: 'v3', auth });
         const filesSchema = await drive.files.get({ fileId: gdFolderId, fields: 'id, ownedByMe', });
         console.log(filesSchema.data)

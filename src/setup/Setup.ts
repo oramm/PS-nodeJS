@@ -1,5 +1,6 @@
 export default class Setup {
     static dbConfig = {
+        connectionLimit: 10,
         host: 'envi-konsulting.kylos.pl',
         user: 'envikons_myEnvi',
         password: '7Fj2*j!lA3t@#D',

@@ -30,9 +30,9 @@ export namespace Envi {
         creationDate?: string;
         registrationDate?: string;
         _documentOpenUrl?: string;
-        documentGdId: string;
+        documentGdId?: string | null;
         _gdFolderUrl?: string;
-        folderGdId?: string;
+        folderGdId?: string | null;
         _lastUpdated?: string;
         _contract?: any;
         _project?: any;
@@ -46,7 +46,6 @@ export namespace Envi {
 
         editorId?: number;
         _canUserChangeFileOrFolder?: boolean;
-        _folderName?: string;
         _documentEditUrl?: string;
     }
 }

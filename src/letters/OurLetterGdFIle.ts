@@ -4,46 +4,77 @@ import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from "../documentTemplates/DocumentGdFile";
 import { Envi } from "../tools/Tools";
 import ToolsDocs from "../tools/ToolsDocs";
+import LetterGdController from "./LetterGdController";
 
 export default class OurLetterGdFile extends DocumentGdFile {
-    projectContext: string;
-    constructor(initObjectParamenter: { _template: DocumentTemplate, document: OurLetter }) {
+    constructor(initObjectParamenter: { _template?: DocumentTemplate, enviDocumentData: OurLetter }) {
         super(initObjectParamenter);
-        this.description = this.document.description;
-        this.projectContext = 'projekt: ' + this.document._project.ourId + ', ' +
-            this.makeCasesList();
-        ;
     }
 
-    /*
-     * tworzy plik z szablonu w folderze pisma na GD
+    /** 1. Tworzy plik z szablonu w folderze pisma na GD
+     *  2. Tworzy namedRanges z tagów w szablonie
+     *   - osobną funkcją w pliku trzeba ustawić namedRages 
      */
     async create(auth: OAuth2Client) {
-        const gDocument = await super.create(auth);
-        ToolsDocs.fillNamedRange(gDocument, 'address', this.makeEntitiesDataLabel(<any[]>this.document._entitiesMain));
-        ToolsDocs.fillNamedRange(gDocument, 'description', <string>this.description);
-        var projectContextStyle = {};
+        let document = await super.create(auth);
+        if (!document.documentId) throw new Error('Letter file not created!' + this.enviDocumentData.id);
+        const documentId = document.documentId;
+        await ToolsDocs.initNamedRangesFromTags(auth, documentId);
+        //ToolsDocs.fillNamedRange(gDocument, 'address', this.makeEntitiesDataLabel(<any[]>this.document._entitiesMain));
+        //ToolsDocs.fillNamedRange(gDocument, 'description', <string>this.description);
         //projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 9;
         //projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#666666';
-        ToolsDocs.fillNamedRange(gDocument, 'projectContext', this.projectContext, projectContextStyle);
-        return gDocument;
+        //ToolsDocs.fillNamedRange(gDocument, 'projectContext', this.projectContext, projectContextStyle);
+        this.enviDocumentData.documentGdId = document.documentId;
+        return document;
     }
 
-    edit(auth: OAuth2Client) {
-        /*
-        super.edit(auth);
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'number', '' + this.document.number);
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'address', this.makeEntitiesDataLabel(this.document._entitiesMain));
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'description', this.description);
-        var projectContextStyle = {};
-        projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 10;
-        projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#b6bbb9';
-        GDocsTools.fillNamedRange(this.document.documentGdId, 'projectContext', this.projectContext, projectContextStyle);
-        */
+    /** aktualizuje treść NemedRanges */
+    async updateTextRunsInNamedRanges(auth: OAuth2Client) {
+        const documentId = this.enviDocumentData.documentGdId;
+        if (!documentId) throw new Error('Letter file not set!' + this.enviDocumentData.id);
+        const newData: { rangeName: string; newText: string; }[] = this.makeDataforNamedRanges();
+        await ToolsDocs.updateTextRunsInNamedRanges(auth, documentId, newData);
+    }
+
+    /** 1. odświeża namedRanges
+     *  2. auktualizuje treść w namedRanges
+     */
+    async edit(auth: OAuth2Client) {
+        const documentId = this.enviDocumentData.documentGdId;
+        if (!documentId) throw new Error('Letter file not set!' + this.enviDocumentData.id);
+        await ToolsDocs.refreshNamedRangesFromTags(auth, documentId);
+        let document = (await ToolsDocs.getDocument(auth, documentId)).data;
+        const namedRangesNames = Object.getOwnPropertyNames(document.namedRanges || {});
+        if (namedRangesNames.length) console.log('NamedRangesNamesFound %o', namedRangesNames);
+        else
+            throw new Error('No namedRanges found');
+
+        document = (await ToolsDocs.getDocument(auth, documentId)).data;
+        await this.updateTextRunsInNamedRanges(auth);
+        return document;
+    }
+
+    private makeDataforNamedRanges(): { rangeName: string; newText: string; }[] {
+        if (!(this.enviDocumentData.creationDate && this.enviDocumentData.number && this.enviDocumentData.description))
+            throw new Error('enviDocumentData attributes not found');
+        const number = (typeof this.enviDocumentData.number === 'number') ? this.enviDocumentData.number.toString() : this.enviDocumentData.number;
+        return [
+            { rangeName: 'creationDate', newText: this.enviDocumentData.creationDate },
+            { rangeName: 'number', newText: number },
+            { rangeName: 'address', newText: this.entitiesDataLabel(<any[]>this.enviDocumentData._entitiesMain) },
+            { rangeName: 'description', newText: this.enviDocumentData.description },
+            { rangeName: 'projectContext', newText: this.projectContextLabel() },
+        ];
+    }
+
+    /**Zwraca listę spraw, kamieni itd */
+    private projectContextLabel() {
+        return `projekt: ${this.enviDocumentData._project.ourId}, ${this.makeCasesList()}`;
     }
 
     private makeCasesList(): string {
-        const cases = this.document._cases.map(item => {
+        const cases = this.enviDocumentData._cases.map(item => {
             item.contractId = item._parent.contractId;
             return item;
         })
@@ -60,9 +91,8 @@ export default class OurLetterGdFile extends DocumentGdFile {
         return casesLabel.substring(0, casesLabel.length - 2);
     }
 
-    /** tworzy etykietę z danymi address
-     */
-    private makeEntitiesDataLabel(entities: any[]) {
+    /** tworzy etykietę z danymi address */
+    private entitiesDataLabel(entities: any[]) {
         let label = '';
         for (var i = 0; i < entities.length; i++) {
             label += entities[i].name
@@ -73,5 +103,4 @@ export default class OurLetterGdFile extends DocumentGdFile {
         }
         return label;
     }
-
 }

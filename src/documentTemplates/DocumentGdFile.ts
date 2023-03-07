@@ -4,43 +4,35 @@ import ToolsDocs from "../tools/ToolsDocs";
 import DocumentTemplate from "./DocumentTemplate";
 import { OAuth2Client } from 'google-auth-library';
 import ToolsGd from "../tools/ToolsGd";
+import EnviErrors from "../tools/Errors";
 
 export default class DocumentGdFile {
-    public _template: DocumentTemplate;
-    public gdFile?: docs_v1.Schema$Document;
-    protected document: Envi.Document;
+    public _template?: DocumentTemplate;
+    protected enviDocumentData: Envi.Document;
     description?: string;
 
 
-    constructor(initObjectParamenter: { _template: DocumentTemplate; document: Envi.Document }) {
+    constructor(initObjectParamenter: { _template?: DocumentTemplate; enviDocumentData: Envi.Document }) {
         this._template = initObjectParamenter._template;
-        this.document = initObjectParamenter.document;
+        this.enviDocumentData = initObjectParamenter.enviDocumentData;
     }
 
-    /*
-     * tworzy plik z szablonu w folderze docelowym na GD
+    /** Tworzy plik z szablonu w folderze docelowym na GD
      */
     async create(auth: OAuth2Client) {
-        if (!this.document.folderGdId) throw new Error('Document must have folderFdId');
-        const gdFile = await ToolsGd.copyFile(auth, this._template.gdId, this.document.folderGdId, this.document.number + ' ' + this.document.creationDate);
+        if (!this.enviDocumentData.folderGdId) throw new EnviErrors.NoGdIdError('Document must have folderFdId');
+        if (!this._template) throw new Error('OurLetter must have Template');
+        const gdFile = await ToolsGd.copyFile(
+            auth,
+            this._template.gdId,
+            this.enviDocumentData.folderGdId,
+            `${this.enviDocumentData.number} ${this.enviDocumentData.creationDate}`
+        );
         await ToolsGd.createPermissions(auth, { fileId: <string>gdFile.data.id });
-        this.document.documentGdId = <string>gdFile.data.id;
-        this.document._documentEditUrl = ToolsGd.createDocumentEditUrl(<string>gdFile.data.id);
-        this.gdFile = await ToolsDocs.getDocument(auth, <string>gdFile.data.id);
-        await this.createNamedRanges(auth);
-        //this.fillNamedRanges();
-        //if (this._template._contents.gdId)
-        //    this.fillContentsFromTemplate();
-        return this.gdFile;
-    }
+        this.enviDocumentData.documentGdId = <string>gdFile.data.id;
+        this.enviDocumentData._documentEditUrl = ToolsGd.createDocumentEditUrl(<string>gdFile.data.id);
+        let document = await (await ToolsDocs.getDocument(auth, <string>gdFile.data.id)).data;
 
-    /*
- * Tworzy zakresy nazwane w szablonie - używać przy dodawaniu naszych pism
- */
-    async createNamedRanges(auth: OAuth2Client) {
-        if (!this.gdFile) throw new Error('brak gdFile');
-        const templateGdFile = await ToolsDocs.getDocument(auth, this._template.gdId)
-        ToolsDocs.createNamedRangesByTags(auth, this.gdFile, ToolsDocs.getNameRangesTagsFromTemplate(templateGdFile));
+        return document;
     }
-
 }

@@ -14,6 +14,7 @@ import Case from '../contracts/milestones/cases/Case';
 import { OAuth2Client } from 'google-auth-library';
 import Tools from '../tools/Tools';
 import { drive_v3 } from 'googleapis';
+import EnviErrors from '../tools/Errors';
 
 export default abstract class Letter extends BusinessObject implements Envi.Document {
     public id?: number;
@@ -22,9 +23,9 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
     public creationDate?: string;
     public registrationDate?: string;
     public _documentOpenUrl?: string;
-    public documentGdId: string;
+    public documentGdId?: string | null;
     _gdFolderUrl?: string;
-    folderGdId?: string;
+    folderGdId?: string | null = null;
     _lastUpdated?: string;
     _contract?: Contract;
     _project: Project;
@@ -38,7 +39,6 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
 
     editorId?: number;
     _canUserChangeFileOrFolder?: boolean;
-    _folderName?: string;
     _documentEditUrl?: string;
 
     constructor(initParamObject: any) {
@@ -69,14 +69,6 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         this._fileOrFolderChanged;
     }
 
-    /*
-     * Używać tylko gdy mamy wiele blobów
-     */
-    makeFolderName(): string {
-        return this.number + ' ' + this.creationDate;
-    }
-
-
     async addInDb() {
         return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             await super.addInDb(conn, true);
@@ -102,7 +94,7 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
             }));
         });
         for (const association of entityAssociations) {
-            association.addInDb(externalConn, isPartOfTransaction);
+            await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
 
@@ -115,51 +107,34 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
             }));
         });
         for (const association of associations) {
-            association.addInDb(externalConn, isPartOfTransaction);
+            await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
-    /** Tworzy folder i wrzuca pliki z blob */
-    protected async createLetterFolder(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        const letterFolder = <drive_v3.Schema$File>await ToolsGd.createFolder(auth,
-            { name: this._folderName || 'tmpName', parents: [this._project.lettersGdFolderId] });
 
-        ToolsGd.createPermissions(auth, { fileId: <string>letterFolder.id });
-        this.folderGdId = <string>letterFolder.id;
-        this._gdFolderUrl = ToolsGd.createGdFolderUrl(this.folderGdId);
-
-        const promises = [];
-        for (const blobEnvi of blobEnviObjects) {
-            blobEnvi.parent = this.folderGdId;
-            promises.push(ToolsGd.uploadFile(auth, blobEnvi));
-        }
-
-        await Promise.all(promises);
-        this._documentOpenUrl = undefined;
-        this.documentGdId = '';
-        return letterFolder;
-    }
     async edit(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        await this.editInDb();
         await this.editLetterGdElements(auth, blobEnviObjects);
+        await this.editInDb();
     }
 
     async editInDb() {
-        await Promise.all([
-            this.deleteCasesAssociationsFromDb(),
-            this.deleteEntitiesAssociationsFromDb()
-        ]);
-
+        console.log('Letter edit in Db Start');
         await ToolsDb.transaction(async conn => {
-            await super.editInDb(conn, true);
             await Promise.all([
+                this.deleteCasesAssociationsFromDb(),
+                this.deleteEntitiesAssociationsFromDb()
+            ]);
+            console.log('associacions deleted');
+
+            await Promise.all([
+                super.editInDb(conn, true).then(() => { console.log('letterData edited') }),
                 this.addCaseAssociationsInDb(conn, true),
                 this.addEntitiesAssociationsInDb(conn, true)
             ]);
+            console.log('associaciont renewed');
         })
     }
 
-    /*
-     * jest wywoływana w editLetter()
+    /** jest wywoływana w editLetter()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
      */
     async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
@@ -180,12 +155,10 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         const sql = `DELETE FROM Letters_Cases WHERE LetterId =?`;
         return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
-
-    deleteFromGd(auth: OAuth2Client) {
-        ToolsGd.deleteFileOrFolder(auth, this.folderGdId || this.documentGdId)
+    async appendAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
+        this.letterFilesCount += blobEnviObjects.length;
     }
 
     abstract initialise(auth: OAuth2Client, blobEnviObjects: any[]): Promise<void>;
-    abstract appendAttachments(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void>;
     abstract editLetterGdElements(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void>
 }

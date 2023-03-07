@@ -87,6 +87,12 @@ export default class Tools {
 
         return string;
     }
+    /**zwraca łańcuch znaków pozostały z oryginalnego text po wycięciu fragmentu pomiędzy indeksami start i end */
+    static getRemainingString(start: number, end: number, text: string): string {
+        const before = text.slice(0, start);
+        const after = text.slice(end);
+        return before + after;
+    }
 
     static testStringToJSON(string: string) {
         string = this.stringToJSON('{"comment":"/n<div>- sieciowe</div>"}')

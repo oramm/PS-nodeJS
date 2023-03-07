@@ -130,11 +130,15 @@ export default class ToolsGapi {
         oAuthClient.setCredentials(credentials);
 
         //console.log('credentials: %o', oAuthClient.credentials);
+        const args: any[] = [oAuthClient]
+        if (argObject) args.push(...argObject);
 
-        result = (thisObject) ? await gapiFunction.apply(thisObject, [oAuthClient, argObject]) : await gapiFunction(oAuthClient, argObject);
+        result = (thisObject) ? await gapiFunction.apply(thisObject, args) : await gapiFunction(...args);
+
         if (result) {
             req.session.userData = await this.getGoogleUserPayload();
             req.session.credentials = oAuthClient.credentials;
+            console.log(`gapiReguestHandler: ${req.session.userData}`);
         }
         return result;
     }

@@ -5,6 +5,10 @@ import { OAuth2Client } from 'google-auth-library';
 import { Envi } from '../tools/EnviTypes';
 import ToolsGd from '../tools/ToolsGd';
 import OurLetterGdFile from './OurLetterGdFIle';
+import EnviErrors from '../tools/Errors';
+import LetterGdController from './LetterGdController';
+import OurLetterGdController from './OurLetterGdController';
+
 
 export default class OurLetter extends Letter {
     _template: DocumentTemplate | undefined;
@@ -21,42 +25,66 @@ export default class OurLetter extends Letter {
 
     async initialise(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
         try {
-            await this.createLetterFolder(auth, blobEnviObjects);
+            const gdFolder = await LetterGdController.createLetterFolder(auth, { ...this });
+            this.folderGdId = <string>gdFolder.id;
+            this._gdFolderUrl = ToolsGd.createGdFolderUrl(this.folderGdId);
             await this.createLetterFile(auth);
             await this.addInDb();
+            const ourLetterGdFile = new OurLetterGdFile({ enviDocumentData: { ...this } })
+            if (!this.number) throw new Error(`Letter number not set for: ${this.id}`);
+            if (!this.creationDate) throw new Error(`Letter creationDate is  not set for: ${this.id}`);
+
+            const folderName = OurLetterGdController.makeFolderName(this.number.toString(), this.creationDate)
+            await Promise.all([
+                ourLetterGdFile.updateTextRunsInNamedRanges(auth),
+                ToolsGd.updateFolder(auth, { id: this.folderGdId, name: folderName }),
+                ToolsGd.updateFile(auth, { id: this.documentGdId, name: folderName }),
+                (blobEnviObjects.length > 0) ? this.appendAttachmentsHandler(auth, blobEnviObjects) : undefined,
+            ]).catch((error) => { throw (error) });
+
         } catch (err) {
-            this.deleteFromGd(auth);
+            this.deleteFromDb();
+            OurLetterGdController.deleteFromGd(auth, null, this.folderGdId);
+            throw (err);
         }
     }
 
+    async addInDb() {
+        await super.addInDb();
+        this.number = this.id;
+    }
+
+    /** Tworzy plik z dokumentem i ustawia this.documentGdId */
     private async createLetterFile(auth: OAuth2Client) {
-        if (!this._template) throw new Error('OurLetter must have Template');
-        else {
-            const ourLetterGdFile = new OurLetterGdFile({ _template: this._template, document: this })
-            await ourLetterGdFile.create(auth);
-        }
+        const ourLetterGdFile = new OurLetterGdFile({ _template: this._template, enviDocumentData: { ...this } })
+        const document = await ourLetterGdFile.create(auth);
+        if (!document.documentId) throw new EnviErrors.NoGdIdError();
+        this.documentGdId = document.documentId;
+        return document;
     }
 
-    makeFolderName(): string {
-        let folderName: string = super.makeFolderName();
-        return folderName += ': Przychodzące'
-    }
-
-    public async appendAttachments(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        const promises = [];
-        for (const blobEnvi of blobEnviObjects) {
-            blobEnvi.parent = this.folderGdId;
-            promises.push(ToolsGd.uploadFile(auth, blobEnvi));
-        }
-        await Promise.all(promises);
+    async appendAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
+        await super.appendAttachmentsHandler(auth, blobEnviObjects);
+        if (!this.folderGdId) throw new EnviErrors.NoGdIdError(`OurLetter: ${this.number}`);
+        await OurLetterGdController.appendAttachments(auth, blobEnviObjects, <string>this.folderGdId);
     }
 
 
+    /**zmienia nazwę folderu i pliku pisma i aktualizuje dane w piśmie*/
     async editLetterGdElements(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        if (!this._template) throw new Error('OurLetter must have Template');
-        else {
-            const ourLetterGdFile = new OurLetterGdFile({ _template: this._template, document: this })
-            ourLetterGdFile.edit(auth);
+        const letterGdFolder = await ToolsGd.getFileOrFolderById(auth, <string>(this.folderGdId));
+        const newFolderName = OurLetterGdController.makeFolderName(<string>this.number, <string>this.creationDate);
+        const ourLetterGdFile = new OurLetterGdFile({ enviDocumentData: { ...this } })
+
+        if (letterGdFolder.name !== newFolderName) {
+            await Promise.all([
+                ourLetterGdFile.edit(auth),
+                ToolsGd.updateFolder(auth, { id: this.folderGdId, name: newFolderName }),
+                ToolsGd.updateFile(auth, { id: this.documentGdId, name: newFolderName }),
+                (blobEnviObjects.length > 0) ? this.appendAttachmentsHandler(auth, blobEnviObjects) : undefined,
+            ]).catch((error) => { throw (error) });
+
+            await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });
         }
     }
 }

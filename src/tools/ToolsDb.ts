@@ -5,7 +5,7 @@ import Tools from './Tools';
 import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
-    static pool: mysql.Pool = mysql.createPool(Setup.dbConfig);
+    static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
 
     static async getQueryCallbackAsync(sql: string) {
         try {
@@ -14,7 +14,6 @@ export default class ToolsDb {
             console.log(sql);
             throw (error);
         }
-
     }
 
     static prepareValueToSql(value: any) {
@@ -71,7 +70,7 @@ export default class ToolsDb {
      * @argument object może mieć atrybut '_isIdNonIncrement' - wtedy id jest trakrowany jak normalne pole
      * */
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection = externalConn ? externalConn : await this.pool.getConnection();
+        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         let stmt;
         try {
             //od klienta przychodzi tmp_id - trzeba się go pozbyć
@@ -89,48 +88,56 @@ export default class ToolsDb {
             console.log('stmt with Error: %o', stmt);
             throw e;
         } finally {
-            if (!externalConn && !isPartOfTransaction) await conn.release();
+            if (!externalConn && !isPartOfTransaction) conn.release();
         }
     }
 
     //edytuje obiekt w bazie
-    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : await this.pool.getConnection();
-        let stmt;
+    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
+        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
+        let stmt: { string: string, values: any[] } = this.dynamicUpdatePreparedStmt(tableName, object);
         try {
-            stmt = await this.dynamicUpdatePreparedStmt(tableName, object);
-            let newObject: any;
-            newObject = (await conn.execute(stmt.string, stmt.values))[0];
+            let newObject = (await conn.execute(stmt.string, stmt.values))[0];
             if (!isPartOfTransaction) await conn.commit();
             return newObject;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
             console.log('stmt with Error: %o', stmt);
             throw e;
+        } finally {
+            if (!externalConn && !isPartOfTransaction) conn.release();
         }
     }
 
     static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : await this.pool.getConnection();
+        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         try {
             await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
             if (!isPartOfTransaction) await conn.commit();
-            console.log('object deleted');
+            console.log(`object deleted from ${tableName}`);
             return object;
+
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
+            console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
             throw e;
+        } finally {
+            if (!isPartOfTransaction && !externalConn) conn.release();
         }
     }
 
     static async executePreparedStmt(sql: string, params: any[], object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn: mysql.PoolConnection | mysql.Pool = externalConn ? externalConn : this.pool;
+        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         try {
             params = params.map(item => this.prepareValueToPreparedStmtSql(item));
             await conn.execute(sql, params);
+            if (!isPartOfTransaction) await conn.commit();
             return object;
         } catch (e) {
             throw e;
+        }
+        finally {
+            if (!isPartOfTransaction && !externalConn) conn.release();
         }
     }
 

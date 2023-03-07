@@ -23,7 +23,7 @@ app.get('/contracts', async (req: any, res: any) => {
 
 app.get('/contract/:id', async (req: any, res: any) => {
     try {
-        const result = await ContractsController.getContractsList(req.params);
+        const result = await ContractsController.getContractsList(req.params || {});
         res.send(result);
     } catch (error) {
         console.error(error);
