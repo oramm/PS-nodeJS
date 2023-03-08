@@ -131,7 +131,10 @@ export default class ToolsGapi {
 
         //console.log('credentials: %o', oAuthClient.credentials);
         const args: any[] = [oAuthClient]
-        if (argObject) args.push(...argObject);
+        if (typeof argObject === "object" && argObject !== null && argObject !== undefined)
+            args.push(...argObject);
+        else
+            args.push(argObject);
 
         result = (thisObject) ? await gapiFunction.apply(thisObject, args) : await gapiFunction(...args);
 

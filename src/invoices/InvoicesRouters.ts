@@ -79,11 +79,12 @@ app.put('/invoice/:id', async (req: any, res: any) => {
 
 app.put('/issueInvoice/:id', async (req: any, res: any) => {
     try {
-        req.body._blobEnviObjects[0].parent = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71';
+        const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
+        req.body._blobEnviObjects[0].parent = parentFolderGdId;
 
         let promises: any[] = await Promise.all(
             [
-                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileGPT, req.body._blobEnviObjects[0]),
+                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileGPT, [req.body._blobEnviObjects[0], undefined, parentFolderGdId]),
                 (!req.body.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId),
             ]
         )
