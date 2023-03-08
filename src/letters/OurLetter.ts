@@ -28,7 +28,10 @@ export default class OurLetter extends Letter {
             const gdFolder = await LetterGdController.createLetterFolder(auth, { ...this });
             this.folderGdId = <string>gdFolder.id;
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(this.folderGdId);
-            await this.createLetterFile(auth);
+            const letterGdFile = await this.createLetterFile(auth);
+            this.documentGdId = <string>letterGdFile.documentId;
+            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(this.documentGdId);
+
             await this.addInDb();
             const ourLetterGdFile = new OurLetterGdFile({ enviDocumentData: { ...this } })
             if (!this.number) throw new Error(`Letter number not set for: ${this.id}`);
