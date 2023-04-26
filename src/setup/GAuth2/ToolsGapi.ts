@@ -1,33 +1,11 @@
+import session from 'express-session';
 import { OAuth2Client } from 'google-auth-library';
 import url from 'url';
 import Person from '../../persons/Person';
 import { Envi } from '../../tools/Tools';
 import ToolsDb from '../../tools/ToolsDb';
-
-// Download your OAuth2 configuration from the Google
-export const keys = {
-    "installed": {
-        "client_id": "246174537725-7t658k3s4u5fsi35jjs4si7ukqlnaujb.apps.googleusercontent.com",
-        "project_id": "erp-envi-1611690452900",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "redirect_uris": [
-            "http://localhost:3000/oauthcallback/",
-            "http://localhost/envi.projectsite/"
-        ],
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_secret": "a-4Yh4X8lv4t3Yw7xjKjILsL",
-        "javascript_origins": [
-            "http://localhost",
-            "https://oramm.github.io",
-            "https://sites.google.com",
-            "https://ps.envi.com.pl",
-            "http://ps.envi.com.pl",
-            "http://erp.envi.com.pl",
-            "https://erp.envi.com.pl"
-        ]
-    }
-};
+import { Request, Response, NextFunction } from 'express';
+import { keys } from './credentials';
 
 
 export let refresh_token: string = '1//09de9o3oImgwxCgYIARAAGAkSNwF-L9IrFqZe55vzOdJThCZGCsxoXU7PKWGxHIuYPLcN5lb6FVlzd2LiHuU1RIMUyxy7Hdfwp7g'
@@ -85,24 +63,76 @@ export default class ToolsGapi {
         return r.tokens;
     }
 
-    static async getGoogleUserPayload(idToken?: string) {
-        if (oAuthClient.credentials.id_token && !idToken)
-            idToken = oAuthClient.credentials.id_token;
-        if (idToken) {
+    static async loginHandler(req: Request, res: Response) {
+        const token = req.body.id_token;
+
+        try {
+            if (!token) throw new Error('No token provided');
             const ticket = await oAuthClient.verifyIdToken({
-                idToken: idToken,
-                audience: keys.installed.client_id, // Specify the CLIENT_ID of the app that accesses the backend
+                idToken: token,
+                audience: [
+                    keys.installed.client_id,
+                    '386403657277-9mh2cnqb9dneoh8lc6o2m339eemj24he.apps.googleusercontent.com',
+                    '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com'],
             });
+
             const payload = ticket.getPayload();
-            //console.log('setGoogleUserId payload: %o', payload);
-            return payload
+            if (!payload) throw new Error('No payload provided');
+            if (!payload.email) throw new Error(`Twoje konto Google nie ma przypisanego adresu email. 
+            Zaloguj się na konto Google i przypisz adres email.`);
+            if (!payload.name) throw new Error(`Twoje konto Google nie ma przypisanego imienia i nazwiska.`);
+            if (!payload.picture) payload.picture = 'https://www.gravatar.com/avatar/    ?d=mp';
+
+            const systemRole = await this.determineSystemRole(payload.email);
+
+            req.session.userData = {
+                googleId: payload.sub,
+                systemEmail: payload.email,
+                userName: payload.name,
+                picture: payload.picture,
+                systemRoleName: systemRole.name,
+                systemRoleId: systemRole.id,
+            };
+            console.log('User data set in session:', req.session.userData);
+            //jeśli nie ma googleId w bazie danych, to go wpisuje (po pierwszym zalogowaniu)
+            if (!systemRole.googleId)
+                await ToolsGapi.editUserGoogleIdInDb(systemRole.personId, req.session.userData.googleId);
+
+
+        } catch (error) {
+            res.status(401).json({ error: 'Unauthorized' });
         }
+    }
+
+    static async determineSystemRole(email: string) {
+        const person = new Person({ systemEmail: email });
+        const role = await person.getSystemRole();
+        return role;
+    }
+
+    static authenticateUser(req: Request, res: Response, next: NextFunction) {
+        if (req.session && req.session.userData) {
+            next();
+        } else {
+            res.status(401).json({ error: 'Unauthorized' });
+        }
+    }
+
+    /** @deprecated  wymaga przeglądu*/
+    static async getAdminGoogleUserPayload() {
+        const idToken = oAuthClient.credentials.id_token;
+        if (!idToken) throw new Error('No token provided');
+        const ticket = await oAuthClient.verifyIdToken({
+            idToken: idToken,
+            audience: keys.installed.client_id, // Specify the CLIENT_ID of the app that accesses the backend
+        });
+        const payload = ticket.getPayload();
+        return payload
     }
 
     static async gapiReguestHandler(req: any, res: any, gapiFunction: Function, argObject?: any, thisObject?: any) {
         let result;
         console.log('--------------- authenticate ----------------')
-        //console.log(`user: ${JSON.stringify(req.session.userData)}:: ${req.session.id}`);
         let credentials: any = req.session.credentials;
         let refreshToken: string;
         //zmieniły się zakresy
@@ -125,12 +155,10 @@ export default class ToolsGapi {
                 credentials = { refresh_token: refreshToken };
         }
 
-        //console.log('\n\n init credentials: %s', credentials);
         console.log('credentials valid for: %d s', ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) / 1000);
         oAuthClient.setCredentials(credentials);
 
-        //console.log('credentials: %o', oAuthClient.credentials);
-        const args: any[] = [oAuthClient]
+        const args = [oAuthClient]
         if (typeof argObject === "object" && argObject !== null && argObject !== undefined)
             args.push(...argObject);
         else
@@ -138,11 +166,11 @@ export default class ToolsGapi {
 
         result = (thisObject) ? await gapiFunction.apply(thisObject, args) : await gapiFunction(...args);
 
-        if (result) {
-            req.session.userData = await this.getGoogleUserPayload();
-            req.session.credentials = oAuthClient.credentials;
-            console.log(`gapiReguestHandler: ${req.session.userData}`);
-        }
+        //if (result) {
+        //    req.session.userData = await this.getAdminGoogleUserPayload();
+        //    req.session.credentials = oAuthClient.credentials;
+        //    console.log(`gapiReguestHandler: ${req.session.userData}`);
+        //}
         return result;
     }
 

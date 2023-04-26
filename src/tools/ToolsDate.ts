@@ -103,10 +103,10 @@ export default class ToolsDate {
     }
 
     private static addZero(i: number | string) {
-        if (i < 10) {
+        if (parseInt(i as string) < 10) {
             i = "0" + i;
         }
-        return i;
+        return i.toString();
     }
 
     static dateDiff(first: number, second: number) {

@@ -1,6 +1,5 @@
 import RolesController from './RolesController'
 import { app } from '../../index'
-import Joi from 'joi';
 import Role from './Role';
 
 app.get('/roles', async (req: any, res: any) => {
@@ -33,9 +32,6 @@ app.get('/role/:id', async (req: any, res: any) => {
 
 app.post('/role', async (req: any, res: any) => {
     try {
-        const schema = {
-            name: Joi.string(),
-        };
         let item = new Role(req.body);
         await item.addInDb();
         res.send(item);

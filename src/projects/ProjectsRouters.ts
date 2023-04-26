@@ -1,14 +1,21 @@
-import express from 'express'
+import express, { Request, Response } from 'express'
 import ProjectsController from './ProjectsController'
 import { app } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import Project from './Project';
+import { UserData } from '../setup/GAuth2/sessionTypes';
 
 
 
-app.get('/projects/:systemEmail', async (req: any, res: any) => {
+app.get('/projects/:systemEmail', async (req: Request, res: Response) => {
+    console.log('get projects %o', req.session.userData);
+    console.log('get projects session id ' + req.sessionID);
     try {
-        const result = await ProjectsController.getProjectsList(req.params);
+        const result = await ProjectsController.getProjectsList({
+            ...req.params,
+            ...req.query,
+            userData: req.session.userData as UserData
+        });
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -16,14 +23,15 @@ app.get('/projects/:systemEmail', async (req: any, res: any) => {
             res.status(500).send(error.message);
         console.error(error);
     }
-
-
 });
 
-app.get('/project/:id/systemEmail/:systemEmail', async (req: any, res: any) => {
+app.get('/project/:id/systemEmail/:systemEmail', async (req: Request, res: Response) => {
     try {
-        console.log(req.params);
-        const result = (await ProjectsController.getProjectsList(req.params))[0];
+        console.log('params and userData: ', { ...req.params, ...req.session.userData });
+        const result = (await ProjectsController.getProjectsList({
+            ...req.params,
+            userData: req.session.userData as UserData
+        }))[0];
         await result?.setProjectEntityAssociationsFromDb();
         res.send(result);
     } catch (error) {

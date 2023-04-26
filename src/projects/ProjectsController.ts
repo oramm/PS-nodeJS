@@ -3,15 +3,37 @@ import Project from "./Project";
 import Person from '../persons/Person'
 import Entity from '../entities/Entity';
 import ProjectEntity from './ProjectEntity';
+import session from 'express-session';
+import { UserData } from '../setup/GAuth2/sessionTypes';
+
 
 export default class ProjectsController {
-    static async getProjectsList(initParamObject: any) {
+    static async getProjectsList(initParamObject: {
+        id?: number,
+        ourId?: string,
+        searchText?: string,
+        systemEmail?: string,
+        userData: UserData,
+        onlyKeyData?: boolean
+    }) {
         const projectIdCondition = (initParamObject.id) ? 'Projects.Id=' + initParamObject.id : '1';
+        const projectOurIdCondition = (initParamObject.ourId) ? `Projects.OurId LIKE "%${initParamObject.ourId}%"` : '1';
 
-        var currentUser = new Person({ systemEmail: initParamObject.systemEmail });
-        var currentUserSystemRole: any = <any>await currentUser.getSystemRole();
-        if (currentUserSystemRole.name == 'ENVI_EMPLOYEE' || currentUserSystemRole.name == 'ENVI_MANAGER')
-            var sql = `SELECT * FROM Projects WHERE ${projectIdCondition}`;
+        const searchTextCondition = (initParamObject.searchText) ?
+            `Projects.OurId LIKE "%${initParamObject.searchText}%" 
+            OR Projects.Number LIKE "%${initParamObject.searchText}%" 
+            OR Projects.Alias LIKE "%${initParamObject.searchText}%"`
+            : '1';
+
+        //const currentUser = new Person({ systemEmail: initParamObject.systemEmail });
+        //const currentUserSystemRole = await currentUser.getSystemRole();
+        const currentUserSystemRoleName = initParamObject.userData.systemRoleName;
+        if (currentUserSystemRoleName == 'ENVI_EMPLOYEE' || currentUserSystemRoleName == 'ENVI_MANAGER')
+            var sql = `SELECT * FROM Projects 
+            WHERE ${projectIdCondition}
+            AND ${projectOurIdCondition}
+            AND ${searchTextCondition}`;
+
         else
             sql = `SELECT  Projects.Id,
                 Projects.OurId,
@@ -33,7 +55,10 @@ export default class ProjectsController {
                 Projects.LastUpdated
                 FROM Projects
                 JOIN Roles ON Roles.ProjectOurId = Projects.OurId
-                WHERE ${projectIdCondition} AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${initParamObject.systemEmail}")
+                WHERE ${projectIdCondition}
+                    AND ${projectOurIdCondition}
+                    AND ${searchTextCondition}
+                    AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${initParamObject.systemEmail}")
                 GROUP BY Projects.Id`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

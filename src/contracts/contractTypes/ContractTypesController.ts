@@ -1,28 +1,30 @@
 
+import { RowDataPacket } from "mysql2";
 import Tools from "../../tools/Tools";
 import ToolsDb from '../../tools/ToolsDb'
 import ContractType from "./ContractType";
 
 export default class ContractTypesController {
-    static async getContractTypesList(initParamObject: any) {
-        const statusCondition = (initParamObject && initParamObject.status) ? 'ContractTypes.Status="' + initParamObject.status + '"' : '1';
-        const sql = 'SELECT  ContractTypes.Id, \n \t' +
-            'ContractTypes.Name, \n \t' +
-            'ContractTypes.Description, \n \t' +
-            'ContractTypes.IsOur, \n \t' +
-            'ContractTypes.Status \n' +
-            'FROM ContractTypes \n' +
-            'WHERE ' + statusCondition;
+    static async getContractTypesList(initParamObject: { status?: string } = {}) {
+        const { status } = initParamObject;
+        const statusCondition = status ? `ContractTypes.Status="${status}"` : "1";
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        const sql = `SELECT ContractTypes.Id,
+                        ContractTypes.Name,
+                        ContractTypes.Description,
+                        ContractTypes.IsOur,
+                        ContractTypes.Status
+                    FROM ContractTypes
+                    WHERE ${statusCondition}`;
+
+        const result = <RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractTypesResult(result);
     }
 
-    static processContractTypesResult(result: any[]): [ContractType?] {
-        let newResult: [ContractType?] = [];
-
+    static processContractTypesResult(result: RowDataPacket[]): ContractType[] {
+        let newResult: ContractType[] = [];
         for (const row of result) {
-            var item = new ContractType({
+            const item = new ContractType({
                 id: row.Id,
                 name: row.Name,
                 description: row.Description,

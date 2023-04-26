@@ -11,19 +11,36 @@ import ContractType from "./contractTypes/ContractType";
 export default class ContractsController {
     static async getContractsList(initParamObject: {
         projectId?: string,
+        searchText?: string,
         contractId?: number
         contractOurId?: string,
+        startDateFrom?: string,
+        startDateTo?: string,
+        contractName?: string,
+        contractAlias?: string,
+        typeId?: number,
         onlyOur?: boolean,
         isArchived?: boolean,
         onlyKeyData?: boolean
-    }) {
+    } = {}) {
 
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'mainContracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'mainContracts.Id=' + initParamObject.contractId : '1';
-        const contractOurIdCondition = (initParamObject && initParamObject.contractOurId) ? 'OurContractsData.OurId="' + initParamObject.contractOurId + '"' : '1';
+        const projectCondition = (initParamObject.projectId) ? `mainContracts.ProjectOurId="${initParamObject.projectId}"` : '1';
+        const contractIdCondition = (initParamObject.contractId) ? `mainContracts.Id=${initParamObject.contractId}` : '1';
+        const contractOurIdCondition = (initParamObject.contractOurId) ? `OurContractsData.OurId LIKE "%${initParamObject.contractOurId}%"` : '1';
+        const contractNameCondition = (initParamObject.contractName) ? `mainContracts.Name="${initParamObject.contractName}"` : '1';
+        const startDateFromCondition = (initParamObject.startDateFrom) ? `mainContracts.StartDate>="${initParamObject.startDateFrom}"` : '1';
+        const endDateToCondition = (initParamObject.startDateTo) ? `mainContracts.StartDate<="${initParamObject.startDateTo}"` : '1';
+        const typeCondition = (initParamObject.typeId) ? `mainContracts.TypeId=${initParamObject.typeId}` : '1';
 
-        const onlyOurContractsCondition = (initParamObject && initParamObject.onlyOur) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (initParamObject && initParamObject.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
+        const onlyOurContractsCondition = (initParamObject.onlyOur) ? 'OurContractsData.OurId IS NOT NULL' : '1';
+        const isArchivedConditon = (initParamObject.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
+
+        const searchTextCondition = (initParamObject.searchText) ?
+            `mainContracts.Name LIKE "%${initParamObject.searchText}%" 
+            OR mainContracts.Number LIKE "%${initParamObject.searchText}%" 
+            OR mainContracts.Alias LIKE "%${initParamObject.searchText}%" 
+            OR OurContractsData.OurId LIKE "%${initParamObject.searchText}%"`
+            : '1';
 
         const sql = `SELECT mainContracts.Id, 
             mainContracts.Alias, 
@@ -61,8 +78,18 @@ export default class ContractsController {
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-          WHERE ${projectCondition} AND ${contractCondition} AND ${onlyOurContractsCondition} AND ${contractOurIdCondition} AND ${isArchivedConditon}
+          WHERE ${projectCondition} 
+            AND ${contractIdCondition} 
+            AND ${onlyOurContractsCondition} 
+            AND ${contractOurIdCondition} 
+            AND ${isArchivedConditon}
+            AND ${contractNameCondition}
+            AND ${startDateFromCondition}
+            AND ${endDateToCondition}
+            AND ${searchTextCondition}
+            AND ${typeCondition}
           ORDER BY OurContractsData.OurId DESC, mainContracts.Number`;
+        //console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             return (initParamObject.onlyKeyData) ? this.processContractsResultKeyData(result, initParamObject) : await this.processContractsResult(result, initParamObject);

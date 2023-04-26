@@ -1,4 +1,3 @@
-import Joi from 'joi';
 import Person from './Person';
 import PersonsController from './PersonsController';
 import { app } from '../index'
@@ -35,9 +34,6 @@ app.get('/person/:id', async (req: any, res: any) => {
 
 app.post('/person', async (req: any, res: any) => {
     try {
-        const schema = {
-            name: Joi.string(),
-        };
         let item = new Person(req.body);
         delete item.systemRoleId;
         delete item.systemEmail;

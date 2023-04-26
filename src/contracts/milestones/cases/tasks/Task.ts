@@ -279,7 +279,8 @@ export default class Task extends BusinessObject {
         let test = false;
         if (this._owner && this._owner.id) {
             let owner = new Person(this._owner);
-            test = this.status !== 'Backlog' && (await owner.getSystemRole()).systemRoleId <= 3
+            const systemRole = await owner.getSystemRole();
+            test = this.status !== 'Backlog' && systemRole.id <= 3
         }
         else
             test = this.status !== 'Backlog';

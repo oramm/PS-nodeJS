@@ -1,6 +1,5 @@
 import bodyParser from 'body-parser';
 import express from 'express';
-import Joi from 'joi';
 import EntitiesController from './EntitiesController';
 import Entity from './Entity';
 import { app } from '../index'
@@ -32,9 +31,6 @@ app.get('/entity/:id', async (req: any, res: any) => {
 
 app.post('/entity', async (req: any, res: any) => {
     try {
-        const schema = {
-            name: Joi.string(),
-        };
         let item = new Entity(req.body);
         await item.addInDb();
         res.send(item);

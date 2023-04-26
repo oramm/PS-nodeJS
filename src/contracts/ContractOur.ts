@@ -16,7 +16,7 @@ export default class ContractOur extends Contract {
     adminId?: number;
     _ourType: string;
     _manager?: Person;
-    _admin?: Person;;
+    _admin?: Person;
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super(initParamObject);
@@ -85,16 +85,16 @@ export default class ContractOur extends Contract {
     }
 
     async shouldBeInScrum() {
-        let test = false;
-        if (this._admin && this._admin.email && this._admin.email.match(/urszula.juzwiak/i))
-            return false;
-        if (this.status !== 'Archiwalny' && !this._type.name.match(/AQM/i)) {
-            if (this._admin && this._admin.id)
-                test = (await this._admin.getSystemRole()).systemRoleId <= 3;
-            if (!test && this._manager && this._manager.id)
-                test = (await this._manager.getSystemRole()).systemRoleId <= 3
-        }
-        return test;
+        if (this._admin?.email?.match(/urszula.juzwiak/i)) return false;
+        if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i)) return false;
+
+        const adminSystemRole = await this._admin?.getSystemRole();
+        if (adminSystemRole?.id && adminSystemRole?.id <= 3) return true;
+
+        const managerSystemRole = await this._manager?.getSystemRole();
+        if (managerSystemRole?.id && managerSystemRole?.id <= 3) return true;
+
+        return false;
     }
     /** wstawia wiersz nagłówka kontratu - bez zadań */
     async addInScrum(auth: OAuth2Client) {

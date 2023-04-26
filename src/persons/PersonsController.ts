@@ -13,7 +13,7 @@ export default class PersonsController {
         showPrivateData?: boolean
     }) {
         const projectConditon = (initParamObject.projectId) ? 'Roles.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        var contractConditon;
+        let contractConditon;
         if (initParamObject.contractId)
             contractConditon =
                 '(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=' + initParamObject.contractId + ') OR Roles.ContractId IS NULL)'
@@ -38,7 +38,11 @@ export default class PersonsController {
             JOIN Entities ON Persons.EntityId=Entities.Id
             LEFT JOIN Roles ON Roles.PersonId = Persons.Id
             JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id
-            WHERE ${projectConditon} AND ${contractConditon} AND ${systemRolecondition} AND ${idCondition} AND ${systemEmailCondition}
+            WHERE ${projectConditon} 
+                AND ${contractConditon} 
+                AND ${systemRolecondition} 
+                AND ${idCondition} 
+                AND ${systemEmailCondition}
             GROUP BY Persons.Id
             ORDER BY Persons.Surname, Persons.Name;`
 

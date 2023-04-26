@@ -82,37 +82,6 @@ export default class ToolsGd {
         }
     }
 
-    /**https://stackoverflow.com/questions/13230487/converting-a-buffer-into-a-readablestream-in-node-js/44091532#44091532 */
-    static async uploadFile(auth: OAuth2Client, file: Envi._blobEnviObject) {
-        const drive = google.drive({ version: 'v3', auth });
-        const filePath = `tmp/${file.name}`;
-        const fileMetadata = {
-            'name': file.name,
-            parents: file.parent
-        };
-        const buff = Buffer.from(file.blobBase64String, 'base64');
-        fs.writeFileSync(filePath, buff);
-        const content: fs.ReadStream = fs.createReadStream(filePath);
-        //console.log(content);
-        const media = {
-            mimeType: file.mimeType,
-            body: content
-        };
-
-        let filesSchema = <drive_v3.Schema$File>await drive.files.create({
-            //@ts-ignore
-            resource: fileMetadata,
-            media: media,
-            fields: 'id'
-        })
-        console.log(`Usuwam: ${filePath}`)
-        fs.unlinkSync(filePath)
-        //@ts-ignore
-        console.log('New Gd File Id: ', filesSchema.data.id);
-        //@ts-ignore
-        return filesSchema.data;
-    }
-
     /**wgrywa plik na serwer
      * @param auth 
      * @param file - blob64 do wgrania

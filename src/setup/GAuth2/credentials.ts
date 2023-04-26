@@ -1,4 +1,4 @@
-{
+export const keys = {
     "installed": {
         "client_id": "246174537725-7t658k3s4u5fsi35jjs4si7ukqlnaujb.apps.googleusercontent.com",
         "project_id": "erp-envi-1611690452900",
@@ -19,5 +19,13 @@
             "http://erp.envi.com.pl",
             "https://erp.envi.com.pl"
         ]
+    },
+    "mongoDb": {
+        "host": "localhost",
+        "port": "27017",
+        "database": "envi",
+        "user": "envi",
+        "password": "mYnChcuBGRUTCU1X",
+        "uri": 'mongodb+srv://envi:mYnChcuBGRUTCU1X@cluster0.yca9wrm.mongodb.net/?retryWrites=true&w=majority'
     }
 }

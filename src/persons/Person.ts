@@ -35,7 +35,7 @@ export default class Person extends BusinessObject {
         this._nameSurnameEmail = this.name + ' ' + this.surname + ' ' + this.email;
         this._alias = ''
         if (this.name && this.surname)
-            this._alias = this.name.substr(0, 1) + this.surname.substr(0, 3);
+            this._alias = this.name.substring(0, 1) + this.surname.substring(0, 3);
 
     }
 
@@ -58,9 +58,9 @@ export default class Person extends BusinessObject {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             const row = result[0];
             return {
-                personId: <number>row.PersonId,
-                systemRoleId: <number>row.SystemRoleId,
+                id: <number>row.SystemRoleId,
                 name: <string>row.SystemRoleName,
+                personId: <number>row.PersonId,
                 googleId: <string | undefined>row.GoogleId,
                 googleRefreshToken: <string | undefined>row.GoogleRefreshToken
             };
@@ -69,4 +69,3 @@ export default class Person extends BusinessObject {
         }
     }
 }
-

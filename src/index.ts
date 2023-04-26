@@ -1,19 +1,42 @@
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import { MongoClient } from 'mongodb';
+import MongoStore from 'connect-mongo';
+
+import './setup/GAuth2/sessionTypes';
+import { keys } from './setup/GAuth2/credentials';
+import multer from 'multer';
 
 export const app = express();
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-app.use(session({
-    //name: 'nazwa test',
-    secret: 'your-random-secret-19890913007',
-    resave: true,
-    saveUninitialized: true,
-    rolling: true,
-    cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'lax' }
-}));
+const storage = multer.memoryStorage();
+export const upload = multer({ storage: storage }); // Użyj multer.memoryStorage()
+
+const uri = process.env.MONGODB_URI || keys.mongoDb.uri;
+const client = new MongoClient(uri);
+
+app.use(
+    session({
+        store: MongoStore.create({
+            clientPromise: client.connect(),
+            collectionName: 'sessions',
+        }),
+        name: 'connect.sid',
+        secret: 'your-random-secret-19890913007',
+        resave: false,
+        saveUninitialized: false,
+        rolling: true,
+        cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000 },
+    })
+);
+
+app.use((req, res, next) => {
+    console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName}`);
+    next();
+});
 app.enable('trust proxy');
 const port = process.env.PORT || 3000;
 
@@ -77,6 +100,6 @@ app.use(materialCardsRouter);
 
 require('./projects/ProjectsRouters');
 
-var server = app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`server is listenning on port: ${port}`);
 });
