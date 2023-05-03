@@ -10,7 +10,7 @@ app.get('/milestoneTypes', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -24,7 +24,7 @@ app.get('/milestoneType/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -39,7 +39,7 @@ app.post('/milestoneType', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
@@ -53,7 +53,7 @@ app.put('/milestoneType/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });
@@ -66,7 +66,7 @@ app.delete('/milestoneType/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });

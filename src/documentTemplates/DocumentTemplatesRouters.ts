@@ -9,7 +9,7 @@ app.get('/documentTemplates', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -23,7 +23,7 @@ app.get('/documentTemplate/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -38,7 +38,7 @@ app.post('/documentTemplate', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
@@ -52,7 +52,7 @@ app.put('/documentTemplate/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });
@@ -65,7 +65,7 @@ app.delete('/documentTemplate/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });

@@ -11,7 +11,6 @@ import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
 
 export default class ContractOther extends Contract {
-
     _ourContract?: ContractOur;
     ourIdRelated?: string;
     materialCardsGdFolderId: string | undefined;

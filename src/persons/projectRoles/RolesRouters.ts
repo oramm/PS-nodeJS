@@ -9,7 +9,7 @@ app.get('/roles', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -23,7 +23,7 @@ app.get('/role/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 
@@ -37,7 +37,7 @@ app.post('/role', async (req: any, res: any) => {
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
@@ -50,7 +50,7 @@ app.put('/role/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });
@@ -64,7 +64,7 @@ app.delete('/role/:id', async (req: any, res: any) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });

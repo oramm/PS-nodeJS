@@ -1,24 +1,80 @@
 import express, { Request, Response } from 'express'
-import ContractsController from './ContractsController'
+import ContractsController, { ContractSearchParamas as ContractSearchParams } from './ContractsController'
 import { app, upload } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ContractType from './contractTypes/ContractType';
-import { type } from 'os';
+import Project from '../projects/Project';
+
+function parseContractSearchFromQueryParams(requestParams: any) {
+    const searchParams: ContractSearchParams = {
+        searchText: requestParams.searchText ? requestParams.searchText : undefined,
+        isArchived: requestParams.isArchived === 'true' ? true : false,
+        contractName: requestParams.contractName,
+        startDateFrom: requestParams.startDateFrom,
+        startDateTo: requestParams.startDateTo,
+        contractAlias: requestParams.contractAlias,
+        onlyKeyData: requestParams.onlyKeyData === 'true' ? true : false,
+        onlyOurs: requestParams.onlyOurs === 'true' ? true : false,
+        contractOurId: requestParams.contractOurId,
+        projectId: requestParams.projectId,
+    };
+
+    if (requestParams._contractType) {
+        const _type: ContractType = JSON.parse(requestParams._contractType as string);
+        searchParams.typeId = _type.id;
+    }
+    if (requestParams._parent) {
+        const _parent: Project = JSON.parse(requestParams._parent as string);
+        searchParams.projectId = _parent.ourId;
+    }
+
+    return searchParams;
+}
+
+function parseContractInitParamsFromRequestBody(requestBody: any) {
+    const contractInitParams: any = {
+        ...requestBody,
+        _type: <ContractType>JSON.parse(requestBody._contractType),
+        _parent: <Project>JSON.parse(requestBody._parent),
+    };
+
+    contractInitParams.projectId = contractInitParams._parent.ourId;
+    return contractInitParams;
+}
+
+function parseOurContractInitParamsFromRequestBody(requestBody: any) {
+    const contractInitParams: any = parseContractInitParamsFromRequestBody(requestBody);
+    return {
+        ...contractInitParams,
+        _admin: requestBody._admin ? JSON.parse(requestBody._admin) : undefined,
+        _manager: requestBody._manager ? JSON.parse(requestBody._manager) : undefined,
+    };
+}
+
+function parseOtherContractInitParamsFromRequestBody(requestBody: any) {
+    const contractInitParams = parseContractInitParamsFromRequestBody(requestBody);
+    return {
+        ...contractInitParams,
+        _contractOur: requestBody._contractOur ? JSON.parse(requestBody._contractOur) : undefined,
+        _contractors: requestBody._contractors ? JSON.parse(requestBody._contractors) : undefined,
+    };
+}
 
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
         let isArchived = false;
         if (typeof req.query.isArchived === 'string')
             isArchived = req.query.isArchived === 'true';
-        const result = await ContractsController.getContractsList({ ...req.query, isArchived });
+        const searchParams = parseContractSearchFromQueryParams(req.query);
+        const result = await ContractsController.getContractsList(searchParams);
         res.send(result);
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
     }
 });
 
@@ -29,12 +85,12 @@ app.get('/contract/:id', async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });
 
-app.post('/contract', upload.any(), async (req: Request, res: Response) => {
+app.post('/contract', async (req: Request, res: Response) => {
     try {
         const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
         if (!item._parent || !item._parent.id)
@@ -46,46 +102,31 @@ app.post('/contract', upload.any(), async (req: Request, res: Response) => {
     } catch (error) {
 
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
 
-app.post('/contractReact', upload.any(), async (req: Request, res: Response) => {
+app.post('/contractReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
-        const formDataObject = req.body;
-
-        const _type: ContractType = JSON.parse(formDataObject._type);
-        const parsedDataFromClient = {
-            ...formDataObject,
-            //value: parseFloat(formDataObject.value),
-            _type,
-            _parent: JSON.parse(formDataObject._parent),
-            ..._type.isOur && {
-                _manager: JSON.parse(formDataObject._manager),
-                _admin: JSON.parse(formDataObject._admin),
-            },
-            ...!_type.isOur && {
-                _contractors: JSON.parse(formDataObject._contractors),
-                _ourContract: JSON.parse(formDataObject._ourContract),
-            }
-        };
-
-
-        console.log('req.body o%', parsedDataFromClient);
-
-        const item = _type.isOur ? new ContractOur(parsedDataFromClient) : new ContractOther(parsedDataFromClient);
+        let item: ContractOur | ContractOther;
+        req.parsedBody.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
+        console.log('req.parsedBody', req.parsedBody);
+        if (req.parsedBody._type.isOur) {
+            item = new ContractOur(req.parsedBody);
+        } else {
+            item = new ContractOther(req.parsedBody);
+        }
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
-
         //await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
         res.send(item);
     } catch (error) {
 
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
@@ -94,21 +135,21 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
         const item = (req.body._type.isOur) ? new ContractOur(req.body) : new ContractOther(req.body);
         if (!item.id) throw new Error(`Próba edycji kontraktu bez Id`);
-        //console.log(`Contract %o updated`, item);
 
         await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
-            item.editInDb()
+            //ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
+            //ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
+            //item.editInDb()
         ]);
 
-        res.send(item);
+        res.send({ item });
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send(error.message);
         console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
     }
 });
+
 
 app.put('/sortProjects', async (req: Request, res: Response) => {
     try {
@@ -117,7 +158,7 @@ app.put('/sortProjects', async (req: Request, res: Response) => {
         res.send("sorted");
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });
@@ -135,7 +176,7 @@ app.delete('/contract/:id', async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });

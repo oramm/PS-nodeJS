@@ -24,6 +24,18 @@ export default class Tools {
         return Utilities.newBlob(decoded, contentType, name);
     }
 
+    static parseObjectsFromBody(body: any) {
+        const parsedBody: any = {};
+        for (const key in body) {
+            try {
+                parsedBody[key] = JSON.parse(body[key]);
+            } catch (error) {
+                parsedBody[key] = body[key];
+            }
+        }
+        return parsedBody;
+    }
+
     static enumFieldsToArray(enumToParse: any): { key: string, value: any }[] {
         let array: { key: string, value: any }[] = [];
 

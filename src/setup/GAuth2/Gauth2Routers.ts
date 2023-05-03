@@ -11,7 +11,7 @@ app.post('/login', async (req: Request, res: Response) => {
         res.send(req.session);
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     };
 });
@@ -28,7 +28,7 @@ app.get('/oauthcallback', async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
-            res.status(500).send(error.message);
+            res.status(500).send({ errorMessage: error.message });
         console.error(error);
     }
 });

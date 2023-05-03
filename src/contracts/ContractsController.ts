@@ -8,38 +8,39 @@ import ContractOther from "./ContractOther";
 import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
 
+export type ContractSearchParamas = {
+    projectId?: string | null,
+    searchText?: string | null,
+    contractId?: number
+    contractOurId?: string | null,
+    startDateFrom?: string | null,
+    startDateTo?: string | null,
+    contractName?: string | null,
+    contractAlias?: string | null,
+    typeId?: number | null,
+    onlyOurs?: boolean | null,
+    isArchived?: boolean | null,
+    onlyKeyData?: boolean | null
+}
+
 export default class ContractsController {
-    static async getContractsList(initParamObject: {
-        projectId?: string,
-        searchText?: string,
-        contractId?: number
-        contractOurId?: string,
-        startDateFrom?: string,
-        startDateTo?: string,
-        contractName?: string,
-        contractAlias?: string,
-        typeId?: number,
-        onlyOur?: boolean,
-        isArchived?: boolean,
-        onlyKeyData?: boolean
-    } = {}) {
+    static async getContractsList(searchParams: ContractSearchParamas = {}) {
+        const projectCondition = (searchParams.projectId) ? `mainContracts.ProjectOurId="${searchParams.projectId}"` : '1';
+        const contractIdCondition = (searchParams.contractId) ? `mainContracts.Id=${searchParams.contractId}` : '1';
+        const contractOurIdCondition = (searchParams.contractOurId) ? `OurContractsData.OurId LIKE "%${searchParams.contractOurId}%"` : '1';
+        const contractNameCondition = (searchParams.contractName) ? `mainContracts.Name="${searchParams.contractName}"` : '1';
+        const startDateFromCondition = (searchParams.startDateFrom) ? `mainContracts.StartDate>="${searchParams.startDateFrom}"` : '1';
+        const startDateToCondition = (searchParams.startDateTo) ? `mainContracts.StartDate<="${searchParams.startDateTo}"` : '1';
+        const typeCondition = (searchParams.typeId) ? `mainContracts.TypeId=${searchParams.typeId}` : '1';
 
-        const projectCondition = (initParamObject.projectId) ? `mainContracts.ProjectOurId="${initParamObject.projectId}"` : '1';
-        const contractIdCondition = (initParamObject.contractId) ? `mainContracts.Id=${initParamObject.contractId}` : '1';
-        const contractOurIdCondition = (initParamObject.contractOurId) ? `OurContractsData.OurId LIKE "%${initParamObject.contractOurId}%"` : '1';
-        const contractNameCondition = (initParamObject.contractName) ? `mainContracts.Name="${initParamObject.contractName}"` : '1';
-        const startDateFromCondition = (initParamObject.startDateFrom) ? `mainContracts.StartDate>="${initParamObject.startDateFrom}"` : '1';
-        const endDateToCondition = (initParamObject.startDateTo) ? `mainContracts.StartDate<="${initParamObject.startDateTo}"` : '1';
-        const typeCondition = (initParamObject.typeId) ? `mainContracts.TypeId=${initParamObject.typeId}` : '1';
+        const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
+        const isArchivedConditon = (searchParams.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
 
-        const onlyOurContractsCondition = (initParamObject.onlyOur) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (initParamObject.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
-
-        const searchTextCondition = (initParamObject.searchText) ?
-            `mainContracts.Name LIKE "%${initParamObject.searchText}%" 
-            OR mainContracts.Number LIKE "%${initParamObject.searchText}%" 
-            OR mainContracts.Alias LIKE "%${initParamObject.searchText}%" 
-            OR OurContractsData.OurId LIKE "%${initParamObject.searchText}%"`
+        const searchTextCondition = (searchParams.searchText) ?
+            `(mainContracts.Name LIKE "%${searchParams.searchText}%" 
+                OR mainContracts.Number LIKE "%${searchParams.searchText}%" 
+                OR mainContracts.Alias LIKE "%${searchParams.searchText}%" 
+                OR OurContractsData.OurId LIKE "%${searchParams.searchText}%")`
             : '1';
 
         const sql = `SELECT mainContracts.Id, 
@@ -80,19 +81,19 @@ export default class ContractsController {
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
           WHERE ${projectCondition} 
             AND ${contractIdCondition} 
-            AND ${onlyOurContractsCondition} 
+            AND ${onlyOursContractsCondition} 
             AND ${contractOurIdCondition} 
             AND ${isArchivedConditon}
             AND ${contractNameCondition}
             AND ${startDateFromCondition}
-            AND ${endDateToCondition}
+            AND ${startDateToCondition}
             AND ${searchTextCondition}
             AND ${typeCondition}
           ORDER BY OurContractsData.OurId DESC, mainContracts.Number`;
         //console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            return (initParamObject.onlyKeyData) ? this.processContractsResultKeyData(result, initParamObject) : await this.processContractsResult(result, initParamObject);
+            return (searchParams.onlyKeyData) ? this.processContractsResultKeyData(result, searchParams) : await this.processContractsResult(result, searchParams);
         } catch (err) {
             console.log(sql);
             throw (err);

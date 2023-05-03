@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { NextFunction } from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
@@ -7,16 +7,38 @@ import MongoStore from 'connect-mongo';
 import './setup/GAuth2/sessionTypes';
 import { keys } from './setup/GAuth2/credentials';
 import multer from 'multer';
-
-export const app = express();
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
+import Tools from './tools/Tools';
+declare global {
+    namespace Express {
+        interface Request {
+            parsedBody: any;
+        }
+    }
+}
+const port = process.env.PORT || 3000;
 const storage = multer.memoryStorage();
 export const upload = multer({ storage: storage }); // Użyj multer.memoryStorage()
 
 const uri = process.env.MONGODB_URI || keys.mongoDb.uri;
 const client = new MongoClient(uri);
+
+export const app = express();
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use((req, res, next) => {
+    if (req.is('multipart/form-data')) {
+        upload.any()(req, res, next);
+        console.log('Multipart form data - upload.any()');
+    }
+    else
+        next();
+});
+
+app.use((req, res, next) => {
+    if (['POST', 'PUT', 'DELETE'].includes(req.method))
+        req.parsedBody = Tools.parseObjectsFromBody(req.body);
+    next();
+});
 
 app.use(
     session({
@@ -38,7 +60,6 @@ app.use((req, res, next) => {
     next();
 });
 app.enable('trust proxy');
-const port = process.env.PORT || 3000;
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
@@ -47,10 +68,8 @@ const corsOptions = {
     credentials: true,
 }
 app.use(cors(corsOptions));
-//app.use(cors(corsOptionsDelegate));
 
 require('./setup/GAuth2/Gauth2Routers');
-//require('./setup/ServiceAPI/ServiceRouters');
 require('./persons/PersonsRouters');
 
 require('./persons/projectRoles/RolesRouters');
