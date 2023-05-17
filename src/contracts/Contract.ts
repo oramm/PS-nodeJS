@@ -5,15 +5,11 @@ import Project from '../projects/Project';
 import Entity from '../entities/Entity';
 import ContractType from './contractTypes/ContractType';
 import mysql from 'mysql2/promise';
-import Person from '../persons/Person';
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 import ContractEntity from './ContractEntity';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import Milestone from './milestones/Milestone';
-import MilestonesController from './milestones/MilestonesController';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
-import { google } from 'googleapis';
 import TasksController from './milestones/cases/tasks/TasksController';
 
 export default abstract class Contract extends BusinessObject {
@@ -23,7 +19,7 @@ export default abstract class Contract extends BusinessObject {
     _type: ContractType;
     _tmpId?: any;
     number: string;
-    name: string;
+    name: string = '';
     projectOurId: string;
     startDate?: string;
     endDate?: string;
@@ -45,7 +41,7 @@ export default abstract class Contract extends BusinessObject {
         super({ _dbTableName: 'Contracts' });
         this.id = initParamObject.id;
         this.alias = initParamObject.alias;
-        this.typeId = initParamObject._type.id;
+        this.typeId = initParamObject._type?.id;
         this._type = initParamObject._type;
         //id tworzone tymczasowo po stronie klienta do obsługi tymczasowego wiersza resultsecie
         this._tmpId = initParamObject._tmpId;

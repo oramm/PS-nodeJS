@@ -34,35 +34,6 @@ function parseContractSearchFromQueryParams(requestParams: any) {
     return searchParams;
 }
 
-function parseContractInitParamsFromRequestBody(requestBody: any) {
-    const contractInitParams: any = {
-        ...requestBody,
-        _type: <ContractType>JSON.parse(requestBody._contractType),
-        _parent: <Project>JSON.parse(requestBody._parent),
-    };
-
-    contractInitParams.projectId = contractInitParams._parent.ourId;
-    return contractInitParams;
-}
-
-function parseOurContractInitParamsFromRequestBody(requestBody: any) {
-    const contractInitParams: any = parseContractInitParamsFromRequestBody(requestBody);
-    return {
-        ...contractInitParams,
-        _admin: requestBody._admin ? JSON.parse(requestBody._admin) : undefined,
-        _manager: requestBody._manager ? JSON.parse(requestBody._manager) : undefined,
-    };
-}
-
-function parseOtherContractInitParamsFromRequestBody(requestBody: any) {
-    const contractInitParams = parseContractInitParamsFromRequestBody(requestBody);
-    return {
-        ...contractInitParams,
-        _contractOur: requestBody._contractOur ? JSON.parse(requestBody._contractOur) : undefined,
-        _contractors: requestBody._contractors ? JSON.parse(requestBody._contractors) : undefined,
-    };
-}
-
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
         let isArchived = false;
@@ -96,7 +67,7 @@ app.post('/contract', async (req: Request, res: Response) => {
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
 
-        //await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
+        await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
         res.send(item);
     } catch (error) {
@@ -120,7 +91,7 @@ app.post('/contractReact', async (req: Request, res: Response) => {
         }
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
-        //await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
+        await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
         res.send(item);
     } catch (error) {
@@ -137,9 +108,9 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
         if (!item.id) throw new Error(`Próba edycji kontraktu bez Id`);
 
         await Promise.all([
-            //ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
-            //ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
-            //item.editInDb()
+            ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item),
+            ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
+            item.editInDb()
         ]);
 
         res.send({ item });

@@ -35,9 +35,7 @@ export default class ContractOur extends Contract {
         //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
         let ourIdOrNumber = this.ourId;
 
-        if (this.name) {
-            this._ourIdOrNumber_Name = `${ourIdOrNumber} ${this.name.substr(0, 50)} ...`;
-        }
+        this._ourIdOrNumber_Name = `${ourIdOrNumber} ${this.name?.substring(0, 50)} ...`;
         this._ourIdOrNumber_Alias = `${ourIdOrNumber} ${this.alias || ''}`.trim();
         this.setFolderName();
     }

@@ -35,14 +35,17 @@ export default class ContractsController {
 
         const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
         const isArchivedConditon = (searchParams.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
+        let searchTextCondition = '1';
 
-        const searchTextCondition = (searchParams.searchText) ?
-            `(mainContracts.Name LIKE "%${searchParams.searchText}%" 
-                OR mainContracts.Number LIKE "%${searchParams.searchText}%" 
-                OR mainContracts.Alias LIKE "%${searchParams.searchText}%" 
-                OR OurContractsData.OurId LIKE "%${searchParams.searchText}%")`
-            : '1';
-
+        if (searchParams.searchText) {
+            const searchText = ToolsDb.stringToSql(searchParams.searchText);
+            searchTextCondition = (searchText) ?
+                `(mainContracts.Name LIKE "%${searchText}%" 
+                OR mainContracts.Number LIKE "%${searchText}%" 
+                OR mainContracts.Alias LIKE "%${searchText}%" 
+                OR OurContractsData.OurId LIKE "%${searchText}%")`
+                : '1';
+        }
         const sql = `SELECT mainContracts.Id, 
             mainContracts.Alias, 
             mainContracts.Number, 

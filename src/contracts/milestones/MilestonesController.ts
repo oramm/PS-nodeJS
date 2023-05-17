@@ -1,7 +1,4 @@
-import mysql from "mysql";
-import Tools from "../../tools/Tools";
 import ToolsDb from '../../tools/ToolsDb'
-import Contract from "../Contract";
 import ContractOther from "../ContractOther";
 import ContractOur from "../ContractOur";
 import Milestone from "./Milestone";

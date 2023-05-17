@@ -9,48 +9,68 @@ import Letter from "./Letter";
 import OurLetter from "./OurLetter";
 import OurOldTypeLetter from "./OurOldTypeLetter";
 
+export type LettersSearchParams = {
+    projectId?: string | null,
+    searchText?: string | null,
+    contractId?: number
+    milestoneId?: string | null,
+    creationDateFrom?: string | null,
+    creationDateTo?: string | null,
+}
 
 export default class LettersController {
-    static async getLettersList(initParamObject: any) {
-        const projectConditon = (initParamObject && initParamObject.projectId) ? 'Projects.OurId="' + initParamObject.projectId + '"' : '1';
-        const milestoneConditon = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id=' + initParamObject.milestoneId : '1';
-        const contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
-        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : `"${ToolsDate.dateDMYtoYMD(initParamObject.endDate)}"`;
 
-        const dateCondition = (initParamObject && initParamObject.startDate) ? `Letters.CreationDate BETWEEN "${ToolsDate.dateDMYtoYMD(initParamObject.startDate)}" AND DATE_ADD(${initParamObject.endDate}, INTERVAL 1 DAY)` : '1';
+    static async getLettersList(searchParams: LettersSearchParams = {}) {
+        console.log('getLettersList', searchParams);
+        const projectConditon = (searchParams.projectId) ? `Projects.OurId="${searchParams.projectId}"` : '1';
+        const milestoneConditon = searchParams.milestoneId ? `Milestones.Id=${searchParams.milestoneId}` : '1';
+        const contractConditon = searchParams.contractId ? `Contracts.Id=${searchParams.contractId}` : '1';
+        const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo) ?
+            `Letters.CreationDate BETWEEN "${ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom)}" 
+            AND DATE_ADD("${searchParams.creationDateTo}", INTERVAL 1 DAY)`
+            : '1';
 
-        const sql = 'SELECT  Letters.Id, \n \t' +
-            'Letters.IsOur, \n \t' +
-            'Letters.Number, \n \t' +
-            'Letters.Description, \n \t' +
-            'Letters.CreationDate, \n \t' +
-            'Letters.RegistrationDate, \n \t' +
-            'Letters.DocumentGdId, \n \t' +
-            'Letters.FolderGdId, \n \t' +
-            'Letters.LetterFilesCount, \n \t' +
-            'Letters.LastUpdated, \n \t' +
-            'Projects.Id AS ProjectId, \n \t' +
-            'Projects.OurId AS ProjectOurId, \n \t' +
-            'Projects.GdFolderId AS ProjectGdFolderId, \n \t' +
-            'Projects.LettersGdFolderId, \n \t' +
-            'Persons.Id AS EditorId, \n \t' +
-            'Persons.Name AS EditorName, \n \t' +
-            'Persons.Surname AS EditorSurname \n' +
-            'FROM Letters \n' +
-            'JOIN Letters_Cases ON Letters_Cases.LetterId=Letters.id \n' +
-            'JOIN Cases ON Letters_Cases.CaseId=Cases.Id \n' +
-            'JOIN Milestones ON Milestones.Id=Cases.MilestoneId \n' +
-            'JOIN Contracts ON Contracts.Id=Milestones.ContractId \n' +
-            'JOIN Projects ON Letters.ProjectId=Projects.Id \n' +
-            'JOIN Persons ON Letters.EditorId=Persons.Id \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' AND ' + milestoneConditon + ' AND ' + dateCondition + '\n' +
-            'GROUP BY Letters.Id \n' +
-            'ORDER BY Letters.RegistrationDate, Letters.CreationDate';
+        const searchTextCondition = (searchParams.searchText) ?
+            `(Letters.Description LIKE "%${searchParams.searchText}%" 
+                OR Letters.Number LIKE "%${searchParams.searchText}%"
+             )`
+            : '1';
+
+        const sql = `SELECT 
+            Letters.Id,
+            Letters.IsOur,
+            Letters.Number,
+            Letters.Description,
+            Letters.CreationDate,
+            Letters.RegistrationDate,
+            Letters.DocumentGdId,
+            Letters.FolderGdId,
+            Letters.LetterFilesCount,
+            Letters.LastUpdated,
+            Projects.Id AS ProjectId,
+            Projects.OurId AS ProjectOurId,
+            Projects.GdFolderId AS ProjectGdFolderId,
+            Projects.LettersGdFolderId,
+            Persons.Id AS EditorId,
+            Persons.Name AS EditorName,
+            Persons.Surname AS EditorSurname
+        FROM Letters
+        JOIN Letters_Cases ON Letters_Cases.LetterId=Letters.id
+        JOIN Cases ON Letters_Cases.CaseId=Cases.Id
+        JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+        JOIN Contracts ON Contracts.Id=Milestones.ContractId
+        JOIN Projects ON Letters.ProjectId=Projects.Id
+        JOIN Persons ON Letters.EditorId=Persons.Id
+        WHERE ${projectConditon} 
+          AND ${contractConditon} 
+          AND ${milestoneConditon} 
+          AND ${dateCondition}
+          AND ${searchTextCondition}
+        GROUP BY Letters.Id
+        ORDER BY Letters.RegistrationDate, Letters.CreationDate`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processLettersResult(result, initParamObject);
-
-
+        return this.processLettersResult(result, searchParams);
     }
 
     static async processLettersResult(result: any[], initParamObject: any) {

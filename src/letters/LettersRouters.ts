@@ -1,5 +1,5 @@
 import express from 'express'
-import LettersController from './LettersController'
+import LettersController, { LettersSearchParams } from './LettersController'
 import { app } from '../index';
 import OurLetter from './OurLetter';
 import OurOldTypeLetter from './OurOldTypeLetter';
@@ -9,11 +9,23 @@ import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import LetterGdController from './LetterGdController';
+import Project from '../projects/Project';
 
+function parseLetterSearchFromQueryParams(requestParams: any) {
+    const searchParams: LettersSearchParams = {
+        ...requestParams,
+    };
+    if (requestParams._project) {
+        const _project: Project = JSON.parse(requestParams._project as string);
+        searchParams.projectId = _project.ourId;
+    }
+    return searchParams;
+}
 
 app.get('/letters', async (req: any, res: any) => {
     try {
-        const result = await LettersController.getLettersList(req.query);
+        const searchParams = parseLetterSearchFromQueryParams(req.query);
+        const result = await LettersController.getLettersList(searchParams);
         res.send(result);
     } catch (error) {
         console.error(error);

@@ -1,3 +1,5 @@
+import ContractOther from "../../contracts/ContractOther";
+import ContractOur from "../../contracts/ContractOur";
 import Case from "../../contracts/milestones/cases/Case";
 import ToolsDb from "../../tools/ToolsDb";
 import LetterCase from "./LetterCase";
@@ -32,6 +34,7 @@ export default class LetterCaseAssociationsController {
             'MilestoneTypes.Name AS MilestoneTypeName, \n \t' +
             'MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber, \n \t' +
             'OurContractsData.OurId AS ContractOurId, \n \t' +
+            'Contracts.Id AS ContractId, \n \t' +
             'Contracts.Number AS ContractNumber, \n \t' +
             'Contracts.Name AS ContractName \n' +
             'FROM Letters_Cases \n' +
@@ -56,6 +59,14 @@ export default class LetterCaseAssociationsController {
         let newResult: [LetterCase?] = [];
 
         for (const row of result) {
+            const contractInitParams = {
+                id: row.ContractId,
+                ourId: row.ContractOurId,
+                number: row.ContractNumber,
+                name: ToolsDb.sqlToString(row.ContractName),
+            }
+            const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
+
             const item = new LetterCase({
                 _letter: {
                     id: row.LetterId,
@@ -87,11 +98,7 @@ export default class LetterCaseAssociationsController {
                             name: row.MilestoneTypeName,
                             _folderNumber: row.MilestoneTypeFolderNumber,
                         },
-                        _parent: {
-                            ourId: row.ContractOurId,
-                            number: row.ContractNumber,
-                            name: row.ContractName
-                        }
+                        _parent: _contract,
                     },
                 })
             });
