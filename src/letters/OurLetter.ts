@@ -11,7 +11,7 @@ import OurLetterGdController from './OurLetterGdController';
 
 
 export default class OurLetter extends Letter {
-    _template: DocumentTemplate | undefined;
+    _template?: DocumentTemplate;
     isOur: boolean = true;
 
     constructor(initParamObject: any) {
@@ -23,7 +23,7 @@ export default class OurLetter extends Letter {
             this._template = initParamObject._template;
     }
 
-    async initialise(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
+    async initialise(auth: OAuth2Client, files: Express.Multer.File[] = []) {
         try {
             const gdFolder = await LetterGdController.createLetterFolder(auth, { ...this });
             this.folderGdId = <string>gdFolder.id;
@@ -42,11 +42,11 @@ export default class OurLetter extends Letter {
                 ourLetterGdFile.updateTextRunsInNamedRanges(auth),
                 ToolsGd.updateFolder(auth, { id: this.folderGdId, name: folderName }),
                 ToolsGd.updateFile(auth, { id: this.documentGdId, name: folderName }),
-                (blobEnviObjects.length > 0) ? this.appendAttachmentsHandler(auth, blobEnviObjects) : undefined,
+                (files.length > 0) ? this.appendAttachmentsHandler(auth, files) : undefined,
             ]).catch((error) => { throw (error) });
 
         } catch (err) {
-            this.deleteFromDb();
+            if (this.id) this.deleteFromDb();
             OurLetterGdController.deleteFromGd(auth, null, this.folderGdId);
             throw (err);
         }
@@ -66,15 +66,14 @@ export default class OurLetter extends Letter {
         return document;
     }
 
-    async appendAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
-        await super.appendAttachmentsHandler(auth, blobEnviObjects);
+    async appendAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
+        await super.appendAttachmentsHandler(auth, files);
         if (!this.folderGdId) throw new EnviErrors.NoGdIdError(`OurLetter: ${this.number}`);
-        await OurLetterGdController.appendAttachments(auth, blobEnviObjects, <string>this.folderGdId);
+        await OurLetterGdController.appendAttachments(auth, files, <string>this.folderGdId);
     }
 
-
     /**zmienia nazwę folderu i pliku pisma i aktualizuje dane w piśmie*/
-    async editLetterGdElements(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
+    async editLetterGdElements(auth: OAuth2Client, files: Express.Multer.File[]) {
         const letterGdFolder = await ToolsGd.getFileOrFolderById(auth, <string>(this.folderGdId));
         const newFolderName = OurLetterGdController.makeFolderName(<string>this.number, <string>this.creationDate);
         const ourLetterGdFile = new OurLetterGdFile({ enviDocumentData: { ...this } })
@@ -84,7 +83,7 @@ export default class OurLetter extends Letter {
                 ourLetterGdFile.edit(auth),
                 ToolsGd.updateFolder(auth, { id: this.folderGdId, name: newFolderName }),
                 ToolsGd.updateFile(auth, { id: this.documentGdId, name: newFolderName }),
-                (blobEnviObjects.length > 0) ? this.appendAttachmentsHandler(auth, blobEnviObjects) : undefined,
+                (files.length > 0) ? this.appendAttachmentsHandler(auth, files) : undefined,
             ]).catch((error) => { throw (error) });
 
             await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });

@@ -1,4 +1,4 @@
-import mysql from "mysql";
+import mysql from 'mysql2/promise';
 import Tools from "../../../tools/Tools";
 import ToolsDb from '../../../tools/ToolsDb'
 import Contract from "../../Contract";
@@ -141,5 +141,22 @@ export default class CasesController {
             return true;
         let hasProcesses: boolean = criteria.hasProcesses === 'true';
         return (caseItem._processesInstances && (hasProcesses === caseItem._processesInstances?.length > 0));
+    }
+
+    static makeSearchTextCondition(searchText: string) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Cases.Number LIKE ? 
+                            OR Cases.Name LIKE ?
+                            OR Cases.Description LIKE ?
+                            OR CaseTypes.FolderNumber LIKE ?
+                            OR Milestones.Name LIKE ?
+                            OR CaseTypes.Name LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 }

@@ -82,13 +82,48 @@ export default class ToolsGd {
         }
     }
 
+    static async uploadFileMulter(
+        auth: OAuth2Client,
+        file: Express.Multer.File, // zaktualizuj typ danych
+        options: drive_v3.Params$Resource$Files$Create = {},
+        parentFolderId: string
+    ) {
+        const drive = google.drive({ version: 'v3', auth });
+        let { originalname: name, mimetype: mimeType } = file; // użyj odpowiednich pól z Express.Multer.File
+        const { fields = 'id', ...otherOptions } = options;
+
+        const parent = parentFolderId;
+        const media = {
+            mimeType,
+            body: Readable.from(file.buffer), // użyj bezpośrednio buffer z Express.Multer.File
+        };
+
+        try {
+            const res = await drive.files.create({
+                requestBody: {
+                    name: name,
+                    parents: parent ? [parent] : [],
+                },
+                media,
+                fields,
+                ...otherOptions,
+            });
+            return res.data;
+        } catch (err) {
+            console.error(`Failed to upload file ${name}`, err);
+            throw err;
+        }
+    }
+
+
     /**wgrywa plik na serwer
      * @param auth 
      * @param file - blob64 do wgrania
      * @param options - paramentry pliku wg api
      * @param parentFolderId - opcjonalny jeśłi nie podany parent jest brany z bloba - file
+     * @deprecated - do zastąpienia 
      */
-    static async uploadFileGPT(auth: OAuth2Client,
+    static async uploadFileBase64(auth: OAuth2Client,
         file: Envi._blobEnviObject,
         options: drive_v3.Params$Resource$Files$Create = {},
         parentFolderId?: string

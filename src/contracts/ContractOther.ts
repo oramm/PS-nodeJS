@@ -30,7 +30,7 @@ export default class ContractOther extends Contract {
         //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
         let _ourIdOrNumber = this.number;
         this.materialCardsGdFolderId = initParamObject.materialCardsGdFolderId;
-        this._ourIdOrNumber_Name = `${_ourIdOrNumber} ${this.name.substring(0, 50)} ...`
+        this._ourIdOrNumber_Name = `${_ourIdOrNumber} ${this.name?.substring(0, 50)} ...`
         this._ourIdOrNumber_Alias = _ourIdOrNumber;
         if (this.alias)
             this._ourIdOrNumber_Alias += ' ' + this.alias;

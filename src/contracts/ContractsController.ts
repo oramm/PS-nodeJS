@@ -1,16 +1,15 @@
-import mysql from "mysql";
+import mysql from 'mysql2/promise';
 import Entity from "../entities/Entity";
-import Person from "../persons/Person";
-import Project from "../projects/Project";
 import ToolsDb from '../tools/ToolsDb'
 import Contract from "./Contract";
 import ContractOther from "./ContractOther";
 import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
+import { type } from "os";
 
 export type ContractSearchParamas = {
     projectId?: string | null,
-    searchText?: string | null,
+    searchText?: string,
     contractId?: number
     contractOurId?: string | null,
     startDateFrom?: string | null,
@@ -18,34 +17,70 @@ export type ContractSearchParamas = {
     contractName?: string | null,
     contractAlias?: string | null,
     typeId?: number | null,
-    onlyOurs?: boolean | null,
+    typesToIncude?: 'our' | 'other' | 'all' | null,
+    onlyOurs?: boolean | null,//@deprecated
     isArchived?: boolean | null,
     onlyKeyData?: boolean | null
 }
 
 export default class ContractsController {
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(mainContracts.Name LIKE ? 
+                          OR mainContracts.Number LIKE ? 
+                          OR mainContracts.Alias LIKE ? 
+                          OR OurContractsData.OurId LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+
+
+        return searchTextCondition;
+    }
+
     static async getContractsList(searchParams: ContractSearchParamas = {}) {
-        const projectCondition = (searchParams.projectId) ? `mainContracts.ProjectOurId="${searchParams.projectId}"` : '1';
-        const contractIdCondition = (searchParams.contractId) ? `mainContracts.Id=${searchParams.contractId}` : '1';
-        const contractOurIdCondition = (searchParams.contractOurId) ? `OurContractsData.OurId LIKE "%${searchParams.contractOurId}%"` : '1';
-        const contractNameCondition = (searchParams.contractName) ? `mainContracts.Name="${searchParams.contractName}"` : '1';
-        const startDateFromCondition = (searchParams.startDateFrom) ? `mainContracts.StartDate>="${searchParams.startDateFrom}"` : '1';
-        const startDateToCondition = (searchParams.startDateTo) ? `mainContracts.StartDate<="${searchParams.startDateTo}"` : '1';
-        const typeCondition = (searchParams.typeId) ? `mainContracts.TypeId=${searchParams.typeId}` : '1';
+        const projectCondition = searchParams.projectId
+            ? mysql.format(`mainContracts.ProjectOurId = ?`, [searchParams.projectId])
+            : '1';
+        const contractIdCondition = searchParams.contractId
+            ? mysql.format(`mainContracts.Id = ?`, [searchParams.contractId])
+            : '1';
+        const contractOurIdCondition = searchParams.contractOurId
+            ? mysql.format(`OurContractsData.OurId LIKE ?`, [`%${searchParams.contractOurId}%`])
+            : '1';
+        const contractNameCondition = searchParams.contractName
+            ? mysql.format(`mainContracts.Name = ?`, [searchParams.contractName])
+            : '1';
+        const startDateFromCondition = searchParams.startDateFrom
+            ? mysql.format(`mainContracts.StartDate >= ?`, [searchParams.startDateFrom])
+            : '1';
+        const startDateToCondition = searchParams.startDateTo
+            ? mysql.format(`mainContracts.StartDate <= ?`, [searchParams.startDateTo])
+            : '1';
+        const typeCondition = searchParams.typeId
+            ? mysql.format(`mainContracts.TypeId = ?`, [searchParams.typeId])
+            : '1';
+
+        let typesToIncudeCondition;
+        switch (searchParams?.typesToIncude) {
+            case 'our':
+                typesToIncudeCondition = 'OurContractsData.OurId IS NOT NULL';
+                break;
+            case 'other':
+                typesToIncudeCondition = 'OurContractsData.OurId IS NULL';
+                break;
+            default:
+                typesToIncudeCondition = '1';
+        }
 
         const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
         const isArchivedConditon = (searchParams.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
-        let searchTextCondition = '1';
 
-        if (searchParams.searchText) {
-            const searchText = ToolsDb.stringToSql(searchParams.searchText);
-            searchTextCondition = (searchText) ?
-                `(mainContracts.Name LIKE "%${searchText}%" 
-                OR mainContracts.Number LIKE "%${searchText}%" 
-                OR mainContracts.Alias LIKE "%${searchText}%" 
-                OR OurContractsData.OurId LIKE "%${searchText}%")`
-                : '1';
-        }
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+
         const sql = `SELECT mainContracts.Id, 
             mainContracts.Alias, 
             mainContracts.Number, 
@@ -92,6 +127,7 @@ export default class ContractsController {
             AND ${startDateToCondition}
             AND ${searchTextCondition}
             AND ${typeCondition}
+            AND ${typesToIncudeCondition}
           ORDER BY OurContractsData.OurId DESC, mainContracts.Number`;
         //console.log(sql);
         try {

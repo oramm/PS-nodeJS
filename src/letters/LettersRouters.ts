@@ -1,4 +1,4 @@
-import express from 'express'
+import express, { Request, Response } from 'express'
 import LettersController, { LettersSearchParams } from './LettersController'
 import { app } from '../index';
 import OurLetter from './OurLetter';
@@ -83,8 +83,32 @@ app.post('/testLetter/:mode', async (req: express.Request, res: express.Response
     };
 });
 
+app.post('/letterReact', async (req: Request, res: Response) => {
+    try {
+        console.log('req.files', req.files);
+        let item: OurLetter | IncomingLetter;
+        if (req.parsedBody.isOur)
+            item = new OurLetter(req.parsedBody);
+        else
+            item = new IncomingLetter(req.parsedBody);
+
+        try {
+            await ToolsGapi.gapiReguestHandler(req, res, item.initialise, [req.files], item);
+        } catch (err) {
+            throw err;
+        }
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    };
+});
+
 app.post('/letter', async (req: any, res: any) => {
     try {
+        console.log('req.files', req.files);
+        console.log('req.parsedBody', req.parsedBody);
         let item: OurLetter | OurOldTypeLetter | IncomingLetter;
         let blobEnviObjects = req.body._blobEnviObjects;
         if (!blobEnviObjects)

@@ -15,35 +15,38 @@ export default class IncomingLetter extends Letter {
         this.number = initParamObject.number;
     }
 
-    async initialise(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
+    async initialise(auth: OAuth2Client, files: Express.Multer.File[] = []) {
         try {
-            this.letterFilesCount = blobEnviObjects.length;
-            if (blobEnviObjects.length > 1) {
-                await this.initAttachmentsHandler(auth, blobEnviObjects);
+            this.letterFilesCount = files.length;
+            if (files.length > 1) {
+                await this.initAttachmentsHandler(auth, files);
             } else {
-                const letterGdFile = await this.createLetterFile(auth, blobEnviObjects[0]);
+                const letterGdFile = await this.createLetterFile(auth, files[0]);
                 if (!letterGdFile.id) throw new EnviErrors.NoGdIdError(`: incomingLetter`);
                 this.setDataToSingleFileState(letterGdFile.id);
             }
             await this.addInDb();
         } catch (err) {
+            this.deleteFromDb();
             IncomingLetterGdController.deleteFromGd(auth, this.folderGdId || this.documentGdId);
+            throw (err);
         }
     }
 
     /** Używać tylko gdy mamy pojedynczego bloba  należy pamiętać o użyciu potem 
      *  setToSingleFileState(documentGdId: string)
      */
-    protected async createLetterFile(auth: OAuth2Client, blobEnviObject: Envi._blobEnviObject) {
-        blobEnviObject.parent = this._project.lettersGdFolderId
-        const letterFile = await ToolsGd.uploadFileGPT(auth, blobEnviObject);
+    protected async createLetterFile(auth: OAuth2Client, file: Express.Multer.File) {
+        if (!this._project.lettersGdFolderId) throw new EnviErrors.NoGdIdError(`: lettersGdFolderId`)
+        const parentFolderGdId = this._project.lettersGdFolderId
+        const letterFile = await ToolsGd.uploadFileMulter(auth, file, undefined, parentFolderGdId);
         return letterFile;
     }
 
-    async editLetterGdElements(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
+    async editLetterGdElements(auth: OAuth2Client, files: Express.Multer.File[]) {
         //użytkownik chce zmienić plik
-        if (blobEnviObjects.length > 0) {
-            await this.replaceAttachmentsHandler(auth, blobEnviObjects);
+        if (files.length > 0) {
+            await this.replaceAttachmentsHandler(auth, files);
         } else if (this.folderGdId) {
             await this.editLetterGdFolder(auth);
         }
@@ -62,11 +65,11 @@ export default class IncomingLetter extends Letter {
      * - Wykonuje operacje na Gd związane z utworzeniem załączników 
      * - jeśli trzeba to tworzy letterFolder
     */
-    private async initAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
-        if (blobEnviObjects.length > 1)
-            await this.setToMultiStateHandler(auth, blobEnviObjects);
+    private async initAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
+        if (files.length > 1)
+            await this.setToMultiStateHandler(auth, files);
         else
-            await this.setToSingleStateHandler(auth, blobEnviObjects);
+            await this.setToSingleStateHandler(auth, files);
     }
 
     /** 
@@ -74,35 +77,35 @@ export default class IncomingLetter extends Letter {
      * - jeśli trzeba to tworzy letterFolder
      * -  usuwa stare załączniki
     */
-    private async replaceAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
+    private async replaceAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
         const oldFolderGdId = this.folderGdId;
         const oldDocumentGdId = this.documentGdId;
-        await this.initAttachmentsHandler(auth, blobEnviObjects);
+        await this.initAttachmentsHandler(auth, files);
         await IncomingLetterGdController.deleteFromGd(auth, oldDocumentGdId, oldFolderGdId);
     }
 
     /** Wykonuje operacje na Gd związane z dodaniem kolejnych załączników używać gdy jest pewność, że utworzono letterFolder 
      *  jeżeli nie utworzono jeszcze folderu nalezy użyć this.makeMultiFileGdElements 
     */
-    async appendAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
-        const newFilesCount = this.letterFilesCount + blobEnviObjects.length;
+    async appendAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
+        const newFilesCount = this.letterFilesCount + files.length;
         //await super.appendAttachmentsHandler(auth, blobEnviObjects);
-        if (!blobEnviObjects.length) throw new Error('no Files to append');
+        if (!files.length) throw new Error('no Files to append');
         if (!this.folderGdId)
-            await this.setToMultiStateHandler(auth, blobEnviObjects);
+            await this.setToMultiStateHandler(auth, files);
         else
-            await IncomingLetterGdController.appendAttachments(auth, blobEnviObjects, <string>this.folderGdId);
+            await IncomingLetterGdController.appendAttachments(auth, files, <string>this.folderGdId);
         this.letterFilesCount = newFilesCount;
     }
 
-    private async setToSingleStateHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        const letterGdFile = await this.createLetterFile(auth, blobEnviObjects[0]);
+    private async setToSingleStateHandler(auth: OAuth2Client, files: Express.Multer.File[]) {
+        const letterGdFile = await this.createLetterFile(auth, files[0]);
         if (!letterGdFile.id)
             throw new EnviErrors.NoGdIdError(`: incomingLetter`);
         this.setDataToSingleFileState(letterGdFile.id);
     }
 
-    private async setToMultiStateHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
+    private async setToMultiStateHandler(auth: OAuth2Client, files: Express.Multer.File[]) {
         const newLetterGdFolder = await IncomingLetterGdController.createLetterFolder(auth, { ...this });
         const letterDocumentGdId = this.documentGdId;
         if (!newLetterGdFolder.id) throw new EnviErrors.NoGdIdError(` - incoming letter folder not created for ${this.number}`);
@@ -110,23 +113,23 @@ export default class IncomingLetter extends Letter {
         //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
 
         await IncomingLetterGdController.moveLetterFIletoFolder(letterDocumentGdId, auth, newLetterGdFolder.id);
-        this.setDataToMultiFileState(newLetterGdFolder.id, blobEnviObjects.length);
-        await IncomingLetterGdController.appendAttachments(auth, blobEnviObjects, <string>this.folderGdId);
+        this.setDataToMultiFileState(newLetterGdFolder.id, files.length);
+        await IncomingLetterGdController.appendAttachments(auth, files, <string>this.folderGdId);
     }
 
     private setDataToSingleFileState(documentGdId: string) {
         this.documentGdId = documentGdId;
         this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(documentGdId);
         this._gdFolderUrl = '';
-        this.folderGdId = null;
+        this.folderGdId = undefined;
         this.letterFilesCount = 1;
     }
 
-    private setDataToMultiFileState(folderGdId: string, blobsCount: number) {
+    private setDataToMultiFileState(folderGdId: string, filesCount: number) {
         this.folderGdId = folderGdId;
-        this.documentGdId = null;
+        this.documentGdId = undefined;
         this._gdFolderUrl = ToolsGd.createDocumentOpenUrl(folderGdId);
         this._documentOpenUrl = undefined;
-        this.letterFilesCount = blobsCount;
+        this.letterFilesCount = filesCount;
     }
 }

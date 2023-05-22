@@ -25,7 +25,7 @@ export default class Project extends BusinessObject {
     dotationValue: any;
     gdFolderId: string | undefined;
     _gdFolderUrl: string | undefined;
-    lettersGdFolderId: any;
+    lettersGdFolderId?: string;
     googleGroupId: any;
     _googleGroupUrl: string | undefined;
     googleCalendarId: any;

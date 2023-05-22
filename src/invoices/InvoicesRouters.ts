@@ -84,7 +84,7 @@ app.put('/issueInvoice/:id', async (req: any, res: any) => {
 
         let promises: any[] = await Promise.all(
             [
-                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileGPT, [req.body._blobEnviObjects[0], undefined, parentFolderGdId]),
+                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileBase64, [req.body._blobEnviObjects[0], undefined, parentFolderGdId]),
                 (!req.body.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId),
             ]
         )

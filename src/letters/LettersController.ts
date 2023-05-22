@@ -21,7 +21,6 @@ export type LettersSearchParams = {
 export default class LettersController {
 
     static async getLettersList(searchParams: LettersSearchParams = {}) {
-        console.log('getLettersList', searchParams);
         const projectConditon = (searchParams.projectId) ? `Projects.OurId="${searchParams.projectId}"` : '1';
         const milestoneConditon = searchParams.milestoneId ? `Milestones.Id=${searchParams.milestoneId}` : '1';
         const contractConditon = searchParams.contractId ? `Contracts.Id=${searchParams.contractId}` : '1';

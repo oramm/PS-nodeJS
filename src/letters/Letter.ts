@@ -12,9 +12,7 @@ import LetterEntity from './associations/LetterEntity';
 import LetterCase from './associations/LetterCase';
 import Case from '../contracts/milestones/cases/Case';
 import { OAuth2Client } from 'google-auth-library';
-import Tools from '../tools/Tools';
-import { drive_v3 } from 'googleapis';
-import EnviErrors from '../tools/Errors';
+
 
 export default abstract class Letter extends BusinessObject implements Envi.Document {
     public id?: number;
@@ -23,11 +21,11 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
     public creationDate?: string;
     public registrationDate?: string;
     public _documentOpenUrl?: string;
-    public documentGdId?: string | null;
+    public documentGdId?: string;
     _gdFolderUrl?: string;
-    folderGdId?: string | null = null;
+    folderGdId?: string;
     _lastUpdated?: string;
-    _contract?: Contract;
+    _contract: Contract;
     _project: Project;
     projectId?: any;
     _cases: Case[];
@@ -47,7 +45,6 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         this.description = initParamObject.description;
         this.number = initParamObject.number;
         this.creationDate = ToolsDate.dateJsToSql(initParamObject.creationDate);
-
         this.registrationDate = ToolsDate.dateJsToSql(initParamObject.registrationDate);
         this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(initParamObject.documentGdId);
         this.documentGdId = initParamObject.documentGdId;
@@ -111,8 +108,8 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         }
     }
 
-    async edit(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]) {
-        await this.editLetterGdElements(auth, blobEnviObjects);
+    async edit(auth: OAuth2Client, files: Express.Multer.File[]) {
+        await this.editLetterGdElements(auth, files);
         await this.editInDb();
     }
 
@@ -155,10 +152,10 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         const sql = `DELETE FROM Letters_Cases WHERE LetterId =?`;
         return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
-    async appendAttachmentsHandler(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void> {
-        this.letterFilesCount += blobEnviObjects.length;
+    async appendAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
+        this.letterFilesCount += files.length;
     }
 
-    abstract initialise(auth: OAuth2Client, blobEnviObjects: any[]): Promise<void>;
-    abstract editLetterGdElements(auth: OAuth2Client, blobEnviObjects: Envi._blobEnviObject[]): Promise<void>
+    abstract initialise(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void>;
+    abstract editLetterGdElements(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void>
 }
