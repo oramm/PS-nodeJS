@@ -55,6 +55,7 @@ export default class CasesController {
                         MilestoneTypes.Name AS MilestoneTypeName,
                         MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
                         OurContractsData.OurId AS ContractOurId,
+                        Contracts.Id AS ContractId,
                         Contracts.Alias AS ContractAlias,
                         Contracts.Number AS ContractNumber,
                         Contracts.Name AS ContractName,
@@ -89,6 +90,7 @@ export default class CasesController {
         ]);
         for (const row of result) {
             const contractInitParams = {
+                id: row.ContractId,
                 ourId: row.ContractOurId,
                 number: row.ContractNumber,
                 alias: row.ContractAlias,

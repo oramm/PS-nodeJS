@@ -15,6 +15,7 @@ export default class ProjectsController {
         systemEmail?: string,
         userData: UserData,
         onlyKeyData?: boolean
+        contractId?: number
     }) {
         const projectIdCondition = (initParamObject.id) ? 'Projects.Id=' + initParamObject.id : '1';
         const projectOurIdCondition = (initParamObject.ourId) ? `Projects.OurId LIKE "%${initParamObject.ourId}%"` : '1';
@@ -28,8 +29,14 @@ export default class ProjectsController {
         //const currentUser = new Person({ systemEmail: initParamObject.systemEmail });
         //const currentUserSystemRole = await currentUser.getSystemRole();
         const currentUserSystemRoleName = initParamObject.userData.systemRoleName;
-        if (currentUserSystemRoleName == 'ENVI_EMPLOYEE' || currentUserSystemRoleName == 'ENVI_MANAGER')
-            var sql = `SELECT * FROM Projects 
+        let sql: string;
+        if (initParamObject.contractId)
+            sql = `SELECT * FROM Projects 
+            JOIN Contracts ON Contracts.ProjectOurId=Projects.OurId
+            WHERE Contracts.id=${initParamObject.contractId}`;
+
+        else if (currentUserSystemRoleName == 'ENVI_EMPLOYEE' || currentUserSystemRoleName == 'ENVI_MANAGER')
+            sql = `SELECT * FROM Projects 
             WHERE ${projectIdCondition}
             AND ${projectOurIdCondition}
             AND ${searchTextCondition}`;
@@ -66,7 +73,7 @@ export default class ProjectsController {
     }
 
     private static async processProjectsResult(result: any[], initParamObject: any) {
-        let newResult: [Project?] = [];
+        let newResult: Project[] = [];
         let entitiesPerAllProjects: any = [];
         //zostawiam bo może w przyszłości będzie analiza instytucji vs projekty
         if (!initParamObject.onlyKeyData === true)

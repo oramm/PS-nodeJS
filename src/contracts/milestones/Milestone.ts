@@ -305,7 +305,7 @@ export default class Milestone extends BusinessObject {
             CaseTypes.IsDefault AS CaseTypeIsDefault,
             MilestoneTypes.Id AS MilestoneTypeId,
             MilestoneTypes.Name AS MilestoneTypeName,
-            NULL AS MilestoneTypeIsDefault --parametr niedostępny
+            NULL AS MilestoneTypeIsDefault -- parametr niedostępny
             FROM CaseTemplates
             JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
             JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id

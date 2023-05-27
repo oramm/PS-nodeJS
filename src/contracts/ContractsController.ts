@@ -168,7 +168,9 @@ export default class ContractsController {
                     name: ToolsDb.sqlToString(row.RelatedName),
                     gdFolderId: row.RelatedGdFolderId
                 },
-                projectId: row.ProjectOurId,
+                _parent: {
+                    ourId: row.ProjectOurId,
+                },
                 startDate: row.StartDate,
                 endDate: row.EndDate,
                 value: row.Value,

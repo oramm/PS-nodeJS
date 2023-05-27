@@ -10,6 +10,8 @@ import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import LetterGdController from './LetterGdController';
 import Project from '../projects/Project';
+import ProjectsController from '../projects/ProjectsController';
+import { UserData } from '../setup/GAuth2/sessionTypes';
 
 function parseLetterSearchFromQueryParams(requestParams: any) {
     const searchParams: LettersSearchParams = {
@@ -86,6 +88,8 @@ app.post('/testLetter/:mode', async (req: express.Request, res: express.Response
 app.post('/letterReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
+        console.log('req.parsedBody', req.parsedBody);
+        console.log('req.body', req.body);
         let item: OurLetter | IncomingLetter;
         if (req.parsedBody.isOur)
             item = new OurLetter(req.parsedBody);
@@ -105,6 +109,7 @@ app.post('/letterReact', async (req: Request, res: Response) => {
     };
 });
 
+/**@deprecated */
 app.post('/letter', async (req: any, res: any) => {
     try {
         console.log('req.files', req.files);
@@ -139,12 +144,23 @@ app.post('/letter', async (req: any, res: any) => {
     };
 });
 
-app.put('/letter/:id', async (req: any, res: any) => {
+
+app.put('/letter/:id', async (req: Request, res: Response) => {
     try {
-        if (!req.body._blobEnviObjects)
-            req.body._blobEnviObjects = [];
-        const item = LettersController.createProperLetter(req.body);
-        await ToolsGapi.gapiReguestHandler(req, res, item.edit, [req.body._blobEnviObjects], item);
+        console.log('req.files', req.files);
+        req.parsedBody._project = (
+            await ProjectsController.getProjectsList({
+                contractId: req.parsedBody._contract.id,
+                userData: req.session.userData as UserData
+            })
+        )[0];
+        let item: OurLetter | IncomingLetter;
+        if (req.parsedBody.isOur)
+            item = new OurLetter(req.parsedBody);
+        else
+            item = new IncomingLetter(req.parsedBody);
+        console.log('item._project', item._project);
+        await ToolsGapi.gapiReguestHandler(req, res, item.edit, [req.files], item);
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
@@ -153,7 +169,7 @@ app.put('/letter/:id', async (req: any, res: any) => {
     }
 });
 
-app.put('/appendLetterAttachments/:id', async (req: any, res: any) => {
+app.put('/appendLetterAttachments/:id', async (req: Request, res: Response) => {
     try {
         const item = LettersController.createProperLetter(req.body);
         if (!req.body._blobEnviObjects || !Array.isArray(req.body._blobEnviObjects)) throw new Error(`No blobs to upload for Letter ${item.number}`);
@@ -169,7 +185,7 @@ app.put('/appendLetterAttachments/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/letter/:id', async (req: any, res: any) => {
+app.delete('/letter/:id', async (req: Request, res: Response) => {
     try {
         const item = LettersController.createProperLetter(req.body);
 

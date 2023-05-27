@@ -23,7 +23,7 @@ export default abstract class Contract extends BusinessObject {
     projectOurId: string;
     startDate?: string;
     endDate?: string;
-    value: any;
+    value?: string | number;
     comment: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
@@ -48,11 +48,20 @@ export default abstract class Contract extends BusinessObject {
         this.number = initParamObject.number;
         this.name = initParamObject.name;
 
-        this.projectOurId = initParamObject.projectId;
         this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
+        if (initParamObject.value) {
+            if (typeof initParamObject.value === 'string') {
+                initParamObject.value = initParamObject.value
+                    .replace(/\s/g, '')
+                    .replace(/,/g, '.')
+                    .replace(/[^0-9.]/g, '');
+                this.value = parseFloat(initParamObject.value);
+            } else {
+                this.value = initParamObject.value;
+            }
+        }
 
-        this.value = initParamObject.value;
         this.comment = initParamObject.comment;
 
         if (initParamObject.gdFolderId)
@@ -65,6 +74,8 @@ export default abstract class Contract extends BusinessObject {
         this._employers = (initParamObject._employers) ? initParamObject._employers : [];
 
         this._parent = initParamObject._parent;
+        this.projectOurId = this._parent?.ourId;;
+
         this.status = initParamObject.status;
     }
     /**batch dla dodawania kontraktów */

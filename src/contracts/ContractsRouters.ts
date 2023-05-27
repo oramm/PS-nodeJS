@@ -113,7 +113,7 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
             item.editInDb()
         ]);
 
-        res.send({ item });
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
