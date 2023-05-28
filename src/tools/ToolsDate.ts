@@ -51,12 +51,33 @@ export default class ToolsDate {
         return date instanceof Date && !isNaN(date.getTime());
     }
 
-    static dateJsToSql(jsDate: Date) {
-        if (jsDate !== undefined) {
-            var sqlDate = new Date(jsDate).toISOString().slice(0, 10);
-            return sqlDate;
+    /**
+     * Przetwarza datę z formatu Date na YYYY-MM-DD
+     */
+    static toLocalDate(date: Date): string {
+        return date.getFullYear() + '-' +
+            ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
+            ('0' + date.getDate()).slice(-2);
+    }
+    /**
+     * Przetwarza datę z formatu Date lub DD-MM-YYYY na YYYY-MM-DD
+     */
+    static dateJsToSql(jsDate: Date | string) {
+        if (jsDate instanceof Date)
+            return this.toLocalDate(jsDate);
+        if (typeof jsDate === 'string') {
+            if (jsDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                // format 'YYYY-MM-DD', no conversion necessary
+                return jsDate;
+            } else if (jsDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                // format 'DD-MM-YYYY', convert to 'YYYY-MM-DD'
+                const parts = jsDate.split('-');
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            } else {
+                // invalid format
+                throw new Error(`Invalid date format: ${jsDate}`);
+            }
         }
-        return jsDate;
     }
 
     static dateJStoDMY(inputDate: Date) {

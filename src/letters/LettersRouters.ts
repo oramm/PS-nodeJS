@@ -147,19 +147,15 @@ app.post('/letter', async (req: any, res: any) => {
 
 app.put('/letter/:id', async (req: Request, res: Response) => {
     try {
+        if (!req.files) req.files = [];
         console.log('req.files', req.files);
-        req.parsedBody._project = (
-            await ProjectsController.getProjectsList({
-                contractId: req.parsedBody._contract.id,
-                userData: req.session.userData as UserData
-            })
-        )[0];
+        const initParams = req.parsedBody;
+        console.log('req.parsedBody.creationDate', req.parsedBody.creationDate);
         let item: OurLetter | IncomingLetter;
-        if (req.parsedBody.isOur)
-            item = new OurLetter(req.parsedBody);
+        if (initParams.isOur)
+            item = new OurLetter(initParams);
         else
-            item = new IncomingLetter(req.parsedBody);
-        console.log('item._project', item._project);
+            item = new IncomingLetter(initParams);
         await ToolsGapi.gapiReguestHandler(req, res, item.edit, [req.files], item);
         res.send(item);
     } catch (error) {

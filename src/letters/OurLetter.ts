@@ -83,7 +83,7 @@ export default class OurLetter extends Letter {
                 ourLetterGdFile.edit(auth),
                 ToolsGd.updateFolder(auth, { id: this.folderGdId, name: newFolderName }),
                 ToolsGd.updateFile(auth, { id: this.documentGdId, name: newFolderName }),
-                (files.length > 0) ? this.appendAttachmentsHandler(auth, files) : undefined,
+                (files?.length > 0) ? this.appendAttachmentsHandler(auth, files) : undefined,
             ]).catch((error) => { throw (error) });
 
             await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });

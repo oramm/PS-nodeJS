@@ -109,8 +109,12 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
     }
 
     async edit(auth: OAuth2Client, files: Express.Multer.File[]) {
+        console.group('Letter edit');
         await this.editLetterGdElements(auth, files);
+        console.log('Letter folder and file in GD edited');
         await this.editInDb();
+        console.log('Letter edited in DB');
+        console.groupEnd();
     }
 
     async editInDb() {
