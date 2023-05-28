@@ -54,17 +54,16 @@ export default class ToolsDate {
     /**
      * Przetwarza datę z formatu Date na YYYY-MM-DD
      */
-    static toLocalDate(date: Date): string {
-        return date.getFullYear() + '-' +
-            ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
-            ('0' + date.getDate()).slice(-2);
+    static toUTC(date: Date): string {
+        let utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        return utcDate.toISOString().slice(0, 10);
     }
     /**
      * Przetwarza datę z formatu Date lub DD-MM-YYYY na YYYY-MM-DD
      */
     static dateJsToSql(jsDate: Date | string) {
         if (jsDate instanceof Date)
-            return this.toLocalDate(jsDate);
+            return this.toUTC(jsDate);
         if (typeof jsDate === 'string') {
             if (jsDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 // format 'YYYY-MM-DD', no conversion necessary

@@ -78,15 +78,19 @@ export default class OurLetter extends Letter {
         const newFolderName = OurLetterGdController.makeFolderName(<string>this.number, <string>this.creationDate);
         const ourLetterGdFile = new OurLetterGdFile({ enviDocumentData: { ...this } })
 
+        const promises: Promise<any>[] = [ourLetterGdFile.edit(auth)];
         if (letterGdFolder.name !== newFolderName) {
-            await Promise.all([
-                ourLetterGdFile.edit(auth),
+            promises.push(
                 ToolsGd.updateFolder(auth, { id: this.folderGdId, name: newFolderName }),
                 ToolsGd.updateFile(auth, { id: this.documentGdId, name: newFolderName }),
-                (files?.length > 0) ? this.appendAttachmentsHandler(auth, files) : undefined,
-            ]).catch((error) => { throw (error) });
-
-            await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });
+            );
         }
+        if (files?.length > 0)
+            promises.push(this.appendAttachmentsHandler(auth, files));
+
+        await Promise.all(promises)
+            .catch((error) => { throw (error) });
+
+        //await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });
     }
 }

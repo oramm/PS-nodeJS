@@ -88,8 +88,6 @@ app.post('/testLetter/:mode', async (req: express.Request, res: express.Response
 app.post('/letterReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
-        console.log('req.parsedBody', req.parsedBody);
-        console.log('req.body', req.body);
         let item: OurLetter | IncomingLetter;
         if (req.parsedBody.isOur)
             item = new OurLetter(req.parsedBody);
@@ -113,7 +111,6 @@ app.post('/letterReact', async (req: Request, res: Response) => {
 app.post('/letter', async (req: any, res: any) => {
     try {
         console.log('req.files', req.files);
-        console.log('req.parsedBody', req.parsedBody);
         let item: OurLetter | OurOldTypeLetter | IncomingLetter;
         let blobEnviObjects = req.body._blobEnviObjects;
         if (!blobEnviObjects)
@@ -150,7 +147,9 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
         if (!req.files) req.files = [];
         console.log('req.files', req.files);
         const initParams = req.parsedBody;
-        console.log('req.parsedBody.creationDate', req.parsedBody.creationDate);
+        if (!initParams._project.id) throw new Error('No _project.id in initParams');
+
+        console.log('initParams', initParams._project);
         let item: OurLetter | IncomingLetter;
         if (initParams.isOur)
             item = new OurLetter(initParams);
