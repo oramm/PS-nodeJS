@@ -72,12 +72,16 @@ export default class ToolsDate {
                 // format 'DD-MM-YYYY', convert to 'YYYY-MM-DD'
                 const parts = jsDate.split('-');
                 return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            } else if (jsDate.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)) {
+                // format 'YYYY-MM-DDTHH:mm:ss.sssZ', convert to 'YYYY-MM-DD'
+                return jsDate.substring(0, 10);
             } else {
                 // invalid format
                 throw new Error(`Invalid date format: ${jsDate}`);
             }
         }
     }
+
 
     static dateJStoDMY(inputDate: Date) {
         if (inputDate) {

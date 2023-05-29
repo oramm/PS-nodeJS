@@ -135,7 +135,7 @@ export default class ContractOur extends Contract {
                 this.ourId, 0, 0, 0, 0,
                 (this._manager) ? this._manager.id : '',
                     '{"contractHeader":true}',
-                `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? this._manager.name : ''}")`,
+                `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? `${this._manager.name} ${this._manager.surname}` : ''}")`,
                     '', '', '', 'd', 'd', 'd', 'd', 'd'
                 ]]
             });
@@ -145,6 +145,7 @@ export default class ContractOur extends Contract {
     /**zmienia dane w nagłówku kontraktu i odnosniki */
     async editInScrum(auth: OAuth2Client) {
         if (await this.shouldBeInScrum()) {
+            console.log('Edytuję dane w Scrum', this.ourId);
             const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
                 rangeA1: Setup.ScrumSheet.CurrentSprint.name
@@ -185,8 +186,9 @@ export default class ContractOur extends Contract {
 
                 })
             } else {
+                console.log('Kontraktu nie było w Scrum - dodaję go na nowo ', this.ourId);
                 await this.addInScrum(auth);
-                await this.addTasksInScrum(auth);
+                await this.addExistingTasksInScrum(auth);
 
                 await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
                 await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);

@@ -5,7 +5,6 @@ import Contract from "./Contract";
 import ContractOther from "./ContractOther";
 import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
-import { type } from "os";
 
 export type ContractSearchParamas = {
     projectId?: string | null,

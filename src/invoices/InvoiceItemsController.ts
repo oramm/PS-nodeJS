@@ -1,31 +1,41 @@
+import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
 import ToolsDate from '../tools/ToolsDate'
 import InvoiceItem from "./InvoiceItem";
 
 
 export default class InvoiceItemsController {
-    static async getInvoiceItemsList(initParamObject: any) {
-        const invoiceCondition = (initParamObject && initParamObject.invoiceId) ? 'InvoiceItems.ParentId="' + initParamObject.invoiceId + '"' : '1';
-        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(initParamObject.endDate) + '"';
+    static async getInvoiceItemsList(searchParams: {
+        invoiceId?: number,
+        startDate?: string,
+        endDate?: string,
+    } = {}) {
+        const invoiceCondition = searchParams.invoiceId
+            ? mysql.format(`InvoiceItems.ParentId = ?`, [searchParams.invoiceId])
+            : '1';
 
-        const dateCondition = (initParamObject && initParamObject.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(initParamObject.startDate) + '" AND DATE_ADD(' + initParamObject.endDate + ', INTERVAL 1 DAY)' : '1';
+        searchParams.endDate = (!searchParams.endDate) ? searchParams.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(searchParams.endDate) + '"';
 
-        const sql = 'SELECT InvoiceItems.Id, \n \t' +
-            'InvoiceItems.ParentId, \n \t' +
-            'InvoiceItems.Description, \n \t' +
-            'InvoiceItems.Quantity, \n \t' +
-            'InvoiceItems.UnitPrice, \n \t' +
-            'InvoiceItems.VatTax, \n \t' +
-            'InvoiceItems.LastUpdated, \n \t' +
-            'Editors.Id AS EditorId, \n \t' +
-            'Editors.Name AS EditorName, \n \t' +
-            'Editors.Surname AS EditorSurname, \n \t' +
-            'Editors.Email AS EditorEmail \n' +
-            'FROM InvoiceItems \n' +
-            'JOIN Invoices ON Invoices.Id=InvoiceItems.ParentId \n' +
-            'LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId \n' +
-            'WHERE ' + invoiceCondition + ' AND ' + dateCondition + '\n' +
-            'ORDER BY InvoiceItems.Id DESC';
+        const dateCondition = (searchParams.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(searchParams.startDate) + '" AND DATE_ADD(' + searchParams.endDate + ', INTERVAL 1 DAY)' : '1';
+
+        const sql = `SELECT InvoiceItems.Id,
+                            InvoiceItems.ParentId,
+                            InvoiceItems.Description,
+                            InvoiceItems.Quantity,
+                            InvoiceItems.UnitPrice,
+                            InvoiceItems.VatTax,
+                            InvoiceItems.LastUpdated,
+                            Editors.Id AS EditorId,
+                            Editors.Name AS EditorName,
+                            Editors.Surname AS EditorSurname,
+                            Editors.Email AS EditorEmail
+                        FROM InvoiceItems
+                        JOIN Invoices ON Invoices.Id=InvoiceItems.ParentId
+                        LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId
+                        WHERE ${invoiceCondition} 
+                          AND ${dateCondition}
+                        ORDER BY InvoiceItems.Id DESC`;
+
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoiceItemsResult(result);

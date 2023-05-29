@@ -11,6 +11,7 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
+import MilestonesController from './milestones/MilestonesController';
 
 export default abstract class Contract extends BusinessObject {
     id?: number;
@@ -102,12 +103,23 @@ export default abstract class Contract extends BusinessObject {
             console.log('folders deleted');
             this.deleteFromScrum(auth);
             console.log('deleted from scrum');
+            if (this.id) this.deleteFromDb();
             console.groupEnd();
             throw error;
         }
     }
-    async edit(auth: OAuth2Client) {
-
+    async editHandler(auth: OAuth2Client) {
+        console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
+        this.editFolder(auth).then(() => {
+            console.log('Contract folder edited');
+        });
+        this.editInScrum(auth).then(() => {
+            console.log('Contract edited in scrum');
+        });
+        this.editInDb().then(() => {
+            console.log('Contract edited in db');
+        });
+        console.groupEnd();
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {
@@ -246,8 +258,8 @@ export default abstract class Contract extends BusinessObject {
     async getTasks() {
         return await TasksController.getTasksList({ contractId: this.id });
     }
-
-    async addTasksInScrum(auth: OAuth2Client) {
+    /**dodaje isteniejące zadania  */
+    async addExistingTasksInScrum(auth: OAuth2Client) {
         const tasks = await this.getTasks();
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
         for (const task of tasks) {
@@ -257,8 +269,9 @@ export default abstract class Contract extends BusinessObject {
     }
 
     /** dodaje wiesz nagowka kontraktu */
-    abstract deleteFromScrum(auth: OAuth2Client): void;
-    abstract addInScrum(auth: OAuth2Client): void;
+    abstract deleteFromScrum(auth: OAuth2Client): Promise<void>;
+    abstract addInScrum(auth: OAuth2Client): Promise<void>;
+    abstract editInScrum(auth: OAuth2Client): Promise<void>;
     abstract setFolderName(): void;
     abstract shouldBeInScrum(): Promise<boolean>;
     abstract isUnique(): Promise<boolean>;

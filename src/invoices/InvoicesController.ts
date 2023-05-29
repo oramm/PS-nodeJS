@@ -1,61 +1,99 @@
-
+import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
 import ToolsDate from '../tools/ToolsDate'
 import Invoice from "./Invoice";
 
 
 export default class InvoicesController {
-    static async getInvoicesList(initParamObject: any) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? `Contracts.ProjectOurId="${initParamObject.projectId}"` : '1';
-        const contractCondition = (initParamObject && initParamObject.contractId) ? `Milestones.ContractId=${initParamObject.contractId}` : '1';
-        initParamObject.endDate = (!initParamObject.endDate) ? initParamObject.endDate = 'CURDATE()' : `"${ToolsDate.dateDMYtoYMD(initParamObject.endDate)}"`;
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
 
-        const dateCondition = (initParamObject && initParamObject.startDate) ? `Invoices.IssueDate BETWEEN "${ToolsDate.dateDMYtoYMD(initParamObject.startDate)}" AND DATE_ADD(${initParamObject.endDate}, INTERVAL 1 DAY)` : '1';
-        const sql = 'SELECT Invoices.Id, \n \t' +
-            'Invoices.Number, \n \t' +
-            'Invoices.Description, \n \t' +
-            'Invoices.Status, \n \t' +
-            'Invoices.CreationDate, \n \t' +
-            'Invoices.IssueDate, \n \t' +
-            'Invoices.SentDate, \n \t' +
-            'Invoices.DaysToPay, \n \t' +
-            'Invoices.PaymentDeadline, \n \t' +
-            'Invoices.GdId, \n \t' +
-            'Invoices.LastUpdated, \n \t' +
-            'Invoices.ContractId, \n \t' +
-            'Entities.Id AS EntityId, \n \t' +
-            'Entities.Name AS EntityName, \n \t' +
-            'Entities.Address AS EntityAddress, \n \t' +
-            'Entities.TaxNumber AS EntityTaxNumber, \n \t' +
-            'Contracts.Number AS ContractNumber, \n \t' +
-            'Contracts.Name AS ContractName, \n \t' +
-            'Contracts.GdFolderId AS ContractGdFolderId, \n \t' +
-            'OurContractsData.OurId AS ContractOurId, \n \t' +
-            'ContractTypes.Id AS ContractTypeId, \n \t' +
-            'ContractTypes.Name AS ContractTypeName, \n \t' +
-            'ContractTypes.IsOur AS ContractTypeIsOur, \n \t' +
-            'ContractTypes.Id AS ContractTypeDescription, \n \t' +
-            'Projects.OurId AS ProjectOurId, \n \t' +
-            'Projects.Name AS ProjectName, \n \t' +
-            'Projects.GdFolderId AS ProjectGdFolderId, \n \t' +
-            'Editors.Id AS EditorId, \n \t' +
-            'Editors.Name AS EditorName, \n \t' +
-            'Editors.Surname AS EditorSurname, \n \t' +
-            'Editors.Email AS EditorEmail, \n \t' +
-            'Owners.Id AS OwnerId, \n \t' +
-            'Owners.Name AS OwnerName, \n \t' +
-            'Owners.Surname AS OwnerSurname, \n \t' +
-            'Owners.Email AS OwnerEmail \n' +
-            'FROM Invoices \n' +
-            'JOIN Entities ON Entities.Id=Invoices.EntityId \n' +
-            'JOIN Contracts ON Contracts.Id=Invoices.ContractId \n' +
-            'JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
-            'JOIN OurContractsData ON OurContractsData.Id = Contracts.Id \n' +
-            'JOIN Projects ON Projects.OurId=Contracts.ProjectOurId \n' +
-            'LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId \n' +
-            'LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId \n' +
-            'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + dateCondition + '\n' +
-            'ORDER BY Invoices.IssueDate ASC';
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Invoices.Number LIKE ? 
+                          OR Invoices.Description LIKE ? 
+                          OR Invoices.Status LIKE ? 
+                          OR Entities.Name LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+
+
+        return searchTextCondition;
+    }
+
+    static async getInvoicesList(searchParams: {
+        projectId?: string,
+        contractId?: number,
+        searchText?: string,
+        issueDateFrom?: string,
+        issueDateTo?: string,
+    } = {}) {
+        const projectCondition = searchParams.projectId
+            ? mysql.format(`Contracts.ProjectOurId = ?`, [searchParams.projectId])
+            : '1';
+
+        const contractCondition = searchParams.contractId
+            ? mysql.format(`Milestones.ContractId = ?`, [searchParams.contractId])
+            : '1';
+        const issueDateFromCondition = searchParams.issueDateFrom
+            ? mysql.format(`Invoices.IssueDate >= ?`, [searchParams.issueDateFrom])
+            : '1';
+        const issueDateToCondition = searchParams.issueDateTo
+            ? mysql.format(`Invoices.IssueDate <= ?`, [searchParams.issueDateTo])
+            : '1';
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+
+        const sql = `SELECT Invoices.Id,
+            Invoices.Number,
+            Invoices.Description,
+            Invoices.Status,
+            Invoices.CreationDate,
+            Invoices.IssueDate,
+            Invoices.SentDate,
+            Invoices.DaysToPay,
+            Invoices.PaymentDeadline,
+            Invoices.GdId,
+            Invoices.LastUpdated,
+            Invoices.ContractId,
+            Entities.Id AS EntityId,
+            Entities.Name AS EntityName,
+            Entities.Address AS EntityAddress,
+            Entities.TaxNumber AS EntityTaxNumber,
+            Contracts.Number AS ContractNumber,
+            Contracts.Name AS ContractName,
+            Contracts.GdFolderId AS ContractGdFolderId,
+            OurContractsData.OurId AS ContractOurId,
+            ContractTypes.Id AS ContractTypeId,
+            ContractTypes.Name AS ContractTypeName,
+            ContractTypes.IsOur AS ContractTypeIsOur,
+            ContractTypes.Id AS ContractTypeDescription,
+            Projects.OurId AS ProjectOurId,
+            Projects.Name AS ProjectName,
+            Projects.GdFolderId AS ProjectGdFolderId,
+            Editors.Id AS EditorId,
+            Editors.Name AS EditorName,
+            Editors.Surname AS EditorSurname,
+            Editors.Email AS EditorEmail,
+            Owners.Id AS OwnerId,
+            Owners.Name AS OwnerName,
+            Owners.Surname AS OwnerSurname,
+            Owners.Email AS OwnerEmail
+        FROM Invoices
+        JOIN Entities ON Entities.Id=Invoices.EntityId
+        JOIN Contracts ON Contracts.Id=Invoices.ContractId
+        JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+        JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
+        JOIN Projects ON Projects.OurId=Contracts.ProjectOurId
+        LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
+        LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
+        WHERE ${projectCondition} 
+          AND ${contractCondition} 
+          AND ${issueDateFromCondition}
+          AND ${issueDateToCondition}
+          AND ${searchTextCondition}
+        ORDER BY Invoices.IssueDate ASC`;
+
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoicesResult(result);
@@ -65,7 +103,7 @@ export default class InvoicesController {
         let newResult: [Invoice?] = [];
 
         for (const row of result) {
-            var item = new Invoice({
+            const item = new Invoice({
                 id: row.Id,
                 number: row.Number,
                 description: ToolsDb.sqlToString(row.Description),

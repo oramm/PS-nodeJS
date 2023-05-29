@@ -10,11 +10,19 @@ export default class TasksController {
         milestoneId?: number,
         contractStatusCondition?: string,
         ownerCondition?: string
-    }) {
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
-        const milestoneCondition = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id=' + initParamObject.milestoneId : '1';
-        const contractStatusCondition = (initParamObject && initParamObject.contractStatusCondition) ? 'Contracts.Status REGEXP "' + initParamObject.contractStatusCondition + '"' : '1';
-        const ownerCondition = (initParamObject && initParamObject.ownerCondition) ? 'Owners.Email REGEXP "' + initParamObject.ownerCondition + '"' : '1';
+    } = {}) {
+        const contractCondition = (initParamObject.contractId)
+            ? 'Contracts.Id=' + initParamObject.contractId :
+            '1';
+        const milestoneCondition = (initParamObject.milestoneId)
+            ? 'Milestones.Id=' + initParamObject.milestoneId
+            : '1';
+        const contractStatusCondition = (initParamObject.contractStatusCondition)
+            ? 'Contracts.Status REGEXP "' + initParamObject.contractStatusCondition + '"'
+            : '1';
+        const ownerCondition = (initParamObject.ownerCondition)
+            ? 'Owners.Email REGEXP "' + initParamObject.ownerCondition + '"'
+            : '1';
 
         const sql = `SELECT  Tasks.Id,
               Tasks.Name AS TaskName,
@@ -57,15 +65,13 @@ export default class TasksController {
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processTasksResult(result);
-
-
     }
 
     static processTasksResult(result: any[]): Task[] {
         let newResult: Task[] = [];
 
         for (const row of result) {
-            var item = new Task({
+            const item = new Task({
                 id: row.Id,
                 name: row.TaskName,
                 description: row.TaskDescription,
