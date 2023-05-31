@@ -19,7 +19,7 @@ export type ContractSearchParamas = {
     contractAlias?: string,
     typeId?: number,
     _contractType?: ContractType,
-    typesToIncude?: 'our' | 'other' | 'all',
+    typesToInclude?: 'our' | 'other' | 'all',
     onlyOurs?: boolean,//@deprecated
     isArchived?: boolean,
     onlyKeyData?: boolean
@@ -55,7 +55,7 @@ export default class ContractsController {
             : '1';
 
         let typesToIncudeCondition;
-        switch (searchParams?.typesToIncude) {
+        switch (searchParams.typesToInclude) {
             case 'our':
                 typesToIncudeCondition = 'OurContractsData.OurId IS NOT NULL';
                 break;

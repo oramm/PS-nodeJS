@@ -4,6 +4,8 @@ import ToolsDate from '../tools/ToolsDate'
 import Invoice from "./Invoice";
 import Project from '../projects/Project';
 import Contract from '../contracts/Contract';
+import ContractOur from '../contracts/ContractOur';
+import ContractOther from '../contracts/ContractOther';
 
 
 export default class InvoicesController {
@@ -51,6 +53,7 @@ export default class InvoicesController {
             Entities.TaxNumber AS EntityTaxNumber,
             Contracts.Number AS ContractNumber,
             Contracts.Name AS ContractName,
+            Contracts.Alias AS ContractAlias,
             Contracts.GdFolderId AS ContractGdFolderId,
             OurContractsData.OurId AS ContractOurId,
             ContractTypes.Id AS ContractTypeId,
@@ -109,6 +112,28 @@ export default class InvoicesController {
         let newResult: [Invoice?] = [];
 
         for (const row of result) {
+            const contractInitParams = {
+                id: row.ContractId,
+                ourId: row.ContractOurId,
+                number: row.ContractNumber,
+                alias: row.ContractAlias,
+                name: ToolsDb.sqlToString(row.ContractName),
+
+                gdFolderId: row.ContractGdFolderId,
+                _parent: {
+                    ourId: row.ProjectOurId,
+                    name: row.ProjectName,
+                    gdFolderId: row.ProjectGdFolderId
+                },
+                _type: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                    description: row.ContractTypeDescription,
+                    isOur: row.ContractTypeIsOur
+                }
+            }
+            const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
+
             const item = new Invoice({
                 id: row.Id,
                 number: row.Number,
@@ -127,24 +152,7 @@ export default class InvoicesController {
                     address: row.EntityAddress,
                     taxNumber: row.EntityTaxNumber
                 },
-                _contract: {
-                    id: row.ContractId,
-                    number: row.ContractNumber,
-                    name: ToolsDb.sqlToString(row.ContractName),
-                    gdFolderId: row.ContractGdFolderId,
-                    ourId: row.ContractOurId,
-                    _parent: {
-                        ourId: row.ProjectOurId,
-                        name: row.ProjectName,
-                        gdFolderId: row.ProjectGdFolderId
-                    },
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                        description: row.ContractTypeDescription,
-                        isOur: row.ContractTypeIsOur
-                    }
-                },
+                _contract: _contract,
                 //ostatni edytujący
                 _editor: {
                     id: row.EditorId,
