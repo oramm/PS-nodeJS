@@ -8,20 +8,24 @@ import IncomingLetter from "./IncomingLetter";
 import Letter from "./Letter";
 import OurLetter from "./OurLetter";
 import OurOldTypeLetter from "./OurOldTypeLetter";
+import Project from "../projects/Project";
 
 export type LettersSearchParams = {
-    projectId?: string | null,
-    searchText?: string | null,
+    projectId?: string,
+    _project?: Project,
+    searchText?: string,
     contractId?: number
-    milestoneId?: string | null,
-    creationDateFrom?: string | null,
-    creationDateTo?: string | null,
+    milestoneId?: string,
+    creationDateFrom?: string,
+    creationDateTo?: string,
 }
 
 export default class LettersController {
 
     static async getLettersList(searchParams: LettersSearchParams = {}) {
-        const projectConditon = (searchParams.projectId) ? `Projects.OurId="${searchParams.projectId}"` : '1';
+        const projectOurId = searchParams._project?.ourId || searchParams.projectId;
+
+        const projectConditon = (projectOurId) ? `Projects.OurId="${projectOurId}"` : '1';
         const milestoneConditon = searchParams.milestoneId ? `Milestones.Id=${searchParams.milestoneId}` : '1';
         const contractConditon = searchParams.contractId ? `Contracts.Id=${searchParams.contractId}` : '1';
         const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo) ?

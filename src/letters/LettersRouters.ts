@@ -9,25 +9,10 @@ import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import LetterGdController from './LetterGdController';
-import Project from '../projects/Project';
-import ProjectsController from '../projects/ProjectsController';
-import { UserData } from '../setup/GAuth2/sessionTypes';
 
-function parseLetterSearchFromQueryParams(requestParams: any) {
-    const searchParams: LettersSearchParams = {
-        ...requestParams,
-    };
-    if (requestParams._project) {
-        const _project: Project = JSON.parse(requestParams._project as string);
-        searchParams.projectId = _project.ourId;
-    }
-    return searchParams;
-}
-
-app.get('/letters', async (req: any, res: any) => {
+app.get('/letters', async (req: Request, res: Response) => {
     try {
-        const searchParams = parseLetterSearchFromQueryParams(req.query);
-        const result = await LettersController.getLettersList(searchParams);
+        const result = await LettersController.getLettersList(req.parsedQuery);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -37,7 +22,7 @@ app.get('/letters', async (req: any, res: any) => {
     }
 });
 
-app.get('/letter/:id', async (req: any, res: any) => {
+app.get('/letter/:id', async (req: Request, res: any) => {
 
     try {
         const result = await LettersController.getLettersList(req.params);
@@ -108,7 +93,7 @@ app.post('/letterReact', async (req: Request, res: Response) => {
 });
 
 /**@deprecated */
-app.post('/letter', async (req: any, res: any) => {
+app.post('/letter', async (req: Request, res: any) => {
     try {
         console.log('req.files', req.files);
         let item: OurLetter | OurOldTypeLetter | IncomingLetter;

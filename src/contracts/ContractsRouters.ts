@@ -5,42 +5,14 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
-import ContractType from './contractTypes/ContractType';
-import Project from '../projects/Project';
-
-function parseContractSearchFromQueryParams(requestParams: any) {
-    const searchParams: ContractSearchParams = {
-        searchText: requestParams.searchText ? requestParams.searchText : undefined,
-        isArchived: requestParams.isArchived === 'true' ? true : false,
-        contractName: requestParams.contractName,
-        startDateFrom: requestParams.startDateFrom,
-        startDateTo: requestParams.startDateTo,
-        contractAlias: requestParams.contractAlias,
-        onlyKeyData: requestParams.onlyKeyData === 'true' ? true : false,
-        onlyOurs: requestParams.onlyOurs === 'true' ? true : false,
-        contractOurId: requestParams.contractOurId,
-        projectId: requestParams.projectId,
-    };
-
-    if (requestParams._contractType) {
-        const _type: ContractType = JSON.parse(requestParams._contractType as string);
-        searchParams.typeId = _type.id;
-    }
-    if (requestParams._parent) {
-        const _parent: Project = JSON.parse(requestParams._parent as string);
-        searchParams.projectId = _parent.ourId;
-    }
-
-    return searchParams;
-}
 
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
         let isArchived = false;
-        if (typeof req.query.isArchived === 'string')
-            isArchived = req.query.isArchived === 'true';
-        const searchParams = parseContractSearchFromQueryParams(req.query);
-        const result = await ContractsController.getContractsList(searchParams);
+        console.log('req.parsedQuery', req.parsedQuery);
+        if (typeof req.parsedQuery.isArchived === 'string')
+            isArchived = req.parsedQuery.isArchived === 'true';
+        const result = await ContractsController.getContractsList(req.parsedQuery);
         res.send(result);
     } catch (error) {
         console.error(error);

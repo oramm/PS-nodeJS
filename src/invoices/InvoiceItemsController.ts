@@ -9,6 +9,7 @@ export default class InvoiceItemsController {
         invoiceId?: number,
         startDate?: string,
         endDate?: string,
+        contractId?: number,
     } = {}) {
         const invoiceCondition = searchParams.invoiceId
             ? mysql.format(`InvoiceItems.ParentId = ?`, [searchParams.invoiceId])

@@ -12,6 +12,7 @@ declare global {
     namespace Express {
         interface Request {
             parsedBody: any;
+            parsedQuery: any;
         }
     }
 }
@@ -36,7 +37,10 @@ app.use((req, res, next) => {
 
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method))
-        req.parsedBody = Tools.parseObjectsFromBody(req.body);
+        req.parsedBody = Tools.parseObjectsJSON(req.body);
+    //paserdquery GET
+    else if (['GET'].includes(req.method))
+        req.parsedQuery = Tools.parseObjectsJSON(req.query);
     next();
 });
 

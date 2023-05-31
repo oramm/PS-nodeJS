@@ -4,10 +4,11 @@ import ToolsGd from '../tools/ToolsGd';
 import Invoice from './Invoice';
 import InvoicesController from './InvoicesController'
 import { app } from '../index'
+import { Request, Response } from 'express';
 
-app.get('/invoices', async (req: any, res: any) => {
+app.get('/invoices', async (req: Request, res: Response) => {
     try {
-        const result = await InvoicesController.getInvoicesList(req.query);
+        const result = await InvoicesController.getInvoicesList(req.parsedQuery);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -17,7 +18,7 @@ app.get('/invoices', async (req: any, res: any) => {
     }
 });
 
-app.get('/invoice/:id', async (req: any, res: any) => {
+app.get('/invoice/:id', async (req: Request, res: Response) => {
     try {
         const result = await InvoicesController.getInvoicesList(req.params);
         res.send(result);
@@ -29,7 +30,7 @@ app.get('/invoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.post('/invoice', async (req: any, res: any) => {
+app.post('/invoice', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         await item.addInDb();
@@ -41,7 +42,7 @@ app.post('/invoice', async (req: any, res: any) => {
     };
 });
 
-app.post('/copyInvoice', async (req: any, res: any) => {
+app.post('/copyInvoice', async (req: Request, res: Response) => {
     try {
         delete req.body.gdId;
         delete req.body.number;
@@ -59,7 +60,7 @@ app.post('/copyInvoice', async (req: any, res: any) => {
     };
 });
 
-app.put('/invoice/:id', async (req: any, res: any) => {
+app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         if (item.gdId && item.status?.match(/Na później|Do zrobienia|/i)) {
@@ -77,7 +78,7 @@ app.put('/invoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.put('/issueInvoice/:id', async (req: any, res: any) => {
+app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
     try {
         const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
         req.body._blobEnviObjects[0].parent = parentFolderGdId;
@@ -102,7 +103,7 @@ app.put('/issueInvoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.put('/setAsToMakeInvoice/:id', async (req: any, res: any) => {
+app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         item.status = 'Do zrobienia';
@@ -116,7 +117,7 @@ app.put('/setAsToMakeInvoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.put('/setAsSentInvoice/:id', async (req: any, res: any) => {
+app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         item.status = 'Wysłana';
@@ -130,7 +131,7 @@ app.put('/setAsSentInvoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.put('/setAsPaidInvoice/:id', async (req: any, res: any) => {
+app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         item.status = 'Zapłacona';
@@ -144,7 +145,7 @@ app.put('/setAsPaidInvoice/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/invoice/:id', async (req: any, res: any) => {
+app.delete('/invoice/:id', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
         await item.deleteFromDb();

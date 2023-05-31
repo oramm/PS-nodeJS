@@ -24,7 +24,7 @@ export default class Tools {
         return Utilities.newBlob(decoded, contentType, name);
     }
 
-    static parseObjectsFromBody(body: any) {
+    static parseObjectsJSON(body: any) {
         const parsedBody: any = {};
         for (const key in body) {
             try {

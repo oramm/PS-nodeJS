@@ -5,44 +5,35 @@ import Contract from "./Contract";
 import ContractOther from "./ContractOther";
 import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
+import Project from '../projects/Project';
 
 export type ContractSearchParamas = {
-    projectId?: string | null,
+    projectId?: string,
+    _parent?: Project,
     searchText?: string,
     contractId?: number
-    contractOurId?: string | null,
-    startDateFrom?: string | null,
-    startDateTo?: string | null,
-    contractName?: string | null,
-    contractAlias?: string | null,
-    typeId?: number | null,
-    typesToIncude?: 'our' | 'other' | 'all' | null,
-    onlyOurs?: boolean | null,//@deprecated
-    isArchived?: boolean | null,
-    onlyKeyData?: boolean | null
+    contractOurId?: string,
+    startDateFrom?: string,
+    startDateTo?: string,
+    contractName?: string,
+    contractAlias?: string,
+    typeId?: number,
+    _contractType?: ContractType,
+    typesToIncude?: 'our' | 'other' | 'all',
+    onlyOurs?: boolean,//@deprecated
+    isArchived?: boolean,
+    onlyKeyData?: boolean
 }
 
 export default class ContractsController {
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
-
-        const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(mainContracts.Name LIKE ? 
-                          OR mainContracts.Number LIKE ? 
-                          OR mainContracts.Alias LIKE ? 
-                          OR OurContractsData.OurId LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
-
-        const searchTextCondition = conditions.join(' AND ');
-
-
-        return searchTextCondition;
-    }
-
     static async getContractsList(searchParams: ContractSearchParamas = {}) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format(`mainContracts.ProjectOurId = ?`, [searchParams.projectId])
+        const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
+        const typeId = searchParams._contractType?.id || searchParams.typeId;
+        const onlyKeyData = typeof searchParams.onlyKeyData === 'string'
+        const isArchived = typeof searchParams.isArchived === 'string'
+
+        const projectCondition = projectOurId
+            ? mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
             : '1';
         const contractIdCondition = searchParams.contractId
             ? mysql.format(`mainContracts.Id = ?`, [searchParams.contractId])
@@ -59,8 +50,8 @@ export default class ContractsController {
         const startDateToCondition = searchParams.startDateTo
             ? mysql.format(`mainContracts.StartDate <= ?`, [searchParams.startDateTo])
             : '1';
-        const typeCondition = searchParams.typeId
-            ? mysql.format(`mainContracts.TypeId = ?`, [searchParams.typeId])
+        const typeCondition = typeId
+            ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
             : '1';
 
         let typesToIncudeCondition;
@@ -74,9 +65,9 @@ export default class ContractsController {
             default:
                 typesToIncudeCondition = '1';
         }
-
+        //@deprecated
         const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (searchParams.isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
+        const isArchivedConditon = (isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
@@ -136,6 +127,21 @@ export default class ContractsController {
             console.log(sql);
             throw (err);
         }
+    }
+
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(mainContracts.Name LIKE ? 
+                          OR mainContracts.Number LIKE ? 
+                          OR mainContracts.Alias LIKE ? 
+                          OR OurContractsData.OurId LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 
     private static async processContractsResult(result: any[], initParamObject: any) {

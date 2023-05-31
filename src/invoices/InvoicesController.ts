@@ -2,39 +2,28 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
 import ToolsDate from '../tools/ToolsDate'
 import Invoice from "./Invoice";
+import Project from '../projects/Project';
+import Contract from '../contracts/Contract';
 
 
 export default class InvoicesController {
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
-
-        const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Invoices.Number LIKE ? 
-                          OR Invoices.Description LIKE ? 
-                          OR Invoices.Status LIKE ? 
-                          OR Entities.Name LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
-
-        const searchTextCondition = conditions.join(' AND ');
-
-
-        return searchTextCondition;
-    }
-
     static async getInvoicesList(searchParams: {
         projectId?: string,
+        _project?: Project,
         contractId?: number,
+        _contract?: Contract,
         searchText?: string,
         issueDateFrom?: string,
         issueDateTo?: string,
     } = {}) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [searchParams.projectId])
-            : '1';
+        const projectOurId = searchParams._project?.ourId || searchParams.projectId;
+        const contractId = searchParams._contract?.id || searchParams.contractId;
 
-        const contractCondition = searchParams.contractId
-            ? mysql.format(`Milestones.ContractId = ?`, [searchParams.contractId])
+        const projectCondition = projectOurId
+            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
+            : '1';
+        const contractCondition = contractId
+            ? mysql.format(`Invoices.ContractId = ?`, [contractId])
             : '1';
         const issueDateFromCondition = searchParams.issueDateFrom
             ? mysql.format(`Invoices.IssueDate >= ?`, [searchParams.issueDateFrom])
@@ -97,6 +86,23 @@ export default class InvoicesController {
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoicesResult(result);
+    }
+
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Invoices.Number LIKE ? 
+                          OR Invoices.Description LIKE ? 
+                          OR Invoices.Status LIKE ? 
+                          OR Entities.Name LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+
+
+        return searchTextCondition;
     }
 
     static processInvoicesResult(result: any[]): [Invoice?] {
