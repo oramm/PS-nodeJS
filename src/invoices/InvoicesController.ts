@@ -17,6 +17,7 @@ export default class InvoicesController {
         searchText?: string,
         issueDateFrom?: string,
         issueDateTo?: string,
+        status?: string
     } = {}) {
         const projectOurId = searchParams._project?.ourId || searchParams.projectId;
         const contractId = searchParams._contract?.id || searchParams.contractId;
@@ -32,6 +33,9 @@ export default class InvoicesController {
             : '1';
         const issueDateToCondition = searchParams.issueDateTo
             ? mysql.format(`Invoices.IssueDate <= ?`, [searchParams.issueDateTo])
+            : '1';
+        const statusCondition = searchParams.status
+            ? mysql.format(`Invoices.Status = ?`, [searchParams.status])
             : '1';
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
@@ -83,6 +87,7 @@ export default class InvoicesController {
           AND ${contractCondition} 
           AND ${issueDateFromCondition}
           AND ${issueDateToCondition}
+          AND ${statusCondition}
           AND ${searchTextCondition}
         ORDER BY Invoices.IssueDate ASC`;
 
