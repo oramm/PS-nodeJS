@@ -21,7 +21,6 @@ app.get('/caseTemplate/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -48,7 +47,6 @@ app.put('/caseTemplate/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -61,6 +59,5 @@ app.delete('/caseTemplate/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

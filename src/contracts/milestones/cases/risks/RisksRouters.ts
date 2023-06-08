@@ -10,7 +10,6 @@ app.get('/risks', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 
 
@@ -24,7 +23,6 @@ app.get('/risk/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 
 

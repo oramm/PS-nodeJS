@@ -10,7 +10,6 @@ app.get('/roles', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 
 
@@ -24,7 +23,6 @@ app.get('/role/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 
 
@@ -51,7 +49,6 @@ app.put('/role/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -65,6 +62,5 @@ app.delete('/role/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

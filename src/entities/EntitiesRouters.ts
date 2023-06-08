@@ -13,7 +13,6 @@ app.get('/entities', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -25,7 +24,6 @@ app.get('/entity/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -64,7 +62,6 @@ app.delete('/entity/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 

@@ -29,7 +29,6 @@ app.get('/contract/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -118,6 +117,5 @@ app.delete('/contract/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

@@ -14,7 +14,6 @@ app.get('/invoices', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -26,7 +25,6 @@ app.get('/invoice/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -71,32 +69,6 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
-    }
-});
-
-app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
-    try {
-        const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
-        req.body._blobEnviObjects[0].parent = parentFolderGdId;
-
-        let promises: any[] = await Promise.all(
-            [
-                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileBase64, [req.body._blobEnviObjects[0], undefined, parentFolderGdId]),
-                (!req.body.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId),
-            ]
-        )
-        let item = new Invoice(req.body);
-        let fileData: drive_v3.Schema$File = promises[0];
-        item.setGdIdAndUrl(fileData.id);
-        item.status = 'Zrobiona';
-        await item.editInDb();
-        res.send(item);
-    } catch (error) {
-        console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
@@ -113,7 +85,34 @@ app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
+    try {
+        const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
+        if (!req.files) req.files = [];
+        console.log(req.files);
+        if (!Array.isArray(req.files)) throw new Error('Nie załączono pliku');
+        let invoceFile: Express.Multer.File;
+        invoceFile = req.files[0];
+
+        let promises: any[] = await Promise.all(
+            [
+                ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileMulter, [invoceFile, undefined, parentFolderGdId]),
+                (!req.parsedBody.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.parsedBody.gdId),
+            ]
+        )
+        let item = new Invoice(req.parsedBody);
+        let fileData: drive_v3.Schema$File = promises[0];
+        item.setGdIdAndUrl(fileData.id);
+        item.status = 'Zrobiona';
+        await item.editInDb();
+        res.send(item);
+    } catch (error) {
         console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
     }
 });
 
@@ -127,7 +126,6 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -141,7 +139,6 @@ app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -156,6 +153,5 @@ app.delete('/invoice/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

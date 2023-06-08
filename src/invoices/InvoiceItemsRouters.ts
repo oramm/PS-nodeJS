@@ -11,7 +11,6 @@ app.get('/invoiceItems', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -23,7 +22,6 @@ app.get('/invoiceItem/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 app.post('/invoiceItem', async (req: any, res: any) => {
@@ -62,7 +60,6 @@ app.put('/invoiceItem/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -75,6 +72,5 @@ app.delete('/invoiceItem/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

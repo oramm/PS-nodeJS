@@ -29,7 +29,6 @@ app.get('/oauthcallback', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 

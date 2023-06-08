@@ -18,7 +18,6 @@ app.get('/letters', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -31,7 +30,6 @@ app.get('/letter/:id', async (req: Request, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 app.post('/testLetter/:mode', async (req: express.Request, res: express.Response) => {
@@ -176,6 +174,5 @@ app.delete('/letter/:id', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

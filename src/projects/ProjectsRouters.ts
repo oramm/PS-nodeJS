@@ -21,7 +21,6 @@ app.get('/projects/:systemEmail', async (req: Request, res: Response) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -38,7 +37,6 @@ app.get('/project/:id/systemEmail/:systemEmail', async (req: Request, res: Respo
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });
 
@@ -93,6 +91,5 @@ app.delete('/project/:id', async (req: any, res: any) => {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
-        console.error(error);
     }
 });

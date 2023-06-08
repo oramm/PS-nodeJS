@@ -88,6 +88,7 @@ export default class ToolsGd {
         options: drive_v3.Params$Resource$Files$Create = {},
         parentFolderId: string
     ) {
+        if (typeof file !== 'object') throw new Error(`'file is type of ${typeof file} but should be object`);
         const drive = google.drive({ version: 'v3', auth });
         let { originalname: name, mimetype: mimeType } = file; // użyj odpowiednich pól z Express.Multer.File
         const { fields = 'id', ...otherOptions } = options;
