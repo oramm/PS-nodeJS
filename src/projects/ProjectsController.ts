@@ -1,45 +1,49 @@
+import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
 import Project from "./Project";
-import Person from '../persons/Person'
 import Entity from '../entities/Entity';
 import ProjectEntity from './ProjectEntity';
-import session from 'express-session';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 
 
 export default class ProjectsController {
-    static async getProjectsList(initParamObject: {
+    /**pobiera listę projektów
+     * @param {Object} searchParams.userData - dane użytkownika zalogowanego do systemu (z sesji)   
+     */
+    static async getProjectsList(searchParams: {
+        userData: UserData,
         id?: number,
         ourId?: string,
         searchText?: string,
         systemEmail?: string,
-        userData: UserData,
         onlyKeyData?: boolean
         contractId?: number
     }) {
-        const projectIdCondition = (initParamObject.id) ? 'Projects.Id=' + initParamObject.id : '1';
-        const projectOurIdCondition = (initParamObject.ourId) ? `Projects.OurId LIKE "%${initParamObject.ourId}%"` : '1';
-
-        const searchTextCondition = (initParamObject.searchText) ?
-            `Projects.OurId LIKE "%${initParamObject.searchText}%" 
-            OR Projects.Number LIKE "%${initParamObject.searchText}%" 
-            OR Projects.Alias LIKE "%${initParamObject.searchText}%"`
+        const projectIdCondition = searchParams.id
+            ? mysql.format('Projects.Id = ?', [searchParams.id])
             : '1';
 
-        //const currentUser = new Person({ systemEmail: initParamObject.systemEmail });
-        //const currentUserSystemRole = await currentUser.getSystemRole();
-        const currentUserSystemRoleName = initParamObject.userData.systemRoleName;
-        let sql: string;
-        if (initParamObject.contractId)
-            sql = `SELECT * FROM Projects 
-            JOIN Contracts ON Contracts.ProjectOurId=Projects.OurId
-            WHERE Contracts.id=${initParamObject.contractId}`;
+        const projectOurIdCondition = searchParams.ourId
+            ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
+            : '1';
 
-        else if (currentUserSystemRoleName == 'ENVI_EMPLOYEE' || currentUserSystemRoleName == 'ENVI_MANAGER')
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const currentUserSystemRoleName = searchParams.userData.systemRoleName;
+
+        let sql: string;
+        if (searchParams.contractId)
+            sql = mysql.format(`SELECT * FROM Projects 
+                                JOIN Contracts ON Contracts.ProjectOurId=Projects.OurId
+                                WHERE Contracts.id=?
+                                ORDER BY Projects.OurId ASC`, [searchParams.contractId]);
+
+
+        else if (['ENVI_EMPLOYEE', 'ENVI_MANAGER'].includes(currentUserSystemRoleName))
             sql = `SELECT * FROM Projects 
             WHERE ${projectIdCondition}
             AND ${projectOurIdCondition}
-            AND ${searchTextCondition}`;
+            AND ${searchTextCondition}
+            ORDER BY Projects.OurId ASC`;
 
         else
             sql = `SELECT  Projects.Id,
@@ -65,11 +69,25 @@ export default class ProjectsController {
                 WHERE ${projectIdCondition}
                     AND ${projectOurIdCondition}
                     AND ${searchTextCondition}
-                    AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${initParamObject.systemEmail}")
-                GROUP BY Projects.Id`;
+                    AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${searchParams.systemEmail}")
+                GROUP BY Projects.OurId ASC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
+    }
+
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Projects.OurId LIKE ? 
+                            OR Projects.Name LIKE ?
+                            OR Projects.Alias LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 
     private static async processProjectsResult(result: any[], initParamObject: any) {
@@ -100,7 +118,7 @@ export default class ProjectsController {
                 googleCalendarId: row.GoogleCalendarId,
                 lastUpdated: row.LastUpdated
             });
-            await item.setProjectEntityAssociations(entitiesPerAllProjects);
+            item.setProjectEntityAssociations(entitiesPerAllProjects);
             newResult.push(item);
         }
         return newResult;

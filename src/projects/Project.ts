@@ -86,9 +86,9 @@ export default class Project extends BusinessObject {
     }
 
     async createProjectFolder(auth: OAuth2Client) {
-        const caseFolder = await ToolsGd.setFolder(auth, { parentId: Setup.Gd.rootFolderId, name: this.gdFolderName() });
-        this.setGdFolderIdAndUrl(caseFolder.id as string);
-        return caseFolder;
+        const folder = await ToolsGd.setFolder(auth, { parentId: Setup.Gd.rootFolderId, name: this.gdFolderName() });
+        this.setGdFolderIdAndUrl(folder.id as string);
+        return folder;
     }
 
     async editProjectFolder(auth: OAuth2Client) {

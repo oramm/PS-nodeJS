@@ -6,14 +6,29 @@ import Project from './Project';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 
 
-
+/** @deprecated */
 app.get('/projects/:systemEmail', async (req: Request, res: Response) => {
     console.log('get projects %o', req.session.userData);
     console.log('get projects session id ' + req.sessionID);
     try {
         const result = await ProjectsController.getProjectsList({
             ...req.params,
-            ...req.query,
+            ...req.parsedQuery,
+            userData: req.session.userData as UserData
+        });
+        res.send(result);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.get('/projects', async (req: Request, res: Response) => {
+    try {
+        if (!req.session.userData) throw new Error('no user data in session');
+        const result = await ProjectsController.getProjectsList({
+            ...req.parsedQuery,
             userData: req.session.userData as UserData
         });
         res.send(result);
