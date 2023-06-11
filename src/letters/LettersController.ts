@@ -1,4 +1,4 @@
-import mysql from "mysql";
+import mysql from 'mysql2/promise';
 import Tools from "../tools/Tools";
 import ToolsDate from "../tools/ToolsDate";
 import ToolsDb from '../tools/ToolsDb'
@@ -25,19 +25,28 @@ export default class LettersController {
     static async getLettersList(searchParams: LettersSearchParams = {}) {
         const projectOurId = searchParams._project?.ourId || searchParams.projectId;
 
-        const projectConditon = (projectOurId) ? `Projects.OurId="${projectOurId}"` : '1';
-        const milestoneConditon = searchParams.milestoneId ? `Milestones.Id=${searchParams.milestoneId}` : '1';
-        const contractConditon = searchParams.contractId ? `Contracts.Id=${searchParams.contractId}` : '1';
-        const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo) ?
-            `Letters.CreationDate BETWEEN "${ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom)}" 
-            AND DATE_ADD("${searchParams.creationDateTo}", INTERVAL 1 DAY)`
+        const projectCondition = projectOurId
+            ? mysql.format(`Projects.OurId = ?`, [projectOurId])
             : '1';
 
-        const searchTextCondition = (searchParams.searchText) ?
-            `(Letters.Description LIKE "%${searchParams.searchText}%" 
-                OR Letters.Number LIKE "%${searchParams.searchText}%"
-             )`
+        const milestoneCondition = searchParams.milestoneId
+            ? mysql.format(`Milestones.Id = ?`, [searchParams.milestoneId])
             : '1';
+
+        const contractCondition = searchParams.contractId
+            ? mysql.format(`Contracts.Id = ?`, [searchParams.contractId])
+            : '1';
+
+        const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo)
+            ? mysql.format(`Letters.CreationDate BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
+                [ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom), searchParams.creationDateTo])
+            : '1';
+
+        const searchTextCondition = searchParams.searchText
+            ? mysql.format(`(Letters.Description LIKE ? OR Letters.Number LIKE ?)`,
+                [`%${searchParams.searchText}%`, `%${searchParams.searchText}%`])
+            : '1';
+
 
         const sql = `SELECT 
             Letters.Id,
@@ -64,9 +73,9 @@ export default class LettersController {
         JOIN Contracts ON Contracts.Id=Milestones.ContractId
         JOIN Projects ON Letters.ProjectId=Projects.Id
         JOIN Persons ON Letters.EditorId=Persons.Id
-        WHERE ${projectConditon} 
-          AND ${contractConditon} 
-          AND ${milestoneConditon} 
+        WHERE ${projectCondition} 
+          AND ${contractCondition} 
+          AND ${milestoneCondition} 
           AND ${dateCondition}
           AND ${searchTextCondition}
         GROUP BY Letters.Id

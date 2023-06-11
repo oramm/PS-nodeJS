@@ -20,10 +20,19 @@ export type CasesSearchParams = {
 
 export default class CasesController {
     static async getCasesList(searchParams: CasesSearchParams = {}) {
-        const projectCondition = (searchParams.projectId) ? 'Contracts.ProjectOurId="' + searchParams.projectId + '"' : '1';
-        const contractCondition = (searchParams.contractId) ? 'Contracts.Id=' + searchParams.contractId : '1';
-        const milestoneCondition = (searchParams.milestoneId) ? 'Cases.MilestoneId=' + searchParams.milestoneId : '1';
-        const caseCondition = (searchParams.caseId) ? 'Cases.Id=' + searchParams.caseId : '1';
+        const projectCondition = searchParams.projectId
+            ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
+            : '1';
+        const contractCondition = searchParams.contractId
+            ? mysql.format('Contracts.Id = ?', [searchParams.contractId])
+            : '1';
+        const milestoneCondition = searchParams.milestoneId
+            ? mysql.format('Cases.MilestoneId = ?', [searchParams.milestoneId])
+            : '1';
+        const caseCondition = searchParams.caseId
+            ? mysql.format('Cases.Id = ?', [searchParams.caseId])
+            : '1';
+
         const searchTextCondition = (searchParams.searchText) ?
             `(Cases.Name LIKE "%${searchParams.searchText}%" 
                 OR Cases.Number LIKE "%${searchParams.searchText}%"
@@ -35,47 +44,47 @@ export default class CasesController {
             : '1';
 
         const sql = `SELECT 
-                        Cases.Id,
-                        CaseTypes.Id AS CaseTypeId,
-                        CaseTypes.Name AS CaseTypeName,
-                        CaseTypes.IsDefault,
-                        CaseTypes.IsUniquePerMilestone,
-                        CaseTypes.MilestoneTypeId,
-                        CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-                        Cases.Name,
-                        Cases.Number,
-                        Cases.Description,
-                        Cases.GdFolderId,
-                        Cases.LastUpdated,
-                        Milestones.Id AS MilestoneId,
-                        Milestones.ContractId,
-                        Milestones.Name AS MilestoneName,
-                        Milestones.GdFolderId AS MilestoneGdFolderId,
-                        MilestoneTypes.Id AS MilestoneTypeId,
-                        MilestoneTypes.Name AS MilestoneTypeName,
-                        MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
-                        OurContractsData.OurId AS ContractOurId,
-                        Contracts.Id AS ContractId,
-                        Contracts.Alias AS ContractAlias,
-                        Contracts.Number AS ContractNumber,
-                        Contracts.Name AS ContractName,
-                        Risks.Id AS RiskId,
-                        Risks.Probability AS RiskProbability,
-                        Risks.OverallImpact AS RiskOverallImpact
-                    FROM Cases
-                    LEFT JOIN CaseTypes ON Cases.TypeId=CaseTypes.Id
-                    JOIN Milestones ON Milestones.Id=Cases.MilestoneId
-                    JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
-                    JOIN Contracts ON Milestones.ContractId=Contracts.Id
-                    LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
-                    LEFT JOIN Risks ON Risks.CaseId=Cases.Id
-                    JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
-                    WHERE ${projectCondition} 
-                      AND ${contractCondition} 
-                      AND ${milestoneCondition} 
-                      AND ${caseCondition}
-                      AND ${searchTextCondition}
-                    ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
+            Cases.Id,
+            CaseTypes.Id AS CaseTypeId,
+            CaseTypes.Name AS CaseTypeName,
+            CaseTypes.IsDefault,
+            CaseTypes.IsUniquePerMilestone,
+            CaseTypes.MilestoneTypeId,
+            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+            Cases.Name,
+            Cases.Number,
+            Cases.Description,
+            Cases.GdFolderId,
+            Cases.LastUpdated,
+            Milestones.Id AS MilestoneId,
+            Milestones.ContractId,
+            Milestones.Name AS MilestoneName,
+            Milestones.GdFolderId AS MilestoneGdFolderId,
+            MilestoneTypes.Id AS MilestoneTypeId,
+            MilestoneTypes.Name AS MilestoneTypeName,
+            MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
+            OurContractsData.OurId AS ContractOurId,
+            Contracts.Id AS ContractId,
+            Contracts.Alias AS ContractAlias,
+            Contracts.Number AS ContractNumber,
+            Contracts.Name AS ContractName,
+            Risks.Id AS RiskId,
+            Risks.Probability AS RiskProbability,
+            Risks.OverallImpact AS RiskOverallImpact
+        FROM Cases
+        LEFT JOIN CaseTypes ON Cases.TypeId=CaseTypes.Id
+        JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+        JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+        JOIN Contracts ON Milestones.ContractId=Contracts.Id
+        LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+        LEFT JOIN Risks ON Risks.CaseId=Cases.Id
+        JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+        WHERE ${projectCondition} 
+            AND ${contractCondition} 
+            AND ${milestoneCondition} 
+            AND ${caseCondition}
+            AND ${searchTextCondition}
+        ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processCasesResult(result, searchParams);

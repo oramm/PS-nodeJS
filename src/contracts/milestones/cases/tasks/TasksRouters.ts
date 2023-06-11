@@ -2,11 +2,12 @@ import ToolsGapi from '../../../../setup/GAuth2/ToolsGapi';
 import Task from './Task';
 import TasksController from './TasksController'
 import { app } from '../../../../index';
+import { Request, Response } from 'express';
 
 
-app.get('/tasks', async (req: any, res: any) => {
+app.get('/tasks', async (req: Request, res: Response) => {
     try {
-        const result = await TasksController.getTasksList(req.query);
+        const result = await TasksController.getTasksList(req.parsedQuery);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -15,7 +16,7 @@ app.get('/tasks', async (req: any, res: any) => {
     }
 });
 
-app.get('/task/:id', async (req: any, res: any) => {
+app.get('/task/:id', async (req: Request, res: Response) => {
     try {
         const result = await TasksController.getTasksList(req.params);
         res.send(result);
@@ -26,7 +27,7 @@ app.get('/task/:id', async (req: any, res: any) => {
     }
 });
 
-app.post('/task', async (req: any, res: any) => {
+app.post('/task', async (req: Request, res: Response) => {
     try {
         let item = new Task(req.body);
         await item.addInDb();
@@ -40,7 +41,7 @@ app.post('/task', async (req: any, res: any) => {
     };
 });
 
-app.put('/task/:id', async (req: any, res: any) => {
+app.put('/task/:id', async (req: Request, res: Response) => {
     try {
         let item = new Task(req.body);
         await Promise.all([
@@ -56,7 +57,7 @@ app.put('/task/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/task/:id', async (req: any, res: any) => {
+app.delete('/task/:id', async (req: Request, res: Response) => {
     try {
         let item = new Task(req.body);
         console.log('delete');

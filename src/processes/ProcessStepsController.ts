@@ -1,4 +1,4 @@
-import mysql from "mysql";
+import mysql from 'mysql2/promise';
 import DocumentTemplate from "../documentTemplates/DocumentTemplate";
 import Tools from "../tools/Tools";
 import ToolsDb from '../tools/ToolsDb'

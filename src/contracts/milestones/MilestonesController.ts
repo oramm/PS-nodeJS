@@ -1,49 +1,56 @@
+import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb'
 import ContractOther from "../ContractOther";
 import ContractOur from "../ContractOur";
 import Milestone from "./Milestone";
 
 export default class MilestonesController {
-    static async getMilestonesList(initParamObject: { projectId?: string, contractId?: number }) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'Milestones.ContractId=' + initParamObject.contractId : '1';
+    static async getMilestonesList(searchParams: {
+        projectId?: string,
+        contractId?: number
+    } = {}) {
+        const projectCondition = searchParams.projectId
+            ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
+            : '1';
+        const contractCondition = searchParams.contractId
+            ? mysql.format('Milestones.ContractId = ?', [searchParams.contractId])
+            : '1';
 
-        const sql = 'SELECT  Milestones.Id, \n \t' +
-            'MilestoneTypes.Id AS TypeId, \n \t' +
-            'MilestoneTypes.Name AS TypeName, \n \t' +
-            'MilestoneTypes_ContractTypes.FolderNumber, \n \t' +
-            'MilestoneTypes_ContractTypes.IsDefault AS TypeIsDefault, \n \t' +
-            'MilestoneTypes.IsUniquePerContract AS TypeIsUniquePerContract, \n \t' +
-            'Milestones.Name, \n \t' +
-            'Milestones.Description, \n \t' +
-            'Milestones.StartDate, \n \t' +
-            'Milestones.EndDate, \n \t' +
-            'Milestones.Status, \n \t' +
-            'Milestones.GdFolderId, \n \t' +
-            'OurContractsData.OurId AS ParentOurId, \n \t' +
-            'OurContractsData.ManagerId AS ParentManagerId, \n \t' +
-            'OurContractsData.AdminId AS ParentAdminId, \n \t' +
-            'Contracts.Id AS ParentId, \n \t' +
-            'Contracts.Number AS ParentNumber, \n \t' +
-            'Contracts.OurIdRelated AS ParentOurIdRelated, \n \t' +
-            'ContractTypes.Id AS ContractTypeId, \n \t' +
-            'ContractTypes.Name AS ContractTypeName, \n \t' +
-            'ContractTypes.Description AS ContractTypeDescription, \n \t' +
-            'ContractTypes.IsOur AS ContractTypeIsOur, \n \t' +
-            'Contracts.ProjectOurId \n' +
-            'FROM Milestones \n' +
-            'JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id \n' +
-            'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
-            'LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
-            'LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId \n' +
-            'WHERE ' + projectCondition + ' AND ' + contractCondition + '\n' +
-            'ORDER BY MilestoneTypes_ContractTypes.FolderNumber';
+        const sql = `SELECT  Milestones.Id,
+            MilestoneTypes.Id AS TypeId,
+            MilestoneTypes.Name AS TypeName,
+            MilestoneTypes_ContractTypes.FolderNumber,
+            MilestoneTypes_ContractTypes.IsDefault AS TypeIsDefault,
+            MilestoneTypes.IsUniquePerContract AS TypeIsUniquePerContract,
+            Milestones.Name,
+            Milestones.Description,
+            Milestones.StartDate,
+            Milestones.EndDate,
+            Milestones.Status,
+            Milestones.GdFolderId,
+            OurContractsData.OurId AS ParentOurId,
+            OurContractsData.ManagerId AS ParentManagerId,
+            OurContractsData.AdminId AS ParentAdminId,
+            Contracts.Id AS ParentId,
+            Contracts.Number AS ParentNumber,
+            Contracts.OurIdRelated AS ParentOurIdRelated,
+            ContractTypes.Id AS ContractTypeId,
+            ContractTypes.Name AS ContractTypeName,
+            ContractTypes.Description AS ContractTypeDescription,
+            ContractTypes.IsOur AS ContractTypeIsOur,
+            Contracts.ProjectOurId
+        FROM Milestones
+        JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+        JOIN Contracts ON Milestones.ContractId = Contracts.Id
+        LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+        LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+        LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
+        WHERE ${projectCondition} 
+          AND ${contractCondition}
+        ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestonesResult(result);
-
-
     }
 
     static processMilestonesResult(result: any[]): Milestone[] {
@@ -65,6 +72,9 @@ export default class MilestonesController {
                     isOur: row.ContractTypeIsOur
                 }
             }
+
+            const _contract = contractInitParam.ourId ? new ContractOur(contractInitParam) : new ContractOther(contractInitParam);
+
             const item = new Milestone({
                 id: row.Id,
                 _type: {
@@ -81,7 +91,7 @@ export default class MilestonesController {
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
                 //może to być kontrakt na roboty (wtedy ma _ourContract), albo OurContract(wtedy ma OurId)
-                _parent: (row.TypeIsOur) ? new ContractOur(contractInitParam) : new ContractOther(contractInitParam)
+                _parent: _contract
             });
             newResult.push(item);
         }

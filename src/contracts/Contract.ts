@@ -37,6 +37,7 @@ export default abstract class Contract extends BusinessObject {
     status: string;
     _parent: Project;
     _folderName?: string;
+    _lastUpdated?: string;
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super({ _dbTableName: 'Contracts' });
@@ -78,6 +79,7 @@ export default abstract class Contract extends BusinessObject {
         this.projectOurId = this._parent?.ourId;;
 
         this.status = initParamObject.status;
+        this._lastUpdated = initParamObject._lastUpdated;
     }
     /**batch dla dodawania kontraktów */
     async addNewController(auth: OAuth2Client) {

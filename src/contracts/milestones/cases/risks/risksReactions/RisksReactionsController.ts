@@ -1,4 +1,4 @@
-import mysql from "mysql";
+import mysql from 'mysql2/promise';
 import ToolsDb from "../../../../../tools/ToolsDb";
 
 export default class RisksReactionsController {

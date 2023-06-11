@@ -84,7 +84,8 @@ export default class ContractsController {
             mainContracts.Status, 
             mainContracts.GdFolderId, 
             mainContracts.MeetingProtocolsGdFolderId, 
-            mainContracts.MaterialCardsGdFolderId, 
+            mainContracts.MaterialCardsGdFolderId,
+            mainContracts.LastUpdated, 
             OurContractsData.OurId, 
             OurContractsData.ManagerId, 
             OurContractsData.AdminId,
@@ -205,7 +206,8 @@ export default class ContractsController {
                 }),
                 _contractors: contractors.map((item: any) => item._entity),
                 _engineers: engineers.map((item: any) => item._entity),
-                _employers: employers.map((item: any) => item._entity)
+                _employers: employers.map((item: any) => item._entity),
+                _lastUpdated: row.LastUpdated
             }
             let item;
             try {
