@@ -26,7 +26,7 @@ app.get('/projects/:systemEmail', async (req: Request, res: Response) => {
 
 app.get('/projects', async (req: Request, res: Response) => {
     try {
-        if (!req.session.userData) throw new Error('no user data in session');
+        //if (!req.session.userData) throw new Error('no user data in session');
         const result = await ProjectsController.getProjectsList({
             ...req.parsedQuery,
             userData: req.session.userData as UserData
