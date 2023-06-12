@@ -18,27 +18,32 @@ export default class ProjectsController {
         systemEmail?: string,
         onlyKeyData?: boolean
         contractId?: number
+        status?: string
     }) {
         const projectIdCondition = searchParams.id
             ? mysql.format('Projects.Id = ?', [searchParams.id])
             : '1';
-
         const projectOurIdCondition = searchParams.ourId
             ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
+            : '1';
+        const statusIdCondition = searchParams.status
+            ? mysql.format('Projects.Status = ?', [searchParams.status])
             : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
         const currentUserSystemRoleName = searchParams.userData.systemRoleName;
 
         let sql: string;
-        if (searchParams.contractId)
+        if (false)
+            //if (searchParams.contractId)
             sql = mysql.format(`SELECT * FROM Projects 
                                 JOIN Contracts ON Contracts.ProjectOurId=Projects.OurId
                                 WHERE Contracts.id=?
                                 ORDER BY Projects.OurId ASC`, [searchParams.contractId]);
 
 
-        else if (['ENVI_EMPLOYEE', 'ENVI_MANAGER'].includes(currentUserSystemRoleName))
+        else if (true)
+            //else if (['ENVI_EMPLOYEE', 'ENVI_MANAGER'].includes(currentUserSystemRoleName))
             sql = `SELECT * FROM Projects 
             WHERE ${projectIdCondition}
             AND ${projectOurIdCondition}
@@ -68,6 +73,7 @@ export default class ProjectsController {
                 JOIN Roles ON Roles.ProjectOurId = Projects.OurId
                 WHERE ${projectIdCondition}
                     AND ${projectOurIdCondition}
+                    AND ${statusIdCondition}
                     AND ${searchTextCondition}
                     AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${searchParams.systemEmail}")
                 GROUP BY Projects.OurId ASC`;

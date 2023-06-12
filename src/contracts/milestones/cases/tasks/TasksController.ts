@@ -82,6 +82,7 @@ export default class TasksController {
               MilestoneTypes.Name AS MilestoneTypeName,
               MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
               OurContractsData.OurId AS ContractOurId,
+              Contracts.Id AS ContractId,
               Contracts.Alias AS ContractAlias,
               Contracts.Number AS ContractNumber,
               Owners.Name AS OwnerName,
@@ -105,7 +106,8 @@ export default class TasksController {
               AND ${deadlineFromCondition}
               AND ${deadlineToCondition}
               AND ${statusCondition}
-              AND ${searchTextCondition}`;
+              AND ${searchTextCondition}
+              ORDER BY Contracts.Id, Milestones.Id, Cases.ID`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processTasksResult(result);
