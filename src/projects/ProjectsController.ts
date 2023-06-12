@@ -31,7 +31,7 @@ export default class ProjectsController {
             : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
-        const currentUserSystemRoleName = searchParams.userData.systemRoleName;
+        //const currentUserSystemRoleName = searchParams.userData.systemRoleName;
 
         let sql: string;
         if (false)
