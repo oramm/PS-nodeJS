@@ -11,30 +11,31 @@ export default class LetterEntityAssociationsController {
         const contractConditon = (initParamObject && initParamObject.contractctId) ? 'Contracts.Id="' + initParamObject.contractctId + '"' : '1';
         const milestoneConditon = (initParamObject && initParamObject.milestonetId) ? 'Milestones.Id="' + initParamObject.milestoneId + '"' : '1';
 
-        const sql = 'SELECT  Letters_Entities.LetterId, \n \t' +
-            'Letters_Entities.EntityId, \n \t' +
-            'Letters_Entities.LetterRole, \n \t' +
-            'Entities.Name AS EntityName, \n \t' +
-            'Entities.Address AS EntityAddress, \n \t' +
-            'Entities.TaxNumber AS EntityTaxNumber, \n \t' +
-            'Entities.Www AS EntityWww, \n \t' +
-            'Entities.Email AS EntityEmail, \n \t' +
-            'Entities.Phone AS EntityPhone, \n \t' +
-            'Entities.Fax AS EntityFax \n' +
-            'FROM Letters_Entities \n' +
-            'JOIN Letters ON Letters_Entities.LetterId = Letters.Id \n' +
-            'JOIN Projects ON Letters.ProjectId = Projects.Id \n' +
-            'JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId \n' +
-            'JOIN Milestones ON Milestones.ContractId = Contracts.Id \n' +
-            'JOIN Entities ON Letters_Entities.EntityId=Entities.Id \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' AND ' + milestoneConditon + ' \n' +
-            'GROUP BY LetterId, EntityId \n' +
-            'ORDER BY Letters_Entities.LetterRole, EntityName';
+        const sql = `SELECT  Letters_Entities.LetterId,
+                Letters_Entities.EntityId,
+                Letters_Entities.LetterRole,
+                Entities.Name AS EntityName,
+                Entities.Address AS EntityAddress,
+                Entities.TaxNumber AS EntityTaxNumber,
+                Entities.Www AS EntityWww,
+                Entities.Email AS EntityEmail,
+                Entities.Phone AS EntityPhone,
+                Entities.Fax AS EntityFax
+            FROM Letters_Entities
+            JOIN Letters ON Letters_Entities.LetterId = Letters.Id
+            JOIN Projects ON Letters.ProjectId = Projects.Id
+            JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId
+            JOIN Milestones ON Milestones.ContractId = Contracts.Id
+            JOIN Entities ON Letters_Entities.EntityId=Entities.Id
+            WHERE ${projectConditon} 
+              AND ${contractConditon} 
+              AND ${milestoneConditon}
+            GROUP BY LetterId, EntityId
+            ORDER BY Letters_Entities.LetterRole, EntityName`;
+
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLetterEntityAssociationsResult(result);
-
-
     }
 
     static processLetterEntityAssociationsResult(result: any[]): LetterEntity[] {

@@ -9,50 +9,51 @@ export default class LetterCaseAssociationsController {
     static async getLetterCaseAssociationsList(initParamObject: any) {
         const projectConditon = (initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
         const contractConditon = (initParamObject && initParamObject.contractctId) ? 'Contracts.Id="' + initParamObject.contractctId + '"' : '1';
-        const sql = 'SELECT  Letters_Cases.LetterId, \n \t' +
-            'Letters_Cases.CaseId, \n \t' +
-            'Letters.Number, \n \t' +
-            'Letters.Description, \n \t' +
-            'Letters.CreationDate, \n \t' +
-            'Letters.RegistrationDate, \n \t' +
-            'Letters.DocumentGdId, \n \t' +
-            'Letters.FolderGdId, \n \t' +
-            'Letters.LastUpdated, \n \t' +
-            'Cases.Name AS CaseName, \n \t' +
-            'Cases.Number AS CaseNumber, \n \t' +
-            'Cases.Description AS CaseDescription, \n \t' +
-            'Cases.GdFolderId AS CaseGdFolderId, \n \t' +
-            'CaseTypes.Id AS CaseTypeId, \n \t' +
-            'CaseTypes.Name AS CaseTypeName, \n \t' +
-            'CaseTypes.IsDefault, \n \t' +
-            'CaseTypes.IsUniquePerMilestone, \n \t' +
-            'CaseTypes.MilestoneTypeId, \n \t' +
-            'CaseTypes.FolderNumber AS CaseTypeFolderNumber, \n \t' +
-            'Milestones.Id AS MilestoneId, \n \t' +
-            'Milestones.Name AS MilestoneName, \n \t' +
-            'MilestoneTypes.Id AS MilestoneTypeId, \n \t' +
-            'MilestoneTypes.Name AS MilestoneTypeName, \n \t' +
-            'MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber, \n \t' +
-            'OurContractsData.OurId AS ContractOurId, \n \t' +
-            'Contracts.Id AS ContractId, \n \t' +
-            'Contracts.Number AS ContractNumber, \n \t' +
-            'Contracts.Name AS ContractName \n' +
-            'FROM Letters_Cases \n' +
-            'JOIN Letters ON Letters_Cases.LetterId = Letters.Id \n' +
-            'JOIN Cases ON Letters_Cases.CaseId = Cases.Id \n' +
-            'JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id \n' +
-            'JOIN Milestones ON Cases.MilestoneId=Milestones.Id \n' +
-            'JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id \n' +
-            'JOIN Contracts ON Milestones.ContractId=Contracts.Id \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id \n' +
-            'JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' \n' +
-            'ORDER BY Letters_Cases.LetterId, Cases.Name';
+        const sql = `SELECT  
+                Letters_Cases.LetterId, 
+                Letters_Cases.CaseId, 
+                Letters.Number, 
+                Letters.Description, 
+                Letters.CreationDate, 
+                Letters.RegistrationDate, 
+                Letters.DocumentGdId, 
+                Letters.FolderGdId, 
+                Letters.LastUpdated, 
+                Cases.Name AS CaseName, 
+                Cases.Number AS CaseNumber, 
+                Cases.Description AS CaseDescription, 
+                Cases.GdFolderId AS CaseGdFolderId, 
+                CaseTypes.Id AS CaseTypeId, 
+                CaseTypes.Name AS CaseTypeName, 
+                CaseTypes.IsDefault, 
+                CaseTypes.IsUniquePerMilestone, 
+                CaseTypes.MilestoneTypeId, 
+                CaseTypes.FolderNumber AS CaseTypeFolderNumber, 
+                Milestones.Id AS MilestoneId, 
+                Milestones.Name AS MilestoneName, 
+                MilestoneTypes.Id AS MilestoneTypeId, 
+                MilestoneTypes.Name AS MilestoneTypeName, 
+                MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber, 
+                OurContractsData.OurId AS ContractOurId, 
+                Contracts.Id AS ContractId, 
+                Contracts.Number AS ContractNumber, 
+                Contracts.Name AS ContractName
+            FROM Letters_Cases
+            JOIN Letters ON Letters_Cases.LetterId = Letters.Id
+            JOIN Cases ON Letters_Cases.CaseId = Cases.Id
+            JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
+            JOIN Milestones ON Cases.MilestoneId=Milestones.Id
+            JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            JOIN Contracts ON Milestones.ContractId=Contracts.Id
+            LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+            WHERE ${projectConditon} 
+              AND ${contractConditon}
+            ORDER BY Letters_Cases.LetterId, Cases.Name`;
+
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLetterCaseAssociationsResult(result);
-
-
     }
 
     static processLetterCaseAssociationsResult(result: any[]): [LetterCase?] {

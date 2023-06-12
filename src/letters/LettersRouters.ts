@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express'
-import LettersController, { LettersSearchParams } from './LettersController'
+import LettersController from './LettersController'
 import { app } from '../index';
 import OurLetter from './OurLetter';
 import OurOldTypeLetter from './OurOldTypeLetter';

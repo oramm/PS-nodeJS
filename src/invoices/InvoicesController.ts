@@ -108,8 +108,6 @@ export default class InvoicesController {
                 [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
-
-
         return searchTextCondition;
     }
 

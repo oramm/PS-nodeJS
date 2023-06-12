@@ -10,19 +10,18 @@ import OurLetter from "./OurLetter";
 import OurOldTypeLetter from "./OurOldTypeLetter";
 import Project from "../projects/Project";
 
-export type LettersSearchParams = {
-    projectId?: string,
-    _project?: Project,
-    searchText?: string,
-    contractId?: number
-    milestoneId?: string,
-    creationDateFrom?: string,
-    creationDateTo?: string,
-}
 
 export default class LettersController {
 
-    static async getLettersList(searchParams: LettersSearchParams = {}) {
+    static async getLettersList(searchParams: {
+        projectId?: string,
+        _project?: Project,
+        searchText?: string,
+        contractId?: number
+        milestoneId?: string,
+        creationDateFrom?: string,
+        creationDateTo?: string,
+    } = {}) {
         const projectOurId = searchParams._project?.ourId || searchParams.projectId;
 
         const projectCondition = projectOurId
@@ -42,12 +41,7 @@ export default class LettersController {
                 [ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom), searchParams.creationDateTo])
             : '1';
 
-        const searchTextCondition = searchParams.searchText
-            ? mysql.format(`(Letters.Description LIKE ? OR Letters.Number LIKE ?)`,
-                [`%${searchParams.searchText}%`, `%${searchParams.searchText}%`])
-            : '1';
-
-
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
         const sql = `SELECT 
             Letters.Id,
             Letters.IsOur,
@@ -65,24 +59,47 @@ export default class LettersController {
             Projects.LettersGdFolderId,
             Persons.Id AS EditorId,
             Persons.Name AS EditorName,
-            Persons.Surname AS EditorSurname
+            Persons.Surname AS EditorSurname,
+            GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
+            GROUP_CONCAT(Cases.Name SEPARATOR ', ') AS CaseNames,
+            GROUP_CONCAT(CaseTypes.Name SEPARATOR ', ') AS CaseTypesNames
         FROM Letters
         JOIN Letters_Cases ON Letters_Cases.LetterId=Letters.id
         JOIN Cases ON Letters_Cases.CaseId=Cases.Id
+        JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
         JOIN Milestones ON Milestones.Id=Cases.MilestoneId
         JOIN Contracts ON Contracts.Id=Milestones.ContractId
         JOIN Projects ON Letters.ProjectId=Projects.Id
         JOIN Persons ON Letters.EditorId=Persons.Id
+        JOIN Letters_Entities ON Letters_Entities.LetterId=Letters.Id
+        JOIN Entities ON Letters_Entities.EntityId=Entities.Id
         WHERE ${projectCondition} 
           AND ${contractCondition} 
           AND ${milestoneCondition} 
           AND ${dateCondition}
           AND ${searchTextCondition}
         GROUP BY Letters.Id
-        ORDER BY Letters.RegistrationDate, Letters.CreationDate`;
+        ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLettersResult(result, searchParams);
+    }
+
+
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Letters.Description LIKE ? 
+                          OR Letters.Number LIKE ?
+                          OR Cases.Name LIKE ?
+                          OR CaseTypes.Name LIKE ?
+                          OR Entities.Name LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 
     static async processLettersResult(result: any[], initParamObject: any) {
