@@ -40,8 +40,8 @@ export default class LettersController {
             ? mysql.format(`Letters.CreationDate BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
                 [ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom), searchParams.creationDateTo])
             : '1';
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText?.toString());
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
         const sql = `SELECT 
             Letters.Id,
             Letters.IsOur,
@@ -85,10 +85,8 @@ export default class LettersController {
         return this.processLettersResult(result, searchParams);
     }
 
-
     static makeSearchTextCondition(searchText: string | undefined) {
         if (!searchText) return '1'
-
         const words = searchText.split(' ');
         const conditions = words.map(word =>
             mysql.format(`(Letters.Description LIKE ? 

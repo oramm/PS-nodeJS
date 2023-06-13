@@ -77,8 +77,7 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.body);
-        item.status = 'Do zrobienia';
+        let item = new Invoice({ ...req.parsedBody, status: 'Do zrobienia' });
         await item.editInDb();
         res.send(item);
     } catch (error) {
@@ -103,10 +102,9 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
                 (!req.parsedBody.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.parsedBody.gdId),
             ]
         )
-        let item = new Invoice(req.parsedBody);
+        let item = new Invoice({ ...req.parsedBody, status: 'Zrobiona' });
         let fileData: drive_v3.Schema$File = promises[0];
         item.setGdIdAndUrl(fileData.id);
-        item.status = 'Zrobiona';
         await item.editInDb();
         res.send(item);
     } catch (error) {
@@ -118,8 +116,7 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.body);
-        item.status = 'Wysłana';
+        let item = new Invoice({ ...req.parsedBody, status: 'Wysłana' });
         await item.editInDb();
         res.send(item);
     } catch (error) {
@@ -131,8 +128,7 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.body);
-        item.status = 'Zapłacona';
+        let item = new Invoice({ ...req.parsedBody, status: 'Zapłacona' });
         await item.editInDb();
         res.send(item);
     } catch (error) {

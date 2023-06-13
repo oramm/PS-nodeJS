@@ -97,4 +97,36 @@ export default class Setup {
             caseGdFolderIdColName: "Case_gdFolderId"
         }
     }
+
+    static invoiceStatusNames = [
+        'Na później',
+        'Do zrobienia',
+        'Zrobiona',
+        'Wysłana',
+        'Zapłacona',
+        'Do korekty',
+        'Wycofana'
+    ];
+
+    static projectStatusNames = [
+        'Nie rozpoczęty',
+        'W trakcie',
+        'Zakończony'
+    ];
+
+    static contractStatusNames = [
+        'Nie rozpoczęty',
+        'W trakcie',
+        'Zakończony',
+        'Archiwalny'
+    ];
+
+    static taskStatusNames = [
+        'Backlog',
+        'Nie rozpoczęty',
+        'W trakcie',
+        'Do poprawy',
+        'Oczekiwanie na odpowiedź',
+        'Zrobione'
+    ];
 }

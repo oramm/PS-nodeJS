@@ -74,7 +74,8 @@ export default class InvoicesController {
             Owners.Id AS OwnerId,
             Owners.Name AS OwnerName,
             Owners.Surname AS OwnerSurname,
-            Owners.Email AS OwnerEmail
+            Owners.Email AS OwnerEmail,
+            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) as TotalNetValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
         JOIN Contracts ON Contracts.Id=Invoices.ContractId
@@ -83,12 +84,14 @@ export default class InvoicesController {
         JOIN Projects ON Projects.OurId=Contracts.ProjectOurId
         LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
+        LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
         WHERE ${projectCondition} 
-          AND ${contractCondition} 
-          AND ${issueDateFromCondition}
-          AND ${issueDateToCondition}
-          AND ${statusCondition}
-          AND ${searchTextCondition}
+            AND ${contractCondition} 
+            AND ${issueDateFromCondition}
+            AND ${issueDateToCondition}
+            AND ${statusCondition}
+            AND ${searchTextCondition}
+        GROUP BY Invoices.Id
         ORDER BY Invoices.IssueDate ASC`;
 
 
@@ -121,7 +124,7 @@ export default class InvoicesController {
                 number: row.ContractNumber,
                 alias: row.ContractAlias,
                 name: ToolsDb.sqlToString(row.ContractName),
-
+                _totalNetValue: row.TotalValue,
                 gdFolderId: row.ContractGdFolderId,
                 _parent: {
                     ourId: row.ProjectOurId,
@@ -142,7 +145,6 @@ export default class InvoicesController {
                 number: row.Number,
                 description: ToolsDb.sqlToString(row.Description),
                 status: row.Status,
-                creationDate: row.CreationDate,
                 issueDate: row.IssueDate,
                 sentDate: row.SentDate,
                 daysToPay: row.DaysToPay,
@@ -169,7 +171,8 @@ export default class InvoicesController {
                     name: row.OwnerName,
                     surname: row.OwnerSurname,
                     email: row.OwnerEmail
-                }
+                },
+                _totalNetValue: row.TotalNetValue
             });
             newResult.push(item);
         }

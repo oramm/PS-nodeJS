@@ -4,7 +4,6 @@ import Case from "../../contracts/milestones/cases/Case";
 import ToolsDb from "../../tools/ToolsDb";
 import LetterCase from "./LetterCase";
 
-
 export default class LetterCaseAssociationsController {
     static async getLetterCaseAssociationsList(initParamObject: any) {
         const projectConditon = (initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';

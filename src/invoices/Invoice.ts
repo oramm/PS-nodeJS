@@ -2,20 +2,20 @@ import InvoiceItem from "./InvoiceItem";
 import ToolsDate from "../tools/ToolsDate";
 import ToolsGd from "../tools/ToolsGd";
 import BusinessObject from "../BussinesObject";
+import Setup from "../setup/Setup";
 
 export default class Invoice extends BusinessObject {
-    id?: any;
-    number?: any;
+    id?: number;
+    number?: string;
     _entity: any;
     entityId?: number;
     description?: string;
-    status?: string;
-    creationDate?: any;
-    issueDate: any;
-    sentDate?: any;
-    paymentDeadline?: any;
+    status: string = '';
+    issueDate: string;
+    sentDate?: string | null;
+    paymentDeadline?: string | null;
     daysToPay: number;
-    _lastUpdated?: any;
+    _lastUpdated?: string;
     _editor?: any;
     _owner?: any;
     ownerId?: number;
@@ -25,56 +25,51 @@ export default class Invoice extends BusinessObject {
     _contract?: any;
     _items?: InvoiceItem[];
     _project: any;
-    gdId?: string | undefined | null;
+    gdId?: string | null;
     _documentOpenUrl?: string;
-    _value?: number;
+    _totalNetValue?: number;
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'Invoices' })
         this.daysToPay = initParamObject.daysToPay;
-        if (initParamObject) {
-            this.id = initParamObject.id;
-            this.number = initParamObject.number;
-            this.description = initParamObject.description;
-            this.status = initParamObject.status;
+        console.log('Invoice constructor initParamObject', initParamObject.status, initParamObject.issueDate, initParamObject.sentDate, initParamObject.paymentDeadline);
+        this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate) as string;
+        this.initByStatus(initParamObject.status, initParamObject);
+        console.log('Invoice constructor initParamObject', this.issueDate, this.sentDate, this.paymentDeadline);
 
-            initParamObject.creationDate = ToolsDate.dateJsToSql(
-                initParamObject.creationDate
-            );
-            this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate);
-            this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
+        if (!initParamObject) return;
 
-            this.gdId = initParamObject.gdId;
-            this.paymentDeadline = ToolsDate.dateJsToSql(
-                initParamObject.paymentDeadline
-            );
-            //tymczasowa linijka do usunięcia po nadpisaniu złych danych
-            this.paymentDeadline = this.countPaymentDeadline();
-            this._lastUpdated = initParamObject._lastUpdated;
+        this.id = initParamObject.id;
+        this.number = initParamObject.number;
+        this.description = initParamObject.description;
 
-            this._entity = initParamObject._entity;
-            if (initParamObject._entity)
-                this.entityId = initParamObject._entity.id;
+        this.gdId = initParamObject.gdId;
+        this._lastUpdated = initParamObject._lastUpdated;
 
-            this._editor = initParamObject._editor;
-            if (initParamObject._editor)
-                this.editorId = initParamObject._editor.id;
-            if (initParamObject._owner) {
-                this._owner = initParamObject._owner;
-                this.ownerId = initParamObject._owner.id;
-                this._owner._nameSurnameEmail =
-                    this._owner.name +
-                    " " +
-                    this._owner.surname +
-                    " " +
-                    this._owner.email;
-            }
-            this._contract = initParamObject._contract;
-            this.contractId = this._contract.id;
-            this._items = initParamObject._items;
+        this._entity = initParamObject._entity;
+        if (initParamObject._entity)
+            this.entityId = initParamObject._entity.id;
 
-            this.setGdIdAndUrl(initParamObject.gdId);
+        this._editor = initParamObject._editor;
+        if (initParamObject._editor)
+            this.editorId = initParamObject._editor.id;
+        if (initParamObject._owner) {
+            this._owner = initParamObject._owner;
+            this.ownerId = initParamObject._owner.id;
+            this._owner._nameSurnameEmail =
+                this._owner.name +
+                " " +
+                this._owner.surname +
+                " " +
+                this._owner.email;
         }
+        this._totalNetValue = initParamObject._totalNetValue as number | undefined;
+        this._contract = initParamObject._contract;
+        this.contractId = this._contract.id;
+        this._items = initParamObject._items;
+
+        this.setGdIdAndUrl(initParamObject.gdId);
+
     }
 
     setGdIdAndUrl(gdId: string | undefined | null) {
@@ -83,9 +78,37 @@ export default class Invoice extends BusinessObject {
     };
 
     countPaymentDeadline() {
-        if (this.sentDate) {
-            var payDay: Date = ToolsDate.addDays(this.sentDate, this.daysToPay);
-            return ToolsDate.dateJsToSql(payDay);
+        if (!this.sentDate) return null;
+        const payDay: Date = ToolsDate.addDays(this.sentDate, this.daysToPay);
+        return ToolsDate.dateJsToSql(payDay);
+
+    }
+    /**ustawia parametry faktury w zależności od  statusu */
+    initByStatus(status: string, initParamObject: {
+        sentDate?: string | null;
+        paymentDeadline?: string | null;
+    }) {
+
+        if (typeof initParamObject.sentDate === 'string') {
+            this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
+            this.paymentDeadline = this.countPaymentDeadline();
+        }
+        this.status = status;
+        //zeruj daty w zależności od statusu
+        switch (status) {
+            case Setup.invoiceStatusNames[0]: //Na później
+            case Setup.invoiceStatusNames[1]: //Do zrobienia
+                this.sentDate = null;
+                this.paymentDeadline = null;
+                break;
+            case Setup.invoiceStatusNames[2]: //Zrobiona
+                this.sentDate = null;
+                this.paymentDeadline = null;
+                break;
+            case Setup.invoiceStatusNames[5]: //Do korekty
+            case Setup.invoiceStatusNames[6]: //Wycofana
+                this.paymentDeadline = null;
+                break;
         }
     }
 }
