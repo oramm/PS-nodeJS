@@ -98,35 +98,35 @@ export default class Setup {
         }
     }
 
-    static invoiceStatusNames = [
-        'Na później',
-        'Do zrobienia',
-        'Zrobiona',
-        'Wysłana',
-        'Zapłacona',
-        'Do korekty',
-        'Wycofana'
-    ];
+    static InvoiceStatus = {
+        LATER: 'Na później',
+        TO_DO: 'Do zrobienia',
+        DONE: 'Zrobiona',
+        SENT: 'Wysłana',
+        PAID: 'Zapłacona',
+        TO_CORRECT: 'Do korekty',
+        WITHDRAWN: 'Wycofana',
+    };
 
-    static projectStatusNames = [
-        'Nie rozpoczęty',
-        'W trakcie',
-        'Zakończony'
-    ];
+    static ProjectStatus = {
+        NOT_STARTED: 'Nie rozpoczęty',
+        IN_PROGRESS: 'W trakcie',
+        FINISHED: 'Zakończony',
+    };
 
-    static contractStatusNames = [
-        'Nie rozpoczęty',
-        'W trakcie',
-        'Zakończony',
-        'Archiwalny'
-    ];
+    static ContractStatus = {
+        NOT_STARTED: 'Nie rozpoczęty',
+        IN_PROGRESS: 'W trakcie',
+        FINISHED: 'Zakończony',
+        ARCHIVAL: 'Archiwalny',
+    };
 
-    static taskStatusNames = [
-        'Backlog',
-        'Nie rozpoczęty',
-        'W trakcie',
-        'Do poprawy',
-        'Oczekiwanie na odpowiedź',
-        'Zrobione'
-    ];
+    static TaskStatus = {
+        BACKLOG: 'Backlog',
+        NOT_STARTED: 'Nie rozpoczęty',
+        IN_PROGRESS: 'W trakcie',
+        TO_CORRECT: 'Do poprawy',
+        AWAITING_RESPONSE: 'Oczekiwanie na odpowiedź',
+        DONE: 'Zrobione',
+    };
 }

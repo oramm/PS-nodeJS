@@ -6,7 +6,7 @@ import Setup from "../setup/Setup";
 
 export default class Invoice extends BusinessObject {
     id?: number;
-    number?: string;
+    number?: string | null;
     _entity: any;
     entityId?: number;
     description?: string;
@@ -35,15 +35,21 @@ export default class Invoice extends BusinessObject {
         console.log('Invoice constructor initParamObject', initParamObject.status, initParamObject.issueDate, initParamObject.sentDate, initParamObject.paymentDeadline);
         this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate) as string;
         this.initByStatus(initParamObject.status, initParamObject);
-        console.log('Invoice constructor initParamObject', this.issueDate, this.sentDate, this.paymentDeadline);
+        console.log('Invoice constructor initParamObject',
+            this.status,
+            this.issueDate,
+            this.sentDate,
+            this.paymentDeadline,
+            this.number,
+            this.gdId,
+            this._documentOpenUrl,
+        );
 
         if (!initParamObject) return;
 
         this.id = initParamObject.id;
-        this.number = initParamObject.number;
-        this.description = initParamObject.description;
 
-        this.gdId = initParamObject.gdId;
+        this.description = initParamObject.description;
         this._lastUpdated = initParamObject._lastUpdated;
 
         this._entity = initParamObject._entity;
@@ -67,9 +73,6 @@ export default class Invoice extends BusinessObject {
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
         this._items = initParamObject._items;
-
-        this.setGdIdAndUrl(initParamObject.gdId);
-
     }
 
     setGdIdAndUrl(gdId: string | undefined | null) {
@@ -87,28 +90,38 @@ export default class Invoice extends BusinessObject {
     initByStatus(status: string, initParamObject: {
         sentDate?: string | null;
         paymentDeadline?: string | null;
+        number?: string | null;
+        gdId?: string | null;
     }) {
 
         if (typeof initParamObject.sentDate === 'string') {
             this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
             this.paymentDeadline = this.countPaymentDeadline();
         }
+        this.number = initParamObject.number;
+        this.gdId = initParamObject.gdId;
+
         this.status = status;
-        //zeruj daty w zależności od statusu
+        //zeruj pola w zależności od statusu
         switch (status) {
-            case Setup.invoiceStatusNames[0]: //Na później
-            case Setup.invoiceStatusNames[1]: //Do zrobienia
+            case Setup.InvoiceStatus.LATER:
+            case Setup.InvoiceStatus.TO_DO:
+                this.gdId = null;
+                this._documentOpenUrl = undefined;
+                this.number = undefined;
                 this.sentDate = null;
                 this.paymentDeadline = null;
                 break;
-            case Setup.invoiceStatusNames[2]: //Zrobiona
+            case Setup.InvoiceStatus.DONE:
                 this.sentDate = null;
                 this.paymentDeadline = null;
                 break;
-            case Setup.invoiceStatusNames[5]: //Do korekty
-            case Setup.invoiceStatusNames[6]: //Wycofana
+            case Setup.InvoiceStatus.TO_CORRECT:
+            case Setup.InvoiceStatus.WITHDRAWN:
                 this.paymentDeadline = null;
                 break;
         }
+
+        this.setGdIdAndUrl(initParamObject.gdId);
     }
 }
