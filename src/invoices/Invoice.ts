@@ -104,7 +104,7 @@ export default class Invoice extends BusinessObject {
         this.status = status;
         //zeruj pola w zależności od statusu
         switch (status) {
-            case Setup.InvoiceStatus.LATER:
+            case Setup.InvoiceStatus.FOR_LATER:
             case Setup.InvoiceStatus.TO_DO:
                 this.gdId = null;
                 this._documentOpenUrl = undefined;

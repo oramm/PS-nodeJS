@@ -99,7 +99,7 @@ export default class Setup {
     }
 
     static InvoiceStatus = {
-        LATER: 'Na później',
+        FOR_LATER: 'Na później',
         TO_DO: 'Do zrobienia',
         DONE: 'Zrobiona',
         SENT: 'Wysłana',
