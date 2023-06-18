@@ -32,18 +32,8 @@ export default class Invoice extends BusinessObject {
     constructor(initParamObject: any) {
         super({ _dbTableName: 'Invoices' })
         this.daysToPay = initParamObject.daysToPay;
-        console.log('Invoice constructor initParamObject', initParamObject.status, initParamObject.issueDate, initParamObject.sentDate, initParamObject.paymentDeadline);
         this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate) as string;
         this.initByStatus(initParamObject.status, initParamObject);
-        console.log('Invoice constructor initParamObject',
-            this.status,
-            this.issueDate,
-            this.sentDate,
-            this.paymentDeadline,
-            this.number,
-            this.gdId,
-            this._documentOpenUrl,
-        );
 
         if (!initParamObject) return;
 
@@ -94,7 +84,7 @@ export default class Invoice extends BusinessObject {
         gdId?: string | null;
     }) {
 
-        if (typeof initParamObject.sentDate === 'string') {
+        if (initParamObject.sentDate) {
             this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
             this.paymentDeadline = this.countPaymentDeadline();
         }
