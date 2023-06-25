@@ -4,6 +4,7 @@ import Project from "./Project";
 import Entity from '../entities/Entity';
 import ProjectEntity from './ProjectEntity';
 import { UserData } from '../setup/GAuth2/sessionTypes';
+import Setup from '../setup/Setup';
 
 
 export default class ProjectsController {
@@ -26,9 +27,16 @@ export default class ProjectsController {
         const projectOurIdCondition = searchParams.ourId
             ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
             : '1';
-        const statusIdCondition = searchParams.status
-            ? mysql.format('Projects.Status = ?', [searchParams.status])
-            : '1';
+
+        let status: string | string[] | undefined = searchParams.status;
+        if (searchParams.status === 'ACTIVE') {
+            status = [Setup.ProjectStatuses.NOT_STARTED, Setup.ProjectStatuses.IN_PROGRESS];
+        }
+        const statusCondition = Array.isArray(status)
+            ? mysql.format('Projects.Status IN (?)', [status])
+            : searchParams.status
+                ? mysql.format('Projects.Status = ?', [status])
+                : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
         //const currentUserSystemRoleName = searchParams.userData.systemRoleName;
@@ -48,6 +56,7 @@ export default class ProjectsController {
             WHERE ${projectIdCondition}
             AND ${projectOurIdCondition}
             AND ${searchTextCondition}
+            AND ${statusCondition}
             ORDER BY Projects.OurId ASC`;
 
         else
@@ -73,11 +82,10 @@ export default class ProjectsController {
                 JOIN Roles ON Roles.ProjectOurId = Projects.OurId
                 WHERE ${projectIdCondition}
                     AND ${projectOurIdCondition}
-                    AND ${statusIdCondition}
+                    AND ${statusCondition}
                     AND ${searchTextCondition}
                     AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${searchParams.systemEmail}")
                 GROUP BY Projects.OurId ASC`;
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
     }

@@ -108,7 +108,7 @@ export default class Setup {
         WITHDRAWN: 'Wycofana',
     };
 
-    static ProjectStatus = {
+    static ProjectStatuses = {
         NOT_STARTED: 'Nie rozpoczęty',
         IN_PROGRESS: 'W trakcie',
         FINISHED: 'Zakończony',

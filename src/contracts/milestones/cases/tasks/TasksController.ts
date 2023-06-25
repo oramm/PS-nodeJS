@@ -25,7 +25,6 @@ export default class TasksController {
         searchText?: string,
         status?: string
     } = {}) {
-        console.log('TasksController.getTasksList', searchParams);
         const projectOurId = searchParams._project?.ourId;
         const projectCondition = projectOurId
             ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
