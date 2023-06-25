@@ -11,7 +11,6 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
-import MilestonesController from './milestones/MilestonesController';
 
 export default abstract class Contract extends BusinessObject {
     id?: number;

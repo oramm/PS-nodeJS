@@ -3,7 +3,6 @@ import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import Contract from './Contract';
 import ContractOur from './ContractOur';
-import { google } from 'googleapis';
 import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ToolsSheets from '../tools/ToolsSheets';

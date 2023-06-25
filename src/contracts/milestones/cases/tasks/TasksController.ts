@@ -7,6 +7,8 @@ import Milestone from '../../Milestone';
 import Person from '../../../../persons/Person';
 import Project from '../../../../projects/Project';
 import Contract from '../../../Contract';
+import ContractOur from '../../../ContractOur';
+import ContractOther from '../../../ContractOther';
 
 export default class TasksController {
     static async getTasksList(searchParams: {
@@ -76,6 +78,7 @@ export default class TasksController {
               CaseTypes.MilestoneTypeId,
               CaseTypes.FolderNumber AS CaseTypeFolderNumber,
               Milestones.Id AS MilestoneId,
+              Milestones.Name AS MilestoneName,
               Milestones.ContractId,
               Milestones.GdFolderId AS MilestoneGdFolderId,
               MilestoneTypes.Id AS MilestoneTypeId,
@@ -85,6 +88,10 @@ export default class TasksController {
               Contracts.Id AS ContractId,
               Contracts.Alias AS ContractAlias,
               Contracts.Number AS ContractNumber,
+              ContractTypes.Name AS ContractTypeName,
+              ContractManagers.Name AS ContractManagerName, 
+              ContractManagers.Surname AS ContractManagerSurname, 
+              ContractManagers.Email AS ContractManagerEmail, 
               Owners.Name AS OwnerName,
               Owners.Surname AS OwnerSurname,
               Owners.Email AS OwnerEmail
@@ -94,7 +101,9 @@ export default class TasksController {
             JOIN Milestones ON Milestones.Id=Cases.MilestoneId
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
+            LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+            LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
             WHERE ${contractCondition} 
@@ -132,8 +141,8 @@ export default class TasksController {
         for (const row of result) {
             const item = new Task({
                 id: row.Id,
-                name: row.TaskName,
-                description: row.TaskDescription,
+                name: ToolsDb.sqlToString(row.TaskName),
+                description: ToolsDb.sqlToString(row.TaskDescription),
                 deadline: row.TaskDeadline,
                 status: row.TaskStatus,
                 _owner: {
@@ -144,7 +153,7 @@ export default class TasksController {
                 },
                 _parent: new Case({
                     id: row.CaseId,
-                    name: row.CaseName,
+                    name: ToolsDb.sqlToString(row.CaseName),
                     gdFolderId: row.CaseGdFolderId,
                     _type: {
                         id: row.CaseTypeId,
@@ -156,16 +165,27 @@ export default class TasksController {
                     },
                     _parent: new Milestone({
                         id: row.MilestoneId,
+                        name: row.MilestoneName,
                         _type: {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
                             _folderNumber: row.MilestoneTypeFolderNumber,
                         },
-                        _parent: {
+                        _parent: { //Contract
+                            id: row.ContractId,
                             ourId: row.ContractOurId,
                             number: row.ContractNumber,
-                            alias: row.ContractAlias
-                        }
+                            alias: row.ContractAlias,
+                            _type: {
+                                name: row.ContractTypeName
+                            },
+                            _manager: row.ContractManagerEmail ? {
+                                name: row.ContractManagerName,
+                                surname: row.ContractManagerSurname,
+                                email: row.ContractManagerEmail,
+                            }
+                                : undefined,
+                        },
                     }),
                 })
             });

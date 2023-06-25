@@ -49,9 +49,9 @@ export default class Case extends BusinessObject {
                 this.typeId = initParamObject._type.id;
 
             this.setDisplayNumber(); //ustawia też this._folderName - uruchamia this.setGdFolderName();
-            this._typeFolderNumber_TypeName_Number_Name = this._type.folderNumber + ' ' + this._type.name;
+            this._typeFolderNumber_TypeName_Number_Name = `${this._type.folderNumber} ${this._type.name}`;
             if (!this._type.isUniquePerMilestone)
-                this._typeFolderNumber_TypeName_Number_Name += ' | ' + this._displayNumber + ' ' + this.name;
+                this._typeFolderNumber_TypeName_Number_Name += ` | ${this._displayNumber} ${this.name || ''}`;
         }
         if (initParamObject.gdFolderId) {
             this.setGdFolderIdAndUrl(initParamObject.gdFolderId);
@@ -75,7 +75,7 @@ export default class Case extends BusinessObject {
 
     //ustawia numer do wyświetlenia w sytemie na podstawie danych z bazy
     setDisplayNumber() {
-        var _displayNumber;
+        let _displayNumber;
         if (!this.number)
             _displayNumber = '00'
         else if (this.number < 10)
