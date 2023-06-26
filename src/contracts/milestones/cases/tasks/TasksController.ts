@@ -9,6 +9,7 @@ import Project from '../../../../projects/Project';
 import Contract from '../../../Contract';
 import ContractOur from '../../../ContractOur';
 import ContractOther from '../../../ContractOther';
+import ToolsGd from '../../../../tools/ToolsGd';
 
 export default class TasksController {
     static async getTasksList(searchParams: {
@@ -87,6 +88,8 @@ export default class TasksController {
               Contracts.Id AS ContractId,
               Contracts.Alias AS ContractAlias,
               Contracts.Number AS ContractNumber,
+              Contracts.Status AS ContractStatus,
+              Contracts.GdFolderId AS ContractGdFolderId,
               ContractTypes.Name AS ContractTypeName,
               ContractManagers.Name AS ContractManagerName, 
               ContractManagers.Surname AS ContractManagerSurname, 
@@ -165,6 +168,7 @@ export default class TasksController {
                     _parent: new Milestone({
                         id: row.MilestoneId,
                         name: row.MilestoneName,
+                        gdFolderId: row.MilestoneGdFolderId,
                         _type: {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
@@ -174,6 +178,9 @@ export default class TasksController {
                             id: row.ContractId,
                             ourId: row.ContractOurId,
                             number: row.ContractNumber,
+                            status: row.ContractStatus,
+                            gdFolderId: row.ContractGdFolderId,
+                            _gdFolderUrl: ToolsGd.createGdFolderUrl(row.ContractGdFolderId),
                             alias: row.ContractAlias,
                             _type: {
                                 name: row.ContractTypeName
