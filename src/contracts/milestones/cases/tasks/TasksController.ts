@@ -10,6 +10,7 @@ import Contract from '../../../Contract';
 import ContractOur from '../../../ContractOur';
 import ContractOther from '../../../ContractOther';
 import ToolsGd from '../../../../tools/ToolsGd';
+import ToolsDate from '../../../../tools/ToolsDate';
 
 export default class TasksController {
     static async getTasksList(searchParams: {
@@ -88,12 +89,20 @@ export default class TasksController {
               Contracts.Id AS ContractId,
               Contracts.Alias AS ContractAlias,
               Contracts.Number AS ContractNumber,
+              Contracts.Name AS ContractName,
+              Contracts.Comment AS ContractComment,
+              Contracts.StartDate AS ContractStartDate,
+              Contracts.EndDate AS ContractEndDate,
+              Contracts.Value AS ContractValue,
               Contracts.Status AS ContractStatus,
               Contracts.GdFolderId AS ContractGdFolderId,
               ContractTypes.Name AS ContractTypeName,
               ContractManagers.Name AS ContractManagerName, 
               ContractManagers.Surname AS ContractManagerSurname, 
-              ContractManagers.Email AS ContractManagerEmail, 
+              ContractManagers.Email AS ContractManagerEmail,
+              ContractAdmins.Name AS ContractAdminName,
+              ContractAdmins.Surname AS ContractAdminSurname,
+              ContractAdmins.Email AS ContractAdminEmail,
               Owners.Name AS OwnerName,
               Owners.Surname AS OwnerSurname,
               Owners.Email AS OwnerEmail
@@ -106,6 +115,7 @@ export default class TasksController {
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
+            LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
             WHERE ${contractCondition} 
@@ -161,7 +171,7 @@ export default class TasksController {
                         id: row.CaseTypeId,
                         name: row.CaseTypeName,
                         isDefault: row.IsDefault,
-                        isUniquePerMilestone: row.isUniquePerMilestone,
+                        isUniquePerMilestone: row.IsUniquePerMilestone,
                         milestoneTypeId: row.MilestoneTypeId,
                         folderNumber: row.CaseTypeFolderNumber,
                     },
@@ -178,6 +188,11 @@ export default class TasksController {
                             id: row.ContractId,
                             ourId: row.ContractOurId,
                             number: row.ContractNumber,
+                            name: ToolsDb.sqlToString(row.ContractName),
+                            comment: ToolsDb.sqlToString(row.ContractComment),
+                            startDate: ToolsDate.dateJsToSql(row.ContractStartDate),
+                            endDate: ToolsDate.dateJsToSql(row.ContractEndDate),
+                            value: row.ContractValue,
                             status: row.ContractStatus,
                             gdFolderId: row.ContractGdFolderId,
                             _gdFolderUrl: ToolsGd.createGdFolderUrl(row.ContractGdFolderId),
@@ -189,6 +204,12 @@ export default class TasksController {
                                 name: row.ContractManagerName,
                                 surname: row.ContractManagerSurname,
                                 email: row.ContractManagerEmail,
+                            }
+                                : undefined,
+                            _admin: row.ContractAdminEmail ? {
+                                name: row.ContractAdminName,
+                                surname: row.ContractAdminSurname,
+                                email: row.ContractAdminEmail,
                             }
                                 : undefined,
                         },

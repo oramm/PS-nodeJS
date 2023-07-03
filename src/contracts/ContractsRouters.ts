@@ -53,7 +53,8 @@ app.post('/contractReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
         let item: ContractOur | ContractOther;
-        req.parsedBody.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
+        if (typeof req.parsedBody.value === "string")
+            req.body.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
         console.log('req.parsedBody', req.parsedBody);
         if (req.parsedBody._type.isOur) {
             item = new ContractOur(req.parsedBody);
