@@ -96,109 +96,112 @@ export default class ContractOur extends Contract {
     }
     /** wstawia wiersz nagłówka kontratu - bez zadań */
     async addInScrum(auth: OAuth2Client) {
-        if (await this.shouldBeInScrum()) {
-            await ToolsSheets.insertRows(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
+        if (!await this.shouldBeInScrum())
+            return;
+
+        await ToolsSheets.insertRows(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            sheetId: Setup.ScrumSheet.CurrentSprint.id,
+            startIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow - 1,
+            endIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
+        });
+
+        await ToolsSheets.copyPasteRows(auth, {
+            source: {
                 sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                startIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow - 1,
-                endIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
-            });
+                startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
+                endRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow + 1,
+            },
+            destination: {
+                sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow - 1,
+                endRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
+            },
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            pasteType: 'PASTE_FORMAT'
+        })
 
-            await ToolsSheets.copyPasteRows(auth, {
-                source: {
-                    sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                    startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
-                    endRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow + 1,
-                },
-                destination: {
-                    sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                    startRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow - 1,
-                    endRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
-                },
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                pasteType: 'PASTE_FORMAT'
-            })
+        const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            rangeA1: Setup.ScrumSheet.CurrentSprint.name
+        })).values;
 
-            const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.CurrentSprint.name
-            })).values;
+        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
+        const ourId_Alias = `${this.ourId} [${this.alias || ''}]`.trim();
 
-            const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
-            const ourId_Alias = `${this.ourId} [${this.alias || ''}]`.trim();
+        await ToolsSheets.updateValues(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow, projectIdColNumber)}`,
+            values: [[this.projectOurId,
+                0,
+            this.ourId, 0, 0, 0, 0,
+            (this._manager) ? this._manager.id : '',
+                '{"contractHeader":true}',
+            `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? `${this._manager.name} ${this._manager.surname}` : ''}")`,
+                '', '', '', 'd', 'd', 'd', 'd', 'd'
+            ]]
+        });
+        await ScrumSheet.CurrentSprint.sortProjects(auth);
 
-            await ToolsSheets.updateValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow, projectIdColNumber)}`,
-                values: [[this.projectOurId,
-                    0,
-                this.ourId, 0, 0, 0, 0,
-                (this._manager) ? this._manager.id : '',
-                    '{"contractHeader":true}',
-                `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? `${this._manager.name} ${this._manager.surname}` : ''}")`,
-                    '', '', '', 'd', 'd', 'd', 'd', 'd'
-                ]]
-            });
-            await ScrumSheet.CurrentSprint.sortProjects(auth);
-        }
     }
     /**zmienia dane w nagłówku kontraktu i odnosniki */
     async editInScrum(auth: OAuth2Client) {
-        if (await this.shouldBeInScrum()) {
-            console.log('Edytuję dane w Scrum', this.ourId);
-            const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.CurrentSprint.name
-            })).values;
-            const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
-            const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
-            //zmień dane w nagłowku
-            const alias = this.alias ? `[${this.alias}] ` : ''
-            const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
-            const headerCaption = this.ourId + ' ' + alias + managerName;
-
-            const headerRowNumber = await ScrumSheet.CurrentSprint.editRowsByColValue(
-                auth, {
-                searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                valueToFind: this.ourId,
-                firstColumnName: Setup.ScrumSheet.CurrentSprint.projectIdColName,
-                rowValues: [
-                    this.projectOurId,
-                    0,
-                    this.ourId, 0, 0, 0, 0,
-                    this._manager ? <number>this._manager.id : '',
-                    '{"contractHeader":true}',
-                    `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
-                    '', '', '', 'd', 'd', 'd', 'd', 'd'
-                ],
-                firstRowOnly: true
-            })
-
-            if (headerRowNumber) {
-                ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
-
-                ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
-                    searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                    valueToFind: <number>this.id,
-                    firstColumnName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                    rowValues: [this.ourId],
-                    majorDimension: 'COLUMNS'
-
-                })
-            } else {
-                console.log('Kontraktu nie było w Scrum - dodaję go na nowo ', this.ourId);
-                await this.addInScrum(auth);
-                await this.addExistingTasksInScrum(auth);
-
-                await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
-                await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
-
-                await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-                await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
-
-            }
-        } else
+        if (!await this.shouldBeInScrum()) {
             this.deleteFromScrum(auth);
+            return;
+        }
+        console.log('Edytuję dane w Scrum', this.ourId);
+        const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            rangeA1: Setup.ScrumSheet.CurrentSprint.name
+        })).values;
+        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
+        const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+        //zmień dane w nagłowku
+        const alias = this.alias ? `[${this.alias}] ` : ''
+        const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
+        const headerCaption = this.ourId + ' ' + alias + managerName;
+
+        const headerRowNumber = await ScrumSheet.CurrentSprint.editRowsByColValue(
+            auth, {
+            searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+            valueToFind: this.ourId,
+            firstColumnName: Setup.ScrumSheet.CurrentSprint.projectIdColName,
+            rowValues: [
+                this.projectOurId,
+                0,
+                this.ourId, 0, 0, 0, 0,
+                this._manager ? <number>this._manager.id : '',
+                '{"contractHeader":true}',
+                `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
+                '', '', '', 'd', 'd', 'd', 'd', 'd'
+            ],
+            firstRowOnly: true
+        })
+
+        if (headerRowNumber) {
+            ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+
+            ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+                searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                valueToFind: <number>this.id,
+                firstColumnName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                rowValues: [this.ourId],
+                majorDimension: 'COLUMNS'
+
+            })
+        } else {
+            console.log('Kontraktu nie było w Scrum - dodaję go na nowo ', this.ourId);
+            await this.addInScrum(auth);
+            await this.addExistingTasksInScrum(auth);
+
+            await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
+
+            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+
+        }
     }
 
     async deleteFromScrum(auth: OAuth2Client) {

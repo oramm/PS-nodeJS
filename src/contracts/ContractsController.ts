@@ -119,7 +119,7 @@ export default class ContractsController {
             AND ${searchTextCondition}
             AND ${typeCondition}
             AND ${typesToIncudeCondition}
-          ORDER BY OurContractsData.OurId DESC, mainContracts.Number`;
+          ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
         //console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

@@ -11,6 +11,7 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
+import { drive_v3 } from 'googleapis';
 
 export default abstract class Contract extends BusinessObject {
     id?: number;
@@ -109,19 +110,18 @@ export default abstract class Contract extends BusinessObject {
             throw error;
         }
     }
+    /**batch dla edycji kontraktów */
     async editHandler(auth: OAuth2Client) {
         console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
-        this.editFolder(auth).then(() => {
-            console.log('Contract folder edited');
-        });
-        this.editInScrum(auth).then(() => {
-            console.log('Contract edited in scrum');
-        });
-        this.editInDb().then(() => {
-            console.log('Contract edited in db');
-        });
+        const promises = [
+            this.editFolder(auth).then(() => console.log('Contract folder edited')),
+            this.editInScrum(auth).then(() => console.log('Contract edited in scrum')),
+            this.editInDb().then(() => console.log('Contract edited in db'))
+        ];
+        await Promise.all(promises);
         console.groupEnd();
     }
+
 
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
@@ -132,9 +132,12 @@ export default abstract class Contract extends BusinessObject {
         if (this._employers.length == 0)
             this._employers = this._parent._employers;
     }
+    async setContractRootFolder(auth: OAuth2Client) {
+        return await ToolsGd.setFolder(auth, { parentId: <string>this._parent?.gdFolderId, name: <string>this._folderName });
+    }
 
     async createFolders(auth: OAuth2Client) {
-        const folder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent?.gdFolderId, name: <string>this._folderName })
+        const folder = await this.setContractRootFolder(auth);
         this.setGdFolderIdAndUrl(folder.id as string);
         const meetingNotesFolder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent.gdFolderId, name: 'Notatki ze spotkań' });
         this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
@@ -216,12 +219,19 @@ export default abstract class Contract extends BusinessObject {
 
     private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-        const promises = [];
-        for (const milestone of milestones)
-            promises.push(milestone.addInDb(conn, true));
-        await Promise.all(promises)
-        await conn.commit();
+        try {
+            await conn.beginTransaction();
+            const promises = [];
+            for (const milestone of milestones)
+                promises.push(milestone.addInDb(conn, true));
+            await Promise.all(promises)
+            await conn.commit();
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            if (!externalConn) conn.release();
+        }
     }
 
     async addInDb() {

@@ -272,15 +272,24 @@ export default class Case extends BusinessObject {
 
     async editInDb() {
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
+        try {
+            await conn.beginTransaction();
+            const promises = [];
+            promises.push(super.editInDb(conn, true));
+            if (this._processesInstances && this._processesInstances.length > 0)
+                promises.push(this.editProcessInstancesInDb(conn, true));
 
-        const res = await Promise.all([
-            super.editInDb(conn, true),
-            this.editProcessInstancesInDb(conn, true)
-        ]);
-        await conn.commit();
-        return res[0];
+            const res = await Promise.all(promises);
+            await conn.commit();
+            return res[0];
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
     }
+
     /**
      * Dodaje sprawę do arkusza danych i domyślne zadania do scrumboarda
      */

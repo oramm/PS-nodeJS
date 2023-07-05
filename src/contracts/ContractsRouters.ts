@@ -9,7 +9,6 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
         let isArchived = false;
-        console.log('req.parsedQuery', req.parsedQuery);
         if (typeof req.parsedQuery.isArchived === 'string')
             isArchived = req.parsedQuery.isArchived === 'true';
         const result = await ContractsController.getContractsList(req.parsedQuery);
@@ -76,7 +75,7 @@ app.post('/contractReact', async (req: Request, res: Response) => {
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const item = (req.body._type.isOur) ? new ContractOur(req.body) : new ContractOther(req.body);
+        const item = (req.body.ourId || req.body._type.isOur) ? new ContractOur(req.body) : new ContractOther(req.body);
         if (!item.id) throw new Error(`Próba edycji kontraktu bez Id`);
 
         await Promise.all([
@@ -90,7 +89,6 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
             res.status(500).send({ errorMessage: error.message });
     }
 });
-
 
 app.put('/sortProjects', async (req: Request, res: Response) => {
     try {

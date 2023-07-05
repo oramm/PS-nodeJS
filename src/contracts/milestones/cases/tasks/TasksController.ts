@@ -114,6 +114,7 @@ export default class TasksController {
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+            LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=Contracts.OurIdRelated)
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
@@ -212,6 +213,7 @@ export default class TasksController {
                                 email: row.ContractAdminEmail,
                             }
                                 : undefined,
+
                         },
                     }),
                 })

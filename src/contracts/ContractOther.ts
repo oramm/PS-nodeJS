@@ -8,6 +8,7 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ToolsSheets from '../tools/ToolsSheets';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
+import { drive_v3 } from 'googleapis';
 
 export default class ContractOther extends Contract {
     _ourContract?: ContractOur;
@@ -48,6 +49,12 @@ export default class ContractOther extends Contract {
         super.setEntitiesFromParent();
         if (this._engineers.length == 0)
             this._engineers = this._parent._engineers;
+    }
+    async setContractRootFolder(auth: OAuth2Client): Promise<drive_v3.Schema$File> {
+        if (!this._folderName) throw new Error('Folder name not set');
+        if (!this._ourContract)
+            return super.setContractRootFolder(auth);
+        return await ToolsGd.setFolder(auth, { parentId: <string>this._ourContract?.gdFolderId, name: this._folderName });
     }
 
     async createFolders(auth: OAuth2Client) {
