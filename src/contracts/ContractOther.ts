@@ -74,7 +74,7 @@ export default class ContractOther extends Contract {
 
     async editInScrum(auth: OAuth2Client) {
         if (!await this.shouldBeInScrum()) {
-            this.deleteFromScrum(auth);
+            this.deleteFromScrum(auth).then(() => { console.log('ContractOther deleted From Scrum') });
             return;
         }
 
@@ -86,14 +86,16 @@ export default class ContractOther extends Contract {
 
         let firstRowNumber = <number>Tools.findFirstInRange(<number>this.id, currentSprintValues, contractIdColIndex) + 1;
         if (firstRowNumber) {
-            ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+            await ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
                 searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
                 valueToFind: <number>this.id,
                 firstColumnName: Setup.ScrumSheet.CurrentSprint.contractNumberColName,
                 rowValues: [<string>this._ourIdOrNumber_Alias],
                 //majorDimension: 'COLUMNS'
             });
+            console.log('ContractOther edited In Scrum');
         } else {
+            console.log('ContractOther not found in Scrum - adding tasks');
             await this.addExistingTasksInScrum(auth);
             //sprawdź czy jest macierzysta umowa ENVI dodana do Scruma
             const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);

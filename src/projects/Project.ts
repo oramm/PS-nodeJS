@@ -224,23 +224,39 @@ export default class Project extends BusinessObject {
 
     async addInDb() {
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-        let project = await super.addInDb(conn, true);
-        await this.addNewProjectEmployersAssociationsInDb(conn, true);
-        await this.addNewProjectEngineersAssociationsInDb(conn, true);
-        await conn.commit();
-        return project;
+        try {
+            await conn.beginTransaction();
+            const project = await super.addInDb(conn, true);
+            await this.addNewProjectEmployersAssociationsInDb(conn, true);
+            await this.addNewProjectEngineersAssociationsInDb(conn, true);
+            await conn.commit();
+            return project;
+        } catch (error) {
+            console.error('An error occurred:', error);
+            await conn.rollback();
+            throw error;
+        } finally {
+            conn.release();
+        }
     }
 
     async editInDb() {
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-
-        const res = await Promise.all([
-            super.editInDb(conn, true),
-            this.editProjectEntitiesAssociationsInDb(conn, true)
-        ]);
-        await conn.commit();
-        return res[0];
+        try {
+            await conn.beginTransaction();
+            const res = await Promise.all([
+                super.editInDb(conn, true),
+                this.editProjectEntitiesAssociationsInDb(conn, true)
+            ]);
+            await conn.commit();
+            return res[0];
+        } catch (error) {
+            console.error('An error occurred:', error);
+            await conn.rollback();
+            throw error;
+        } finally {
+            conn.release();
+        }
     }
+
 }

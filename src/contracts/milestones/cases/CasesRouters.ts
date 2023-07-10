@@ -2,8 +2,9 @@ import CasesController from './CasesController'
 import { app } from '../../../index';
 import Case from './Case';
 import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
+import { Request, Response } from 'express';
 
-app.get('/cases', async (req: any, res: any) => {
+app.get('/cases', async (req: Request, res: Response) => {
     try {
         const result = await CasesController.getCasesList(req.query);
         res.send(result);
@@ -15,7 +16,7 @@ app.get('/cases', async (req: any, res: any) => {
     }
 });
 
-app.get('/case/:id', async (req: any, res: any) => {
+app.get('/case/:id', async (req: Request, res: Response) => {
     try {
         const result = await CasesController.getCasesList(req.params);
         res.send(result);
@@ -26,22 +27,11 @@ app.get('/case/:id', async (req: any, res: any) => {
     }
 });
 
-app.post('/case', async (req: any, res: any) => {
+app.post('/case', async (req: Request, res: Response) => {
     try {
-        let caseItem = new Case(req.body);
-        let caseData;
-        //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Cases
-        await ToolsGapi.gapiReguestHandler(req, res, caseItem.createFolder, undefined, caseItem);
-        try {
-            caseData = await caseItem.addInDb();
-        } catch (err) {
-            ToolsGapi.gapiReguestHandler(req, res, caseItem.deleteFolder, undefined, caseItem);
-            throw err;
-        }
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, caseItem.editFolder, undefined, caseItem),
-            ToolsGapi.gapiReguestHandler(req, res, caseItem.addInScrum, { defaultTasks: caseData?.defaultTasksInDb }, caseItem),
-        ]);
+        let caseItem = new Case({ ...req.body, _parent: req.body._milestone });
+        await ToolsGapi.gapiReguestHandler(req, res, caseItem.addNewController, undefined, caseItem);
+
         res.send(caseItem);
     } catch (error) {
 
@@ -51,7 +41,7 @@ app.post('/case', async (req: any, res: any) => {
     };
 });
 
-app.put('/case/:id', async (req: any, res: any) => {
+app.put('/case/:id', async (req: Request, res: Response) => {
     try {
         let item = new Case(req.body);
         if (item._wasChangedToUniquePerMilestone)
@@ -68,7 +58,7 @@ app.put('/case/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/case/:id', async (req: any, res: any) => {
+app.delete('/case/:id', async (req: Request, res: Response) => {
     try {
         let item = new Case(req.body);
         console.log('delete');

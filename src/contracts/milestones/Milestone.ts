@@ -173,10 +173,25 @@ export default class Milestone extends BusinessObject {
     private async addDefaultCasesInDb(caseItems: Case[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const caseData = [];
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        await conn.beginTransaction();
-        for (const caseItem of caseItems)
-            caseData.push(caseItem.addInDb(conn, true));
-        await conn.commit();
+        try {
+            await conn.beginTransaction();
+
+            for (const caseItem of caseItems) {
+                caseData.push(caseItem.addInDb(conn, true));
+            }
+
+            await conn.commit();
+        } catch (error) {
+            console.error('An error occurred:', error);
+            if (!externalConn) {
+                await conn.rollback();
+            }
+            throw error;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+            }
+        }
         return await Promise.all(caseData)
     }
 

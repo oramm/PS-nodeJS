@@ -72,12 +72,13 @@ export default class ToolsDb {
      * */
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        let stmt;
+        let stmt: { string: string; values: any[] } | undefined;
+
         try {
-            //od klienta przychodzi tmp_id - trzeba się go pozbyć
-            if (!object._isIdNonIncrement)
-                delete object.id;
-            stmt = await this.dynamicInsertPreparedStmt(tableName, object);
+            // Remove tmp_id from the client
+            if (!object._isIdNonIncrement) delete object.id;
+
+            stmt = this.dynamicInsertPreparedStmt(tableName, object);
             const result = await conn.execute(stmt.string, stmt.values);
             object.id = (<any>result)[0].insertId;
 
@@ -86,24 +87,44 @@ export default class ToolsDb {
             return object;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
-            console.log('stmt with Error: %o', stmt);
+
+            console.error('Error occurred during statement execution: ', e);
+            if (stmt) {
+                console.error('Statement with error: ', stmt);
+            } else {
+                console.error('Statement was not defined.');
+            }
+
             throw e;
         } finally {
             if (!externalConn && !isPartOfTransaction) conn.release();
         }
     }
 
+
     //edytuje obiekt w bazie
     static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        let stmt: { string: string, values: any[] } = this.dynamicUpdatePreparedStmt(tableName, object);
+        let stmt: { string: string, values: any[] } | undefined;
+
         try {
-            let newObject = (await conn.execute(stmt.string, stmt.values))[0];
+            stmt = this.dynamicUpdatePreparedStmt(tableName, object);
+            const result = await conn.execute(stmt.string, stmt.values);
+            const newObject = result[0];
+
             if (!isPartOfTransaction) await conn.commit();
+
             return newObject;
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
-            console.log('stmt with Error: %o', stmt);
+
+            console.error('Error occurred during statement execution: ', e);
+            if (stmt) {
+                console.error('Statement with error: ', stmt);
+            } else {
+                console.error('Statement was not defined.');
+            }
+
             throw e;
         } finally {
             if (!externalConn && !isPartOfTransaction) conn.release();
@@ -117,7 +138,6 @@ export default class ToolsDb {
             if (!isPartOfTransaction) await conn.commit();
             console.log(`object deleted from ${tableName}`);
             return object;
-
         } catch (e) {
             if (!isPartOfTransaction) await conn.rollback();
             console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
@@ -135,6 +155,7 @@ export default class ToolsDb {
             if (!isPartOfTransaction) await conn.commit();
             return object;
         } catch (e) {
+            if (!isPartOfTransaction && !externalConn) await conn.rollback();
             throw e;
         }
         finally {

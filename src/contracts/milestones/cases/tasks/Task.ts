@@ -283,30 +283,44 @@ export default class Task extends BusinessObject {
      */
     async shouldBeInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection) {
         let test = false;
-        if (this._owner && this._owner.id) {
-            let owner = new Person(this._owner);
-            const systemRole = await owner.getSystemRole();
-            test = this.status !== 'Backlog' && systemRole.id <= 3
-        }
-        else
-            test = this.status !== 'Backlog';
-        //zadanie nie powinno być w scrumie jeśli nie ma w scrumie kontraktu
-        if (test) {
-            const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+
+        try {
+            if (this._owner && this._owner.id) {
+                let owner = new Person(this._owner);
+                const systemRole = await owner.getSystemRole();
+                test = this.status !== 'Backlog' && systemRole && systemRole.id <= 3
+            }
+            else
+                test = this.status !== 'Backlog';
+
+            if (!test) return test;
+
             const parents = await this.getParents(conn);
-            let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
+            const result = await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
                 rangeA1: Setup.ScrumSheet.CurrentSprint.name
-            })).values;
+            });
 
-            const contractOurIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
-            //dla kontraktu 'Our' bierz dane z ourData, dla kontraktu na roboty bież dane z kolumny OurIdRelated
-            const ourContractOurId = (parents.contractOurId) ? parents.contractOurId : parents.contractOurIdRelated;
-            const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColNumber);
-            if (!headerContractRow)
+            if (result && result.values && result.values.length > 0) {
+                const currentSprintValues = result.values;
+                const contractOurIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+                const ourContractOurId = (parents.contractOurId) ? parents.contractOurId : parents.contractOurIdRelated;
+                const headerContractRow = Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColNumber);
+                if (!headerContractRow)
+                    test = false;
+            } else {
                 test = false;
+            }
+
+        } catch (error) {
+            console.error('An error occurred:', error);
+            test = false;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+            }
         }
         return test;
     }
 }
-

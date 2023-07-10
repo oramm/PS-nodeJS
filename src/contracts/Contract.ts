@@ -167,7 +167,7 @@ export default abstract class Contract extends BusinessObject {
             }));
         });
         for (const association of entityAssociations) {
-            association.addInDb(externalConn, isPartOfTransaction);
+            await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
     /*
@@ -271,13 +271,23 @@ export default abstract class Contract extends BusinessObject {
     }
     /**dodaje isteniejące zadania  */
     async addExistingTasksInScrum(auth: OAuth2Client) {
-        const tasks = await this.getTasks();
-        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        for (const task of tasks) {
-            await task.addInScrum(auth, conn, true);
+        let conn: mysql.PoolConnection | null = null;
+        try {
+            const tasks = await this.getTasks();
+            console.log(`adding ${tasks.length} tasks in scrum`);
+            conn = await ToolsDb.pool.getConnection();
+            for (const task of tasks) {
+                await task.addInScrum(auth, conn, true);
+            }
+        } catch (error) {
+            console.error('An error occurred:', error);
+        } finally {
+            if (conn) {
+                conn.release();
+            }
         }
-        conn.release();
     }
+
 
     /** dodaje wiesz nagowka kontraktu */
     abstract deleteFromScrum(auth: OAuth2Client): Promise<void>;

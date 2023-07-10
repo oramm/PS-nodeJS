@@ -64,6 +64,37 @@ export default class Case extends BusinessObject {
         this._processesInstances = (initParamObject._processesInstances) ? initParamObject._processesInstances : [];
     }
 
+    async addNewController(auth: OAuth2Client) {
+        console.group('Case.addNewController()');
+        try {
+            let caseData: {
+                caseItem: Case;
+                processInstances: ProcessInstance[] | undefined;
+                defaultTasksInDb: Task[];
+            } | undefined;
+            //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Cases
+            await this.createFolder(auth);
+            console.log('folder created');
+
+            caseData = await this.addInDb();
+            console.log('added in db');
+
+            await Promise.all([
+                this.editFolder(auth)
+                    .then(() => console.log('folder name corrected'))
+                    .catch(err => console.log(err)),
+                this.addInScrum(auth, { defaultTasks: caseData?.defaultTasksInDb })
+                    .then(() => console.log('added in scrum'))
+                    .catch(err => console.log(err)),
+            ]);
+        } catch (err) {
+            await this.deleteFolder(auth).then(() => console.log('folder deleted')).catch(err => console.log(err));
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
@@ -267,6 +298,9 @@ export default class Case extends BusinessObject {
             };
         } catch (err) {
             await conn.rollback();
+            throw err;
+        } finally {
+            if (!externalConn) conn.release();
         }
     }
 

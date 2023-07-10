@@ -70,6 +70,7 @@ export default class TasksController {
               Tasks.OwnerId,
               Cases.Id AS CaseId,
               Cases.Name AS CaseName,
+              Cases.Description AS CaseDescription,
               Cases.TypeId AS CaseTypeId,
               Cases.GdFolderId AS CaseGdFolderId,
               CaseTypes.Id AS CaseTypeId,
@@ -97,9 +98,11 @@ export default class TasksController {
               Contracts.Status AS ContractStatus,
               Contracts.GdFolderId AS ContractGdFolderId,
               ContractTypes.Name AS ContractTypeName,
+              ContractManagers.Id AS ContractManagerId,
               ContractManagers.Name AS ContractManagerName, 
               ContractManagers.Surname AS ContractManagerSurname, 
               ContractManagers.Email AS ContractManagerEmail,
+              ContractAdmins.Id AS ContractAdminId,
               ContractAdmins.Name AS ContractAdminName,
               ContractAdmins.Surname AS ContractAdminSurname,
               ContractAdmins.Email AS ContractAdminEmail,
@@ -167,6 +170,7 @@ export default class TasksController {
                 _parent: new Case({
                     id: row.CaseId,
                     name: ToolsDb.sqlToString(row.CaseName),
+                    description: ToolsDb.sqlToString(row.CaseDescription),
                     gdFolderId: row.CaseGdFolderId,
                     _type: {
                         id: row.CaseTypeId,
@@ -202,12 +206,14 @@ export default class TasksController {
                                 name: row.ContractTypeName
                             },
                             _manager: row.ContractManagerEmail ? {
+                                id: row.ContractManagerId,
                                 name: row.ContractManagerName,
                                 surname: row.ContractManagerSurname,
                                 email: row.ContractManagerEmail,
                             }
                                 : undefined,
                             _admin: row.ContractAdminEmail ? {
+                                id: row.ContractAdminId,
                                 name: row.ContractAdminName,
                                 surname: row.ContractAdminSurname,
                                 email: row.ContractAdminEmail,

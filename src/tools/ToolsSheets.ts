@@ -1,8 +1,5 @@
-import { throws } from 'assert';
 import { OAuth2Client } from 'google-auth-library';
 import { sheets_v4, google } from 'googleapis';
-import Setup from '../setup/Setup';
-import { Envi } from './EnviTypes';
 import Tools from './Tools';
 
 export default class ToolsSheets {
