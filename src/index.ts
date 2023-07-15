@@ -3,6 +3,9 @@ import cors from 'cors';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
 import MongoStore from 'connect-mongo';
+import dotenv from 'dotenv';
+dotenv.config();
+
 
 import './setup/GAuth2/sessionTypes';
 import { keys } from './setup/GAuth2/credentials';

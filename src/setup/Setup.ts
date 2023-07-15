@@ -1,18 +1,10 @@
 export default class Setup {
     static dbConfig = {
         connectionLimit: 10,
-        host: 'envi-konsulting.kylos.pl',
-        user: 'envikons_myEnvi',
-        password: '7Fj2*j!lA3t@#D',
-        database: 'envikons_myEnvi',
-        multipleStatements: true,
-    };
-    static dbConfigTaryfy = {
-        host: 'envi-konsulting.kylos.pl',
-        user: 'envikons_taryfy',
-        password: 'sUt6!ARpdvuq',
-        database: 'envikons_taryfy',
-        port: 3306,
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
         multipleStatements: true,
     };
 
