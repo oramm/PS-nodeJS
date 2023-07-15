@@ -7,8 +7,6 @@ import Milestone from '../../Milestone';
 import Person from '../../../../persons/Person';
 import Project from '../../../../projects/Project';
 import Contract from '../../../Contract';
-import ContractOur from '../../../ContractOur';
-import ContractOther from '../../../ContractOther';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
 
@@ -109,11 +107,11 @@ export default class TasksController {
               Owners.Name AS OwnerName,
               Owners.Surname AS OwnerSurname,
               Owners.Email AS OwnerEmail
-            FROM Tasks
-            JOIN Cases ON Cases.Id=Tasks.CaseId
-            LEFT JOIN CaseTypes ON Cases.typeId=CaseTypes.Id
-            JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+            FROM Milestones
+            LEFT JOIN Cases ON Cases.MilestoneId=Milestones.Id
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            LEFT JOIN CaseTypes ON Cases.typeId=CaseTypes.Id
+            LEFT JOIN Tasks ON Tasks.CaseId=Cases.Id
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id

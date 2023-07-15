@@ -49,8 +49,8 @@ export default class LetterEntityAssociationsController {
                 },
                 _entity: new Entity({
                     id: row.EntityId,
-                    name: row.EntityName,
-                    address: row.EntityAddress,
+                    name: ToolsDb.sqlToString(row.EntityName),
+                    address: ToolsDb.sqlToString(row.EntityAddress),
                     taxNumber: row.EntityTaxNumber,
                     www: row.EntityWww,
                     email: row.EntityEmail,

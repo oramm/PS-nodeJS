@@ -9,6 +9,8 @@ import Letter from "./Letter";
 import OurLetter from "./OurLetter";
 import OurOldTypeLetter from "./OurOldTypeLetter";
 import Project from "../projects/Project";
+import Contract from '../contracts/Contract';
+import Case from '../contracts/milestones/cases/Case';
 
 
 export default class LettersController {
@@ -16,6 +18,8 @@ export default class LettersController {
     static async getLettersList(searchParams: {
         projectId?: string,
         _project?: Project,
+        _contract?: Contract,
+        _case?: Case,
         searchText?: string,
         contractId?: number
         milestoneId?: string,
@@ -23,17 +27,23 @@ export default class LettersController {
         creationDateTo?: string,
     } = {}) {
         const projectOurId = searchParams._project?.ourId || searchParams.projectId;
+        const contractId = searchParams._contract?.id || searchParams.contractId;
+        const caseId = searchParams._case?.id;
 
         const projectCondition = projectOurId
             ? mysql.format(`Projects.OurId = ?`, [projectOurId])
+            : '1';
+
+        const contractCondition = contractId
+            ? mysql.format(`Contracts.Id = ?`, [contractId])
             : '1';
 
         const milestoneCondition = searchParams.milestoneId
             ? mysql.format(`Milestones.Id = ?`, [searchParams.milestoneId])
             : '1';
 
-        const contractCondition = searchParams.contractId
-            ? mysql.format(`Contracts.Id = ?`, [searchParams.contractId])
+        const caseCondition = caseId
+            ? mysql.format(`Cases.Id = ?`, [caseId])
             : '1';
 
         const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo)
@@ -75,7 +85,8 @@ export default class LettersController {
         JOIN Entities ON Letters_Entities.EntityId=Entities.Id
         WHERE ${projectCondition} 
           AND ${contractCondition} 
-          AND ${milestoneCondition} 
+          AND ${milestoneCondition}
+          AND ${caseCondition}
           AND ${dateCondition}
           AND ${searchTextCondition}
         GROUP BY Letters.Id

@@ -5,6 +5,7 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import ContractsWithChildrenController from './ContractsWithChildrenController';
 
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
@@ -12,6 +13,20 @@ app.get('/contracts', async (req: Request, res: Response) => {
         if (typeof req.parsedQuery.isArchived === 'string')
             isArchived = req.parsedQuery.isArchived === 'true';
         const result = await ContractsController.getContractsList(req.parsedQuery);
+        res.send(result);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.get('/contractsWithChildren', async (req: Request, res: Response) => {
+    try {
+        let isArchived = false;
+        if (typeof req.parsedQuery.isArchived === 'string')
+            isArchived = req.parsedQuery.isArchived === 'true';
+        const result = await ContractsWithChildrenController.getContractsList(req.parsedQuery);
         res.send(result);
     } catch (error) {
         console.error(error);
