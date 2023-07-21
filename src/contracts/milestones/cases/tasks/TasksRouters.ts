@@ -29,7 +29,7 @@ app.get('/task/:id', async (req: Request, res: Response) => {
 
 app.post('/task', async (req: Request, res: Response) => {
     try {
-        let item = new Task(req.body);
+        let item = new Task({ ...req.body, _parent: req.body._case });
         await item.addInDb();
         await ToolsGapi.gapiReguestHandler(req, res, item.addInScrum, undefined, item);
         res.send(item);
