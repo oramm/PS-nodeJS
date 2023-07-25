@@ -101,11 +101,13 @@ export default abstract class Contract extends BusinessObject {
             console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
         } catch (error) {
             console.group('Error while creating contract');
-            await this.deleteFolder(auth);
-            console.log('folders deleted');
-            this.deleteFromScrum(auth);
-            console.log('deleted from scrum');
-            if (this.id) this.deleteFromDb();
+            this.deleteFolder(auth)
+                .then(() => console.log('folders deleted'));
+            this.deleteFromScrum(auth)
+                .then(() => console.log('deleted from scrum'));
+
+            if (this.id) this.deleteFromDb()
+                .then(() => console.log('deleted from db'));
             console.groupEnd();
             throw error;
         }

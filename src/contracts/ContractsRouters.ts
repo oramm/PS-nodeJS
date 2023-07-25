@@ -77,6 +77,10 @@ app.post('/contractReact', async (req: Request, res: Response) => {
         }
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
+
+        if (item instanceof ContractOur)
+            console.log('add contract ', item._type, item._admin, item._manager)
+
         await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
         res.send(item);

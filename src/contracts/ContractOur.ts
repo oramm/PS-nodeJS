@@ -83,7 +83,9 @@ export default class ContractOur extends Contract {
     }
 
     async shouldBeInScrum() {
+        console.log('contractAddInscrum ', this._admin, this._manager, this._type)
         if (this._admin?.email?.match(/urszula.juzwiak/i)) return false;
+        if (this._manager?.email?.match(/urszula.juzwiak/i)) return false;
         if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i)) return false;
 
         const adminSystemRole = await this._admin?.getSystemRole();
@@ -213,11 +215,13 @@ export default class ContractOur extends Contract {
 
     async createDefaultMilestones(auth: OAuth2Client) {
         await super.createDefaultMilestones(auth);
-        await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
-        await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
+        if (await this.shouldBeInScrum()) {
+            await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
 
-        await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-        await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+        }
     }
 
     async isUnique(): Promise<boolean> {

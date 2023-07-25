@@ -289,6 +289,7 @@ export default class Case extends BusinessObject {
                 this.createDefaultTasksInDb(conn, true)
             ]);
             if (!isPartOfTransaction) await conn.commit();
+            console.log('case added in db', this);
             this.number = await this.getNumberFromDb();
             this.setDisplayNumber();
             return {

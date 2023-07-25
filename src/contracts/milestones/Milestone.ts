@@ -167,7 +167,7 @@ export default class Milestone extends BusinessObject {
             casesData: <any>caseData,
             isPartOfBatch: parameters?.isPartOfBatch
         });
-        console.log('added in scrum');
+        console.log('milestone added in scrum');
     }
 
     private async addDefaultCasesInDb(caseItems: Case[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
