@@ -11,6 +11,7 @@ import './setup/GAuth2/sessionTypes';
 import { keys } from './setup/GAuth2/credentials';
 import multer from 'multer';
 import Tools from './tools/Tools';
+import ToolsDb from './tools/ToolsDb';
 declare global {
     namespace Express {
         interface Request {
@@ -38,6 +39,33 @@ app.use((req, res, next) => {
         next();
 });
 
+client.connect()
+    .then(() => {
+        console.log('Connected to MongoDB.');
+    })
+    .catch(err => {
+        console.error('Failed to connect to MongoDB', err);
+        process.exit(1);
+    });
+
+process.on('SIGTERM', async () => {
+    try {
+        console.log('SIGTERM signal received. Closing MongoDB connection...');
+        await client.close();
+        console.log('MongoDB connection closed.');
+
+        console.info('SIGTERM signal received. Closing MySQL connection pool.');
+        await ToolsDb.pool.end();
+        console.info('Successfully closed MySQL connection pool');
+    } catch (err) {
+        console.error('Error occurred while closing the databases:', err);
+    } finally {
+        process.exit(0);
+    }
+});
+
+
+
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method))
         req.parsedBody = Tools.parseObjectsJSON(req.body);
@@ -50,7 +78,8 @@ app.use((req, res, next) => {
 app.use(
     session({
         store: MongoStore.create({
-            clientPromise: client.connect(),
+            //clientPromise: client.connect(),
+            client: client,
             collectionName: 'sessions',
         }),
         name: 'connect.sid',
