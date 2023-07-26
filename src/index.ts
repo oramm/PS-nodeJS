@@ -54,7 +54,7 @@ process.on('SIGTERM', async () => {
         await client.close();
         console.log('MongoDB connection closed.');
 
-        console.info('SIGTERM signal received. Closing MySQL connection pool.');
+        console.info('Closing MySQL connection pool.');
         await ToolsDb.pool.end();
         console.info('Successfully closed MySQL connection pool');
     } catch (err) {
@@ -87,7 +87,13 @@ app.use(
         resave: false,
         saveUninitialized: false,
         rolling: true,
-        cookie: { path: '/', httpOnly: true, secure: false, sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000 },
+        cookie: {
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production' ? true : false,
+            sameSite: 'lax',
+            maxAge: 24 * 60 * 60 * 1000
+        },
     })
 );
 
