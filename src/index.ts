@@ -98,7 +98,8 @@ app.use(
 );
 
 app.use((req, res, next) => {
-    console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName}`);
+
+    console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
     next();
 });
 app.enable('trust proxy');
