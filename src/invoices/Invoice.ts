@@ -124,7 +124,10 @@ export default class Invoice extends BusinessObject {
             const invoiceCopy = new Invoice({
                 ...this,
                 id: undefined,
-                description: this.description + ' KOPIA',
+                description: this.description
+                    ? (this.description.endsWith(' KOPIA') ? this.description : this.description + ' KOPIA')
+                    : 'KOPIA',
+
                 status: Setup.InvoiceStatus.FOR_LATER,
                 gdId: null,
                 number: null,
