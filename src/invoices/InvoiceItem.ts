@@ -42,6 +42,8 @@ export default class InvoiceItem extends BusinessObject {
     }
 
     getGrossValue(): number {
-        return this.getNetValue() + this.getVatValue();
+        const grossValue = this.getNetValue() + this.getVatValue();
+        return Math.round(grossValue * 100) / 100;
     }
+
 }
