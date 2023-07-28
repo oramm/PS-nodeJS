@@ -37,7 +37,6 @@ export default class InvoiceItemsController {
                           AND ${dateCondition}
                         ORDER BY InvoiceItems.Id DESC`;
 
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoiceItemsResult(result);
     }

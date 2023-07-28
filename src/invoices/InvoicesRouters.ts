@@ -42,17 +42,7 @@ app.post('/invoice', async (req: Request, res: Response) => {
 
 app.post('/copyInvoice', async (req: Request, res: Response) => {
     try {
-        //delete req.body.gdId;
-        //delete req.body.number;
-        //delete req.body.sentDate;
-        //delete req.body.paymentDeadline;
-        //req.body.description += ' - kopia';
-        //req.body.status = 'Na później'
-        let item = new Invoice({
-            ...req.body,
-            description: req.body.description + ' - kopia',
-            status: 'Na później'
-        });
+        let item = new Invoice(req.body);
         await item.copyController();
         res.send(item);
     } catch (error) {

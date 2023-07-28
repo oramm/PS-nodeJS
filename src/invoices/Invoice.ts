@@ -120,15 +120,29 @@ export default class Invoice extends BusinessObject {
 
     async copyController() {
         ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            const invoiceCopy = await this.addInDb();
+            console.log('copyController for invoice', this.id);
+            const invoiceCopy = new Invoice({
+                ...this,
+                id: undefined,
+                description: this.description + ' KOPIA',
+                status: Setup.InvoiceStatus.FOR_LATER,
+                gdId: null,
+                number: null,
+                sentDate: null,
+                paymentDeadline: null,
+            });
+
+            await invoiceCopy.addInDb();
             const originalItems = await InvoiceItemsController.getInvoiceItemsList({ invoiceId: this.id });
-            if (!originalItems) return;
+
             for (const itemData of originalItems) {
                 delete itemData.id;
-                itemData._parent = invoiceCopy.id;
+                itemData._parent = invoiceCopy;
                 let itemCopy = new InvoiceItem(itemData);
                 await itemCopy.setEditorId();
+                console.log('itemCopy editorSet');
                 await itemCopy.addInDb();
+                console.log('itemCopy added', itemCopy);
             }
         });
     }
