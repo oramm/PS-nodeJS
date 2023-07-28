@@ -1,9 +1,9 @@
-import express from 'express'
+import { Request, Response } from 'express'
 import InvoiceItem from './InvoiceItem';
 import InvoiceItemsController from './InvoiceItemsController'
 import { app } from '../index'
 
-app.get('/invoiceItems', async (req: any, res: any) => {
+app.get('/invoiceItems', async (req: Request, res: Response) => {
     try {
         const result = await InvoiceItemsController.getInvoiceItemsList(req.query);
         res.send(result);
@@ -14,7 +14,7 @@ app.get('/invoiceItems', async (req: any, res: any) => {
     }
 });
 
-app.get('/invoiceItem/:id', async (req: any, res: any) => {
+app.get('/invoiceItem/:id', async (req: Request, res: Response) => {
     try {
         const result = await InvoiceItemsController.getInvoiceItemsList(req.params);
         res.send(result);
@@ -24,7 +24,7 @@ app.get('/invoiceItem/:id', async (req: any, res: any) => {
             res.status(500).send({ errorMessage: error.message });
     }
 });
-app.post('/invoiceItem', async (req: any, res: any) => {
+app.post('/invoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
         await item.setEditorId();
@@ -37,7 +37,7 @@ app.post('/invoiceItem', async (req: any, res: any) => {
     };
 });
 
-app.post('/copyInvoiceItem', async (req: any, res: any) => {
+app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
         await item.setEditorId();
@@ -50,7 +50,7 @@ app.post('/copyInvoiceItem', async (req: any, res: any) => {
     };
 });
 
-app.put('/invoiceItem/:id', async (req: any, res: any) => {
+app.put('/invoiceItem/:id', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
         await item.setEditorId();
@@ -63,7 +63,7 @@ app.put('/invoiceItem/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/invoiceItem/:id', async (req: any, res: any) => {
+app.delete('/invoiceItem/:id', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
         await item.deleteFromDb();

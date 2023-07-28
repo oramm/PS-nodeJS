@@ -42,8 +42,8 @@ export default class InvoiceItemsController {
         return this.processInvoiceItemsResult(result);
     }
 
-    static processInvoiceItemsResult(result: any[]): [InvoiceItem?] {
-        let newResult: [InvoiceItem?] = [];
+    static processInvoiceItemsResult(result: any[]) {
+        let newResult: InvoiceItem[] = [];
 
         for (const row of result) {
             var item = new InvoiceItem({

@@ -1,6 +1,5 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
-import ToolsDate from '../tools/ToolsDate'
 import Invoice from "./Invoice";
 import Project from '../projects/Project';
 import Contract from '../contracts/Contract';
@@ -75,7 +74,7 @@ export default class InvoicesController {
             Owners.Name AS OwnerName,
             Owners.Surname AS OwnerSurname,
             Owners.Email AS OwnerEmail,
-            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) as TotalNetValue
+            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
         JOIN Contracts ON Contracts.Id=Invoices.ContractId

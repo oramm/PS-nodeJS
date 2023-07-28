@@ -246,7 +246,7 @@ export default class ToolsDb {
             values.push(object.id);
         return values;
     }
-    /*
+    /**
         async useTransaction() {
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 await conn.query('...');

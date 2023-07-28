@@ -3,6 +3,9 @@ import ToolsDate from "../tools/ToolsDate";
 import ToolsGd from "../tools/ToolsGd";
 import BusinessObject from "../BussinesObject";
 import Setup from "../setup/Setup";
+import mysql from 'mysql2/promise';
+import ToolsDb from "../tools/ToolsDb";
+import InvoiceItemsController from "./InvoiceItemsController";
 
 export default class Invoice extends BusinessObject {
     id?: number;
@@ -113,5 +116,20 @@ export default class Invoice extends BusinessObject {
         }
 
         this.setGdIdAndUrl(initParamObject.gdId);
+    }
+
+    async copyController() {
+        ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            const invoiceCopy = await this.addInDb();
+            const originalItems = await InvoiceItemsController.getInvoiceItemsList({ invoiceId: this.id });
+            if (!originalItems) return;
+            for (const itemData of originalItems) {
+                delete itemData.id;
+                itemData._parent = invoiceCopy.id;
+                let itemCopy = new InvoiceItem(itemData);
+                await itemCopy.setEditorId();
+                await itemCopy.addInDb();
+            }
+        });
     }
 }

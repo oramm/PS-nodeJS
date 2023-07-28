@@ -53,7 +53,7 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
             description: req.body.description + ' - kopia',
             status: 'Na później'
         });
-        await item.addInDb();
+        await item.copyController();
         res.send(item);
     } catch (error) {
         if (error instanceof Error)
