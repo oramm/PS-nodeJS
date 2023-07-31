@@ -83,7 +83,6 @@ export default class ContractOur extends Contract {
     }
 
     async shouldBeInScrum() {
-        console.log('contractAddInscrum ', this._admin, this._manager, this._type)
         if (this._admin?.email?.match(/urszula.juzwiak/i)) return false;
         if (this._manager?.email?.match(/urszula.juzwiak/i)) return false;
         if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i)) return false;

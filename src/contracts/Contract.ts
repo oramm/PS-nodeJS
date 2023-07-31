@@ -209,12 +209,14 @@ export default abstract class Contract extends BusinessObject {
             console.log('folders creataed');
             defaultMilestones.push(milestone);
         }
-        console.log('templates loaded');
+        //console.log('templates loaded');
         await this.addDefaultMilestonesInDb(defaultMilestones);
-        console.log('milestones saved in db');
-        console.groupCollapsed('creating default cases');
-        for (const milestone of defaultMilestones)
+        console.log('default milestones saved in db');
+
+        for (const milestone of defaultMilestones) {
+            console.groupCollapsed(`--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`);
             await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+        }
         console.groupEnd();
     }
 

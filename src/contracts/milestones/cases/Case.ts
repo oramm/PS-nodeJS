@@ -240,15 +240,19 @@ export default class Case extends BusinessObject {
                 await ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: `${this._folderName} - USUŃ` });
         }
     }
-
+    /** dla spraw uniquePerMilestone numeru nie ma */
     async getNumberFromDb() {
+        if (this._type.isUniquePerMilestone) return;
         const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {
-            var row = result[0];
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const row = result[0];
+            if (!row?.Number)
+                throw new Error(`No Number found in db for nonUnique Case ${this.id}`);
+
             return <number>row.Number;
         } catch (err) {
+            console.log('Error in getNumberFromDb() in Case', this.id, this._typeFolderNumber_TypeName_Number_Name);
             throw err;
         }
     }
@@ -284,12 +288,16 @@ export default class Case extends BusinessObject {
         try {
             if (!isPartOfTransaction) await conn.beginTransaction();
             let caseItem: Case = await super.addInDb(conn, true);
+            console.log('Case added to db', this.id);
             const result = await Promise.all([
-                this.addNewProcessInstancesInDb(conn, true),
+                this.addNewProcessInstancesInDb(conn, true)
+                    .then((processInstances) => { console.log('Process instances added to db'); return processInstances }),
                 this.createDefaultTasksInDb(conn, true)
+                    .then((tasks) => { console.log('Default tasks added to db'); return tasks })
             ]);
+
             if (!isPartOfTransaction) await conn.commit();
-            console.log('case added in db', this);
+            console.log('getting number for case', this.id);
             this.number = await this.getNumberFromDb();
             this.setDisplayNumber();
             return {

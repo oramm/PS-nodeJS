@@ -142,7 +142,7 @@ export default class Milestone extends BusinessObject {
             'Typ kontraktu, który próbujesz dodać nie ma przypisanego żadnego szablonu sprawy!\n' +
             'Zgłoś administratorowi potrzebę utworzenia szablonów spraw i zadań'
         );
-        console.log('templates loaded');
+        console.log('default cases templates loaded');
         for (const template of defaultCaseTemplates) {
             const caseItem = new Case({
                 name: template.name,
@@ -159,9 +159,9 @@ export default class Milestone extends BusinessObject {
             await caseItem.createFolder(auth);
             defaultCaseItems.push(caseItem);
         }
-        console.log('folders created');
+        console.log('default cases folders created');
         const caseData = await this.addDefaultCasesInDb(defaultCaseItems);
-        console.log('saved in db');
+        console.log('cases saved in db');
 
         await this.addDefaultCasesInScrum(auth, {
             casesData: <any>caseData,
@@ -174,13 +174,14 @@ export default class Milestone extends BusinessObject {
         const caseData = [];
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
         try {
+            console.group('adding Default Cases In Db...');
             await conn.beginTransaction();
-
             for (const caseItem of caseItems) {
+                console.log('adding case in db: ' + caseItem._typeFolderNumber_TypeName_Number_Name);
                 caseData.push(caseItem.addInDb(conn, true));
             }
-
             await conn.commit();
+            console.groupEnd();
         } catch (error) {
             console.error('An error occurred:', error);
             if (!externalConn) {

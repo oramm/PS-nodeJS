@@ -62,13 +62,12 @@ export default class ToolsGd {
 
         });
         if (filesSchema.data.files && filesSchema.data.files.length) {
-            console.log('Files:');
+            //console.log('Files:');
             filesSchema.data.files.map((file: drive_v3.Schema$File) => {
-                console.log(`${file.name} (${file.id})`);
+                //console.log(`${file.name} (${file.id})`);
             });
             return filesSchema.data.files[0];
-        } else
-            console.log('No files found.');
+        } //else { console.log('No files found.'); }
     }
     /**
      * Sprawdza czy plik lub folder istnieje
@@ -168,7 +167,7 @@ export default class ToolsGd {
             requestBody: fileMetadata,
             fields: 'id'
         })
-        console.log('New Gd folder Id: ', filesSchema.data.id);
+        //console.log('New Gd folder Id: ', filesSchema.data.id);
         return filesSchema.data;
     }
 
@@ -310,7 +309,7 @@ export default class ToolsGd {
                 fileId: parameters.fileId,
                 fields: 'id'
             })
-            console.log('Permission createed: %o', permissionSchema.data);
+            //console.log('Permission createed: %o', permissionSchema.data);
             return permissionSchema.data;
         }
     }
