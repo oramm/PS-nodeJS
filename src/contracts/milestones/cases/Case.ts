@@ -245,14 +245,14 @@ export default class Case extends BusinessObject {
         if (this._type.isUniquePerMilestone) return;
         const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
         try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const result = <mysql.RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
             const row = result[0];
             if (!row?.Number)
                 throw new Error(`No Number found in db for nonUnique Case ${this.id}`);
 
-            return <number>row.Number;
+            return row.Number as number;
         } catch (err) {
-            console.log('Error in getNumberFromDb() in Case', this.id, this._typeFolderNumber_TypeName_Number_Name);
+            console.log('Error in getNumberFromDb() in Case', this);
             throw err;
         }
     }
@@ -288,16 +288,12 @@ export default class Case extends BusinessObject {
         try {
             if (!isPartOfTransaction) await conn.beginTransaction();
             let caseItem: Case = await super.addInDb(conn, true);
-            console.log('Case added to db', this.id);
             const result = await Promise.all([
-                this.addNewProcessInstancesInDb(conn, true)
-                    .then((processInstances) => { console.log('Process instances added to db'); return processInstances }),
+                this.addNewProcessInstancesInDb(conn, true),
                 this.createDefaultTasksInDb(conn, true)
-                    .then((tasks) => { console.log('Default tasks added to db'); return tasks })
             ]);
 
             if (!isPartOfTransaction) await conn.commit();
-            console.log('getting number for case', this.id);
             this.number = await this.getNumberFromDb();
             this.setDisplayNumber();
             return {
@@ -306,7 +302,7 @@ export default class Case extends BusinessObject {
                 defaultTasksInDb: result[1],
             };
         } catch (err) {
-            await conn.rollback();
+            if (!isPartOfTransaction) await conn.rollback();
             throw err;
         } finally {
             if (!externalConn) conn.release();

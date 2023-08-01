@@ -106,12 +106,26 @@ export default class InvoicesController {
             mysql.format(`(Invoices.Number LIKE ? 
                           OR Invoices.Description LIKE ? 
                           OR Invoices.Status LIKE ? 
-                          OR Entities.Name LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+                          OR Entities.Name LIKE ?
+                          
+                          OR OurContractsData.OurId LIKE ?
+                          OR Contracts.Number LIKE ?
+                          OR Contracts.Name LIKE ?
+                          OR Contracts.Alias LIKE ?
+
+                          
+                          OR EXISTS (
+                              SELECT 1 
+                              FROM InvoiceItems
+                              WHERE InvoiceItems.ParentId = Invoices.Id 
+                                  AND InvoiceItems.Description LIKE ?
+                          ))`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
+
 
     static processInvoicesResult(result: any[]): [Invoice?] {
         let newResult: [Invoice?] = [];

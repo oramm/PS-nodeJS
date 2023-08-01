@@ -177,7 +177,7 @@ export default class Milestone extends BusinessObject {
             console.group('adding Default Cases In Db...');
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
-                console.log('adding case in db: ' + caseItem._typeFolderNumber_TypeName_Number_Name);
+                //console.log('adding case in db: ' + caseItem._typeFolderNumber_TypeName_Number_Name);
                 caseData.push(caseItem.addInDb(conn, true));
             }
             await conn.commit();

@@ -65,11 +65,9 @@ app.post('/contract', async (req: Request, res: Response) => {
 
 app.post('/contractReact', async (req: Request, res: Response) => {
     try {
-        console.log('req.files', req.files);
         let item: ContractOur | ContractOther;
         if (typeof req.parsedBody.value === "string")
             req.body.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
-        console.log('req.parsedBody', req.parsedBody);
         if (req.parsedBody._type.isOur) {
             item = new ContractOur(req.parsedBody);
         } else {
@@ -77,9 +75,6 @@ app.post('/contractReact', async (req: Request, res: Response) => {
         }
         if (!item._parent || !item._parent.id)
             throw new Error('Nie przypisano projektu do kontraktu')
-
-        if (item instanceof ContractOur)
-            console.log('add contract ', item._type, item._admin, item._manager)
 
         await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
 
