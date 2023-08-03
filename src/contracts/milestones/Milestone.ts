@@ -17,6 +17,7 @@ import mysql from 'mysql2/promise';
 import Task from './cases/tasks/Task';
 import ProcessInstance from '../../processes/processInstances/ProcessInstance';
 import ContractsController from '../ContractsController';
+import e from 'express';
 
 export default class Milestone extends BusinessObject {
     id?: number;
@@ -142,7 +143,6 @@ export default class Milestone extends BusinessObject {
             'Typ kontraktu, który próbujesz dodać nie ma przypisanego żadnego szablonu sprawy!\n' +
             'Zgłoś administratorowi potrzebę utworzenia szablonów spraw i zadań'
         );
-        console.log('default cases templates loaded');
         for (const template of defaultCaseTemplates) {
             const caseItem = new Case({
                 name: template.name,
@@ -173,12 +173,13 @@ export default class Milestone extends BusinessObject {
     private async addDefaultCasesInDb(caseItems: Case[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const caseData = [];
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        if (!externalConn) console.log('new connection created for adding default cases in db');
         try {
             console.group('adding Default Cases In Db...');
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
                 //console.log('adding case in db: ' + caseItem._typeFolderNumber_TypeName_Number_Name);
-                caseData.push(caseItem.addInDb(conn, true));
+                caseData.push(await caseItem.addInDb(conn, true));
             }
             await conn.commit();
             console.groupEnd();
@@ -191,6 +192,7 @@ export default class Milestone extends BusinessObject {
         } finally {
             if (!externalConn) {
                 conn.release();
+                console.log('connection released after adding default cases in db');
             }
         }
         return await Promise.all(caseData)

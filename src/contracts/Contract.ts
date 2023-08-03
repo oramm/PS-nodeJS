@@ -206,15 +206,14 @@ export default abstract class Contract extends BusinessObject {
                 milestone.number = 1;
             }
             await milestone.createFolders(auth);
-            console.log('folders creataed');
             defaultMilestones.push(milestone);
         }
-        //console.log('templates loaded');
+        console.log('Milestones folders creataed');
         await this.addDefaultMilestonesInDb(defaultMilestones);
         console.log('default milestones saved in db');
 
         for (const milestone of defaultMilestones) {
-            console.groupCollapsed(`--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`);
+            console.group(`--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`);
             await milestone.createDefaultCases(auth, { isPartOfBatch: true });
         }
         console.groupEnd();
@@ -222,6 +221,7 @@ export default abstract class Contract extends BusinessObject {
 
     private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        if (!externalConn) console.log('new connection:: addDefaultMilestonesInDb ');
         try {
             await conn.beginTransaction();
             const promises = [];
@@ -233,7 +233,7 @@ export default abstract class Contract extends BusinessObject {
             await conn.rollback();
             throw err;
         } finally {
-            if (!externalConn) conn.release();
+            if (!externalConn) { conn.release(); console.log('connection released:: addDefaultMilestonesInDb'); }
         }
     }
 

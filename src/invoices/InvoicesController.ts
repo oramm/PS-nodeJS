@@ -107,13 +107,10 @@ export default class InvoicesController {
                           OR Invoices.Description LIKE ? 
                           OR Invoices.Status LIKE ? 
                           OR Entities.Name LIKE ?
-                          
                           OR OurContractsData.OurId LIKE ?
                           OR Contracts.Number LIKE ?
                           OR Contracts.Name LIKE ?
                           OR Contracts.Alias LIKE ?
-
-                          
                           OR EXISTS (
                               SELECT 1 
                               FROM InvoiceItems

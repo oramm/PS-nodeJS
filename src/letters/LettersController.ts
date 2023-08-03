@@ -104,8 +104,9 @@ export default class LettersController {
                           OR Letters.Number LIKE ?
                           OR Cases.Name LIKE ?
                           OR CaseTypes.Name LIKE ?
+                          OR Letters.Number LIKE ?
                           OR Entities.Name LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;

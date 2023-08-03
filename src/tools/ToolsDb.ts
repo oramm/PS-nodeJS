@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import Tools from './Tools';
 import ToolsDate from './ToolsDate';
+import e from 'express';
 
 export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
@@ -71,7 +72,10 @@ export default class ToolsDb {
      * @argument object może mieć atrybut '_isIdNonIncrement' - wtedy id jest trakrowany jak normalne pole
      * */
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
+        if (!externalConn) console.log(`addInDb ${tableName}:: conn opened`);
+
         let stmt: { string: string; values: any[] } | undefined;
 
         try {
@@ -86,7 +90,7 @@ export default class ToolsDb {
 
             return object;
         } catch (e) {
-            if (!isPartOfTransaction) await conn.rollback();
+            if (!externalConn) await conn.rollback();
 
             console.error('Error occurred during statement execution: ', e);
             if (stmt) {
@@ -97,13 +101,18 @@ export default class ToolsDb {
 
             throw e;
         } finally {
-            if (!externalConn && !isPartOfTransaction) conn.release();
+            if (!externalConn || !isPartOfTransaction) {
+                conn.release();
+                console.log(`addInDb ${tableName}:: conn released`);
+            }
         }
     }
 
 
     //edytuje obiekt w bazie
     static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
+        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         let stmt: { string: string, values: any[] } | undefined;
 
@@ -116,7 +125,7 @@ export default class ToolsDb {
 
             return newObject;
         } catch (e) {
-            if (!isPartOfTransaction) await conn.rollback();
+            if (!externalConn) await conn.rollback();
 
             console.error('Error occurred during statement execution: ', e);
             if (stmt) {
@@ -127,11 +136,13 @@ export default class ToolsDb {
 
             throw e;
         } finally {
-            if (!externalConn && !isPartOfTransaction) conn.release();
+            if (!externalConn || !isPartOfTransaction) conn.release();
         }
     }
 
     static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         try {
             await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
@@ -139,15 +150,17 @@ export default class ToolsDb {
             console.log(`object deleted from ${tableName}`);
             return object;
         } catch (e) {
-            if (!isPartOfTransaction) await conn.rollback();
+            if (!externalConn) await conn.rollback();
             console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
             throw e;
         } finally {
-            if (!isPartOfTransaction && !externalConn) conn.release();
+            if (!isPartOfTransaction || !externalConn) conn.release();
         }
     }
 
     static async executePreparedStmt(sql: string, params: any[], object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         try {
             params = params.map(item => this.prepareValueToPreparedStmtSql(item));
@@ -155,11 +168,12 @@ export default class ToolsDb {
             if (!isPartOfTransaction) await conn.commit();
             return object;
         } catch (e) {
-            if (!isPartOfTransaction && !externalConn) await conn.rollback();
+            if (!externalConn) await conn.rollback();
             throw e;
         }
         finally {
-            if (!isPartOfTransaction && !externalConn) conn.release();
+            if (!isPartOfTransaction || !externalConn) conn.release();
+
         }
     }
 
@@ -256,6 +270,7 @@ export default class ToolsDb {
     */
     static async transaction(callback: (conn: mysql.PoolConnection) => Promise<any>) {
         const connection = await this.pool.getConnection();
+        console.log('transaction:: connection acquired');
         await connection.beginTransaction();
 
         try {
@@ -269,6 +284,7 @@ export default class ToolsDb {
             throw err;
         } finally {
             connection.release();
+            console.log('transaction:: connection released');
         }
     }
 }

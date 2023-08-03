@@ -132,14 +132,15 @@ export default class Case extends BusinessObject {
      * jest wywoływana w addInDb()
      * tworzy instancję procesu i zadanie do scrumboarda na podstawie szablonu
      */
-    async addNewProcessInstancesInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async addNewProcessInstancesInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
+        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
         const result = [];
         if (this._type._processes.length > 0) {
             //typ sprawy może mieć wiele procesów - sprawa automatycznie też
             for (const process of this._type._processes) {
                 //dodaj zadanie ramowe z szablonu
                 let processInstanceTask = new Task({ _parent: this });
-                await processInstanceTask.addInDbFromTemplateForProcess(process, externalConn, true);
+                await processInstanceTask.addInDbFromTemplateForProcess(process, externalConn, isPartOfTransaction);
 
                 const processInstance = new ProcessInstance({
                     _process: process,
@@ -242,9 +243,11 @@ export default class Case extends BusinessObject {
     }
     /** dla spraw uniquePerMilestone numeru nie ma */
     async getNumberFromDb() {
-        if (this._type.isUniquePerMilestone) return;
-        const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
+        if (this._type.isUniquePerMilestone)
+            return;
         try {
+            const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
+
             const result = <mysql.RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
             const row = result[0];
             if (!row?.Number)
@@ -252,7 +255,7 @@ export default class Case extends BusinessObject {
 
             return row.Number as number;
         } catch (err) {
-            console.log('Error in getNumberFromDb() in Case', this);
+            console.log('Error in getNumberFromDb() in Case', this._typeFolderNumber_TypeName_Number_Name);
             throw err;
         }
     }
@@ -283,8 +286,9 @@ export default class Case extends BusinessObject {
         return defaultTasks;
     }
 
-    async addInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async addInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
+        if (!externalConn) console.log('caseAddInDb:: connection created');
         try {
             if (!isPartOfTransaction) await conn.beginTransaction();
             let caseItem: Case = await super.addInDb(conn, true);
@@ -294,7 +298,7 @@ export default class Case extends BusinessObject {
             ]);
 
             if (!isPartOfTransaction) await conn.commit();
-            this.number = await this.getNumberFromDb();
+            if (!this.number) this.number = await this.getNumberFromDb();
             this.setDisplayNumber();
             return {
                 caseItem,
@@ -302,10 +306,13 @@ export default class Case extends BusinessObject {
                 defaultTasksInDb: result[1],
             };
         } catch (err) {
-            if (!isPartOfTransaction) await conn.rollback();
+            if (!isPartOfTransaction) { await conn.rollback(); console.log('<- rollback <-'); }
             throw err;
         } finally {
-            if (!externalConn) conn.release();
+            if (!externalConn) {
+                conn.release();
+                console.log('caseAddInDb:: connection released', this.id);
+            }
         }
     }
 
