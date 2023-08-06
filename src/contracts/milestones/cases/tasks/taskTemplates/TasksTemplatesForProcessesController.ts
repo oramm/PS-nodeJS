@@ -1,5 +1,3 @@
-
-
 import ToolsDb from "../../../../../tools/ToolsDb";
 import TasksTemplateForProcess from "./TaskTemplateForProcess";
 
@@ -21,8 +19,8 @@ export default class TasksTemplateForProcesssController {
         return this.processTasksTemplateForProcesssResult(result);
     }
 
-    static processTasksTemplateForProcesssResult(result: any[]): [TasksTemplateForProcess?] {
-        let newResult: [TasksTemplateForProcess?] = [];
+    static processTasksTemplateForProcesssResult(result: any[]) {
+        let newResult: TasksTemplateForProcess[] = [];
 
         for (const row of result) {
             const item = new TasksTemplateForProcess({

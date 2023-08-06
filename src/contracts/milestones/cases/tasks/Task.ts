@@ -51,7 +51,8 @@ export default class Task extends BusinessObject {
     /* Służy do dodowania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
    *
    */
-    async addInDbFromTemplateForProcess(process: Process, conn: any, isPartOfTransaction: boolean) {
+    async addInDbFromTemplateForProcess(process: Process, conn: mysql.PoolConnection, isPartOfTransaction: boolean) {
+        console.log('addInDbFromTemplateForProcess:: connection Id', conn.threadId);
         const taskTemplate = (await TasksTemplateForProcesssController.getTasksTemplateForProcesssList({ processId: process.id }))[0];
         if (taskTemplate) {
             this.status = 'Backlog';
@@ -64,11 +65,13 @@ export default class Task extends BusinessObject {
 
     async addInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection, isPartOfBatch?: boolean) {
         const conn: mysql.PoolConnection = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        if (!await this.shouldBeInScrum(auth, conn)) {
-            console.log(`Nie dodaję do Scruma zadania: "${this.name}"`);
-            return;
-        }
+        console.log('Task addInScrum:: connection Id', conn.threadId);
+
         try {
+            if (!await this.shouldBeInScrum(auth, conn)) {
+                //console.log(`Nie dodaję do Scruma zadania: "${this.name}"`);
+                return;
+            }
             const parents = await this.getParents(conn);
             let currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -179,12 +182,15 @@ export default class Task extends BusinessObject {
         } catch (err) {
             throw err;
         } finally {
-            if (!externalConn) conn.release();
+            if (!externalConn) {
+                conn.release();
+                console.log('Task addInScrum conn released', conn.threadId);
+            }
         }
     }
 
-
-    private async getParents(conn: mysql.PoolConnection) {
+    private async getParents(externalConnection: mysql.PoolConnection) {
+        console.log('Task getParents', externalConnection.threadId);
         const sql = `SELECT
             Cases.Name AS CaseName,
             Cases.TypeId AS CaseTypeId,
@@ -212,7 +218,7 @@ export default class Task extends BusinessObject {
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId=ContractTypes.Id AND MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
             WHERE Cases.Id =${this.caseId}`;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql, externalConnection);
         try {
             var row = result[0];
             return {
@@ -284,7 +290,7 @@ export default class Task extends BusinessObject {
     async shouldBeInScrum(auth: OAuth2Client, externalConn?: mysql.PoolConnection) {
         let test = false;
         const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-
+        console.log('Task shouldBeInScrum conn', conn.threadId);
         try {
             if (this._owner && this._owner.id) {
                 let owner = new Person(this._owner);
@@ -319,6 +325,7 @@ export default class Task extends BusinessObject {
         } finally {
             if (!externalConn) {
                 conn.release();
+                console.log('conn released in task shouldBeInScrum', conn.threadId);
             }
         }
         return test;

@@ -39,14 +39,24 @@ app.use((req, res, next) => {
         next();
 });
 
-client.connect()
-    .then(() => {
+// Przechowuje liczbę prób połączenia
+let connectAttempts = 0;
+
+async function connectWithRetry() {
+    try {
+        await client.connect();
         console.log('Connected to MongoDB.');
-    })
-    .catch(err => {
-        console.error('Failed to connect to MongoDB', err);
-        process.exit(1);
-    });
+    } catch (err) {
+        connectAttempts++;
+
+        console.error(`Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`, err);
+
+        // Oczekuje 5 sekund przed kolejną próbą
+        setTimeout(connectWithRetry, 5000);
+    }
+}
+
+connectWithRetry();
 
 process.on('SIGTERM', async () => {
     try {
@@ -64,6 +74,15 @@ process.on('SIGTERM', async () => {
     }
 });
 
+process.on('uncaughtException', (err) => {
+    console.error('Wystąpił nieobsłużony wyjątek:', err);
+    // Można tutaj również dodać kod do łagodnego zamykania aplikacji, jeśli to konieczne
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Nieobsłużone odrzucenie Promise:', promise, 'powód:', reason);
+    // Podobnie jak powyżej, możemy tutaj dodać kod do łagodnego zamykania aplikacji
+});
 
 
 app.use((req, res, next) => {

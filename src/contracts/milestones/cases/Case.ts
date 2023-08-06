@@ -128,12 +128,12 @@ export default class Case extends BusinessObject {
             this._folderName = this._type.folderNumber + ' ' + this._type.name;
     }
 
-    /*
-     * jest wywoływana w addInDb()
+    /**jest wywoływana w addInDb()
      * tworzy instancję procesu i zadanie do scrumboarda na podstawie szablonu
      */
-    async addNewProcessInstancesInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
+    async addNewProcessInstancesInDb(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
         if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
+        console.log('Case.addNewProcessInstancesInDb():: Id', externalConn.threadId);
         const result = [];
         if (this._type._processes.length > 0) {
             //typ sprawy może mieć wiele procesów - sprawa automatycznie też
@@ -153,11 +153,11 @@ export default class Case extends BusinessObject {
             return result;
         }
     }
-    /*
-     * jest wywoływana w editCase()
+    /** jest wywoływana w editCase()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
      */
-    async editProcessInstancesInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async editProcessInstancesInDb(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
+        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
         await this.deleteProcessInstancesFromDb();
         await this.addNewProcessInstancesInDb(externalConn, isPartOfTransaction);
     }
@@ -242,13 +242,13 @@ export default class Case extends BusinessObject {
         }
     }
     /** dla spraw uniquePerMilestone numeru nie ma */
-    async getNumberFromDb() {
+    async getNumberFromDb(externalConn?: mysql.PoolConnection) {
         if (this._type.isUniquePerMilestone)
             return;
         try {
             const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
 
-            const result = <mysql.RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const result = <mysql.RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql, externalConn);
             const row = result[0];
             if (!row?.Number)
                 throw new Error(`No Number found in db for nonUnique Case ${this.id}`);
@@ -268,7 +268,8 @@ export default class Case extends BusinessObject {
    * Tworzy domyślne sprawy i zapisuje je w db
    * argument: {defaultTaskTemplates, externalConn, isPartOfTransaction}
    */
-    async createDefaultTasksInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async createDefaultTasksInDb(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
+        console.log('createDefaultTasksInDb :: connection Id', externalConn?.threadId)
         const defaultTasks = [];
         const defaultTaskTemplates = await this.getTasksTemplates();
         for (const template of defaultTaskTemplates) {
@@ -287,31 +288,34 @@ export default class Case extends BusinessObject {
     }
 
     async addInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
-        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        if (!externalConn) console.log('caseAddInDb:: connection created');
+        let conn: mysql.PoolConnection | undefined;
         try {
+            conn = (externalConn) ? externalConn : await ToolsDb.getPoolConnectionWithTimeout();
+            if (!externalConn) console.log('caseAddInDb:: connection created', conn.threadId);
+            else console.log('Case.addInDb:: Connection Id: ', conn.threadId);
+
             if (!isPartOfTransaction) await conn.beginTransaction();
             let caseItem: Case = await super.addInDb(conn, true);
-            const result = await Promise.all([
+            const [processInstances, defaultTasks] = await Promise.all([
                 this.addNewProcessInstancesInDb(conn, true),
                 this.createDefaultTasksInDb(conn, true)
             ]);
 
             if (!isPartOfTransaction) await conn.commit();
-            if (!this.number) this.number = await this.getNumberFromDb();
+            if (!this.number) this.number = await this.getNumberFromDb(conn);
             this.setDisplayNumber();
             return {
                 caseItem,
-                processInstances: result[0],
-                defaultTasksInDb: result[1],
+                processInstances: processInstances,
+                defaultTasksInDb: defaultTasks,
             };
         } catch (err) {
-            if (!isPartOfTransaction) { await conn.rollback(); console.log('<- rollback <-'); }
+            if (!isPartOfTransaction) { await conn?.rollback(); console.log('<- rollback <-'); }
             throw err;
         } finally {
             if (!externalConn) {
-                conn.release();
-                console.log('caseAddInDb:: connection released', this.id);
+                conn?.release();
+                console.log('caseAddInDb:: connection released', conn?.threadId);
             }
         }
     }
@@ -359,10 +363,10 @@ export default class Case extends BusinessObject {
             ToolsSheets.appendRowsToSpreadSheet(auth, { spreadsheetId: Setup.ScrumSheet.GdId, sheetName: Setup.ScrumSheet.Data.name, values: [caseData] });
         console.log(`added case ${this._type.name} do sheet "Data"`)
         //dodaj sprawę do arkusza currentSprint
-        console.groupCollapsed('adding default tasks')
+        console.groupCollapsed('adding default tasks to scrumboard')
         for (const task of parameters.defaultTasks)
             await task.addInScrum(auth, undefined, parameters.isPartOfBatch);
-        console.log('default tasks added');
+        console.log('default tasks added to scrumboard');
         console.groupEnd();
     }
 

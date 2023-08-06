@@ -1,16 +1,36 @@
-import { ResultSetHeader } from 'mysql2';
 import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import Tools from './Tools';
 import ToolsDate from './ToolsDate';
-import e from 'express';
+
 
 export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
 
-    static async getQueryCallbackAsync(sql: string) {
+    static async getPoolConnectionWithTimeout() {
+        const promiseGetConnection = this.pool.getConnection();
+        let timer: NodeJS.Timeout | null = null;  // Dodajemy null jako wartość początkową
+
+        const timeout = new Promise<mysql.PoolConnection>((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error('Timeout acquiring connection'));
+            }, 10000);
+        });
+
         try {
-            return (await this.pool.query(sql))[0];
+            const connection = await Promise.race([promiseGetConnection, timeout]);
+            if (timer) clearTimeout(timer);  // Sprawdzamy, czy timer jest ustawiony przed próbą czyszczenia
+            return connection;
+        } catch (error) {
+            if (timer) clearTimeout(timer);  // Podobnie jak wyżej
+            throw error;
+        }
+    }
+
+    static async getQueryCallbackAsync(sql: string, externalConn?: mysql.PoolConnection) {
+        const conn = externalConn || this.pool;
+        try {
+            return (await conn.query(sql))[0];
         } catch (error) {
             console.log(sql);
             throw (error);
@@ -74,7 +94,7 @@ export default class ToolsDb {
     static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        if (!externalConn) console.log(`addInDb ${tableName}:: conn opened`);
+        if (!externalConn) console.log(`addInDb ${tableName}:: conn opened `, conn.threadId);
 
         let stmt: { string: string; values: any[] } | undefined;
 
@@ -103,11 +123,10 @@ export default class ToolsDb {
         } finally {
             if (!externalConn || !isPartOfTransaction) {
                 conn.release();
-                console.log(`addInDb ${tableName}:: conn released`);
+                console.log(`addInDb ${tableName}:: conn released`, conn.threadId);
             }
         }
     }
-
 
     //edytuje obiekt w bazie
     static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
@@ -154,7 +173,7 @@ export default class ToolsDb {
             console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
             throw e;
         } finally {
-            if (!isPartOfTransaction || !externalConn) conn.release();
+            if (!isPartOfTransaction || !externalConn) { conn.release(); console.log(`conn released`); }
         }
     }
 
@@ -270,21 +289,26 @@ export default class ToolsDb {
     */
     static async transaction(callback: (conn: mysql.PoolConnection) => Promise<any>) {
         const connection = await this.pool.getConnection();
-        console.log('transaction:: connection acquired');
-        await connection.beginTransaction();
+        let transactionStarted = false;
 
         try {
+            console.log('transaction:: connection acquired', connection.threadId);
+            await connection.beginTransaction();
+            transactionStarted = true; // transaction started successfully
+
             const result = await callback(connection);
             await connection.commit();
             return result;
-        } catch (err) {
 
-            await connection.rollback();
-            // Throw the error again so others can catch it.
+        } catch (err) {
+            if (transactionStarted) {
+                await connection.rollback();
+            }
             throw err;
         } finally {
             connection.release();
-            console.log('transaction:: connection released');
+            console.log('transaction:: connection released ', connection.threadId);
         }
     }
+
 }

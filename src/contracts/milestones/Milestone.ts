@@ -170,33 +170,31 @@ export default class Milestone extends BusinessObject {
         console.log('milestone added in scrum');
     }
 
-    private async addDefaultCasesInDb(caseItems: Case[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    private async addDefaultCasesInDb(caseItems: Case[]) {
         const caseData = [];
-        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        if (!externalConn) console.log('new connection created for adding default cases in db');
+        let conn: mysql.PoolConnection | undefined;
         try {
+            conn = await ToolsDb.getPoolConnectionWithTimeout();
+            console.log('new connection created for adding default cases in db', conn.threadId);
+
             console.group('adding Default Cases In Db...');
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
-                //console.log('adding case in db: ' + caseItem._typeFolderNumber_TypeName_Number_Name);
                 caseData.push(await caseItem.addInDb(conn, true));
             }
             await conn.commit();
             console.groupEnd();
         } catch (error) {
             console.error('An error occurred:', error);
-            if (!externalConn) {
-                await conn.rollback();
-            }
+            await conn?.rollback();
             throw error;
         } finally {
-            if (!externalConn) {
-                conn.release();
-                console.log('connection released after adding default cases in db');
-            }
+            conn?.release();
+            console.log('connection released after adding default cases in db ', conn?.threadId);
         }
-        return await Promise.all(caseData)
+        return await Promise.all(caseData);
     }
+
 
     private async addDefaultCasesInScrum(auth: OAuth2Client, parameters: {
         casesData: [{
@@ -284,8 +282,8 @@ export default class Milestone extends BusinessObject {
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = MilestoneTypes.Id AND MilestoneTypes_ContractTypes.ContractTypeId= ${this._parent._type.id} 
             ORDER BY MilestoneTypeId`;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             const newResult: CaseType[] = [];
             for (const row of result) {
                 const item = new CaseType({

@@ -95,7 +95,7 @@ export default abstract class Contract extends BusinessObject {
             console.log('Contract added in scrum');
             console.group('Creating default milestones');
             await this.createDefaultMilestones(auth);
-            console.log('Default milestones created');
+            console.log('Default milestones, cases & tasks created');
             console.groupEnd();
             console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
         } catch (error) {
@@ -220,8 +220,9 @@ export default abstract class Contract extends BusinessObject {
     }
 
     private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        const conn = (externalConn) ? externalConn : await ToolsDb.pool.getConnection();
-        if (!externalConn) console.log('new connection:: addDefaultMilestonesInDb ');
+        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
+        const conn = (externalConn) ? externalConn : await ToolsDb.getPoolConnectionWithTimeout();
+        if (!externalConn) console.log('new connection:: addDefaultMilestonesInDb ', conn.threadId);
         try {
             await conn.beginTransaction();
             const promises = [];
@@ -233,7 +234,7 @@ export default abstract class Contract extends BusinessObject {
             await conn.rollback();
             throw err;
         } finally {
-            if (!externalConn) { conn.release(); console.log('connection released:: addDefaultMilestonesInDb'); }
+            if (!externalConn) { conn.release(); console.log('connection released:: addDefaultMilestonesInDb', conn.threadId); }
         }
     }
 

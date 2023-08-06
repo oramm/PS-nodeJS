@@ -6,6 +6,7 @@ import ContractOther from "./ContractOther";
 import ContractOur from "./ContractOur";
 import ContractType from "./contractTypes/ContractType";
 import Project from '../projects/Project';
+import Setup from '../setup/Setup';
 
 export type ContractSearchParamas = {
     projectId?: string,
@@ -67,7 +68,7 @@ export default class ContractsController {
         }
         //@deprecated
         const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (isArchived) ? 'mainContracts.Status="Archiwalny"' : 'mainContracts.Status!="Archiwalny"';
+        const isArchivedConditon = (isArchived) ? `mainContracts.Status=${Setup.ContractStatus.ARCHIVAL}` : 1;//'mainContracts.Status!="Archiwalny"';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
