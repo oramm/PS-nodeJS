@@ -17,7 +17,6 @@ import mysql from 'mysql2/promise';
 import Task from './cases/tasks/Task';
 import ProcessInstance from '../../processes/processInstances/ProcessInstance';
 import ContractsController from '../ContractsController';
-import e from 'express';
 
 export default class Milestone extends BusinessObject {
     id?: number;
@@ -176,8 +175,6 @@ export default class Milestone extends BusinessObject {
         try {
             conn = await ToolsDb.getPoolConnectionWithTimeout();
             console.log('new connection created for adding default cases in db', conn.threadId);
-
-            console.group('adding Default Cases In Db...');
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
                 caseData.push(await caseItem.addInDb(conn, true));

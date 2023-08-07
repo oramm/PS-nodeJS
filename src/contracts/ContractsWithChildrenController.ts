@@ -12,6 +12,7 @@ import ToolsDate from '../tools/ToolsDate';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import { ContractsWithChildren as ContractWithChildren, ContractsWithChildren } from './ContractTypes';
+import Setup from '../setup/Setup';
 
 export default class ContractsWithChildrenController {
     static async getContractsList(searchParams: {
@@ -26,7 +27,7 @@ export default class ContractsWithChildrenController {
         deadlineFrom?: string,
         deadlineTo?: string,
         searchText?: string,
-        status?: string
+        statusType?: 'active' | 'archived' | 'all',
     } = {}) {
         const projectOurId = searchParams._project?.ourId;
         const projectCondition = projectOurId
@@ -45,22 +46,19 @@ export default class ContractsWithChildrenController {
         const milestoneCondition = milestoneId
             ? mysql.format('Milestones.Id = ?', [milestoneId])
             : '1';
-        const contractStatusCondition = searchParams.contractStatusCondition
-            ? mysql.format('Contracts.Status REGEXP ?', [searchParams.contractStatusCondition])
-            : '1';
-        const ownerCondition = searchParams._owner
-            ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
-            : '1';
-        const deadlineFromCondition = searchParams.deadlineFrom
-            ? mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom])
-            : '1';
-        const deadlineToCondition = searchParams.deadlineTo
-            ? mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo])
-            : '1';
-        const statusCondition = searchParams.status
-            ? mysql.format(`Tasks.Status = ?`, [searchParams.status])
-            : '1';
 
+        let statusTypeCondition;
+        switch (searchParams.statusType) {
+            case 'active':
+                statusTypeCondition = `Contracts.Status NOT REGEXP "${Setup.ContractStatus.ARCHIVAL}"`;
+                break;
+            case 'archived':
+                statusTypeCondition = `Contracts.Status REGEXP "${Setup.ContractStatus.ARCHIVAL}"`;
+                break;
+            case 'all':
+            default:
+                statusTypeCondition = '1';
+        }
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
         const sql = `SELECT  Tasks.Id,
@@ -126,15 +124,10 @@ export default class ContractsWithChildrenController {
             WHERE ${contractCondition} 
               AND ${milestoneCondition}
               AND ${caseCondition} 
-              AND ${contractStatusCondition} 
+              AND ${statusTypeCondition} 
               AND ${projectCondition}
-              AND ${ownerCondition}
-              AND ${deadlineFromCondition}
-              AND ${deadlineToCondition}
-              AND ${statusCondition}
               AND ${searchTextCondition}
             ORDER BY Contracts.Id, Milestones.Id, Cases.ID`;
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractsResult(result);
     }

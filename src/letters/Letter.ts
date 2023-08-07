@@ -156,6 +156,7 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         const sql = `DELETE FROM Letters_Cases WHERE LetterId =?`;
         return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
+
     async appendAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
         this.letterFilesCount += files.length;
     }

@@ -57,7 +57,7 @@ export default class OurLetterGdFile extends DocumentGdFile {
 
     private makeDataforNamedRanges(): { rangeName: string; newText: string; }[] {
         if (!(this.enviDocumentData.creationDate && this.enviDocumentData.number && this.enviDocumentData.description))
-            throw new Error('enviDocumentData attributes not found');
+            throw new Error('enviDocumentData creationDate or number or description not found');
         const number = (typeof this.enviDocumentData.number === 'number') ? this.enviDocumentData.number.toString() : this.enviDocumentData.number;
         return [
             { rangeName: 'creationDate', newText: this.enviDocumentData.creationDate },
