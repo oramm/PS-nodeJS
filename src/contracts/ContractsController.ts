@@ -16,6 +16,8 @@ export type ContractSearchParamas = {
     contractOurId?: string,
     startDateFrom?: string,
     startDateTo?: string,
+    endDateFrom?: string,
+    endDateTo?: string,
     contractName?: string,
     contractAlias?: string,
     typeId?: number,
@@ -50,6 +52,13 @@ export default class ContractsController {
             : '1';
         const startDateToCondition = searchParams.startDateTo
             ? mysql.format(`mainContracts.StartDate <= ?`, [searchParams.startDateTo])
+            : '1';
+
+        const endDateFromCondition = searchParams.endDateFrom
+            ? mysql.format(`mainContracts.EndDate >= ?`, [searchParams.endDateFrom])
+            : '1';
+        const endDateToCondition = searchParams.endDateTo
+            ? mysql.format(`mainContracts.EndDate <= ?`, [searchParams.endDateTo])
             : '1';
         const typeCondition = typeId
             ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
@@ -117,11 +126,13 @@ export default class ContractsController {
             AND ${contractNameCondition}
             AND ${startDateFromCondition}
             AND ${startDateToCondition}
+            AND ${endDateFromCondition}
+            AND ${endDateToCondition}
             AND ${searchTextCondition}
             AND ${typeCondition}
             AND ${typesToIncudeCondition}
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
-        //console.log(sql);
+
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             return (searchParams.onlyKeyData) ? this.processContractsResultKeyData(result, searchParams) : await this.processContractsResult(result, searchParams);
