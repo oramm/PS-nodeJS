@@ -94,6 +94,7 @@ export default class ContractsWithChildrenController {
                 Cases.Description AS CaseDescription,
                 Cases.TypeId AS CaseTypeId,
                 Cases.GdFolderId AS CaseGdFolderId,
+                Cases.Number AS CaseNumber,
                 CaseTypes.Id AS CaseTypeId,
                 CaseTypes.Name AS CaseTypeName,
                 CaseTypes.IsDefault,
@@ -203,6 +204,7 @@ export default class ContractsWithChildrenController {
                 id: row.CaseId,
                 name: ToolsDb.sqlToString(row.CaseName),
                 description: ToolsDb.sqlToString(row.CaseDescription),
+                number: row.CaseNumber,
                 gdFolderId: row.CaseGdFolderId,
                 _type: {
                     id: row.CaseTypeId,
