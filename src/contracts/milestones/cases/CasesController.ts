@@ -13,6 +13,7 @@ import ContractOther from "../../ContractOther";
 export type CasesSearchParams = {
     projectId?: string,
     contractId?: number,
+    _contract?: Contract,
     milestoneId?: number,
     caseId?: number,
     searchText?: string
@@ -23,8 +24,9 @@ export default class CasesController {
         const projectCondition = searchParams.projectId
             ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
             : '1';
-        const contractCondition = searchParams.contractId
-            ? mysql.format('Contracts.Id = ?', [searchParams.contractId])
+        const contractId = searchParams.contractId || searchParams._contract?.id
+        const contractCondition = contractId
+            ? mysql.format('Contracts.Id = ?', [contractId])
             : '1';
         const milestoneCondition = searchParams.milestoneId
             ? mysql.format('Cases.MilestoneId = ?', [searchParams.milestoneId])

@@ -127,7 +127,7 @@ export default class ContractsWithChildrenController {
               AND ${statusTypeCondition} 
               AND ${projectCondition}
               AND ${searchTextCondition}
-            ORDER BY Contracts.Id, Milestones.Id, Cases.ID`;
+            ORDER BY Contracts.Id, Milestones.Id, CaseTypeFolderNumber, Cases.Id`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractsResult(result);
     }
