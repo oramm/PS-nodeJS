@@ -121,7 +121,7 @@ export default class LettersController {
         for (const row of result) {
             const _casesAssociationsPerLetter = _casesAssociationsPerProject.filter((item: any) => item.letterId == row.Id);
             const _letterEntitiesMainPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'MAIN');
-            const _letterEntitiesCcPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'Cc');
+            const _letterEntitiesCcPerLetter = _letterEntitiesPerProject.filter((item: any) => item.letterId == row.Id && item.letterRole == 'CC');
             const initParam = {
                 id: row.Id,
                 isOur: row.IsOur,
