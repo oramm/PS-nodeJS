@@ -5,6 +5,7 @@ import DocumentGdFile from "../documentTemplates/DocumentGdFile";
 import { Envi } from "../tools/Tools";
 import ToolsDocs from "../tools/ToolsDocs";
 import LetterGdController from "./LetterGdController";
+import Entity from "../entities/Entity";
 
 export default class OurLetterGdFile extends DocumentGdFile {
     constructor(initObjectParamenter: { _template?: DocumentTemplate, enviDocumentData: OurLetter }) {
@@ -65,7 +66,13 @@ export default class OurLetterGdFile extends DocumentGdFile {
             { rangeName: 'address', newText: this.entitiesDataLabel(<any[]>this.enviDocumentData._entitiesMain) },
             { rangeName: 'description', newText: this.enviDocumentData.description },
             { rangeName: 'projectContext', newText: this.projectContextLabel() },
+            { rangeName: 'addressCc', newText: this.addressCcLabel() },
         ];
+    }
+
+    private addressCcLabel() {
+        if (this.enviDocumentData?._entitiesCc?.length === 0) return '-----';
+        return this.entitiesDataLabel(<any[]>this.enviDocumentData._entitiesCc);
     }
 
     /**Zwraca listę spraw, kamieni itd */
@@ -92,9 +99,9 @@ export default class OurLetterGdFile extends DocumentGdFile {
     }
 
     /** tworzy etykietę z danymi address */
-    private entitiesDataLabel(entities: any[]) {
+    private entitiesDataLabel(entities: Entity[]) {
         let label = '';
-        for (var i = 0; i < entities.length; i++) {
+        for (let i = 0; i < entities.length; i++) {
             label += entities[i].name
             if (entities[i].address)
                 label += '\n' + entities[i].address;
