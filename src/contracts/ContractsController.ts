@@ -9,10 +9,10 @@ import Project from '../projects/Project';
 import Setup from '../setup/Setup';
 
 export type ContractSearchParamas = {
+    id?: number,
     projectId?: string,
     _parent?: Project,
     searchText?: string,
-    contractId?: number
     contractOurId?: string,
     startDateFrom?: string,
     startDateTo?: string,
@@ -35,11 +35,11 @@ export default class ContractsController {
         const onlyKeyData = typeof searchParams.onlyKeyData === 'string'
         const isArchived = typeof searchParams.isArchived === 'string'
 
+        const idCondition = searchParams.id
+            ? mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+            : '1';
         const projectCondition = projectOurId
             ? mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
-            : '1';
-        const contractIdCondition = searchParams.contractId
-            ? mysql.format(`mainContracts.Id = ?`, [searchParams.contractId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
             ? mysql.format(`OurContractsData.OurId LIKE ?`, [`%${searchParams.contractOurId}%`])
@@ -118,8 +118,8 @@ export default class ContractsController {
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-          WHERE ${projectCondition} 
-            AND ${contractIdCondition} 
+          WHERE ${idCondition} 
+            AND ${projectCondition} 
             AND ${onlyOursContractsCondition} 
             AND ${contractOurIdCondition} 
             AND ${isArchivedConditon}

@@ -9,6 +9,7 @@ import ContractOther from '../contracts/ContractOther';
 
 export default class InvoicesController {
     static async getInvoicesList(searchParams: {
+        id?: number,
         projectId?: string,
         _project?: Project,
         contractId?: number,
@@ -20,6 +21,10 @@ export default class InvoicesController {
     } = {}) {
         const projectOurId = searchParams._project?.ourId || searchParams.projectId;
         const contractId = searchParams._contract?.id || searchParams.contractId;
+
+        const idCondition = searchParams.id
+            ? mysql.format(`Invoices.Id = ?`, [searchParams.id])
+            : '1';
 
         const projectCondition = projectOurId
             ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
@@ -84,7 +89,8 @@ export default class InvoicesController {
         LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
         LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
-        WHERE ${projectCondition} 
+        WHERE ${idCondition}
+            AND ${projectCondition} 
             AND ${contractCondition} 
             AND ${issueDateFromCondition}
             AND ${issueDateToCondition}
