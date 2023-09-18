@@ -8,7 +8,7 @@ import ContractType from "./contractTypes/ContractType";
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
 
-export type ContractSearchParamas = {
+export type ContractSearchParams = {
     id?: number,
     projectId?: string,
     _parent?: Project,
@@ -29,7 +29,7 @@ export type ContractSearchParamas = {
 }
 
 export default class ContractsController {
-    static async getContractsList(searchParams: ContractSearchParamas = {}) {
+    static async getContractsList(searchParams: ContractSearchParams = {}) {
         const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
         const onlyKeyData = typeof searchParams.onlyKeyData === 'string'
@@ -144,7 +144,7 @@ export default class ContractsController {
 
     static makeSearchTextCondition(searchText: string | undefined) {
         if (!searchText) return '1'
-
+        if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
         const conditions = words.map(word =>
             mysql.format(`(mainContracts.Name LIKE ? 

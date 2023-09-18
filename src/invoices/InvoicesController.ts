@@ -106,7 +106,7 @@ export default class InvoicesController {
 
     static makeSearchTextCondition(searchText: string | undefined) {
         if (!searchText) return '1'
-
+        searchText = searchText.toString();
         const words = searchText.split(' ');
         const conditions = words.map(word =>
             mysql.format(`(Invoices.Number LIKE ? 
