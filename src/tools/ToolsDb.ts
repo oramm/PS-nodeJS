@@ -128,7 +128,7 @@ export default class ToolsDb {
         }
     }
 
-    //edytuje obiekt w bazie
+    /**edytuje obiekt w bazie */
     static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
 

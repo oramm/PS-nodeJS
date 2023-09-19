@@ -71,11 +71,15 @@ export default class ContractOur extends Contract {
     }
 
     async editInDb() {
-        let datatoDb = Tools.cloneOfObject(this);
-        this.preparetoDboperation(datatoDb);
-        await ToolsDb.editInDb('Contracts', datatoDb);
-        this.id = datatoDb.id;
-        await ToolsDb.editInDb('OurContractsData', this.getourContractDbFIelds());
+        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            const datatoDb = Tools.cloneOfObject(this);
+            this.preparetoDboperation(datatoDb);
+            await ToolsDb.editInDb('Contracts', datatoDb, conn, true);
+            this.id = datatoDb.id;
+
+            const ourContractDbFields = this.getourContractDbFIelds();
+            await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true);
+        });
     }
 
     getType(ourId: string): string {
