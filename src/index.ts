@@ -158,7 +158,7 @@ app.use(risksReactionsRouter);
 
 require('./contracts/milestones/cases/tasks/TasksRouters');
 require('./contracts/milestones/cases/tasks/taskTemplates/TaskTemplatesRouters');
-
+require('./contracts/securities/SecuritiesRouters');
 require('./processes/ProcessesRouters');
 require('./processes/ProcessStepsRouters');
 require('./processes/processInstances/ProcessInstancesRouters'); require('./processes/processInstances/ProcessStepInstancesRouters');

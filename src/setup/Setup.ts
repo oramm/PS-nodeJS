@@ -90,6 +90,14 @@ export default class Setup {
         }
     }
 
+    static CaseTypes = {
+        SECURITY_GUARANTY: 99,
+    }
+
+    static MilestoneTypes = {
+        OURCONTRACT_ADMINISTRATION: 1,
+    }
+
     static InvoiceStatus = {
         FOR_LATER: 'Na później',
         TO_DO: 'Do zrobienia',

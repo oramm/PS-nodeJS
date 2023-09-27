@@ -18,7 +18,7 @@ export default class ContractOur extends Contract {
     _manager?: Person;
     _admin?: Person;
 
-    constructor(initParamObject: any, conn?: mysql.PoolConnection) {
+    constructor(initParamObject: any) {
         super(initParamObject);
         if (initParamObject._ourContract && initParamObject._ourContract.ourId)
             throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
@@ -46,7 +46,7 @@ export default class ContractOur extends Contract {
 
     async addInDb() {
         let datatoDb = Tools.cloneOfObject(this);
-        this.preparetoDboperation(datatoDb);
+        this.prepareToDboperation(datatoDb);
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             await ToolsDb.addInDb('Contracts', datatoDb, conn, true);
             this.id = datatoDb.id;
@@ -64,7 +64,7 @@ export default class ContractOur extends Contract {
         };
     }
 
-    private preparetoDboperation(datatoDb: any) {
+    private prepareToDboperation(datatoDb: any) {
         delete datatoDb.ourId;
         delete datatoDb.managerId;
         delete datatoDb.adminId;
@@ -73,7 +73,7 @@ export default class ContractOur extends Contract {
     async editInDb() {
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             const datatoDb = Tools.cloneOfObject(this);
-            this.preparetoDboperation(datatoDb);
+            this.prepareToDboperation(datatoDb);
             await ToolsDb.editInDb('Contracts', datatoDb, conn, true);
             this.id = datatoDb.id;
 

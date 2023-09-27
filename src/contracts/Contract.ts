@@ -1,6 +1,6 @@
 import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
-import { auth, OAuth2Client } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import Project from '../projects/Project';
 import Entity from '../entities/Entity';
 import ContractType from './contractTypes/ContractType';

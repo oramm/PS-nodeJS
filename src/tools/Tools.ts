@@ -68,11 +68,11 @@ export default class Tools {
         return (typeof x === "number") && Math.floor(x) === x
     }
 
-    static isBoolean(x: any): boolean {
-        return (typeof x === "boolean")
-    }
-    static numberWithThousandsSeparators(x: number) {
-        return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    static stringToNumber(value: string) {
+        const sanitizedValue = value
+            .replace(/\s|[^0-9.]/g, '')
+            .replace(/,/g, '.');
+        return parseFloat(sanitizedValue);
     }
 
     static capitalizeFirstLetter(string: string) {

@@ -7,13 +7,18 @@ import Milestone from "./Milestone";
 export default class MilestonesController {
     static async getMilestonesList(searchParams: {
         projectId?: string,
-        contractId?: number
+        contractId?: number,
+        typeId?: number,
     } = {}) {
         const projectCondition = searchParams.projectId
             ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
             : '1';
         const contractCondition = searchParams.contractId
             ? mysql.format('Milestones.ContractId = ?', [searchParams.contractId])
+            : '1';
+        //typeCondition
+        const typeCondition = searchParams.typeId
+            ? mysql.format('Milestones.TypeId = ?', [searchParams.typeId])
             : '1';
 
         const sql = `SELECT  Milestones.Id,
@@ -46,7 +51,8 @@ export default class MilestonesController {
         LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
         LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
         WHERE ${projectCondition} 
-          AND ${contractCondition}
+            AND ${contractCondition}
+            AND ${typeCondition}
         ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

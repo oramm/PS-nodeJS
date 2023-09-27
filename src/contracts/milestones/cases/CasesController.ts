@@ -16,6 +16,7 @@ export type CasesSearchParams = {
     _contract?: Contract,
     milestoneId?: number,
     caseId?: number,
+    typeId?: number,
     searchText?: string
 }
 
@@ -33,6 +34,10 @@ export default class CasesController {
             : '1';
         const caseCondition = searchParams.caseId
             ? mysql.format('Cases.Id = ?', [searchParams.caseId])
+            : '1';
+
+        const typeIdCondition = searchParams.typeId
+            ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
             : '1';
 
         const searchTextCondition = (searchParams.searchText) ?
@@ -86,6 +91,7 @@ export default class CasesController {
             AND ${milestoneCondition} 
             AND ${caseCondition}
             AND ${searchTextCondition}
+            AND ${typeIdCondition}
         ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

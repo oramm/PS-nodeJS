@@ -135,23 +135,25 @@ export default class Case extends BusinessObject {
         if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
         console.log('Case.addNewProcessInstancesInDb():: Id', externalConn.threadId);
         const result = [];
-        if (this._type._processes.length > 0) {
-            //typ sprawy może mieć wiele procesów - sprawa automatycznie też
-            for (const process of this._type._processes) {
-                //dodaj zadanie ramowe z szablonu
-                let processInstanceTask = new Task({ _parent: this });
-                await processInstanceTask.addInDbFromTemplateForProcess(process, externalConn, isPartOfTransaction);
+        if (!this._type._processes || this._type._processes.length <= 0)
+            return;
 
-                const processInstance = new ProcessInstance({
-                    _process: process,
-                    _case: this,
-                    _task: processInstanceTask
-                });
-                await processInstance.addInDb(externalConn, isPartOfTransaction);
-                result.push(processInstance)
-            }
-            return result;
+        //typ sprawy może mieć wiele procesów - sprawa automatycznie też
+        for (const process of this._type._processes) {
+            //dodaj zadanie ramowe z szablonu
+            let processInstanceTask = new Task({ _parent: this });
+            await processInstanceTask.addInDbFromTemplateForProcess(process, externalConn, isPartOfTransaction);
+
+            const processInstance = new ProcessInstance({
+                _process: process,
+                _case: this,
+                _task: processInstanceTask
+            });
+            await processInstance.addInDb(externalConn, isPartOfTransaction);
+            result.push(processInstance)
         }
+        return result;
+
     }
     /** jest wywoływana w editCase()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
@@ -264,10 +266,8 @@ export default class Case extends BusinessObject {
         return await TaskTemplatesController.getTaskTemplatesList({ caseTypeId: this.typeId });
     }
 
-    /*
-   * Tworzy domyślne sprawy i zapisuje je w db
-   * argument: {defaultTaskTemplates, externalConn, isPartOfTransaction}
-   */
+    /** Tworzy domyślne zasania i zapisuje je w db
+     */
     async createDefaultTasksInDb(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
         console.log('createDefaultTasksInDb :: connection Id', externalConn?.threadId)
         const defaultTasks = [];
@@ -431,6 +431,14 @@ export default class Case extends BusinessObject {
         else
             nameCaption = (this.name) ? this.name : ''
         return nameCaption;
+    }
+
+    async deleteController(auth: OAuth2Client) {
+        await this.deleteFromDb();
+        await Promise.all([
+            this.deleteFolder(auth),
+            this.deleteFromScrumSheet(auth)
+        ]);
     }
 
     async deleteFromScrumSheet(auth: OAuth2Client) {
