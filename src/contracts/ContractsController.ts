@@ -108,7 +108,7 @@ export default class ContractsController {
             relatedContracts.Id AS RelatedId, 
             relatedContracts.Name AS RelatedName, 
             relatedContracts.GdFolderId AS RelatedGdFolderId, 
-            ContractTypes.Id AS TypeId, 
+            ContractTypes.Id AS MainContractTypeId, 
             ContractTypes.Name AS TypeName, 
             ContractTypes.IsOur AS TypeIsOur, 
             ContractTypes.Description AS TypeDescription
@@ -211,7 +211,7 @@ export default class ContractsController {
                     email: row.AdminEmail
                 },
                 _type: new ContractType({
-                    id: row.TypeId,
+                    id: row.MainContractTypeId,
                     name: row.TypeName,
                     description: row.TypeDescription,
                     isOur: row.TypeIsOur
