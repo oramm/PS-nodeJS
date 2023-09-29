@@ -24,6 +24,7 @@ app.get('/invoiceItem/:id', async (req: Request, res: Response) => {
             res.status(500).send({ errorMessage: error.message });
     }
 });
+
 app.post('/invoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);

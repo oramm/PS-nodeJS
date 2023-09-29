@@ -54,9 +54,9 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
 
 app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.body);
-        if (item.gdId && item.status?.match(/Na później|Do zrobienia|/i)) {
-            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.body.gdId, ToolsGd);
+        let item = new Invoice(req.parsedBody);
+        if (item.gdId && item.status?.match(/Na później|Do zrobienia/i)) {
+            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.parsedBody.gdId, ToolsGd);
             item.setGdIdAndUrl(null);
         }
 
