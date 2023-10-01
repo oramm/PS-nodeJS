@@ -63,7 +63,7 @@ export class Security extends BusinessObject {
         this.firstPartExpiryDate = ToolsDate.dateJsToSql(firstPartExpiryDate);
         this.secondPartExpiryDate = ToolsDate.dateJsToSql(secondPartExpiryDate);
         this.isCash = isCash;
-        this._case = _case;
+        this._case = _case instanceof Case ? _case : new Case(_case);
         this._contract = _contract;
         this._editor = _editor;
         this._lastUpdated = _lastUpdated;
@@ -86,7 +86,7 @@ export class Security extends BusinessObject {
     async getCase(): Promise<Case | undefined> {
         return (await CasesController.getCasesList({
             contractId: this.contractId,
-            typeId: Setup.CaseTypes.SECURITY_GUARANTY
+            typeId: Setup.CaseTypes.SECURITY_GUARANTEE
         }))[0];
     }
 
@@ -99,7 +99,7 @@ export class Security extends BusinessObject {
     }
 
     async getCaseType() {
-        const caseType = (await CaseTypesController.getCaseTypesList({ id: Setup.CaseTypes.SECURITY_GUARANTY }))[0];
+        const caseType = (await CaseTypesController.getCaseTypesList({ id: Setup.CaseTypes.SECURITY_GUARANTEE }))[0];
         return caseType;
     }
 

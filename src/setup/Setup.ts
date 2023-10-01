@@ -91,7 +91,7 @@ export default class Setup {
     }
 
     static CaseTypes = {
-        SECURITY_GUARANTY: 99,
+        SECURITY_GUARANTEE: 99,
     }
 
     static MilestoneTypes = {

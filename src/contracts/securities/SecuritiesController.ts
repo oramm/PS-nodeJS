@@ -210,7 +210,7 @@ export default class SecuritiesController {
                     email: row.EditorsEmail
                 })
             });
-            await item.setGdFolderUrl();
+            item.setGdFolderUrl();
             newResult.push(item);
         }
         return newResult;
