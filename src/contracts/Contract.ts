@@ -23,6 +23,7 @@ export default abstract class Contract extends BusinessObject {
     projectOurId: string;
     startDate?: string;
     endDate?: string;
+    guaranteeEndDate?: string;
     value?: string | number;
     comment: string;
     gdFolderId?: string;
@@ -51,6 +52,7 @@ export default abstract class Contract extends BusinessObject {
 
         this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
+        this.guaranteeEndDate = ToolsDate.dateJsToSql(initParamObject.guaranteeEndDate);
         if (initParamObject.value) {
             if (typeof initParamObject.value === 'string') {
                 initParamObject.value = initParamObject.value
@@ -171,7 +173,7 @@ export default abstract class Contract extends BusinessObject {
             await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
-    /*
+    /**
      * jest wywoływana w editCase()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
      */

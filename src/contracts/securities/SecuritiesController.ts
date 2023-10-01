@@ -98,6 +98,7 @@ export default class SecuritiesController {
             Contracts.Name AS ContractName, 
             Contracts.StartDate AS ContractStartDate, 
             Contracts.EndDate AS ContractEndDate,
+            Contracts.GuaranteeEndDate AS ContractGuaranteeEndDate,
             Contracts.Status AS ContractStatus,
             OurContractsData.OurId AS ContractOurId,
             Admins.Id AS AdminsId,
@@ -195,6 +196,7 @@ export default class SecuritiesController {
                     number: row.ContractNumber,
                     startDate: row.ContractStartDate,
                     endDate: row.ContractEndDate,
+                    guaranteeEndDate: row.ContractGuaranteeEndDate,
                     name: row.ContractName,
                     status: row.ContractStatus,
                     _admin: new Person({
