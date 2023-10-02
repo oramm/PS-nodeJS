@@ -25,6 +25,7 @@ export type ContractSearchParams = {
     typesToInclude?: 'our' | 'other' | 'all',
     onlyOurs?: boolean,//@deprecated
     isArchived?: boolean,
+    status?: string | string[],
     onlyKeyData?: boolean
 }
 
@@ -63,6 +64,18 @@ export default class ContractsController {
         const typeCondition = typeId
             ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
             : '1';
+
+
+        let statusCondition = '1';
+        if (searchParams.status) {
+            if (typeof searchParams.status === 'string') {
+                statusCondition = mysql.format(`mainContracts.Status = ?`, [searchParams.status])
+            } else if (Array.isArray(searchParams.status)) {
+                const statusConditions = searchParams.status.map(status => mysql.format(`mainContracts.Status = ?`, [status]));
+                statusCondition = '(' + statusConditions.join(' OR ') + ')';
+            }
+        }
+
 
         let typesToIncudeCondition;
         switch (searchParams.typesToInclude) {
@@ -131,9 +144,10 @@ export default class ContractsController {
             AND ${endDateToCondition}
             AND ${searchTextCondition}
             AND ${typeCondition}
+            AND ${statusCondition}
             AND ${typesToIncudeCondition}
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
-
+        console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             return (searchParams.onlyKeyData) ? this.processContractsResultKeyData(result, searchParams) : await this.processContractsResult(result, searchParams);
