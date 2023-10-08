@@ -114,13 +114,16 @@ export default abstract class Contract extends BusinessObject {
         }
     }
     /**batch dla edycji kontraktów */
-    async editHandler(auth: OAuth2Client) {
+    async editHandler(auth: OAuth2Client, fieldsToUpdate: string[] = []) {
         console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
-        const promises = [
+        const onlyDbfields = ['status', 'comment', 'startDate', 'endDate', 'guaranteeEndDate', 'value', 'name'];
+        const isOnlyDbFields = fieldsToUpdate.length > 0 && fieldsToUpdate.every(field => onlyDbfields.includes(field));
+
+        const promises = [this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))];
+        if (!isOnlyDbFields) promises.push(
             this.editFolder(auth).then(() => console.log('Contract folder edited')),
-            this.editInScrum(auth).then(() => console.log('Contract edited in scrum')),
-            this.editInDb().then(() => console.log('Contract edited in db'))
-        ];
+            this.editInScrum(auth).then(() => console.log('Contract edited in scrum'))
+        );
         await Promise.all(promises);
         console.groupEnd();
     }
@@ -247,12 +250,7 @@ export default abstract class Contract extends BusinessObject {
         });
     }
 
-    async editInDb() {
-        const res = await ToolsDb.transaction(async conn => {
-            await super.editInDb(conn, true);
-            await this.editEntitiesAssociationsInDb(conn, true);
-        });
-    }
+
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
         if (this.gdFolderId) {

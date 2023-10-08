@@ -37,6 +37,13 @@ export default class ContractOther extends Contract {
         this.setFolderName();
     }
 
+    async editInDb(extenalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean, fieldsToUpdate?: string[]) {
+        const res = await ToolsDb.transaction(async conn => {
+            await super.editInDb(conn, true, fieldsToUpdate);
+            await this.editEntitiesAssociationsInDb(conn, true);
+        });
+    }
+
     setFolderName() {
         this._folderName = `${this.number} ${this.alias || ''}`.trim();
     }

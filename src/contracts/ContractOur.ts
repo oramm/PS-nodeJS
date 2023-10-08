@@ -70,15 +70,20 @@ export default class ContractOur extends Contract {
         delete datatoDb.adminId;
     }
 
-    async editInDb() {
+    async editInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false, fieldsToUpdate?: string[]) {
+        const ourContractFields = ['ourId', 'managerId', 'adminId'];
+        const ourContractFieldsToUpdate = fieldsToUpdate?.filter(field => ourContractFields.includes(field)) || [];
+        const contractFieldsToUpdate = fieldsToUpdate?.filter(field => !ourContractFields.includes(field)) || [];
+
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             const datatoDb = Tools.cloneOfObject(this);
             this.prepareToDboperation(datatoDb);
-            await ToolsDb.editInDb('Contracts', datatoDb, conn, true);
+            await ToolsDb.editInDb('Contracts', datatoDb, conn, true, contractFieldsToUpdate);
             this.id = datatoDb.id;
-
-            const ourContractDbFields = this.getourContractDbFIelds();
-            await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true);
+            if (ourContractFieldsToUpdate.length > 0) {
+                const ourContractDbFields = this.getourContractDbFIelds();
+                await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true, ourContractFieldsToUpdate);
+            }
         });
     }
 

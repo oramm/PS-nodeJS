@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import Tools from './Tools';
 import ToolsDate from './ToolsDate';
+import { RepositoryDataItem } from '../types/types';
 
 
 export default class ToolsDb {
@@ -129,20 +130,27 @@ export default class ToolsDb {
     }
 
     /**edytuje obiekt w bazie */
-    static async editInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean): Promise<any> {
+    static async editInDb(
+        tableName: string,
+        object: any,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        fieldsToUpdate?: string[]
+    ): Promise<any> {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
 
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
         let stmt: { string: string, values: any[] } | undefined;
 
         try {
-            stmt = this.dynamicUpdatePreparedStmt(tableName, object);
+            stmt = this.dynamicUpdatePreparedStmt(tableName, object, fieldsToUpdate);
+            console.log(stmt.string);
             const result = await conn.execute(stmt.string, stmt.values);
             const newObject = result[0];
 
             if (!isPartOfTransaction) await conn.commit();
 
-            return newObject;
+            return { ...object, ...newObject };
         } catch (e) {
             if (!externalConn) await conn.rollback();
 
@@ -200,20 +208,27 @@ export default class ToolsDb {
      * * * * * * * * Prepared Statement
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-    //tworzy String prepared Statement na podstawie atrybutuów objektu
-    private static dynamicUpdatePreparedStmt(tableName: string, object: any) {
+    /**tworzy String prepared Statement na podstawie atrybutuów objektu*/
+    private static dynamicUpdatePreparedStmt(tableName: string, object: any, fieldsToUpdate?: string[]) {
         if (!object.id)
             throw new Error('Edytowany obiekt musi mieć atrybut Id!');
 
         let keys: string[] = Object.keys(object);
+
+        //Jeśli fieldsToUpdate istnieje, przefiltruj klucze
+        if (fieldsToUpdate && fieldsToUpdate.length) {
+            keys = keys.filter(key => fieldsToUpdate.includes(key));
+        }
+
         let stmt: { string: string, values: any[] } = {
             string: 'UPDATE ' + tableName + ' SET ',
             values: this.processColls('UPDATE', keys, object)
         };
+
         for (const key of keys) {
             if (this.isValidDbAttribute(key, object)) {
                 //polami w Db sa atrybuty bez _ i z dopiskiem LocalData (jest on usuwany przed wysłąniem SQL do db)
-                const end = key.indexOf('LocalData')
+                const end = key.indexOf('LocalData');
                 let keyWithoutLocalData = key;
                 if (end > 0) {
                     keyWithoutLocalData = key.substring(0, end);

@@ -21,8 +21,8 @@ export default class BusinessObject {
         return await ToolsDb.addInDb(this._dbTableName, this, externalConn, isPartOfTransaction);
     }
 
-    async editInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
-        return await ToolsDb.editInDb(this._dbTableName, this, externalConn, isPartOfTransaction);
+    async editInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false, fieldsToUpdate?: string[]) {
+        return await ToolsDb.editInDb(this._dbTableName, this, externalConn, isPartOfTransaction, fieldsToUpdate);
     }
 
     async deleteFromDb() {

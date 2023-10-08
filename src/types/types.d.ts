@@ -1,4 +1,5 @@
 // sessionTypes.ts
+import e from 'express';
 import 'express-session';
 
 declare module 'express-session' {
@@ -13,3 +14,8 @@ declare module 'express-session' {
         };
     }
 }
+
+export interface RepositoryDataItem {
+    id: number;
+    [key: string]: any;
+};
