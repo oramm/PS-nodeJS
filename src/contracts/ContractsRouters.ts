@@ -7,8 +7,6 @@ import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ContractsWithChildrenController from './ContractsWithChildrenController';
 import ContractsSettlementController from './ContractsSettlementController';
-import ToolsDb from '../tools/ToolsDb';
-import { send } from 'process';
 
 app.get('/contracts', async (req: Request, res: Response) => {
     try {
@@ -103,12 +101,11 @@ app.post('/contractReact', async (req: Request, res: Response) => {
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const item = req.body.item;
-        const fieldsToUpdate = req.body.fieldsToUpdate;
-        if (!item || !item.id) throw new Error(`Próba edycji kontraktu bez Id`);
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        if (!itemFromClient || !itemFromClient.id) throw new Error(`Próba edycji kontraktu bez Id`);
 
-        //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'item'
-        const contractInstance = (item.ourId || item._type.isOur) ? new ContractOur(item) : new ContractOther(item);
+        //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
+        const contractInstance = (itemFromClient.ourId || itemFromClient._type.isOur) ? new ContractOur(itemFromClient) : new ContractOther(itemFromClient);
 
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, contractInstance.editHandler, [fieldsToUpdate], contractInstance)

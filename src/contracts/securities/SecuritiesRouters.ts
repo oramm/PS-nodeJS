@@ -38,9 +38,10 @@ app.post('/security', async (req: Request, res: Response) => {
 
 app.put('/security/:id', async (req: Request, res: Response) => {
     try {
-        if (typeof req.parsedBody.value === "string")
-            req.parsedBody.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
-        const item = new Security(req.parsedBody);
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        if (typeof itemFromClient.value === "string")
+            itemFromClient.value = parseFloat(itemFromClient.value.replace(/ /g, '').replace(',', '.'));
+        const item = new Security(itemFromClient);
         if (!item.id) throw new Error(`Próba edycji ZNWU bez Id`);
 
         await ToolsGapi.gapiReguestHandler(req, res, (<Security>item).editController, undefined, item);

@@ -54,9 +54,10 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
 
 app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.parsedBody);
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        let item = new Invoice(itemFromClient);
         if (item.gdId && item.status?.match(/Na później|Do zrobienia/i)) {
-            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.parsedBody.gdId, ToolsGd);
+            await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, item.gdId, ToolsGd);
             item.setGdIdAndUrl(null);
         }
 
@@ -71,7 +72,8 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice({ ...req.parsedBody, status: 'Do zrobienia' });
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        let item = new Invoice({ ...itemFromClient, status: 'Do zrobienia' });
         await item.editInDb();
         res.send(item);
     } catch (error) {
@@ -83,20 +85,21 @@ app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
     try {
+        const itemFromClient = req.parsedBody;
         const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
         if (!req.files) req.files = [];
         console.log(req.files);
         if (!Array.isArray(req.files)) throw new Error('Nie załączono pliku');
         let invoceFile: Express.Multer.File;
         invoceFile = req.files[0];
+        let item = new Invoice({ ...itemFromClient, status: 'Zrobiona' });
 
         let promises: any[] = await Promise.all(
             [
                 ToolsGapi.gapiReguestHandler(req, res, ToolsGd.uploadFileMulter, [invoceFile, undefined, parentFolderGdId]),
-                (!req.parsedBody.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, req.parsedBody.gdId),
+                (!item.gdId) ? null : ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, item.gdId),
             ]
         )
-        let item = new Invoice({ ...req.parsedBody, status: 'Zrobiona' });
         let fileData: drive_v3.Schema$File = promises[0];
         item.setGdIdAndUrl(fileData.id);
         await item.editInDb();
@@ -110,7 +113,9 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice({ ...req.parsedBody, status: 'Wysłana' });
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const item = new Invoice({ ...itemFromClient, status: 'Wysłana' });
+
         await item.editInDb();
         res.send(item);
     } catch (error) {
@@ -122,7 +127,8 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice({ ...req.parsedBody, status: 'Zapłacona' });
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const item = new Invoice({ ...itemFromClient, status: 'Zapłacona' });
         await item.editInDb();
         res.send(item);
     } catch (error) {

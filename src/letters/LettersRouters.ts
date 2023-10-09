@@ -127,17 +127,19 @@ app.post('/letter', async (req: Request, res: any) => {
 
 app.put('/letter/:id', async (req: Request, res: Response) => {
     try {
-        if (!req.files) req.files = [];
-        console.log('req.files', req.files);
-        const initParams = req.parsedBody;
-        if (!initParams._project.id) throw new Error('No _project.id in initParams');
+        let { item: initParamsFromClient, fieldsToUpdate } = req.parsedBody;
 
-        console.log('initParams', initParams._project);
+        if (!req.files) req.files = [];
+        else initParamsFromClient = req.parsedBody;
+        console.log('req.files', req.files);
+        if (!initParamsFromClient._project.id) throw new Error('No _project.id in initParamsFromClient');
+
+        console.log('initParamsFromClient', initParamsFromClient._project);
         let item: OurLetter | IncomingLetter;
-        if (initParams.isOur)
-            item = new OurLetter(initParams);
+        if (initParamsFromClient.isOur)
+            item = new OurLetter(initParamsFromClient);
         else
-            item = new IncomingLetter(initParams);
+            item = new IncomingLetter(initParamsFromClient);
         await ToolsGapi.gapiReguestHandler(req, res, item.edit, [req.files], item);
         res.send(item);
     } catch (error) {

@@ -43,7 +43,8 @@ app.post('/case', async (req: Request, res: Response) => {
 
 app.put('/case/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Case(req.body);
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)
             item.setAsUniquePerMilestone();
         await ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item);

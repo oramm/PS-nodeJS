@@ -79,7 +79,8 @@ app.post('/project', async (req: any, res: any) => {
 
 app.put('/project/:id', async (req: any, res: any) => {
     try {
-        let item = new Project(req.body);
+        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        let item = new Project(itemFromClient);
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, item.editProjectFolder, undefined, item),
             item.editInDb(),
