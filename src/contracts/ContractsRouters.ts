@@ -101,7 +101,8 @@ app.post('/contractReact', async (req: Request, res: Response) => {
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         if (!itemFromClient || !itemFromClient.id) throw new Error(`Próba edycji kontraktu bez Id`);
 
         //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'

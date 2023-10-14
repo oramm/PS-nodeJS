@@ -54,7 +54,8 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
 
 app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         let item = new Invoice(itemFromClient);
         if (item.gdId && item.status?.match(/Na później|Do zrobienia/i)) {
             await ToolsGapi.gapiReguestHandler(req, res, ToolsGd.trashFile, item.gdId, ToolsGd);
@@ -72,7 +73,8 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         let item = new Invoice({ ...itemFromClient, status: 'Do zrobienia' });
         await item.editInDb();
         res.send(item);
@@ -85,6 +87,7 @@ app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
     try {
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         const parentFolderGdId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71'
         if (!req.files) req.files = [];
@@ -113,7 +116,8 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         const item = new Invoice({ ...itemFromClient, status: 'Wysłana' });
 
         await item.editInDb();
@@ -127,7 +131,8 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         const item = new Invoice({ ...itemFromClient, status: 'Zapłacona' });
         await item.editInDb();
         res.send(item);

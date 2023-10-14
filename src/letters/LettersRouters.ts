@@ -127,10 +127,10 @@ app.post('/letter', async (req: Request, res: any) => {
 
 app.put('/letter/:id', async (req: Request, res: Response) => {
     try {
-        let { item: initParamsFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const initParamsFromClient = req.parsedBody;
 
         if (!req.files) req.files = [];
-        else initParamsFromClient = req.parsedBody;
         console.log('req.files', req.files);
         if (!initParamsFromClient._project.id) throw new Error('No _project.id in initParamsFromClient');
 

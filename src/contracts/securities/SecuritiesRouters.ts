@@ -38,7 +38,8 @@ app.post('/security', async (req: Request, res: Response) => {
 
 app.put('/security/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
         if (typeof itemFromClient.value === "string")
             itemFromClient.value = parseFloat(itemFromClient.value.replace(/ /g, '').replace(',', '.'));
         const item = new Security(itemFromClient);

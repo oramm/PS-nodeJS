@@ -43,13 +43,14 @@ app.post('/task', async (req: Request, res: Response) => {
 
 app.put('/task/:id', async (req: Request, res: Response) => {
     try {
-        const { item: itemFromClient, fieldsToUpdate } = req.parsedBody;
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const itemFromClient = req.parsedBody;
+
         let item = new Task(itemFromClient);
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item),
             item.editInDb()
         ]);
-
         res.send(item);
     } catch (error) {
         if (error instanceof Error)

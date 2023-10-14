@@ -16,6 +16,7 @@ declare global {
     namespace Express {
         interface Request {
             parsedBody: any;
+            fieldsToUpdate?: string[];
             parsedQuery: any;
         }
     }
@@ -117,11 +118,18 @@ app.use(
 );
 
 app.use((req, res, next) => {
-
     console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
     next();
 });
 app.enable('trust proxy');
+
+app.use((req, res, next) => {
+    if (req.method === 'PUT') {
+        req.fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        delete req.parsedBody.fieldsToUpdate;
+    }
+    next();
+});
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
