@@ -51,6 +51,7 @@ export default class ContractOur extends Contract {
             await ToolsDb.addInDb('Contracts', datatoDb, conn, true);
             this.id = datatoDb.id;
             await ToolsDb.addInDb('OurContractsData', this.getourContractDbFIelds(), conn, true);
+            await this.addEntitiesAssociationsInDb(conn, true);
         })
     }
 
@@ -63,7 +64,7 @@ export default class ContractOur extends Contract {
             managerId: this.managerId
         };
     }
-
+    /** usuwa z pomocniczego obiektu atrybuty niepasujące to tabeli Contracts */
     private prepareToDboperation(datatoDb: any) {
         delete datatoDb.ourId;
         delete datatoDb.managerId;
@@ -80,10 +81,9 @@ export default class ContractOur extends Contract {
             this.prepareToDboperation(datatoDb);
             await ToolsDb.editInDb('Contracts', datatoDb, conn, true, contractFieldsToUpdate);
             this.id = datatoDb.id;
-            if (ourContractFieldsToUpdate.length > 0) {
-                const ourContractDbFields = this.getourContractDbFIelds();
-                await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true, ourContractFieldsToUpdate);
-            }
+            const ourContractDbFields = this.getourContractDbFIelds();
+            await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true, ourContractFieldsToUpdate);
+            await this.editEntitiesAssociationsInDb(conn, true);
         });
     }
 

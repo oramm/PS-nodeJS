@@ -60,77 +60,78 @@ export default class TasksController {
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
-        const sql = `SELECT  Tasks.Id,
-              Tasks.Name AS TaskName,
-              Tasks.Description AS TaskDescription,
-              Tasks.Deadline AS TaskDeadline,
-              Tasks.Status AS TaskStatus,
-              Tasks.OwnerId,
-              Cases.Id AS CaseId,
-              Cases.Name AS CaseName,
-              Cases.Description AS CaseDescription,
-              Cases.TypeId AS CaseTypeId,
-              Cases.GdFolderId AS CaseGdFolderId,
-              CaseTypes.Id AS CaseTypeId,
-              CaseTypes.Name AS CaseTypeName,
-              CaseTypes.IsDefault,
-              CaseTypes.IsUniquePerMilestone,
-              CaseTypes.MilestoneTypeId,
-              CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-              Milestones.Id AS MilestoneId,
-              Milestones.Name AS MilestoneName,
-              Milestones.ContractId,
-              Milestones.GdFolderId AS MilestoneGdFolderId,
-              MilestoneTypes.Id AS MilestoneTypeId,
-              MilestoneTypes.Name AS MilestoneTypeName,
-              MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
-              OurContractsData.OurId AS ContractOurId,
-              Contracts.Id AS ContractId,
-              Contracts.Alias AS ContractAlias,
-              Contracts.Number AS ContractNumber,
-              Contracts.Name AS ContractName,
-              Contracts.Comment AS ContractComment,
-              Contracts.StartDate AS ContractStartDate,
-              Contracts.EndDate AS ContractEndDate,
-              Contracts.Value AS ContractValue,
-              Contracts.Status AS ContractStatus,
-              Contracts.GdFolderId AS ContractGdFolderId,
-              ContractTypes.Name AS ContractTypeName,
-              ContractManagers.Id AS ContractManagerId,
-              ContractManagers.Name AS ContractManagerName, 
-              ContractManagers.Surname AS ContractManagerSurname, 
-              ContractManagers.Email AS ContractManagerEmail,
-              ContractAdmins.Id AS ContractAdminId,
-              ContractAdmins.Name AS ContractAdminName,
-              ContractAdmins.Surname AS ContractAdminSurname,
-              ContractAdmins.Email AS ContractAdminEmail,
-              Owners.Name AS OwnerName,
-              Owners.Surname AS OwnerSurname,
-              Owners.Email AS OwnerEmail
-            FROM Milestones
-            LEFT JOIN Cases ON Cases.MilestoneId=Milestones.Id
-            JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
-            LEFT JOIN CaseTypes ON Cases.typeId=CaseTypes.Id
-            LEFT JOIN Tasks ON Tasks.CaseId=Cases.Id
-            JOIN Contracts ON Milestones.ContractId=Contracts.Id
+        const sql = `SELECT  
+                Tasks.Id,
+                Tasks.Name AS TaskName,
+                Tasks.Description AS TaskDescription,
+                Tasks.Deadline AS TaskDeadline,
+                Tasks.Status AS TaskStatus,
+                Tasks.OwnerId,
+                Cases.Id AS CaseId,
+                Cases.Name AS CaseName,
+                Cases.Description AS CaseDescription,
+                Cases.TypeId AS CaseTypeId,
+                Cases.GdFolderId AS CaseGdFolderId,
+                CaseTypes.Id AS CaseTypeId,
+                CaseTypes.Name AS CaseTypeName,
+                CaseTypes.IsDefault,
+                CaseTypes.IsUniquePerMilestone,
+                CaseTypes.MilestoneTypeId,
+                CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+                Milestones.Id AS MilestoneId,
+                Milestones.Name AS MilestoneName,
+                Milestones.ContractId,
+                Milestones.GdFolderId AS MilestoneGdFolderId,
+                MilestoneTypes.Id AS MilestoneTypeId,
+                MilestoneTypes.Name AS MilestoneTypeName,
+                MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
+                OurContractsData.OurId AS ContractOurId,
+                Contracts.Id AS ContractId,
+                Contracts.Alias AS ContractAlias,
+                Contracts.Number AS ContractNumber,
+                Contracts.Name AS ContractName,
+                Contracts.Comment AS ContractComment,
+                Contracts.StartDate AS ContractStartDate,
+                Contracts.EndDate AS ContractEndDate,
+                Contracts.Value AS ContractValue,
+                Contracts.Status AS ContractStatus,
+                Contracts.GdFolderId AS ContractGdFolderId,
+                ContractTypes.Name AS ContractTypeName,
+                ContractManagers.Id AS ContractManagerId,
+                ContractManagers.Name AS ContractManagerName, 
+                ContractManagers.Surname AS ContractManagerSurname, 
+                ContractManagers.Email AS ContractManagerEmail,
+                ContractAdmins.Id AS ContractAdminId,
+                ContractAdmins.Name AS ContractAdminName,
+                ContractAdmins.Surname AS ContractAdminSurname,
+                ContractAdmins.Email AS ContractAdminEmail,
+                Owners.Name AS OwnerName,
+                Owners.Surname AS OwnerSurname,
+                Owners.Email AS OwnerEmail
+            FROM Tasks
+            JOIN Cases ON Tasks.CaseId = Cases.Id
+            JOIN Milestones ON Cases.MilestoneId = Milestones.Id
+            JOIN MilestoneTypes ON Milestones.TypeId = MilestoneTypes.Id
+            LEFT JOIN CaseTypes ON Cases.typeId = CaseTypes.Id
+            JOIN Contracts ON Milestones.ContractId = Contracts.Id
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-            LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
-            LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=Contracts.OurIdRelated)
+            LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
+            LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id = (SELECT OurContractsData.Id FROM OurContractsData WHERE OurId = Contracts.OurIdRelated)
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
-            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
             WHERE ${contractCondition} 
-              AND ${milestoneCondition}
-              AND ${caseCondition} 
-              AND ${contractStatusCondition} 
-              AND ${projectCondition}
-              AND ${ownerCondition}
-              AND ${deadlineFromCondition}
-              AND ${deadlineToCondition}
-              AND ${statusCondition}
-              AND ${searchTextCondition}
-              ORDER BY Contracts.Id, Milestones.Id, Cases.ID`;
+                AND ${milestoneCondition}
+                AND ${caseCondition} 
+                AND ${contractStatusCondition} 
+                AND ${projectCondition}
+                AND ${ownerCondition}
+                AND ${deadlineFromCondition}
+                AND ${deadlineToCondition}
+                AND ${statusCondition}
+                AND ${searchTextCondition}
+            ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processTasksResult(result);

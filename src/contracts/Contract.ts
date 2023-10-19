@@ -31,9 +31,9 @@ export default abstract class Contract extends BusinessObject {
     meetingProtocolsGdFolderId?: string;
     _ourIdOrNumber_Name?: string;
     _ourIdOrNumber_Alias?: string;
-    _contractors: Entity[];
-    _engineers: Entity[];
-    _employers: Entity[];
+    _contractors?: Entity[];
+    _engineers?: Entity[];
+    _employers?: Entity[];
     status: string;
     _parent: Project;
     _folderName?: string;
@@ -119,7 +119,9 @@ export default abstract class Contract extends BusinessObject {
         const onlyDbfields = ['status', 'comment', 'startDate', 'endDate', 'guaranteeEndDate', 'value', 'name'];
         const isOnlyDbFields = fieldsToUpdate.length > 0 && fieldsToUpdate.every(field => onlyDbfields.includes(field));
 
-        const promises = [this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))];
+        const promises = [
+            this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))
+        ];
         if (!isOnlyDbFields) promises.push(
             this.editFolder(auth).then(() => console.log('Contract folder edited')),
             this.editInScrum(auth).then(() => console.log('Contract edited in scrum'))
@@ -135,7 +137,7 @@ export default abstract class Contract extends BusinessObject {
     }
 
     setEntitiesFromParent() {
-        if (this._employers.length == 0)
+        if (this._employers?.length == 0)
             this._employers = this._parent._employers;
     }
     async setContractRootFolder(auth: OAuth2Client) {
@@ -151,21 +153,21 @@ export default abstract class Contract extends BusinessObject {
 
     async addEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const entityAssociations: ContractEntity[] = [];
-        this._contractors.map((item) => {
+        this._contractors?.map((item) => {
             entityAssociations.push(new ContractEntity({
                 contractRole: 'CONTRACTOR',
                 _contract: this,
                 _entity: item
             }));
         });
-        this._engineers.map((item) => {
+        this._engineers?.map((item) => {
             entityAssociations.push(new ContractEntity({
                 contractRole: 'ENGINEER',
                 _contract: this,
                 _entity: item
             }));
         });
-        this._employers.map((item) => {
+        this._employers?.map((item) => {
             entityAssociations.push(new ContractEntity({
                 contractRole: 'EMPLOYER',
                 _contract: this,
@@ -176,18 +178,17 @@ export default abstract class Contract extends BusinessObject {
             await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
-    /**
-     * jest wywoływana w editCase()
+    /**jest wywoływana w editCase()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
      */
     async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        await this.deleteEntitiesAssociationsFromDb();
+        await this.deleteEntitiesAssociationsFromDb(externalConn, isPartOfTransaction);
         await this.addEntitiesAssociationsInDb(externalConn, isPartOfTransaction);
     }
 
-    async deleteEntitiesAssociationsFromDb() {
+    async deleteEntitiesAssociationsFromDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
-        return await ToolsDb.executePreparedStmt(sql, [this.id], this);
+        return await ToolsDb.executePreparedStmt(sql, [this.id], this, externalConn, isPartOfTransaction);
     }
 
     async createDefaultMilestones(auth: OAuth2Client) {
@@ -242,14 +243,6 @@ export default abstract class Contract extends BusinessObject {
             if (!externalConn) { conn.release(); console.log('connection released:: addDefaultMilestonesInDb', conn.threadId); }
         }
     }
-
-    async addInDb() {
-        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            const contract = await super.addInDb(conn, true);
-            await this.addEntitiesAssociationsInDb(conn, true);
-        });
-    }
-
 
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje

@@ -37,6 +37,13 @@ export default class ContractOther extends Contract {
         this.setFolderName();
     }
 
+    async addInDb() {
+        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            await super.addInDb(conn, true);
+            await this.addEntitiesAssociationsInDb(conn, true);
+        });
+    }
+
     async editInDb(extenalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean, fieldsToUpdate?: string[]) {
         const res = await ToolsDb.transaction(async conn => {
             await super.editInDb(conn, true, fieldsToUpdate);
@@ -54,7 +61,7 @@ export default class ContractOther extends Contract {
 
     setEntitiesFromParent() {
         super.setEntitiesFromParent();
-        if (this._engineers.length == 0)
+        if (this._engineers?.length == 0)
             this._engineers = this._parent._engineers;
     }
     async setContractRootFolder(auth: OAuth2Client): Promise<drive_v3.Schema$File> {

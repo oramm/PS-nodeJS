@@ -140,6 +140,7 @@ export default class ToolsDb {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
 
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
+        if (!externalConn) console.log(`editInDb ${tableName}:: conn opened `, conn.threadId);
         let stmt: { string: string, values: any[] } | undefined;
 
         try {
@@ -163,7 +164,10 @@ export default class ToolsDb {
 
             throw e;
         } finally {
-            if (!externalConn || !isPartOfTransaction) conn.release();
+            if (!externalConn || !isPartOfTransaction) {
+                conn.release();
+                console.log(`editInDb ${tableName}:: conn released`, conn.threadId);
+            }
         }
     }
 
@@ -171,6 +175,7 @@ export default class ToolsDb {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
 
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
+        if (!externalConn) console.log(`deleteFromDb ${tableName}:: conn opened `, conn.threadId);
         try {
             await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
             if (!isPartOfTransaction) await conn.commit();
@@ -181,7 +186,10 @@ export default class ToolsDb {
             console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
             throw e;
         } finally {
-            if (!isPartOfTransaction || !externalConn) { conn.release(); console.log(`conn released`); }
+            if (!isPartOfTransaction || !externalConn) {
+                conn.release();
+                console.log(`deleteFromDb ${tableName}:: conn released`, conn.threadId);
+            }
         }
     }
 
@@ -189,6 +197,7 @@ export default class ToolsDb {
         if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
 
         const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
+        if (!externalConn) console.log(`executePreparedStmt:: conn opened `, conn.threadId);
         try {
             params = params.map(item => this.prepareValueToPreparedStmtSql(item));
             await conn.execute(sql, params);
@@ -199,8 +208,10 @@ export default class ToolsDb {
             throw e;
         }
         finally {
-            if (!isPartOfTransaction || !externalConn) conn.release();
-
+            if (!isPartOfTransaction || !externalConn) {
+                conn.release();
+                console.log(`executePreparedStmt:: conn released`, conn.threadId);
+            }
         }
     }
 

@@ -149,7 +149,9 @@ export default class ContractsController {
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            return (searchParams.onlyKeyData) ? this.processContractsResultKeyData(result, searchParams) : await this.processContractsResult(result, searchParams);
+            return (searchParams.onlyKeyData)
+                ? this.processContractsResultKeyData(result, searchParams)
+                : await this.processContractsResult(result, searchParams);
         } catch (err) {
             console.log(sql);
             throw (err);
@@ -171,12 +173,17 @@ export default class ContractsController {
         return searchTextCondition;
     }
 
-    private static async processContractsResult(result: any[], initParamObject: any) {
-        const newResult: Contract[] = [];
+    private static async processContractsResult(result: any[], initParamObject: ContractSearchParams) {
+        const newResult: (ContractOur | ContractOther)[] = [];
         let entitiesPerProject: any[] = [];
 
-        if (initParamObject.projectId)
-            entitiesPerProject = await this.getContractEntityAssociationsList(initParamObject);
+        if (initParamObject.projectId || initParamObject.id) {
+            entitiesPerProject = await this.getContractEntityAssociationsList({
+                projectId: initParamObject.projectId,
+                contractId: initParamObject.id,
+                isArchived: initParamObject.isArchived
+            });
+        }
         for (const row of result) {
 
             const contractors = entitiesPerProject.filter((item: any) =>
@@ -236,7 +243,7 @@ export default class ContractsController {
                 _employers: employers.map((item: any) => item._entity),
                 _lastUpdated: row.LastUpdated
             }
-            let item;
+            let item: ContractOur | ContractOther;
             try {
                 item = (row.TypeIsOur) ? new ContractOur(initParam) : new ContractOther(initParam);
             } catch (err) {
@@ -301,25 +308,35 @@ export default class ContractsController {
         return newResult;
     }
 
-    static async getContractEntityAssociationsList(initParamObject: { projectId?: string, contractId?: string, isArchived?: string }) {
-        let projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        let contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
-        const sql = 'SELECT  Contracts_Entities.ContractId, \n \t' +
-            'Contracts_Entities.EntityId, \n \t' +
-            'Contracts_Entities.ContractRole, \n \t' +
-            'Entities.Name, \n \t' +
-            'Entities.Address, \n \t' +
-            'Entities.TaxNumber, \n \t' +
-            'Entities.Www, \n \t' +
-            'Entities.Email, \n \t' +
-            'Entities.Phone, \n \t' +
-            'Entities.Fax \n' +
-            'FROM Contracts_Entities \n' +
-            'JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id \n' +
-            'JOIN Entities ON Contracts_Entities.EntityId=Entities.Id \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon + ' \n' +
-            'ORDER BY Contracts_Entities.ContractRole, Entities.Name';
+    static async getContractEntityAssociationsList(initParamObject: { projectId?: string, contractId?: number, isArchived?: boolean }) {
+
+        const projectConditon = initParamObject && initParamObject.projectId
+            ? mysql.format('Contracts.ProjectOurId = ?', [initParamObject.projectId])
+            : '1';
+
+        const contractConditon = initParamObject && initParamObject.contractId
+            ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
+            : '1';
+        const sql = `SELECT 
+                Contracts_Entities.ContractId,
+                Contracts_Entities.EntityId,
+                Contracts_Entities.ContractRole,
+                Entities.Name,
+                Entities.Address,
+                Entities.TaxNumber,
+                Entities.Www,
+                Entities.Email,
+                Entities.Phone,
+                Entities.Fax
+            FROM Contracts_Entities
+            JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
+            JOIN Entities ON Contracts_Entities.EntityId=Entities.Id
+            LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+            WHERE ${projectConditon} 
+            AND ${contractConditon}
+            ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
+
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
         return this.processContractEntityAssociations(result);

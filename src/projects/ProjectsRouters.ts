@@ -55,10 +55,10 @@ app.get('/project/:id/systemEmail/:systemEmail', async (req: Request, res: Respo
     }
 });
 
-app.post('/project', async (req: any, res: any) => {
+app.post('/project', async (req: Request, res: Response) => {
 
     try {
-        let item = new Project(req.body);
+        let item = new Project(req.parsedBody);
         //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Projects
         await ToolsGapi.gapiReguestHandler(req, res, item.createProjectFolder, undefined, item);
         try {
@@ -77,7 +77,7 @@ app.post('/project', async (req: any, res: any) => {
     };
 });
 
-app.put('/project/:id', async (req: any, res: any) => {
+app.put('/project/:id', async (req: Request, res: Response) => {
     try {
         const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -95,7 +95,7 @@ app.put('/project/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/project/:id', async (req: any, res: any) => {
+app.delete('/project/:id', async (req: Request, res: Response) => {
     try {
         let item = new Project(req.body);
         console.log('delete');
