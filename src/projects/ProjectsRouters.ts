@@ -98,11 +98,11 @@ app.put('/project/:id', async (req: Request, res: Response) => {
 app.delete('/project/:id', async (req: Request, res: Response) => {
     try {
         let item = new Project(req.body);
-        console.log('delete');
         await item.deleteFromDb();
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, item.deleteProjectFolder, undefined, item)
         ]);
+        console.log(`Project: ${item.ourId} ${item.alias} deleted`);
         res.send(item);
     } catch (error) {
         console.error(error);
