@@ -12,6 +12,7 @@ import { keys } from './setup/GAuth2/credentials';
 import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
+import Setup from './setup/Setup';
 declare global {
     namespace Express {
         interface Request {
@@ -187,8 +188,8 @@ app.use(caseEventsRouter);
 const materialCardsRouter = require('./contracts/materialCards/MaterialCardsRouters');
 app.use(materialCardsRouter);
 
-require('./projects/ProjectsRouters');
+require('./projects/ProjectsRouters'); Tools
 
-const server = app.listen(port, () => {
+app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
 });

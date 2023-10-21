@@ -25,6 +25,7 @@ export default abstract class Contract extends BusinessObject {
     endDate?: string;
     guaranteeEndDate?: string;
     value?: string | number;
+    _remainingValue?: string | number;
     comment: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
@@ -64,7 +65,17 @@ export default abstract class Contract extends BusinessObject {
                 this.value = initParamObject.value;
             }
         }
-
+        if (initParamObject._remainingValue) {
+            if (typeof initParamObject._remainingValue === 'string') {
+                initParamObject._remainingValue = initParamObject._remainingValue
+                    .replace(/\s/g, '')
+                    .replace(/,/g, '.')
+                    .replace(/[^0-9.]/g, '');
+                this._remainingValue = parseFloat(initParamObject._remainingValue);
+            } else {
+                this._remainingValue = initParamObject._remainingValue;
+            }
+        }
         this.comment = initParamObject.comment;
 
         if (initParamObject.gdFolderId)

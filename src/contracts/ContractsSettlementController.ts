@@ -27,7 +27,7 @@ export default class ContractsSettlementController {
         const isArchived = typeof searchParams.isArchived === 'string'
 
         const idCondition = searchParams.id
-            ? mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+            ? mysql.format(`Contracts.Id = ?`, [searchParams.id])
             : '1';
 
 
@@ -43,26 +43,26 @@ export default class ContractsSettlementController {
             : '1';  // domyślna wartość, jeśli statusList jest pusty
 
         const projectCondition = projectOurId
-            ? mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
+            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
             ? mysql.format(`OurContractsData.OurId LIKE ?`, [`%${searchParams.contractOurId}%`])
             : '1';
         const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`mainContracts.StartDate >= ?`, [searchParams.startDateFrom])
+            ? mysql.format(`Contracts.StartDate >= ?`, [searchParams.startDateFrom])
             : '1';
         const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`mainContracts.StartDate <= ?`, [searchParams.startDateTo])
+            ? mysql.format(`Contracts.StartDate <= ?`, [searchParams.startDateTo])
             : '1';
 
         const endDateFromCondition = searchParams.endDateFrom
-            ? mysql.format(`mainContracts.EndDate >= ?`, [searchParams.endDateFrom])
+            ? mysql.format(`Contracts.EndDate >= ?`, [searchParams.endDateFrom])
             : '1';
         const endDateToCondition = searchParams.endDateTo
-            ? mysql.format(`mainContracts.EndDate <= ?`, [searchParams.endDateTo])
+            ? mysql.format(`Contracts.EndDate <= ?`, [searchParams.endDateTo])
             : '1';
         const typeCondition = typeId
-            ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
+            ? mysql.format(`Contracts.TypeId = ?`, [typeId])
             : '1';
 
         let typesToIncudeCondition;
@@ -76,17 +76,17 @@ export default class ContractsSettlementController {
             default:
                 typesToIncudeCondition = '1';
         }
-        const isArchivedConditon = (isArchived) ? `mainContracts.Status=${Setup.ContractStatus.ARCHIVAL}` : 1;//'mainContracts.Status!="Archiwalny"';
+        const isArchivedConditon = (isArchived) ? `Contracts.Status=${Setup.ContractStatus.ARCHIVAL}` : 1;//'Contracts.Status!="Archiwalny"';
 
         const sql = `SELECT 
-            mainContracts.Id, 
-            mainContracts.Value, 
+            Contracts.Id, 
+            Contracts.Value, 
             OurContractsData.OurId, 
             SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) AS TotalIssuedValue,
-            (SELECT mainContracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue
-          FROM Contracts AS mainContracts
-          LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
-          LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
+            (SELECT Contracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue
+          FROM Contracts
+          LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id
+          LEFT JOIN Invoices ON Invoices.ContractId=Contracts.Id
           LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
           WHERE ${idCondition} 
             AND ${statusCondition}
@@ -99,7 +99,7 @@ export default class ContractsSettlementController {
             AND ${endDateToCondition}
             AND ${typeCondition}
             AND ${typesToIncudeCondition}
-          ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
+          ORDER BY Contracts.ProjectOurId, OurContractsData.OurId DESC, Contracts.Number`;
 
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

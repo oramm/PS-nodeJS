@@ -5,7 +5,6 @@ import Contract from './Contract';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
 import { auth, OAuth2Client } from 'google-auth-library';
-import { google } from 'googleapis';
 import ToolsSheets from '../tools/ToolsSheets';
 import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';

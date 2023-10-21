@@ -40,8 +40,8 @@ export default class RolesController {
 
     }
 
-    static processRolesResult(result: any[]): [Role?] {
-        let newResult: [Role?] = [];
+    static processRolesResult(result: any[]) {
+        let newResult: Role[] = [];
 
         for (const row of result) {
             var item = new Role({

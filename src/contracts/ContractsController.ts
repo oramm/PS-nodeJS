@@ -27,6 +27,7 @@ export type ContractSearchParams = {
     isArchived?: boolean,
     status?: string | string[],
     onlyKeyData?: boolean
+    getRemainingValue?: boolean
 }
 
 export default class ContractsController {
@@ -65,7 +66,6 @@ export default class ContractsController {
             ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
             : '1';
 
-
         let statusCondition = '1';
         if (searchParams.status) {
             if (typeof searchParams.status === 'string') {
@@ -75,7 +75,6 @@ export default class ContractsController {
                 statusCondition = '(' + statusConditions.join(' OR ') + ')';
             }
         }
-
 
         let typesToIncudeCondition;
         switch (searchParams.typesToInclude) {
@@ -94,6 +93,11 @@ export default class ContractsController {
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
+        const remainingValueColumn = searchParams.getRemainingValue
+            ? '(SELECT mainContracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue'
+            : null;
+
+
         const sql = `SELECT mainContracts.Id, 
             mainContracts.Alias, 
             mainContracts.Number, 
@@ -109,10 +113,11 @@ export default class ContractsController {
             mainContracts.GdFolderId, 
             mainContracts.MeetingProtocolsGdFolderId, 
             mainContracts.MaterialCardsGdFolderId,
-            mainContracts.LastUpdated, 
+            mainContracts.LastUpdated,
             OurContractsData.OurId, 
             OurContractsData.ManagerId, 
             OurContractsData.AdminId,
+            ${remainingValueColumn},
             Admins.Name AS AdminName, 
             Admins.Surname AS AdminSurname, 
             Admins.Email AS AdminEmail, 
@@ -132,6 +137,8 @@ export default class ContractsController {
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
+          LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
+          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
           WHERE ${idCondition} 
             AND ${projectCondition} 
             AND ${onlyOursContractsCondition} 
@@ -146,6 +153,7 @@ export default class ContractsController {
             AND ${typeCondition}
             AND ${statusCondition}
             AND ${typesToIncudeCondition}
+          GROUP BY mainContracts.Id
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -214,6 +222,7 @@ export default class ContractsController {
                 endDate: row.EndDate,
                 guaranteeEndDate: row.GuaranteeEndDate,
                 value: row.Value,
+                _remainingValue: row.RemainingValue,
                 comment: ToolsDb.sqlToString(row.Comment),
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
