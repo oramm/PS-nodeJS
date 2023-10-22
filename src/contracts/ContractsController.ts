@@ -93,8 +93,20 @@ export default class ContractsController {
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
 
-        const remainingValueColumn = searchParams.getRemainingValue
-            ? '(SELECT mainContracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue'
+        const remainingNotScheduledValueColumn = searchParams.getRemainingValue
+            ? `(SELECT mainContracts.Value - IFNULL(
+                SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) 
+                AS RemainingNotScheduledValue`
+            : null;
+
+        const remainingNotIssuedColumn = searchParams.getRemainingValue
+            ? `(SELECT mainContracts.Value - IFNULL(
+                    (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) 
+                    FROM Invoices 
+                    JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
+                    WHERE Invoices.ContractId=mainContracts.Id 
+                      AND Invoices.Status IN ('Zrobiona', 'Wysłana', 'Zapłacona')), 0))
+                    AS RemainingNotIssuedValue`
             : null;
 
 
@@ -117,7 +129,8 @@ export default class ContractsController {
             OurContractsData.OurId, 
             OurContractsData.ManagerId, 
             OurContractsData.AdminId,
-            ${remainingValueColumn},
+            ${remainingNotScheduledValueColumn},
+            ${remainingNotIssuedColumn},
             Admins.Name AS AdminName, 
             Admins.Surname AS AdminSurname, 
             Admins.Email AS AdminEmail, 
@@ -222,7 +235,8 @@ export default class ContractsController {
                 endDate: row.EndDate,
                 guaranteeEndDate: row.GuaranteeEndDate,
                 value: row.Value,
-                _remainingValue: row.RemainingValue,
+                _remainingNotScheduledValue: row.RemainingNotScheduledValue,
+                _remainingNotIssuedValue: row.RemainingNotIssuedValue,
                 comment: ToolsDb.sqlToString(row.Comment),
                 status: row.Status,
                 gdFolderId: row.GdFolderId,

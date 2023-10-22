@@ -25,7 +25,8 @@ export default abstract class Contract extends BusinessObject {
     endDate?: string;
     guaranteeEndDate?: string;
     value?: string | number;
-    _remainingValue?: string | number;
+    _remainingNotScheduledValue?: string | number;
+    _remainingNotIssuedValue?: string | number;
     comment: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
@@ -59,21 +60,33 @@ export default abstract class Contract extends BusinessObject {
                 initParamObject.value = initParamObject.value
                     .replace(/\s/g, '')
                     .replace(/,/g, '.')
-                    .replace(/[^0-9.]/g, '');
+                    .replace(/[^0-9.-]/g, '');
                 this.value = parseFloat(initParamObject.value);
             } else {
                 this.value = initParamObject.value;
             }
         }
-        if (initParamObject._remainingValue) {
-            if (typeof initParamObject._remainingValue === 'string') {
-                initParamObject._remainingValue = initParamObject._remainingValue
+        if (initParamObject._remainingNotScheduledValue) {
+            if (typeof initParamObject._remainingNotScheduledValue === 'string') {
+                initParamObject._remainingNotScheduledValue = initParamObject._remainingNotScheduledValue
                     .replace(/\s/g, '')
                     .replace(/,/g, '.')
-                    .replace(/[^0-9.]/g, '');
-                this._remainingValue = parseFloat(initParamObject._remainingValue);
+                    .replace(/[^0-9.-]/g, '');
+                this._remainingNotScheduledValue = parseFloat(initParamObject._remainingNotScheduledValue);
             } else {
-                this._remainingValue = initParamObject._remainingValue;
+                this._remainingNotScheduledValue = initParamObject._remainingNotScheduledValue;
+            }
+        }
+
+        if (initParamObject._remainingNotIssuedValue) {
+            if (typeof initParamObject._remainingNotIssuedValue === 'string') {
+                initParamObject._remainingNotIssuedValue = initParamObject._remainingNotIssuedValue
+                    .replace(/\s/g, '')
+                    .replace(/,/g, '.')
+                    .replace(/[^0-9.-]/g, '');
+                this._remainingNotIssuedValue = parseFloat(initParamObject._remainingNotIssuedValue);
+            } else {
+                this._remainingNotIssuedValue = initParamObject._remainingNotIssuedValue;
             }
         }
         this.comment = initParamObject.comment;
