@@ -30,6 +30,7 @@ export class Security extends BusinessObject {
     _editor: Person;
     _lastUpdated: Date;
     _gdFolderUrl?: string;
+    status: string;
 
     constructor(initParms: SecurityInitParms) {
         super({ _dbTableName: 'Securities' });
@@ -46,7 +47,8 @@ export class Security extends BusinessObject {
             secondPartExpiryDate,
             isCash,
             _editor,
-            _lastUpdated
+            _lastUpdated,
+            status
         } = initParms;
         if (!_contract.id) throw new Error(`Nie podano id kontraktu`);
 
@@ -56,7 +58,7 @@ export class Security extends BusinessObject {
         this.firstPartRate = firstPartRate;
         this.secondPartRate = secondPartRate;
         this.value = (typeof value === 'string') ? Tools.stringToNumber(value) : value;
-
+        this.status = status;
         this.returnedValue = (typeof returnedValue === 'string') ? Tools.stringToNumber(returnedValue) : returnedValue;
         this.deductionValue = (typeof deductionValue === 'string') ? Tools.stringToNumber(deductionValue) : deductionValue;
         this._remainingValue = this.value - returnedValue;
@@ -141,4 +143,5 @@ export type SecurityInitParms = {
     _contract: ContractOur;
     _lastUpdated: Date;
     _editor: Person;
+    status: string;
 }
