@@ -12,45 +12,20 @@ import Project from "../projects/Project";
 import Contract from '../contracts/Contract';
 import Case from '../contracts/milestones/cases/Case';
 
+type LetterSearchParams = {
+    projectId?: string,
+    _project?: Project,
+    _contract?: Contract,
+    _case?: Case,
+    searchText?: string,
+    contractId?: number,
+    milestoneId?: string,
+    creationDateFrom?: string,
+    creationDateTo?: string,
+};
 
 export default class LettersController {
-
-    static async getLettersList(searchParams: {
-        projectId?: string,
-        _project?: Project,
-        _contract?: Contract,
-        _case?: Case,
-        searchText?: string,
-        contractId?: number
-        milestoneId?: string,
-        creationDateFrom?: string,
-        creationDateTo?: string,
-    } = {}) {
-        const projectOurId = searchParams._project?.ourId || searchParams.projectId;
-        const contractId = searchParams._contract?.id || searchParams.contractId;
-        const caseId = searchParams._case?.id;
-
-        const projectCondition = projectOurId
-            ? mysql.format(`Projects.OurId = ?`, [projectOurId])
-            : '1';
-
-        const contractCondition = contractId
-            ? mysql.format(`Contracts.Id = ?`, [contractId])
-            : '1';
-
-        const milestoneCondition = searchParams.milestoneId
-            ? mysql.format(`Milestones.Id = ?`, [searchParams.milestoneId])
-            : '1';
-
-        const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ?`, [caseId])
-            : '1';
-
-        const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo)
-            ? mysql.format(`Letters.CreationDate BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
-                [ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom), searchParams.creationDateTo])
-            : '1';
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText?.toString());
+    static async getLettersList(orConditions: LetterSearchParams[]) {
 
         const sql = `SELECT 
             Letters.Id,
@@ -83,17 +58,12 @@ export default class LettersController {
         JOIN Persons ON Letters.EditorId=Persons.Id
         JOIN Letters_Entities ON Letters_Entities.LetterId=Letters.Id
         JOIN Entities ON Letters_Entities.EntityId=Entities.Id
-        WHERE ${projectCondition} 
-          AND ${contractCondition} 
-          AND ${milestoneCondition}
-          AND ${caseCondition}
-          AND ${dateCondition}
-          AND ${searchTextCondition}
+        WHERE ${this.makeOrGroupsConditions(orConditions)}
         GROUP BY Letters.Id
         ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processLettersResult(result, searchParams);
+        return this.processLettersResult(result, orConditions[0]);
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
@@ -110,6 +80,48 @@ export default class LettersController {
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
+    }
+
+    static makeOrGroupsConditions(orConditions: LetterSearchParams[]) {
+        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
+        const orGroupsCondition = orGroups.join(' OR ');
+        return orGroupsCondition;
+    }
+
+    static makeAndConditions(searchParams: LetterSearchParams) {
+        const projectOurId = searchParams._project?.ourId || searchParams.projectId;
+        const contractId = searchParams._contract?.id || searchParams.contractId;
+        const caseId = searchParams._case?.id;
+
+        const projectCondition = projectOurId
+            ? mysql.format(`Projects.OurId = ?`, [projectOurId])
+            : '1';
+
+        const contractCondition = contractId
+            ? mysql.format(`Contracts.Id = ?`, [contractId])
+            : '1';
+
+        const milestoneCondition = searchParams.milestoneId
+            ? mysql.format(`Milestones.Id = ?`, [searchParams.milestoneId])
+            : '1';
+
+        const caseCondition = caseId
+            ? mysql.format(`Cases.Id = ?`, [caseId])
+            : '1';
+
+        const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo)
+            ? mysql.format(`Letters.CreationDate BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
+                [ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom), searchParams.creationDateTo])
+            : '1';
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText?.toString());
+
+        const conditions = `${projectCondition} 
+            AND ${contractCondition} 
+            AND ${milestoneCondition}
+            AND ${caseCondition}
+            AND ${dateCondition}
+            AND ${searchTextCondition}`;
+        return conditions;
     }
 
     static async processLettersResult(result: any[], initParamObject: any) {

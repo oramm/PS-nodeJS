@@ -10,56 +10,23 @@ import Contract from '../../../Contract';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
 
+type TaskSearchParams = {
+    _project?: Project,
+    _contract?: Contract,
+    contractId?: number,
+    _milestone?: Milestone,
+    milestoneId?: number,
+    _case?: Case,
+    contractStatusCondition?: string,
+    _owner?: Person,
+    deadlineFrom?: string,
+    deadlineTo?: string,
+    searchText?: string,
+    status?: string
+}
+
 export default class TasksController {
-    static async getTasksList(searchParams: {
-        _project?: Project,
-        _contract?: Contract,
-        contractId?: number,
-        _milestone?: Milestone,
-        milestoneId?: number,
-        _case?: Case,
-        contractStatusCondition?: string,
-        _owner?: Person,
-        deadlineFrom?: string,
-        deadlineTo?: string,
-        searchText?: string,
-        status?: string
-    } = {}) {
-        const projectOurId = searchParams._project?.ourId;
-        const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
-            : '1';
-
-        const caseId = searchParams._case?.id;
-        const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ?`, [caseId])
-            : '1';
-        const contractId = searchParams.contractId || searchParams._contract?.id;
-        const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
-            : '1';
-        const milestoneId = searchParams._milestone?.id || searchParams.milestoneId;
-        const milestoneCondition = milestoneId
-            ? mysql.format('Milestones.Id = ?', [milestoneId])
-            : '1';
-        const contractStatusCondition = searchParams.contractStatusCondition
-            ? mysql.format('Contracts.Status REGEXP ?', [searchParams.contractStatusCondition])
-            : '1';
-        const ownerCondition = searchParams._owner
-            ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
-            : '1';
-        const deadlineFromCondition = searchParams.deadlineFrom
-            ? mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom])
-            : '1';
-        const deadlineToCondition = searchParams.deadlineTo
-            ? mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo])
-            : '1';
-        const statusCondition = searchParams.status
-            ? mysql.format(`Tasks.Status = ?`, [searchParams.status])
-            : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
-
+    static async getTasksList(orConditions: TaskSearchParams[] = []) {
         const sql = `SELECT  
                 Tasks.Id,
                 Tasks.Name AS TaskName,
@@ -121,16 +88,7 @@ export default class TasksController {
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
-            WHERE ${contractCondition} 
-                AND ${milestoneCondition}
-                AND ${caseCondition} 
-                AND ${contractStatusCondition} 
-                AND ${projectCondition}
-                AND ${ownerCondition}
-                AND ${deadlineFromCondition}
-                AND ${deadlineToCondition}
-                AND ${statusCondition}
-                AND ${searchTextCondition}
+            WHERE ${this.makeOrGroupsConditions(orConditions)}
             ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -148,6 +106,62 @@ export default class TasksController {
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
+    }
+
+    private static makeOrGroupsConditions(orConditions: any[]) {
+        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
+        const orGroupsCondition = orGroups.join(' OR ');
+        return orGroupsCondition;
+    }
+
+    private static makeAndConditions(searchParams: any) {
+        const projectOurId = searchParams._project?.ourId;
+        const projectCondition = projectOurId
+            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
+            : '1';
+
+        const caseId = searchParams._case?.id;
+        const caseCondition = caseId
+            ? mysql.format(`Cases.Id = ?`, [caseId])
+            : '1';
+        const contractId = searchParams.contractId || searchParams._contract?.id;
+        const contractCondition = contractId
+            ? mysql.format('Contracts.Id = ?', [contractId])
+            : '1';
+        const milestoneId = searchParams._milestone?.id || searchParams.milestoneId;
+        const milestoneCondition = milestoneId
+            ? mysql.format('Milestones.Id = ?', [milestoneId])
+            : '1';
+        const contractStatusCondition = searchParams.contractStatusCondition
+            ? mysql.format('Contracts.Status REGEXP ?', [searchParams.contractStatusCondition])
+            : '1';
+        const ownerCondition = searchParams._owner
+            ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
+            : '1';
+        const deadlineFromCondition = searchParams.deadlineFrom
+            ? mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom])
+            : '1';
+        const deadlineToCondition = searchParams.deadlineTo
+            ? mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo])
+            : '1';
+        const statusCondition = searchParams.status
+            ? mysql.format(`Tasks.Status = ?`, [searchParams.status])
+            : '1';
+
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+
+        const conditions = `${contractCondition} 
+            AND ${milestoneCondition}
+            AND ${caseCondition} 
+            AND ${contractStatusCondition} 
+            AND ${projectCondition}
+            AND ${ownerCondition}
+            AND ${deadlineFromCondition}
+            AND ${deadlineToCondition}
+            AND ${statusCondition}
+            AND ${searchTextCondition}`
+
+        return conditions;
     }
 
     static processTasksResult(result: any[]): Task[] {

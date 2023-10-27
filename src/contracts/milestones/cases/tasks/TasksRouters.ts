@@ -5,20 +5,10 @@ import { app } from '../../../../index';
 import { Request, Response } from 'express';
 
 
-app.get('/tasks', async (req: Request, res: Response) => {
+app.post('/tasks', async (req: Request, res: Response) => {
     try {
-        const result = await TasksController.getTasksList(req.parsedQuery);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
-app.get('/task/:id', async (req: Request, res: Response) => {
-    try {
-        const result = await TasksController.getTasksList(req.params);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await TasksController.getTasksList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);

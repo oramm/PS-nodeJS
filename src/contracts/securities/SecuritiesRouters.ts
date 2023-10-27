@@ -4,13 +4,15 @@ import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
 import SecuritiesController from './SecuritiesController';
 import { Security } from './Security';
 
-
-app.get('/securities', async (req: Request, res: Response) => {
+app.post('/securities', async (req: Request, res: Response) => {
     try {
         let isArchived = false;
-        if (typeof req.parsedQuery.isArchived === 'string')
-            isArchived = req.parsedQuery.isArchived === 'true';
-        const result = await SecuritiesController.getSecuritiesList(req.parsedQuery);
+        if (typeof req.body.isArchived === 'string')
+            isArchived = req.body.isArchived === 'true';
+
+        const orConditions = req.parsedBody.orConditions;
+
+        const result = await SecuritiesController.getSecuritiesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);

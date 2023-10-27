@@ -10,9 +10,10 @@ import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import LetterGdController from './LetterGdController';
 
-app.get('/letters', async (req: Request, res: Response) => {
+app.post('/letters', async (req: Request, res: Response) => {
     try {
-        const result = await LettersController.getLettersList(req.parsedQuery);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await LettersController.getLettersList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -21,17 +22,6 @@ app.get('/letters', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/letter/:id', async (req: Request, res: any) => {
-
-    try {
-        const result = await LettersController.getLettersList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
 app.post('/testLetter/:mode', async (req: express.Request, res: express.Response) => {
     let response;
     try {

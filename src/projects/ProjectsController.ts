@@ -6,61 +6,23 @@ import ProjectEntity from './ProjectEntity';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 import Setup from '../setup/Setup';
 
+type ProjectSearchParams = {
+    userData: UserData,
+    id?: number,
+    ourId?: string,
+    searchText?: string,
+    systemEmail?: string,
+    onlyKeyData?: boolean
+    contractId?: number
+    status?: string
+}
 
 export default class ProjectsController {
     /**pobiera listę projektów
      * @param {Object} searchParams.userData - dane użytkownika zalogowanego do systemu (z sesji)   
      */
-    static async getProjectsList(searchParams: {
-        userData: UserData,
-        id?: number,
-        ourId?: string,
-        searchText?: string,
-        systemEmail?: string,
-        onlyKeyData?: boolean
-        contractId?: number
-        status?: string
-    }) {
-        const projectIdCondition = searchParams.id
-            ? mysql.format('Projects.Id = ?', [searchParams.id])
-            : '1';
-        const projectOurIdCondition = searchParams.ourId
-            ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
-            : '1';
-
-        let status: string | string[] | undefined = searchParams.status;
-        if (searchParams.status === 'ACTIVE') {
-            status = [Setup.ProjectStatuses.NOT_STARTED, Setup.ProjectStatuses.IN_PROGRESS];
-        }
-        const statusCondition = Array.isArray(status)
-            ? mysql.format('Projects.Status IN (?)', [status])
-            : searchParams.status
-                ? mysql.format('Projects.Status = ?', [status])
-                : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
-        //const currentUserSystemRoleName = searchParams.userData.systemRoleName;
-
-        let sql: string;
-        if (false)
-            //if (searchParams.contractId)
-            sql = mysql.format(`SELECT * FROM Projects 
-                                JOIN Contracts ON Contracts.ProjectOurId=Projects.OurId
-                                WHERE Contracts.id=?
-                                ORDER BY Projects.OurId ASC`, [searchParams.contractId]);
-
-
-        else if (true)
-            //else if (['ENVI_EMPLOYEE', 'ENVI_MANAGER'].includes(currentUserSystemRoleName))
-            sql = `SELECT * FROM Projects 
-            WHERE ${projectIdCondition}
-            AND ${projectOurIdCondition}
-            AND ${searchTextCondition}
-            AND ${statusCondition}
-            ORDER BY Projects.OurId ASC`;
-
-        else
-            sql = `SELECT  Projects.Id,
+    static async getProjectsList(orConditions: ProjectSearchParams[]) {
+        const sql = `SELECT  Projects.Id,
                 Projects.OurId,
                 Projects.Name,
                 Projects.Alias, 
@@ -79,12 +41,8 @@ export default class ProjectsController {
                 Projects.GoogleCalendarId, 
                 Projects.LastUpdated
                 FROM Projects
-                JOIN Roles ON Roles.ProjectOurId = Projects.OurId
-                WHERE ${projectIdCondition}
-                    AND ${projectOurIdCondition}
-                    AND ${statusCondition}
-                    AND ${searchTextCondition}
-                    AND Roles.PersonId = @x := (SELECT Persons.Id FROM Persons WHERE Persons.SystemEmail = "${searchParams.systemEmail}")
+                /* JOIN Roles ON Roles.ProjectOurId = Projects.OurId */
+                WHERE ${this.makeOrGroupsConditions(orConditions)}
                 GROUP BY Projects.OurId ASC`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
@@ -102,6 +60,39 @@ export default class ProjectsController {
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
+    }
+
+    private static makeOrGroupsConditions(orConditions: ProjectSearchParams[]) {
+        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
+        const orGroupsCondition = orGroups.join(' OR ');
+        return orGroupsCondition;
+    }
+
+    private static makeAndConditions(searchParams: ProjectSearchParams) {
+        const projectIdCondition = searchParams.id
+            ? mysql.format('Projects.Id = ?', [searchParams.id])
+            : '1';
+        const projectOurIdCondition = searchParams.ourId
+            ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
+            : '1';
+
+        let status: string | string[] | undefined = searchParams.status;
+        if (searchParams.status === 'ACTIVE') {
+            status = [Setup.ProjectStatuses.NOT_STARTED, Setup.ProjectStatuses.IN_PROGRESS];
+        }
+        const statusCondition = Array.isArray(status)
+            ? mysql.format('Projects.Status IN (?)', [status])
+            : searchParams.status
+                ? mysql.format('Projects.Status = ?', [status])
+                : '1';
+
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const conditions = `${projectIdCondition}
+            AND ${projectOurIdCondition}
+            AND ${statusCondition}
+            AND ${searchTextCondition}`;
+        console.log(conditions);
+        return conditions;
     }
 
     private static async processProjectsResult(result: any[], initParamObject: any) {

@@ -288,7 +288,7 @@ export default abstract class Contract extends BusinessObject {
     }
 
     async getTasks() {
-        return await TasksController.getTasksList({ contractId: this.id });
+        return await TasksController.getTasksList([{ contractId: this.id }]);
     }
     /**dodaje isteniejące zadania  */
     async addExistingTasksInScrum(auth: OAuth2Client) {

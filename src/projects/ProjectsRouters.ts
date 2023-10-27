@@ -1,36 +1,16 @@
-import express, { Request, Response } from 'express'
+import { Request, Response } from 'express'
 import ProjectsController from './ProjectsController'
 import { app } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import Project from './Project';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 
-
-/** @deprecated */
-app.get('/projects/:systemEmail', async (req: Request, res: Response) => {
-    console.log('get projects %o', req.session.userData);
-    console.log('get projects session id ' + req.sessionID);
-    try {
-        const result = await ProjectsController.getProjectsList({
-            ...req.params,
-            ...req.parsedQuery,
-            userData: req.session.userData as UserData
-        });
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
 app.get('/projects', async (req: Request, res: Response) => {
     try {
-        //if (!req.session.userData) throw new Error('no user data in session');
-        const result = await ProjectsController.getProjectsList({
+        const result = await ProjectsController.getProjectsList([{
             ...req.parsedQuery,
             userData: req.session.userData as UserData
-        });
+        }]);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -39,14 +19,10 @@ app.get('/projects', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/project/:id/systemEmail/:systemEmail', async (req: Request, res: Response) => {
+app.post('/projects', async (req: Request, res: Response) => {
     try {
-        console.log('params and userData: ', { ...req.params, ...req.session.userData });
-        const result = (await ProjectsController.getProjectsList({
-            ...req.params,
-            userData: req.session.userData as UserData
-        }))[0];
-        await result?.setProjectEntityAssociationsFromDb();
+        const orConditions = req.parsedBody.orConditions;
+        const result = await ProjectsController.getProjectsList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);

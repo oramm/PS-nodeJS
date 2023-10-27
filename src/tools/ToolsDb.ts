@@ -42,7 +42,7 @@ export default class ToolsDb {
         if (value !== undefined && value !== null) {
             if (typeof value === 'number' || typeof value === 'boolean')
                 return value;
-            var date = value.split('-');
+            const date = value.split('-');
             if (value.length == 10 && date.length == 3 && date[2].length == 4)
                 //czy mamy datę
                 return "'" + ToolsDate.dateJsToSql(value) + "'";
@@ -68,11 +68,11 @@ export default class ToolsDb {
     }
 
     static stringToSql(string: string): string {
-        var sqlString = '';
+        let sqlString = '';
         if (string !== 'LAST_INSERT_ID()') {
             sqlString = string.replace(/\'/gi, "\\'");
             sqlString = sqlString.replace(/\"/gi, '\\"');
-            sqlString = sqlString.replace(/\%/gi, '\\%');
+            //sqlString = sqlString.replace(/\%/gi, '\\%');
             //sqlString = string.replace(/\_/gi, '\\_');
         }
         return sqlString;
@@ -337,4 +337,16 @@ export default class ToolsDb {
         }
     }
 
+    static makeOrConditionFromValueOrArray(valueOrArray: string | string[] | undefined, tableName: string, fieldName: string): string {
+        if (!valueOrArray) return '1';
+
+        if (typeof valueOrArray === 'string') {
+            return mysql.format(`${tableName}.${fieldName} = ?`, [valueOrArray]);
+        } else if (Array.isArray(valueOrArray)) {
+            const conditions = valueOrArray.map(value => mysql.format(`${tableName}.${fieldName} = ?`, [value]));
+            return '(' + conditions.join(' OR ') + ')';
+        }
+
+        return '1';
+    }
 }

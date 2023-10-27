@@ -6,20 +6,10 @@ import InvoicesController from './InvoicesController'
 import { app } from '../index'
 import { Request, Response } from 'express';
 
-app.get('/invoices', async (req: Request, res: Response) => {
+app.post('/invoices', async (req: Request, res: Response) => {
     try {
-        const result = await InvoicesController.getInvoicesList(req.parsedQuery);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
-app.get('/invoice/:id', async (req: Request, res: Response) => {
-    try {
-        const result = await InvoicesController.getInvoicesList(req.params);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await InvoicesController.getInvoicesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
