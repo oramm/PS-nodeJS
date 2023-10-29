@@ -88,7 +88,7 @@ export default class TasksController {
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
-            WHERE ${this.makeOrGroupsConditions(orConditions)}
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
             ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -100,29 +100,23 @@ export default class TasksController {
 
         const words = searchText.split(' ');
         const conditions = words.map(word =>
-            mysql.format(`(Tasks.Name LIKE ? 
-                          OR Tasks.Description LIKE ?)`,
+            mysql.format(`(Tasks.Name LIKE ?
+        OR Tasks.Description LIKE ?)`,
                 [`%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
-    private static makeOrGroupsConditions(orConditions: any[]) {
-        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
-    }
-
     private static makeAndConditions(searchParams: any) {
         const projectOurId = searchParams._project?.ourId;
         const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
+            ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
             : '1';
 
         const caseId = searchParams._case?.id;
         const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ?`, [caseId])
+            ? mysql.format(`Cases.Id = ? `, [caseId])
             : '1';
         const contractId = searchParams.contractId || searchParams._contract?.id;
         const contractCondition = contractId
@@ -139,13 +133,13 @@ export default class TasksController {
             ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
             : '1';
         const deadlineFromCondition = searchParams.deadlineFrom
-            ? mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom])
+            ? mysql.format(`Tasks.Deadline >= ? `, [searchParams.deadlineFrom])
             : '1';
         const deadlineToCondition = searchParams.deadlineTo
-            ? mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo])
+            ? mysql.format(`Tasks.Deadline <= ? `, [searchParams.deadlineTo])
             : '1';
         const statusCondition = searchParams.status
-            ? mysql.format(`Tasks.Status = ?`, [searchParams.status])
+            ? mysql.format(`Tasks.Status = ? `, [searchParams.status])
             : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
@@ -159,7 +153,7 @@ export default class TasksController {
             AND ${deadlineFromCondition}
             AND ${deadlineToCondition}
             AND ${statusCondition}
-            AND ${searchTextCondition}`
+            AND ${searchTextCondition} `
 
         return conditions;
     }

@@ -2,12 +2,14 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from "../../../tools/ToolsDb";
 import MilestoneType from "./MilestoneType";
+import Project from '../../../projects/Project';
+
+export type MilestoneTypesSearchParams = {
+    _project?: Project,
+}
 
 export default class MilestoneTypesController {
-    static async getMilestoneTypesList(initParamObject: any) {
-        const projectIdCondition = initParamObject.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [initParamObject.projectId])
-            : '1';
+    static async getMilestoneTypesList(orConditions: MilestoneTypesSearchParams[] = []) {
 
         const sql = `SELECT  
                 MilestoneTypes_ContractTypes.MilestoneTypeId,
@@ -26,7 +28,7 @@ export default class MilestoneTypesController {
             JOIN MilestoneTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = MilestoneTypes.Id
             JOIN ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId = ContractTypes.Id
             JOIN Contracts ON Contracts.TypeId = MilestoneTypes_ContractTypes.ContractTypeId
-            WHERE ${projectIdCondition}
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
             GROUP BY MilestoneTypes_ContractTypes.MilestoneTypeId
             ORDER BY ContractTypes.Name, MilestoneTypes.Name`;
 
@@ -34,8 +36,17 @@ export default class MilestoneTypesController {
         return this.processMilestoneTypesResult(result);
     }
 
-    static processMilestoneTypesResult(result: any[]): [MilestoneType?] {
-        let newResult: [MilestoneType?] = [];
+    static makeAndConditions(searchParams: MilestoneTypesSearchParams) {
+        const projectOurId = searchParams._project?.ourId;
+        const projectCondition = projectOurId
+            ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
+            : '1';
+
+        return `${projectCondition}`;
+    }
+
+    static processMilestoneTypesResult(result: any[]): MilestoneType[] {
+        let newResult: MilestoneType[] = [];
 
         for (const row of result) {
             const item = new MilestoneType({

@@ -21,34 +21,7 @@ export type CasesSearchParams = {
 }
 
 export default class CasesController {
-    static async getCasesList(searchParams: CasesSearchParams = {}) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
-            : '1';
-        const contractId = searchParams.contractId || searchParams._contract?.id
-        const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
-            : '1';
-        const milestoneCondition = searchParams.milestoneId
-            ? mysql.format('Cases.MilestoneId = ?', [searchParams.milestoneId])
-            : '1';
-        const caseCondition = searchParams.caseId
-            ? mysql.format('Cases.Id = ?', [searchParams.caseId])
-            : '1';
-
-        const typeIdCondition = searchParams.typeId
-            ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
-            : '1';
-
-        const searchTextCondition = (searchParams.searchText) ?
-            `(Cases.Name LIKE "%${searchParams.searchText}%" 
-                OR Cases.Number LIKE "%${searchParams.searchText}%"
-                OR Cases.Description LIKE "%${searchParams.searchText}%"
-                OR CaseTypes.FolderNumber LIKE "%${searchParams.searchText}%"
-                OR Milestones.Name LIKE "%${searchParams.searchText}%"
-                OR CaseTypes.Name LIKE "%${searchParams.searchText}%"
-             )`
-            : '1';
+    static async getCasesList(orConditions: CasesSearchParams[] = []) {
 
         const sql = `SELECT 
             Cases.Id,
@@ -86,16 +59,57 @@ export default class CasesController {
         LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
         LEFT JOIN Risks ON Risks.CaseId=Cases.Id
         JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
-        WHERE ${projectCondition} 
+        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+        ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
+
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return this.processCasesResult(result, orConditions[0]);
+    }
+
+    static makeAndConditions(searchParams: CasesSearchParams) {
+        const projectCondition = searchParams.projectId
+            ? mysql.format('Contracts.ProjectOurId = ?', [searchParams.projectId])
+            : '1';
+        const contractId = searchParams.contractId || searchParams._contract?.id
+        const contractCondition = contractId
+            ? mysql.format('Contracts.Id = ?', [contractId])
+            : '1';
+        const milestoneCondition = searchParams.milestoneId
+            ? mysql.format('Cases.MilestoneId = ?', [searchParams.milestoneId])
+            : '1';
+        const caseCondition = searchParams.caseId
+            ? mysql.format('Cases.Id = ?', [searchParams.caseId])
+            : '1';
+
+        const typeIdCondition = searchParams.typeId
+            ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
+            : '1';
+
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+
+        return `${projectCondition} 
             AND ${contractCondition} 
             AND ${milestoneCondition} 
             AND ${caseCondition}
             AND ${searchTextCondition}
-            AND ${typeIdCondition}
-        ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
+            AND ${typeIdCondition}`;
+    }
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processCasesResult(result, searchParams);
+    static makeSearchTextCondition(searchText?: string) {
+        if (!searchText) return '1'
+
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Cases.Number LIKE ? 
+                            OR Cases.Name LIKE ?
+                            OR Cases.Description LIKE ?
+                            OR CaseTypes.FolderNumber LIKE ?
+                            OR Milestones.Name LIKE ?
+                            OR CaseTypes.Name LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 
     static async processCasesResult(result: any[], initParamObject: { projectId?: string, contractId?: number, milestoneId?: number }) {
@@ -160,22 +174,5 @@ export default class CasesController {
             return true;
         let hasProcesses: boolean = criteria.hasProcesses === 'true';
         return (caseItem._processesInstances && (hasProcesses === caseItem._processesInstances?.length > 0));
-    }
-
-    static makeSearchTextCondition(searchText: string) {
-        if (!searchText) return '1'
-
-        const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Cases.Number LIKE ? 
-                            OR Cases.Name LIKE ?
-                            OR Cases.Description LIKE ?
-                            OR CaseTypes.FolderNumber LIKE ?
-                            OR Milestones.Name LIKE ?
-                            OR CaseTypes.Name LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
     }
 }

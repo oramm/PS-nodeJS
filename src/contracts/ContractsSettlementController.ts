@@ -21,7 +21,31 @@ export type ContractSettlementSearchParams = {
 }
 
 export default class ContractsSettlementController {
-    static async getSums(searchParams: ContractSettlementSearchParams = {}) {
+    static async getSums(orConditions: ContractSettlementSearchParams[] = []) {
+
+        const sql = `SELECT 
+            Contracts.Id, 
+            Contracts.Value, 
+            OurContractsData.OurId, 
+            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) AS TotalIssuedValue,
+            (SELECT Contracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue
+          FROM Contracts
+          LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id
+          LEFT JOIN Invoices ON Invoices.ContractId=Contracts.Id
+          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
+          WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+          ORDER BY Contracts.ProjectOurId, OurContractsData.OurId DESC, Contracts.Number`;
+
+        try {
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            return this.processContractsResult(result, orConditions[0]);
+        } catch (err) {
+            console.log(sql);
+            throw (err);
+        }
+    }
+
+    static makeAndConditions(searchParams: ContractSettlementSearchParams) {
         const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
         const isArchived = typeof searchParams.isArchived === 'string'
@@ -29,7 +53,6 @@ export default class ContractsSettlementController {
         const idCondition = searchParams.id
             ? mysql.format(`Contracts.Id = ?`, [searchParams.id])
             : '1';
-
 
         const statusList = searchParams.invoiceStatuses || [
             Setup.InvoiceStatus.DONE,
@@ -78,17 +101,7 @@ export default class ContractsSettlementController {
         }
         const isArchivedConditon = (isArchived) ? `Contracts.Status=${Setup.ContractStatus.ARCHIVAL}` : 1;//'Contracts.Status!="Archiwalny"';
 
-        const sql = `SELECT 
-            Contracts.Id, 
-            Contracts.Value, 
-            OurContractsData.OurId, 
-            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) AS TotalIssuedValue,
-            (SELECT Contracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue
-          FROM Contracts
-          LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id
-          LEFT JOIN Invoices ON Invoices.ContractId=Contracts.Id
-          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
-          WHERE ${idCondition} 
+        return `${idCondition} 
             AND ${statusCondition}
             AND ${projectCondition} 
             AND ${contractOurIdCondition} 
@@ -98,16 +111,7 @@ export default class ContractsSettlementController {
             AND ${endDateFromCondition}
             AND ${endDateToCondition}
             AND ${typeCondition}
-            AND ${typesToIncudeCondition}
-          ORDER BY Contracts.ProjectOurId, OurContractsData.OurId DESC, Contracts.Number`;
-
-        try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            return this.processContractsResult(result, searchParams);
-        } catch (err) {
-            console.log(sql);
-            throw (err);
-        }
+            AND ${typesToIncudeCondition}`;
     }
 
     private static processContractsResult(result: any[], initParamObject: any) {

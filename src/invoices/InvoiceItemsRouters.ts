@@ -3,20 +3,10 @@ import InvoiceItem from './InvoiceItem';
 import InvoiceItemsController from './InvoiceItemsController'
 import { app } from '../index'
 
-app.get('/invoiceItems', async (req: Request, res: Response) => {
+app.post('/invoiceItems', async (req: Request, res: Response) => {
     try {
-        const result = await InvoiceItemsController.getInvoiceItemsList(req.query);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
-app.get('/invoiceItem/:id', async (req: Request, res: Response) => {
-    try {
-        const result = await InvoiceItemsController.getInvoiceItemsList(req.params);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await InvoiceItemsController.getInvoiceItemsList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);

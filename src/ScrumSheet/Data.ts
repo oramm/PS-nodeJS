@@ -41,7 +41,7 @@ export default class Data {
             rangeA1: Setup.ScrumSheet.Data.name
         })).values;
 
-        const cases = await CasesController.getCasesList(auth);
+        const cases = await CasesController.getCasesList();
         const caseIdColIndex = dataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName);
         const caseGdFolderIdColIndex = dataValues[0].indexOf(Setup.ScrumSheet.Data.caseGdFolderIdColName);
 

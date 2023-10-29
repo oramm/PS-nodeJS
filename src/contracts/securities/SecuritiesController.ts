@@ -6,6 +6,7 @@ import ContractOur from '../ContractOur';
 import { Security } from './Security';
 import Person from '../../persons/Person';
 import Case from '../milestones/cases/Case';
+import { CasesSearchParams } from '../milestones/cases/CasesController';
 
 export type SecuritiesSearchParams = {
     id?: number,
@@ -90,7 +91,7 @@ export default class SecuritiesController {
                 LEFT JOIN Persons AS Editors ON Securities.EditorId = Editors.Id
                 LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
                 LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-                WHERE ${this.makeOrGroupsConditions(orConditions)}
+                WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
                 ORDER BY ContractEndDate DESC`;
         console.log(sql);
         try {
@@ -109,67 +110,60 @@ export default class SecuritiesController {
         const conditions = words.map(word =>
             mysql.format(
                 `(Securities.Description Like ?
-                  OR Contracts.Name LIKE ? 
-                  OR Contracts.Number LIKE ? 
-                  OR Contracts.Alias LIKE ? 
-                  OR OurContractsData.OurId LIKE ?)`,
+        OR Contracts.Name LIKE ?
+        OR Contracts.Number LIKE ?
+        OR Contracts.Alias LIKE ?
+        OR OurContractsData.OurId LIKE ?)`,
                 [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
             ));
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
-    static makeOrGroupsConditions(orConditions: SecuritiesSearchParams[]) {
-        const orGroups = orConditions.map(orCondition => '(' + this.makeAndConditions(orCondition) + ')');
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
-    }
-
-
     static makeAndConditions(searchParams: SecuritiesSearchParams) {
         const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
 
         const idCondition = searchParams.id
-            ? mysql.format(`Contracts.Id = ?`, [searchParams.id])
+            ? mysql.format(`Contracts.Id = ? `, [searchParams.id])
             : '1';
         const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
+            ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ?`, [`%${searchParams.contractOurId}%`])
+            ? mysql.format(`OurContractsData.OurId LIKE ? `, [`%${searchParams.contractOurId}%`])
             : '1';
         const contractNameCondition = searchParams.contractName
-            ? mysql.format(`Contracts.Name = ?`, [searchParams.contractName])
+            ? mysql.format(`Contracts.Name = ? `, [searchParams.contractName])
             : '1';
         const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`Contracts.StartDate >= ?`, [searchParams.startDateFrom])
+            ? mysql.format(`Contracts.StartDate >= ? `, [searchParams.startDateFrom])
             : '1';
         const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`Contracts.StartDate <= ?`, [searchParams.startDateTo])
+            ? mysql.format(`Contracts.StartDate <= ? `, [searchParams.startDateTo])
             : '1';
         const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(searchParams.status, 'Securities', 'Status');
 
         searchParams.status
-            ? mysql.format(`Securities.Status = ?`, [searchParams.status])
+            ? mysql.format(`Securities.Status = ? `, [searchParams.status])
             : '1';
 
         const firstPartExpiryDateFromCondition = searchParams.firstPartExpiryDateFrom
-            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) >= ?`, [searchParams.firstPartExpiryDateFrom])
+            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) >= ? `, [searchParams.firstPartExpiryDateFrom])
             : '1';
         const firstPartExpiryDateToCondition = searchParams.firstPartExpiryDateTo
-            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) <= ?`, [searchParams.firstPartExpiryDateTo])
+            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) <= ? `, [searchParams.firstPartExpiryDateTo])
             : '1';
 
         const secondPartExpiryDateFromCondition = searchParams.secondPartExpiryDateFrom
-            ? mysql.format(`Securities.SecondPartExpiryDate >= ?`, [searchParams.secondPartExpiryDateFrom])
+            ? mysql.format(`Securities.SecondPartExpiryDate >= ? `, [searchParams.secondPartExpiryDateFrom])
             : '1';
         const secondPartExpiryDateToCondition = searchParams.secondPartExpiryDateTo
-            ? mysql.format(`Securities.SecondPartExpiryDate <= ?`, [searchParams.secondPartExpiryDateTo])
+            ? mysql.format(`Securities.SecondPartExpiryDate <= ? `, [searchParams.secondPartExpiryDateTo])
             : '1';
 
         const contractTypeCondition = typeId
-            ? mysql.format(`Contracts.TypeId = ?`, [typeId])
+            ? mysql.format(`Contracts.TypeId = ? `, [typeId])
             : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
@@ -186,7 +180,7 @@ export default class SecuritiesController {
                 AND ${secondPartExpiryDateToCondition}
                 AND ${statusCondition}
                 AND ${contractTypeCondition}
-                AND ${searchTextCondition}`;
+                AND ${searchTextCondition} `;
 
     }
 

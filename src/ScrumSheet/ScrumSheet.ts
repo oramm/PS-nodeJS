@@ -11,7 +11,7 @@ export default class ScrumSheet {
     static CurrentSprint = CurrentSprint;
     static Data = Data
     static async scrumGetPersons() {
-        return await PersonsController.getPersonsList({ systemRoleName: 'ENVI_EMPLOYEE' }) || [];
+        return await PersonsController.getPersonsList([{ systemRoleName: 'ENVI_EMPLOYEE' }]) || [];
     }
 
     static async personsRefresh(auth: OAuth2Client) {

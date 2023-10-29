@@ -4,26 +4,16 @@ import Case from './Case';
 import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
 import { Request, Response } from 'express';
 
-app.get('/cases', async (req: Request, res: Response) => {
+app.put('/cases', async (req: Request, res: Response) => {
     try {
-        const result = await CasesController.getCasesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await CasesController.getCasesList(orConditions);
         res.send(result);
     } catch (err) {
         if (err instanceof Error) {
             res.status(500).send(err.message);
             console.error(err);
         }
-    }
-});
-
-app.get('/case/:id', async (req: Request, res: Response) => {
-    try {
-        const result = await CasesController.getCasesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
     }
 });
 

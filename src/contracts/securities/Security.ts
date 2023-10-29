@@ -87,22 +87,22 @@ export class Security extends BusinessObject {
     }
 
     async getCase(): Promise<Case | undefined> {
-        return (await CasesController.getCasesList({
+        return (await CasesController.getCasesList([{
             contractId: this.contractId,
             typeId: Setup.CaseTypes.SECURITY_GUARANTEE
-        }))[0];
+        }]))[0];
     }
 
     async getMilestone() {
-        const milestone = (await MilestonesController.getMilestonesList({
+        const milestone = (await MilestonesController.getMilestonesList([{
             contractId: this.contractId,
             typeId: Setup.MilestoneTypes.OURCONTRACT_ADMINISTRATION
-        }))[0];
+        }]))[0];
         return milestone;
     }
 
     async getCaseType() {
-        const caseType = (await CaseTypesController.getCaseTypesList({ id: Setup.CaseTypes.SECURITY_GUARANTEE }))[0];
+        const caseType = (await CaseTypesController.getCaseTypesList([{ id: Setup.CaseTypes.SECURITY_GUARANTEE }]))[0];
         return caseType;
     }
 

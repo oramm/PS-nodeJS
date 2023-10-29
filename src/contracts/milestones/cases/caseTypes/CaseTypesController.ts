@@ -1,28 +1,38 @@
-
-
+import mysql from 'mysql2/promise';
 import ProcessesController from "../../../../processes/ProcesesController";
 import ToolsDb from "../../../../tools/ToolsDb";
 import CaseType from "./CaseType";
 
 export default class CaseTypesController {
-    static async getCaseTypesList(initParamObject: any) {
-        const milestoneCondition = (initParamObject && initParamObject.milestoneId) ? 'CaseTypes.MilestoneTypeId=(SELECT TypeId FROM Milestones WHERE Id=' + initParamObject.milestoneId + ') OR CaseTypes.MilestoneTypeId=NULL' : '1';
-        const milestoneTypeCondition = (initParamObject && initParamObject.milestoneTypeId) ? 'CaseTypes.MilestoneTypeId=' + initParamObject.milestoneTypeId : '1';
-
-        const sql = 'SELECT  CaseTypes.Id, \n \t' +
-            'CaseTypes.Name, \n \t' +
-            'CaseTypes.Description, \n \t' +
-            'CaseTypes.IsDefault, \n \t' +
-            'CaseTypes.IsUniquePerMilestone, \n \t' +
-            'CaseTypes.MilestoneTypeId, \n \t' +
-            'CaseTypes.FolderNumber, \n \t' +
-            'CaseTypes.LastUpdated, \n \t' +
-            'CaseTypes.EditorId \n' +
-            'FROM CaseTypes \n' +
-            'WHERE ' + milestoneCondition + ' AND ' + milestoneTypeCondition;
+    static async getCaseTypesList(orConditions: any[] | undefined = []) {
+        const sql = `SELECT  
+                CaseTypes.Id,
+                CaseTypes.Name,
+                CaseTypes.Description,
+                CaseTypes.IsDefault,
+                CaseTypes.IsUniquePerMilestone,
+                CaseTypes.MilestoneTypeId,
+                CaseTypes.FolderNumber,
+                CaseTypes.LastUpdated,
+                CaseTypes.EditorId
+            FROM CaseTypes
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processCaseTypesResult(result);
+    }
+
+    static makeAndConditions(initParamObject: any) {
+        const milestoneCondition = initParamObject.milestoneId
+            ? mysql.format(`(CaseTypes.MilestoneTypeId=(SELECT TypeId FROM Milestones WHERE Id=?) OR CaseTypes.MilestoneTypeId IS NULL)`, [initParamObject.milestoneId])
+            : '1';
+
+        const milestoneTypeCondition = initParamObject.milestoneTypeId
+            ? mysql.format(`CaseTypes.MilestoneTypeId=?`, [initParamObject.milestoneTypeId])
+            : '1';
+
+        return `${milestoneCondition} 
+            AND ${milestoneTypeCondition}`;
     }
 
     static async processCaseTypesResult(result: any[]) {

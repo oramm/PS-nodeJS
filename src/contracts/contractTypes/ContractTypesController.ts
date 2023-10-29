@@ -1,13 +1,15 @@
 
 import { RowDataPacket } from "mysql2";
-import Tools from "../../tools/Tools";
+import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb'
 import ContractType from "./ContractType";
 
+export type ContractTypesSearchParams = {
+    status?: string,
+}
+
 export default class ContractTypesController {
-    static async getContractTypesList(initParamObject: { status?: string } = {}) {
-        const { status } = initParamObject;
-        const statusCondition = status ? `ContractTypes.Status="${status}"` : "1";
+    static async getContractTypesList(initParamObject: ContractTypesSearchParams[] = []) {
 
         const sql = `SELECT ContractTypes.Id,
                         ContractTypes.Name,
@@ -15,10 +17,19 @@ export default class ContractTypesController {
                         ContractTypes.IsOur,
                         ContractTypes.Status
                     FROM ContractTypes
-                    WHERE ${statusCondition}`;
+                    WHERE ${ToolsDb.makeOrGroupsConditions(initParamObject, this.makeAndConditions.bind(this))}`;
 
         const result = <RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractTypesResult(result);
+    }
+
+    static makeAndConditions(searchParams: ContractTypesSearchParams) {
+        const { status } = searchParams;
+        const statusCondition = status
+            ? mysql.format(`ContractTypes.Status=?`, [status])
+            : '1';
+
+        return `${statusCondition}`;
     }
 
     static processContractTypesResult(result: RowDataPacket[]): ContractType[] {

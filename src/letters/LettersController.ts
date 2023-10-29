@@ -58,7 +58,7 @@ export default class LettersController {
         JOIN Persons ON Letters.EditorId=Persons.Id
         JOIN Letters_Entities ON Letters_Entities.LetterId=Letters.Id
         JOIN Entities ON Letters_Entities.EntityId=Entities.Id
-        WHERE ${this.makeOrGroupsConditions(orConditions)}
+        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
         GROUP BY Letters.Id
         ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
 
@@ -70,22 +70,16 @@ export default class LettersController {
         if (!searchText) return '1'
         const words = searchText.split(' ');
         const conditions = words.map(word =>
-            mysql.format(`(Letters.Description LIKE ? 
-                          OR Letters.Number LIKE ?
-                          OR Cases.Name LIKE ?
-                          OR CaseTypes.Name LIKE ?
-                          OR Letters.Number LIKE ?
-                          OR Entities.Name LIKE ?)`,
+            mysql.format(`(Letters.Description LIKE ?
+        OR Letters.Number LIKE ?
+        OR Cases.Name LIKE ?
+        OR CaseTypes.Name LIKE ?
+        OR Letters.Number LIKE ?
+        OR Entities.Name LIKE ?)`,
                 [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
-    }
-
-    static makeOrGroupsConditions(orConditions: LetterSearchParams[]) {
-        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
     }
 
     static makeAndConditions(searchParams: LetterSearchParams) {
@@ -94,19 +88,19 @@ export default class LettersController {
         const caseId = searchParams._case?.id;
 
         const projectCondition = projectOurId
-            ? mysql.format(`Projects.OurId = ?`, [projectOurId])
+            ? mysql.format(`Projects.OurId = ? `, [projectOurId])
             : '1';
 
         const contractCondition = contractId
-            ? mysql.format(`Contracts.Id = ?`, [contractId])
+            ? mysql.format(`Contracts.Id = ? `, [contractId])
             : '1';
 
         const milestoneCondition = searchParams.milestoneId
-            ? mysql.format(`Milestones.Id = ?`, [searchParams.milestoneId])
+            ? mysql.format(`Milestones.Id = ? `, [searchParams.milestoneId])
             : '1';
 
         const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ?`, [caseId])
+            ? mysql.format(`Cases.Id = ? `, [caseId])
             : '1';
 
         const dateCondition = (searchParams.creationDateFrom && searchParams.creationDateTo)
@@ -120,7 +114,7 @@ export default class LettersController {
             AND ${milestoneCondition}
             AND ${caseCondition}
             AND ${dateCondition}
-            AND ${searchTextCondition}`;
+            AND ${searchTextCondition} `;
         return conditions;
     }
 

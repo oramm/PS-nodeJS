@@ -3,21 +3,15 @@ import ToolsDb from '../tools/ToolsDb'
 import ToolsDate from '../tools/ToolsDate'
 import InvoiceItem from "./InvoiceItem";
 
+type InvoiceItemSearchParams = {
+    invoiceId?: number,
+    startDate?: string,
+    endDate?: string,
+    contractId?: number,
+}
 
 export default class InvoiceItemsController {
-    static async getInvoiceItemsList(searchParams: {
-        invoiceId?: number,
-        startDate?: string,
-        endDate?: string,
-        contractId?: number,
-    } = {}) {
-        const invoiceCondition = searchParams.invoiceId
-            ? mysql.format(`InvoiceItems.ParentId = ?`, [searchParams.invoiceId])
-            : '1';
-
-        searchParams.endDate = (!searchParams.endDate) ? searchParams.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(searchParams.endDate) + '"';
-
-        const dateCondition = (searchParams.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(searchParams.startDate) + '" AND DATE_ADD(' + searchParams.endDate + ', INTERVAL 1 DAY)' : '1';
+    static async getInvoiceItemsList(orConditions: InvoiceItemSearchParams[] = []) {
 
         const sql = `SELECT InvoiceItems.Id,
                             InvoiceItems.ParentId,
@@ -33,12 +27,24 @@ export default class InvoiceItemsController {
                         FROM InvoiceItems
                         JOIN Invoices ON Invoices.Id=InvoiceItems.ParentId
                         LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId
-                        WHERE ${invoiceCondition} 
-                          AND ${dateCondition}
+                        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
                         ORDER BY InvoiceItems.Id DESC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoiceItemsResult(result);
+    }
+
+    static makeAndConditions(searchParams: InvoiceItemSearchParams) {
+        const invoiceCondition = searchParams.invoiceId
+            ? mysql.format(`InvoiceItems.ParentId = ? `, [searchParams.invoiceId])
+            : '1';
+
+        searchParams.endDate = (!searchParams.endDate) ? searchParams.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(searchParams.endDate) + '"';
+
+        const dateCondition = (searchParams.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(searchParams.startDate) + '" AND DATE_ADD(' + searchParams.endDate + ', INTERVAL 1 DAY)' : '1';
+
+        return `${invoiceCondition} 
+        AND ${dateCondition} `;
     }
 
     static processInvoiceItemsResult(result: any[]) {

@@ -5,20 +5,6 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import Project from './Project';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 
-app.get('/projects', async (req: Request, res: Response) => {
-    try {
-        const result = await ProjectsController.getProjectsList([{
-            ...req.parsedQuery,
-            userData: req.session.userData as UserData
-        }]);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
 app.post('/projects', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;

@@ -6,28 +6,16 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import Planning from '../ScrumSheet/Planning';
 import CurrentSprint from '../ScrumSheet/CurrentSprint';
 
-app.get('/persons', async (req: any, res: any) => {
+app.post('/persons', async (req: any, res: any) => {
     try {
-        const result = await PersonsController.getPersonsList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await PersonsController.getPersonsList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
     }
-});
-
-app.get('/person/:id', async (req: any, res: any) => {
-    try {
-        const result = await PersonsController.getPersonsList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-
-
 });
 
 app.post('/person', async (req: any, res: any) => {

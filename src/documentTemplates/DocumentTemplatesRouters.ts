@@ -1,31 +1,18 @@
 import DocumentTemplatesController from './DocumentTemplatesController'
 import { app } from '../index';
 import DocumentTemplate from './DocumentTemplate';
+import { Request, Response } from 'express';
 
-app.get('/documentTemplates', async (req: any, res: any) => {
+app.post('/documentTemplates', async (req: Request, res: Response) => {
     try {
-        const result = await DocumentTemplatesController.getDocumentTemplatesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await DocumentTemplatesController.getDocumentTemplatesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
     }
-
-
-});
-
-app.get('/documentTemplate/:id', async (req: any, res: any) => {
-    try {
-        const result = await DocumentTemplatesController.getDocumentTemplatesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-
-
 });
 
 app.post('/documentTemplate', async (req: any, res: any) => {

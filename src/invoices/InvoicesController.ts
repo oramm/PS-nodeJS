@@ -66,10 +66,9 @@ export default class InvoicesController {
         LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
         LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
-        WHERE ${this.makeOrGroupsConditions(orConditions)}
+        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
         GROUP BY Invoices.Id
         ORDER BY Invoices.IssueDate ASC`;
-
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processInvoicesResult(result);
@@ -98,12 +97,6 @@ export default class InvoicesController {
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
-    }
-
-    static makeOrGroupsConditions(orConditions: InvoiceSearchParams[]) {
-        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
     }
 
     static makeAndConditions(searchParams: InvoiceSearchParams) {

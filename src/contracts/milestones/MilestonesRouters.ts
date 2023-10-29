@@ -3,9 +3,10 @@ import { app } from '../../index';
 import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
 import Milestone from './Milestone';
 
-app.get('/milestones', async (req: any, res: any) => {
+app.post('/milestones', async (req: any, res: any) => {
     try {
-        const result = await MilestonesController.getMilestonesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await MilestonesController.getMilestonesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -14,17 +15,6 @@ app.get('/milestones', async (req: any, res: any) => {
     }
 
 
-});
-
-app.get('/milestone/:id', async (req: any, res: any) => {
-    try {
-        const result = await MilestonesController.getMilestonesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
 });
 
 app.post('/milestone', async (req: any, res: any) => {

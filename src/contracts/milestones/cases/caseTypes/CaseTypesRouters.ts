@@ -3,27 +3,15 @@ import CaseType from './CaseType';
 import CaseTypesController from './CaseTypesController';
 import { app } from '../../../../index';
 
-app.get('/caseTypes', async (req: any, res: any) => {
+app.post('/caseTypes', async (req: any, res: any) => {
     try {
-        const result = await CaseTypesController.getCaseTypesList(req.query);
+        const orCondition = req.parsedBody.orCondition;
+        const result = await CaseTypesController.getCaseTypesList(orCondition);
         res.send(result);
     } catch (err) {
         console.error(err);
         if (err instanceof Error)
             res.status(500).send(err.message);
-    }
-
-
-});
-
-app.get('/caseType/:id', async (req: any, res: any) => {
-    try {
-        const result = await CaseTypesController.getCaseTypesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
     }
 });
 

@@ -1,27 +1,18 @@
 import mysql from 'mysql2/promise';
-import Tools from "../tools/Tools";
 import ToolsDb from '../tools/ToolsDb'
 import Person from "./Person";
 
+type PersonsSearchParams = {
+    projectId?: string,
+    contractId?: number,
+    systemRoleName?: string,
+    systemEmail?: string,
+    id?: number,
+    showPrivateData?: boolean
+}
+
 export default class PersonsController {
-    static async getPersonsList(initParamObject: {
-        projectId?: string,
-        contractId?: number,
-        systemRoleName?: string,
-        systemEmail?: string,
-        id?: number,
-        showPrivateData?: boolean
-    }) {
-        const projectConditon = (initParamObject.projectId) ? 'Roles.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        let contractConditon;
-        if (initParamObject.contractId)
-            contractConditon =
-                '(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=' + initParamObject.contractId + ') OR Roles.ContractId IS NULL)'
-        else
-            contractConditon = '1';
-        const systemRolecondition = (initParamObject && initParamObject.systemRoleName) ? 'SystemRoles.Name REGEXP "' + initParamObject.systemRoleName + '"' : '1'
-        const systemEmailCondition = (initParamObject && initParamObject.systemEmail) ? 'Persons.systemEmail="' + initParamObject.systemEmail + '"' : '1';
-        const idCondition = (initParamObject && initParamObject.id) ? 'Persons.Id=' + initParamObject.id : '1';
+    static async getPersonsList(orConditions: PersonsSearchParams[] = []) {
 
         const sql = `SELECT  Persons.Id,
                 Persons.EntityId,
@@ -38,11 +29,7 @@ export default class PersonsController {
             JOIN Entities ON Persons.EntityId=Entities.Id
             LEFT JOIN Roles ON Roles.PersonId = Persons.Id
             JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id
-            WHERE ${projectConditon} 
-                AND ${contractConditon} 
-                AND ${systemRolecondition} 
-                AND ${idCondition} 
-                AND ${systemEmailCondition}
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
             GROUP BY Persons.Id
             ORDER BY Persons.Surname, Persons.Name;`
 
@@ -50,8 +37,42 @@ export default class PersonsController {
         return this.processPersonsResult(result);
     }
 
+    static makeAndConditions(searchParams: PersonsSearchParams) {
+        const projectCondition = searchParams.projectId
+            ? mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId])
+            : '1';
+
+        let contractCondition;
+        if (searchParams.contractId) {
+            contractCondition = mysql.format(
+                `(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`,
+                [searchParams.contractId]
+            );
+        } else {
+            contractCondition = '1';
+        }
+
+        const systemRoleCondition = searchParams.systemRoleName
+            ? mysql.format(`SystemRoles.Name REGEXP ?`, [searchParams.systemRoleName])
+            : '1';
+
+        const systemEmailCondition = searchParams.systemEmail
+            ? mysql.format(`Persons.systemEmail=?`, [searchParams.systemEmail])
+            : '1';
+
+        const idCondition = searchParams.id
+            ? mysql.format(`Persons.Id=?`, [searchParams.id])
+            : '1';
+
+        return `${projectCondition} 
+            AND ${contractCondition} 
+            AND ${systemRoleCondition} 
+            AND ${idCondition} 
+            AND ${systemEmailCondition}`;
+    }
+
     static async getPersonBySystemEmail(systemEmail: string) {
-        return (await this.getPersonsList({ systemEmail: systemEmail, showPrivateData: true }))[0];
+        return (await this.getPersonsList([{ systemEmail: systemEmail, showPrivateData: true }]))[0];
     }
 
     static processPersonsResult(result: any[]): Person[] {

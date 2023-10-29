@@ -42,7 +42,7 @@ export default class ProjectsController {
                 Projects.LastUpdated
                 FROM Projects
                 /* JOIN Roles ON Roles.ProjectOurId = Projects.OurId */
-                WHERE ${this.makeOrGroupsConditions(orConditions)}
+                WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
                 GROUP BY Projects.OurId ASC`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
@@ -53,19 +53,13 @@ export default class ProjectsController {
 
         const words = searchText.split(' ');
         const conditions = words.map(word =>
-            mysql.format(`(Projects.OurId LIKE ? 
-                            OR Projects.Name LIKE ?
-                            OR Projects.Alias LIKE ?)`,
+            mysql.format(`(Projects.OurId LIKE ?
+        OR Projects.Name LIKE ?
+        OR Projects.Alias LIKE ?)`,
                 [`%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
-    }
-
-    private static makeOrGroupsConditions(orConditions: ProjectSearchParams[]) {
-        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
     }
 
     private static makeAndConditions(searchParams: ProjectSearchParams) {
@@ -90,8 +84,7 @@ export default class ProjectsController {
         const conditions = `${projectIdCondition}
             AND ${projectOurIdCondition}
             AND ${statusCondition}
-            AND ${searchTextCondition}`;
-        console.log(conditions);
+            AND ${searchTextCondition} `;
         return conditions;
     }
 

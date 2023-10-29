@@ -73,9 +73,11 @@ export default class ContractsController {
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
           LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
           LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
-          WHERE ${this.makeOrGroupsConditions(orConditions)}
+          WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
           GROUP BY mainContracts.Id
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
+
+        console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             return (orConditions[0].onlyKeyData)
@@ -92,20 +94,14 @@ export default class ContractsController {
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
         const conditions = words.map(word =>
-            mysql.format(`(mainContracts.Name LIKE ? 
-                          OR mainContracts.Number LIKE ? 
-                          OR mainContracts.Alias LIKE ? 
-                          OR OurContractsData.OurId LIKE ?)`,
+            mysql.format(`(mainContracts.Name LIKE ?
+                OR mainContracts.Number LIKE ?
+                OR mainContracts.Alias LIKE ?
+                OR OurContractsData.OurId LIKE ?)`,
                 [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
-    }
-
-    static makeOrGroupsConditions(orConditions: ContractSearchParams[]) {
-        const orGroups = orConditions.map(orCondition => this.makeAndConditions(orCondition));
-        const orGroupsCondition = orGroups.join(' OR ');
-        return orGroupsCondition;
     }
 
     static makeAndConditions(searchParams: ContractSearchParams) {
@@ -114,32 +110,32 @@ export default class ContractsController {
         const isArchived = typeof searchParams.isArchived === 'string'
 
         const idCondition = searchParams.id
-            ? mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+            ? mysql.format(`mainContracts.Id = ? `, [searchParams.id])
             : '1';
         const projectCondition = projectOurId
-            ? mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
+            ? mysql.format(`mainContracts.ProjectOurId = ? `, [projectOurId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ?`, [`%${searchParams.contractOurId}%`])
+            ? mysql.format(`OurContractsData.OurId LIKE ? `, [`%${searchParams.contractOurId}%`])
             : '1';
         const contractNameCondition = searchParams.contractName
-            ? mysql.format(`mainContracts.Name = ?`, [searchParams.contractName])
+            ? mysql.format(`mainContracts.Name = ? `, [searchParams.contractName])
             : '1';
         const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`mainContracts.StartDate >= ?`, [searchParams.startDateFrom])
+            ? mysql.format(`mainContracts.StartDate >= ? `, [searchParams.startDateFrom])
             : '1';
         const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`mainContracts.StartDate <= ?`, [searchParams.startDateTo])
+            ? mysql.format(`mainContracts.StartDate <= ? `, [searchParams.startDateTo])
             : '1';
 
         const endDateFromCondition = searchParams.endDateFrom
-            ? mysql.format(`mainContracts.EndDate >= ?`, [searchParams.endDateFrom])
+            ? mysql.format(`mainContracts.EndDate >= ? `, [searchParams.endDateFrom])
             : '1';
         const endDateToCondition = searchParams.endDateTo
-            ? mysql.format(`mainContracts.EndDate <= ?`, [searchParams.endDateTo])
+            ? mysql.format(`mainContracts.EndDate <= ? `, [searchParams.endDateTo])
             : '1';
         const typeCondition = typeId
-            ? mysql.format(`mainContracts.TypeId = ?`, [typeId])
+            ? mysql.format(`mainContracts.TypeId = ? `, [typeId])
             : '1';
 
         let statusCondition = ToolsDb.makeOrConditionFromValueOrArray(searchParams.status, 'mainContracts', 'Status');
@@ -158,7 +154,7 @@ export default class ContractsController {
         }
         //@deprecated
         const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (isArchived) ? `mainContracts.Status=${Setup.ContractStatus.ARCHIVAL}` : 1;//'mainContracts.Status!="Archiwalny"';
+        const isArchivedConditon = (isArchived) ? `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL} ` : 1;//'mainContracts.Status!="Archiwalny"';
 
         const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
         const conditions = `${idCondition} 
@@ -174,29 +170,29 @@ export default class ContractsController {
             AND ${searchTextCondition}
             AND ${typeCondition}
             AND ${statusCondition}
-            AND ${typesToIncudeCondition}`
+            AND ${typesToIncudeCondition} `
         return conditions;
     }
 
     private static makeOptionalColumns(searchParams: ContractSearchParams) {
         const remainingNotScheduledValueColumn = searchParams.getRemainingValue
             ? `(SELECT mainContracts.Value - IFNULL(
-                SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) 
+            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) 
                 AS RemainingNotScheduledValue`
             : null;
 
         const remainingNotIssuedColumn = searchParams.getRemainingValue
             ? `(SELECT mainContracts.Value - IFNULL(
-                    (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) 
+                (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) 
                     FROM Invoices 
-                    JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
-                    WHERE Invoices.ContractId=mainContracts.Id 
-                      AND Invoices.Status IN ('Zrobiona', 'Wysłana', 'Zapłacona')), 0))
+                    JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id 
+                    WHERE Invoices.ContractId = mainContracts.Id 
+                      AND Invoices.Status IN('Zrobiona', 'Wysłana', 'Zapłacona')), 0))
                     AS RemainingNotIssuedValue`
             : null;
 
         return `${remainingNotScheduledValueColumn},
-                    ${remainingNotIssuedColumn}`
+                    ${remainingNotIssuedColumn} `
     }
 
     private static async processContractsResult(result: any[], initParamObject: ContractSearchParams) {
@@ -345,21 +341,21 @@ export default class ContractsController {
         const contractConditon = initParamObject && initParamObject.contractId
             ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
             : '1';
-        const sql = `SELECT 
-                Contracts_Entities.ContractId,
-                Contracts_Entities.EntityId,
-                Contracts_Entities.ContractRole,
-                Entities.Name,
-                Entities.Address,
-                Entities.TaxNumber,
-                Entities.Www,
-                Entities.Email,
-                Entities.Phone,
-                Entities.Fax
+        const sql = `SELECT
+Contracts_Entities.ContractId,
+    Contracts_Entities.EntityId,
+    Contracts_Entities.ContractRole,
+    Entities.Name,
+    Entities.Address,
+    Entities.TaxNumber,
+    Entities.Www,
+    Entities.Email,
+    Entities.Phone,
+    Entities.Fax
             FROM Contracts_Entities
             JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-            JOIN Entities ON Contracts_Entities.EntityId=Entities.Id
-            LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+            JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
+            LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
             WHERE ${projectConditon} 
             AND ${contractConditon}
             ORDER BY Contracts_Entities.ContractRole, Entities.Name`;

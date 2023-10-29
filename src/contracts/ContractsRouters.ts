@@ -8,26 +8,12 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ContractsWithChildrenController from './ContractsWithChildrenController';
 import ContractsSettlementController from './ContractsSettlementController';
 
-app.get('/contracts', async (req: Request, res: Response) => {
-    try {
-        let isArchived = false;
-        if (typeof req.parsedQuery.isArchived === 'string')
-            isArchived = req.parsedQuery.isArchived === 'true';
-        const result = await ContractsController.getContractsList([req.parsedQuery]);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
 app.post('/contracts', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         let isArchived = false;
-        if (typeof req.parsedBody.isArchived === 'string')
-            isArchived = req.parsedBody.isArchived === 'true';
+        if (typeof orConditions.isArchived === 'string')
+            isArchived = orConditions.isArchived === 'true';
         const result = await ContractsController.getContractsList(orConditions);
         res.send(result);
     } catch (error) {
@@ -37,12 +23,13 @@ app.post('/contracts', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/contractsWithChildren', async (req: Request, res: Response) => {
+app.post('/contractsWithChildren', async (req: Request, res: Response) => {
     try {
+        const orConditions = req.parsedBody.orConditions;
         let isArchived = false;
-        if (typeof req.parsedQuery.isArchived === 'string')
-            isArchived = req.parsedQuery.isArchived === 'true';
-        const result = await ContractsWithChildrenController.getContractsList(req.parsedQuery);
+        if (typeof orConditions.isArchived === 'string')
+            isArchived = orConditions.isArchived === 'true';
+        const result = await ContractsWithChildrenController.getContractsList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -51,9 +38,10 @@ app.get('/contractsWithChildren', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/contractsSettlementData', async (req: Request, res: Response) => {
+app.post('/contractsSettlementData', async (req: Request, res: Response) => {
     try {
-        const result = await ContractsSettlementController.getSums(req.parsedQuery);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await ContractsSettlementController.getSums(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);

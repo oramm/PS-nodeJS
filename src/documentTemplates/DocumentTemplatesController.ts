@@ -20,8 +20,8 @@ export default class DocumentTemplatesController {
         return this.processDocumentTemplatesResult(result);
     }
 
-    static processDocumentTemplatesResult(result: any[]): [DocumentTemplate?] {
-        let newResult: [DocumentTemplate?] = [];
+    static processDocumentTemplatesResult(result: any[]): DocumentTemplate[] {
+        let newResult: DocumentTemplate[] = [];
 
         for (const row of result) {
             var item = new DocumentTemplate({

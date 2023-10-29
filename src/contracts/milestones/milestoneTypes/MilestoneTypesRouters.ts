@@ -3,30 +3,16 @@ import MilestoneTypesController from './MilestoneTypesController'
 import { app } from '../../../index';
 import MilestoneType from './MilestoneType';
 
-app.get('/milestoneTypes', async (req: any, res: any) => {
+app.post('/milestoneTypes', async (req: any, res: any) => {
     try {
-        const result = await MilestoneTypesController.getMilestoneTypesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await MilestoneTypesController.getMilestoneTypesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
     }
-
-
-});
-
-app.get('/milestoneType/:id', async (req: any, res: any) => {
-    try {
-        const result = await MilestoneTypesController.getMilestoneTypesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-
-
 });
 
 app.post('/milestoneType', async (req: any, res: any) => {

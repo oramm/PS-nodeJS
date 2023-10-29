@@ -336,7 +336,7 @@ export default class ToolsDb {
             console.log('transaction:: connection released ', connection.threadId);
         }
     }
-
+    /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
     static makeOrConditionFromValueOrArray(valueOrArray: string | string[] | undefined, tableName: string, fieldName: string): string {
         if (!valueOrArray) return '1';
 
@@ -348,5 +348,13 @@ export default class ToolsDb {
         }
 
         return '1';
+    }
+
+    /** Tworzy fragment WHERE gdzie elementy tablicy - grupy warunków są połączene przez OR
+     */
+    static makeOrGroupsConditions<Conditions>(orConditions: Conditions[], makeAndConditions: (orCondition: Conditions) => string) {
+        const orGroups = orConditions.map(orCondition => '(' + makeAndConditions(orCondition) + ')');
+        const orGroupsCondition = orGroups.join(' OR ');
+        return orGroupsCondition || '1';
     }
 }

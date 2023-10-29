@@ -136,7 +136,7 @@ export default class Invoice extends BusinessObject {
             });
 
             await invoiceCopy.addInDb();
-            const originalItems = await InvoiceItemsController.getInvoiceItemsList({ invoiceId: this.id });
+            const originalItems = await InvoiceItemsController.getInvoiceItemsList([{ invoiceId: this.id }]);
 
             for (const itemData of originalItems) {
                 delete itemData.id;
