@@ -41,7 +41,7 @@ export default class ContractsController {
             mainContracts.StartDate, 
             mainContracts.EndDate, 
             mainContracts.GuaranteeEndDate,
-            mainContracts.Value, 
+            mainContracts.Value,
             mainContracts.Comment, 
             mainContracts.Status, 
             mainContracts.GdFolderId, 
@@ -51,6 +51,10 @@ export default class ContractsController {
             OurContractsData.OurId, 
             OurContractsData.ManagerId, 
             OurContractsData.AdminId,
+            Projects.OurId AS ProjectOurId,
+            Projects.Name AS ProjectName,
+            Projects.Alias AS ProjectAlias,
+            Projects.GdFolderId AS ProjectGdFolderId,
             ${this.makeOptionalColumns(orConditions[0])},
             Admins.Name AS AdminName, 
             Admins.Surname AS AdminSurname, 
@@ -67,6 +71,7 @@ export default class ContractsController {
             ContractTypes.Description AS TypeDescription
           FROM Contracts AS mainContracts
           LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
+          JOIN Projects ON Projects.OurId=mainContracts.ProjectOurId
           LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
@@ -231,6 +236,9 @@ export default class ContractsController {
                 },
                 _parent: {
                     ourId: row.ProjectOurId,
+                    name: row.ProjectName,
+                    alias: row.ProjectAlias,
+                    gdFolderId: row.ProjectGdFolderId
                 },
                 startDate: row.StartDate,
                 endDate: row.EndDate,

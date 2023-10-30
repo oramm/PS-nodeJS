@@ -137,20 +137,21 @@ export default abstract class Contract extends BusinessObject {
             throw error;
         }
     }
-    /**batch dla edycji kontraktów */
+    /** batch dla edycji kontraktów  
+     *  jeśli pole nie wymaga zmian w innych elentach niż w db to pomijane sa handlery tych elementów
+     */
     async editHandler(auth: OAuth2Client, fieldsToUpdate: string[] = []) {
         console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
         const onlyDbfields = ['status', 'comment', 'startDate', 'endDate', 'guaranteeEndDate', 'value', 'name'];
         const isOnlyDbFields = fieldsToUpdate.length > 0 && fieldsToUpdate.every(field => onlyDbfields.includes(field));
 
-        const promises = [
-            this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))
-        ];
-        if (!isOnlyDbFields) promises.push(
-            this.editFolder(auth).then(() => console.log('Contract folder edited')),
-            this.editInScrum(auth).then(() => console.log('Contract edited in scrum'))
-        );
-        await Promise.all(promises);
+        if (!isOnlyDbFields) {
+            await Promise.all([
+                this.editFolder(auth).then(() => console.log('Contract folder edited')),
+                this.editInScrum(auth).then(() => console.log('Contract edited in scrum'))
+            ]);
+        }
+        await this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))
         console.groupEnd();
     }
 
@@ -274,6 +275,7 @@ export default abstract class Contract extends BusinessObject {
             try {
                 await ToolsGd.getFileOrFolderById(auth, this.gdFolderId);
             } catch (err) {
+                console.log('folder not found, creating new one');
                 return await this.createFolders(auth);
             }
             return await ToolsGd.updateFolder(auth, { name: this._folderName, id: this.gdFolderId });
