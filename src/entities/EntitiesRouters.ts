@@ -1,13 +1,14 @@
 import bodyParser from 'body-parser';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import EntitiesController from './EntitiesController';
 import Entity from './Entity';
 import { app } from '../index'
 
 
-app.get('/entities', async (req: any, res: any) => {
+app.post('/entities', async (req: Request, res: Response) => {
     try {
-        const result = await EntitiesController.getEntitiesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await EntitiesController.getEntitiesList(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -16,18 +17,7 @@ app.get('/entities', async (req: any, res: any) => {
     }
 });
 
-app.get('/entity/:id', async (req: any, res: any) => {
-    try {
-        const result = await EntitiesController.getEntitiesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
-app.post('/entity', async (req: any, res: any) => {
+app.post('/entity', async (req: Request, res: Response) => {
     try {
         let item = new Entity(req.body);
         await item.addInDb();
@@ -39,7 +29,7 @@ app.post('/entity', async (req: any, res: any) => {
     };
 });
 
-app.put('/entity/:id', async (req: any, res: any) => {
+app.put('/entity/:id', async (req: Request, res: Response) => {
     try {
         let item = new Entity(req.body);
         console.log(req.body);
@@ -52,7 +42,7 @@ app.put('/entity/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/entity/:id', async (req: any, res: any) => {
+app.delete('/entity/:id', async (req: Request, res: Response) => {
     try {
         let item = new Entity(req.body);
         console.log('delete');

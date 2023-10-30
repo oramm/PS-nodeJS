@@ -1,15 +1,14 @@
 import ToolsDb from '../tools/ToolsDb'
 import Entity from "./Entity";
 
+export type EntitiesSearchParams = {
+    projectId?: string,
+    id?: number
+    name?: string
+}
+
 export default class EntitiesController {
-    static async getEntitiesList(initParamObject: {
-        projectId?: string,
-        id?: number
-        name?: string
-    } = {}) {
-        const projectConditon = (initParamObject.projectId) ? `Contracts.ProjectOurId="${initParamObject.projectId}"` : '1';
-        const idCondition = (initParamObject.id) ? `Entities.Id=${initParamObject.id}` : '1';
-        const nameCondition = (initParamObject.name) ? `Entities.Name LIKE "%${initParamObject.name}%"` : '1';
+    static async getEntitiesList(orConditions: EntitiesSearchParams[] = []) {
 
         const sql = `SELECT  Entities.Id,
                 Entities.Name,
@@ -20,13 +19,21 @@ export default class EntitiesController {
                 Entities.Phone,
                 Entities.Fax
             FROM Entities
-            WHERE ${projectConditon} 
-                AND ${idCondition}
-                AND ${nameCondition}
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
             ORDER BY Entities.Name;`
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processEntitiesResult(result);
+    }
+
+    static makeAndConditions(searchParams: EntitiesSearchParams) {
+        const projectConditon = (searchParams.projectId) ? `Contracts.ProjectOurId="${searchParams.projectId}"` : '1';
+        const idCondition = (searchParams.id) ? `Entities.Id=${searchParams.id}` : '1';
+        const nameCondition = (searchParams.name) ? `Entities.Name LIKE "%${searchParams.name}%"` : '1';
+
+        return `${projectConditon} 
+            AND ${idCondition}
+            AND ${nameCondition}`;
     }
 
     static processEntitiesResult(result: any[]): [Entity?] {

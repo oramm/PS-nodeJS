@@ -30,7 +30,7 @@ export type ContractsWithChildrenSearchParams = {
 }
 
 export default class ContractsWithChildrenController {
-    static async getContractsList(searchParams: ContractsWithChildrenSearchParams[] = []) {
+    static async getContractsList(orConditions: ContractsWithChildrenSearchParams[] = []) {
 
         const sql = `SELECT  Tasks.Id,
                 Contracts.Id AS ContractId,
@@ -93,8 +93,8 @@ export default class ContractsWithChildrenController {
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN Persons AS TasksOwners ON TasksOwners.Id = Tasks.OwnerId
-            WHERE ${ToolsDb.makeOrGroupsConditions(searchParams, this.makeAndConditions.bind(this))}
-            ORDER BY Contracts.Id, Milestones.Id, CaseTypeFolderNumber, Cases.Id`;
+            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+            ORDER BY Contracts.Id, MilestoneTypeFolderNumber, CaseTypeFolderNumber, Cases.Id`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractsResult(result);
     }
