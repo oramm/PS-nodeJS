@@ -4,7 +4,7 @@ import Case from './Case';
 import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
 import { Request, Response } from 'express';
 
-app.put('/cases', async (req: Request, res: Response) => {
+app.post('/cases', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await CasesController.getCasesList(orConditions);

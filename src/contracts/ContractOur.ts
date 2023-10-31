@@ -82,6 +82,7 @@ export default class ContractOur extends Contract {
             this.id = datatoDb.id;
             const ourContractDbFields = this.getourContractDbFIelds();
             await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true, ourContractFieldsToUpdate);
+            console.log('Edytuję powiązania z podmiotami');
             await this.editEntitiesAssociationsInDb(conn, true);
         });
     }

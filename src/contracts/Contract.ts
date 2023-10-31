@@ -200,18 +200,18 @@ export default abstract class Contract extends BusinessObject {
             }));
         });
         for (const association of entityAssociations) {
+            console.log(`adding association ${association.contractRole} ${association._entity.name}`);
             await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
-    /**jest wywoływana w editCase()
-     * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
-     */
+    /** wywoływana w EditContractHandler */
     async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
         await this.deleteEntitiesAssociationsFromDb(externalConn, isPartOfTransaction);
         await this.addEntitiesAssociationsInDb(externalConn, isPartOfTransaction);
     }
 
     async deleteEntitiesAssociationsFromDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+        console.log('deleting entities associations from db');
         const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
         return await ToolsDb.executePreparedStmt(sql, [this.id], this, externalConn, isPartOfTransaction);
     }
