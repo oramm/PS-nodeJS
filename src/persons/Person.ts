@@ -22,6 +22,7 @@ export default class Person extends BusinessObject {
 
         this.id = initParamObject.id;
         if (initParamObject._entity) this.entityId = initParamObject._entity.id;
+        this._entity = initParamObject._entity;
         this.name = initParamObject.name;
         this.surname = initParamObject.surname;
         this.position = initParamObject.position;
@@ -31,7 +32,6 @@ export default class Person extends BusinessObject {
         this.comment = initParamObject.comment;
         this.systemRoleId = initParamObject.systemRoleId;
         this.systemEmail = initParamObject.systemEmail;
-        this._entity = initParamObject._entity;
         this._nameSurnameEmail = this.name + ' ' + this.surname + ' ' + this.email;
         this._alias = ''
         if (this.name && this.surname)

@@ -350,6 +350,27 @@ export default class ToolsDb {
         return '1';
     }
 
+    /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
+    static makeOrConditionFromValueOrArray1(valueOrArray: string | string[] | any[] | undefined, tableName: string, tableFieldName: string, objectFieldName: string = ''): string {
+        if (!valueOrArray) return '1';
+        if (typeof valueOrArray === 'string') {
+            return mysql.format(`${tableName}.${tableFieldName} = ?`, [valueOrArray]);
+        } else if (Array.isArray(valueOrArray)) {
+            // If the first element is an object (and not null), treat the entire array as an array of objects
+            if (typeof valueOrArray[0] === 'object' && valueOrArray[0] !== null) {
+                const conditions = valueOrArray.map((obj) => mysql.format(`${tableName}.${tableFieldName} = ?`, [obj[objectFieldName]]));
+                return '(' + conditions.join(' OR ') + ')';
+            } else if (typeof valueOrArray[0] === 'string') {
+                const conditions = valueOrArray.map(value => mysql.format(`${tableName}.${tableFieldName} = ?`, [value]));
+                return '(' + conditions.join(' OR ') + ')';
+            }
+        }
+
+        return '1';
+
+    }
+
+
     /** Tworzy fragment WHERE gdzie elementy tablicy - grupy warunków są połączene przez OR
      */
     static makeOrGroupsConditions<Conditions>(orConditions: Conditions[], makeAndConditions: (orCondition: Conditions) => string) {

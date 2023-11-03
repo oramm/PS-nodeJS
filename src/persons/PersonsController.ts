@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb'
 import Person from "./Person";
+import Entity from '../entities/Entity';
 
 type PersonsSearchParams = {
     projectId?: string,
@@ -9,6 +10,8 @@ type PersonsSearchParams = {
     systemEmail?: string,
     id?: number,
     showPrivateData?: boolean
+    _entities?: Entity[],
+    searchText?: string
 }
 
 export default class PersonsController {
@@ -64,11 +67,34 @@ export default class PersonsController {
             ? mysql.format(`Persons.Id=?`, [searchParams.id])
             : '1';
 
-        return `${projectCondition} 
+        const entityCondition = ToolsDb.makeOrConditionFromValueOrArray1(searchParams._entities, 'Persons', 'EntityId', 'id');
+        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+
+        const conditions = `${projectCondition} 
             AND ${contractCondition} 
             AND ${systemRoleCondition} 
             AND ${idCondition} 
-            AND ${systemEmailCondition}`;
+            AND ${systemEmailCondition}
+            AND ${entityCondition}
+            AND ${searchTextCondition}`;
+
+        console.log(conditions);
+        return conditions;
+    }
+
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1'
+        if (searchText) searchText = searchText.toString();
+        const words = searchText.split(' ');
+        const conditions = words.map(word =>
+            mysql.format(`(Persons.Name LIKE ?
+                OR Persons.Surname LIKE ?
+                OR Persons.Comment LIKE ?
+                OR Persons.Position LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+
+        const searchTextCondition = conditions.join(' AND ');
+        return searchTextCondition;
     }
 
     static async getPersonBySystemEmail(systemEmail: string) {
