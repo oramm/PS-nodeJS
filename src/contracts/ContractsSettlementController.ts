@@ -120,9 +120,9 @@ export default class ContractsSettlementController {
             const item: ContractSettlementData = {
                 id: row.Id,
                 ourId: row.OurId,
-                value: row.Value,
-                totalIssuedValue: row.TotalIssuedValue,
-                remainingValue: row.RemainingValue
+                value: parseFloat(row.Value),
+                totalIssuedValue: parseFloat(row.TotalIssuedValue),
+                remainingValue: parseFloat(row.RemainingValue)
             };
             newResult.push(item);
         }
@@ -130,7 +130,7 @@ export default class ContractsSettlementController {
     }
 }
 
-type ContractSettlementData = {
+export type ContractSettlementData = {
     id: number,
     ourId: string,
     value: number,

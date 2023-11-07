@@ -1,3 +1,4 @@
+import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 
@@ -41,8 +42,14 @@ export default class Person extends BusinessObject {
 
     async getSystemRole() {
         if (!this.id && !this.systemEmail) throw new Error('Person should have an ID or systemEmail');
-        const personIdCondition = (this.id) ? 'Persons.Id=' + this.id : '1';
-        const systemEmailCondition = (this.systemEmail) ? 'Persons.SystemEmail = "' + this.systemEmail + '"' : '1';
+        const personIdCondition = this.id
+            ? mysql.format('Persons.Id = ?', [this.id])
+            : '1';
+
+        const systemEmailCondition = this.systemEmail
+            ? mysql.format('Persons.SystemEmail = ?', [this.systemEmail])
+            : '1';
+
 
         const sql = 'SELECT \n \t' +
             'Persons.SystemRoleId, \n \t ' +

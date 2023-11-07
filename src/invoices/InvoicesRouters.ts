@@ -5,6 +5,8 @@ import Invoice from './Invoice';
 import InvoicesController from './InvoicesController'
 import { app } from '../index'
 import { Request, Response } from 'express';
+import InvoiceValidator from './InvoiceValidator';
+import ContractOur from '../contracts/ContractOur';
 
 app.post('/invoices', async (req: Request, res: Response) => {
     try {
@@ -21,6 +23,8 @@ app.post('/invoices', async (req: Request, res: Response) => {
 app.post('/invoice', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
+        const validator = new InvoiceValidator(new ContractOur(item._contract), item);
+        await validator.checkValueWithContract(true);
         await item.addInDb();
         res.send(item);
     } catch (error) {
@@ -33,6 +37,8 @@ app.post('/invoice', async (req: Request, res: Response) => {
 app.post('/copyInvoice', async (req: Request, res: Response) => {
     try {
         let item = new Invoice(req.body);
+        const validator = new InvoiceValidator(new ContractOur(item._contract), item);
+        await validator.checkValueWithContract(true);
         await item.copyController();
         res.send(item);
     } catch (error) {

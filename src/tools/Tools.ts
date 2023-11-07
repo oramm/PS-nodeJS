@@ -99,6 +99,15 @@ export default class Tools {
 
         return string;
     }
+    /**formatuje liczbę dodając odstępy i dokładność po przecinku*/
+    static formatNumber(number: number, digits: number = 2) {
+        const formatter = new Intl.NumberFormat('pl-PL', {
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits,
+        });
+        return formatter.format(number);
+    }
+
     /**zwraca łańcuch znaków pozostały z oryginalnego text po wycięciu fragmentu pomiędzy indeksami start i end */
     static getRemainingString(start: number, end: number, text: string): string {
         const before = text.slice(0, start);

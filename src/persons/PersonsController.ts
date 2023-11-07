@@ -78,7 +78,6 @@ export default class PersonsController {
             AND ${entityCondition}
             AND ${searchTextCondition}`;
 
-        console.log(conditions);
         return conditions;
     }
 

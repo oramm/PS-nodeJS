@@ -82,7 +82,6 @@ export default class ContractsController {
           GROUP BY mainContracts.Id
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
 
-        console.log(sql);
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             return (orConditions[0].onlyKeyData)

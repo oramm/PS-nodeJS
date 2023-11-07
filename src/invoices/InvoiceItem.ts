@@ -1,4 +1,7 @@
 import BusinessObject from "../BussinesObject";
+import ContractOur from "../contracts/ContractOur";
+import Invoice from "./Invoice";
+import InvoiceValidator from "./InvoiceValidator";
 
 export default class InvoiceItem extends BusinessObject {
     id?: number;
@@ -45,5 +48,4 @@ export default class InvoiceItem extends BusinessObject {
         const grossValue = this.getNetValue() + this.getVatValue();
         return Math.round(grossValue * 100) / 100;
     }
-
 }

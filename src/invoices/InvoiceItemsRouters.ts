@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import InvoiceItem from './InvoiceItem';
 import InvoiceItemsController from './InvoiceItemsController'
 import { app } from '../index'
+import InvoiceItemValidator from './InvoiceItemValidator';
+import ContractOur from '../contracts/ContractOur';
 
 app.post('/invoiceItems', async (req: Request, res: Response) => {
     try {
@@ -18,6 +20,8 @@ app.post('/invoiceItems', async (req: Request, res: Response) => {
 app.post('/invoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
+        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        await validator.checkValueAgainstContract(true);
         await item.setEditorId();
         await item.addInDb();
         res.send(item);
@@ -31,6 +35,8 @@ app.post('/invoiceItem', async (req: Request, res: Response) => {
 app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
+        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        await validator.checkValueAgainstContract(true);
         await item.setEditorId();
         await item.addInDb();
         res.send(item);
@@ -44,6 +50,8 @@ app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
 app.put('/invoiceItem/:id', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
+        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        await validator.checkValueAgainstContract(false);
         await item.setEditorId();
         await item.editInDb();
         res.send(item);

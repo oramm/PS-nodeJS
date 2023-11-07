@@ -6,6 +6,8 @@ import Setup from "../setup/Setup";
 import mysql from 'mysql2/promise';
 import ToolsDb from "../tools/ToolsDb";
 import InvoiceItemsController from "./InvoiceItemsController";
+import ContractsSettlementController from "../contracts/ContractsSettlementController";
+import ContractOur from "../contracts/ContractOur";
 
 export default class Invoice extends BusinessObject {
     id?: number;
@@ -25,20 +27,18 @@ export default class Invoice extends BusinessObject {
     editorId?: number;
     contractId?: number;
 
-    _contract?: any;
+    _contract: ContractOur;
     _items?: InvoiceItem[];
     _project: any;
     gdId?: string | null;
     _documentOpenUrl?: string;
-    _totalNetValue?: number;
+    _totalNetValue: number;
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'Invoices' })
         this.daysToPay = initParamObject.daysToPay;
         this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate) as string;
         this.initByStatus(initParamObject.status, initParamObject);
-
-        if (!initParamObject) return;
 
         this.id = initParamObject.id;
 
@@ -62,7 +62,7 @@ export default class Invoice extends BusinessObject {
                 " " +
                 this._owner.email;
         }
-        this._totalNetValue = initParamObject._totalNetValue as number | undefined;
+        this._totalNetValue = initParamObject._totalNetValue as number;
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
         this._items = initParamObject._items;
