@@ -50,23 +50,6 @@ app.post('/contractsSettlementData', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/contract', async (req: Request, res: Response) => {
-    try {
-        const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
-        if (!item._parent || !item._parent.id)
-            throw new Error('Nie przypisano projektu do kontraktu')
-
-        await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
-
-        res.send(item);
-    } catch (error) {
-
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
-    };
-});
-
 app.post('/contractReact', async (req: Request, res: Response) => {
     try {
         let item: ContractOur | ContractOther;
@@ -74,6 +57,8 @@ app.post('/contractReact', async (req: Request, res: Response) => {
             req.body.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
         if (req.parsedBody._type.isOur) {
             item = new ContractOur(req.parsedBody);
+            item.ourId = await item.makeOurId();
+            console.log('dodaję ', item.ourId);
         } else {
             item = new ContractOther(req.parsedBody);
         }
@@ -99,7 +84,8 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
 
         //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
         const contractInstance = (itemFromClient.ourId || itemFromClient._type.isOur) ? new ContractOur(itemFromClient) : new ContractOther(itemFromClient);
-
+        if (contractInstance instanceof ContractOur)
+            console.log(await contractInstance.makeOurId());
         await Promise.all([
             ToolsGapi.gapiReguestHandler(req, res, contractInstance.editHandler, [fieldsToUpdate], contractInstance)
         ]);

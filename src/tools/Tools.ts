@@ -108,6 +108,11 @@ export default class Tools {
         return formatter.format(number);
     }
 
+    static addZero(i: number | string): string {
+        const num = typeof i === 'number' ? i : parseInt(i);
+        return num < 10 ? `0${num}` : num.toString();
+    }
+
     /**zwraca łańcuch znaków pozostały z oryginalnego text po wycięciu fragmentu pomiędzy indeksami start i end */
     static getRemainingString(start: number, end: number, text: string): string {
         const before = text.slice(0, start);

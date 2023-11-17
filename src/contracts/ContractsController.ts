@@ -51,6 +51,9 @@ export default class ContractsController {
             OurContractsData.OurId, 
             OurContractsData.ManagerId, 
             OurContractsData.AdminId,
+            Cities.Id AS CityId,
+            Cities.Name AS CityName,
+            Cities.Code AS CityCode,
             Projects.OurId AS ProjectOurId,
             Projects.Name AS ProjectName,
             Projects.Alias AS ProjectAlias,
@@ -71,6 +74,7 @@ export default class ContractsController {
             ContractTypes.Description AS TypeDescription
           FROM Contracts AS mainContracts
           LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
+          LEFT JOIN Cities ON Cities.Id=OurContractsData.CityId
           JOIN Projects ON Projects.OurId=mainContracts.ProjectOurId
           LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
@@ -221,11 +225,19 @@ export default class ContractsController {
             const employers = entitiesPerProject.filter((item: any) =>
                 item._contract.id == row.Id && item.contractRole == 'EMPLOYER'
             );
+
+            const _city = (row.CityId) ? {
+                id: row.CityId,
+                name: row.CityName,
+                code: row.CityCode
+            } : undefined;
+
             const initParam = {
                 id: row.Id,
                 alias: row.Alias,
                 number: row.Number,
                 name: ToolsDb.sqlToString(row.Name),
+                _city,
                 //kontrakt powiązany z kontraktem na roboty
                 _ourContract: {
                     ourId: row.OurIdRelated,
@@ -349,25 +361,24 @@ export default class ContractsController {
             ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
             : '1';
         const sql = `SELECT
-Contracts_Entities.ContractId,
-    Contracts_Entities.EntityId,
-    Contracts_Entities.ContractRole,
-    Entities.Name,
-    Entities.Address,
-    Entities.TaxNumber,
-    Entities.Www,
-    Entities.Email,
-    Entities.Phone,
-    Entities.Fax
-            FROM Contracts_Entities
-            JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-            JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
-            LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-            WHERE ${projectConditon} 
-            AND ${contractConditon}
-            ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
+            Contracts_Entities.ContractId,
+            Contracts_Entities.EntityId,
+            Contracts_Entities.ContractRole,
+            Entities.Name,
+            Entities.Address,
+            Entities.TaxNumber,
+            Entities.Www,
+            Entities.Email,
+            Entities.Phone,
+            Entities.Fax
+                    FROM Contracts_Entities
+                    JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
+                    JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
+                    LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
+                    WHERE ${projectConditon} 
+                    AND ${contractConditon}
+                    ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
 
-        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
         return this.processContractEntityAssociations(result);

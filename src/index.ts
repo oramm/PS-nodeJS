@@ -157,7 +157,7 @@ require('./contracts/milestones/cases/CasesRouters');
 require('./contracts/milestones/cases/caseTypes/CaseTypesRouters');
 require('./contracts/milestones/cases/caseTemplates/CaseTemplatesRouters');
 require('./contracts/MilestoneTypeContractTypeAssociations/MilestoneTypeContractTypeAssociationsRouters');
-
+require('./Admin/Cities/CitiesRouters');
 
 const risksRouter = require('./contracts/milestones/cases/risks/RisksRouters');
 app.use(risksRouter);

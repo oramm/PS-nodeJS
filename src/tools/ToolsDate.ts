@@ -1,3 +1,5 @@
+import Tools from "./Tools";
+
 export default class ToolsDate {
     static isStringAYMDDate(string: string) {
         var x = string.length;
@@ -85,8 +87,8 @@ export default class ToolsDate {
 
     static dateJStoDMY(inputDate: Date) {
         if (inputDate) {
-            var dd = this.addZero(inputDate.getDate());
-            var mm = this.addZero(inputDate.getMonth() + 1); //January is 0!
+            var dd = Tools.addZero(inputDate.getDate());
+            var mm = Tools.addZero(inputDate.getMonth() + 1); //January is 0!
             var yyyy = inputDate.getFullYear();
 
             return dd + '-' + mm + '-' + yyyy;
@@ -116,21 +118,14 @@ export default class ToolsDate {
     static timestampToString(timestamp: string | Date) {
         if (typeof timestamp === 'string')
             timestamp = new Date(timestamp);
-        var day = this.addZero(timestamp.getDate());
-        var month = this.addZero(timestamp.getMonth() + 1);
+        var day = Tools.addZero(timestamp.getDate());
+        var month = Tools.addZero(timestamp.getMonth() + 1);
         var year = timestamp.getFullYear();
-        var h = this.addZero(timestamp.getHours());
-        var m = this.addZero(timestamp.getMinutes());
+        var h = Tools.addZero(timestamp.getHours());
+        var m = Tools.addZero(timestamp.getMinutes());
         return day + '&#8209;' + month + '&#8209;' + year + ' ' +
             h + ':' + m
 
-    }
-
-    private static addZero(i: number | string) {
-        if (parseInt(i as string) < 10) {
-            i = "0" + i;
-        }
-        return i.toString();
     }
 
     static dateDiff(first: number, second: number) {

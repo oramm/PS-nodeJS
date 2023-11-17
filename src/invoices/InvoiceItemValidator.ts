@@ -86,23 +86,23 @@ export default class InvoiceItemValidator {
         if (isNewItem && valueToCheck === contractValue) {
             throw new Error(
                 `Nie można dodać nowej pozycji, ponieważ suma wartości wcześniejszych faktur i tej pozycji ` +
-                `jest równa się wartości umowy tj.: ${Tools.formatNumber(contractValue)} zł` + '\n' +
+                `jest równa się wartości umowy tj.: ${Tools.formatNumber(contractValue)} zł\n` +
                 `Wartość wcześniejszych faktur łacznie: ${Tools.formatNumber(issuedValue)} zł`
             );
         }
         if (isNewItem && valueToCheck > contractValue) {
             throw new Error(
                 `Nie można dodać nowej pozycji, ponieważ suma wartości wcześniejszych faktur i tej pozycji ` +
-                `(${valueToCheck} zł) przekracza wartość umowy o (${Tools.formatNumber(valueToCheck - contractValue)} zł).` + '\n' +
-                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł` + '\n' +
+                `(${valueToCheck} zł) przekracza wartość umowy o (${Tools.formatNumber(valueToCheck - contractValue)} zł).\n` +
+                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł\n` +
                 `Wartość wcześniejszych faktur łacznie: ${Tools.formatNumber(issuedValue)} zł`
             );
         }
         if (!isNewItem && issuedValue > contractValue) {
             throw new Error(
                 `Nie można zmienić tej pozycji, ponieważ suma wartości wcześniejszych faktur i tej pozycji ` +
-                `(${Tools.formatNumber(valueToCheck)} zł) przekracza wartość umowy o (${Tools.formatNumber(valueToCheck - contractValue)} zł).` + '\n' +
-                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł` + '\n' +
+                `(${Tools.formatNumber(valueToCheck)} zł) przekracza wartość umowy o (${Tools.formatNumber(valueToCheck - contractValue)} zł).\n` +
+                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł\n` +
                 `Wartość wcześniejszych faktur łącznie: ${Tools.formatNumber(issuedValue)} zł`
             );
         }

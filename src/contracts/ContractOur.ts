@@ -8,6 +8,7 @@ import { auth, OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../tools/ToolsSheets';
 import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import City from '../Admin/Cities/City';
 
 export default class ContractOur extends Contract {
     ourId: string;
@@ -16,13 +17,15 @@ export default class ContractOur extends Contract {
     _ourType: string;
     _manager?: Person;
     _admin?: Person;
+    cityId?: number;
+    _city?: City;
 
     constructor(initParamObject: any) {
         super(initParamObject);
         if (initParamObject._ourContract && initParamObject._ourContract.ourId)
             throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
         this.ourId = initParamObject.ourId.toUpperCase();
-        this._ourType = this.getType(this.ourId);
+        this._ourType = this._type.name || this.getType(this.ourId);
         if (initParamObject._manager) {
             this._manager = new Person(initParamObject._manager);
             this.managerId = initParamObject._manager.id
@@ -30,6 +33,10 @@ export default class ContractOur extends Contract {
         if (initParamObject._admin) {
             this._admin = new Person(initParamObject._admin);
             this.adminId = initParamObject._admin.id;
+        }
+        if (initParamObject._city) {
+            this.cityId = initParamObject._city.id;
+            this._city = initParamObject._city;
         }
         //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
         let ourIdOrNumber = this.ourId;
@@ -60,7 +67,8 @@ export default class ContractOur extends Contract {
             id: this.id,
             ourId: this.ourId,
             adminId: this.adminId,
-            managerId: this.managerId
+            managerId: this.managerId,
+            cityId: this.cityId
         };
     }
     /** usuwa z pomocniczego obiektu atrybuty niepasujące to tabeli Contracts */
@@ -68,10 +76,11 @@ export default class ContractOur extends Contract {
         delete datatoDb.ourId;
         delete datatoDb.managerId;
         delete datatoDb.adminId;
+        delete datatoDb.cityId;
     }
 
     async editInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false, fieldsToUpdate?: string[]) {
-        const ourContractFields = ['ourId', 'managerId', 'adminId'];
+        const ourContractFields = ['ourId', 'managerId', 'adminId', 'cityId'];
         const ourContractFieldsToUpdate = fieldsToUpdate?.filter(field => ourContractFields.includes(field)) || [];
         const contractFieldsToUpdate = fieldsToUpdate?.filter(field => !ourContractFields.includes(field)) || [];
 
@@ -85,6 +94,38 @@ export default class ContractOur extends Contract {
             console.log('Edytuję powiązania z podmiotami');
             await this.editEntitiesAssociationsInDb(conn, true);
         });
+    }
+
+    async makeOurId() {
+        if (!this._city) throw new Error('Nie można utworzyć OurId - brak miasta');
+        if (!this._city.code) throw new Error('Nie można utworzyć OurId - brak kodu miasta');
+        if (!this._type) throw new Error('Nie można utworzyć OurId - brak typu kontraktu');
+        if (!this._type.name) throw new Error('Nie można utworzyć OurId - brak nazwy typu kontraktu');
+
+        const itemsCount = Tools.addZero(await this.getItemsCount());
+        return `${this._city.code}.${this._type.name}.${itemsCount}`;
+    }
+
+    private async getItemsCount() {
+        const typeCondition = mysql.format(`ContractTypes.Id = ?`, [this._type.id]);
+        const cityCondition = mysql.format(`OurContractsData.CityId = ?`, [this._city?.id]);
+
+        const sql = `SELECT COUNT(*) AS ItemsCount
+            FROM Contracts
+            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
+            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
+            WHERE  ${typeCondition} AND ${cityCondition}`;
+        console.log(sql);
+
+        try {
+            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const row = result[0];
+            const itemsCount = row.ItemsCount as number;
+            console.log('@@@@@itemsCount', itemsCount);
+            return itemsCount + 1;
+        } catch (err) {
+            throw err;
+        }
     }
 
     getType(ourId: string): string {
