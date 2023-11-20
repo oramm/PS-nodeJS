@@ -34,6 +34,10 @@ export default class LetterCaseAssociationsController {
                 MilestoneTypes.Name AS MilestoneTypeName, 
                 MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber, 
                 OurContractsData.OurId AS ContractOurId, 
+                ContractTypes.Id AS ContractTypeId, 
+                ContractTypes.Name AS ContractTypeName, 
+                ContractTypes.IsOur AS ContractTypeIsOur, 
+                ContractTypes.Description AS ContractTypeDescription,
                 Contracts.Id AS ContractId, 
                 Contracts.Number AS ContractNumber, 
                 Contracts.Name AS ContractName
@@ -44,6 +48,7 @@ export default class LetterCaseAssociationsController {
             JOIN Milestones ON Cases.MilestoneId=Milestones.Id
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
+            JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             WHERE ${projectConditon} 
@@ -64,6 +69,12 @@ export default class LetterCaseAssociationsController {
                 ourId: row.ContractOurId,
                 number: row.ContractNumber,
                 name: ToolsDb.sqlToString(row.ContractName),
+                _type: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                    isOur: row.ContractTypeIsOur,
+                    description: ToolsDb.sqlToString(row.ContractTypeDescription),
+                }
             }
             const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
 
