@@ -6,7 +6,6 @@ import ContractOur from '../ContractOur';
 import { Security } from './Security';
 import Person from '../../persons/Person';
 import Case from '../milestones/cases/Case';
-import { CasesSearchParams } from '../milestones/cases/CasesController';
 
 export type SecuritiesSearchParams = {
     id?: number,
@@ -74,6 +73,10 @@ export default class SecuritiesController {
                     Contracts.GuaranteeEndDate AS ContractGuaranteeEndDate,
                     Contracts.Status AS ContractStatus,
                     OurContractsData.OurId AS ContractOurId,
+                    ContractTypes.Id AS MainContractTypeId, 
+                    ContractTypes.Name AS TypeName, 
+                    ContractTypes.IsOur AS TypeIsOur, 
+                    ContractTypes.Description AS TypeDescription,
                     Admins.Id AS AdminsId,
                     Admins.Name AS EditorsName,
                     Admins.Surname AS EditorsSurname,
@@ -225,6 +228,12 @@ export default class SecuritiesController {
                     guaranteeEndDate: row.ContractGuaranteeEndDate,
                     name: row.ContractName,
                     status: row.ContractStatus,
+                    _type: {
+                        id: row.ContractTypeId,
+                        name: row.ContractTypeName,
+                        description: row.ContractTypeDescription,
+                        isOur: row.ContractTypeIsOur
+                    },
                     _admin: new Person({
                         id: row.AdminsId,
                         name: row.EditorsName,

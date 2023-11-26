@@ -48,6 +48,10 @@ export default class CasesController {
             Contracts.Alias AS ContractAlias,
             Contracts.Number AS ContractNumber,
             Contracts.Name AS ContractName,
+            ContractTypes.Id AS MainContractTypeId, 
+            ContractTypes.Name AS TypeName, 
+            ContractTypes.IsOur AS TypeIsOur, 
+            ContractTypes.Description AS TypeDescription,
             Risks.Id AS RiskId,
             Risks.Probability AS RiskProbability,
             Risks.OverallImpact AS RiskOverallImpact
@@ -56,6 +60,7 @@ export default class CasesController {
         JOIN Milestones ON Milestones.Id=Cases.MilestoneId
         JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
         JOIN Contracts ON Milestones.ContractId=Contracts.Id
+        JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
         LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
         LEFT JOIN Risks ON Risks.CaseId=Cases.Id
         JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
@@ -126,6 +131,12 @@ export default class CasesController {
                 number: row.ContractNumber,
                 alias: row.ContractAlias,
                 name: ToolsDb.sqlToString(row.ContractName),
+                _type: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                    description: row.ContractTypeDescription,
+                    isOur: row.ContractTypeIsOur
+                }
             }
             const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
 

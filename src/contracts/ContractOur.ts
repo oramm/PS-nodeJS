@@ -24,6 +24,7 @@ export default class ContractOur extends Contract {
         super(initParamObject);
         if (initParamObject._ourContract && initParamObject._ourContract.ourId)
             throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
+
         this.ourId = initParamObject.ourId.toUpperCase();
         this._ourType = this._type.name || this.getType(this.ourId);
         if (initParamObject._manager) {
@@ -110,22 +111,37 @@ export default class ContractOur extends Contract {
         const typeCondition = mysql.format(`ContractTypes.Id = ?`, [this._type.id]);
         const cityCondition = mysql.format(`OurContractsData.CityId = ?`, [this._city?.id]);
 
-        const sql = `SELECT COUNT(*) AS ItemsCount
-            FROM Contracts
-            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
-            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
-            WHERE  ${typeCondition} AND ${cityCondition}`;
+        const sql = this.getPrevNumberSQL(typeCondition, cityCondition);
         console.log(sql);
 
         try {
             const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
             const row = result[0];
-            const itemsCount = row.ItemsCount as number;
+            const itemsCount = row.Number as number;
             console.log('@@@@@itemsCount', itemsCount);
             return itemsCount + 1;
         } catch (err) {
             throw err;
         }
+    }
+
+    private getPrevNumberSQL(typeCondition: string, cityCondition: string) {
+
+        const sql = `SELECT MAX(CAST(SUBSTRING(OurContractsData.OurId, LENGTH(OurId) - 1, 2) AS UNSIGNED)) AS Number
+            FROM Contracts
+            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
+            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
+            WHERE  ${typeCondition} AND ${cityCondition}`;
+        return sql;
+    }
+
+    private getSameCityTypeCountSQL(typeCondition: string, cityCondition: string) {
+        const sql = `SELECT COUNT(*) AS Number
+            FROM Contracts
+            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
+            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
+            WHERE  ${typeCondition} AND ${cityCondition}`;
+        return sql;
     }
 
     getType(ourId: string): string {
