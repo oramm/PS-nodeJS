@@ -134,7 +134,6 @@ export default class InvoicesController {
             AND ${searchTextCondition}`;
     }
 
-
     static processInvoicesResult(result: any[]): [Invoice?] {
         let newResult: [Invoice?] = [];
 

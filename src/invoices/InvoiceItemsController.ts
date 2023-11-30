@@ -36,6 +36,10 @@ export default class InvoiceItemsController {
                             Contracts.Name as ContractName,
                             Contracts.Alias as ContractAlias,
                             OurContractsData.OurId as ContractOurId,
+                            ContractTypes.Id AS ContractTypeId,
+                            ContractTypes.Name AS ContractTypeName,
+                            ContractTypes.IsOur AS ContractTypeIsOur,
+                            ContractTypes.Id AS ContractTypeDescription,                
                             Editors.Id AS EditorId,
                             Editors.Name AS EditorName,
                             Editors.Surname AS EditorSurname,
@@ -44,6 +48,7 @@ export default class InvoiceItemsController {
                         JOIN Invoices ON Invoices.Id=InvoiceItems.ParentId
                         JOIN Contracts ON Contracts.Id=Invoices.ContractId
                         JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
+                        JOIN ContractTypes ON ContractTypes.Id=Contracts.TypeId
                         LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId
                         WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
                         ORDER BY InvoiceItems.Id DESC`;
@@ -90,6 +95,12 @@ export default class InvoiceItemsController {
                         name: row.ContractName,
                         alias: row.ContractAlias,
                         ourId: row.ContractOurId,
+                        _type: {
+                            id: row.ContractTypeId,
+                            name: row.ContractTypeName,
+                            description: row.ContractTypeDescription,
+                            isOur: row.ContractTypeIsOur
+                        }
                     }
                 },
                 description: ToolsDb.sqlToString(row.Description),
