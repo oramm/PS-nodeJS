@@ -1,6 +1,7 @@
 import ContractOur from "../contracts/ContractOur";
 import ContractsSettlementController, { ContractSettlementData } from "../contracts/ContractsSettlementController";
 import Setup from "../setup/Setup";
+import Tools from "../tools/Tools";
 import Invoice from "./Invoice";
 
 export default class InvoiceValidator {
@@ -50,9 +51,14 @@ export default class InvoiceValidator {
 
     private checkInvoiceValueAgainstRemainingValue(contractSettlementData: ContractSettlementData, isNewInvoice: boolean) {
         if (isNewInvoice && this.invoice._totalNetValue >= contractSettlementData.remainingValue) {
-            throw new Error(`Nie można dodać nowej faktury, ponieważ suma wartości wcześniejszych faktur i tej faktury (${this.invoice._totalNetValue} zł) przekracza lub równa się wartości umowy (${contractSettlementData.remainingValue} zł).
-            Wartość umowy: ${this.contract.value} zł
-            Wartość wcześniejszych faktur: ${contractSettlementData.totalIssuedValue} zł`);
+            const contractValue = this.contract.value as number;
+            throw new Error(
+                `Nie można dodać nowej faktury, ponieważ suma wartości wcześniejszych faktur i tej faktury (${this.invoice._totalNetValue} zł) ` +
+                `przekracza lub równa się wartości umowy (${Tools.formatNumber(contractSettlementData.remainingValue)} zł). \n` +
+                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł \n` +
+                `Wartość wcześniejszych faktur(wszystkie statusy): ${Tools.formatNumber(contractSettlementData.totalIssuedValue)} zł \n` +
+                `Wskazówka: sprawdź w widoku kontraktu czy nie ma zapomnianych faktur o statusie "Na Później".`
+            );
         }
     }
 }
