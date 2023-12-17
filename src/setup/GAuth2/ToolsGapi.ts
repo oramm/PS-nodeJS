@@ -86,6 +86,7 @@ export default class ToolsGapi {
             const systemRole = await this.determineSystemRole(payload.email);
 
             req.session.userData = {
+                enviId: systemRole.personId,
                 googleId: payload.sub,
                 systemEmail: payload.email,
                 userName: payload.name,
@@ -111,6 +112,7 @@ export default class ToolsGapi {
     }
 
     static authenticateUser(req: Request, res: Response, next: NextFunction) {
+        console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
         if (req.session && req.session.userData) {
             next();
         } else {

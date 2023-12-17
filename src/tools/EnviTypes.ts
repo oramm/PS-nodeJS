@@ -3,24 +3,24 @@ export namespace Envi {
         blobBase64String: string; //base64data,
         name: string; //blob.name,
         mimeType: string; //blob.mimeType
-        parent?: string
+        parent?: string;
     }
 
     export interface DocumentTemplate {
-        id?: number,
-        gdId: string,
-        _contents: Envi.DocumentContents,
-        name: string
-        description?: string,
-        _nameConentsAlias?: string
+        id?: number;
+        gdId: string;
+        _contents: Envi.DocumentContents;
+        name: string;
+        description?: string;
+        _nameConentsAlias?: string;
     }
 
     export interface DocumentContents {
-        id?: number,
-        gdId: string,
-        caseTypeId: number,
-        alias: string,
-        documentTemplateId?: number
+        id?: number;
+        gdId: string;
+        caseTypeId: number;
+        alias: string;
+        documentTemplateId?: number;
     }
 
     export interface Document {
@@ -32,12 +32,12 @@ export namespace Envi {
         _documentOpenUrl?: string;
         documentGdId?: string | null;
         _gdFolderUrl?: string;
-        folderGdId?: string | null;
+        gdFolderId?: string | null;
         _lastUpdated?: string;
         _contract?: any;
         _project?: any;
         projectId?: any;
-        _cases: any[];
+        _cases?: any[];
         _entitiesMain?: any[];
         _entitiesCc?: any[];
         letterFilesCount?: number;

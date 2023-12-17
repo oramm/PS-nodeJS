@@ -11,6 +11,7 @@ export default class Setup {
     static Gd = {
         rootFolderId: '1C_wMgQJtzsFmgsmHp7Dr_F1VJx4v1mjo',
         meetingProtocoTemlateId: '1B5D2ZUkPgNft0-0JZCtkxSk8eAZa91DnwQY8Bbln9Bo',
+        offersRootFolderId: '0B2pP2WpBR244WDgzT0RHcmFCMW8',
     };
 
     static ScrumSheet = {
@@ -137,5 +138,26 @@ export default class Setup {
         TO_CORRECT: 'Do poprawy',
         AWAITING_RESPONSE: 'Oczekiwanie na odpowiedź',
         DONE: 'Zrobione',
+    };
+
+    static OfferStatus = {
+        TO_DO: 'Do złożenia',
+        DONE: 'Czekamy na wynik',
+        AWARDED: 'Wygrana',
+        LOST: 'Przegrana',
+        WITHDRAWN: 'Wycofana',
+        NOT_INTERESTED: 'Nie składamy',
+    };
+
+    static OfferBidProcedure = {
+        X: 'Zapytanie ofertowe',
+        TENDER_PL: 'Przetarg BZP',
+        TENDER_EU: 'Przetarg DUUE',
+    };
+
+    static OfferForm = {
+        EMAIL: 'Email',
+        PLATFORM: 'Platforma',
+        PAPER: 'Papier',
     };
 }

@@ -1,7 +1,6 @@
 import BusinessObject from '../BussinesObject';
 import Contract from '../contracts/Contract';
 import Entity from '../entities/Entity';
-import Person from '../persons/Person';
 import Project from '../projects/Project';
 import { Envi } from '../tools/EnviTypes';
 import ToolsDate from '../tools/ToolsDate';
@@ -13,8 +12,10 @@ import LetterCase from './associations/LetterCase';
 import Case from '../contracts/milestones/cases/Case';
 import { OAuth2Client } from 'google-auth-library';
 
-
-export default abstract class Letter extends BusinessObject implements Envi.Document {
+export default abstract class Letter
+    extends BusinessObject
+    implements Envi.Document
+{
     public id?: number;
     public number?: string | number;
     public description?: string;
@@ -23,7 +24,7 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
     public _documentOpenUrl?: string;
     public documentGdId?: string;
     _gdFolderUrl?: string;
-    folderGdId?: string;
+    gdFolderId?: string;
     _lastUpdated?: string;
     _contract: Contract;
     _project: Project;
@@ -45,24 +46,34 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         this.description = initParamObject.description;
         this.number = initParamObject.number;
         this.creationDate = ToolsDate.dateJsToSql(initParamObject.creationDate);
-        this.registrationDate = ToolsDate.dateJsToSql(initParamObject.registrationDate);
-        this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(initParamObject.documentGdId);
+        this.registrationDate = ToolsDate.dateJsToSql(
+            initParamObject.registrationDate
+        );
+        this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+            initParamObject.documentGdId
+        );
         this.documentGdId = initParamObject.documentGdId;
-        if (initParamObject.folderGdId) {
-            this._gdFolderUrl = ToolsGd.createGdFolderUrl(initParamObject.folderGdId);
-            this.folderGdId = initParamObject.folderGdId;
+        if (initParamObject.gdFolderId) {
+            this._gdFolderUrl = ToolsGd.createGdFolderUrl(
+                initParamObject.gdFolderId
+            );
+            this.gdFolderId = initParamObject.gdFolderId;
         }
         this._lastUpdated = initParamObject._lastUpdated;
         this._contract = initParamObject._contract;
         this._project = initParamObject._project;
         this.projectId = initParamObject._project.id;
         this._cases = initParamObject._cases;
-        this._entitiesMain = (initParamObject._entitiesMain) ? initParamObject._entitiesMain : [];
-        this._entitiesCc = (initParamObject._entitiesCc) ? initParamObject._entitiesCc : [];
+        this._entitiesMain = initParamObject._entitiesMain
+            ? initParamObject._entitiesMain
+            : [];
+        this._entitiesCc = initParamObject._entitiesCc
+            ? initParamObject._entitiesCc
+            : [];
         this.letterFilesCount = initParamObject.letterFilesCount;
 
         this._editor = initParamObject._editor;
-        this._canUserChangeFileOrFolder// = this.canUserChangeFileOrFolder();
+        this._canUserChangeFileOrFolder;
         this._fileOrFolderChanged;
     }
 
@@ -74,34 +85,46 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         });
     }
 
-    async addEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async addEntitiesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         const entityAssociations: LetterEntity[] = [];
         this._entitiesMain.map((item) => {
-            entityAssociations.push(new LetterEntity({
-                letterRole: 'MAIN',
-                _letter: this,
-                _entity: item
-            }));
+            entityAssociations.push(
+                new LetterEntity({
+                    letterRole: 'MAIN',
+                    _letter: this,
+                    _entity: item,
+                })
+            );
         });
         this._entitiesCc.map((item) => {
-            entityAssociations.push(new LetterEntity({
-                letterRole: 'CC',
-                _letter: this,
-                _entity: item
-            }));
+            entityAssociations.push(
+                new LetterEntity({
+                    letterRole: 'CC',
+                    _letter: this,
+                    _entity: item,
+                })
+            );
         });
         for (const association of entityAssociations) {
             await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
 
-    async addCaseAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async addCaseAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         const associations: LetterCase[] = [];
         this._cases.map((item) => {
-            associations.push(new LetterCase({
-                _letter: this,
-                _case: item
-            }));
+            associations.push(
+                new LetterCase({
+                    _letter: this,
+                    _case: item,
+                })
+            );
         });
         for (const association of associations) {
             await association.addInDb(externalConn, isPartOfTransaction);
@@ -119,31 +142,42 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
 
     async editInDb() {
         console.log('Letter edit in Db Start');
-        await ToolsDb.transaction(async conn => {
+        await ToolsDb.transaction(async (conn) => {
             await Promise.all([
                 this.deleteCasesAssociationsFromDb(),
-                this.deleteEntitiesAssociationsFromDb()
+                this.deleteEntitiesAssociationsFromDb(),
             ]);
             console.log('associacions deleted');
 
             await Promise.all([
-                super.editInDb(conn, true).then(() => { console.log('letterData edited') }),
+                super.editInDb(conn, true).then(() => {
+                    console.log('letterData edited');
+                }),
                 this.addCaseAssociationsInDb(conn, true),
-                this.addEntitiesAssociationsInDb(conn, true)
+                this.addEntitiesAssociationsInDb(conn, true),
             ]);
             console.log('associaciont renewed');
-        })
+        });
     }
 
     /** jest wywoływana w editLetter()
      * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
      */
-    async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async editEntitiesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         await this.deleteEntitiesAssociationsFromDb();
-        await this.addEntitiesAssociationsInDb(externalConn, isPartOfTransaction);
+        await this.addEntitiesAssociationsInDb(
+            externalConn,
+            isPartOfTransaction
+        );
     }
 
-    async editCasesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async editCasesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         await this.deleteCasesAssociationsFromDb();
         await this.addCaseAssociationsInDb(externalConn, isPartOfTransaction);
     }
@@ -157,10 +191,19 @@ export default abstract class Letter extends BusinessObject implements Envi.Docu
         return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
 
-    async appendAttachmentsHandler(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void> {
+    async appendAttachmentsHandler(
+        auth: OAuth2Client,
+        files: Express.Multer.File[]
+    ): Promise<void> {
         this.letterFilesCount += files.length;
     }
 
-    abstract initialise(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void>;
-    abstract editLetterGdElements(auth: OAuth2Client, files: Express.Multer.File[]): Promise<void>
+    abstract initialise(
+        auth: OAuth2Client,
+        files: Express.Multer.File[]
+    ): Promise<void>;
+    abstract editLetterGdElements(
+        auth: OAuth2Client,
+        files: Express.Multer.File[]
+    ): Promise<void>;
 }

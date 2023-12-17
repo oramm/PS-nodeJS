@@ -1,34 +1,34 @@
 import mysql from 'mysql2/promise';
-import Entity from "../entities/Entity";
-import ToolsDb from '../tools/ToolsDb'
-import Contract from "./Contract";
-import ContractOther from "./ContractOther";
-import ContractOur from "./ContractOur";
-import ContractType from "./contractTypes/ContractType";
+import Entity from '../entities/Entity';
+import ToolsDb from '../tools/ToolsDb';
+import Contract from './Contract';
+import ContractOther from './ContractOther';
+import ContractOur from './ContractOur';
+import ContractType from './contractTypes/ContractType';
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
 
 export type ContractSearchParams = {
-    id?: number,
-    projectId?: string,
-    _parent?: Project,
-    searchText?: string,
-    contractOurId?: string,
-    startDateFrom?: string,
-    startDateTo?: string,
-    endDateFrom?: string,
-    endDateTo?: string,
-    contractName?: string,
-    contractAlias?: string,
-    typeId?: number,
-    _contractType?: ContractType,
-    typesToInclude?: 'our' | 'other' | 'all',
-    onlyOurs?: boolean,//@deprecated
-    isArchived?: boolean,
-    status?: string | string[],
-    onlyKeyData?: boolean
-    getRemainingValue?: boolean
-}
+    id?: number;
+    projectId?: string;
+    _project?: Project;
+    searchText?: string;
+    contractOurId?: string;
+    startDateFrom?: string;
+    startDateTo?: string;
+    endDateFrom?: string;
+    endDateTo?: string;
+    contractName?: string;
+    contractAlias?: string;
+    typeId?: number;
+    _contractType?: ContractType;
+    typesToInclude?: 'our' | 'other' | 'all';
+    onlyOurs?: boolean; //@deprecated
+    isArchived?: boolean;
+    status?: string | string[];
+    onlyKeyData?: boolean;
+    getRemainingValue?: boolean;
+};
 
 export default class ContractsController {
     static async getContractsList(orConditions: ContractSearchParams[] = []) {
@@ -82,40 +82,49 @@ export default class ContractsController {
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
           LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
           LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
-          WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+          WHERE ${ToolsDb.makeOrGroupsConditions(
+              orConditions,
+              this.makeAndConditions.bind(this)
+          )}
           GROUP BY mainContracts.Id
           ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
 
         try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            return (orConditions[0].onlyKeyData)
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(sql)
+            );
+            return orConditions[0].onlyKeyData
                 ? this.processContractsResultKeyData(result, orConditions[0])
                 : await this.processContractsResult(result, orConditions[0]);
         } catch (err) {
             console.log(sql);
-            throw (err);
+            throw err;
         }
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(mainContracts.Name LIKE ?
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(mainContracts.Name LIKE ?
                 OR mainContracts.Number LIKE ?
                 OR mainContracts.Alias LIKE ?
                 OR OurContractsData.OurId LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
     static makeAndConditions(searchParams: ContractSearchParams) {
-        const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
+        const projectOurId =
+            searchParams._project?.ourId || searchParams.projectId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
-        const isArchived = typeof searchParams.isArchived === 'string'
+        const isArchived = typeof searchParams.isArchived === 'string';
 
         const idCondition = searchParams.id
             ? mysql.format(`mainContracts.Id = ? `, [searchParams.id])
@@ -124,30 +133,45 @@ export default class ContractsController {
             ? mysql.format(`mainContracts.ProjectOurId = ? `, [projectOurId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ? `, [`%${searchParams.contractOurId}%`])
+            ? mysql.format(`OurContractsData.OurId LIKE ? `, [
+                  `%${searchParams.contractOurId}%`,
+              ])
             : '1';
         const contractNameCondition = searchParams.contractName
-            ? mysql.format(`mainContracts.Name = ? `, [searchParams.contractName])
+            ? mysql.format(`mainContracts.Name = ? `, [
+                  searchParams.contractName,
+              ])
             : '1';
         const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`mainContracts.StartDate >= ? `, [searchParams.startDateFrom])
+            ? mysql.format(`mainContracts.StartDate >= ? `, [
+                  searchParams.startDateFrom,
+              ])
             : '1';
         const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`mainContracts.StartDate <= ? `, [searchParams.startDateTo])
+            ? mysql.format(`mainContracts.StartDate <= ? `, [
+                  searchParams.startDateTo,
+              ])
             : '1';
 
         const endDateFromCondition = searchParams.endDateFrom
-            ? mysql.format(`mainContracts.EndDate >= ? `, [searchParams.endDateFrom])
+            ? mysql.format(`mainContracts.EndDate >= ? `, [
+                  searchParams.endDateFrom,
+              ])
             : '1';
         const endDateToCondition = searchParams.endDateTo
-            ? mysql.format(`mainContracts.EndDate <= ? `, [searchParams.endDateTo])
+            ? mysql.format(`mainContracts.EndDate <= ? `, [
+                  searchParams.endDateTo,
+              ])
             : '1';
         const typeCondition = typeId
             ? mysql.format(`mainContracts.TypeId = ? `, [typeId])
             : '1';
 
-        let statusCondition = ToolsDb.makeOrConditionFromValueOrArray(searchParams.status, 'mainContracts', 'Status');
-
+        let statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+            searchParams.status,
+            'mainContracts',
+            'Status'
+        );
 
         let typesToIncudeCondition;
         switch (searchParams.typesToInclude) {
@@ -161,10 +185,16 @@ export default class ContractsController {
                 typesToIncudeCondition = '1';
         }
         //@deprecated
-        const onlyOursContractsCondition = (searchParams.onlyOurs) ? 'OurContractsData.OurId IS NOT NULL' : '1';
-        const isArchivedConditon = (isArchived) ? `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL} ` : 1;//'mainContracts.Status!="Archiwalny"';
+        const onlyOursContractsCondition = searchParams.onlyOurs
+            ? 'OurContractsData.OurId IS NOT NULL'
+            : '1';
+        const isArchivedConditon = isArchived
+            ? `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL} `
+            : 1; //'mainContracts.Status!="Archiwalny"';
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
         const conditions = `${idCondition} 
             AND ${projectCondition} 
             AND ${onlyOursContractsCondition} 
@@ -178,7 +208,7 @@ export default class ContractsController {
             AND ${searchTextCondition}
             AND ${typeCondition}
             AND ${statusCondition}
-            AND ${typesToIncudeCondition} `
+            AND ${typesToIncudeCondition} `;
         return conditions;
     }
 
@@ -200,10 +230,13 @@ export default class ContractsController {
             : null;
 
         return `${remainingNotScheduledValueColumn},
-                    ${remainingNotIssuedColumn} `
+                    ${remainingNotIssuedColumn} `;
     }
 
-    private static async processContractsResult(result: any[], initParamObject: ContractSearchParams) {
+    private static async processContractsResult(
+        result: any[],
+        initParamObject: ContractSearchParams
+    ) {
         const newResult: (ContractOur | ContractOther)[] = [];
         let entitiesPerProject: any[] = [];
 
@@ -211,26 +244,33 @@ export default class ContractsController {
             entitiesPerProject = await this.getContractEntityAssociationsList({
                 projectId: initParamObject.projectId,
                 contractId: initParamObject.id,
-                isArchived: initParamObject.isArchived
+                isArchived: initParamObject.isArchived,
             });
         }
         for (const row of result) {
+            const contractors = entitiesPerProject.filter(
+                (item: any) =>
+                    item._contract.id == row.Id &&
+                    item.contractRole == 'CONTRACTOR'
+            );
+            const engineers = entitiesPerProject.filter(
+                (item: any) =>
+                    item._contract.id == row.Id &&
+                    item.contractRole == 'ENGINEER'
+            );
+            const employers = entitiesPerProject.filter(
+                (item: any) =>
+                    item._contract.id == row.Id &&
+                    item.contractRole == 'EMPLOYER'
+            );
 
-            const contractors = entitiesPerProject.filter((item: any) =>
-                item._contract.id == row.Id && item.contractRole == 'CONTRACTOR'
-            );
-            const engineers = entitiesPerProject.filter((item: any) =>
-                item._contract.id == row.Id && item.contractRole == 'ENGINEER'
-            );
-            const employers = entitiesPerProject.filter((item: any) =>
-                item._contract.id == row.Id && item.contractRole == 'EMPLOYER'
-            );
-
-            const _city = (row.CityId) ? {
-                id: row.CityId,
-                name: row.CityName,
-                code: row.CityCode
-            } : undefined;
+            const _city = row.CityId
+                ? {
+                      id: row.CityId,
+                      name: row.CityName,
+                      code: row.CityCode,
+                  }
+                : undefined;
 
             const initParam = {
                 id: row.Id,
@@ -243,13 +283,13 @@ export default class ContractsController {
                     ourId: row.OurIdRelated,
                     id: row.RelatedId,
                     name: ToolsDb.sqlToString(row.RelatedName),
-                    gdFolderId: row.RelatedGdFolderId
+                    gdFolderId: row.RelatedGdFolderId,
                 },
-                _parent: {
+                _project: {
                     ourId: row.ProjectOurId,
                     name: row.ProjectName,
                     alias: row.ProjectAlias,
-                    gdFolderId: row.ProjectGdFolderId
+                    gdFolderId: row.ProjectGdFolderId,
                 },
                 startDate: row.StartDate,
                 endDate: row.EndDate,
@@ -267,38 +307,43 @@ export default class ContractsController {
                     id: row.ManagerId,
                     name: row.ManagerName,
                     surname: row.ManagerSurname,
-                    email: row.ManagerEmail
+                    email: row.ManagerEmail,
                 },
                 _admin: {
                     id: row.AdminId,
                     name: row.AdminName,
                     surname: row.AdminSurname,
-                    email: row.AdminEmail
+                    email: row.AdminEmail,
                 },
                 _type: new ContractType({
                     id: row.MainContractTypeId,
                     name: row.TypeName,
                     description: row.TypeDescription,
-                    isOur: row.TypeIsOur
+                    isOur: row.TypeIsOur,
                 }),
                 _contractors: contractors.map((item: any) => item._entity),
                 _engineers: engineers.map((item: any) => item._entity),
                 _employers: employers.map((item: any) => item._entity),
-                _lastUpdated: row.LastUpdated
-            }
+                _lastUpdated: row.LastUpdated,
+            };
             let item: ContractOur | ContractOther;
             try {
-                item = (row.TypeIsOur) ? new ContractOur(initParam) : new ContractOther(initParam);
+                item = row.TypeIsOur
+                    ? new ContractOur(initParam)
+                    : new ContractOther(initParam);
             } catch (err) {
                 console.log(initParam);
-                throw (err);
+                throw err;
             }
             newResult.push(item);
         }
         return newResult;
     }
 
-    private static processContractsResultKeyData(result: any[], initParamObject: any): Contract[] {
+    private static processContractsResultKeyData(
+        result: any[],
+        initParamObject: any
+    ): Contract[] {
         let newResult: Contract[] = [];
 
         for (const row of result) {
@@ -312,7 +357,7 @@ export default class ContractsController {
                     ourId: row.OurIdRelated,
                     id: row.RelatedId,
                     name: ToolsDb.sqlToString(row.RelatedName),
-                    gdFolderId: row.RelatedGdFolderId
+                    gdFolderId: row.RelatedGdFolderId,
                 },
                 projectId: row.ProjectOurId,
                 startDate: row.StartDate,
@@ -329,37 +374,46 @@ export default class ContractsController {
                     id: row.ManagerId,
                     name: row.ManagerName,
                     surname: row.ManagerSurname,
-                    email: row.ManagerEmail
+                    email: row.ManagerEmail,
                 },
                 _admin: {
                     id: row.AdminId,
                     name: row.AdminName,
                     surname: row.AdminSurname,
-                    email: row.AdminEmail
+                    email: row.AdminEmail,
                 },
                 _type: {
                     id: row.TypeId,
                     name: row.TypeName,
                     description: row.TypeDescription,
-                    isOur: row.TypeIsOur
+                    isOur: row.TypeIsOur,
                 },
-            }
-            const item = (row.TypeIsOur) ? new ContractOur(initParam) : new ContractOther(initParam);
+            };
+            const item = row.TypeIsOur
+                ? new ContractOur(initParam)
+                : new ContractOther(initParam);
 
             newResult.push(item);
         }
         return newResult;
     }
 
-    static async getContractEntityAssociationsList(initParamObject: { projectId?: string, contractId?: number, isArchived?: boolean }) {
+    static async getContractEntityAssociationsList(initParamObject: {
+        projectId?: string;
+        contractId?: number;
+        isArchived?: boolean;
+    }) {
+        const projectConditon =
+            initParamObject && initParamObject.projectId
+                ? mysql.format('Contracts.ProjectOurId = ?', [
+                      initParamObject.projectId,
+                  ])
+                : '1';
 
-        const projectConditon = initParamObject && initParamObject.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [initParamObject.projectId])
-            : '1';
-
-        const contractConditon = initParamObject && initParamObject.contractId
-            ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
-            : '1';
+        const contractConditon =
+            initParamObject && initParamObject.contractId
+                ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
+                : '1';
         const sql = `SELECT
             Contracts_Entities.ContractId,
             Contracts_Entities.EntityId,
@@ -391,7 +445,7 @@ export default class ContractsController {
             const item = {
                 contractRole: row.ContractRole,
                 _contract: {
-                    id: row.ContractId
+                    id: row.ContractId,
                 },
                 _entity: new Entity({
                     id: row.EntityId,
@@ -401,13 +455,12 @@ export default class ContractsController {
                     www: row.Www,
                     email: row.Email,
                     phone: row.Phone,
-                    fax: row.Fax
-                })
+                    fax: row.Fax,
+                }),
             };
 
             newResult.push(item);
         }
         return newResult;
-
     }
 }

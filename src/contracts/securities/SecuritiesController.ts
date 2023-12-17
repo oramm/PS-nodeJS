@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb'
-import ContractType from "../contractTypes/ContractType";
+import ToolsDb from '../../tools/ToolsDb';
+import ContractType from '../contractTypes/ContractType';
 import Project from '../../projects/Project';
 import ContractOur from '../ContractOur';
 import { Security } from './Security';
@@ -8,23 +8,23 @@ import Person from '../../persons/Person';
 import Case from '../milestones/cases/Case';
 
 export type SecuritiesSearchParams = {
-    id?: number,
-    projectId?: string,
-    _parent?: Project,
-    searchText?: string,
-    contractOurId?: string,
-    startDateFrom?: string,
-    startDateTo?: string,
-    firstPartExpiryDateFrom?: string,
-    firstPartExpiryDateTo?: string,
-    secondPartExpiryDateFrom?: string,
-    secondPartExpiryDateTo?: string,
-    status?: string,
-    contractName?: string,
-    contractAlias?: string,
-    typeId?: number,
-    _contractType?: ContractType
-}
+    id?: number;
+    projectId?: string;
+    _parent?: Project;
+    searchText?: string;
+    contractOurId?: string;
+    startDateFrom?: string;
+    startDateTo?: string;
+    firstPartExpiryDateFrom?: string;
+    firstPartExpiryDateTo?: string;
+    secondPartExpiryDateFrom?: string;
+    secondPartExpiryDateTo?: string;
+    status?: string;
+    contractName?: string;
+    contractAlias?: string;
+    typeId?: number;
+    _contractType?: ContractType;
+};
 
 export default class SecuritiesController {
     /**
@@ -34,12 +34,11 @@ export default class SecuritiesController {
      * @example
      * // Pobierz papiery wartościowe o ID równym 1 lub 2.
      * const result = await SecuritiesController.getSecuritiesList({}, [{id: 1}, {id: 2}]);
-     * 
+     *
      * // Pobierz papiery wartościowe o statusie 'active' dla projektu o ID 'A' lub statusie 'inactive' dla projektu o ID 'B'.
      * const result = await SecuritiesController.getSecuritiesList({projectId: "A"}, [{status: "active"}, {projectId: "B", status: "inactive"}]);
      */
     static async getSecuritiesList(orConditions: SecuritiesSearchParams[]) {
-
         const sql = `SELECT 
                     Securities.Id,
                     Securities.ContractId,
@@ -94,37 +93,49 @@ export default class SecuritiesController {
                 LEFT JOIN Persons AS Editors ON Securities.EditorId = Editors.Id
                 LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
                 LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-                WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+                WHERE ${ToolsDb.makeOrGroupsConditions(
+                    orConditions,
+                    this.makeAndConditions.bind(this)
+                )}
                 ORDER BY ContractEndDate DESC`;
-        console.log(sql);
         try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(sql)
+            );
             return this.processResult(result);
         } catch (err) {
             console.log(sql);
-            throw (err);
+            throw err;
         }
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
+        const conditions = words.map((word) =>
             mysql.format(
                 `(Securities.Description Like ?
         OR Contracts.Name LIKE ?
         OR Contracts.Number LIKE ?
         OR Contracts.Alias LIKE ?
         OR OurContractsData.OurId LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
-            ));
+                [
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                ]
+            )
+        );
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
     static makeAndConditions(searchParams: SecuritiesSearchParams) {
-        const projectOurId = searchParams._parent?.ourId || searchParams.projectId;
+        const projectOurId =
+            searchParams._parent?.ourId || searchParams.projectId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
 
         const idCondition = searchParams.id
@@ -134,42 +145,68 @@ export default class SecuritiesController {
             ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
             : '1';
         const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ? `, [`%${searchParams.contractOurId}%`])
+            ? mysql.format(`OurContractsData.OurId LIKE ? `, [
+                  `%${searchParams.contractOurId}%`,
+              ])
             : '1';
         const contractNameCondition = searchParams.contractName
             ? mysql.format(`Contracts.Name = ? `, [searchParams.contractName])
             : '1';
         const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`Contracts.StartDate >= ? `, [searchParams.startDateFrom])
+            ? mysql.format(`Contracts.StartDate >= ? `, [
+                  searchParams.startDateFrom,
+              ])
             : '1';
         const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`Contracts.StartDate <= ? `, [searchParams.startDateTo])
+            ? mysql.format(`Contracts.StartDate <= ? `, [
+                  searchParams.startDateTo,
+              ])
             : '1';
-        const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(searchParams.status, 'Securities', 'Status');
+        const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+            searchParams.status,
+            'Securities',
+            'Status'
+        );
 
         searchParams.status
             ? mysql.format(`Securities.Status = ? `, [searchParams.status])
             : '1';
 
-        const firstPartExpiryDateFromCondition = searchParams.firstPartExpiryDateFrom
-            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) >= ? `, [searchParams.firstPartExpiryDateFrom])
-            : '1';
-        const firstPartExpiryDateToCondition = searchParams.firstPartExpiryDateTo
-            ? mysql.format(`COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) <= ? `, [searchParams.firstPartExpiryDateTo])
-            : '1';
+        const firstPartExpiryDateFromCondition =
+            searchParams.firstPartExpiryDateFrom
+                ? mysql.format(
+                      `COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) >= ? `,
+                      [searchParams.firstPartExpiryDateFrom]
+                  )
+                : '1';
+        const firstPartExpiryDateToCondition =
+            searchParams.firstPartExpiryDateTo
+                ? mysql.format(
+                      `COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) <= ? `,
+                      [searchParams.firstPartExpiryDateTo]
+                  )
+                : '1';
 
-        const secondPartExpiryDateFromCondition = searchParams.secondPartExpiryDateFrom
-            ? mysql.format(`Securities.SecondPartExpiryDate >= ? `, [searchParams.secondPartExpiryDateFrom])
-            : '1';
-        const secondPartExpiryDateToCondition = searchParams.secondPartExpiryDateTo
-            ? mysql.format(`Securities.SecondPartExpiryDate <= ? `, [searchParams.secondPartExpiryDateTo])
-            : '1';
+        const secondPartExpiryDateFromCondition =
+            searchParams.secondPartExpiryDateFrom
+                ? mysql.format(`Securities.SecondPartExpiryDate >= ? `, [
+                      searchParams.secondPartExpiryDateFrom,
+                  ])
+                : '1';
+        const secondPartExpiryDateToCondition =
+            searchParams.secondPartExpiryDateTo
+                ? mysql.format(`Securities.SecondPartExpiryDate <= ? `, [
+                      searchParams.secondPartExpiryDateTo,
+                  ])
+                : '1';
 
         const contractTypeCondition = typeId
             ? mysql.format(`Contracts.TypeId = ? `, [typeId])
             : '1';
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         return `${idCondition} 
                 AND ${projectCondition}  
@@ -184,7 +221,6 @@ export default class SecuritiesController {
                 AND ${statusCondition}
                 AND ${contractTypeCondition}
                 AND ${searchTextCondition} `;
-
     }
 
     private static async processResult(result: any[]) {
@@ -216,7 +252,7 @@ export default class SecuritiesController {
                         isDefault: row.IsDefault,
                         isUniquePerMilestone: row.isUniquePerMilestone,
                         milestoneTypeId: row.MilestoneTypeId,
-                    }
+                    },
                 }),
                 _contract: new ContractOur({
                     id: row.ContractId,
@@ -232,20 +268,20 @@ export default class SecuritiesController {
                         id: row.ContractTypeId,
                         name: row.ContractTypeName,
                         description: row.ContractTypeDescription,
-                        isOur: row.ContractTypeIsOur
+                        isOur: row.ContractTypeIsOur,
                     },
                     _admin: new Person({
                         id: row.AdminsId,
                         name: row.EditorsName,
                         surname: row.EditorsSurname,
-                        email: row.EditorsEmail
-                    })
+                        email: row.EditorsEmail,
+                    }),
                 }),
                 _editor: new Person({
                     name: row.EditorsName,
                     surname: row.EditorsSurname,
-                    email: row.EditorsEmail
-                })
+                    email: row.EditorsEmail,
+                }),
             });
             item.setGdFolderUrl();
             newResult.push(item);

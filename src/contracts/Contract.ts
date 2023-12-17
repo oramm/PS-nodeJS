@@ -37,7 +37,7 @@ export default abstract class Contract extends BusinessObject {
     _engineers?: Entity[];
     _employers?: Entity[];
     status: string;
-    _parent: Project;
+    _project: Project;
     _folderName?: string;
     _lastUpdated?: string;
 
@@ -54,7 +54,9 @@ export default abstract class Contract extends BusinessObject {
 
         this.startDate = ToolsDate.dateJsToSql(initParamObject.startDate);
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate);
-        this.guaranteeEndDate = ToolsDate.dateJsToSql(initParamObject.guaranteeEndDate);
+        this.guaranteeEndDate = ToolsDate.dateJsToSql(
+            initParamObject.guaranteeEndDate
+        );
         if (initParamObject.value) {
             if (typeof initParamObject.value === 'string') {
                 initParamObject.value = initParamObject.value
@@ -67,41 +69,58 @@ export default abstract class Contract extends BusinessObject {
             }
         }
         if (initParamObject._remainingNotScheduledValue) {
-            if (typeof initParamObject._remainingNotScheduledValue === 'string') {
-                initParamObject._remainingNotScheduledValue = initParamObject._remainingNotScheduledValue
-                    .replace(/\s/g, '')
-                    .replace(/,/g, '.')
-                    .replace(/[^0-9.-]/g, '');
-                this._remainingNotScheduledValue = parseFloat(initParamObject._remainingNotScheduledValue);
+            if (
+                typeof initParamObject._remainingNotScheduledValue === 'string'
+            ) {
+                initParamObject._remainingNotScheduledValue =
+                    initParamObject._remainingNotScheduledValue
+                        .replace(/\s/g, '')
+                        .replace(/,/g, '.')
+                        .replace(/[^0-9.-]/g, '');
+                this._remainingNotScheduledValue = parseFloat(
+                    initParamObject._remainingNotScheduledValue
+                );
             } else {
-                this._remainingNotScheduledValue = initParamObject._remainingNotScheduledValue;
+                this._remainingNotScheduledValue =
+                    initParamObject._remainingNotScheduledValue;
             }
         }
 
         if (initParamObject._remainingNotIssuedValue) {
             if (typeof initParamObject._remainingNotIssuedValue === 'string') {
-                initParamObject._remainingNotIssuedValue = initParamObject._remainingNotIssuedValue
-                    .replace(/\s/g, '')
-                    .replace(/,/g, '.')
-                    .replace(/[^0-9.-]/g, '');
-                this._remainingNotIssuedValue = parseFloat(initParamObject._remainingNotIssuedValue);
+                initParamObject._remainingNotIssuedValue =
+                    initParamObject._remainingNotIssuedValue
+                        .replace(/\s/g, '')
+                        .replace(/,/g, '.')
+                        .replace(/[^0-9.-]/g, '');
+                this._remainingNotIssuedValue = parseFloat(
+                    initParamObject._remainingNotIssuedValue
+                );
             } else {
-                this._remainingNotIssuedValue = initParamObject._remainingNotIssuedValue;
+                this._remainingNotIssuedValue =
+                    initParamObject._remainingNotIssuedValue;
             }
         }
         this.comment = initParamObject.comment;
 
         if (initParamObject.gdFolderId)
             this.setGdFolderIdAndUrl(initParamObject.gdFolderId);
-        this.meetingProtocolsGdFolderId = initParamObject.meetingProtocolsGdFolderId;
+        this.meetingProtocolsGdFolderId =
+            initParamObject.meetingProtocolsGdFolderId;
 
-        this._contractors = (initParamObject._contractors) ? initParamObject._contractors : [];
+        this._contractors = initParamObject._contractors
+            ? initParamObject._contractors
+            : [];
 
-        this._engineers = (initParamObject._engineers) ? initParamObject._engineers : [];
-        this._employers = (initParamObject._employers) ? initParamObject._employers : [];
+        this._engineers = initParamObject._engineers
+            ? initParamObject._engineers
+            : [];
+        this._employers = initParamObject._employers
+            ? initParamObject._employers
+            : [];
 
-        this._parent = initParamObject._parent;
-        this.projectOurId = this._parent?.ourId;;
+        this._project = initParamObject._project;
+        this.projectOurId = this._project?.ourId;
 
         this.status = initParamObject.status;
         this._lastUpdated = initParamObject._lastUpdated;
@@ -109,7 +128,9 @@ export default abstract class Contract extends BusinessObject {
     /**batch dla dodawania kontraktów */
     async addNewController(auth: OAuth2Client) {
         if (await this.isUnique())
-            throw new Error(`Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`);
+            throw new Error(
+                `Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`
+            );
 
         try {
             console.group(`Creating a new Contract ${this.id}`);
@@ -126,35 +147,50 @@ export default abstract class Contract extends BusinessObject {
             console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
         } catch (error) {
             console.group('Error while creating contract');
-            this.deleteFolder(auth)
-                .then(() => console.log('folders deleted'));
-            this.deleteFromScrum(auth)
-                .then(() => console.log('deleted from scrum'));
+            this.deleteFolder(auth).then(() => console.log('folders deleted'));
+            this.deleteFromScrum(auth).then(() =>
+                console.log('deleted from scrum')
+            );
 
-            if (this.id) this.deleteFromDb()
-                .then(() => console.log('deleted from db'));
+            if (this.id)
+                this.deleteFromDb().then(() => console.log('deleted from db'));
             console.groupEnd();
             throw error;
         }
     }
-    /** batch dla edycji kontraktów  
+    /** batch dla edycji kontraktów
      *  jeśli pole nie wymaga zmian w innych elentach niż w db to pomijane sa handlery tych elementów
      */
     async editHandler(auth: OAuth2Client, fieldsToUpdate: string[] = []) {
         console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
-        const onlyDbfields = ['status', 'comment', 'startDate', 'endDate', 'guaranteeEndDate', 'value', 'name'];
-        const isOnlyDbFields = fieldsToUpdate.length > 0 && fieldsToUpdate.every(field => onlyDbfields.includes(field));
+        const onlyDbfields = [
+            'status',
+            'comment',
+            'startDate',
+            'endDate',
+            'guaranteeEndDate',
+            'value',
+            'name',
+        ];
+        const isOnlyDbFields =
+            fieldsToUpdate.length > 0 &&
+            fieldsToUpdate.every((field) => onlyDbfields.includes(field));
 
         if (!isOnlyDbFields) {
             await Promise.all([
-                this.editFolder(auth).then(() => console.log('Contract folder edited')),
-                this.editInScrum(auth).then(() => console.log('Contract edited in scrum'))
+                this.editFolder(auth).then(() =>
+                    console.log('Contract folder edited')
+                ),
+                this.editInScrum(auth).then(() =>
+                    console.log('Contract edited in scrum')
+                ),
             ]);
         }
-        await this.editInDb(undefined, undefined, fieldsToUpdate).then(() => console.log('Contract edited in db'))
+        await this.editInDb(undefined, undefined, fieldsToUpdate).then(() =>
+            console.log('Contract edited in db')
+        );
         console.groupEnd();
     }
-
 
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
@@ -163,75 +199,111 @@ export default abstract class Contract extends BusinessObject {
 
     setEntitiesFromParent() {
         if (this._employers?.length == 0)
-            this._employers = this._parent._employers;
+            this._employers = this._project._employers;
     }
     async setContractRootFolder(auth: OAuth2Client) {
-        return await ToolsGd.setFolder(auth, { parentId: <string>this._parent?.gdFolderId, name: <string>this._folderName });
+        return await ToolsGd.setFolder(auth, {
+            parentId: <string>this._project?.gdFolderId,
+            name: <string>this._folderName,
+        });
     }
 
     async createFolders(auth: OAuth2Client) {
         const folder = await this.setContractRootFolder(auth);
         this.setGdFolderIdAndUrl(folder.id as string);
-        const meetingNotesFolder = await ToolsGd.setFolder(auth, { parentId: <string>this._parent.gdFolderId, name: 'Notatki ze spotkań' });
+        const meetingNotesFolder = await ToolsGd.setFolder(auth, {
+            parentId: <string>this._project.gdFolderId,
+            name: 'Notatki ze spotkań',
+        });
         this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
     }
 
-    async addEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async addEntitiesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         const entityAssociations: ContractEntity[] = [];
         this._contractors?.map((item) => {
-            entityAssociations.push(new ContractEntity({
-                contractRole: 'CONTRACTOR',
-                _contract: this,
-                _entity: item
-            }));
+            entityAssociations.push(
+                new ContractEntity({
+                    contractRole: 'CONTRACTOR',
+                    _contract: this,
+                    _entity: item,
+                })
+            );
         });
         this._engineers?.map((item) => {
-            entityAssociations.push(new ContractEntity({
-                contractRole: 'ENGINEER',
-                _contract: this,
-                _entity: item
-            }));
+            entityAssociations.push(
+                new ContractEntity({
+                    contractRole: 'ENGINEER',
+                    _contract: this,
+                    _entity: item,
+                })
+            );
         });
         this._employers?.map((item) => {
-            entityAssociations.push(new ContractEntity({
-                contractRole: 'EMPLOYER',
-                _contract: this,
-                _entity: item
-            }));
+            entityAssociations.push(
+                new ContractEntity({
+                    contractRole: 'EMPLOYER',
+                    _contract: this,
+                    _entity: item,
+                })
+            );
         });
         for (const association of entityAssociations) {
-            console.log(`adding association ${association.contractRole} ${association._entity.name}`);
+            console.log(
+                `adding association ${association.contractRole} ${association._entity.name}`
+            );
             await association.addInDb(externalConn, isPartOfTransaction);
         }
     }
     /** wywoływana w EditContractHandler */
-    async editEntitiesAssociationsInDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        await this.deleteEntitiesAssociationsFromDb(externalConn, isPartOfTransaction);
-        await this.addEntitiesAssociationsInDb(externalConn, isPartOfTransaction);
+    async editEntitiesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        await this.deleteEntitiesAssociationsFromDb(
+            externalConn,
+            isPartOfTransaction
+        );
+        await this.addEntitiesAssociationsInDb(
+            externalConn,
+            isPartOfTransaction
+        );
     }
 
-    async deleteEntitiesAssociationsFromDb(externalConn: mysql.PoolConnection, isPartOfTransaction?: boolean) {
+    async deleteEntitiesAssociationsFromDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
         console.log('deleting entities associations from db');
         const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
-        return await ToolsDb.executePreparedStmt(sql, [this.id], this, externalConn, isPartOfTransaction);
+        return await ToolsDb.executePreparedStmt(
+            sql,
+            [this.id],
+            this,
+            externalConn,
+            isPartOfTransaction
+        );
     }
 
     async createDefaultMilestones(auth: OAuth2Client) {
         const defaultMilestones: Milestone[] = [];
 
-        const defaultMilestoneTemplates = await MilestoneTemplatesController.getMilestoneTemplatesList({
-            isDefaultOnly: true,
-            contractTypeId: this.typeId
-        });
+        const defaultMilestoneTemplates =
+            await MilestoneTemplatesController.getMilestoneTemplatesList({
+                isDefaultOnly: true,
+                contractTypeId: this.typeId,
+            });
         for (const template of defaultMilestoneTemplates) {
             const milestone = new Milestone({
                 name: template.name,
                 description: template.description,
                 _type: template._milestoneType,
                 _parent: this,
-                status: 'Nie rozpoczęty'
+                status: 'Nie rozpoczęty',
             });
-            //zasymuluj numer kamienia nieunikalnego. 
+            //zasymuluj numer kamienia nieunikalnego.
             //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
             if (!milestone._type.isUniquePerContract) {
                 milestone.number = 1;
@@ -244,28 +316,49 @@ export default abstract class Contract extends BusinessObject {
         console.log('default milestones saved in db');
 
         for (const milestone of defaultMilestones) {
-            console.group(`--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`);
+            console.group(
+                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
+            );
             await milestone.createDefaultCases(auth, { isPartOfBatch: true });
         }
         console.groupEnd();
     }
 
-    private async addDefaultMilestonesInDb(milestones: Milestone[], externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
-        const conn = (externalConn) ? externalConn : await ToolsDb.getPoolConnectionWithTimeout();
-        if (!externalConn) console.log('new connection:: addDefaultMilestonesInDb ', conn.threadId);
+    private async addDefaultMilestonesInDb(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Transaction is not possible without external connection'
+            );
+        const conn = externalConn
+            ? externalConn
+            : await ToolsDb.getPoolConnectionWithTimeout();
+        if (!externalConn)
+            console.log(
+                'new connection:: addDefaultMilestonesInDb ',
+                conn.threadId
+            );
         try {
             await conn.beginTransaction();
             const promises = [];
             for (const milestone of milestones)
                 promises.push(milestone.addInDb(conn, true));
-            await Promise.all(promises)
+            await Promise.all(promises);
             await conn.commit();
         } catch (err) {
             await conn.rollback();
             throw err;
         } finally {
-            if (!externalConn) { conn.release(); console.log('connection released:: addDefaultMilestonesInDb', conn.threadId); }
+            if (!externalConn) {
+                conn.release();
+                console.log(
+                    'connection released:: addDefaultMilestonesInDb',
+                    conn.threadId
+                );
+            }
         }
     }
 
@@ -278,11 +371,13 @@ export default abstract class Contract extends BusinessObject {
                 console.log('folder not found, creating new one');
                 return await this.createFolders(auth);
             }
-            return await ToolsGd.updateFolder(auth, { name: this._folderName, id: this.gdFolderId });
+            return await ToolsGd.updateFolder(auth, {
+                name: this._folderName,
+                id: this.gdFolderId,
+            });
         }
         //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
-        else
-            return await this.createFolders(auth);
+        else return await this.createFolders(auth);
     }
 
     async deleteFolder(auth: OAuth2Client) {
@@ -310,7 +405,6 @@ export default abstract class Contract extends BusinessObject {
             }
         }
     }
-
 
     /** dodaje wiesz nagowka kontraktu */
     abstract deleteFromScrum(auth: OAuth2Client): Promise<void>;

@@ -1,14 +1,24 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from "../../tools/ToolsDb";
-import ProcessStepInstance from "./ProcessStepInstance";
+import ToolsDb from '../../tools/ToolsDb';
+import ProcessStepInstance from './ProcessStepInstance';
 
 export default class ProcessStepInstancesController {
     static async getProcessStepInstancesList(initParamObject: any) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'Projects.OurId="' + initParamObject.projectId + '"' : '1'
-        const contractCondition = (initParamObject && initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1'
-        const milestoneCondition = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id=' + initParamObject.milestoneId : '1'
+        const projectCondition =
+            initParamObject && initParamObject.projectId
+                ? 'Projects.OurId="' + initParamObject.projectId + '"'
+                : '1';
+        const contractCondition =
+            initParamObject && initParamObject.contractId
+                ? 'Contracts.Id=' + initParamObject.contractId
+                : '1';
+        const milestoneCondition =
+            initParamObject && initParamObject.milestoneId
+                ? 'Milestones.Id=' + initParamObject.milestoneId
+                : '1';
 
-        const sql = 'SELECT  ProcessesStepsInstances.Id, \n \t' +
+        const sql =
+            'SELECT  ProcessesStepsInstances.Id, \n \t' +
             'ProcessesStepsInstances.ProcessInstanceId, \n \t' +
             'ProcessInstances.CaseId, \n \t' +
             'ProcessesStepsInstances.Status, \n \t' +
@@ -20,7 +30,7 @@ export default class ProcessStepInstancesController {
             'ProcessesSteps.Name AS ProcessStepName, \n \t' +
             'ProcessesSteps.Description AS ProcessStepDescription, \n \t' +
             'Letters.DocumentGdId AS OurLetterDocumentGdId, \n \t' +
-            'Letters.FolderGdId AS OurLetterFolderGdId, \n \t' +
+            'Letters.GdFolderId AS OurLetterGdFolderId, \n \t' +
             'DocumentTemplates.Name AS DocumentTemplateName, \n \t' +
             'DocumentTemplates.GdId AS DocumentTemplateGdId \n' +
             'FROM ProcessesStepsInstances \n' +
@@ -34,15 +44,20 @@ export default class ProcessStepInstancesController {
             'JOIN Milestones ON Milestones.Id = Cases.MilestoneId \n' +
             'JOIN Contracts ON Contracts.Id = Milestones.ContractId \n' +
             'JOIN Projects ON Projects.OurId = Contracts.ProjectOurId \n' +
-            'WHERE ' + projectCondition + ' AND ' + contractCondition + ' AND ' + milestoneCondition;
+            'WHERE ' +
+            projectCondition +
+            ' AND ' +
+            contractCondition +
+            ' AND ' +
+            milestoneCondition;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProcessStepInstancesResult(result);
-
-
     }
 
-    static processProcessStepInstancesResult(result: any[]): [ProcessStepInstance?] {
+    static processProcessStepInstancesResult(
+        result: any[]
+    ): [ProcessStepInstance?] {
         let newResult: [ProcessStepInstance?] = [];
 
         for (const row of result) {
@@ -55,7 +70,7 @@ export default class ProcessStepInstancesController {
                 _ourLetter: {
                     id: row.OurLetterId,
                     documentGdId: row.OurLetterDocumentGdId,
-                    folderGdId: row.OurLetterFolderGdId,
+                    gdFolderId: row.OurLetterGdFolderId,
                 },
                 _lastUpdated: row.LastUpdated,
                 _processStep: {
@@ -68,12 +83,11 @@ export default class ProcessStepInstancesController {
                     },
                 },
                 _case: {
-                    id: row.CaseId
+                    id: row.CaseId,
                 },
                 _editor: {
-                    id: row.EditorId
+                    id: row.EditorId,
                 },
-
             });
 
             newResult.push(item);

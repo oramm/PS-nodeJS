@@ -5,6 +5,7 @@ import 'express-session';
 declare module 'express-session' {
     interface SessionData {
         userData: {
+            enviId: number;
             googleId: string;
             systemEmail: string;
             userName: string;

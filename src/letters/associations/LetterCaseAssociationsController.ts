@@ -1,13 +1,18 @@
-import ContractOther from "../../contracts/ContractOther";
-import ContractOur from "../../contracts/ContractOur";
-import Case from "../../contracts/milestones/cases/Case";
-import ToolsDb from "../../tools/ToolsDb";
-import LetterCase from "./LetterCase";
+import ContractOther from '../../contracts/ContractOther';
+import ContractOur from '../../contracts/ContractOur';
+import Case from '../../contracts/milestones/cases/Case';
+import ToolsDb from '../../tools/ToolsDb';
+import LetterCase from './LetterCase';
 
 export default class LetterCaseAssociationsController {
     static async getLetterCaseAssociationsList(initParamObject: any) {
-        const projectConditon = (initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractConditon = (initParamObject && initParamObject.contractctId) ? 'Contracts.Id="' + initParamObject.contractctId + '"' : '1';
+        const projectConditon = initParamObject.projectId
+            ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"'
+            : '1';
+        const contractConditon =
+            initParamObject && initParamObject.contractctId
+                ? 'Contracts.Id="' + initParamObject.contractctId + '"'
+                : '1';
         const sql = `SELECT  
                 Letters_Cases.LetterId, 
                 Letters_Cases.CaseId, 
@@ -16,7 +21,7 @@ export default class LetterCaseAssociationsController {
                 Letters.CreationDate, 
                 Letters.RegistrationDate, 
                 Letters.DocumentGdId, 
-                Letters.FolderGdId, 
+                Letters.GdFolderId, 
                 Letters.LastUpdated, 
                 Cases.Name AS CaseName, 
                 Cases.Number AS CaseNumber, 
@@ -55,7 +60,6 @@ export default class LetterCaseAssociationsController {
               AND ${contractConditon}
             ORDER BY Letters_Cases.LetterId, Cases.Name`;
 
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLetterCaseAssociationsResult(result);
     }
@@ -73,10 +77,14 @@ export default class LetterCaseAssociationsController {
                     id: row.ContractTypeId,
                     name: row.ContractTypeName,
                     isOur: row.ContractTypeIsOur,
-                    description: ToolsDb.sqlToString(row.ContractTypeDescription),
-                }
-            }
-            const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
+                    description: ToolsDb.sqlToString(
+                        row.ContractTypeDescription
+                    ),
+                },
+            };
+            const _contract = contractInitParams.ourId
+                ? new ContractOur(contractInitParams)
+                : new ContractOther(contractInitParams);
 
             const item = new LetterCase({
                 _letter: {
@@ -86,7 +94,7 @@ export default class LetterCaseAssociationsController {
                     creationDate: row.CreationDate,
                     registrationDate: row.RegistrationDate,
                     documentGdId: row.DocumentGdId,
-                    folderGdId: row.FolderGdId
+                    gdFolderId: row.GdFolderId,
                 },
                 _case: new Case({
                     id: row.CaseId,
@@ -111,7 +119,7 @@ export default class LetterCaseAssociationsController {
                         },
                         _parent: _contract,
                     },
-                })
+                }),
             });
             newResult.push(item);
         }

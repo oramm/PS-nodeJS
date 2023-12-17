@@ -1,5 +1,7 @@
-import express, { Request, Response } from 'express'
-import ContractsController, { ContractSearchParams as ContractSearchParams } from './ContractsController'
+import express, { Request, Response } from 'express';
+import ContractsController, {
+    ContractSearchParams as ContractSearchParams,
+} from './ContractsController';
 import { app, upload } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ContractOur from './ContractOur';
@@ -29,7 +31,9 @@ app.post('/contractsWithChildren', async (req: Request, res: Response) => {
         let isArchived = false;
         if (typeof orConditions.isArchived === 'string')
             isArchived = orConditions.isArchived === 'true';
-        const result = await ContractsWithChildrenController.getContractsList(orConditions);
+        const result = await ContractsWithChildrenController.getContractsList(
+            orConditions
+        );
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -41,7 +45,9 @@ app.post('/contractsWithChildren', async (req: Request, res: Response) => {
 app.post('/contractsSettlementData', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await ContractsSettlementController.getSums(orConditions);
+        const result = await ContractsSettlementController.getSums(
+            orConditions
+        );
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -53,8 +59,10 @@ app.post('/contractsSettlementData', async (req: Request, res: Response) => {
 app.post('/contractReact', async (req: Request, res: Response) => {
     try {
         let item: ContractOur | ContractOther;
-        if (typeof req.parsedBody.value === "string")
-            req.body.value = parseFloat(req.parsedBody.value.replace(/ /g, '').replace(',', '.'));
+        if (typeof req.parsedBody.value === 'string')
+            req.body.value = parseFloat(
+                req.parsedBody.value.replace(/ /g, '').replace(',', '.')
+            );
         if (req.parsedBody._type.isOur) {
             item = new ContractOur(req.parsedBody);
             item.ourId = await item.makeOurId();
@@ -62,32 +70,47 @@ app.post('/contractReact', async (req: Request, res: Response) => {
         } else {
             item = new ContractOther(req.parsedBody);
         }
-        if (!item._parent || !item._parent.id)
-            throw new Error('Nie przypisano projektu do kontraktu')
+        if (!item._project || !item._project.id)
+            throw new Error('Nie przypisano projektu do kontraktu');
 
-        await ToolsGapi.gapiReguestHandler(req, res, item.addNewController, undefined, item);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.addNewController,
+            undefined,
+            item
+        );
 
         res.send(item);
     } catch (error) {
-
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
         const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
         const itemFromClient = req.parsedBody;
-        if (!itemFromClient || !itemFromClient.id) throw new Error(`Próba edycji kontraktu bez Id`);
+        if (!itemFromClient || !itemFromClient.id)
+            throw new Error(`Próba edycji kontraktu bez Id`);
 
         //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
-        const contractInstance = (itemFromClient.ourId || itemFromClient._type.isOur) ? new ContractOur(itemFromClient) : new ContractOther(itemFromClient);
+        const contractInstance =
+            itemFromClient.ourId || itemFromClient._type.isOur
+                ? new ContractOur(itemFromClient)
+                : new ContractOther(itemFromClient);
         if (contractInstance instanceof ContractOur)
             console.log(await contractInstance.makeOurId());
         await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, contractInstance.editHandler, [fieldsToUpdate], contractInstance)
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                contractInstance.editHandler,
+                [fieldsToUpdate],
+                contractInstance
+            ),
         ]);
 
         res.send(contractInstance);
@@ -98,12 +121,14 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
     }
 });
 
-
 app.put('/sortProjects', async (req: Request, res: Response) => {
     try {
-
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.sortProjects);
-        res.send("sorted");
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            ScrumSheet.CurrentSprint.sortProjects
+        );
+        res.send('sorted');
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
@@ -113,11 +138,25 @@ app.put('/sortProjects', async (req: Request, res: Response) => {
 
 app.delete('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const item = req.body._type.isOur ? new ContractOur(req.body) : new ContractOther(req.body);
+        const item = req.body._type.isOur
+            ? new ContractOur(req.body)
+            : new ContractOther(req.body);
         await item.deleteFromDb();
         await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.deleteFromScrum, undefined, item)
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.deleteFolder,
+                undefined,
+                item
+            ),
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.deleteFromScrum,
+                undefined,
+                item
+            ),
         ]);
         res.send(item);
         console.log(`Contract ${item.name} deleted`);

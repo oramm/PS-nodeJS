@@ -13,6 +13,7 @@ import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
 import Setup from './setup/Setup';
+import ToolsGapi from './setup/GAuth2/ToolsGapi';
 declare global {
     namespace Express {
         interface Request {
@@ -122,6 +123,7 @@ app.use((req, res, next) => {
     console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
     next();
 });
+
 app.enable('trust proxy');
 
 app.use((req, res, next) => {
@@ -175,6 +177,7 @@ require('./processes/processInstances/ProcessInstancesRouters'); require('./proc
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
+require('./Offers/OffersRouters');
 
 const meetingsRouter = require('./meetings/MeetingsRouters');
 app.use(meetingsRouter);

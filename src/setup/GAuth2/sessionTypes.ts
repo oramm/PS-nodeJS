@@ -1,5 +1,6 @@
 // sessionTypes.ts
 import 'express-session';
+import { RepositoryDataItem } from '../../types/types';
 
 declare module 'express-session' {
     interface SessionData {
@@ -8,6 +9,7 @@ declare module 'express-session' {
 }
 
 export interface UserData {
+    enviId: number;
     googleId: string;
     systemEmail: string;
     userName: string;
