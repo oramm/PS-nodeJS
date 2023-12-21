@@ -178,7 +178,7 @@ app.delete('/letter/:id', async (req: Request, res: Response) => {
             req,
             res,
             LetterGdController.deleteFromGd,
-            [item.documentGdId, item.gdFolderId],
+            [item.gdDocumentId, item.gdFolderId],
             undefined
         );
         await item.deleteFromDb();

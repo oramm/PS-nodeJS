@@ -59,7 +59,7 @@ export default abstract class Offer
         this.editorId = initParamObject._editor.id;
         this._lastUpdated = initParamObject._lastUpdated;
         this.employerName =
-            initParamObject._employer?.name.trim() ||
+            initParamObject._employer?.name?.trim() ||
             (<string>initParamObject.employerName).trim();
         this.status = initParamObject.status;
         this.gdFolderId = initParamObject.gdFolderId;
@@ -68,21 +68,9 @@ export default abstract class Offer
         );
     }
 
-    setCity(cityOrCityName: City | string) {
-        if (typeof cityOrCityName === 'string') {
-            const city = new City({ name: cityOrCityName });
-            city.addInDb();
-            this._city = city;
-            this.cityId = city.id as number;
-        } else {
-            this._city = cityOrCityName;
-            this.cityId = cityOrCityName.id as number;
-        }
-    }
-
     async addNewController(auth: OAuth2Client) {
         try {
-            console.group('Creating ne offer');
+            console.group('Creating new offer');
             this.createGdElements(auth);
             console.log('Offer folder created');
             await this.addInDb();
@@ -113,6 +101,18 @@ export default abstract class Offer
         await OfferGdController.deleteFromGd(auth, this.gdFolderId);
     }
 
+    setCity(cityOrCityName: City | string) {
+        if (typeof cityOrCityName === 'string') {
+            const city = new City({ name: cityOrCityName });
+            city.addInDb();
+            this._city = city;
+            this.cityId = city.id as number;
+        } else {
+            this._city = cityOrCityName;
+            this.cityId = cityOrCityName.id as number;
+        }
+    }
+
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
@@ -120,6 +120,7 @@ export default abstract class Offer
 
     async createGdElements(auth: OAuth2Client) {
         const gdFolder = await OfferGdController.createOfferFolder(auth, this);
+        if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
 

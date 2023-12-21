@@ -3,10 +3,10 @@ import { OAuth2Client } from 'google-auth-library';
 import OfferGdController from './OfferGdController';
 
 export default class OurOffer extends Offer {
-    gdDocumentId: string;
-    constructor(initParamObject: OfferInitParams & { gdGileId: string }) {
+    gdDocumentId?: string;
+    constructor(initParamObject: OfferInitParams & { gdDocumentId?: string }) {
         super(initParamObject);
-        this.gdDocumentId = initParamObject.gdGileId;
+        this.gdDocumentId = initParamObject.gdDocumentId;
     }
 
     async createGdElements(auth: OAuth2Client) {

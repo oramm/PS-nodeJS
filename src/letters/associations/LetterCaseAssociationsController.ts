@@ -20,7 +20,7 @@ export default class LetterCaseAssociationsController {
                 Letters.Description, 
                 Letters.CreationDate, 
                 Letters.RegistrationDate, 
-                Letters.DocumentGdId, 
+                Letters.GdDocumentId, 
                 Letters.GdFolderId, 
                 Letters.LastUpdated, 
                 Cases.Name AS CaseName, 
@@ -93,7 +93,7 @@ export default class LetterCaseAssociationsController {
                     description: row.Description,
                     creationDate: row.CreationDate,
                     registrationDate: row.RegistrationDate,
-                    documentGdId: row.DocumentGdId,
+                    gdDocumentId: row.GdDocumentId,
                     gdFolderId: row.GdFolderId,
                 },
                 _case: new Case({

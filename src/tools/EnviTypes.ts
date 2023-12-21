@@ -30,7 +30,7 @@ export namespace Envi {
         creationDate?: string;
         registrationDate?: string;
         _documentOpenUrl?: string;
-        documentGdId?: string | null;
+        gdDocumentId?: string | null;
         _gdFolderUrl?: string;
         gdFolderId?: string | null;
         _lastUpdated?: string;

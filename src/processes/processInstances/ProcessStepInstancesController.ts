@@ -29,7 +29,7 @@ export default class ProcessStepInstancesController {
             'ProcessesSteps.Id AS ProcessStepId, \n \t' +
             'ProcessesSteps.Name AS ProcessStepName, \n \t' +
             'ProcessesSteps.Description AS ProcessStepDescription, \n \t' +
-            'Letters.DocumentGdId AS OurLetterDocumentGdId, \n \t' +
+            'Letters.GdDocumentId AS OurLetterGdDocumentId, \n \t' +
             'Letters.GdFolderId AS OurLetterGdFolderId, \n \t' +
             'DocumentTemplates.Name AS DocumentTemplateName, \n \t' +
             'DocumentTemplates.GdId AS DocumentTemplateGdId \n' +
@@ -69,7 +69,7 @@ export default class ProcessStepInstancesController {
                 deadline: row.Deadline,
                 _ourLetter: {
                     id: row.OurLetterId,
-                    documentGdId: row.OurLetterDocumentGdId,
+                    gdDocumentId: row.OurLetterGdDocumentId,
                     gdFolderId: row.OurLetterGdFolderId,
                 },
                 _lastUpdated: row.LastUpdated,

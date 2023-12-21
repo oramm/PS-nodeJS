@@ -33,13 +33,13 @@ export default class OurLetterGdFile extends DocumentGdFile {
         //projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 9;
         //projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#666666';
         //ToolsDocs.fillNamedRange(gDocument, 'projectContext', this.projectContext, projectContextStyle);
-        this.enviDocumentData.documentGdId = document.documentId;
+        this.enviDocumentData.gdDocumentId = document.documentId;
         return document;
     }
 
     /** aktualizuje treść NemedRanges */
     async updateTextRunsInNamedRanges(auth: OAuth2Client) {
-        const documentId = this.enviDocumentData.documentGdId;
+        const documentId = this.enviDocumentData.gdDocumentId;
         if (!documentId)
             throw new Error('Letter file not set!' + this.enviDocumentData.id);
         const newData: { rangeName: string; newText: string }[] =
@@ -51,7 +51,7 @@ export default class OurLetterGdFile extends DocumentGdFile {
      *  2. auktualizuje treść w namedRanges
      */
     async edit(auth: OAuth2Client) {
-        const documentId = this.enviDocumentData.documentGdId;
+        const documentId = this.enviDocumentData.gdDocumentId;
         if (!documentId)
             throw new Error('Letter file not set!' + this.enviDocumentData.id);
         await ToolsDocs.refreshNamedRangesFromTags(auth, documentId);

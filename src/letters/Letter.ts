@@ -22,7 +22,7 @@ export default abstract class Letter
     public creationDate?: string;
     public registrationDate?: string;
     public _documentOpenUrl?: string;
-    public documentGdId?: string;
+    public gdDocumentId?: string;
     _gdFolderUrl?: string;
     gdFolderId?: string;
     _lastUpdated?: string;
@@ -50,9 +50,9 @@ export default abstract class Letter
             initParamObject.registrationDate
         );
         this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
-            initParamObject.documentGdId
+            initParamObject.gdDocumentId
         );
-        this.documentGdId = initParamObject.documentGdId;
+        this.gdDocumentId = initParamObject.gdDocumentId;
         if (initParamObject.gdFolderId) {
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(
                 initParamObject.gdFolderId

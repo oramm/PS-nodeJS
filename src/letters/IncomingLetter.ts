@@ -33,14 +33,14 @@ export default class IncomingLetter extends Letter {
             this.deleteFromDb();
             IncomingLetterGdController.deleteFromGd(
                 auth,
-                this.gdFolderId || this.documentGdId
+                this.gdFolderId || this.gdDocumentId
             );
             throw err;
         }
     }
 
     /** Używać tylko gdy mamy pojedynczego bloba  należy pamiętać o użyciu potem
-     *  setToSingleFileState(documentGdId: string)
+     *  setToSingleFileState(gdDocumentId: string)
      */
     protected async createLetterFile(
         auth: OAuth2Client,
@@ -110,11 +110,11 @@ export default class IncomingLetter extends Letter {
         files: Express.Multer.File[]
     ): Promise<void> {
         const oldGdFolderId = this.gdFolderId;
-        const oldDocumentGdId = this.documentGdId;
+        const oldGdDocumentId = this.gdDocumentId;
         await this.initAttachmentsHandler(auth, files);
         await IncomingLetterGdController.deleteFromGd(
             auth,
-            oldDocumentGdId,
+            oldGdDocumentId,
             oldGdFolderId
         );
     }
@@ -157,19 +157,19 @@ export default class IncomingLetter extends Letter {
             await IncomingLetterGdController.createLetterFolder(auth, {
                 ...this,
             });
-        const letterDocumentGdId = this.documentGdId;
+        const letterGdDocumentId = this.gdDocumentId;
         if (!newLetterGdFolder.id)
             throw new EnviErrors.NoGdIdError(
                 ` - incoming letter folder not created for ${this.number}`
             );
-        if (!letterDocumentGdId)
+        if (!letterGdDocumentId)
             throw new EnviErrors.NoGdIdError(
                 `no letter  GdId for ${this.number}`
             );
         //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
 
         await IncomingLetterGdController.moveLetterFIletoFolder(
-            letterDocumentGdId,
+            letterGdDocumentId,
             auth,
             newLetterGdFolder.id
         );
@@ -181,9 +181,9 @@ export default class IncomingLetter extends Letter {
         );
     }
 
-    private setDataToSingleFileState(documentGdId: string) {
-        this.documentGdId = documentGdId;
-        this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(documentGdId);
+    private setDataToSingleFileState(gdDocumentId: string) {
+        this.gdDocumentId = gdDocumentId;
+        this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(gdDocumentId);
         this._gdFolderUrl = '';
         this.gdFolderId = undefined;
         this.letterFilesCount = 1;
@@ -191,7 +191,7 @@ export default class IncomingLetter extends Letter {
 
     private setDataToMultiFileState(gdFolderId: string, filesCount: number) {
         this.gdFolderId = gdFolderId;
-        this.documentGdId = undefined;
+        this.gdDocumentId = undefined;
         this._gdFolderUrl = ToolsGd.createDocumentOpenUrl(gdFolderId);
         this._documentOpenUrl = undefined;
         this.letterFilesCount = filesCount;

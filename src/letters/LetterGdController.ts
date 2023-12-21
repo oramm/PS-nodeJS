@@ -33,10 +33,10 @@ export default class LetterGdController {
     /** Dla pism z folderem usuwa folder pisma dla pism bez folderu (z pojedynczym plikiem) usuwa plik pisma */
     static async deleteFromGd(
         auth: OAuth2Client,
-        documentGdId?: string | undefined | null,
+        gdDocumentId?: string | undefined | null,
         gdFolderId?: string | null
     ) {
-        const gdIdToDelete = gdFolderId || documentGdId;
+        const gdIdToDelete = gdFolderId || gdDocumentId;
         if (!gdIdToDelete)
             throw new EnviErrors.NoGdIdError('Document must have folderFdId');
         await ToolsGd.trashFileOrFolder(auth, gdIdToDelete);

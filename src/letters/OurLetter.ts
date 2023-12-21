@@ -29,9 +29,9 @@ export default class OurLetter extends Letter {
             this.gdFolderId = <string>gdFolder.id;
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(this.gdFolderId);
             const letterGdFile = await this.createLetterFile(auth);
-            this.documentGdId = <string>letterGdFile.documentId;
+            this.gdDocumentId = <string>letterGdFile.documentId;
             this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
-                this.documentGdId
+                this.gdDocumentId
             );
 
             await this.addInDb();
@@ -56,7 +56,7 @@ export default class OurLetter extends Letter {
                     name: folderName,
                 }),
                 ToolsGd.updateFile(auth, {
-                    id: this.documentGdId,
+                    id: this.gdDocumentId,
                     name: folderName,
                 }),
                 files.length > 0
@@ -77,7 +77,7 @@ export default class OurLetter extends Letter {
         this.number = this.id;
     }
 
-    /** Tworzy plik z dokumentem i ustawia this.documentGdId */
+    /** Tworzy plik z dokumentem i ustawia this.gdDocumentId */
     private async createLetterFile(auth: OAuth2Client) {
         const ourLetterGdFile = new OurLetterGdFile({
             _template: this._template,
@@ -85,7 +85,7 @@ export default class OurLetter extends Letter {
         });
         const document = await ourLetterGdFile.create(auth);
         if (!document.documentId) throw new EnviErrors.NoGdIdError();
-        this.documentGdId = document.documentId;
+        this.gdDocumentId = document.documentId;
         return document;
     }
 
@@ -128,7 +128,7 @@ export default class OurLetter extends Letter {
                     name: newFolderName,
                 }),
                 ToolsGd.updateFile(auth, {
-                    id: this.documentGdId,
+                    id: this.gdDocumentId,
                     name: newFolderName,
                 })
             );

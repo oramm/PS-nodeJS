@@ -34,7 +34,7 @@ export default class DocumentGdFile {
         await ToolsGd.createPermissions(auth, {
             fileId: <string>gdFile.data.id,
         });
-        this.enviDocumentData.documentGdId = <string>gdFile.data.id;
+        this.enviDocumentData.gdDocumentId = <string>gdFile.data.id;
         this.enviDocumentData._documentEditUrl = ToolsGd.createDocumentEditUrl(
             <string>gdFile.data.id
         );

@@ -11,13 +11,13 @@ export default class IncomingLetterGdController extends LetterGdController {
 
     /** przenosi plik do folderu po dodaniu załączników do pisma z pojedynczym plikiem */
     static async moveLetterFIletoFolder(
-        letterDocumentGdId: string,
+        letterGdDocumentId: string,
         auth: OAuth2Client,
         letterGdFolderId: string
     ) {
         const letterFile = await ToolsGd.getFileOrFolderById(
             auth,
-            letterDocumentGdId
+            letterGdDocumentId
         );
         //przenieś wcześniej istniejący plik do nowego folderu
         await ToolsGd.moveFileOrFolder(auth, letterFile, letterGdFolderId);

@@ -16,7 +16,9 @@ export default class ToolsGd {
 
     static createDocumentEditUrl(gdDocumentId: string): string | undefined {
         if (gdDocumentId)
-            return 'https://docs.google.com/document/d/' + gdDocumentId + '/edit';
+            return (
+                'https://docs.google.com/document/d/' + gdDocumentId + '/edit'
+            );
     }
 
     /**
@@ -24,7 +26,6 @@ export default class ToolsGd {
      * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
      */
     static async listFiles(auth: OAuth2Client) {
-
         const drive = google.drive({ version: 'v3', auth });
         const filesSchema = await drive.files.list({
             pageSize: 10,
@@ -35,15 +36,13 @@ export default class ToolsGd {
             filesSchema.data.files.map((file: drive_v3.Schema$File) => {
                 console.log(`${file.id}: ${file.name}`);
             });
-        } else
-            console.log('No files found.');
+        } else console.log('No files found.');
     }
 
     static async getFileOrFolderById(auth: OAuth2Client, id: string) {
         const drive = google.drive({ version: 'v3', auth });
         const fileSchema = await drive.files.get({ fileId: id });
         return await fileSchema.data;
-
     }
 
     /**
@@ -51,7 +50,10 @@ export default class ToolsGd {
      * Do sprawdzenia czy plik istnieje użyj this.fileOrFolderExists()
      * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
      */
-    static async getFileByName(auth: OAuth2Client, parameters: { parentId: string, fileName: string, isTrashed?: boolean }) {
+    static async getFileByName(
+        auth: OAuth2Client,
+        parameters: { parentId: string; fileName: string; isTrashed?: boolean }
+    ) {
         if (!parameters.isTrashed) parameters.isTrashed = false;
         const drive = google.drive({ version: 'v3', auth });
         const q = `name = '${parameters.fileName}' and '${parameters.parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = ${parameters.isTrashed}`;
@@ -59,7 +61,6 @@ export default class ToolsGd {
             q,
             //pageSize: 10,
             //fields: 'nextPageToken, files(id, name, parents, mimeType)',
-
         });
         if (filesSchema.data.files && filesSchema.data.files.length) {
             //console.log('Files:');
@@ -72,9 +73,15 @@ export default class ToolsGd {
     /**
      * Sprawdza czy plik lub folder istnieje
      */
-    static async fileOrFolderExists(auth: OAuth2Client, fileOrFolderId: string) {
+    static async fileOrFolderExists(
+        auth: OAuth2Client,
+        fileOrFolderId: string
+    ) {
         try {
-            const fileSchema = await this.getFileOrFolderById(auth, fileOrFolderId);
+            const fileSchema = await this.getFileOrFolderById(
+                auth,
+                fileOrFolderId
+            );
             return true;
         } catch (err) {
             return false;
@@ -87,7 +94,10 @@ export default class ToolsGd {
         options: drive_v3.Params$Resource$Files$Create = {},
         parentFolderId: string
     ) {
-        if (typeof file !== 'object') throw new Error(`'file is type of ${typeof file} but should be object`);
+        if (typeof file !== 'object')
+            throw new Error(
+                `'file is type of ${typeof file} but should be object`
+            );
         const drive = google.drive({ version: 'v3', auth });
         let { originalname: name, mimetype: mimeType } = file; // użyj odpowiednich pól z Express.Multer.File
         const { fields = 'id', ...otherOptions } = options;
@@ -115,15 +125,15 @@ export default class ToolsGd {
         }
     }
 
-
     /**wgrywa plik na serwer
-     * @param auth 
+     * @param auth
      * @param file - blob64 do wgrania
      * @param options - paramentry pliku wg api
      * @param parentFolderId - opcjonalny jeśłi nie podany parent jest brany z bloba - file
-     * @deprecated - do zastąpienia 
+     * @deprecated - do zastąpienia
      */
-    static async uploadFileBase64(auth: OAuth2Client,
+    static async uploadFileBase64(
+        auth: OAuth2Client,
         file: Envi._blobEnviObject,
         options: drive_v3.Params$Resource$Files$Create = {},
         parentFolderId?: string
@@ -137,7 +147,7 @@ export default class ToolsGd {
             mimeType,
             body: Readable.from(Buffer.from(file.blobBase64String, 'base64')),
         };
-        let x: drive_v3.Params$Resource$Files$Create = { media }
+        let x: drive_v3.Params$Resource$Files$Create = { media };
         try {
             const res = await drive.files.create({
                 requestBody: {
@@ -155,48 +165,64 @@ export default class ToolsGd {
         }
     }
 
-    static async createFolder(auth: OAuth2Client, folderData: { name: string, parents: string[] }) {
+    static async createFolder(
+        auth: OAuth2Client,
+        folderData: { name: string; parents: string[] }
+    ) {
         const drive = google.drive({ version: 'v3', auth });
         const fileMetadata = {
-            'name': folderData.name,
+            name: folderData.name,
             parents: folderData.parents,
-            'mimeType': 'application/vnd.google-apps.folder'
-
+            mimeType: 'application/vnd.google-apps.folder',
         };
         const filesSchema = await drive.files.create({
             requestBody: fileMetadata,
-            fields: 'id'
-        })
+            fields: 'id',
+        });
         //console.log('New Gd folder Id: ', filesSchema.data.id);
         return filesSchema.data;
     }
 
-    /** Zwraca istniejący folder lub tworzy nowy 
+    /** Zwraca istniejący folder lub tworzy nowy
      */
-    static async setFolder(auth: OAuth2Client, parameters: { parentId: string, name: string, id?: string }) {
+    static async setFolder(
+        auth: OAuth2Client,
+        parameters: { parentId: string; name: string; id?: string }
+    ) {
         parameters.name = parameters.name.trim();
 
-        let folder: drive_v3.Schema$File | undefined = await this.getFileByName(auth, { fileName: parameters.name, parentId: parameters.parentId });
+        let folder: drive_v3.Schema$File | undefined = await this.getFileByName(
+            auth,
+            { fileName: parameters.name, parentId: parameters.parentId }
+        );
         if (!folder) {
-            folder = await (this.createFolder(auth, { name: parameters.name, parents: [parameters.parentId] }) as drive_v3.Schema$File);
+            folder = (await this.createFolder(auth, {
+                name: parameters.name,
+                parents: [parameters.parentId],
+            })) as drive_v3.Schema$File;
             await this.createPermissions(auth, { fileId: folder.id as string });
         }
-        if (typeof folder.id != "string") throw new Error('Nie utworzono folderu')
+        if (typeof folder.id != 'string')
+            throw new Error('Nie utworzono folderu');
         return folder;
     }
 
-    static async updateFile(auth: OAuth2Client, requestBody: drive_v3.Schema$File) {
+    static async updateFile(
+        auth: OAuth2Client,
+        requestBody: drive_v3.Schema$File
+    ) {
         try {
-            if (!requestBody.id) throw new Error('ToolsGd.updateFile:: no fileId given in requestBody');
+            if (!requestBody.id)
+                throw new Error(
+                    'ToolsGd.updateFile:: no fileId given in requestBody'
+                );
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>requestBody.id;
             delete requestBody.id;
-            const filesSchema = await drive.files.update(
-                {
-                    fileId: fileId,
-                    requestBody: requestBody,
-
-                })
+            const filesSchema = await drive.files.update({
+                fileId: fileId,
+                requestBody: requestBody,
+            });
             console.log(`Zaktualizowano plik ${fileId}`);
             return filesSchema.data;
         } catch (error) {
@@ -204,7 +230,10 @@ export default class ToolsGd {
         }
     }
 
-    static async updateFolder(auth: OAuth2Client, requestBody: drive_v3.Schema$File) {
+    static async updateFolder(
+        auth: OAuth2Client,
+        requestBody: drive_v3.Schema$File
+    ) {
         try {
             const filesSchemaData = await this.updateFile(auth, requestBody);
             console.log(`Zaktualizowano folder ${requestBody.id}`);
@@ -214,7 +243,11 @@ export default class ToolsGd {
         }
     }
 
-    static async moveFileOrFolder(auth: OAuth2Client, fileData: drive_v3.Schema$File, newParentFolderId: string) {
+    static async moveFileOrFolder(
+        auth: OAuth2Client,
+        fileData: drive_v3.Schema$File,
+        newParentFolderId: string
+    ) {
         try {
             console.log(`Przenoszę do nowego folderu plik ${fileData.id} ...`);
 
@@ -224,9 +257,9 @@ export default class ToolsGd {
                 fileId: fileId,
                 removeParents: fileData.parents?.join(','),
                 addParents: newParentFolderId,
-            })
+            });
             console.log(`Plik przeniesiony do ${newParentFolderId}`);
-            return "ok";
+            return 'ok';
         } catch (error) {
             throw error;
         }
@@ -235,9 +268,9 @@ export default class ToolsGd {
     static async trashFile(auth: OAuth2Client, fileId: string) {
         try {
             console.log(`Przenoszę do kosza na Gd plik ${fileId} ...`);
-            await this.updateFile(auth, { id: fileId, trashed: true })
+            await this.updateFile(auth, { id: fileId, trashed: true });
             console.log(`z Dysku Google usunięto plik ${fileId}`);
-            return "ok";
+            return 'ok';
         } catch (error) {
             throw error;
         }
@@ -247,7 +280,7 @@ export default class ToolsGd {
         try {
             await this.trashFile(auth, fileId);
             console.log(`z Dysku Google usunięto folder ${fileId}`);
-            return "ok";
+            return 'ok';
         } catch (error) {
             throw error;
         }
@@ -259,26 +292,30 @@ export default class ToolsGd {
 
             const drive = google.drive({ version: 'v3', auth });
             await drive.files.delete({
-                fileId: fileId
-            })
+                fileId: fileId,
+            });
             console.log(`z Dysku Google usunięto plik ${fileId}`);
-            return "ok";
+            return 'ok';
         } catch (error) {
             throw error;
         }
     }
 
-    static async copyFile(auth: OAuth2Client, originFileId: string, destFolderId: string, copyName: string) {
+    static async copyFile(
+        auth: OAuth2Client,
+        originFileId: string,
+        destFolderId: string,
+        copyName: string
+    ) {
         try {
             const drive = google.drive({ version: 'v3', auth });
             const newFile = await drive.files.copy({
                 fileId: originFileId,
                 requestBody: {
                     name: copyName,
-                    parents: [destFolderId]
-                }
-
-            })
+                    parents: [destFolderId],
+                },
+            });
             console.log(`Skopiowano plik ${originFileId}`);
             return newFile;
         } catch (error) {
@@ -289,26 +326,41 @@ export default class ToolsGd {
     /** przenosi do kosza albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
     static async trashFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
         const drive = google.drive({ version: 'v3', auth });
-        const filesSchema = await drive.files.get({ fileId: gdFolderId, fields: 'id, ownedByMe', });
-        console.log(filesSchema.data)
+        const filesSchema = await drive.files.get({
+            fileId: gdFolderId,
+            fields: 'id, ownedByMe',
+        });
+        console.log(filesSchema.data);
         if (filesSchema.data.ownedByMe)
             await ToolsGd.trashFile(auth, filesSchema.data.id as string);
         else
-            await ToolsGd.updateFolder(auth, { id: gdFolderId, name: `${filesSchema.data.name} - USUŃ` });
+            await ToolsGd.updateFolder(auth, {
+                id: gdFolderId,
+                name: `${filesSchema.data.name} - USUŃ`,
+            });
     }
 
     /** domyślnie ustawia uprawnienia { type: 'anyone', role: 'writer' }
      * https://developers.google.com/drive/api/v3/manage-sharing#create_a_permission
      */
-    static async createPermissions(auth: OAuth2Client, parameters: { fileId: string, permissions?: [{ type: string, role: string, emailAddress?: string }] }) {
-        if (!parameters.permissions) parameters.permissions = [{ type: 'anyone', role: 'writer' }]
+    static async createPermissions(
+        auth: OAuth2Client,
+        parameters: {
+            fileId: string;
+            permissions?: [
+                { type: string; role: string; emailAddress?: string }
+            ];
+        }
+    ) {
+        if (!parameters.permissions)
+            parameters.permissions = [{ type: 'anyone', role: 'writer' }];
         const drive = google.drive({ version: 'v3', auth });
         for (const permission of parameters.permissions) {
             let permissionSchema = await drive.permissions.create({
                 requestBody: permission,
                 fileId: parameters.fileId,
-                fields: 'id'
-            })
+                fields: 'id',
+            });
             //console.log('Permission createed: %o', permissionSchema.data);
             return permissionSchema.data;
         }

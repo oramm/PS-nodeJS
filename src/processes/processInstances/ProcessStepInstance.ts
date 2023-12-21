@@ -2,7 +2,6 @@ import BusinessObject from '../../BussinesObject';
 import ToolsDate from '../../tools/ToolsDate';
 import ToolsGd from '../../tools/ToolsGd';
 
-
 export default class ProcessStepInstance extends BusinessObject {
     id?: number;
     processInstanceId?: number;
@@ -19,18 +18,22 @@ export default class ProcessStepInstance extends BusinessObject {
     _extRepoTmpDataObject?: any;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'ProcessesStepsInstances' })
+        super({ _dbTableName: 'ProcessesStepsInstances' });
         this.id = initParamObject.id;
         this.processInstanceId = initParamObject.processInstanceId;
         if (initParamObject._processStep) {
             this._processStep = initParamObject._processStep;
             this.processStepId = initParamObject._processStep.id;
         }
-        this.status = (initParamObject.status) ? initParamObject.status : 'Nie rozpoczęte';
+        this.status = initParamObject.status
+            ? initParamObject.status
+            : 'Nie rozpoczęte';
         if (initParamObject._ourLetter && initParamObject._ourLetter.id) {
             this._ourLetter = initParamObject._ourLetter;
             this.ourLetterId = initParamObject._ourLetter.id;
-            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(initParamObject._ourLetter.documentGdId);
+            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+                initParamObject._ourLetter.gdDocumentId
+            );
         }
         this.editorId = initParamObject.editorId;
 
@@ -38,7 +41,5 @@ export default class ProcessStepInstance extends BusinessObject {
 
         this._lastUpdated = initParamObject._lastUpdated;
         this._case = initParamObject._case;
-
     }
 }
-

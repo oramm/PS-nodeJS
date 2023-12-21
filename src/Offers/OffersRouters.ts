@@ -76,13 +76,15 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
 });
 
 function makeOfferObject(req: Request) {
-    const gdFileId = req.parsedBody.gdFileId;
+    const isOur = req.parsedBody.isOur as boolean;
     const offerInitParams: OfferInitParams = {
         ...req.parsedBody,
-        _editor: { id: req.session.userData?.enviId as number },
+        _editor: req.parsedBody._editor || {
+            id: req.session.userData?.enviId as number,
+        },
     };
-    const item = gdFileId
-        ? new OurOffer({ ...offerInitParams, gdGileId: gdFileId })
+    const item = isOur
+        ? new OurOffer(offerInitParams)
         : new OtherOffer(offerInitParams);
     return item;
 }

@@ -21,7 +21,7 @@ export default class CaseEventsController {
             'Letters.Description, \n \t' +
             'Letters.CreationDate AS EventDate,  \n \t' +
             'Letters.RegistrationDate, \n \t' +
-            'Letters.DocumentGdId AS EventGdId, \n \t' +
+            'Letters.GdDocumentId AS EventGdId, \n \t' +
             'Letters.GdFolderId AS EventGdFolderId, \n \t' +
             'Letters.LastUpdated, \n \t' +
             'Letters.ProjectId, \n \t' +
@@ -106,7 +106,7 @@ export default class CaseEventsController {
                     description: row.Description,
                     creationDate: row.EventDate,
                     registrationDate: row.RegistrationDate,
-                    documentGdId: row.EventGdId,
+                    gdDocumentId: row.EventGdId,
                     gdFolderId: row.EventGdFolderId,
                     _lastUpdated: row.LastUpdated,
                     _entitiesMain: _letterEntitiesMainPerLetter.map(

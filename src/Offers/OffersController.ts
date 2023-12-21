@@ -150,7 +150,7 @@ export default class OffersController {
             };
 
             const item = row.GdGileId
-                ? new OurOffer({ ...offerInitData, gdGileId: row.GdGileId })
+                ? new OurOffer({ ...offerInitData, gdDocumentId: row.GdGileId })
                 : new OtherOffer(offerInitData);
 
             newResult.push(item);
