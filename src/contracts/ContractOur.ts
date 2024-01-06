@@ -1,4 +1,3 @@
-
 import mysql from 'mysql2/promise';
 import Person from '../persons/Person';
 import Contract from './Contract';
@@ -23,14 +22,14 @@ export default class ContractOur extends Contract {
     constructor(initParamObject: any) {
         super(initParamObject);
         if (initParamObject._ourContract && initParamObject._ourContract.ourId)
-            throw new Error("Nie można powiązać ze sobą dwóch Umów ENVI!!!");
+            throw new Error('Nie można powiązać ze sobą dwóch Umów ENVI!!!');
 
         this.ourId = initParamObject.ourId.toUpperCase();
         this._ourType = this._type.name || this.getType(this.ourId);
         if (initParamObject._manager) {
             this._manager = new Person(initParamObject._manager);
-            this.managerId = initParamObject._manager.id
-        };
+            this.managerId = initParamObject._manager.id;
+        }
         if (initParamObject._admin) {
             this._admin = new Person(initParamObject._admin);
             this.adminId = initParamObject._admin.id;
@@ -42,8 +41,13 @@ export default class ContractOur extends Contract {
         //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
         let ourIdOrNumber = this.ourId;
 
-        this._ourIdOrNumber_Name = `${ourIdOrNumber} ${this.name?.substring(0, 50)} ...`;
-        this._ourIdOrNumber_Alias = `${ourIdOrNumber} ${this.alias || ''}`.trim();
+        this._ourIdOrNumber_Name = `${ourIdOrNumber} ${this.name?.substring(
+            0,
+            50
+        )} ...`;
+        this._ourIdOrNumber_Alias = `${ourIdOrNumber} ${
+            this.alias || ''
+        }`.trim();
         this.setFolderName();
     }
 
@@ -57,9 +61,14 @@ export default class ContractOur extends Contract {
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             await ToolsDb.addInDb('Contracts', datatoDb, conn, true);
             this.id = datatoDb.id;
-            await ToolsDb.addInDb('OurContractsData', this.getourContractDbFIelds(), conn, true);
+            await ToolsDb.addInDb(
+                'OurContractsData',
+                this.getourContractDbFIelds(),
+                conn,
+                true
+            );
             await this.addEntitiesAssociationsInDb(conn, true);
-        })
+        });
     }
 
     private getourContractDbFIelds() {
@@ -69,7 +78,7 @@ export default class ContractOur extends Contract {
             ourId: this.ourId,
             adminId: this.adminId,
             managerId: this.managerId,
-            cityId: this.cityId
+            cityId: this.cityId,
         };
     }
     /** usuwa z pomocniczego obiektu atrybuty niepasujące to tabeli Contracts */
@@ -80,68 +89,43 @@ export default class ContractOur extends Contract {
         delete datatoDb.cityId;
     }
 
-    async editInDb(externalConn?: mysql.PoolConnection, isPartOfTransaction: boolean = false, fieldsToUpdate?: string[]) {
+    async editInDb(
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction: boolean = false,
+        fieldsToUpdate?: string[]
+    ) {
         const ourContractFields = ['ourId', 'managerId', 'adminId', 'cityId'];
-        const ourContractFieldsToUpdate = fieldsToUpdate?.filter(field => ourContractFields.includes(field)) || [];
-        const contractFieldsToUpdate = fieldsToUpdate?.filter(field => !ourContractFields.includes(field)) || [];
+        const ourContractFieldsToUpdate =
+            fieldsToUpdate?.filter((field) =>
+                ourContractFields.includes(field)
+            ) || [];
+        const contractFieldsToUpdate =
+            fieldsToUpdate?.filter(
+                (field) => !ourContractFields.includes(field)
+            ) || [];
 
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             const datatoDb = Tools.cloneOfObject(this);
             this.prepareToDboperation(datatoDb);
-            await ToolsDb.editInDb('Contracts', datatoDb, conn, true, contractFieldsToUpdate);
+            await ToolsDb.editInDb(
+                'Contracts',
+                datatoDb,
+                conn,
+                true,
+                contractFieldsToUpdate
+            );
             this.id = datatoDb.id;
             const ourContractDbFields = this.getourContractDbFIelds();
-            await ToolsDb.editInDb('OurContractsData', ourContractDbFields, conn, true, ourContractFieldsToUpdate);
+            await ToolsDb.editInDb(
+                'OurContractsData',
+                ourContractDbFields,
+                conn,
+                true,
+                ourContractFieldsToUpdate
+            );
             console.log('Edytuję powiązania z podmiotami');
             await this.editEntitiesAssociationsInDb(conn, true);
         });
-    }
-
-    async makeOurId() {
-        if (!this._city) throw new Error('Nie można utworzyć OurId - brak miasta');
-        if (!this._city.code) throw new Error('Nie można utworzyć OurId - brak kodu miasta');
-        if (!this._type) throw new Error('Nie można utworzyć OurId - brak typu kontraktu');
-        if (!this._type.name) throw new Error('Nie można utworzyć OurId - brak nazwy typu kontraktu');
-
-        const itemsCount = Tools.addZero(await this.getItemsCount());
-        return `${this._city.code}.${this._type.name}.${itemsCount}`;
-    }
-
-    private async getItemsCount() {
-        const typeCondition = mysql.format(`ContractTypes.Id = ?`, [this._type.id]);
-        const cityCondition = mysql.format(`OurContractsData.CityId = ?`, [this._city?.id]);
-
-        const sql = this.getPrevNumberSQL(typeCondition, cityCondition);
-        console.log(sql);
-
-        try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            const row = result[0];
-            const itemsCount = row.Number as number;
-            console.log('@@@@@itemsCount', itemsCount);
-            return itemsCount + 1;
-        } catch (err) {
-            throw err;
-        }
-    }
-
-    private getPrevNumberSQL(typeCondition: string, cityCondition: string) {
-
-        const sql = `SELECT MAX(CAST(SUBSTRING(OurContractsData.OurId, LENGTH(OurId) - 1, 2) AS UNSIGNED)) AS Number
-            FROM Contracts
-            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
-            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
-            WHERE  ${typeCondition} AND ${cityCondition}`;
-        return sql;
-    }
-
-    private getSameCityTypeCountSQL(typeCondition: string, cityCondition: string) {
-        const sql = `SELECT COUNT(*) AS Number
-            FROM Contracts
-            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
-            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
-            WHERE  ${typeCondition} AND ${cityCondition}`;
-        return sql;
     }
 
     getType(ourId: string): string {
@@ -151,7 +135,8 @@ export default class ContractOur extends Contract {
     async shouldBeInScrum() {
         if (this._admin?.email?.match(/urszula.juzwiak/i)) return false;
         if (this._manager?.email?.match(/urszula.juzwiak/i)) return false;
-        if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i)) return false;
+        if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i))
+            return false;
 
         const adminSystemRole = await this._admin?.getSystemRole();
         if (adminSystemRole?.id && adminSystemRole?.id <= 3) return true;
@@ -163,8 +148,7 @@ export default class ContractOur extends Contract {
     }
     /** wstawia wiersz nagłówka kontratu - bez zadań */
     async addInScrum(auth: OAuth2Client) {
-        if (!await this.shouldBeInScrum())
-            return;
+        if (!(await this.shouldBeInScrum())) return;
 
         await ToolsSheets.insertRows(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
@@ -185,103 +169,161 @@ export default class ContractOur extends Contract {
                 endRowIndex: Setup.ScrumSheet.CurrentSprint.firstDataRow,
             },
             spreadsheetId: Setup.ScrumSheet.GdId,
-            pasteType: 'PASTE_FORMAT'
-        })
+            pasteType: 'PASTE_FORMAT',
+        });
 
-        const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            rangeA1: Setup.ScrumSheet.CurrentSprint.name
-        })).values;
+        const currentSprintValues = <any[][]>(
+            await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+            })
+        ).values;
 
-        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
+        const projectIdColNumber =
+            currentSprintValues[0].indexOf(
+                Setup.ScrumSheet.CurrentSprint.projectIdColName
+            ) + 1;
         const ourId_Alias = `${this.ourId} [${this.alias || ''}]`.trim();
 
         await ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
-            rangeA1: `${Setup.ScrumSheet.CurrentSprint.name}!${ToolsSheets.R1C1toA1(Setup.ScrumSheet.CurrentSprint.firstDataRow, projectIdColNumber)}`,
-            values: [[this.projectOurId,
-                0,
-            this.ourId, 0, 0, 0, 0,
-            (this._manager) ? this._manager.id : '',
-                '{"contractHeader":true}',
-            `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${this._manager ? `${this._manager.name} ${this._manager.surname}` : ''}")`,
-                '', '', '', 'd', 'd', 'd', 'd', 'd'
-            ]]
+            rangeA1: `${
+                Setup.ScrumSheet.CurrentSprint.name
+            }!${ToolsSheets.R1C1toA1(
+                Setup.ScrumSheet.CurrentSprint.firstDataRow,
+                projectIdColNumber
+            )}`,
+            values: [
+                [
+                    this.projectOurId,
+                    0,
+                    this.ourId,
+                    0,
+                    0,
+                    0,
+                    0,
+                    this._manager ? this._manager.id : '',
+                    '{"contractHeader":true}',
+                    `=HYPERLINK("${this._gdFolderUrl}";"${ourId_Alias} ${
+                        this._manager
+                            ? `${this._manager.name} ${this._manager.surname}`
+                            : ''
+                    }")`,
+                    '',
+                    '',
+                    '',
+                    'd',
+                    'd',
+                    'd',
+                    'd',
+                    'd',
+                ],
+            ],
         });
         await ScrumSheet.CurrentSprint.sortProjects(auth);
-
     }
     /**zmienia dane w nagłówku kontraktu i odnosniki */
     async editInScrum(auth: OAuth2Client) {
-        if (!await this.shouldBeInScrum()) {
+        if (!(await this.shouldBeInScrum())) {
             this.deleteFromScrum(auth);
             return;
         }
         console.log('Edytuję dane w Scrum', this.ourId);
-        const currentSprintValues = <any[][]>(await ToolsSheets.getValues(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            rangeA1: Setup.ScrumSheet.CurrentSprint.name
-        })).values;
-        const projectIdColNumber = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.projectIdColName) + 1;
-        const contractOurIdColIndex = currentSprintValues[0].indexOf(Setup.ScrumSheet.CurrentSprint.contractOurIdColName);
+        const currentSprintValues = <any[][]>(
+            await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+            })
+        ).values;
+        const projectIdColNumber =
+            currentSprintValues[0].indexOf(
+                Setup.ScrumSheet.CurrentSprint.projectIdColName
+            ) + 1;
+        const contractOurIdColIndex = currentSprintValues[0].indexOf(
+            Setup.ScrumSheet.CurrentSprint.contractOurIdColName
+        );
         //zmień dane w nagłowku
-        const alias = this.alias ? `[${this.alias}] ` : ''
-        const managerName = this._manager ? `${this._manager.name} ${this._manager.surname}` : '';
+        const alias = this.alias ? `[${this.alias}] ` : '';
+        const managerName = this._manager
+            ? `${this._manager.name} ${this._manager.surname}`
+            : '';
         const headerCaption = this.ourId + ' ' + alias + managerName;
 
-        const headerRowNumber = await ScrumSheet.CurrentSprint.editRowsByColValue(
-            auth, {
-            searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-            valueToFind: this.ourId,
-            firstColumnName: Setup.ScrumSheet.CurrentSprint.projectIdColName,
-            rowValues: [
-                this.projectOurId,
-                0,
-                this.ourId, 0, 0, 0, 0,
-                this._manager ? <number>this._manager.id : '',
-                '{"contractHeader":true}',
-                `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
-                '', '', '', 'd', 'd', 'd', 'd', 'd'
-            ],
-            firstRowOnly: true
-        })
+        const headerRowNumber =
+            await ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+                searchColName:
+                    Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                valueToFind: this.ourId,
+                firstColumnName:
+                    Setup.ScrumSheet.CurrentSprint.projectIdColName,
+                rowValues: [
+                    this.projectOurId,
+                    0,
+                    this.ourId,
+                    0,
+                    0,
+                    0,
+                    0,
+                    this._manager ? <number>this._manager.id : '',
+                    '{"contractHeader":true}',
+                    `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
+                    '',
+                    '',
+                    '',
+                    'd',
+                    'd',
+                    'd',
+                    'd',
+                    'd',
+                ],
+                firstRowOnly: true,
+            });
 
         if (headerRowNumber) {
             ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
 
             ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
-                searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                searchColName:
+                    Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
                 valueToFind: <number>this.id,
-                firstColumnName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+                firstColumnName:
+                    Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
                 rowValues: [this.ourId],
-                majorDimension: 'COLUMNS'
-
-            })
+                majorDimension: 'COLUMNS',
+            });
         } else {
-            console.log('Kontraktu nie było w Scrum - dodaję go na nowo ', this.ourId);
+            console.log(
+                'Kontraktu nie było w Scrum - dodaję go na nowo ',
+                this.ourId
+            );
             await this.addInScrum(auth);
             await this.addExistingTasksInScrum(auth);
 
-            await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+            await ScrumSheet.CurrentSprint.setSumInContractRow(
+                auth,
+                this.ourId
+            );
             await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
 
             await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
             await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
-
         }
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
         ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-            valueToFind: this.ourId
+            valueToFind: this.ourId,
         });
     }
 
     async createDefaultMilestones(auth: OAuth2Client) {
         await super.createDefaultMilestones(auth);
         if (await this.shouldBeInScrum()) {
-            await ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+            await ScrumSheet.CurrentSprint.setSumInContractRow(
+                auth,
+                this.ourId
+            );
             await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
 
             await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
@@ -290,12 +332,13 @@ export default class ContractOur extends Contract {
     }
 
     async isUnique(): Promise<boolean> {
-        const sql = `SELECT Id FROM OurContractsData WHERE OurId = "${this.ourId}"`
+        const sql = `SELECT Id FROM OurContractsData WHERE OurId = "${this.ourId}"`;
 
         try {
-            const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-            return (result[0]) ? true : false
-
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(sql)
+            );
+            return result[0] ? true : false;
         } catch (err) {
             throw err;
         }

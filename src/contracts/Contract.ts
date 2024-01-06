@@ -125,6 +125,7 @@ export default abstract class Contract extends BusinessObject {
         this.status = initParamObject.status;
         this._lastUpdated = initParamObject._lastUpdated;
     }
+
     /**batch dla dodawania kontraktów */
     async addNewController(auth: OAuth2Client) {
         if (await this.isUnique())

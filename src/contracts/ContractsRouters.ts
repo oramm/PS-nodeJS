@@ -9,6 +9,7 @@ import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ContractsWithChildrenController from './ContractsWithChildrenController';
 import ContractsSettlementController from './ContractsSettlementController';
+import { CityData, ContractTypeData } from '../types/types';
 
 app.post('/contracts', async (req: Request, res: Response) => {
     try {
@@ -64,8 +65,13 @@ app.post('/contractReact', async (req: Request, res: Response) => {
                 req.parsedBody.value.replace(/ /g, '').replace(',', '.')
             );
         if (req.parsedBody._type.isOur) {
-            item = new ContractOur(req.parsedBody);
-            item.ourId = await item.makeOurId();
+            const ourId = await ContractsController.makeOurId(
+                req.parsedBody._city as CityData,
+                req.parsedBody._type as ContractTypeData
+            );
+
+            item = new ContractOur({ ...req.parsedBody, ourId });
+
             console.log('dodaję ', item.ourId);
         } else {
             item = new ContractOther(req.parsedBody);
@@ -101,8 +107,6 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
             itemFromClient.ourId || itemFromClient._type.isOur
                 ? new ContractOur(itemFromClient)
                 : new ContractOther(itemFromClient);
-        if (contractInstance instanceof ContractOur)
-            console.log(await contractInstance.makeOurId());
         await Promise.all([
             ToolsGapi.gapiReguestHandler(
                 req,

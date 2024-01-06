@@ -7,6 +7,8 @@ import ContractOur from './ContractOur';
 import ContractType from './contractTypes/ContractType';
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
+import Tools from '../tools/Tools';
+import { CityData, ContractTypeData } from '../types/types';
 
 export type ContractSearchParams = {
     id?: number;
@@ -462,5 +464,54 @@ export default class ContractsController {
             newResult.push(item);
         }
         return newResult;
+    }
+
+    static async makeOurId(city: CityData, type: ContractTypeData) {
+        if (!city) throw new Error('Nie można utworzyć OurId - brak miasta');
+        if (!city.code)
+            throw new Error('Nie można utworzyć OurId - brak kodu miasta');
+        if (!type)
+            throw new Error('Nie można utworzyć OurId - brak typu kontraktu');
+        if (!type.name)
+            throw new Error(
+                'Nie można utworzyć OurId - brak nazwy typu kontraktu'
+            );
+
+        const itemsCount = Tools.addZero(await this.getItemsCount(city, type));
+        return `${city.code}.${type.name}.${itemsCount}`;
+    }
+
+    private static async getItemsCount(city: CityData, type: ContractTypeData) {
+        const typeCondition = mysql.format(`ContractTypes.Id = ?`, [type.id]);
+        const cityCondition = mysql.format(`OurContractsData.CityId = ?`, [
+            city.id,
+        ]);
+
+        const sql = this.getPrevNumberSQL(typeCondition, cityCondition);
+        console.log(sql);
+
+        try {
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(sql)
+            );
+            const row = result[0];
+            const itemsCount = row.Number as number;
+            console.log('@@@@@itemsCount', itemsCount);
+            return itemsCount + 1;
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    private static getPrevNumberSQL(
+        typeCondition: string,
+        cityCondition: string
+    ) {
+        const sql = `SELECT MAX(CAST(SUBSTRING(OurContractsData.OurId, LENGTH(OurId) - 1, 2) AS UNSIGNED)) AS Number
+            FROM Contracts
+            JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
+            JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
+            WHERE  ${typeCondition} AND ${cityCondition}`;
+        return sql;
     }
 }
