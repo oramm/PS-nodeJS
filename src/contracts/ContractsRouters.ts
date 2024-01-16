@@ -69,10 +69,7 @@ app.post('/contractReact', async (req: Request, res: Response) => {
                 req.parsedBody._city as CityData,
                 req.parsedBody._type as ContractTypeData
             );
-
             item = new ContractOur({ ...req.parsedBody, ourId });
-
-            console.log('dodaję ', item.ourId);
         } else {
             item = new ContractOther(req.parsedBody);
         }

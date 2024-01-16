@@ -1,16 +1,20 @@
 import DocumentTemplate from '../documentTemplates/DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
-import { Envi } from '../tools/Tools';
 import ToolsDocs from '../tools/ToolsDocs';
-import OurOffer from './OurOffer';
+import { OurOfferData } from '../types/types';
+import Setup from '../setup/Setup';
+import { Envi } from '../tools/EnviTypes';
 
 export default class OurOfferGdFile extends DocumentGdFile {
-    constructor(initObjectParameter: {
-        _template?: DocumentTemplate;
-        enviDocumentData: OurOffer;
-    }) {
+    protected enviDocumentData: Envi.OfferDocumentData;
+    constructor(initObjectParameter: { enviDocumentData: OurOfferData }) {
         super(initObjectParameter);
+        this._template = {
+            gdId: Setup.Gd.ourOfferTemplateGdId,
+            name: 'ourOfferTemplate',
+        };
+        this.enviDocumentData = initObjectParameter.enviDocumentData;
     }
 
     /** 1. Tworzy plik z szablonu w folderze pisma na GD
@@ -18,22 +22,26 @@ export default class OurOfferGdFile extends DocumentGdFile {
      *   - osobną funkcją w pliku trzeba ustawić namedRages
      */
     async create(auth: OAuth2Client) {
-        let document = await super.create(auth);
-        if (!document.documentId)
-            throw new Error(
-                'Letter file not created!' + this.enviDocumentData.id
-            );
-        const documentId = document.documentId;
-        await ToolsDocs.initNamedRangesFromTags(auth, documentId);
-        this.enviDocumentData.gdDocumentId = document.documentId;
-        return document;
+        try {
+            const document = await super.create(auth);
+            if (!document.documentId)
+                throw new Error(
+                    'Offer file not created!' + this.enviDocumentData.id
+                );
+            const documentId = document.documentId;
+            await ToolsDocs.initNamedRangesFromTags(auth, documentId);
+            this.enviDocumentData.gdDocumentId = document.documentId;
+            return document;
+        } catch (error) {
+            throw error;
+        }
     }
 
     /** aktualizuje treść NemedRanges */
     async updateTextRunsInNamedRanges(auth: OAuth2Client) {
         const documentId = this.enviDocumentData.gdDocumentId;
         if (!documentId)
-            throw new Error('Letter file not set!' + this.enviDocumentData.id);
+            throw new Error('Offer file not set!' + this.enviDocumentData.id);
         const newData: { rangeName: string; newText: string }[] =
             this.makeDataforNamedRanges();
         await ToolsDocs.updateTextRunsInNamedRanges(auth, documentId, newData);
@@ -45,7 +53,7 @@ export default class OurOfferGdFile extends DocumentGdFile {
     async edit(auth: OAuth2Client) {
         const documentId = this.enviDocumentData.gdDocumentId;
         if (!documentId)
-            throw new Error('Letter file not set!' + this.enviDocumentData.id);
+            throw new Error('Offer file not set!' + this.enviDocumentData.id);
         await ToolsDocs.refreshNamedRangesFromTags(auth, documentId);
         let document = (await ToolsDocs.getDocument(auth, documentId)).data;
         const namedRangesNames = Object.getOwnPropertyNames(
@@ -61,26 +69,38 @@ export default class OurOfferGdFile extends DocumentGdFile {
     }
 
     private makeDataforNamedRanges(): { rangeName: string; newText: string }[] {
+        if (!this.enviDocumentData.creationDate)
+            throw new Error('Offer must have creationDate');
+        if (!this.enviDocumentData.description)
+            throw new Error('Offer must have description');
         if (
-            !(
-                this.enviDocumentData.creationDate &&
-                this.enviDocumentData.number &&
-                this.enviDocumentData.description
-            )
+            !this.enviDocumentData.employerName &&
+            !this.enviDocumentData._employer
         )
-            throw new Error(
-                'enviDocumentData creationDate or number or description not found'
-            );
-        const number =
-            typeof this.enviDocumentData.number === 'number'
-                ? this.enviDocumentData.number.toString()
-                : this.enviDocumentData.number;
+            throw new Error('Offer must have employerName or _employer data');
+
         return [
             {
                 rangeName: 'creationDate',
                 newText: this.enviDocumentData.creationDate,
             },
-            { rangeName: 'number', newText: number },
+            {
+                rangeName: 'description',
+                newText: this.enviDocumentData.description,
+            },
+            {
+                rangeName: 'employerName',
+                newText: (this.enviDocumentData.employerName ||
+                    this.enviDocumentData._employer?.name) as string,
+            },
         ];
+    }
+
+    makeFileName() {
+        if (!this.enviDocumentData.alias)
+            throw new Error('Document must have alias');
+        if (!this.enviDocumentData.creationDate)
+            throw new Error('Document must have creationDate');
+        return `${this.enviDocumentData.alias} ${this.enviDocumentData._type?.name} ${this.enviDocumentData.creationDate}`;
     }
 }

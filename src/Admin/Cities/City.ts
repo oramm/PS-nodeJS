@@ -1,6 +1,7 @@
 import BusinessObject from '../../BussinesObject';
+import { CityData } from '../../types/types';
 
-export default class City extends BusinessObject {
+export default class City extends BusinessObject implements CityData {
     id?: number;
     name: string;
     code: string;
@@ -12,4 +13,3 @@ export default class City extends BusinessObject {
         this.code = initParamObject.code;
     }
 }
-

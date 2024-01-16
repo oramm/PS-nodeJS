@@ -2,15 +2,13 @@ import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import Tools from './Tools';
 import ToolsDate from './ToolsDate';
-import { RepositoryDataItem } from '../types/types';
-
 
 export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
 
     static async getPoolConnectionWithTimeout() {
         const promiseGetConnection = this.pool.getConnection();
-        let timer: NodeJS.Timeout | null = null;  // Dodajemy null jako wartość początkową
+        let timer: NodeJS.Timeout | null = null; // Dodajemy null jako wartość początkową
 
         const timeout = new Promise<mysql.PoolConnection>((_, reject) => {
             timer = setTimeout(() => {
@@ -19,22 +17,28 @@ export default class ToolsDb {
         });
 
         try {
-            const connection = await Promise.race([promiseGetConnection, timeout]);
-            if (timer) clearTimeout(timer);  // Sprawdzamy, czy timer jest ustawiony przed próbą czyszczenia
+            const connection = await Promise.race([
+                promiseGetConnection,
+                timeout,
+            ]);
+            if (timer) clearTimeout(timer); // Sprawdzamy, czy timer jest ustawiony przed próbą czyszczenia
             return connection;
         } catch (error) {
-            if (timer) clearTimeout(timer);  // Podobnie jak wyżej
+            if (timer) clearTimeout(timer); // Podobnie jak wyżej
             throw error;
         }
     }
 
-    static async getQueryCallbackAsync(sql: string, externalConn?: mysql.PoolConnection) {
+    static async getQueryCallbackAsync(
+        sql: string,
+        externalConn?: mysql.PoolConnection
+    ) {
         const conn = externalConn || this.pool;
         try {
             return (await conn.query(sql))[0];
         } catch (error) {
             console.log(sql);
-            throw (error);
+            throw error;
         }
     }
 
@@ -53,18 +57,21 @@ export default class ToolsDb {
 
     static prepareValueToPreparedStmtSql(value: any) {
         //"startDate":"12-06-2018"
-        if (value === null || value === '' || typeof value === 'number' || typeof value === 'boolean')
+        if (
+            value === null ||
+            value === '' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+        )
             return value;
-        if (value === undefined)
-            return null;
+        if (value === undefined) return null;
         if (typeof value === 'string') {
             if (ToolsDate.isStringADate(value))
                 //czy mamy datę
                 return ToolsDate.dateDMYtoYMD(value);
             else return this.stringToSql(value);
         }
-        if (ToolsDate.isValidDate(value))
-            return ToolsDate.dateJsToSql(value);
+        if (ToolsDate.isValidDate(value)) return ToolsDate.dateJsToSql(value);
     }
 
     static stringToSql(string: string): string {
@@ -81,21 +88,30 @@ export default class ToolsDb {
     static sqlToString(sqlString: string): string {
         let string = '';
         if (!sqlString) return string;
-        if (sqlString === 'LAST_INSERT_ID()')
-            return sqlString;
+        if (sqlString === 'LAST_INSERT_ID()') return sqlString;
 
         return sqlString
             .replace(/\\'/gi, "'")
             .replace(/\\"/gi, '"')
             .replace(/\\%/gi, '%');
     }
-    /** dodaje do bazy obiekt 
+    /** dodaje do bazy obiekt
      * @argument object może mieć atrybut '_isIdNonIncrement' - wtedy id jest trakrowany jak normalne pole
      * */
-    static async addInDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
-        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        if (!externalConn) console.log(`addInDb ${tableName}:: conn opened `, conn.threadId);
+    static async addInDb(
+        tableName: string,
+        object: any,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Cannot be part of transaction without external connection!'
+            );
+        const conn: mysql.PoolConnection =
+            externalConn || (await this.pool.getConnection());
+        if (!externalConn)
+            console.log(`addInDb ${tableName}:: conn opened `, conn.threadId);
 
         let stmt: { string: string; values: any[] } | undefined;
 
@@ -124,7 +140,10 @@ export default class ToolsDb {
         } finally {
             if (!externalConn || !isPartOfTransaction) {
                 conn.release();
-                console.log(`addInDb ${tableName}:: conn released`, conn.threadId);
+                console.log(
+                    `addInDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
             }
         }
     }
@@ -137,14 +156,23 @@ export default class ToolsDb {
         isPartOfTransaction?: boolean,
         fieldsToUpdate?: string[]
     ): Promise<any> {
-        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Cannot be part of transaction without external connection!'
+            );
 
-        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        if (!externalConn) console.log(`editInDb ${tableName}:: conn opened `, conn.threadId);
-        let stmt: { string: string, values: any[] } | undefined;
+        const conn: mysql.PoolConnection =
+            externalConn || (await this.pool.getConnection());
+        if (!externalConn)
+            console.log(`editInDb ${tableName}:: conn opened `, conn.threadId);
+        let stmt: { string: string; values: any[] } | undefined;
 
         try {
-            stmt = this.dynamicUpdatePreparedStmt(tableName, object, fieldsToUpdate);
+            stmt = this.dynamicUpdatePreparedStmt(
+                tableName,
+                object,
+                fieldsToUpdate
+            );
             console.log(stmt.string);
             const result = await conn.execute(stmt.string, stmt.values);
             const newObject = result[0];
@@ -166,51 +194,89 @@ export default class ToolsDb {
         } finally {
             if (!externalConn || !isPartOfTransaction) {
                 conn.release();
-                console.log(`editInDb ${tableName}:: conn released`, conn.threadId);
+                console.log(
+                    `editInDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
             }
         }
     }
 
-    static async deleteFromDb(tableName: string, object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+    static async deleteFromDb(
+        tableName: string,
+        object: any,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Cannot be part of transaction without external connection!'
+            );
 
-        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        if (!externalConn) console.log(`deleteFromDb ${tableName}:: conn opened `, conn.threadId);
+        const conn: mysql.PoolConnection =
+            externalConn || (await this.pool.getConnection());
+        if (!externalConn)
+            console.log(
+                `deleteFromDb ${tableName}:: conn opened `,
+                conn.threadId
+            );
         try {
-            await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [object.id]);
+            await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [
+                object.id,
+            ]);
             if (!isPartOfTransaction) await conn.commit();
             console.log(`object deleted from ${tableName}`);
             return object;
         } catch (e) {
             if (!externalConn) await conn.rollback();
-            console.log(`stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`);
+            console.log(
+                `stmt with Error: DELETE FROM ${tableName} WHERE Id = ${object.id};`
+            );
             throw e;
         } finally {
             if (!isPartOfTransaction || !externalConn) {
                 conn.release();
-                console.log(`deleteFromDb ${tableName}:: conn released`, conn.threadId);
+                console.log(
+                    `deleteFromDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
             }
         }
     }
 
-    static async executePreparedStmt(sql: string, params: any[], object: any, externalConn?: mysql.PoolConnection, isPartOfTransaction?: boolean) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Cannot be part of transaction without external connection!');
+    static async executePreparedStmt(
+        sql: string,
+        params: any[],
+        object: any,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Cannot be part of transaction without external connection!'
+            );
 
-        const conn: mysql.PoolConnection = externalConn || await this.pool.getConnection();
-        if (!externalConn) console.log(`executePreparedStmt:: conn opened `, conn.threadId);
+        const conn: mysql.PoolConnection =
+            externalConn || (await this.pool.getConnection());
+        if (!externalConn)
+            console.log(`executePreparedStmt:: conn opened `, conn.threadId);
         try {
-            params = params.map(item => this.prepareValueToPreparedStmtSql(item));
+            params = params.map((item) =>
+                this.prepareValueToPreparedStmtSql(item)
+            );
             await conn.execute(sql, params);
             if (!isPartOfTransaction) await conn.commit();
             return object;
         } catch (e) {
             if (!externalConn) await conn.rollback();
             throw e;
-        }
-        finally {
+        } finally {
             if (!isPartOfTransaction || !externalConn) {
                 conn.release();
-                console.log(`executePreparedStmt:: conn released`, conn.threadId);
+                console.log(
+                    `executePreparedStmt:: conn released`,
+                    conn.threadId
+                );
             }
         }
     }
@@ -220,7 +286,11 @@ export default class ToolsDb {
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
     /**tworzy String prepared Statement na podstawie atrybutuów objektu*/
-    private static dynamicUpdatePreparedStmt(tableName: string, object: any, fieldsToUpdate?: string[]) {
+    private static dynamicUpdatePreparedStmt(
+        tableName: string,
+        object: any,
+        fieldsToUpdate?: string[]
+    ) {
         if (!object.id)
             throw new Error('Edytowany obiekt musi mieć atrybut Id!');
 
@@ -228,12 +298,12 @@ export default class ToolsDb {
 
         //Jeśli fieldsToUpdate istnieje, przefiltruj klucze
         if (fieldsToUpdate && fieldsToUpdate.length) {
-            keys = keys.filter(key => fieldsToUpdate.includes(key));
+            keys = keys.filter((key) => fieldsToUpdate.includes(key));
         }
 
-        let stmt: { string: string, values: any[] } = {
+        let stmt: { string: string; values: any[] } = {
             string: 'UPDATE ' + tableName + ' SET ',
-            values: this.processColls('UPDATE', keys, object)
+            values: this.processColls('UPDATE', keys, object),
         };
 
         for (const key of keys) {
@@ -244,7 +314,8 @@ export default class ToolsDb {
                 if (end > 0) {
                     keyWithoutLocalData = key.substring(0, end);
                 }
-                stmt.string += Tools.capitalizeFirstLetter(keyWithoutLocalData) + '=?, ';
+                stmt.string +=
+                    Tools.capitalizeFirstLetter(keyWithoutLocalData) + '=?, ';
             }
         }
         //obetnij ostatni przecinek
@@ -256,9 +327,9 @@ export default class ToolsDb {
     private static dynamicInsertPreparedStmt(tableName: string, object: any) {
         const keys: string[] = Object.keys(object);
         //INSERT INTO tableName (Name, Description, MilestoneId) values (?, ?, ?)
-        const stmt: { string: string, values: any[] } = {
+        const stmt: { string: string; values: any[] } = {
             string: `INSERT INTO ${tableName} (`,
-            values: this.processColls('INSERT', keys, object)
+            values: this.processColls('INSERT', keys, object),
         };
 
         let questionMarks = '';
@@ -276,23 +347,24 @@ export default class ToolsDb {
 
         return stmt;
     }
-    /* 
-     *jeśli nie chcę aby zmienna była zmieniana w DB trzeba: 
-     *  dodać znak '_' albo 
+    /*
+     *jeśli nie chcę aby zmienna była zmieniana w DB trzeba:
+     *  dodać znak '_' albo
      *  skasować parametr z obiektu: 'delete parametr'
-    */
+     */
     private static isValidDbAttribute(key: string, object: any) {
         if (key === 'id')
-            if (object._isIdNonIncrement)
-                return true;
-            else
-                return (typeof object[key] === 'number') ? false : true;
-        if (!key.includes('_') && object[key] !== undefined)
-            return true;
+            if (object._isIdNonIncrement) return true;
+            else return typeof object[key] === 'number' ? false : true;
+        if (!key.includes('_') && object[key] !== undefined) return true;
         else return false;
     }
 
-    private static processColls(queryType: 'UPDATE' | 'INSERT', cols: string[], object: any) {
+    private static processColls(
+        queryType: 'UPDATE' | 'INSERT',
+        cols: string[],
+        object: any
+    ) {
         const values = [];
         for (const key of cols) {
             // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
@@ -301,8 +373,7 @@ export default class ToolsDb {
                 values.push(this.prepareValueToPreparedStmtSql(object[key]));
             }
         }
-        if (queryType === 'UPDATE')
-            values.push(object.id);
+        if (queryType === 'UPDATE') values.push(object.id);
         return values;
     }
     /**
@@ -313,19 +384,23 @@ export default class ToolsDb {
             });
         }
     */
-    static async transaction(callback: (conn: mysql.PoolConnection) => Promise<any>) {
+    static async transaction(
+        callback: (conn: mysql.PoolConnection) => Promise<any>
+    ) {
         const connection = await this.pool.getConnection();
         let transactionStarted = false;
 
         try {
-            console.log('transaction:: connection acquired', connection.threadId);
+            console.log(
+                'transaction:: connection acquired',
+                connection.threadId
+            );
             await connection.beginTransaction();
             transactionStarted = true; // transaction started successfully
 
             const result = await callback(connection);
             await connection.commit();
             return result;
-
         } catch (err) {
             if (transactionStarted) {
                 await connection.rollback();
@@ -333,17 +408,28 @@ export default class ToolsDb {
             throw err;
         } finally {
             connection.release();
-            console.log('transaction:: connection released ', connection.threadId);
+            console.log(
+                'transaction:: connection released ',
+                connection.threadId
+            );
         }
     }
     /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
-    static makeOrConditionFromValueOrArray(valueOrArray: string | string[] | undefined, tableName: string, fieldName: string): string {
+    static makeOrConditionFromValueOrArray(
+        valueOrArray: string | string[] | undefined,
+        tableName: string,
+        fieldName: string
+    ): string {
         if (!valueOrArray) return '1';
 
         if (typeof valueOrArray === 'string') {
-            return mysql.format(`${tableName}.${fieldName} = ?`, [valueOrArray]);
+            return mysql.format(`${tableName}.${fieldName} = ?`, [
+                valueOrArray,
+            ]);
         } else if (Array.isArray(valueOrArray)) {
-            const conditions = valueOrArray.map(value => mysql.format(`${tableName}.${fieldName} = ?`, [value]));
+            const conditions = valueOrArray.map((value) =>
+                mysql.format(`${tableName}.${fieldName} = ?`, [value])
+            );
             return '(' + conditions.join(' OR ') + ')';
         }
 
@@ -351,30 +437,49 @@ export default class ToolsDb {
     }
 
     /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
-    static makeOrConditionFromValueOrArray1(valueOrArray: string | string[] | any[] | undefined, tableName: string, tableFieldName: string, objectFieldName: string = ''): string {
+    static makeOrConditionFromValueOrArray1(
+        valueOrArray: string | string[] | any[] | undefined,
+        tableName: string,
+        tableFieldName: string,
+        objectFieldName: string = ''
+    ): string {
         if (!valueOrArray) return '1';
         if (typeof valueOrArray === 'string') {
-            return mysql.format(`${tableName}.${tableFieldName} = ?`, [valueOrArray]);
+            return mysql.format(`${tableName}.${tableFieldName} = ?`, [
+                valueOrArray,
+            ]);
         } else if (Array.isArray(valueOrArray)) {
             // If the first element is an object (and not null), treat the entire array as an array of objects
-            if (typeof valueOrArray[0] === 'object' && valueOrArray[0] !== null) {
-                const conditions = valueOrArray.map((obj) => mysql.format(`${tableName}.${tableFieldName} = ?`, [obj[objectFieldName]]));
+            if (
+                typeof valueOrArray[0] === 'object' &&
+                valueOrArray[0] !== null
+            ) {
+                const conditions = valueOrArray.map((obj) =>
+                    mysql.format(`${tableName}.${tableFieldName} = ?`, [
+                        obj[objectFieldName],
+                    ])
+                );
                 return '(' + conditions.join(' OR ') + ')';
             } else if (typeof valueOrArray[0] === 'string') {
-                const conditions = valueOrArray.map(value => mysql.format(`${tableName}.${tableFieldName} = ?`, [value]));
+                const conditions = valueOrArray.map((value) =>
+                    mysql.format(`${tableName}.${tableFieldName} = ?`, [value])
+                );
                 return '(' + conditions.join(' OR ') + ')';
             }
         }
 
         return '1';
-
     }
-
 
     /** Tworzy fragment WHERE gdzie elementy tablicy - grupy warunków są połączene przez OR
      */
-    static makeOrGroupsConditions<Conditions>(orConditions: Conditions[], makeAndConditions: (orCondition: Conditions) => string) {
-        const orGroups = orConditions.map(orCondition => '(' + makeAndConditions(orCondition) + ')');
+    static makeOrGroupsConditions<Conditions>(
+        orConditions: Conditions[],
+        makeAndConditions: (orCondition: Conditions) => string
+    ) {
+        const orGroups = orConditions.map(
+            (orCondition) => '(' + makeAndConditions(orCondition) + ')'
+        );
         const orGroupsCondition = orGroups.join(' OR ');
         return orGroupsCondition || '1';
     }

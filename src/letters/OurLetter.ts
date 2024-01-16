@@ -14,7 +14,6 @@ export default class OurLetter extends Letter {
 
     constructor(initParamObject: any) {
         super(initParamObject);
-        this.number = initParamObject.number;
 
         //_template jest potrzebny tylko przy tworzeniu pisma
         if (initParamObject._template)
@@ -139,7 +138,5 @@ export default class OurLetter extends Letter {
         await Promise.all(promises).catch((error) => {
             throw error;
         });
-
-        //await ToolsGd.updateFolder(auth, { name: newFolderName, id: letterGdFolder.id });
     }
 }

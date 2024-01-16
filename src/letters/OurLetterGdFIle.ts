@@ -4,16 +4,18 @@ import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
 import { Envi } from '../tools/Tools';
 import ToolsDocs from '../tools/ToolsDocs';
-import LetterGdController from './LetterGdController';
 import Entity from '../entities/Entity';
 import Case from '../contracts/milestones/cases/Case';
 
 export default class OurLetterGdFile extends DocumentGdFile {
+    protected enviDocumentData: OurLetter;
+
     constructor(initObjectParamenter: {
         _template?: DocumentTemplate;
         enviDocumentData: OurLetter;
     }) {
         super(initObjectParamenter);
+        this.enviDocumentData = initObjectParamenter.enviDocumentData;
     }
 
     /** 1. Tworzy plik z szablonu w folderze pisma na GD
@@ -28,11 +30,6 @@ export default class OurLetterGdFile extends DocumentGdFile {
             );
         const documentId = document.documentId;
         await ToolsDocs.initNamedRangesFromTags(auth, documentId);
-        //ToolsDocs.fillNamedRange(gDocument, 'address', this.makeEntitiesDataLabel(<any[]>this.document._entitiesMain));
-        //ToolsDocs.fillNamedRange(gDocument, 'description', <string>this.description);
-        //projectContextStyle[DocumentApp.Attribute.FONT_SIZE] = 9;
-        //projectContextStyle[DocumentApp.Attribute.FOREGROUND_COLOR] = '#666666';
-        //ToolsDocs.fillNamedRange(gDocument, 'projectContext', this.projectContext, projectContextStyle);
         this.enviDocumentData.gdDocumentId = document.documentId;
         return document;
     }
@@ -158,5 +155,12 @@ export default class OurLetterGdFile extends DocumentGdFile {
             if (i < entities.length - 1) label += '\n';
         }
         return label;
+    }
+
+    makeFileName() {
+        if (!this.enviDocumentData.creationDate)
+            throw new Error('Document must have creationDate');
+        const numberLabel = this.enviDocumentData.number || 'TMP-NO';
+        return `${this.enviDocumentData.number} ${this.enviDocumentData.creationDate}`;
     }
 }

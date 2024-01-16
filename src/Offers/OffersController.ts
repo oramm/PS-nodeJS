@@ -1,11 +1,12 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
-import Offer, { OfferInitParams } from './Offer';
+import Offer from './Offer';
 import ContractType from '../contracts/contractTypes/ContractType';
 import City from '../Admin/Cities/City';
 import Person from '../persons/Person';
-import OtherOffer from './OtherOffer';
+import ExternalOffer from './OtherOffer';
 import OurOffer from './OurOffer';
+import { OfferData, OurOfferData } from '../types/types';
 
 export type OffersSearchParams = {
     id?: number;
@@ -20,10 +21,10 @@ export type OffersSearchParams = {
 
 export default class OffersController {
     static async getOffersList(orConditions: OffersSearchParams[] = []) {
-        console.log(orConditions);
         const sql = `SELECT Offers.Id,
                 Offers.Alias,
                 Offers.Description,
+                Offers.CreationDate,
                 Offers.SubmissionDeadline,
                 Offers.TypeId,
                 Offers.Form,
@@ -40,7 +41,6 @@ export default class OffersController {
                 Cities.Code AS CityCode,
                 ContractTypes.Id AS MainContractTypeId, 
                 ContractTypes.Name AS TypeName, 
-                ContractTypes.IsOur AS TypeIsOur, 
                 ContractTypes.Description AS TypeDescription,
                 Persons.Id AS EditorId,
                 Persons.Name AS EditorName,
@@ -119,39 +119,43 @@ export default class OffersController {
         let newResult: Offer[] = [];
 
         for (const row of result) {
-            const offerInitData: OfferInitParams = {
+            const offerInitData: OfferData | OurOfferData = {
                 id: row.Id,
                 alias: ToolsDb.sqlToString(row.Alias),
                 description: ToolsDb.sqlToString(row.Description),
+                creationDate: row.CreationDate,
                 submissionDeadline: row.SubmissionDeadline,
                 form: ToolsDb.sqlToString(row.Form),
                 isOur: row.IsOur,
                 status: row.Status,
                 bidProcedure: ToolsDb.sqlToString(row.BidProcedure),
                 gdFolderId: row.GdFolderId,
+                gdDocumentId: row.GdDocumentId,
                 _lastUpdated: row.LastUpdated,
                 _employer: { name: ToolsDb.sqlToString(row.EmployerName) },
-                _type: new ContractType({
+                _type: {
                     id: row.MainContractTypeId,
                     name: row.TypeName,
                     description: row.TypeDescription,
-                }),
-                _city: new City({
+                    isOur: true,
+                    status: 'active',
+                },
+                _city: {
                     id: row.CityId,
                     name: row.CityName,
                     code: row.CityCode,
-                }),
-                _editor: new Person({
+                },
+                _editor: {
                     id: row.EditorId,
                     name: ToolsDb.sqlToString(row.EditorName),
                     surname: ToolsDb.sqlToString(row.EditorSurname),
                     email: ToolsDb.sqlToString(row.EditorEmail),
-                }),
+                },
             };
 
-            const item = row.GdGileId
-                ? new OurOffer({ ...offerInitData, gdDocumentId: row.GdGileId })
-                : new OtherOffer(offerInitData);
+            const item = row.IsOur
+                ? new OurOffer(offerInitData)
+                : new ExternalOffer(offerInitData);
 
             newResult.push(item);
         }

@@ -1,39 +1,43 @@
 import City from '../Admin/Cities/City';
 import BusinessObject from '../BussinesObject';
 import ContractType from '../contracts/contractTypes/ContractType';
-import Person from '../persons/Person';
-import { Envi } from '../tools/EnviTypes';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsGd from '../tools/ToolsGd';
+import {
+    CityData,
+    ContractTypeData,
+    OfferData,
+    PersonData,
+} from '../types/types';
 import OfferGdController from './OfferGdController';
 import { OAuth2Client } from 'google-auth-library';
 
 export default abstract class Offer
     extends BusinessObject
-    implements Envi.Document
+    implements OfferData
 {
     id?: number;
     alias: string;
+    creationDate: string;
     description: string;
     submissionDeadline: string;
-    _type: ContractType;
+    _type: ContractTypeData;
     typeId: number;
-    _city: City;
+    _city: CityData;
     cityId: number;
     form: string;
     isOur: boolean;
     bidProcedure: string;
+    _editor: PersonData;
     editorId: number;
-    _editor: any;
     _lastUpdated: string;
     employerName: string;
     status: string;
     gdFolderId: string;
     _gdFolderUrl: string;
 
-    constructor(initParamObject: OfferInitParams) {
+    constructor(initParamObject: OfferData) {
         super({ _dbTableName: 'Offers' });
-
         if (!initParamObject._city.id)
             throw new Error('City id is not defined');
         if (!initParamObject._type.id)
@@ -46,6 +50,9 @@ export default abstract class Offer
         this.id = initParamObject.id;
         this.alias = initParamObject.alias.trim();
         this.description = initParamObject.description.trim();
+        this.creationDate = ToolsDate.dateJsToSql(
+            initParamObject.creationDate
+        ) as string;
         this.submissionDeadline = ToolsDate.dateJsToSql(
             initParamObject.submissionDeadline
         ) as string;
@@ -56,6 +63,7 @@ export default abstract class Offer
         this.form = initParamObject.form.trim();
         this.isOur = initParamObject.isOur;
         this.bidProcedure = initParamObject.bidProcedure.trim();
+        this._editor = initParamObject._editor;
         this.editorId = initParamObject._editor.id;
         this._lastUpdated = initParamObject._lastUpdated;
         this.employerName =
@@ -71,7 +79,7 @@ export default abstract class Offer
     async addNewController(auth: OAuth2Client) {
         try {
             console.group('Creating new offer');
-            this.createGdElements(auth);
+            await this.createGdElements(auth);
             console.log('Offer folder created');
             await this.addInDb();
             console.log('Offer added to db');
@@ -117,7 +125,7 @@ export default abstract class Offer
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
     }
-
+    /**tworzy folder główny oferty */
     async createGdElements(auth: OAuth2Client) {
         const gdFolder = await OfferGdController.createOfferFolder(auth, this);
         if (!gdFolder.id) throw new Error('Folder  not created');
@@ -142,21 +150,3 @@ export default abstract class Offer
         return letterGdFolder;
     }
 }
-
-export type OfferInitParams = {
-    id?: number;
-    alias: string;
-    description: string;
-    submissionDeadline: string | Date;
-    _type: ContractType;
-    _city: City;
-    form: string;
-    isOur: boolean;
-    bidProcedure: string;
-    _editor: Person;
-    _lastUpdated: string;
-    _employer?: { name: string };
-    employerName?: string;
-    status: string;
-    gdFolderId: string;
-};

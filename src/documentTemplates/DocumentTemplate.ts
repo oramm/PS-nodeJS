@@ -1,14 +1,19 @@
 import BusinessObject from '../BussinesObject';
+import { Envi } from '../tools/EnviTypes';
+import { DocumentTemplateData } from '../types/types';
 
-export default class DocumentTemplate extends BusinessObject {
+export default class DocumentTemplate
+    extends BusinessObject
+    implements Envi.DocumentTemplateData
+{
     id?: number;
     name: string;
-    description: string;
+    description?: string;
     gdId: string;
     _contents: any;
     _nameContentsAlias: string;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: DocumentTemplateData) {
         super({ _dbTableName: 'DocumentTemplates' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
@@ -16,8 +21,7 @@ export default class DocumentTemplate extends BusinessObject {
         this.gdId = initParamObject.gdId;
         this._contents = initParamObject._contents;
         this._nameContentsAlias = initParamObject.name;
-        if (initParamObject._contents.alias)
+        if (initParamObject._contents?.alias)
             this._nameContentsAlias += ` => ${initParamObject._contents.alias}`;
     }
 }
-

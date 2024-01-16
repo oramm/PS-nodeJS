@@ -1,7 +1,6 @@
-import mysql from 'mysql2/promise';
-import Tools from "../tools/Tools";
-import ToolsDb from '../tools/ToolsDb'
-import DocumentTemplate from "./DocumentTemplate";
+import ToolsDb from '../tools/ToolsDb';
+import { DocumentTemplateData } from '../types/types';
+import DocumentTemplate from './DocumentTemplate';
 
 export default class DocumentTemplatesController {
     static async getDocumentTemplatesList(initParamObject: any) {
@@ -20,11 +19,13 @@ export default class DocumentTemplatesController {
         return this.processDocumentTemplatesResult(result);
     }
 
-    static processDocumentTemplatesResult(result: any[]): DocumentTemplate[] {
-        let newResult: DocumentTemplate[] = [];
+    static processDocumentTemplatesResult(
+        result: any[]
+    ): DocumentTemplateData[] {
+        let newResult: DocumentTemplateData[] = [];
 
         for (const row of result) {
-            var item = new DocumentTemplate({
+            const item: DocumentTemplateData = {
                 id: row.Id,
                 name: row.Name,
                 description: row.Description,
@@ -33,9 +34,9 @@ export default class DocumentTemplatesController {
                     id: row.ContentsId,
                     gdId: row.ContentsGdId,
                     alias: row.ContentsAlias,
-                    caseTypeId: row.ContentsCaseTypeId
+                    caseTypeId: row.ContentsCaseTypeId,
                 },
-            });
+            };
             newResult.push(item);
         }
         return newResult;

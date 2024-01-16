@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import OffersController from './OffersController';
-import Offer, { OfferInitParams } from './Offer';
+import Offer from './Offer';
 import { app } from '../index';
 import Setup from '../setup/Setup';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import OfferGdController from './OfferGdController';
 import OurOffer from './OurOffer';
-import OtherOffer from './OtherOffer';
+import ExternalOffer from './OtherOffer';
 import { off } from 'process';
+import { OfferData } from '../types/types';
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {
@@ -63,7 +64,7 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.editController,
+            item.deleteController,
             undefined,
             item
         );
@@ -77,7 +78,7 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
 
 function makeOfferObject(req: Request) {
     const isOur = req.parsedBody.isOur as boolean;
-    const offerInitParams: OfferInitParams = {
+    const offerInitParams: OfferData = {
         ...req.parsedBody,
         _editor: req.parsedBody._editor || {
             id: req.session.userData?.enviId as number,
@@ -85,6 +86,6 @@ function makeOfferObject(req: Request) {
     };
     const item = isOur
         ? new OurOffer(offerInitParams)
-        : new OtherOffer(offerInitParams);
+        : new ExternalOffer(offerInitParams);
     return item;
 }

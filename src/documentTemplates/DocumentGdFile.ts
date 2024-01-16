@@ -5,22 +5,22 @@ import DocumentTemplate from './DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsGd from '../tools/ToolsGd';
 import EnviErrors from '../tools/Errors';
+import { DocumentTemplateData } from '../types/types';
 
-export default class DocumentGdFile {
-    public _template?: DocumentTemplate;
-    protected enviDocumentData: Envi.Document;
+export default abstract class DocumentGdFile {
+    public _template?: DocumentTemplateData;
+    protected enviDocumentData: Envi.GenericDocumentData;
     description?: string;
 
     constructor(initObjectParamenter: {
         _template?: DocumentTemplate;
-        enviDocumentData: Envi.Document;
+        enviDocumentData: Envi.GenericDocumentData;
     }) {
         this._template = initObjectParamenter._template;
         this.enviDocumentData = initObjectParamenter.enviDocumentData;
     }
 
-    /** Tworzy plik z szablonu w folderze docelowym na GD
-     */
+    /** Tworzy plik z szablonu w folderze docelowym na GD */
     async create(auth: OAuth2Client) {
         if (!this.enviDocumentData.gdFolderId)
             throw new EnviErrors.NoGdIdError('Document must have folderFdId');
@@ -29,7 +29,7 @@ export default class DocumentGdFile {
             auth,
             this._template.gdId,
             this.enviDocumentData.gdFolderId,
-            `${this.enviDocumentData.number} ${this.enviDocumentData.creationDate}`
+            this.makeFileName()
         );
         await ToolsGd.createPermissions(auth, {
             fileId: <string>gdFile.data.id,
@@ -44,4 +44,6 @@ export default class DocumentGdFile {
 
         return document;
     }
+
+    abstract makeFileName(): string;
 }

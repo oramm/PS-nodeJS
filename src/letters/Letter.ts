@@ -14,7 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 
 export default abstract class Letter
     extends BusinessObject
-    implements Envi.Document
+    implements Envi.LetterDocumentData
 {
     public id?: number;
     public number?: string | number;

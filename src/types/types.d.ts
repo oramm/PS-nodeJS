@@ -17,8 +17,7 @@ declare module 'express-session' {
 }
 
 export interface RepositoryDataItem {
-    id: number;
-    [key: string]: any;
+    id?: number;
 }
 
 export interface SystemRoleData {
@@ -195,17 +194,17 @@ export interface PersonData extends RepositoryDataItem {
     name: string;
     surname: string;
     email: string;
-    cellPhone: string;
-    _alias: string;
-    position: string;
-    _entity: Entity;
+    cellPhone?: string;
+    _alias?: string;
+    position?: string;
+    _entity?: Entity;
 }
 
 export interface DocumentTemplateData extends RepositoryDataItem {
     name: string;
-    description: string;
+    description?: string;
     gdId: string;
-    _contents: {
+    _contents?: {
         id?: number;
         gdId?: string;
         alias: string;
@@ -268,23 +267,28 @@ export interface CityData extends RepositoryDataItem {
     code: string;
 }
 
-interface OfferData extends RepositoryDataItem {
+export interface OfferData extends RepositoryDataItem {
+    creationDate: string;
     alias: string;
     description: string;
     submissionDeadline: string;
-    _type: ContractType;
-    _city: City;
-    typeId: number;
+    _type: ContractTypeData;
+    _city: CityData;
+    typeId?: number;
     form: string;
     isOur: boolean;
     bidProcedure: string;
-    editorId: number;
+    editorId?: number;
     _lastUpdated: string;
-    employerName: string;
+    employerName?: string;
+    _employer?: EntityData;
+    _editor: PersonData;
     status: string;
     gdFolderId: string;
 }
 
-export interface OurOfferData extends Offer {}
+export interface OurOfferData extends OfferData {
+    gdDocumentId?: string;
+}
 
-export interface ExternalOfferData extends Offer {}
+export interface ExternalOfferData extends OfferData {}

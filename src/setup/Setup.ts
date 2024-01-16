@@ -12,6 +12,7 @@ export default class Setup {
         rootFolderId: '1C_wMgQJtzsFmgsmHp7Dr_F1VJx4v1mjo',
         meetingProtocoTemlateId: '1B5D2ZUkPgNft0-0JZCtkxSk8eAZa91DnwQY8Bbln9Bo',
         offersRootFolderId: '0B2pP2WpBR244WDgzT0RHcmFCMW8',
+        ourOfferTemplateGdId: '173TvhbPAgRD_08Ey5cq4PP8RxOmCh4vO-UjjzB5dGro',
     };
 
     static ScrumSheet = {
@@ -20,84 +21,82 @@ export default class Setup {
             id: 830733384,
             firstDataRow: 3,
             name: 'planowanie',
-            personIdColName: "Osoba",
-            workingDaysColName: "liczba dni pracy",
-            workingHoursColName: "liczba godzin pracy",
-            freeHoursColName: "odbierane godziny",
-            hoursAvailableColName: "liczba godzin w tygodniu",
+            personIdColName: 'Osoba',
+            workingDaysColName: 'liczba dni pracy',
+            workingHoursColName: 'liczba godzin pracy',
+            freeHoursColName: 'odbierane godziny',
+            hoursAvailableColName: 'liczba godzin w tygodniu',
             /**drugi wiersz */
-            planningMeetingColName: "planowanie",
+            planningMeetingColName: 'planowanie',
             /**drugi wiersz */
-            retrospectionMeetingColName: "spotkanie końcowe",
+            retrospectionMeetingColName: 'spotkanie końcowe',
             /**drugi wiersz */
-            extraMeetingsColName: "dodatkowe spotkania",
-
+            extraMeetingsColName: 'dodatkowe spotkania',
         },
         CurrentSprint: {
             id: 223354508,
             firstDataRow: 4,
-            name: "aktualny sprint",
-            projectIdColName: "Id projektu",
-            contractDbIdColName: "dbId kontraktu",
-            contractOurIdColName: "ourId kontraktu",
-            milestoneIdColName: "Id kamienia milowego",
-            caseTypeIdColName: "Id typu sprawy",
-            caseIdColName: "Id sprawy",
-            taskIdColName: "Id zadania",
-            rowStatusColName: "#ImportStatus",
-            contractNumberColName: "Nr kontraktu na roboty/ dostawy",
-            milestoneNameColName: "Typ i nazwa kamienia milowego",
+            name: 'aktualny sprint',
+            projectIdColName: 'Id projektu',
+            contractDbIdColName: 'dbId kontraktu',
+            contractOurIdColName: 'ourId kontraktu',
+            milestoneIdColName: 'Id kamienia milowego',
+            caseTypeIdColName: 'Id typu sprawy',
+            caseIdColName: 'Id sprawy',
+            taskIdColName: 'Id zadania',
+            rowStatusColName: '#ImportStatus',
+            contractNumberColName: 'Nr kontraktu na roboty/ dostawy',
+            milestoneNameColName: 'Typ i nazwa kamienia milowego',
 
-            caseTypeColName: "Typ sprawy I numer sprawy",
-            caseNameColName: "Nazwa sprawy",
-            taskNameColName: "Nazwa zadania",
-            taskDeadlineColName: "Deadline",
-            taskEstimatedTimeColName: "szac. czas",
-            taskStatusColName: "Status",
-            taskOwnerIdColName: "Id właściciela",
-            taskOwnerNameColName: "Kto",
+            caseTypeColName: 'Typ sprawy I numer sprawy',
+            caseNameColName: 'Nazwa sprawy',
+            taskNameColName: 'Nazwa zadania',
+            taskDeadlineColName: 'Deadline',
+            taskEstimatedTimeColName: 'szac. czas',
+            taskStatusColName: 'Status',
+            taskOwnerIdColName: 'Id właściciela',
+            taskOwnerNameColName: 'Kto',
             /**drugi wiersz */
-            monColName: "PON.",
+            monColName: 'PON.',
             /**drugi wiersz */
-            tueColName: "WTO.",
+            tueColName: 'WTO.',
             /**drugi wiersz */
-            wedColName: "SR.",
+            wedColName: 'SR.',
             /**drugi wiersz */
-            thuColName: "CZW.",
+            thuColName: 'CZW.',
             /**drugi wiersz */
-            friColName: "PT.",
+            friColName: 'PT.',
             /**drugi wiersz */
-            sprintSumColName: "Razem",
+            sprintSumColName: 'Razem',
             /**drugi wiersz */
-            sprintDiffColName: "Różnica",
+            sprintDiffColName: 'Różnica',
             modeColName: 'tryb',
 
-            timesSummaryColName: "#TimesSummary",
+            timesSummaryColName: '#TimesSummary',
             /**Formuły z czasami dla osób*/
-            timesColName: "#Times",
-
+            timesColName: '#Times',
         },
         Data: {
             id: 2143933154,
             firstDataRow: 2,
             name: 'dane',
-            personIdColName: "OwnerId",
-            personNameColName: "lista osób - zasoby",
-            caseIdColName: "CaseId",
-            caseTypeIdColName: "CaseTypeId",
-            case_milestoneIdColName: "Case_MilestoneId",
-            caseNameColName: "CaseName",
-            caseGdFolderIdColName: "Case_gdFolderId"
-        }
-    }
+            personIdColName: 'OwnerId',
+            personNameColName: 'lista osób - zasoby',
+            caseIdColName: 'CaseId',
+            caseTypeIdColName: 'CaseTypeId',
+            case_milestoneIdColName: 'Case_MilestoneId',
+            caseNameColName: 'CaseName',
+            caseGdFolderIdColName: 'Case_gdFolderId',
+        },
+    };
 
     static CaseTypes = {
         SECURITY_GUARANTEE: 99,
-    }
+    };
 
     static MilestoneTypes = {
         OURCONTRACT_ADMINISTRATION: 1,
-    }
+    };
 
     static InvoiceStatus = {
         FOR_LATER: 'Na później',
@@ -129,7 +128,7 @@ export default class Setup {
         PROLONGED: 'Przedłużona',
         RETURNED_1ST_PART: 'Zwrócona 70%',
         RETURNED_2ND_PART: 'Zwrócona 100%',
-    }
+    };
 
     static TaskStatus = {
         BACKLOG: 'Backlog',
