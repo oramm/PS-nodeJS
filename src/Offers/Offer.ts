@@ -20,6 +20,7 @@ export default abstract class Offer
     alias: string;
     creationDate: string;
     description: string;
+    comment: string;
     submissionDeadline: string;
     _type: ContractTypeData;
     typeId: number;
@@ -50,6 +51,7 @@ export default abstract class Offer
         this.id = initParamObject.id;
         this.alias = initParamObject.alias.trim();
         this.description = initParamObject.description.trim();
+        this.comment = initParamObject.comment.trim();
         this.creationDate = ToolsDate.dateJsToSql(
             initParamObject.creationDate
         ) as string;

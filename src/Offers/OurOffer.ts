@@ -9,8 +9,10 @@ import ToolsGd from '../tools/ToolsGd';
 export default class OurOffer extends Offer implements Envi.OfferDocumentData {
     gdDocumentId?: string;
     _documentOpenUrl?: string;
+    resourcesGdFolderId?: string;
     constructor(initParamObject: OurOfferData) {
         super(initParamObject);
+        this.resourcesGdFolderId = initParamObject.resourcesGdFolderId;
         if (initParamObject.gdDocumentId) {
             this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
                 initParamObject.gdDocumentId

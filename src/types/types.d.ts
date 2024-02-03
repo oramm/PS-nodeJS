@@ -271,6 +271,7 @@ export interface OfferData extends RepositoryDataItem {
     creationDate: string;
     alias: string;
     description: string;
+    comment: string;
     submissionDeadline: string;
     _type: ContractTypeData;
     _city: CityData;
@@ -289,6 +290,7 @@ export interface OfferData extends RepositoryDataItem {
 
 export interface OurOfferData extends OfferData {
     gdDocumentId?: string;
+    resourcesGdFolderId?: string;
 }
 
 export interface ExternalOfferData extends OfferData {}

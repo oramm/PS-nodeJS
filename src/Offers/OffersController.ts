@@ -24,6 +24,7 @@ export default class OffersController {
         const sql = `SELECT Offers.Id,
                 Offers.Alias,
                 Offers.Description,
+                Offers.Comment,
                 Offers.CreationDate,
                 Offers.SubmissionDeadline,
                 Offers.TypeId,
@@ -36,6 +37,7 @@ export default class OffersController {
                 Offers.LastUpdated,
                 Offers.GdFolderId,
                 Offers.GdDocumentId,
+                Offers.resourcesGdFolderId,
                 Cities.Id AS CityId,
                 Cities.Name AS CityName,
                 Cities.Code AS CityCode,
@@ -54,7 +56,7 @@ export default class OffersController {
                 orConditions,
                 this.makeAndConditions.bind(this)
             )}
-            ORDER BY Offers.SubmissionDeadline;`;
+            ORDER BY Offers.SubmissionDeadline DESC;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processOffersResult(result);
@@ -123,6 +125,7 @@ export default class OffersController {
                 id: row.Id,
                 alias: ToolsDb.sqlToString(row.Alias),
                 description: ToolsDb.sqlToString(row.Description),
+                comment: ToolsDb.sqlToString(row.Comment),
                 creationDate: row.CreationDate,
                 submissionDeadline: row.SubmissionDeadline,
                 form: ToolsDb.sqlToString(row.Form),
@@ -131,6 +134,7 @@ export default class OffersController {
                 bidProcedure: ToolsDb.sqlToString(row.BidProcedure),
                 gdFolderId: row.GdFolderId,
                 gdDocumentId: row.GdDocumentId,
+                resourcesGdFolderId: row.resourcesGdFolderId,
                 _lastUpdated: row.LastUpdated,
                 _employer: { name: ToolsDb.sqlToString(row.EmployerName) },
                 _type: {
