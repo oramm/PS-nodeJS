@@ -4,6 +4,7 @@ import Setup from '../setup/Setup';
 import ToolsDb from '../tools/ToolsDb';
 import InvoiceItem from './InvoiceItem';
 import Tools from '../tools/Tools';
+import InvoiceItemsController from './InvoiceItemsController';
 
 export default class InvoiceItemValidator {
     private contract: ContractOur;
@@ -18,8 +19,14 @@ export default class InvoiceItemValidator {
         isNewInvoiceItem: boolean
     ): Promise<boolean> {
         this.checkContractValueSet();
-        this.checkAgainstContract(isNewInvoiceItem);
-        await this.checkInvoiceItemValueAgainstRemainingValue(isNewInvoiceItem);
+        isNewInvoiceItem
+            ? this.checkNewAgainstContract()
+            : this.checkEditedAgainstContract();
+
+        isNewInvoiceItem
+            ? await this.checkNewValueAgainstRemainingValue()
+            : await this.checkEditedValueAgainstRemainingValue();
+
         return true;
     }
 
@@ -29,9 +36,9 @@ export default class InvoiceItemValidator {
         }
     }
 
-    private checkAgainstContract(isNewInvoice: boolean) {
+    private checkNewAgainstContract() {
         const contractValue = this.contract.value as number;
-        if (isNewInvoice && contractValue < this.invoiceItem._netValue) {
+        if (contractValue < this.invoiceItem._netValue) {
             throw new Error(
                 `Nie można dodać tej pozycji do faktury, ponieważ jej wartość ` +
                     `przekracza wartość kontraktu (${Tools.formatNumber(
@@ -39,9 +46,14 @@ export default class InvoiceItemValidator {
                     )} zł).`
             );
         }
-        if (!isNewInvoice && contractValue < this.invoiceItem._netValue) {
+    }
+
+    private checkEditedAgainstContract() {
+        const contractValue = this.contract.value as number;
+
+        if (contractValue < this.invoiceItem._netValue) {
             throw new Error(
-                `Wartość tej pozycji przekracza wartość kontraktu o ${Tools.formatNumber(
+                `Nie można zmienić tej pozycji bo jej przekracza wartość kontraktu o ${Tools.formatNumber(
                     this.invoiceItem._netValue - contractValue
                 )} zł` +
                     '\n' +
@@ -80,6 +92,7 @@ export default class InvoiceItemValidator {
                 Setup.InvoiceStatus.FOR_LATER,
                 Setup.InvoiceStatus.TO_CORRECT,
                 Setup.InvoiceStatus.DONE,
+                Setup.InvoiceStatus.DONE,
                 Setup.InvoiceStatus.SENT,
                 Setup.InvoiceStatus.PAID,
             ],
@@ -91,39 +104,63 @@ export default class InvoiceItemValidator {
             AND ${statusCondition}`;
     }
 
-    private async checkInvoiceItemValueAgainstRemainingValue(
-        isNewItem: boolean
-    ) {
-        const issuedValue = (await this.getItemsValue()).value;
-        const valueToCheck = this.invoiceItem._netValue + issuedValue;
+    private async checkNewValueAgainstRemainingValue() {
+        const otherItemsValue = (await this.getItemsValue()).value;
+        const itemsTotalValue = this.invoiceItem._netValue + otherItemsValue;
         const contractValue = this.contract.value as number;
         console.log(
-            `issuedValue: ${issuedValue}, valueToCheck: ${valueToCheck}, contractValue: ${contractValue}`
+            `otherItemsValue: ${otherItemsValue}, itemsTotalValue: ${itemsTotalValue}, contractValue: ${contractValue}`
         );
 
-        if (isNewItem && valueToCheck > contractValue) {
+        if (itemsTotalValue > contractValue) {
             throw new Error(
                 `Nie można dodać nowej pozycji, ponieważ suma wartości wcześniejszych faktur i tej pozycji ` +
-                    `(${valueToCheck} zł) przekracza wartość umowy o (${Tools.formatNumber(
-                        valueToCheck - contractValue
-                    )} zł).\n` +
+                    `(${itemsTotalValue} zł) przekracza wartość umowy o ${Tools.formatNumber(
+                        itemsTotalValue - contractValue
+                    )} zł.\n` +
+                    `Maksymalna wartość tej pozycji to ${Tools.formatNumber(
+                        contractValue - otherItemsValue
+                    )} zł \n` +
                     `Wartość umowy: ${Tools.formatNumber(contractValue)} zł\n` +
                     `Wartość wcześniejszych faktur łacznie: ${Tools.formatNumber(
-                        issuedValue
+                        otherItemsValue
                     )} zł`
             );
         }
-        if (!isNewItem && issuedValue > contractValue) {
+    }
+
+    private async checkEditedValueAgainstRemainingValue() {
+        const [otherItemsValueObject, thisItemSaved] = await Promise.all([
+            this.getItemsValue(),
+            InvoiceItemsController.getInvoiceItemsList([
+                { invoiceId: this.invoiceItem._parent.id },
+            ]),
+        ]);
+        //vartość pozycji w bazie dla wszystkich faktur z bieżącego kontraktu bez bieżącej pozycji
+        const otherItemsValue =
+            otherItemsValueObject.value - thisItemSaved[0]._netValue;
+
+        const totalIssuedValueAferEdit =
+            otherItemsValue + this.invoiceItem._netValue;
+        const contractValue = this.contract.value as number;
+        console.log(
+            `otherItemsValue: ${otherItemsValue}, totalIssuedValueAferEdit: ${totalIssuedValueAferEdit}, contractValue: ${contractValue}`
+        );
+
+        if (totalIssuedValueAferEdit > contractValue) {
             throw new Error(
                 `Nie można zmienić tej pozycji, ponieważ suma wartości wcześniejszych faktur i tej pozycji ` +
                     `(${Tools.formatNumber(
-                        valueToCheck
-                    )} zł) przekracza wartość umowy o (${Tools.formatNumber(
-                        valueToCheck - contractValue
-                    )} zł).\n` +
+                        totalIssuedValueAferEdit
+                    )} zł) przekracza wartość umowy o ${Tools.formatNumber(
+                        totalIssuedValueAferEdit - contractValue
+                    )} zł.\n` +
+                    `Maksymalna wartość tej pozycji to ${Tools.formatNumber(
+                        contractValue - otherItemsValue
+                    )} zł \n` +
                     `Wartość umowy: ${Tools.formatNumber(contractValue)} zł\n` +
                     `Wartość wcześniejszych faktur łącznie: ${Tools.formatNumber(
-                        issuedValue
+                        otherItemsValue
                     )} zł`
             );
         }

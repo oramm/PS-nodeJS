@@ -1,8 +1,10 @@
-import ContractOur from "../contracts/ContractOur";
-import ContractsSettlementController, { ContractSettlementData } from "../contracts/ContractsSettlementController";
-import Setup from "../setup/Setup";
-import Tools from "../tools/Tools";
-import Invoice from "./Invoice";
+import ContractOur from '../contracts/ContractOur';
+import ContractsSettlementController, {
+    ContractSettlementData,
+} from '../contracts/ContractsSettlementController';
+import Setup from '../setup/Setup';
+import Tools from '../tools/Tools';
+import Invoice from './Invoice';
 
 export default class InvoiceValidator {
     private contract: ContractOur;
@@ -15,10 +17,13 @@ export default class InvoiceValidator {
 
     async checkValueWithContract(isNewInvoice: boolean): Promise<boolean> {
         this.checkContractValueSet();
-        this.checkInvoiceValueAgainstContract(isNewInvoice);
+        if (isNewInvoice) this.checkNewInvoiceValueAgainstContract();
 
         const contractSettlementData = await this.getContractSettlementData();
-        this.checkInvoiceValueAgainstRemainingValue(contractSettlementData, isNewInvoice);
+        this.checkInvoiceValueAgainstRemainingValue(
+            contractSettlementData,
+            isNewInvoice
+        );
 
         return true;
     }
@@ -29,35 +34,54 @@ export default class InvoiceValidator {
         }
     }
 
-    private checkInvoiceValueAgainstContract(isNewInvoice: boolean) {
+    private checkNewInvoiceValueAgainstContract() {
         const contractValue = this.contract.value as number;
-        if (isNewInvoice && contractValue <= this.invoice._totalNetValue) {
-            throw new Error(`Nie można dodać nowej faktury, ponieważ jej wartość (${this.invoice._totalNetValue} zł) przekracza lub równa się wartości kontraktu (${contractValue} zł).`);
-        }
-        if (!isNewInvoice && contractValue < this.invoice._totalNetValue) {
-            throw new Error(`Edycja:Wartość tej faktury przekracza wartość kontraktu o ${this.invoice._totalNetValue - contractValue} zł`);
+        if (contractValue <= this.invoice._totalNetValue) {
+            throw new Error(
+                `Nie można dodać nowej faktury, ponieważ jej wartość (${this.invoice._totalNetValue} zł) przekracza lub równa się wartości kontraktu (${contractValue} zł).`
+            );
         }
     }
 
     private async getContractSettlementData(): Promise<ContractSettlementData> {
-        const invoiceStatuses = Object.values(Setup.InvoiceStatus).filter((status) => status !== Setup.InvoiceStatus.WITHDRAWN);
-        const contractSettlementData = await ContractsSettlementController.getSums([{
-            id: this.contract.id,
-            invoiceStatuses: invoiceStatuses,
-        }]);
+        const invoiceStatuses = Object.values(Setup.InvoiceStatus).filter(
+            (status) =>
+                status !== Setup.InvoiceStatus.WITHDRAWN ||
+                status !== Setup.InvoiceStatus.TO_CORRECT
+        );
+        const contractSettlementData =
+            await ContractsSettlementController.getSums([
+                {
+                    id: this.contract.id,
+                    invoiceStatuses: invoiceStatuses,
+                },
+            ]);
         console.log(contractSettlementData);
         return contractSettlementData[0];
     }
 
-    private checkInvoiceValueAgainstRemainingValue(contractSettlementData: ContractSettlementData, isNewInvoice: boolean) {
-        if (isNewInvoice && this.invoice._totalNetValue >= contractSettlementData.remainingValue) {
+    private checkInvoiceValueAgainstRemainingValue(
+        contractSettlementData: ContractSettlementData,
+        isNewInvoice: boolean
+    ) {
+        if (
+            isNewInvoice &&
+            this.invoice._totalNetValue >=
+                contractSettlementData.remainingRegisteredValue
+        ) {
             const contractValue = this.contract.value as number;
             throw new Error(
                 `Nie można dodać nowej faktury, ponieważ suma wartości wcześniejszych faktur i tej faktury (${this.invoice._totalNetValue} zł) ` +
-                `przekracza lub równa się wartości umowy (${Tools.formatNumber(contractSettlementData.remainingValue)} zł). \n` +
-                `Wartość umowy: ${Tools.formatNumber(contractValue)} zł \n` +
-                `Wartość wcześniejszych faktur(wszystkie statusy): ${Tools.formatNumber(contractSettlementData.totalIssuedValue)} zł \n` +
-                `Wskazówka: sprawdź w widoku kontraktu czy nie ma zapomnianych faktur o statusie "Na Później".`
+                    `przekracza lub równa się wartości umowy (${Tools.formatNumber(
+                        contractSettlementData.remainingRegisteredValue
+                    )} zł). \n` +
+                    `Wartość umowy: ${Tools.formatNumber(
+                        contractValue
+                    )} zł \n` +
+                    `Wartość wcześniejszych faktur(wszystkie statusy): ${Tools.formatNumber(
+                        contractSettlementData.totalIssuedValue
+                    )} zł \n` +
+                    `Wskazówka: sprawdź w widoku kontraktu czy nie ma zapomnianych faktur o statusie "Na Później".`
             );
         }
     }

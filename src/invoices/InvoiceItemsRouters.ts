@@ -1,14 +1,16 @@
-import { Request, Response } from 'express'
+import { Request, Response } from 'express';
 import InvoiceItem from './InvoiceItem';
-import InvoiceItemsController from './InvoiceItemsController'
-import { app } from '../index'
+import InvoiceItemsController from './InvoiceItemsController';
+import { app } from '../index';
 import InvoiceItemValidator from './InvoiceItemValidator';
 import ContractOur from '../contracts/ContractOur';
 
 app.post('/invoiceItems', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await InvoiceItemsController.getInvoiceItemsList(orConditions);
+        const result = await InvoiceItemsController.getInvoiceItemsList(
+            orConditions
+        );
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -20,7 +22,10 @@ app.post('/invoiceItems', async (req: Request, res: Response) => {
 app.post('/invoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
-        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        const validator = new InvoiceItemValidator(
+            new ContractOur(item._parent._contract),
+            item
+        );
         await validator.checkValueAgainstContract(true);
         await item.setEditorId();
         await item.addInDb();
@@ -29,13 +34,16 @@ app.post('/invoiceItem', async (req: Request, res: Response) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
 app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
     try {
         let item = new InvoiceItem(req.body);
-        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        const validator = new InvoiceItemValidator(
+            new ContractOur(item._parent._contract),
+            item
+        );
         await validator.checkValueAgainstContract(true);
         await item.setEditorId();
         await item.addInDb();
@@ -44,13 +52,16 @@ app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
 app.put('/invoiceItem/:id', async (req: Request, res: Response) => {
     try {
-        let item = new InvoiceItem(req.body);
-        const validator = new InvoiceItemValidator(new ContractOur(item._parent._contract), item);
+        let item = new InvoiceItem(req.parsedBody);
+        const validator = new InvoiceItemValidator(
+            new ContractOur(item._parent._contract),
+            item
+        );
         await validator.checkValueAgainstContract(false);
         await item.setEditorId();
         await item.editInDb();

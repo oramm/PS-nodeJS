@@ -22,12 +22,25 @@ export type ContractSettlementSearchParams = {
 
 export default class ContractsSettlementController {
     static async getSums(orConditions: ContractSettlementSearchParams[] = []) {
+        orConditions.forEach((condition) => {
+            condition.invoiceStatuses =
+                condition.invoiceStatuses || this.externalStatuses();
+        });
+        const externalStatuses = this.externalStatuses()
+            .map((s) => `'${s}'`)
+            .join(', ');
+        const registeredStatuses = this.registeredStatuses()
+            .map((s) => `'${s}'`)
+            .join(', ');
+
         const sql = `SELECT 
             Contracts.Id, 
             Contracts.Value, 
             OurContractsData.OurId, 
-            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) AS TotalIssuedValue,
-            (SELECT Contracts.Value - IFNULL(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) AS RemainingValue
+            SUM(CASE WHEN Invoices.Status IN (${externalStatuses}) THEN InvoiceItems.Quantity * InvoiceItems.UnitPrice ELSE 0 END) AS TotalIssuedValue,
+            SUM(CASE WHEN Invoices.Status IN (${registeredStatuses}) THEN InvoiceItems.Quantity * InvoiceItems.UnitPrice ELSE 0 END) AS TotalRegisteredValue,
+            Contracts.Value - IFNULL(SUM(CASE WHEN Invoices.Status IN (${externalStatuses}) THEN InvoiceItems.Quantity * InvoiceItems.UnitPrice ELSE 0 END), 0) AS RemainingIssuedValue,
+            Contracts.Value - IFNULL(SUM(CASE WHEN Invoices.Status IN (${registeredStatuses}) THEN InvoiceItems.Quantity * InvoiceItems.UnitPrice ELSE 0 END), 0) AS RemainingRegisteredValue
           FROM Contracts
           LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id
           LEFT JOIN Invoices ON Invoices.ContractId=Contracts.Id
@@ -58,18 +71,6 @@ export default class ContractsSettlementController {
         const idCondition = searchParams.id
             ? mysql.format(`Contracts.Id = ?`, [searchParams.id])
             : '1';
-
-        const statusList = searchParams.invoiceStatuses || [
-            Setup.InvoiceStatus.DONE,
-            Setup.InvoiceStatus.SENT,
-            Setup.InvoiceStatus.PAID,
-        ];
-        console.log(statusList);
-
-        const statusCondition =
-            statusList.length > 0
-                ? mysql.format(`Invoices.Status IN (?)`, [statusList])
-                : '1'; // domyślna wartość, jeśli statusList jest pusty
 
         const projectCondition = projectOurId
             ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
@@ -116,7 +117,6 @@ export default class ContractsSettlementController {
             : 1; //'Contracts.Status!="Archiwalny"';
 
         return `${idCondition} 
-            AND ${statusCondition}
             AND ${projectCondition} 
             AND ${contractOurIdCondition} 
             AND ${isArchivedConditon}
@@ -128,7 +128,10 @@ export default class ContractsSettlementController {
             AND ${typesToIncudeCondition}`;
     }
 
-    private static processContractsResult(result: any[], initParamObject: any) {
+    private static processContractsResult(
+        result: any[],
+        initParamObject: ContractSettlementSearchParams
+    ) {
         const newResult: ContractSettlementData[] = [];
         for (const row of result) {
             const item: ContractSettlementData = {
@@ -136,11 +139,37 @@ export default class ContractsSettlementController {
                 ourId: row.OurId,
                 value: parseFloat(row.Value),
                 totalIssuedValue: parseFloat(row.TotalIssuedValue),
-                remainingValue: parseFloat(row.RemainingValue),
+                totalRegisteredValue: parseFloat(row.TotalRegisteredValue),
+                remainingIssuedValue: parseFloat(row.RemainingIssuedValue),
+                remainingRegisteredValue: parseFloat(
+                    row.RemainingRegisteredValue
+                ),
             };
             newResult.push(item);
         }
         return newResult;
+    }
+
+    /**statusy wydane na zewnątrz */
+    private static externalStatuses() {
+        return [
+            Setup.InvoiceStatus.TO_DO,
+            Setup.InvoiceStatus.DONE,
+            Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.PAID,
+        ];
+    }
+
+    /**statusy  zarejestrowane poza  */
+    private static registeredStatuses() {
+        return [
+            Setup.InvoiceStatus.FOR_LATER,
+            Setup.InvoiceStatus.TO_CORRECT,
+            Setup.InvoiceStatus.TO_DO,
+            Setup.InvoiceStatus.DONE,
+            Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.PAID,
+        ];
     }
 }
 
@@ -149,5 +178,7 @@ export type ContractSettlementData = {
     ourId: string;
     value: number;
     totalIssuedValue: number;
-    remainingValue: number;
+    totalRegisteredValue: number;
+    remainingRegisteredValue: number;
+    remainingIssuedValue: number;
 };

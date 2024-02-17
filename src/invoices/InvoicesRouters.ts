@@ -22,14 +22,14 @@ app.post('/invoices', async (req: Request, res: Response) => {
 
 app.post('/invoice', async (req: Request, res: Response) => {
     try {
-        let item = new Invoice(req.body);
+        let invoice = new Invoice(req.body);
         const validator = new InvoiceValidator(
-            new ContractOur(item._contract),
-            item
+            new ContractOur(invoice._contract),
+            invoice
         );
         await validator.checkValueWithContract(true);
-        await item.addInDb();
-        res.send(item);
+        await invoice.addInDb();
+        res.send(invoice);
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
@@ -56,6 +56,7 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
 
 app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
+        //nie ma validacji przy edycji bo jest zbędna - jest w edycji pozycji
         const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         let item = new Invoice(itemFromClient);
