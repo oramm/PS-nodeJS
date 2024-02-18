@@ -9,6 +9,8 @@ import Project from '../projects/Project';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import { CityData, ContractTypeData } from '../types/types';
+import Person from '../persons/Person';
+import { admin } from 'googleapis/build/src/apis/admin';
 
 export type ContractSearchParams = {
     id?: number;
@@ -30,6 +32,8 @@ export type ContractSearchParams = {
     status?: string | string[];
     onlyKeyData?: boolean;
     getRemainingValue?: boolean;
+    _admin?: Person;
+    _manager?: Person;
 };
 
 export default class ContractsController {
@@ -67,9 +71,11 @@ export default class ContractsController {
             Managers.Name AS ManagerName, 
             Managers.Surname AS ManagerSurname, 
             Managers.Email AS ManagerEmail, 
-            relatedContracts.Id AS RelatedId, 
-            relatedContracts.Name AS RelatedName, 
-            relatedContracts.GdFolderId AS RelatedGdFolderId, 
+            RelatedContracts.Id AS RelatedId, 
+            RelatedContracts.Name AS RelatedName, 
+            RelatedContracts.GdFolderId AS RelatedGdFolderId,
+            RelatedOurContractsData.AdminId AS RelatedAdminId,
+            RelatedOurContractsData.ManagerId AS RelatedManagerId,
             ContractTypes.Id AS MainContractTypeId, 
             ContractTypes.Name AS TypeName, 
             ContractTypes.IsOur AS TypeIsOur, 
@@ -78,7 +84,8 @@ export default class ContractsController {
           LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
           LEFT JOIN Cities ON Cities.Id=OurContractsData.CityId
           JOIN Projects ON Projects.OurId=mainContracts.ProjectOurId
-          LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
+          LEFT JOIN Contracts AS RelatedContracts ON RelatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
+          LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = mainContracts.OurIdRelated
           LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
@@ -169,11 +176,18 @@ export default class ContractsController {
             ? mysql.format(`mainContracts.TypeId = ? `, [typeId])
             : '1';
 
-        let statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+        const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
             searchParams.status,
             'mainContracts',
             'Status'
         );
+        const adminId = searchParams._admin?.id;
+        const adminIdCondition = adminId
+            ? mysql.format(
+                  `(OurContractsData.AdminId = ? OR RelatedOurContractsData.AdminId = ?)`,
+                  [adminId, adminId]
+              )
+            : '1';
 
         let typesToIncudeCondition;
         switch (searchParams.typesToInclude) {
@@ -210,6 +224,7 @@ export default class ContractsController {
             AND ${searchTextCondition}
             AND ${typeCondition}
             AND ${statusCondition}
+            AND ${adminIdCondition}
             AND ${typesToIncudeCondition} `;
         return conditions;
     }

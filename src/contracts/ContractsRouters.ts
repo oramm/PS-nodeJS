@@ -1,7 +1,5 @@
 import express, { Request, Response } from 'express';
-import ContractsController, {
-    ContractSearchParams as ContractSearchParams,
-} from './ContractsController';
+import ContractsController from './ContractsController';
 import { app, upload } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ContractOur from './ContractOur';
