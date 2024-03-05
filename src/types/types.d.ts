@@ -1,4 +1,5 @@
 // sessionTypes.ts
+import exp from 'constants';
 import e from 'express';
 import 'express-session';
 
@@ -54,36 +55,37 @@ export interface ContractData extends RepositoryDataItem {
     number: string;
     alias: string;
     comment: string;
-    startDate: string;
-    endDate: string;
-    guaranteeEndDate: string;
+    startDate?: string;
+    endDate?: string;
+    guaranteeEndDate?: string;
     _project: Project;
     status: string;
-    gdFolderId: string;
-    meetingProtocolsGdFolderId: string;
-    _type: ContractType;
-    value: number;
-    _remainingNotScheduledValue?: number;
-    _remainingNotIssuedValue?: number;
-    _folderName: string;
-    _gdFolderUrl: string;
-    _ourIdOrNumber_Alias: string;
-    _ourIdOrNumber_Name: string;
-    _lastUpdated: string;
+    gdFolderId?: string;
+    meetingProtocolsGdFolderId?: string;
+    _type: ContractTypeData;
+    value?: string | number;
+    _remainingNotScheduledValue?: string | number;
+    _remainingNotIssuedValue?: string | number;
+    _folderName?: string;
+    _gdFolderUrl?: string;
+    _ourIdOrNumber_Alias?: string;
+    _ourIdOrNumber_Name?: string;
+    _lastUpdated?: string;
     _contractors?: Entity[];
     _engineers?: Entity[];
     _employers?: Entity[];
 }
 
-export interface OurContractData extends Contract {
-    _admin: Person;
-    _manager: Person;
+export interface OurContractData extends ContractData {
+    _admin?: Person;
+    _manager?: Person;
     ourId: string;
 }
 
-export interface OtherContractData extends Contract {
-    _contractors: Entity[];
-    _ourContract: OurContract;
+export interface OtherContractData extends ContractData {
+    _contractors?: Entity[];
+    _ourContract?: OurContract;
+    materialCardsGdFolderId?: string;
 }
 
 export interface ContractsSettlementDataData {
@@ -96,28 +98,36 @@ export interface ContractsSettlementDataData {
 
 export interface MilestoneData extends RepositoryDataItem {
     name: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    gdFolderId: string;
+    number?: number;
+    description?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    gdFolderId?: string;
     _type: MilestoneType;
-    _parent: OurContract | OtherContract;
-    _FolderNumber_TypeName_Name: string;
-    _folderName: string;
-    _gdFolderUrl: string;
+    _contract?: OurContractData | OtherContractData;
+    _offer?: OurOfferData | ExternalOfferData;
+    contractId?: number;
+    offerId?: number;
+    _FolderNumber_TypeName_Name?: string;
+    _folderNumber?: string;
+    _folderName?: string;
+    _gdFolderUrl?: string;
 }
 
 export interface CaseData extends RepositoryDataItem {
-    name: string;
-    number: number;
-    description: string;
-    gdFolderId: string;
-    _parent: Milestone;
+    name?: string | null;
+    number?: number;
+    description?: string;
+    gdFolderId?: string;
+    _parent: MilestoneData;
     _type: CaseType;
-    _folderName: string;
-    _displayNumber: string;
-    _gdFolderUrl: string;
-    _typeFolderNumber_TypeName_Number_Name: string;
+    _folderName?: string;
+    _displayNumber?: string;
+    _gdFolderUrl?: string;
+    _typeFolderNumber_TypeName_Number_Name?: string;
+    _risk?: any;
+    _processesInstances?: any[];
 }
 
 export interface TaskData extends RepositoryDataItem {
@@ -131,9 +141,9 @@ export interface TaskData extends RepositoryDataItem {
 
 export interface ContractTypeData extends RepositoryDataItem {
     name: string;
-    description: string;
+    description?: string;
     isOur: boolean;
-    status: string;
+    status?: string;
 }
 
 export interface MilestoneTypeData extends RepositoryDataItem {
@@ -142,7 +152,7 @@ export interface MilestoneTypeData extends RepositoryDataItem {
     isInScrumByDefault: boolean;
     isUniquePerContract: boolean;
     _isDefault: boolean;
-    _contractType: ContractType;
+    _contractType: ContractTypeData;
     _folderNumber_MilestoneTypeName: string;
     _folderNumber: string;
 }
@@ -268,24 +278,26 @@ export interface CityData extends RepositoryDataItem {
 }
 
 export interface OfferData extends RepositoryDataItem {
-    creationDate: string;
+    creationDate?: string;
     alias: string;
-    description: string;
-    comment: string;
-    submissionDeadline: string;
+    description?: string;
+    comment?: string;
+    submissionDeadline?: string;
     _type: ContractTypeData;
     _city: CityData;
     typeId?: number;
-    form: string;
+    cityId?: number;
+    form?: string;
     isOur: boolean;
-    bidProcedure: string;
+    bidProcedure?: string;
     editorId?: number;
-    _lastUpdated: string;
+    _lastUpdated?: string;
     employerName?: string;
     _employer?: EntityData;
-    _editor: PersonData;
-    status: string;
-    gdFolderId: string;
+    _editor?: PersonData;
+    status?: string;
+    gdFolderId?: string;
+    _gdFolderUrl?: string;
 }
 
 export interface OurOfferData extends OfferData {
