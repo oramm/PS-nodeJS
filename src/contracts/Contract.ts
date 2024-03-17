@@ -11,10 +11,18 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
+import {
+    ContractData,
+    OtherContractData,
+    OurContractData,
+} from '../types/types';
 
-export default abstract class Contract extends BusinessObject {
+export default abstract class Contract
+    extends BusinessObject
+    implements ContractData
+{
     id?: number;
-    alias?: string;
+    alias: string;
     typeId: number;
     _type: ContractType;
     _tmpId?: any;
@@ -292,16 +300,19 @@ export default abstract class Contract extends BusinessObject {
         const defaultMilestones: Milestone[] = [];
 
         const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.getMilestoneTemplatesList({
-                isDefaultOnly: true,
-                contractTypeId: this.typeId,
-            });
+            await MilestoneTemplatesController.getMilestoneTemplatesList(
+                {
+                    isDefaultOnly: true,
+                    contractTypeId: this.typeId,
+                },
+                'CONTRACT'
+            );
         for (const template of defaultMilestoneTemplates) {
             const milestone = new Milestone({
                 name: template.name,
                 description: template.description,
                 _type: template._milestoneType,
-                _parent: this,
+                _contract: this as any,
                 status: 'Nie rozpoczęty',
             });
             //zasymuluj numer kamienia nieunikalnego.

@@ -4,10 +4,12 @@ import DocumentGdFile from '../documentTemplates/DocumentGdFile';
 import ToolsDocs from '../tools/ToolsDocs';
 import { OurOfferData } from '../types/types';
 import Setup from '../setup/Setup';
-import { Envi } from '../tools/EnviTypes';
+import EnviErrors from '../tools/Errors';
+import CasesController from '../contracts/milestones/cases/CasesController';
+import ToolsGd from '../tools/ToolsGd';
 
 export default class OurOfferGdFile extends DocumentGdFile {
-    protected enviDocumentData: Envi.OfferDocumentData;
+    protected enviDocumentData: OurOfferData;
     constructor(initObjectParameter: { enviDocumentData: OurOfferData }) {
         super(initObjectParameter);
         this._template = {
@@ -101,6 +103,39 @@ export default class OurOfferGdFile extends DocumentGdFile {
             throw new Error('Document must have alias');
         if (!this.enviDocumentData.creationDate)
             throw new Error('Document must have creationDate');
-        return `${this.enviDocumentData.alias} ${this.enviDocumentData._type?.name} ${this.enviDocumentData.creationDate}`;
+        return `${this.enviDocumentData._type?.name} ${this.enviDocumentData.alias} ${this.enviDocumentData.creationDate}`;
+    }
+
+    async editFileName(auth: OAuth2Client) {
+        if (!this.enviDocumentData.gdDocumentId)
+            throw new EnviErrors.NoGdIdError();
+
+        await ToolsGd.updateFile(auth, {
+            id: this.enviDocumentData.gdDocumentId,
+            name: this.makeFileName(),
+        });
+    }
+
+    async moveToMakeOfferFolder(auth: OAuth2Client) {
+        if (!this.enviDocumentData.gdDocumentId)
+            throw new EnviErrors.NoGdIdError();
+
+        const makeOfferCases = await CasesController.getCasesList(
+            [{ offerId: this.enviDocumentData.id, typeId: 100 }] // 100 - CaseTypes.id dla typu sprawy "Przygotowanie oferty"
+        );
+
+        if (makeOfferCases.length !== 1)
+            throw new Error('Wrong number of cases');
+        const makeOferCase = makeOfferCases[0];
+
+        const gDocument = await ToolsGd.getFileOrFolderById(
+            auth,
+            this.enviDocumentData.gdDocumentId
+        );
+        ToolsGd.moveFileOrFolder(
+            auth,
+            gDocument,
+            makeOferCase.gdFolderId as string
+        );
     }
 }

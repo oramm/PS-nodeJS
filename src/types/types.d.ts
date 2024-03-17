@@ -167,28 +167,56 @@ export interface CaseTypeData extends RepositoryDataItem {
     isDefault: boolean;
 }
 
-export interface LetterData extends RepositoryDataItem {
-    number: string;
-    description: string;
-    creationDate: string;
-    registrationDate: string;
-    _project: Project;
-    _entitiesMain: Entity[];
-    _entitiesCc: Entity[];
-    _editor: Person;
-    _lastUpdated: string;
-    _cases: Case[];
-    _gdFolderUrl?: string;
-    letterFilesCount: number;
-}
-
-export interface OurLetterData extends Letter {
-    isOur: true;
+export interface GenericDocumentData extends RepositoryDataItem {
+    description?: string;
+    creationDate?: string;
     _documentOpenUrl?: string;
+    gdDocumentId?: string | null;
+    _gdFolderUrl?: string;
+    gdFolderId?: string | null;
+    _lastUpdated?: string;
+    _entitiesMain?: EntityData[];
+    _entitiesCc?: EntityData[];
+    letterFilesCount?: number;
+    _editor?: PersonData;
+    _fileOrFolderChanged?: boolean;
+    editorId?: number;
+    _canUserChangeFileOrFolder?: boolean;
+    _documentEditUrl?: string;
 }
 
-export interface IncomingLetterData extends Letter {
+export interface LetterData extends GenericDocumentData {
+    number?: string | number;
+    registrationDate?: string;
+    _editor: Person;
+    _cases: CaseData[];
+}
+
+export interface OurLetterData extends LetterData {
+    _template?: DocumentTemplateData;
+    isOur: true;
+}
+
+export interface IncomingLetterData extends LetterData {
     isOur: false;
+}
+
+export interface OurLetterContractData extends OurLetterData {
+    _project: ProjectData;
+    projectId?: number;
+}
+
+export interface IncomingLetterContractData extends IncomingLetterData {
+    _project: ProjectData;
+    projectId?: number;
+}
+
+export interface OurLetterOfferData extends OurLetterData {
+    _offer: OurOfferData;
+}
+
+export interface IncomingLetterOfferData extends IncomingLetterData {
+    _offer: ExternalOfferData;
 }
 
 export interface EntityData extends RepositoryDataItem {

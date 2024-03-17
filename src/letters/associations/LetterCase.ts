@@ -1,7 +1,7 @@
-import BusinessObject from "../../BussinesObject";
-import Case from "../../contracts/milestones/cases/Case";
-import Letter from "../Letter";
-
+import BusinessObject from '../../BussinesObject';
+import Case from '../../contracts/milestones/cases/Case';
+import { CaseData } from '../../types/types';
+import Letter from '../Letter';
 
 export default class LetterCase extends BusinessObject {
     letterId: number;
@@ -10,7 +10,7 @@ export default class LetterCase extends BusinessObject {
     _letter: any;
     _case: any;
 
-    constructor(initParamObject: { _letter: any, _case: Case }) {
+    constructor(initParamObject: { _letter: any; _case: CaseData }) {
         super({ _dbTableName: 'Letters_Cases' });
         this.letterId = initParamObject._letter.id;
         this.caseId = <number>initParamObject._case.id;

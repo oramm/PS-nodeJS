@@ -1,16 +1,48 @@
+import ToolsDb from '../../../../tools/ToolsDb';
+import mysql from 'mysql2/promise';
+import MilestoneType from '../../milestoneTypes/MilestoneType';
+import CaseType from '../caseTypes/CaseType';
+import CaseTemplate from './CaseTemplate';
 
-
-import ToolsDb from "../../../../tools/ToolsDb";
-import MilestoneType from "../../milestoneTypes/MilestoneType";
-import CaseType from "../caseTypes/CaseType";
-import CaseTemplate from "./CaseTemplate";
+export type CaseTemplatesSearchParams = {
+    isDefaultOnly?: boolean;
+    isInScrumByDefaultOnly?: boolean;
+    contractTypeId?: number;
+    milestoneTypeId?: number;
+};
 
 export default class CaseTemplatesController {
-    static async getCaseTemplatesList(initParamObject: any) {
-        const isDefaultCondition = (initParamObject.isDefaultOnly) ? 'CaseTypes.IsDefault=TRUE' : '1';
-        const isInScrumDefaultCondition = (initParamObject.isInScrumByDefaultOnly) ? 'CaseTypes.IsInScrumByDefault=TRUE' : '1';
-        const contractTypeIdCondition = (initParamObject.contractTypeId) ? 'MilestoneTypes_ContractTypes.ContractTypeId=' + initParamObject.contractTypeId : '1';
-        const milestoneTypeIdCondition = (initParamObject.milestoneTypeId) ? 'MilestoneTypes.Id=' + initParamObject.milestoneTypeId : '1';
+    static async getCaseTemplatesList(
+        searchParams: CaseTemplatesSearchParams,
+        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
+    ) {
+        const isDefaultCondition = searchParams.isDefaultOnly
+            ? 'CaseTypes.IsDefault = TRUE'
+            : '1';
+
+        const isInScrumDefaultCondition = searchParams.isInScrumByDefaultOnly
+            ? 'CaseTypes.IsInScrumByDefault = TRUE'
+            : '1';
+
+        const contractTypeIdCondition =
+            searchParams.contractTypeId && milestoneParentType === 'CONTRACT'
+                ? mysql.format(
+                      'MilestoneTypes_ContractTypes.ContractTypeId = ?',
+                      [searchParams.contractTypeId]
+                  )
+                : '1';
+
+        const milestoneTypeIdCondition = searchParams.milestoneTypeId
+            ? mysql.format('MilestoneTypes.Id = ?', [
+                  searchParams.milestoneTypeId,
+              ])
+            : '1=1';
+
+        const typeIdCondition =
+            milestoneParentType === 'CONTRACT'
+                ? 'MilestoneTypes_ContractTypes.MilestoneTypeId IS NOT NULL'
+                : 'MilestoneTypes_Offers.MilestoneTypeId IS NOT NULL';
+
         const sql = `SELECT CaseTemplates.Id,
                 CaseTemplates.Name,
                 CaseTemplates.Description,
@@ -22,12 +54,17 @@ export default class CaseTemplatesController {
                 CaseTypes.IsDefault AS CaseTypeIsDefault,
                 MilestoneTypes.Id AS MilestoneTypeId,
                 MilestoneTypes.Name AS MilestoneTypeName,
-                MilestoneTypes_ContractTypes.IsDefault AS MilestoneTypeIsDefault
+                COALESCE(MilestoneTypes_ContractTypes.IsDefault, TRUE) AS MilestoneTypeIsDefault
             FROM CaseTemplates
             JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
             JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id
-            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes.Id=MilestoneTypes_ContractTypes.MilestoneTypeId
-            WHERE ${isDefaultCondition} AND ${isInScrumDefaultCondition} AND ${contractTypeIdCondition} AND ${milestoneTypeIdCondition}
+            LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes.Id=MilestoneTypes_ContractTypes.MilestoneTypeId
+            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes.Id= MilestoneTypes_Offers.MilestoneTypeId
+            WHERE   ${isDefaultCondition} 
+                AND ${isInScrumDefaultCondition} 
+                AND ${contractTypeIdCondition} 
+                AND ${milestoneTypeIdCondition}
+                AND ${typeIdCondition}
             GROUP BY CaseTemplates.Id`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -42,7 +79,7 @@ export default class CaseTemplatesController {
                 id: row.Id,
                 name: row.Name,
                 description: row.Description,
-                templateComment: "",
+                templateComment: '',
                 _caseType: new CaseType({
                     id: row.CaseTypeId,
                     name: row.CaseTypeName,
@@ -53,8 +90,8 @@ export default class CaseTemplatesController {
                     _milestoneType: new MilestoneType({
                         id: row.MilestoneTypeId,
                         name: row.MilestoneTypeName,
-                        _isDefault: row.MilestoneTypeIsDefault
-                    })
+                        _isDefault: row.MilestoneTypeIsDefault,
+                    }),
                 }),
                 caseTypeId: row.CaseTypeId,
             });

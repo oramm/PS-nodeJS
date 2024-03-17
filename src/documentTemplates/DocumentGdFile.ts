@@ -1,20 +1,19 @@
-import { docs_v1 } from 'googleapis';
 import { Envi } from '../tools/EnviTypes';
 import ToolsDocs from '../tools/ToolsDocs';
 import DocumentTemplate from './DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsGd from '../tools/ToolsGd';
 import EnviErrors from '../tools/Errors';
-import { DocumentTemplateData } from '../types/types';
+import { DocumentTemplateData, GenericDocumentData } from '../types/types';
 
 export default abstract class DocumentGdFile {
     public _template?: DocumentTemplateData;
-    protected enviDocumentData: Envi.GenericDocumentData;
+    protected enviDocumentData: GenericDocumentData;
     description?: string;
 
     constructor(initObjectParamenter: {
-        _template?: DocumentTemplate;
-        enviDocumentData: Envi.GenericDocumentData;
+        _template?: DocumentTemplateData;
+        enviDocumentData: GenericDocumentData;
     }) {
         this._template = initObjectParamenter._template;
         this.enviDocumentData = initObjectParamenter.enviDocumentData;

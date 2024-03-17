@@ -1,4 +1,4 @@
-import CasesController from './CasesController'
+import CasesController from './CasesController';
 import { app } from '../../../index';
 import Case from './Case';
 import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
@@ -20,15 +20,20 @@ app.post('/cases', async (req: Request, res: Response) => {
 app.post('/case', async (req: Request, res: Response) => {
     try {
         let caseItem = new Case({ ...req.body, _parent: req.body._milestone });
-        await ToolsGapi.gapiReguestHandler(req, res, caseItem.addNewController, undefined, caseItem);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            caseItem.addNewController,
+            undefined,
+            caseItem
+        );
 
         res.send(caseItem);
     } catch (error) {
-
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
 app.put('/case/:id', async (req: Request, res: Response) => {
@@ -38,9 +43,21 @@ app.put('/case/:id', async (req: Request, res: Response) => {
         let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)
             item.setAsUniquePerMilestone();
-        await ToolsGapi.gapiReguestHandler(req, res, item.editFolder, undefined, item);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.editFolder,
+            undefined,
+            item
+        );
         await item.editInDb();
-        await ToolsGapi.gapiReguestHandler(req, res, item.editInScrum, undefined, item);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.editInScrum,
+            undefined,
+            item
+        );
 
         res.send(item);
     } catch (error) {
@@ -56,8 +73,20 @@ app.delete('/case/:id', async (req: Request, res: Response) => {
         console.log('delete');
         await item.deleteFromDb();
         await Promise.all([
-            ToolsGapi.gapiReguestHandler(req, res, item.deleteFolder, undefined, item),
-            ToolsGapi.gapiReguestHandler(req, res, item.deleteFromScrumSheet, undefined, item)
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.deleteFolder,
+                undefined,
+                item
+            ),
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.deleteFromScrumSheet,
+                undefined,
+                item
+            ),
         ]);
         res.send(item);
     } catch (error) {

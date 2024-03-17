@@ -1,10 +1,15 @@
-import MilestoneTemplatesController from './MilestoneTemplatesController'
+import MilestoneTemplatesController from './MilestoneTemplatesController';
 import { app } from '../../../index';
 import MilestoneTemplate from './MilestoneTemplate';
+import { Request, Response } from 'express';
 
-app.get('/milestoneTemplates', async (req: any, res: any) => {
+app.post('/milestoneTemplates', async (req: Request, res: Response) => {
     try {
-        const result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.query);
+        const result =
+            await MilestoneTemplatesController.getMilestoneTemplatesList(
+                req.parsedBody,
+                req.parsedBody.templateType
+            );
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -13,18 +18,7 @@ app.get('/milestoneTemplates', async (req: any, res: any) => {
     }
 });
 
-app.get('/milestoneTemplate/:id', async (req: any, res: any) => {
-    try {
-        const result = await MilestoneTemplatesController.getMilestoneTemplatesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
-
-app.post('/milestoneTemplate', async (req: any, res: any) => {
+app.post('/milestoneTemplate', async (req: Request, res: Response) => {
     try {
         let item = new MilestoneTemplate(req.body);
         await item.setEditorId();
@@ -34,10 +28,10 @@ app.post('/milestoneTemplate', async (req: any, res: any) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
-app.put('/milestoneTemplate/:id', async (req: any, res: any) => {
+app.put('/milestoneTemplate/:id', async (req: Request, res: Response) => {
     try {
         let item = new MilestoneTemplate(req.body);
         await item.setEditorId();
@@ -50,7 +44,7 @@ app.put('/milestoneTemplate/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/milestoneTemplate/:id', async (req: any, res: any) => {
+app.delete('/milestoneTemplate/:id', async (req: Request, res: Response) => {
     try {
         let item = new MilestoneTemplate(req.body);
         await item.deleteFromDb();

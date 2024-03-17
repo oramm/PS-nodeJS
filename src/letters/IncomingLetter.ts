@@ -1,15 +1,16 @@
 import Letter from './Letter';
 import { auth, OAuth2Client } from 'google-auth-library';
-import { Envi } from '../tools/EnviTypes';
-
 import ToolsGd from '../tools/ToolsGd';
-import Tools from '../tools/Tools';
-import { drive_v3 } from 'googleapis';
-import IncomingLetterGdController from './IncomingLetterGdController';
+import IncomingLetterGdController from './gdControlers/IncomingLetterGdController';
 import EnviErrors from '../tools/Errors';
+import { IncomingLetterData } from '../types/types';
 
-export default class IncomingLetter extends Letter {
-    constructor(initParamObject: any) {
+export default abstract class IncomingLetter
+    extends Letter
+    implements IncomingLetterData
+{
+    isOur: false = false;
+    constructor(initParamObject: IncomingLetterData) {
         super(initParamObject);
         this.number = initParamObject.number;
     }
@@ -46,9 +47,7 @@ export default class IncomingLetter extends Letter {
         auth: OAuth2Client,
         file: Express.Multer.File
     ) {
-        if (!this._project.lettersGdFolderId)
-            throw new EnviErrors.NoGdIdError(`: lettersGdFolderId`);
-        const parentGdFolderId = this._project.lettersGdFolderId;
+        const parentGdFolderId = this.makeParentFolderGdId();
         const letterFile = await ToolsGd.uploadFileMulter(
             auth,
             file,
@@ -71,7 +70,7 @@ export default class IncomingLetter extends Letter {
     }
 
     /**zmienia tylko nazwę folderu */
-    private async editLetterGdFolder(auth: OAuth2Client) {
+    protected async editLetterGdFolder(auth: OAuth2Client) {
         const letterGdFolder = await ToolsGd.getFileOrFolderById(
             auth,
             <string>this.gdFolderId
@@ -168,7 +167,7 @@ export default class IncomingLetter extends Letter {
             );
         //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
 
-        await IncomingLetterGdController.moveLetterFIletoFolder(
+        await IncomingLetterGdController.moveLetterFiletoFolder(
             letterGdDocumentId,
             auth,
             newLetterGdFolder.id
@@ -196,4 +195,6 @@ export default class IncomingLetter extends Letter {
         this._documentOpenUrl = undefined;
         this.letterFilesCount = filesCount;
     }
+
+    abstract makeParentFolderGdId(): string;
 }

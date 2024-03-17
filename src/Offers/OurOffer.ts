@@ -3,10 +3,9 @@ import { OAuth2Client } from 'google-auth-library';
 import { OurOfferData } from '../types/types';
 import OurOfferGdFile from './OurOfferGdFIle';
 import EnviErrors from '../tools/Errors';
-import { Envi } from '../tools/EnviTypes';
 import ToolsGd from '../tools/ToolsGd';
 
-export default class OurOffer extends Offer implements Envi.OfferDocumentData {
+export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
     _documentOpenUrl?: string;
     resourcesGdFolderId?: string;
@@ -19,6 +18,14 @@ export default class OurOffer extends Offer implements Envi.OfferDocumentData {
             );
             this.gdDocumentId = initParamObject.gdDocumentId;
         }
+    }
+
+    async addNewController(auth: OAuth2Client) {
+        await super.addNewController(auth);
+        const ourOfferGdFile = new OurOfferGdFile({
+            enviDocumentData: { ...this },
+        });
+        await ourOfferGdFile.moveToMakeOfferFolder(auth);
     }
 
     async createGdElements(auth: OAuth2Client) {
@@ -52,9 +59,11 @@ export default class OurOffer extends Offer implements Envi.OfferDocumentData {
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...this },
         });
-        const [letterGdFolder, _] = await Promise.all([
+
+        const [letterGdFolder, _, _1] = await Promise.all([
             super.editGdElements(auth),
             ourOfferGdFile.edit(auth),
+            ourOfferGdFile.editFileName(auth),
         ]);
         return letterGdFolder;
     }

@@ -3,12 +3,15 @@ import { ExternalOfferData } from '../types/types';
 import Offer from './Offer';
 import { OAuth2Client } from 'google-auth-library';
 
-export default class ExternalOffer extends Offer {
+export default class ExternalOffer extends Offer implements ExternalOfferData {
     constructor(initParamObject: ExternalOfferData) {
         super(initParamObject);
     }
 
     async createGdElements(auth: OAuth2Client) {
+        if (!this.gdFolderId) {
+            throw new Error('Brak folderu oferty');
+        }
         await super.createGdElements(auth);
         try {
             console.log('Tworzenie podfolderów');

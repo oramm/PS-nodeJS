@@ -6,6 +6,7 @@ import ContractOur from '../ContractOur';
 import { Security } from './Security';
 import Person from '../../persons/Person';
 import Case from '../milestones/cases/Case';
+import { MilestoneData } from '../../types/types';
 
 export type SecuritiesSearchParams = {
     id?: number;
@@ -116,10 +117,10 @@ export default class SecuritiesController {
         const conditions = words.map((word) =>
             mysql.format(
                 `(Securities.Description Like ?
-        OR Contracts.Name LIKE ?
-        OR Contracts.Number LIKE ?
-        OR Contracts.Alias LIKE ?
-        OR OurContractsData.OurId LIKE ?)`,
+                    OR Contracts.Name LIKE ?
+                    OR Contracts.Number LIKE ?
+                    OR Contracts.Alias LIKE ?
+                    OR OurContractsData.OurId LIKE ?)`,
                 [
                     `%${word}%`,
                     `%${word}%`,
@@ -253,6 +254,7 @@ export default class SecuritiesController {
                         isUniquePerMilestone: row.isUniquePerMilestone,
                         milestoneTypeId: row.MilestoneTypeId,
                     },
+                    _parent: {} as MilestoneData,
                 }),
                 _contract: new ContractOur({
                     id: row.ContractId,

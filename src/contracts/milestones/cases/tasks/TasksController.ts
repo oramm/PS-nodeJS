@@ -1,32 +1,46 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from "../../../../tools/ToolsDb";
-import Case from "../Case";
+import ToolsDb from '../../../../tools/ToolsDb';
+import Case from '../Case';
 
-import Task from "./Task";
+import Task from './Task';
 import Milestone from '../../Milestone';
 import Person from '../../../../persons/Person';
 import Project from '../../../../projects/Project';
-import Contract from '../../../Contract';
+
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
+import {
+    OfferData,
+    OtherContractData,
+    OurContractData,
+} from '../../../../types/types';
 
 type TaskSearchParams = {
-    _project?: Project,
-    _contract?: Contract,
-    contractId?: number,
-    _milestone?: Milestone,
-    milestoneId?: number,
-    _case?: Case,
-    contractStatusCondition?: string,
-    _owner?: Person,
-    deadlineFrom?: string,
-    deadlineTo?: string,
-    searchText?: string,
-    status?: string
-}
+    _project?: Project;
+    _contract?: OurContractData | OtherContractData;
+    _offer?: OfferData;
+    contractId?: number;
+    _milestone?: Milestone;
+    milestoneId?: number;
+    _case?: Case;
+    contractStatusCondition?: string;
+    _owner?: Person;
+    deadlineFrom?: string;
+    deadlineTo?: string;
+    searchText?: string;
+    status?: string;
+};
 
 export default class TasksController {
-    static async getTasksList(orConditions: TaskSearchParams[] = []) {
+    static async getTasksList(
+        orConditions: TaskSearchParams[] = [],
+        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
+    ) {
+        const milestoneParentTypeCondition =
+            milestoneParentType === 'CONTRACT'
+                ? 'Milestones.ContractId IS NOT NULL'
+                : 'Milestones.OfferId IS NOT NULL';
+
         const sql = `SELECT  
                 Tasks.Id,
                 Tasks.Name AS TaskName,
@@ -48,10 +62,11 @@ export default class TasksController {
                 Milestones.Id AS MilestoneId,
                 Milestones.Name AS MilestoneName,
                 Milestones.ContractId,
+                Milestones.OfferId,
                 Milestones.GdFolderId AS MilestoneGdFolderId,
                 MilestoneTypes.Id AS MilestoneTypeId,
                 MilestoneTypes.Name AS MilestoneTypeName,
-                MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
+                COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
                 OurContractsData.OurId AS ContractOurId,
                 Contracts.Id AS ContractId,
                 Contracts.Alias AS ContractAlias,
@@ -80,15 +95,23 @@ export default class TasksController {
             JOIN Milestones ON Cases.MilestoneId = Milestones.Id
             JOIN MilestoneTypes ON Milestones.TypeId = MilestoneTypes.Id
             LEFT JOIN CaseTypes ON Cases.typeId = CaseTypes.Id
-            JOIN Contracts ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
             LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id = (SELECT OurContractsData.Id FROM OurContractsData WHERE OurId = Contracts.OurIdRelated)
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
-            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
+            LEFT JOIN MilestoneTypes_ContractTypes 
+                ON  MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId 
+                AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
+            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = Milestones.TypeId
             LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
+                AND ${milestoneParentTypeCondition}
             ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -96,13 +119,16 @@ export default class TasksController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
 
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Tasks.Name LIKE ?
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Tasks.Name LIKE ?
         OR Tasks.Description LIKE ?)`,
-                [`%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
@@ -118,16 +144,20 @@ export default class TasksController {
         const caseCondition = caseId
             ? mysql.format(`Cases.Id = ? `, [caseId])
             : '1';
-        const contractId = searchParams.contractId || searchParams._contract?.id;
+        const contractId =
+            searchParams.contractId || searchParams._contract?.id;
         const contractCondition = contractId
             ? mysql.format('Contracts.Id = ?', [contractId])
             : '1';
-        const milestoneId = searchParams._milestone?.id || searchParams.milestoneId;
+        const milestoneId =
+            searchParams._milestone?.id || searchParams.milestoneId;
         const milestoneCondition = milestoneId
             ? mysql.format('Milestones.Id = ?', [milestoneId])
             : '1';
         const contractStatusCondition = searchParams.contractStatusCondition
-            ? mysql.format('Contracts.Status REGEXP ?', [searchParams.contractStatusCondition])
+            ? mysql.format('Contracts.Status REGEXP ?', [
+                  searchParams.contractStatusCondition,
+              ])
             : '1';
         const ownerCondition = searchParams._owner
             ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
@@ -142,7 +172,9 @@ export default class TasksController {
             ? mysql.format(`Tasks.Status = ? `, [searchParams.status])
             : '1';
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         const conditions = `${contractCondition} 
             AND ${milestoneCondition}
@@ -153,7 +185,7 @@ export default class TasksController {
             AND ${deadlineFromCondition}
             AND ${deadlineToCondition}
             AND ${statusCondition}
-            AND ${searchTextCondition} `
+            AND ${searchTextCondition} `;
 
         return conditions;
     }
@@ -169,10 +201,10 @@ export default class TasksController {
                 deadline: row.TaskDeadline,
                 status: row.TaskStatus,
                 _owner: {
-                    id: (row.OwnerId) ? row.OwnerId : undefined,
-                    name: (row.OwnerName) ? row.OwnerName : '',
-                    surname: (row.OwnerSurname) ? row.OwnerSurname : '',
-                    email: (row.OwnerEmail) ? row.OwnerEmail : ''
+                    id: row.OwnerId ? row.OwnerId : undefined,
+                    name: row.OwnerName ? row.OwnerName : '',
+                    surname: row.OwnerSurname ? row.OwnerSurname : '',
+                    email: row.OwnerEmail ? row.OwnerEmail : '',
                 },
                 _parent: new Case({
                     id: row.CaseId,
@@ -196,40 +228,64 @@ export default class TasksController {
                             name: row.MilestoneTypeName,
                             _folderNumber: row.MilestoneTypeFolderNumber,
                         },
-                        _parent: { //Contract
+                        _contract: {
+                            //Contract
                             id: row.ContractId,
                             ourId: row.ContractOurId,
                             number: row.ContractNumber,
                             name: ToolsDb.sqlToString(row.ContractName),
                             comment: ToolsDb.sqlToString(row.ContractComment),
-                            startDate: ToolsDate.dateJsToSql(row.ContractStartDate),
+                            startDate: ToolsDate.dateJsToSql(
+                                row.ContractStartDate
+                            ),
                             endDate: ToolsDate.dateJsToSql(row.ContractEndDate),
                             value: row.ContractValue,
                             status: row.ContractStatus,
                             gdFolderId: row.ContractGdFolderId,
-                            _gdFolderUrl: ToolsGd.createGdFolderUrl(row.ContractGdFolderId),
+                            _gdFolderUrl: ToolsGd.createGdFolderUrl(
+                                row.ContractGdFolderId
+                            ),
                             alias: row.ContractAlias,
                             _type: {
-                                name: row.ContractTypeName
+                                name: row.ContractTypeName,
+                                isOur: row.ContractOurId ? true : false,
                             },
-                            _manager: row.ContractManagerEmail ? {
-                                id: row.ContractManagerId,
-                                name: row.ContractManagerName,
-                                surname: row.ContractManagerSurname,
-                                email: row.ContractManagerEmail,
-                            }
+                            _manager: row.ContractManagerEmail
+                                ? {
+                                      id: row.ContractManagerId,
+                                      name: row.ContractManagerName,
+                                      surname: row.ContractManagerSurname,
+                                      email: row.ContractManagerEmail,
+                                  }
                                 : undefined,
-                            _admin: row.ContractAdminEmail ? {
-                                id: row.ContractAdminId,
-                                name: row.ContractAdminName,
-                                surname: row.ContractAdminSurname,
-                                email: row.ContractAdminEmail,
-                            }
+                            _admin: row.ContractAdminEmail
+                                ? {
+                                      id: row.ContractAdminId,
+                                      name: row.ContractAdminName,
+                                      surname: row.ContractAdminSurname,
+                                      email: row.ContractAdminEmail,
+                                  }
                                 : undefined,
-
+                            _project: {},
+                        },
+                        _offer: {
+                            id: row.OfferId,
+                            status: '',
+                            alias: '',
+                            _type: { name: '', isOur: false },
+                            _city: { code: '', name: '' },
+                            bidProcedure: '',
+                            _editor: {
+                                id: 0,
+                                name: '',
+                                surname: '',
+                                email: '',
+                            },
+                            isOur: false,
+                            form: '',
                         },
                     }),
-                })
+                }),
             });
             newResult.push(item);
         }

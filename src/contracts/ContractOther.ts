@@ -9,11 +9,17 @@ import ToolsSheets from '../tools/ToolsSheets';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
 import { drive_v3 } from 'googleapis';
+import { OtherContractData } from '../types/types';
+import Entity from '../entities/Entity';
 
-export default class ContractOther extends Contract {
+export default class ContractOther
+    extends Contract
+    implements OtherContractData
+{
     _ourContract?: ContractOur;
     ourIdRelated?: string;
-    materialCardsGdFolderId: string | undefined;
+    materialCardsGdFolderId?: string;
+    _contractors?: Entity[] | undefined;
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super(initParamObject);

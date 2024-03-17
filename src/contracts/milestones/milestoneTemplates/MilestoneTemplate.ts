@@ -9,11 +9,11 @@ export default class MilestoneTemplate extends BusinessObject {
     startDateRule?: any;
     endDateRule?: any;
     lastUpdated?: any;
+    templateType?: string;
     _contractTypeId: number;
     _folderNumber: string;
     _milestoneType: MilestoneType;
     milestoneTypeId: number;
-
 
     constructor(initParamObject: any) {
         super({ _dbTableName: 'MilestoneTemplates' });
@@ -24,13 +24,13 @@ export default class MilestoneTemplate extends BusinessObject {
             this.startDateRule = initParamObject.startDateRule;
         if (initParamObject.endDateRule)
             this.endDateRule = initParamObject.endDateRule;
-        initParamObject.endDateRule
+        initParamObject.endDateRule;
+        this.templateType = initParamObject.templateType;
         this.lastUpdated = initParamObject.lastUpdated;
         this._contractTypeId = initParamObject._contractTypeId;
         this._folderNumber = initParamObject._folderNumber;
 
         this._milestoneType = initParamObject._milestoneType;
-        this.milestoneTypeId = initParamObject._milestoneType.id
+        this.milestoneTypeId = initParamObject._milestoneType.id;
     }
 }
-

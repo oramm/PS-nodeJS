@@ -1,47 +1,57 @@
 import BusinessObject from '../BussinesObject';
-import Contract from '../contracts/Contract';
-import Entity from '../entities/Entity';
 import Project from '../projects/Project';
-import { Envi } from '../tools/EnviTypes';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
 import mysql from 'mysql2/promise';
 import LetterEntity from './associations/LetterEntity';
 import LetterCase from './associations/LetterCase';
-import Case from '../contracts/milestones/cases/Case';
 import { OAuth2Client } from 'google-auth-library';
+import {
+    CaseData,
+    EntityData,
+    LetterData,
+    PersonData,
+    ProjectData,
+} from '../types/types';
 
 export default abstract class Letter
     extends BusinessObject
-    implements Envi.LetterDocumentData
+    implements LetterData
 {
-    public id?: number;
-    public number?: string | number;
-    public description?: string;
-    public creationDate?: string;
-    public registrationDate?: string;
-    public _documentOpenUrl?: string;
-    public gdDocumentId?: string;
+    id?: number;
+    number?: string | number;
+    description?: string;
+    creationDate?: string;
+    registrationDate?: string;
+    _documentOpenUrl?: string;
+    gdDocumentId?: string;
     _gdFolderUrl?: string;
     gdFolderId?: string;
     _lastUpdated?: string;
-    _contract: Contract;
-    _project: Project;
-    projectId?: any;
-    _cases: Case[];
-    _entitiesMain: Entity[];
-    _entitiesCc: Entity[];
+    _cases: CaseData[];
+    _entitiesMain: EntityData[];
+    _entitiesCc: EntityData[];
     letterFilesCount: number = 0;
-    _editor?: any;
+    _editor: PersonData;
     _fileOrFolderChanged?: boolean;
 
     editorId?: number;
     _canUserChangeFileOrFolder?: boolean;
     _documentEditUrl?: string;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: LetterData) {
         super({ _dbTableName: 'Letters' });
+        if (!initParamObject.creationDate) {
+            throw new Error('creationDate is required');
+        }
+        if (!initParamObject.registrationDate) {
+            throw new Error('registrationDate is required');
+        }
+        if (!initParamObject._cases) {
+            throw new Error('_cases is required');
+        }
+
         this.id = initParamObject.id;
         this.description = initParamObject.description;
         this.number = initParamObject.number;
@@ -49,10 +59,12 @@ export default abstract class Letter
         this.registrationDate = ToolsDate.dateJsToSql(
             initParamObject.registrationDate
         );
-        this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
-            initParamObject.gdDocumentId
-        );
-        this.gdDocumentId = initParamObject.gdDocumentId;
+        if (initParamObject.gdDocumentId) {
+            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+                initParamObject.gdDocumentId
+            );
+            this.gdDocumentId = initParamObject.gdDocumentId;
+        }
         if (initParamObject.gdFolderId) {
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(
                 initParamObject.gdFolderId
@@ -60,9 +72,6 @@ export default abstract class Letter
             this.gdFolderId = initParamObject.gdFolderId;
         }
         this._lastUpdated = initParamObject._lastUpdated;
-        this._contract = initParamObject._contract;
-        this._project = initParamObject._project;
-        this.projectId = initParamObject._project.id;
         this._cases = initParamObject._cases;
         this._entitiesMain = initParamObject._entitiesMain
             ? initParamObject._entitiesMain
@@ -70,7 +79,8 @@ export default abstract class Letter
         this._entitiesCc = initParamObject._entitiesCc
             ? initParamObject._entitiesCc
             : [];
-        this.letterFilesCount = initParamObject.letterFilesCount;
+        if (initParamObject.letterFilesCount)
+            this.letterFilesCount = initParamObject.letterFilesCount;
 
         this._editor = initParamObject._editor;
         this._canUserChangeFileOrFolder;

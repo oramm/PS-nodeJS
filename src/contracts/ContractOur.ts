@@ -8,8 +8,9 @@ import ToolsSheets from '../tools/ToolsSheets';
 import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import City from '../Admin/Cities/City';
+import { OurContractData } from '../types/types';
 
-export default class ContractOur extends Contract {
+export default class ContractOur extends Contract implements OurContractData {
     ourId: string;
     managerId?: number;
     adminId?: number;

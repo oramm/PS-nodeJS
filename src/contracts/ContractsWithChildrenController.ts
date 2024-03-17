@@ -1,8 +1,8 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from "../tools/ToolsDb";
-import Case from "./milestones/cases/Case";
+import ToolsDb from '../tools/ToolsDb';
+import Case from './milestones/cases/Case';
 
-import Task from "./milestones/cases/tasks/Task";
+import Task from './milestones/cases/tasks/Task';
 import Milestone from './milestones/Milestone';
 import Person from '../persons/Person';
 import Project from '../projects/Project';
@@ -11,27 +11,31 @@ import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
-import { ContractsWithChildren as ContractWithChildren, ContractsWithChildren } from './ContractTypes';
+import {
+    ContractsWithChildren as ContractWithChildren,
+    ContractsWithChildren,
+} from './ContractTypes';
 import Setup from '../setup/Setup';
 
 export type ContractsWithChildrenSearchParams = {
-    _project?: Project,
-    _contract?: Contract,
-    contractId?: number,
-    _milestone?: Milestone,
-    milestoneId?: number,
-    _case?: Case,
-    contractStatusCondition?: string,
-    _owner?: Person,
-    deadlineFrom?: string,
-    deadlineTo?: string,
-    searchText?: string,
-    statusType?: 'active' | 'archived' | 'all',
-}
+    _project?: Project;
+    _contract?: Contract;
+    contractId?: number;
+    _milestone?: Milestone;
+    milestoneId?: number;
+    _case?: Case;
+    contractStatusCondition?: string;
+    _owner?: Person;
+    deadlineFrom?: string;
+    deadlineTo?: string;
+    searchText?: string;
+    statusType?: 'active' | 'archived' | 'all';
+};
 
 export default class ContractsWithChildrenController {
-    static async getContractsList(orConditions: ContractsWithChildrenSearchParams[] = []) {
-
+    static async getContractsList(
+        orConditions: ContractsWithChildrenSearchParams[] = []
+    ) {
         const sql = `SELECT  Tasks.Id,
                 Contracts.Id AS ContractId,
                 Contracts.Alias AS ContractAlias,
@@ -91,9 +95,14 @@ export default class ContractsWithChildrenController {
             LEFT JOIN Tasks ON Tasks.CaseId=Cases.Id
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
-            JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+            JOIN MilestoneTypes_ContractTypes 
+                ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
+                AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId 
             LEFT JOIN Persons AS TasksOwners ON TasksOwners.Id = Tasks.OwnerId
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
             ORDER BY Contracts.Id, MilestoneTypeFolderNumber, CaseTypeFolderNumber, Cases.Id`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractsResult(result);
@@ -109,11 +118,13 @@ export default class ContractsWithChildrenController {
         const caseCondition = caseId
             ? mysql.format(`Cases.Id = ?`, [caseId])
             : '1';
-        const contractId = searchParams.contractId || searchParams._contract?.id;
+        const contractId =
+            searchParams.contractId || searchParams._contract?.id;
         const contractCondition = contractId
             ? mysql.format('Contracts.Id = ?', [contractId])
             : '1';
-        const milestoneId = searchParams._milestone?.id || searchParams.milestoneId;
+        const milestoneId =
+            searchParams._milestone?.id || searchParams.milestoneId;
         const milestoneCondition = milestoneId
             ? mysql.format('Milestones.Id = ?', [milestoneId])
             : '1';
@@ -130,7 +141,9 @@ export default class ContractsWithChildrenController {
             default:
                 statusTypeCondition = '1';
         }
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         return `${contractCondition} 
             AND ${milestoneCondition}
@@ -141,13 +154,16 @@ export default class ContractsWithChildrenController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
 
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Tasks.Name LIKE ? 
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Tasks.Name LIKE ? 
                           OR Tasks.Description LIKE ?)`,
-                [`%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
@@ -171,27 +187,35 @@ export default class ContractsWithChildrenController {
                     value: row.ContractValue,
                     status: row.ContractStatus,
                     gdFolderId: row.ContractGdFolderId,
-                    _gdFolderUrl: ToolsGd.createGdFolderUrl(row.ContractGdFolderId),
+                    _gdFolderUrl: ToolsGd.createGdFolderUrl(
+                        row.ContractGdFolderId
+                    ),
                     alias: row.ContractAlias,
                     _type: {
-                        name: row.ContractTypeName
+                        name: row.ContractTypeName,
                     },
-                    _manager: row.ContractManagerEmail ? {
-                        id: row.ContractManagerId,
-                        name: row.ContractManagerName,
-                        surname: row.ContractManagerSurname,
-                        email: row.ContractManagerEmail,
-                    } : undefined,
-                    _admin: row.ContractAdminEmail ? {
-                        id: row.ContractAdminId,
-                        name: row.ContractAdminName,
-                        surname: row.ContractAdminSurname,
-                        email: row.ContractAdminEmail,
-                    } : undefined,
+                    _manager: row.ContractManagerEmail
+                        ? {
+                              id: row.ContractManagerId,
+                              name: row.ContractManagerName,
+                              surname: row.ContractManagerSurname,
+                              email: row.ContractManagerEmail,
+                          }
+                        : undefined,
+                    _admin: row.ContractAdminEmail
+                        ? {
+                              id: row.ContractAdminId,
+                              name: row.ContractAdminName,
+                              surname: row.ContractAdminSurname,
+                              email: row.ContractAdminEmail,
+                          }
+                        : undefined,
                     _relatedContracts: [], // Przechowuje związane kontrakty
                 };
 
-                contract = (row.ContractOurId) ? new ContractOur(initParams) : new ContractOther(initParams);;
+                contract = row.ContractOurId
+                    ? new ContractOur(initParams)
+                    : new ContractOther(initParams);
                 contracts[row.ContractId] = contract;
             }
 
@@ -204,7 +228,7 @@ export default class ContractsWithChildrenController {
                     name: row.MilestoneTypeName,
                     _folderNumber: row.MilestoneTypeFolderNumber,
                 },
-                _parent: contract,
+                _contract: contract,
             });
 
             const caseItem = new Case({
@@ -231,41 +255,50 @@ export default class ContractsWithChildrenController {
                 deadline: row.TaskDeadline,
                 status: row.TaskStatus,
                 _owner: {
-                    id: (row.OwnerId) ? row.OwnerId : undefined,
-                    name: (row.OwnerName) ? row.OwnerName : '',
-                    surname: (row.OwnerSurname) ? row.OwnerSurname : '',
-                    email: (row.OwnerEmail) ? row.OwnerEmail : ''
+                    id: row.OwnerId ? row.OwnerId : undefined,
+                    name: row.OwnerName ? row.OwnerName : '',
+                    surname: row.OwnerSurname ? row.OwnerSurname : '',
+                    email: row.OwnerEmail ? row.OwnerEmail : '',
                 },
                 _parent: caseItem,
             });
 
             // Znajdujemy kontrakt w contractsWitchChildren lub tworzymy nowy, jeśli go nie ma
-            let contractWithChildren = contractsWithChildren.find(c => c.contract.id === contract.id);
+            let contractWithChildren = contractsWithChildren.find(
+                (c) => c.contract.id === contract.id
+            );
             if (!contractWithChildren) {
                 contractWithChildren = {
                     id: contract.id as number,
                     contract: contract,
-                    milestonesWithCases: []
+                    milestonesWithCases: [],
                 };
                 contractsWithChildren.push(contractWithChildren);
             }
 
             // Znajdujemy kamień milowy w kontrakcie lub tworzymy nowy, jeśli go nie ma
-            let milestoneWithCases = contractWithChildren.milestonesWithCases.find(m => m.milestone.id === milestone.id);
+            let milestoneWithCases =
+                contractWithChildren.milestonesWithCases.find(
+                    (m) => m.milestone.id === milestone.id
+                );
             if (!milestoneWithCases) {
                 milestoneWithCases = {
                     milestone: milestone,
-                    casesWithTasks: []
+                    casesWithTasks: [],
                 };
-                contractWithChildren.milestonesWithCases.push(milestoneWithCases);
+                contractWithChildren.milestonesWithCases.push(
+                    milestoneWithCases
+                );
             }
 
             // Znajdujemy sprawę w kamieniu milowym lub tworzymy nową, jeśli jej nie ma
-            let caseWithTasks = milestoneWithCases.casesWithTasks.find(c => c.caseItem.id === caseItem.id);
+            let caseWithTasks = milestoneWithCases.casesWithTasks.find(
+                (c) => c.caseItem.id === caseItem.id
+            );
             if (!caseWithTasks) {
                 caseWithTasks = {
                     caseItem: caseItem,
-                    tasks: []
+                    tasks: [],
                 };
                 milestoneWithCases.casesWithTasks.push(caseWithTasks);
             }

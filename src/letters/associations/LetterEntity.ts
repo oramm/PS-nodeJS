@@ -1,19 +1,23 @@
-import BusinessObject from "../../BussinesObject";
-import Entity from "../../entities/Entity";
-import Letter from "../Letter";
-
+import BusinessObject from '../../BussinesObject';
+import { EntityData, LetterData } from '../../types/types';
 
 export default class LetterEntity extends BusinessObject {
     letterId: number;
-    _letter: Letter;
+    _letter: LetterData;
     entityId: number;
-    _entity: Entity;
+    _entity: EntityData;
     letterRole: 'CC' | 'MAIN';
     id: string;
 
-
-    constructor(initParamObject: { _letter: any, _entity: Entity, letterRole: 'CC' | 'MAIN' }) {
+    constructor(initParamObject: {
+        _letter: LetterData;
+        _entity: EntityData;
+        letterRole: 'CC' | 'MAIN';
+    }) {
         super({ _dbTableName: 'Letters_Entities' });
+        if (!initParamObject._letter.id)
+            throw new Error('Letter id is required');
+
         this.letterId = initParamObject._letter.id;
         this._letter = initParamObject._letter;
 

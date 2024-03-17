@@ -1,54 +1,56 @@
-
-
-import ToolsDb from "../../../../tools/ToolsDb";
-import Risk from "./Risk";
+import ToolsDb from '../../../../tools/ToolsDb';
+import Risk from './Risk';
 
 export default class RisksController {
     static async getRisksList(initParamObject: any) {
-        const projectCondition = (initParamObject.projectId) ? 'Risks.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractCondition = (initParamObject.contractId) ? 'Contracts.Id=' + initParamObject.contractId : '1';
+        const projectCondition = initParamObject.projectId
+            ? `Risks.ProjectOurId="${initParamObject.projectId}"`
+            : '1';
 
-        const sql = 'SELECT Risks.Id, \n \t' +
-            'Risks.Name, \n \t' +
-            'Risks.Cause, \n \t' +
-            'Risks.ScheduleImpactDescription, \n \t' +
-            'Risks.CostImpactDescription, \n \t' +
-            'Risks.Probability, \n \t' +
-            'Risks.OverallImpact, \n \t' +
-            'OverallImpact*Probability AS Rate, \n \t' +
-            'Risks.AdditionalActionsDescription, \n \t' +
-            'Risks.CaseId, \n \t' +
-            'Risks.ProjectOurId, \n \t' +
-            'Risks.LastUpdated, \n \t' +
-            'Cases.Id AS CaseId, \n \t' +
-            'Cases.Name AS CaseName, \n \t' +
-            'Cases.GdFolderId AS CaseGdFolderId, \n \t' +
-            'CaseTypes.name AS CaseTypeName, \n \t' +
-            'CaseTypes.FolderNumber AS CaseTypeFolderNumber, \n \t' +
-            'Milestones.Id AS MilestoneId, \n \t' +
-            'Milestones.Name AS MilestoneName, \n \t' +
-            'Milestones.GdFolderId AS MilestoneGdFolderId, \n \t' +
-            'MilestoneTypes.Id AS MilestoneTypeId, \n \t' +
-            'MilestoneTypes_ContractTypes.FolderNumber AS MilestoneFolderNumber, \n \t' +
-            'MilestoneTypes.Name AS MilestoneTypeName, \n \t' +
-            'OurContractsData.OurId AS ContractOurId, \n \t' +
-            'Contracts.Id AS ContractId, \n \t' +
-            'Contracts.Number AS ContractNumber, \n \t' +
-            'Contracts.Name AS ContractName \n' +
-            'FROM Risks \n' +
-            'JOIN Cases ON Risks.CaseId=Cases.Id \n' +
-            'JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId \n' +
-            'JOIN Milestones ON Milestones.Id=Cases.MilestoneId \n' +
-            'JOIN MilestoneTypes ON MilestoneTypes.Id=Milestones.TypeId \n' +
-            'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
-            'LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id \n' +
-            'JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId\n' +
-            'WHERE ' + projectCondition + ' AND ' + contractCondition;
+        const contractCondition = initParamObject.contractId
+            ? `Contracts.Id=${initParamObject.contractId}`
+            : '1';
+        //TODO - do obsłużenia oferty
+        const sql = `SELECT Risks.Id,
+                Risks.Name,
+                Risks.Cause,
+                Risks.ScheduleImpactDescription,
+                Risks.CostImpactDescription,
+                Risks.Probability,
+                Risks.OverallImpact,
+                OverallImpact * Probability AS Rate,
+                Risks.AdditionalActionsDescription,
+                Risks.CaseId,
+                Risks.ProjectOurId,
+                Risks.LastUpdated,
+                Cases.Id AS CaseId,
+                Cases.Name AS CaseName,
+                Cases.GdFolderId AS CaseGdFolderId,
+                CaseTypes.name AS CaseTypeName,
+                CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+                Milestones.Id AS MilestoneId,
+                Milestones.Name AS MilestoneName,
+                Milestones.GdFolderId AS MilestoneGdFolderId,
+                MilestoneTypes.Id AS MilestoneTypeId,
+                COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneFolderNumber,
+                MilestoneTypes.Name AS MilestoneTypeName,
+                OurContractsData.OurId AS ContractOurId,
+                Contracts.Id AS ContractId,
+                Contracts.Number AS ContractNumber,
+                Contracts.Name AS ContractName
+            FROM Risks
+            JOIN Cases ON Risks.CaseId=Cases.Id
+            JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId
+            JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+            JOIN MilestoneTypes ON MilestoneTypes.Id=Milestones.TypeId
+            JOIN Contracts ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
+            LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=MilestoneTypes.Id
+            WHERE ${projectCondition} AND ${contractCondition}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.RisksResult(result);
-
-
     }
 
     static RisksResult(result: any[]): [Risk?] {
@@ -74,8 +76,8 @@ export default class RisksController {
                     gdFolderId: row.CaseGdFolderId,
                     _type: {
                         name: row.CaseTypeName,
-                        folderNumber: row.CaseTypeFolderNumber
-                    }
+                        folderNumber: row.CaseTypeFolderNumber,
+                    },
                 },
                 //parentem jest Milestone
                 _parent: {
@@ -86,13 +88,18 @@ export default class RisksController {
                     _type: {
                         id: row.MilestoneTypeId,
                         //folderNumber: dbResults.getString(22),
-                        name: row.MilestoneTypeName
+                        name: row.MilestoneTypeName,
                     },
                     _parent: {
-                        ourIdNumberName: row.ContractOurId + ' ' + row.ContractNumber + ' ' + row.ContractName,
-                        id: row.ContractId
-                    }
-                }
+                        ourIdNumberName:
+                            row.ContractOurId +
+                            ' ' +
+                            row.ContractNumber +
+                            ' ' +
+                            row.ContractName,
+                        id: row.ContractId,
+                    },
+                },
             });
             newResult.push(item);
         }

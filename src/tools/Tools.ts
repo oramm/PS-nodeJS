@@ -224,12 +224,14 @@ export namespace Envi {
 
         //https://stackoverflow.com/questions/14446511/most-efficient-method-to-groupby-on-an-array-of-objects?page=1&tab=votes#tab-top
 
-        static groupBy(array: any[], key: string) {
-            return array.reduce(function (rv, x) {
-                (rv[x[key]] = rv[x[key]] || []).push(x);
+        static groupBy<T>(array: T[], key: keyof T) {
+            return array.reduce((rv: { [key: string]: T[] }, x: T) => {
+                const k = x[key] as unknown as string; // Przekształcenie wartości klucza na string
+                (rv[k] = rv[k] || []).push(x);
                 return rv;
-            }, {});
+            }, {} as { [key: string]: T[] });
         }
+
         //finds an element in Array by its value
         static search(nameKey: string, property: string, myArray: any[]) {
             for (const item of myArray)

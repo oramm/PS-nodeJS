@@ -6,7 +6,6 @@ import MongoStore from 'connect-mongo';
 import dotenv from 'dotenv';
 dotenv.config();
 
-
 import './setup/GAuth2/sessionTypes';
 import { keys } from './setup/GAuth2/credentials';
 import multer from 'multer';
@@ -31,15 +30,13 @@ const uri = process.env.MONGODB_URI || keys.mongoDb.uri;
 const client = new MongoClient(uri);
 
 export const app = express();
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use((req, res, next) => {
     if (req.is('multipart/form-data')) {
         upload.any()(req, res, next);
         console.log('Multipart form data - upload.any()');
-    }
-    else
-        next();
+    } else next();
 });
 
 // Przechowuje liczbę prób połączenia
@@ -52,7 +49,10 @@ async function connectWithRetry() {
     } catch (err) {
         connectAttempts++;
 
-        console.error(`Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`, err);
+        console.error(
+            `Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`,
+            err
+        );
 
         // Oczekuje 5 sekund przed kolejną próbą
         setTimeout(connectWithRetry, 5000);
@@ -83,10 +83,14 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Nieobsłużone odrzucenie Promise:', promise, 'powód:', reason);
+    console.error(
+        'Nieobsłużone odrzucenie Promise:',
+        promise,
+        'powód:',
+        reason
+    );
     // Podobnie jak powyżej, możemy tutaj dodać kod do łagodnego zamykania aplikacji
 });
-
 
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method))
@@ -114,13 +118,15 @@ app.use(
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production' ? true : false,
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            maxAge: 24 * 60 * 60 * 1000
+            maxAge: 24 * 60 * 60 * 1000,
         },
     })
 );
 
 app.use((req, res, next) => {
-    console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
+    console.log(
+        `Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `
+    );
     next();
 });
 
@@ -136,10 +142,15 @@ app.use((req, res, next) => {
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
-    origin: ['http://localhost', 'https://erp-envi.herokuapp.com', 'https://erp.envi.com.pl', 'https://ps.envi.com.pl'],
+    origin: [
+        'http://localhost',
+        'https://erp-envi.herokuapp.com',
+        'https://erp.envi.com.pl',
+        'https://ps.envi.com.pl',
+    ],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
-}
+};
 app.use(cors(corsOptions));
 
 require('./setup/GAuth2/Gauth2Routers');
@@ -172,12 +183,13 @@ require('./contracts/milestones/cases/tasks/taskTemplates/TaskTemplatesRouters')
 require('./contracts/securities/SecuritiesRouters');
 require('./processes/ProcessesRouters');
 require('./processes/ProcessStepsRouters');
-require('./processes/processInstances/ProcessInstancesRouters'); require('./processes/processInstances/ProcessStepInstancesRouters');
+require('./processes/processInstances/ProcessInstancesRouters');
+require('./processes/processInstances/ProcessStepInstancesRouters');
 
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
-require('./Offers/OffersRouters');
+require('./offers/OffersRouters');
 
 const meetingsRouter = require('./meetings/MeetingsRouters');
 app.use(meetingsRouter);
@@ -191,7 +203,8 @@ app.use(caseEventsRouter);
 const materialCardsRouter = require('./contracts/materialCards/MaterialCardsRouters');
 app.use(materialCardsRouter);
 
-require('./projects/ProjectsRouters'); Tools
+require('./projects/ProjectsRouters');
+Tools;
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);

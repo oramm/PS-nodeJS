@@ -1,6 +1,6 @@
 import City from '../Admin/Cities/City';
 import BusinessObject from '../BussinesObject';
-import ContractType from '../contracts/contractTypes/ContractType';
+import mysql from 'mysql2/promise';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsGd from '../tools/ToolsGd';
 import {
@@ -9,8 +9,11 @@ import {
     OfferData,
     PersonData,
 } from '../types/types';
-import OfferGdController from './OfferGdController';
 import { OAuth2Client } from 'google-auth-library';
+import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
+import Milestone from '../contracts/milestones/Milestone';
+import ToolsDb from '../tools/ToolsDb';
+import OfferGdController from './OfferGdController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -18,24 +21,24 @@ export default abstract class Offer
 {
     id?: number;
     alias: string;
-    creationDate: string;
-    description: string;
-    comment: string;
-    submissionDeadline: string;
+    creationDate?: string;
+    description?: string;
+    comment?: string;
+    submissionDeadline?: string;
     _type: ContractTypeData;
     typeId: number;
     _city: CityData;
-    cityId: number;
-    form: string;
+    cityId?: number;
+    form?: string;
     isOur: boolean;
-    bidProcedure: string;
-    _editor: PersonData;
-    editorId: number;
-    _lastUpdated: string;
-    employerName: string;
-    status: string;
-    gdFolderId: string;
-    _gdFolderUrl: string;
+    bidProcedure?: string;
+    _editor?: PersonData;
+    editorId?: number;
+    _lastUpdated?: string;
+    employerName?: string;
+    status?: string;
+    gdFolderId?: string;
+    _gdFolderUrl?: string;
 
     constructor(initParamObject: OfferData) {
         super({ _dbTableName: 'Offers' });
@@ -45,26 +48,30 @@ export default abstract class Offer
             throw new Error('Type id is not defined');
         if (!initParamObject._employer && !initParamObject.employerName)
             throw new Error('Employer name or is not defined');
-        if (!initParamObject._editor.id)
+        if (!initParamObject._editor?.id)
             throw new Error('Editor id is not defined');
 
         this.id = initParamObject.id;
         this.alias = initParamObject.alias.trim();
-        this.description = initParamObject.description.trim();
-        this.comment = initParamObject.comment.trim();
-        this.creationDate = ToolsDate.dateJsToSql(
-            initParamObject.creationDate
-        ) as string;
-        this.submissionDeadline = ToolsDate.dateJsToSql(
-            initParamObject.submissionDeadline
-        ) as string;
+        this.description = initParamObject.description?.trim();
+
+        this.comment = initParamObject.comment?.trim() ?? undefined;
+        if (initParamObject.creationDate)
+            this.creationDate = ToolsDate.dateJsToSql(
+                initParamObject.creationDate
+            ) as string;
+        if (initParamObject.submissionDeadline)
+            this.submissionDeadline = ToolsDate.dateJsToSql(
+                initParamObject.submissionDeadline
+            ) as string;
         this._type = initParamObject._type;
         this._city = initParamObject._city;
         this.cityId = initParamObject._city.id;
         this.typeId = initParamObject._type.id;
-        this.form = initParamObject.form.trim();
+
+        this.form = initParamObject.form?.trim() ?? undefined;
         this.isOur = initParamObject.isOur;
-        this.bidProcedure = initParamObject.bidProcedure.trim();
+        this.bidProcedure = initParamObject.bidProcedure?.trim() ?? undefined;
         this._editor = initParamObject._editor;
         this.editorId = initParamObject._editor.id;
         this._lastUpdated = initParamObject._lastUpdated;
@@ -73,9 +80,10 @@ export default abstract class Offer
             (<string>initParamObject.employerName).trim();
         this.status = initParamObject.status;
         this.gdFolderId = initParamObject.gdFolderId;
-        this._gdFolderUrl = ToolsGd.createGdFolderUrl(
-            initParamObject.gdFolderId
-        );
+        if (initParamObject.gdFolderId)
+            this._gdFolderUrl = ToolsGd.createGdFolderUrl(
+                initParamObject.gdFolderId
+            );
     }
 
     async addNewController(auth: OAuth2Client) {
@@ -85,6 +93,8 @@ export default abstract class Offer
             console.log('Offer folder created');
             await this.addInDb();
             console.log('Offer added to db');
+            console.group('Creating default milestones');
+            await this.createDefaultMilestones(auth);
             console.groupEnd();
         } catch (err) {
             this.deleteController(auth);
@@ -107,6 +117,7 @@ export default abstract class Offer
     }
 
     async deleteController(auth: OAuth2Client) {
+        if (!this.gdFolderId) throw new Error('Brak folderu oferty');
         if (this.id) await this.deleteFromDb();
         await OfferGdController.deleteFromGd(auth, this.gdFolderId);
     }
@@ -134,7 +145,82 @@ export default abstract class Offer
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
 
+    async createDefaultMilestones(auth: OAuth2Client) {
+        const defaultMilestones: Milestone[] = [];
+
+        const defaultMilestoneTemplates =
+            await MilestoneTemplatesController.getMilestoneTemplatesList(
+                {
+                    isDefaultOnly: true,
+                    contractTypeId: this.typeId,
+                },
+                'OFFER'
+            );
+        for (const template of defaultMilestoneTemplates) {
+            const milestone = new Milestone({
+                name: template.name,
+                description: template.description,
+                _type: template._milestoneType,
+                _offer: this as any,
+                status: 'Nie rozpoczęty',
+            });
+
+            await milestone.createFolders(auth);
+            defaultMilestones.push(milestone);
+        }
+        console.log('Milestones folders created');
+        await this.addDefaultMilestonesInDb(defaultMilestones);
+        console.log('default milestones saved in db');
+
+        for (const milestone of defaultMilestones) {
+            console.group(
+                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
+            );
+            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+        }
+        console.groupEnd();
+    }
+
+    private async addDefaultMilestonesInDb(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Transaction is not possible without external connection'
+            );
+        const conn = externalConn
+            ? externalConn
+            : await ToolsDb.getPoolConnectionWithTimeout();
+        if (!externalConn)
+            console.log(
+                'new connection:: addDefaultMilestonesInDb ',
+                conn.threadId
+            );
+        try {
+            await conn.beginTransaction();
+            const promises = [];
+            for (const milestone of milestones)
+                promises.push(milestone.addInDb(conn, true));
+            await Promise.all(promises);
+            await conn.commit();
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+                console.log(
+                    'connection released:: addDefaultMilestonesInDb',
+                    conn.threadId
+                );
+            }
+        }
+    }
+
     async editGdElements(auth: OAuth2Client) {
+        if (!this.submissionDeadline) throw new Error('Brak terminu składania');
         const letterGdFolder = await ToolsGd.getFileOrFolderById(
             auth,
             <string>this.gdFolderId

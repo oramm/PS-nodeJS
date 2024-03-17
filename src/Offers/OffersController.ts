@@ -4,7 +4,7 @@ import Offer from './Offer';
 import ContractType from '../contracts/contractTypes/ContractType';
 import City from '../Admin/Cities/City';
 import Person from '../persons/Person';
-import ExternalOffer from './OtherOffer';
+import ExternalOffer from './ExternalOffer';
 import OurOffer from './OurOffer';
 import { OfferData, OurOfferData } from '../types/types';
 
@@ -130,6 +130,7 @@ export default class OffersController {
                 submissionDeadline: row.SubmissionDeadline,
                 form: ToolsDb.sqlToString(row.Form),
                 isOur: row.IsOur,
+                cityId: row.CityId,
                 status: row.Status,
                 bidProcedure: ToolsDb.sqlToString(row.BidProcedure),
                 gdFolderId: row.GdFolderId,

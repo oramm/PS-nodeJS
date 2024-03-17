@@ -31,11 +31,12 @@ export default class ToolsDb {
 
     static async getQueryCallbackAsync(
         sql: string,
-        externalConn?: mysql.PoolConnection
+        externalConn?: mysql.PoolConnection,
+        params: any[] = []
     ) {
         const conn = externalConn || this.pool;
         try {
-            return (await conn.query(sql))[0];
+            return (await conn.query(sql, params))[0];
         } catch (error) {
             console.log(sql);
             throw error;

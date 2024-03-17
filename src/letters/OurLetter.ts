@@ -1,18 +1,21 @@
 import DocumentTemplate from '../documentTemplates/DocumentTemplate';
 import Letter from './Letter';
 import { OAuth2Client } from 'google-auth-library';
-import { Envi } from '../tools/EnviTypes';
 import ToolsGd from '../tools/ToolsGd';
 import OurLetterGdFile from './OurLetterGdFIle';
 import EnviErrors from '../tools/Errors';
-import LetterGdController from './LetterGdController';
-import OurLetterGdController from './OurLetterGdController';
+import LetterGdController from './gdControlers/LetterGdController';
+import OurLetterGdController from './gdControlers/OurLetterContractGdController';
+import { DocumentTemplateData, OurLetterData } from '../types/types';
 
-export default class OurLetter extends Letter {
-    _template?: DocumentTemplate;
-    isOur: boolean = true;
+export default abstract class OurLetter
+    extends Letter
+    implements OurLetterData
+{
+    _template?: DocumentTemplateData;
+    isOur: true = true;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: OurLetterData) {
         super(initParamObject);
 
         //_template jest potrzebny tylko przy tworzeniu pisma
@@ -34,9 +37,9 @@ export default class OurLetter extends Letter {
             );
 
             await this.addInDb();
-            const ourLetterGdFile = new OurLetterGdFile({
-                enviDocumentData: { ...this },
-            });
+            const ourLetterGdFile = this.makeLetterGdFileController(
+                this._template
+            );
             if (!this.number)
                 throw new Error(`Letter number not set for: ${this.id}`);
             if (!this.creationDate)
@@ -77,11 +80,8 @@ export default class OurLetter extends Letter {
     }
 
     /** Tworzy plik z dokumentem i ustawia this.gdDocumentId */
-    private async createLetterFile(auth: OAuth2Client) {
-        const ourLetterGdFile = new OurLetterGdFile({
-            _template: this._template,
-            enviDocumentData: { ...this },
-        });
+    protected async createLetterFile(auth: OAuth2Client) {
+        const ourLetterGdFile = this.makeLetterGdFileController(this._template);
         const document = await ourLetterGdFile.create(auth);
         if (!document.documentId) throw new EnviErrors.NoGdIdError();
         this.gdDocumentId = document.documentId;
@@ -115,9 +115,7 @@ export default class OurLetter extends Letter {
             <string>this.number,
             <string>this.creationDate
         );
-        const ourLetterGdFile = new OurLetterGdFile({
-            enviDocumentData: { ...this },
-        });
+        const ourLetterGdFile = this.makeLetterGdFileController();
 
         const promises: Promise<any>[] = [ourLetterGdFile.edit(auth)];
         if (letterGdFolder.name !== newFolderName) {
@@ -139,4 +137,7 @@ export default class OurLetter extends Letter {
             throw error;
         });
     }
+    abstract makeLetterGdFileController(
+        _template?: DocumentTemplateData
+    ): OurLetterGdFile;
 }

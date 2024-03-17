@@ -1,7 +1,6 @@
 import mysql from 'mysql2/promise';
 import Entity from '../entities/Entity';
 import ToolsDb from '../tools/ToolsDb';
-import Contract from './Contract';
 import ContractOther from './ContractOther';
 import ContractOur from './ContractOur';
 import ContractType from './contractTypes/ContractType';
@@ -10,7 +9,6 @@ import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import { CityData, ContractTypeData } from '../types/types';
 import Person from '../persons/Person';
-import { admin } from 'googleapis/build/src/apis/admin';
 
 export type ContractSearchParams = {
     id?: number;
@@ -360,8 +358,8 @@ export default class ContractsController {
     private static processContractsResultKeyData(
         result: any[],
         initParamObject: any
-    ): Contract[] {
-        let newResult: Contract[] = [];
+    ) {
+        const newResult: (ContractOur | ContractOther)[] = [];
 
         for (const row of result) {
             const initParam = {

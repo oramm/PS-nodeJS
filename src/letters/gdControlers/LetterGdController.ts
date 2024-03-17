@@ -1,21 +1,19 @@
 import { OAuth2Client } from 'google-auth-library';
-import Letter from './Letter';
 
-import ToolsGd from '../tools/ToolsGd';
-import EnviErrors from '../tools/Errors';
+import ToolsGd from '../../tools/ToolsGd';
+import EnviErrors from '../../tools/Errors';
+import { LetterData } from '../../types/types';
 
-export default class LetterGdController {
+export default abstract class LetterGdController {
     static makeFolderName(number: string, creationDate: string) {
         return `${number} ${creationDate}`;
     }
 
     /** Tworzy folder pisma - nie zmienia letterData*/
-    static async createLetterFolder(auth: OAuth2Client, letterData: Letter) {
-        if (!letterData._project.lettersGdFolderId)
-            throw new EnviErrors.NoGdIdError(
-                'Project must have lettersGdFolderId'
-            );
-
+    static async createLetterFolder(
+        auth: OAuth2Client,
+        letterData: LetterData
+    ) {
         const letterNumber = letterData.number?.toString() || 'NO_NUMBER_YET';
         const folderName = this.makeFolderName(
             letterNumber,
@@ -23,7 +21,7 @@ export default class LetterGdController {
         );
         const letterFolder = await ToolsGd.createFolder(auth, {
             name: folderName,
-            parents: [letterData._project.lettersGdFolderId],
+            parents: [this.makeParentFolderGdId(letterData)],
         });
 
         ToolsGd.createPermissions(auth, { fileId: <string>letterFolder.id });
@@ -75,5 +73,9 @@ export default class LetterGdController {
             //promises.push(ToolsGd.uploadFileBase64(auth, blobEnvi, undefined, parentGdFolderId));
         });
         await Promise.all(promises);
+    }
+
+    static makeParentFolderGdId(letterData: LetterData): string {
+        throw new Error('Method not implemented in sublass.');
     }
 }

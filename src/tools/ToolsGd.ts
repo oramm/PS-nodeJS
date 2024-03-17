@@ -249,10 +249,11 @@ export default class ToolsGd {
         newParentFolderId: string
     ) {
         try {
-            console.log(`Przenoszę do nowego folderu plik ${fileData.id} ...`);
-
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>fileData.id;
+
+            console.log(`Przenoszę do nowego folderu plik ${fileId} ...`);
+
             await drive.files.update({
                 fileId: fileId,
                 removeParents: fileData.parents?.join(','),

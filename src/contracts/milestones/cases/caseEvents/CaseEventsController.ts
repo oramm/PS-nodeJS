@@ -1,5 +1,6 @@
 import LetterEntityAssociationsController from '../../../../letters/associations/LetterEntityAssociationsController';
 import IncomingLetter from '../../../../letters/IncomingLetter';
+import LettersController from '../../../../letters/LettersController';
 import OurLetter from '../../../../letters/OurLetter';
 import OurOldTypeLetter from '../../../../letters/OurOldTypeLetter';
 import Meeting from '../../../../meetings/Meeting';
@@ -124,13 +125,7 @@ export default class CaseEventsController {
                         id: row.ProjectId,
                     },
                 };
-                if (letterInitParams.isOur) {
-                    if (
-                        letterInitParams.id == parseInt(letterInitParams.number)
-                    )
-                        item = new OurLetter(letterInitParams);
-                    else item = new OurOldTypeLetter(letterInitParams);
-                } else item = new IncomingLetter(letterInitParams);
+                item = LettersController.createProperLetter(letterInitParams);
                 item._eventType = 'LETTER';
             } else {
                 item = new MeetingArrangement({

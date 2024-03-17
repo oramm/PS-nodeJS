@@ -1,14 +1,10 @@
 import { Request, Response } from 'express';
-import OffersController from './OffersController';
-import Offer from './Offer';
 import { app } from '../index';
-import Setup from '../setup/Setup';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
-import OfferGdController from './OfferGdController';
 import OurOffer from './OurOffer';
-import ExternalOffer from './OtherOffer';
-import { off } from 'process';
 import { OfferData } from '../types/types';
+import OffersController from './OffersController';
+import ExternalOffer from './ExternalOffer';
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {

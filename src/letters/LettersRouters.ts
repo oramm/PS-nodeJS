@@ -8,12 +8,30 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
-import LetterGdController from './LetterGdController';
+import LetterGdController from './gdControlers/LetterGdController';
 
-app.post('/letters', async (req: Request, res: Response) => {
+app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await LettersController.getLettersList(orConditions);
+        const result = await LettersController.getLettersList(
+            orConditions,
+            'CONTRACT'
+        );
+        res.send(result);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.post('/offersLetters', async (req: Request, res: Response) => {
+    try {
+        const orConditions = req.parsedBody.orConditions;
+        const result = await LettersController.getLettersList(
+            orConditions,
+            'OFFER'
+        );
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -91,9 +109,7 @@ app.post(
 app.post('/letterReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
-        let item: OurLetter | IncomingLetter;
-        if (req.parsedBody.isOur) item = new OurLetter(req.parsedBody);
-        else item = new IncomingLetter(req.parsedBody);
+        const item = LettersController.createProperLetter(req.parsedBody);
 
         try {
             await ToolsGapi.gapiReguestHandler(
@@ -121,14 +137,9 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
 
         if (!req.files) req.files = [];
         console.log('req.files', req.files);
-        if (!initParamsFromClient._project.id)
-            throw new Error('No _project.id in initParamsFromClient');
 
-        console.log('initParamsFromClient', initParamsFromClient._project);
-        let item: OurLetter | IncomingLetter;
-        if (initParamsFromClient.isOur)
-            item = new OurLetter(initParamsFromClient);
-        else item = new IncomingLetter(initParamsFromClient);
+        const item = LettersController.createProperLetter(initParamsFromClient);
+
         await ToolsGapi.gapiReguestHandler(
             req,
             res,

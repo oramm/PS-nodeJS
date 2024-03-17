@@ -2,7 +2,6 @@ import { OAuth2Client } from 'google-auth-library';
 import Offer from './Offer';
 
 import ToolsGd from '../tools/ToolsGd';
-import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 
 export default class OfferGdController {
@@ -16,6 +15,13 @@ export default class OfferGdController {
 
     /** Tworzy folder oferty w folderze _city - nie zmienia offerData*/
     static async createOfferFolder(auth: OAuth2Client, offerData: Offer) {
+        if (!offerData._city)
+            throw new Error('Brak miasta w przypisanego do oferty');
+        if (!offerData._type)
+            throw new Error('Brak typu w przypisanego do oferty');
+        if (!offerData.submissionDeadline)
+            throw new Error('Brak terminu składania oferty');
+
         const {
             _city,
             _type,

@@ -1,18 +1,16 @@
-import DocumentTemplate from '../documentTemplates/DocumentTemplate';
-import OurLetter from './OurLetter';
 import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
 import { Envi } from '../tools/Tools';
 import ToolsDocs from '../tools/ToolsDocs';
 import Entity from '../entities/Entity';
-import Case from '../contracts/milestones/cases/Case';
+import { CaseData, DocumentTemplateData, OurLetterData } from '../types/types';
 
-export default class OurLetterGdFile extends DocumentGdFile {
-    protected enviDocumentData: OurLetter;
+export default abstract class OurLetterGdFile extends DocumentGdFile {
+    protected enviDocumentData: OurLetterData;
 
     constructor(initObjectParamenter: {
-        _template?: DocumentTemplate;
-        enviDocumentData: OurLetter;
+        _template?: DocumentTemplateData;
+        enviDocumentData: OurLetterData;
     }) {
         super(initObjectParamenter);
         this.enviDocumentData = initObjectParamenter.enviDocumentData;
@@ -65,7 +63,10 @@ export default class OurLetterGdFile extends DocumentGdFile {
         return document;
     }
 
-    private makeDataforNamedRanges(): { rangeName: string; newText: string }[] {
+    protected makeDataforNamedRanges(): {
+        rangeName: string;
+        newText: string;
+    }[] {
         if (
             !(
                 this.enviDocumentData.creationDate &&
@@ -98,56 +99,19 @@ export default class OurLetterGdFile extends DocumentGdFile {
             },
             {
                 rangeName: 'projectContext',
-                newText: this.projectContextLabel(),
+                newText: this.letterContextLabel(),
             },
             { rangeName: 'addressCc', newText: this.addressCcLabel() },
         ];
     }
 
-    private addressCcLabel() {
+    protected addressCcLabel() {
         if (this.enviDocumentData?._entitiesCc?.length === 0) return '-----';
         return this.entitiesDataLabel(<any[]>this.enviDocumentData._entitiesCc);
     }
 
-    /**Zwraca listę spraw, kamieni itd */
-    private projectContextLabel() {
-        return `projekt: ${
-            this.enviDocumentData._project.ourId
-        }, ${this.makeCasesList()}`;
-    }
-
-    private makeCasesList(): string {
-        const cases = this.enviDocumentData._cases as Case[];
-        const casesWithcContractId = cases.map((item) => {
-            return { ...item, contractId: item._parent.contractId };
-        });
-        let casesByContracts = Envi.ToolsArray.groupBy(
-            casesWithcContractId,
-            'contractId'
-        );
-        let casesLabel: string = '';
-        for (const contractIdItem in casesByContracts) {
-            casesLabel += 'kontrakt: ';
-            casesLabel +=
-                casesByContracts[contractIdItem][0]._parent._parent.ourId ||
-                casesByContracts[contractIdItem][0]._parent._parent.number;
-            casesLabel +=
-                ' ' +
-                casesByContracts[contractIdItem][0]._parent._parent.name +
-                ', ';
-            casesLabel +=
-                casesByContracts[contractIdItem].length > 1
-                    ? ' sprawy: '
-                    : ' sprawa: ';
-            for (const caseItem of casesByContracts[contractIdItem])
-                casesLabel +=
-                    caseItem._typeFolderNumber_TypeName_Number_Name + ', ';
-        }
-        return casesLabel.substring(0, casesLabel.length - 2);
-    }
-
     /** tworzy etykietę z danymi address */
-    private entitiesDataLabel(entities: Entity[]) {
+    protected entitiesDataLabel(entities: Entity[]) {
         let label = '';
         for (let i = 0; i < entities.length; i++) {
             label += entities[i].name;
@@ -160,7 +124,11 @@ export default class OurLetterGdFile extends DocumentGdFile {
     makeFileName() {
         if (!this.enviDocumentData.creationDate)
             throw new Error('Document must have creationDate');
-        const numberLabel = this.enviDocumentData.number || 'TMP-NO';
         return `${this.enviDocumentData.number} ${this.enviDocumentData.creationDate}`;
     }
+
+    protected abstract makeCasesList(): string;
+
+    /**Zwraca listę spraw, kamieni itd */
+    protected abstract letterContextLabel(): string;
 }
