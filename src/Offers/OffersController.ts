@@ -3,7 +3,6 @@ import ToolsDb from '../tools/ToolsDb';
 import Offer from './Offer';
 import ContractType from '../contracts/contractTypes/ContractType';
 import City from '../Admin/Cities/City';
-import Person from '../persons/Person';
 import ExternalOffer from './ExternalOffer';
 import OurOffer from './OurOffer';
 import { OfferData, OurOfferData } from '../types/types';

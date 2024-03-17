@@ -336,9 +336,9 @@ export default class ContractsController {
                     description: row.TypeDescription,
                     isOur: row.TypeIsOur,
                 }),
-                _contractors: contractors.map((item: any) => item._entity),
-                _engineers: engineers.map((item: any) => item._entity),
-                _employers: employers.map((item: any) => item._entity),
+                _contractors: contractors.map((item) => item._entity),
+                _engineers: engineers.map((item) => item._entity),
+                _employers: employers.map((item) => item._entity),
                 _lastUpdated: row.LastUpdated,
             };
             let item: ContractOur | ContractOther;

@@ -158,16 +158,18 @@ export default class LettersController {
             ? mysql.format(`Cases.Id = ? `, [caseId])
             : '1';
 
-        const dateCondition =
-            searchParams.creationDateFrom && searchParams.creationDateTo
-                ? mysql.format(
-                      `Letters.CreationDate BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
-                      [
-                          ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom),
-                          searchParams.creationDateTo,
-                      ]
-                  )
-                : '1';
+        const creationDateFromCondition = searchParams.creationDateFrom
+            ? mysql.format(`Letters.CreationDate >= ? `, [
+                  ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom),
+              ])
+            : '1';
+
+        const creationDateToCondition = searchParams.creationDateTo
+            ? mysql.format(`Letters.CreationDate <= ? `, [
+                  searchParams.creationDateTo,
+              ])
+            : '1';
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText?.toString()
         );
@@ -176,7 +178,8 @@ export default class LettersController {
             AND ${contractCondition} 
             AND ${milestoneCondition}
             AND ${caseCondition}
-            AND ${dateCondition}
+            AND ${creationDateFromCondition}
+            AND ${creationDateToCondition}
             AND ${searchTextCondition} 
             AND ${offerCondition}`;
         return conditions;
@@ -224,6 +227,10 @@ export default class LettersController {
                     break;
                 case IncomingLetterOffer:
                     paramsCreator = this.createIncomingLetterOfferInitParam;
+                    break;
+                case OurOldTypeLetter:
+                    paramsCreator =
+                        this.createOurOldTypeLetterContractInitParam;
                     break;
                 default:
                     throw new Error(
@@ -377,6 +384,22 @@ export default class LettersController {
         };
 
         return initParam;
+    }
+
+    private static createOurOldTypeLetterContractInitParam(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ) {
+        const params = LettersController.createIncomingLetterContractInitParam(
+            row,
+            _casesAssociationsPerLetter,
+            _letterEntitiesMainPerLetter,
+            _letterEntitiesCcPerLetter
+        );
+
+        return { ...params, isOur: true };
     }
 
     private static getLetterType(row: any) {
