@@ -7,6 +7,7 @@ import {
 } from '../types/types';
 import OurLetter from './OurLetter';
 import OurLetterContractGdFile from './OurLetterContractGdFIle';
+import OurLetterContractGdController from './gdControlers/OurLetterContractGdController';
 
 export default class OurLetterContract
     extends OurLetter
@@ -14,6 +15,8 @@ export default class OurLetterContract
 {
     _project: ProjectData;
     projectId: number;
+
+    _letterGdController = new OurLetterContractGdController();
 
     constructor(initParamObject: OurLetterContractData) {
         super(initParamObject);

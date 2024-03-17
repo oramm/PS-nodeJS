@@ -3,33 +3,41 @@ import ContractOther from '../../contracts/ContractOther';
 import ContractOur from '../../contracts/ContractOur';
 import Case from '../../contracts/milestones/cases/Case';
 import ToolsDb from '../../tools/ToolsDb';
-import { OfferData } from '../../types/types';
+import { ContractData, OfferData, ProjectData } from '../../types/types';
 import LetterCase from './LetterCase';
 import mysql from 'mysql2/promise';
 import OurOffer from '../../offers/OurOffer';
 
 export type LetterCaseSearchParams = {
+    _project?: ProjectData;
     projectId?: string;
     contractId?: number;
+    _contract?: ContractData;
     offerId?: number;
+    _offer?: OfferData;
 };
 
 export default class LetterCaseAssociationsController {
     static async getLetterCaseAssociationsList(
         searchParams: LetterCaseSearchParams = {}
     ) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [
-                  searchParams.projectId,
-              ])
+        const projectId =
+            searchParams._project?.ourId || searchParams.projectId;
+
+        const contractId =
+            searchParams._contract?.id || searchParams.contractId;
+        const offerId = searchParams._offer?.id || searchParams.offerId;
+
+        const projectCondition = projectId
+            ? mysql.format('Contracts.ProjectOurId = ?', [projectId])
             : '1';
 
-        const contractCondition = searchParams.contractId
-            ? mysql.format('Contracts.Id = ?', [searchParams.contractId])
+        const contractCondition = contractId
+            ? mysql.format('Contracts.Id = ?', [contractId])
             : '1';
 
-        const offerCondition = searchParams.offerId
-            ? mysql.format('Offers.Id = ?', [searchParams.offerId])
+        const offerCondition = offerId
+            ? mysql.format('Offers.Id = ?', [offerId])
             : '1';
 
         const sql = `SELECT  
@@ -74,7 +82,7 @@ export default class LetterCaseAssociationsController {
             JOIN Milestones ON Cases.MilestoneId=Milestones.Id
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             LEFT JOIN Contracts ON Milestones.ContractId=Contracts.Id
-            JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+            LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
             LEFT JOIN MilestoneTypes_ContractTypes 
@@ -85,7 +93,7 @@ export default class LetterCaseAssociationsController {
                 AND ${contractCondition}
                 AND ${offerCondition}
             ORDER BY Letters_Cases.LetterId, Cases.Name`;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLetterCaseAssociationsResult(result);
     }

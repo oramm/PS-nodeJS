@@ -1,6 +1,7 @@
 import EnviErrors from '../tools/Errors';
 import { IncomingLetterContractData, ProjectData } from '../types/types';
 import IncomingLetter from './IncomingLetter';
+import IncomingLetterContractGdController from './gdControlers/IncomingLetterContractGdController';
 
 export default class IncomingLetterContract
     extends IncomingLetter
@@ -8,6 +9,7 @@ export default class IncomingLetterContract
 {
     _project: ProjectData;
     projectId?: number;
+    _letterGdController = new IncomingLetterContractGdController();
 
     constructor(initParamObject: IncomingLetterContractData) {
         super(initParamObject);

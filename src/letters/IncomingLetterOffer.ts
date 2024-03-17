@@ -4,12 +4,14 @@ import {
     OurOfferData,
 } from '../types/types';
 import IncomingLetter from './IncomingLetter';
+import IncomingLetterOfferGdController from './gdControlers/IncomingLetterOfferGdController';
 
 export default class IncomingLetterOffer
     extends IncomingLetter
     implements IncomingLetterOfferData
 {
     _offer: OurOfferData | ExternalOfferData;
+    _letterGdController = new IncomingLetterOfferGdController();
 
     constructor(initParamObject: IncomingLetterOfferData) {
         super(initParamObject);

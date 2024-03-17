@@ -1,6 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
-import { Envi } from '../tools/Tools';
 import ToolsDocs from '../tools/ToolsDocs';
 import Entity from '../entities/Entity';
 import { CaseData, DocumentTemplateData, OurLetterData } from '../types/types';

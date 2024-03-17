@@ -1,28 +1,20 @@
 import mysql from 'mysql2/promise';
-import Tools from '../tools/Tools';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import LetterCaseAssociationsController, {
     LetterCaseSearchParams,
 } from './associations/LetterCaseAssociationsController';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
-import IncomingLetter from './IncomingLetter';
 import Letter from './Letter';
-import OurLetter from './OurLetter';
 import OurOldTypeLetter from './OurOldTypeLetter';
-import Project from '../projects/Project';
 import {
     CaseData,
-    ExternalOfferData,
+    ContractData,
     IncomingLetterContractData,
-    IncomingLetterData,
     IncomingLetterOfferData,
     LetterData,
     OfferData,
-    OtherContractData,
-    OurContractData,
     OurLetterContractData,
-    OurLetterData,
     OurLetterOfferData,
     OurOfferData,
     ProjectData,
@@ -30,15 +22,15 @@ import {
 import OurLetterContract from './OurLetterContract';
 import LetterCase from './associations/LetterCase';
 import LetterEntity from './associations/LetterEntity';
-import OurLetterOffer from './OurLetterOfffer';
 import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
+import OurLetterOffer from './OurLetterOffer';
 
 type LetterSearchParams = {
     projectId?: string;
-    _project?: Project;
-    _contract?: OurContractData | OtherContractData;
-    _offer?: OurOfferData | ExternalOfferData;
+    _project?: ProjectData;
+    _contract?: ContractData;
+    _offer?: OfferData;
     _case?: CaseData;
     searchText?: string;
     contractId?: number;
@@ -76,6 +68,7 @@ export default class LettersController {
             Persons.Id AS EditorId,
             Offers.Id AS OfferId,
             Offers.Alias AS OfferAlias,
+            Offers.Description AS OfferDescription,
             Persons.Name AS EditorName,
             Persons.Surname AS EditorSurname,
             GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
@@ -110,12 +103,16 @@ export default class LettersController {
         const conditions = words.map((word) =>
             mysql.format(
                 `(Letters.Description LIKE ?
-        OR Letters.Number LIKE ?
-        OR Cases.Name LIKE ?
-        OR CaseTypes.Name LIKE ?
-        OR Letters.Number LIKE ?
-        OR Entities.Name LIKE ?)`,
+                    OR Letters.Number LIKE ?
+                    OR Cases.Name LIKE ?
+                    OR CaseTypes.Name LIKE ?
+                    OR Letters.Number LIKE ?
+                    OR Offers.Alias LIKE ?
+                    OR Offers.Description LIKE ?
+                    OR Entities.Name LIKE ?)`,
                 [
+                    `%${word}%`,
+                    `%${word}%`,
                     `%${word}%`,
                     `%${word}%`,
                     `%${word}%`,
@@ -146,7 +143,7 @@ export default class LettersController {
             ? mysql.format(`Contracts.Id = ? `, [contractId])
             : '1';
 
-        const offerCondition = searchParams.offerId
+        const offerCondition = offerId
             ? mysql.format(`Offers.Id = ? `, [offerId])
             : '1';
 

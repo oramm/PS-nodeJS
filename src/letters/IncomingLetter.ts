@@ -10,6 +10,8 @@ export default abstract class IncomingLetter
     implements IncomingLetterData
 {
     isOur: false = false;
+    abstract _letterGdController: IncomingLetterGdController;
+
     constructor(initParamObject: IncomingLetterData) {
         super(initParamObject);
         this.number = initParamObject.number;
@@ -32,7 +34,7 @@ export default abstract class IncomingLetter
             await this.addInDb();
         } catch (err) {
             this.deleteFromDb();
-            IncomingLetterGdController.deleteFromGd(
+            this._letterGdController.deleteFromGd(
                 auth,
                 this.gdFolderId || this.gdDocumentId
             );
@@ -75,7 +77,7 @@ export default abstract class IncomingLetter
             auth,
             <string>this.gdFolderId
         );
-        const newFolderName = IncomingLetterGdController.makeFolderName(
+        const newFolderName = this._letterGdController.makeFolderName(
             <string>this.number,
             <string>this.creationDate
         );
@@ -111,7 +113,7 @@ export default abstract class IncomingLetter
         const oldGdFolderId = this.gdFolderId;
         const oldGdDocumentId = this.gdDocumentId;
         await this.initAttachmentsHandler(auth, files);
-        await IncomingLetterGdController.deleteFromGd(
+        await this._letterGdController.deleteFromGd(
             auth,
             oldGdDocumentId,
             oldGdFolderId
@@ -130,7 +132,7 @@ export default abstract class IncomingLetter
         if (!files.length) throw new Error('no Files to append');
         if (!this.gdFolderId) await this.setToMultiStateHandler(auth, files);
         else
-            await IncomingLetterGdController.appendAttachments(
+            await this._letterGdController.appendAttachments(
                 auth,
                 files,
                 <string>this.gdFolderId
@@ -153,7 +155,7 @@ export default abstract class IncomingLetter
         files: Express.Multer.File[]
     ) {
         const newLetterGdFolder =
-            await IncomingLetterGdController.createLetterFolder(auth, {
+            await this._letterGdController.createLetterFolder(auth, {
                 ...this,
             });
         const letterGdDocumentId = this.gdDocumentId;
@@ -167,13 +169,13 @@ export default abstract class IncomingLetter
             );
         //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
 
-        await IncomingLetterGdController.moveLetterFiletoFolder(
+        await this._letterGdController.moveLetterFiletoFolder(
             letterGdDocumentId,
             auth,
             newLetterGdFolder.id
         );
         this.setDataToMultiFileState(newLetterGdFolder.id, files.length);
-        await IncomingLetterGdController.appendAttachments(
+        await this._letterGdController.appendAttachments(
             auth,
             files,
             <string>this.gdFolderId

@@ -2,7 +2,6 @@ import { Envi } from '../tools/Tools';
 import {
     CaseData,
     DocumentTemplateData,
-    OurLetterContractData,
     OurLetterOfferData,
 } from '../types/types';
 import OurLetterGdFile from './OurLetterGdFIle';

@@ -5,15 +5,12 @@ import EnviErrors from '../../tools/Errors';
 import { LetterData } from '../../types/types';
 
 export default abstract class LetterGdController {
-    static makeFolderName(number: string, creationDate: string) {
+    makeFolderName(number: string, creationDate: string) {
         return `${number} ${creationDate}`;
     }
 
     /** Tworzy folder pisma - nie zmienia letterData*/
-    static async createLetterFolder(
-        auth: OAuth2Client,
-        letterData: LetterData
-    ) {
+    async createLetterFolder(auth: OAuth2Client, letterData: LetterData) {
         const letterNumber = letterData.number?.toString() || 'NO_NUMBER_YET';
         const folderName = this.makeFolderName(
             letterNumber,
@@ -29,7 +26,7 @@ export default abstract class LetterGdController {
     }
 
     /** Dla pism z folderem usuwa folder pisma dla pism bez folderu (z pojedynczym plikiem) usuwa plik pisma */
-    static async deleteFromGd(
+    async deleteFromGd(
         auth: OAuth2Client,
         gdDocumentId?: string | undefined | null,
         gdFolderId?: string | null
@@ -43,7 +40,7 @@ export default abstract class LetterGdController {
     /**
      * - Wrzuca pliki do folderu pisma - folder musi być wcześniej utworzony
      **/
-    static async appendAttachments(
+    async appendAttachments(
         auth: OAuth2Client,
         files: Express.Multer.File[],
         letterGdFolderId: string
@@ -57,7 +54,7 @@ export default abstract class LetterGdController {
      * @param files
      * @param parentGdFolderId
      */
-    protected static async uploadAttachments(
+    protected async uploadAttachments(
         auth: OAuth2Client,
         files: Express.Multer.File[],
         parentGdFolderId: string
@@ -75,7 +72,5 @@ export default abstract class LetterGdController {
         await Promise.all(promises);
     }
 
-    static makeParentFolderGdId(letterData: LetterData): string {
-        throw new Error('Method not implemented in sublass.');
-    }
+    abstract makeParentFolderGdId(letterData: LetterData): string;
 }

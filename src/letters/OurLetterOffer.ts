@@ -1,21 +1,19 @@
-import OurLetterGdFile from './OurLetterGdFIle';
-
 import {
     DocumentTemplateData,
     ExternalOfferData,
-    OurLetterContractData,
     OurLetterOfferData,
     OurOfferData,
-    ProjectData,
 } from '../types/types';
 import OurLetter from './OurLetter';
 import OurLetterOfferGdFile from './OurLetterOfferGdFIle';
+import OurLetterOfferGdController from './gdControlers/OurLetterOfferGdController';
 
 export default class OurLetterOffer
     extends OurLetter
     implements OurLetterOfferData
 {
     _offer: OurOfferData | ExternalOfferData;
+    _letterGdController = new OurLetterOfferGdController();
 
     constructor(initParamObject: OurLetterOfferData) {
         super(initParamObject);

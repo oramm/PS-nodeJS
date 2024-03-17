@@ -1,14 +1,10 @@
 import express, { Request, Response } from 'express';
 import LettersController from './LettersController';
 import { app } from '../index';
-import OurLetter from './OurLetter';
-import OurOldTypeLetter from './OurOldTypeLetter';
-import IncomingLetter from './IncomingLetter';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
-import LetterGdController from './gdControlers/LetterGdController';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
@@ -184,11 +180,10 @@ app.put('/appendLetterAttachments/:id', async (req: Request, res: Response) => {
 app.delete('/letter/:id', async (req: Request, res: Response) => {
     try {
         const item = LettersController.createProperLetter(req.body);
-
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            LetterGdController.deleteFromGd,
+            item._letterGdController.deleteFromGd,
             [item.gdDocumentId, item.gdFolderId],
             undefined
         );

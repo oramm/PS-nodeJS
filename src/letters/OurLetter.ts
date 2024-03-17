@@ -1,12 +1,10 @@
-import DocumentTemplate from '../documentTemplates/DocumentTemplate';
 import Letter from './Letter';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsGd from '../tools/ToolsGd';
 import OurLetterGdFile from './OurLetterGdFIle';
 import EnviErrors from '../tools/Errors';
-import LetterGdController from './gdControlers/LetterGdController';
-import OurLetterGdController from './gdControlers/OurLetterContractGdController';
 import { DocumentTemplateData, OurLetterData } from '../types/types';
+import OurLetterGdController from './gdControlers/OurLetterGdController';
 
 export default abstract class OurLetter
     extends Letter
@@ -14,6 +12,7 @@ export default abstract class OurLetter
 {
     _template?: DocumentTemplateData;
     isOur: true = true;
+    abstract _letterGdController: OurLetterGdController;
 
     constructor(initParamObject: OurLetterData) {
         super(initParamObject);
@@ -25,9 +24,12 @@ export default abstract class OurLetter
 
     async initialise(auth: OAuth2Client, files: Express.Multer.File[] = []) {
         try {
-            const gdFolder = await LetterGdController.createLetterFolder(auth, {
-                ...this,
-            });
+            const gdFolder = await this._letterGdController.createLetterFolder(
+                auth,
+                {
+                    ...this,
+                }
+            );
             this.gdFolderId = <string>gdFolder.id;
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(this.gdFolderId);
             const letterGdFile = await this.createLetterFile(auth);
@@ -47,7 +49,7 @@ export default abstract class OurLetter
                     `Letter creationDate is  not set for: ${this.id}`
                 );
 
-            const folderName = OurLetterGdController.makeFolderName(
+            const folderName = this._letterGdController.makeFolderName(
                 this.number.toString(),
                 this.creationDate
             );
@@ -69,7 +71,7 @@ export default abstract class OurLetter
             });
         } catch (err) {
             if (this.id) this.deleteFromDb();
-            OurLetterGdController.deleteFromGd(auth, null, this.gdFolderId);
+            this._letterGdController.deleteFromGd(auth, null, this.gdFolderId);
             throw err;
         }
     }
@@ -95,7 +97,7 @@ export default abstract class OurLetter
         await super.appendAttachmentsHandler(auth, files);
         if (!this.gdFolderId)
             throw new EnviErrors.NoGdIdError(`OurLetter: ${this.number}`);
-        await OurLetterGdController.appendAttachments(
+        await this._letterGdController.appendAttachments(
             auth,
             files,
             <string>this.gdFolderId
@@ -111,7 +113,7 @@ export default abstract class OurLetter
             auth,
             <string>this.gdFolderId
         );
-        const newFolderName = OurLetterGdController.makeFolderName(
+        const newFolderName = this._letterGdController.makeFolderName(
             <string>this.number,
             <string>this.creationDate
         );
