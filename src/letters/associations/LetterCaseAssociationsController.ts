@@ -1,4 +1,3 @@
-import ExternalOffer from '../../offers/ExternalOffer';
 import ContractOther from '../../contracts/ContractOther';
 import ContractOur from '../../contracts/ContractOur';
 import Case from '../../contracts/milestones/cases/Case';
@@ -6,7 +5,6 @@ import ToolsDb from '../../tools/ToolsDb';
 import { ContractData, OfferData, ProjectData } from '../../types/types';
 import LetterCase from './LetterCase';
 import mysql from 'mysql2/promise';
-import OurOffer from '../../offers/OurOffer';
 
 export type LetterCaseSearchParams = {
     _project?: ProjectData;
