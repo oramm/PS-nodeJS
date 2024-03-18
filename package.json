@@ -43,6 +43,9 @@
         "open": "^7.4.2",
         "types": "^0.1.1"
     },
+    "engines": {
+        "node": "20.x"
+    },
     "prettier": {
         "tabWidth": 4,
         "singleQuote": true
