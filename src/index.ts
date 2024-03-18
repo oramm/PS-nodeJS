@@ -189,7 +189,7 @@ require('./processes/processInstances/ProcessStepInstancesRouters');
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
-require('./offers1/OffersRouters');
+require('./offers/OffersRouters');
 
 const meetingsRouter = require('./meetings/MeetingsRouters');
 app.use(meetingsRouter);
