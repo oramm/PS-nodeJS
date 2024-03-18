@@ -74,7 +74,11 @@ export default class LetterCaseAssociationsController {
                 Contracts.Number AS ContractNumber, 
                 Contracts.Name AS ContractName,
                 Offers.Id AS OfferId,
-                Offers.Alias AS OfferAlias
+                Offers.Alias AS OfferAlias,
+                Offers.IsOur AS OfferIsOur,
+                Cities.Id AS OfferCityId,
+                Cities.Name AS CityName,
+                Cities.Code AS CityCode
             FROM Letters_Cases
             JOIN Letters ON Letters_Cases.LetterId = Letters.Id
             JOIN Cases ON Letters_Cases.CaseId = Cases.Id
@@ -85,6 +89,7 @@ export default class LetterCaseAssociationsController {
             LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
+            LEFT JOIN Cities ON Offers.CityId=Cities.Id
             LEFT JOIN MilestoneTypes_ContractTypes 
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
                 AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
@@ -168,7 +173,7 @@ export default class LetterCaseAssociationsController {
 
     private static makeOfferObject(row: any) {
         if (!row.OfferId) return;
-        const offerInitParam: OfferData = {
+        const offerInitParam = <OfferData>{
             id: row.OfferId,
             alias: row.OfferAlias,
             isOur: row.OfferIsOur,
@@ -176,16 +181,12 @@ export default class LetterCaseAssociationsController {
             bidProcedure: row.OfferBidProcedure,
             employerName: row.OfferEmployerName,
             gdFolderId: row.GdFolderId,
-            _city: { id: row.CityId, name: row.CityName, code: row.CityCode },
-            _type: {
-                id: row.OfferTypeId,
-                name: row.OfferTypeName,
-                isOur: row.OfferTypeIsOur,
-                description: row.OfferTypeDescription,
+            _city: {
+                id: row.OfferCityId,
+                name: row.CityName,
+                code: row.CityCode,
             },
         };
-        return row.OfferIsOur
-            ? new OurOffer(offerInitParam)
-            : new ExternalOffer(offerInitParam);
+        return offerInitParam;
     }
 }

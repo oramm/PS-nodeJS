@@ -1,7 +1,8 @@
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
+import { EntityData } from '../types/types';
 
-export default class Entity extends BusinessObject {
+export default class Entity extends BusinessObject implements EntityData {
     id?: number;
     name?: string;
     address?: string;
@@ -14,8 +15,7 @@ export default class Entity extends BusinessObject {
         super({ _dbTableName: 'Entities' });
         if (initParamObject) {
             this.id = initParamObject.id;
-            if (initParamObject.name)
-                this.name = initParamObject.name.trim();
+            if (initParamObject.name) this.name = initParamObject.name.trim();
             this.address = initParamObject.address;
             if (initParamObject.taxNumber)
                 this.taxNumber = initParamObject.taxNumber;
@@ -23,7 +23,6 @@ export default class Entity extends BusinessObject {
             this.email = initParamObject.email;
             this.phone = initParamObject.phone;
             this.fax = initParamObject.fax;
-
         }
     }
 }

@@ -1,8 +1,12 @@
 import { OAuth2Client } from 'google-auth-library';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
 import ToolsDocs from '../tools/ToolsDocs';
-import Entity from '../entities/Entity';
-import { CaseData, DocumentTemplateData, OurLetterData } from '../types/types';
+import {
+    CaseData,
+    DocumentTemplateData,
+    EntityData,
+    OurLetterData,
+} from '../types/types';
 
 export default abstract class OurLetterGdFile extends DocumentGdFile {
     protected enviDocumentData: OurLetterData;
@@ -12,6 +16,9 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
         enviDocumentData: OurLetterData;
     }) {
         super(initObjectParamenter);
+        if (!initObjectParamenter.enviDocumentData._entitiesMain)
+            throw new Error('enviDocumentData._entitiesMain not found');
+
         this.enviDocumentData = initObjectParamenter.enviDocumentData;
     }
 
@@ -66,6 +73,10 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
         rangeName: string;
         newText: string;
     }[] {
+        if (!this.enviDocumentData._entitiesMain?.length)
+            throw new Error('enviDocumentData._entitiesMain is empty');
+        if (!this.enviDocumentData._cases.length)
+            throw new Error('enviDocumentData._cases is empty');
         if (
             !(
                 this.enviDocumentData.creationDate &&
@@ -89,7 +100,7 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
             {
                 rangeName: 'address',
                 newText: this.entitiesDataLabel(
-                    <any[]>this.enviDocumentData._entitiesMain
+                    this.enviDocumentData._entitiesMain
                 ),
             },
             {
@@ -105,12 +116,16 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
     }
 
     protected addressCcLabel() {
-        if (this.enviDocumentData?._entitiesCc?.length === 0) return '-----';
-        return this.entitiesDataLabel(<any[]>this.enviDocumentData._entitiesCc);
+        if (
+            !this.enviDocumentData._entitiesCc ||
+            this.enviDocumentData._entitiesCc?.length === 0
+        )
+            return '-----';
+        return this.entitiesDataLabel(this.enviDocumentData._entitiesCc);
     }
 
     /** tworzy etykietę z danymi address */
-    protected entitiesDataLabel(entities: Entity[]) {
+    protected entitiesDataLabel(entities: EntityData[]) {
         let label = '';
         for (let i = 0; i < entities.length; i++) {
             label += entities[i].name;

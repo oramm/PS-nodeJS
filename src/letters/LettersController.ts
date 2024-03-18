@@ -69,6 +69,7 @@ export default class LettersController {
             Offers.Id AS OfferId,
             Offers.Alias AS OfferAlias,
             Offers.Description AS OfferDescription,
+            Offers.CityId AS OfferCityId,
             Persons.Name AS EditorName,
             Persons.Surname AS EditorSurname,
             GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
@@ -325,6 +326,7 @@ export default class LettersController {
             _offer: <OurOfferData>{
                 id: row.OfferId,
                 alias: row.OfferAlias,
+                description: row.OfferDescription,
             },
         };
 
@@ -350,6 +352,7 @@ export default class LettersController {
             _offer: <OurOfferData>{
                 id: row.OfferId,
                 alias: row.OfferAlias,
+                description: row.OfferDescription,
             },
         };
 
