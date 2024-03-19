@@ -1,4 +1,3 @@
-import { Envi } from '../tools/Tools';
 import {
     CaseData,
     DocumentTemplateData,
@@ -21,17 +20,15 @@ export default class OurLetterOfferGdFile extends OurLetterGdFile {
     protected letterContextLabel() {
         return `oferta: ${
             this.enviDocumentData._offer.description
-        }, ${this.makeCasesList()}`;
+        }, sprawy: ${this.makeCasesList()}`;
     }
 
     protected makeCasesList(): string {
         //pismo może dotyczyć tylko jednej oferty
         const cases = this.enviDocumentData._cases as CaseData[];
-        let casesLabel: string = `oferta: ${this.enviDocumentData._offer.description}, sprawy: `;
+        let casesLabel: string = '';
 
         for (const caseItem of cases) {
-            if (!caseItem._parent?._offer)
-                throw new Error('Case must have _parent._offer');
             casesLabel +=
                 caseItem._typeFolderNumber_TypeName_Number_Name + ', ';
         }

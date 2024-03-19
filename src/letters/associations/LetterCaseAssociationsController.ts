@@ -96,7 +96,7 @@ export default class LetterCaseAssociationsController {
                 AND ${contractCondition}
                 AND ${offerCondition}
             ORDER BY Letters_Cases.LetterId, Cases.Name`;
-        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLetterCaseAssociationsResult(result);
     }

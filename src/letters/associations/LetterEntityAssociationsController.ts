@@ -1,8 +1,6 @@
-import Case from '../../contracts/milestones/cases/Case';
 import Entity from '../../entities/Entity';
 import ToolsDb from '../../tools/ToolsDb';
 import { LetterData } from '../../types/types';
-import Letter from '../Letter';
 import LetterEntity from './LetterEntity';
 
 export default class LetterEntityAssociationsController {
@@ -32,9 +30,10 @@ export default class LetterEntityAssociationsController {
                 Entities.Fax AS EntityFax
             FROM Letters_Entities
             JOIN Letters ON Letters_Entities.LetterId = Letters.Id
-            JOIN Projects ON Letters.ProjectId = Projects.Id
-            JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId
-            JOIN Milestones ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
+            LEFT JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId
+            LEFT JOIN Milestones ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN Offers ON Offers.Id = Letters.OfferId
             JOIN Entities ON Letters_Entities.EntityId=Entities.Id
             WHERE ${projectConditon} 
               AND ${contractConditon} 

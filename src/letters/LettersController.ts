@@ -81,7 +81,7 @@ export default class LettersController {
         JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
         JOIN Milestones ON Milestones.Id=Cases.MilestoneId
         LEFT JOIN Contracts ON Contracts.Id=Milestones.ContractId
-        LEFT JOIN Offers ON Offers.Id = Milestones.OfferId
+        LEFT JOIN Offers ON Offers.Id = Letters.OfferId
         LEFT JOIN Projects ON Letters.ProjectId=Projects.Id
         JOIN Persons ON Letters.EditorId=Persons.Id
         JOIN Letters_Entities ON Letters_Entities.LetterId=Letters.Id
@@ -93,7 +93,7 @@ export default class LettersController {
             AND ${milestoneParentTypeCondition}
         GROUP BY Letters.Id
         ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
-        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLettersResult(result, orConditions[0]);
     }
@@ -215,16 +215,12 @@ export default class LettersController {
 
             switch (ProperLetterType) {
                 case OurLetterContract:
-                    paramsCreator = this.createOurLetterContractInitParam;
+                case IncomingLetterContract:
+                    paramsCreator = this.createLetterContractInitParam;
                     break;
                 case OurLetterOffer:
-                    paramsCreator = this.createOurLetterOfferInitParam;
-                    break;
-                case IncomingLetterContract:
-                    paramsCreator = this.createIncomingLetterContractInitParam;
-                    break;
                 case IncomingLetterOffer:
-                    paramsCreator = this.createIncomingLetterOfferInitParam;
+                    paramsCreator = this.createLetterOfferInitParam;
                     break;
                 case OurOldTypeLetter:
                     paramsCreator =
@@ -280,7 +276,7 @@ export default class LettersController {
         return initParam;
     }
 
-    private static createOurLetterContractInitParam(
+    private static createLetterContractInitParam(
         row: any,
         _casesAssociationsPerLetter: LetterCase[],
         _letterEntitiesMainPerLetter: LetterEntity[],
@@ -307,13 +303,13 @@ export default class LettersController {
         return initParam;
     }
 
-    private static createOurLetterOfferInitParam(
+    private static createLetterOfferInitParam(
         row: any,
         _casesAssociationsPerLetter: LetterCase[],
         _letterEntitiesMainPerLetter: LetterEntity[],
         _letterEntitiesCcPerLetter: LetterEntity[]
     ) {
-        const letterParams = this.createLetterInitParam(
+        const letterParams = LettersController.createLetterInitParam(
             row,
             _casesAssociationsPerLetter,
             _letterEntitiesMainPerLetter,
@@ -333,66 +329,13 @@ export default class LettersController {
         return initParam;
     }
 
-    private static createIncomingLetterOfferInitParam(
-        row: any,
-        _casesAssociationsPerLetter: LetterCase[],
-        _letterEntitiesMainPerLetter: LetterEntity[],
-        _letterEntitiesCcPerLetter: LetterEntity[]
-    ) {
-        const letterParams = this.createLetterInitParam(
-            row,
-            _casesAssociationsPerLetter,
-            _letterEntitiesMainPerLetter,
-            _letterEntitiesCcPerLetter
-        );
-
-        const initParam: IncomingLetterOfferData = {
-            ...letterParams,
-            isOur: row.IsOur,
-            _offer: <OurOfferData>{
-                id: row.OfferId,
-                alias: row.OfferAlias,
-                description: row.OfferDescription,
-            },
-        };
-
-        return initParam;
-    }
-
-    private static createIncomingLetterContractInitParam(
-        row: any,
-        _casesAssociationsPerLetter: LetterCase[],
-        _letterEntitiesMainPerLetter: LetterEntity[],
-        _letterEntitiesCcPerLetter: LetterEntity[]
-    ) {
-        const letterParams = LettersController.createLetterInitParam(
-            row,
-            _casesAssociationsPerLetter,
-            _letterEntitiesMainPerLetter,
-            _letterEntitiesCcPerLetter
-        );
-
-        const initParam: IncomingLetterContractData = {
-            ...letterParams,
-            isOur: row.IsOur,
-            _project: <ProjectData>{
-                id: row.ProjectId,
-                ourId: row.ProjectOurId,
-                gdFolderId: row.ProjectGdFolderId,
-                lettersGdFolderId: row.LettersGdFolderId,
-            },
-        };
-
-        return initParam;
-    }
-
     private static createOurOldTypeLetterContractInitParam(
         row: any,
         _casesAssociationsPerLetter: LetterCase[],
         _letterEntitiesMainPerLetter: LetterEntity[],
         _letterEntitiesCcPerLetter: LetterEntity[]
     ) {
-        const params = LettersController.createIncomingLetterContractInitParam(
+        const params = LettersController.createLetterContractInitParam(
             row,
             _casesAssociationsPerLetter,
             _letterEntitiesMainPerLetter,
@@ -405,7 +348,7 @@ export default class LettersController {
     private static getLetterType(row: any) {
         if (row.IsOur && row.Id == row.Number && row.ProjectId)
             return OurLetterContract;
-        if (row.IsOur && row.Id !== row.Number) return OurOldTypeLetter;
+        if (row.IsOur && row.Id != row.Number) return OurOldTypeLetter;
         if (row.IsOur && row.OfferId) return OurLetterOffer;
         if (!row.IsOur && row.ProjectId) return IncomingLetterContract;
         return IncomingLetterOffer;
