@@ -14,6 +14,7 @@ import MilestoneTemplatesController from '../contracts/milestones/milestoneTempl
 import Milestone from '../contracts/milestones/Milestone';
 import ToolsDb from '../tools/ToolsDb';
 import OfferGdController from './OfferGdController';
+import Setup from '../setup/Setup';
 
 export default abstract class Offer
     extends BusinessObject
@@ -156,13 +157,18 @@ export default abstract class Offer
                 },
                 'OFFER'
             );
-        for (const template of defaultMilestoneTemplates) {
+
+        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
+            const template = defaultMilestoneTemplates[i];
             const milestone = new Milestone({
                 name: template.name,
                 description: template.description,
                 _type: template._milestoneType,
                 _offer: this as any,
                 status: 'Nie rozpoczęty',
+                endDate: i
+                    ? this.submissionDeadline
+                    : this.setBidValidityDate(),
             });
 
             await milestone.createFolders(auth);
@@ -179,6 +185,24 @@ export default abstract class Offer
             await milestone.createDefaultCases(auth, { isPartOfBatch: true });
         }
         console.groupEnd();
+    }
+    //tymczasowa funkcja
+    private setBidValidityDate() {
+        if (!this.submissionDeadline) throw new Error('Brak terminu składania');
+        let bidValidityDate: Date;
+        let validityDays = 90;
+        if (this.bidProcedure === Setup.OfferBidProcedure.REQUEST_FOR_QUOTATION)
+            validityDays = 30;
+        if (this.bidProcedure === Setup.OfferBidProcedure.TENDER_PL)
+            validityDays = 60;
+
+        bidValidityDate = ToolsDate.addDays(
+            this.submissionDeadline,
+            validityDays
+        );
+        const bidValidityDateStr = ToolsDate.dateJsToSql(bidValidityDate);
+        if (!bidValidityDateStr) throw new Error('Błąd daty');
+        return bidValidityDateStr;
     }
 
     private async addDefaultMilestonesInDb(

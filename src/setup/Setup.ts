@@ -149,7 +149,7 @@ export default class Setup {
     };
 
     static OfferBidProcedure = {
-        X: 'Zapytanie ofertowe',
+        REQUEST_FOR_QUOTATION: 'Zapytanie ofertowe',
         TENDER_PL: 'Przetarg BZP',
         TENDER_EU: 'Przetarg DUUE',
     };
