@@ -9,10 +9,8 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
     }
 
     async createGdElements(auth: OAuth2Client) {
-        if (!this.gdFolderId) {
-            throw new Error('Brak folderu oferty');
-        }
         await super.createGdElements(auth);
+        if (!this.gdFolderId) throw new Error('Brak folderu oferty');
         try {
             console.log('Tworzenie podfolderów');
             ToolsGd.setFolder(auth, {
