@@ -10,8 +10,6 @@ import OurOldTypeLetter from './OurOldTypeLetter';
 import {
     CaseData,
     ContractData,
-    IncomingLetterContractData,
-    IncomingLetterOfferData,
     LetterData,
     OfferData,
     OurLetterContractData,

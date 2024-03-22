@@ -13,7 +13,7 @@ import { OAuth2Client } from 'google-auth-library';
 import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
 import Milestone from '../contracts/milestones/Milestone';
 import ToolsDb from '../tools/ToolsDb';
-import OfferGdController from './OfferGdController';
+import OfferGdController from './gdControllers/OfferGdController';
 import Setup from '../setup/Setup';
 
 export default abstract class Offer
@@ -120,7 +120,8 @@ export default abstract class Offer
     async deleteController(auth: OAuth2Client) {
         if (!this.gdFolderId) throw new Error('Brak folderu oferty');
         if (this.id) await this.deleteFromDb();
-        await OfferGdController.deleteFromGd(auth, this.gdFolderId);
+        const offerGdController = new OfferGdController();
+        await offerGdController.deleteFromGd(auth, this.gdFolderId);
     }
 
     setCity(cityOrCityName: City | string) {
@@ -141,7 +142,8 @@ export default abstract class Offer
     }
     /**tworzy folder główny oferty */
     async createGdElements(auth: OAuth2Client) {
-        const gdFolder = await OfferGdController.createOfferFolder(auth, this);
+        const offerGdController = new OfferGdController();
+        const gdFolder = await offerGdController.createOfferFolder(auth, this);
         if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
@@ -249,7 +251,8 @@ export default abstract class Offer
             auth,
             <string>this.gdFolderId
         );
-        const newFolderName = OfferGdController.makeFolderName(
+        const offerGdController = new OfferGdController();
+        const newFolderName = offerGdController.makeFolderName(
             this._type.name,
             this.alias,
             this.submissionDeadline

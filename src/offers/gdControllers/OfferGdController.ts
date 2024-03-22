@@ -1,11 +1,11 @@
 import { OAuth2Client } from 'google-auth-library';
-import Offer from './Offer';
 
-import ToolsGd from '../tools/ToolsGd';
-import Setup from '../setup/Setup';
+import ToolsGd from '../../tools/ToolsGd';
+import Setup from '../../setup/Setup';
+import { OfferData } from '../../types/types';
 
 export default class OfferGdController {
-    static makeFolderName(
+    makeFolderName(
         typeName: string,
         alias: string,
         submissionDeadline: string
@@ -14,7 +14,7 @@ export default class OfferGdController {
     }
 
     /** Tworzy folder oferty w folderze _city - nie zmienia offerData*/
-    static async createOfferFolder(auth: OAuth2Client, offerData: Offer) {
+    async createOfferFolder(auth: OAuth2Client, offerData: OfferData) {
         if (!offerData._city)
             throw new Error('Brak miasta w przypisanego do oferty');
         if (!offerData._type)
@@ -22,13 +22,7 @@ export default class OfferGdController {
         if (!offerData.submissionDeadline)
             throw new Error('Brak terminu składania oferty');
 
-        const {
-            _city,
-            _type,
-            employerName: employer,
-            submissionDeadline,
-            alias,
-        } = offerData;
+        const { _city, _type, alias } = offerData;
         const cityFolder = await ToolsGd.setFolder(auth, {
             name: _city.name,
             parentId: Setup.Gd.offersRootFolderId,
@@ -49,7 +43,7 @@ export default class OfferGdController {
     }
 
     /** Usuwa folder oferty */
-    static async deleteFromGd(auth: OAuth2Client, gdFolderId: string) {
+    async deleteFromGd(auth: OAuth2Client, gdFolderId: string) {
         try {
             await ToolsGd.trashFileOrFolder(auth, gdFolderId);
         } catch (error) {
@@ -58,7 +52,7 @@ export default class OfferGdController {
     }
 
     /** Wrzuca pliki do folderu oferty - folder musi być wcześniej utworzony */
-    static async appendAttachments(
+    async appendAttachments(
         auth: OAuth2Client,
         files: Express.Multer.File[],
         offerGdFolderId: string
@@ -72,7 +66,7 @@ export default class OfferGdController {
      * @param files
      * @param parentGdFolderId
      */
-    protected static async uploadAttachments(
+    protected async uploadAttachments(
         auth: OAuth2Client,
         files: Express.Multer.File[],
         parentGdFolderId: string

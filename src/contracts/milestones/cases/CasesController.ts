@@ -89,7 +89,6 @@ export default class CasesController {
         )}
             AND ${milestoneParentTypeCondition}
         ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processCasesResult(result, orConditions[0]);
     }
