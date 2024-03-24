@@ -1,9 +1,9 @@
-import BusinessObject from "../../BussinesObject";
+import BusinessObject from '../../BussinesObject';
 
 export default class Role extends BusinessObject {
     id: number;
     projectOurId?: string;
-    contractId?: number
+    contractId?: number;
     name: string;
     description: string;
     groupName: string;
@@ -15,7 +15,7 @@ export default class Role extends BusinessObject {
     _contract: any;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Roles' })
+        super({ ...initParamObject, _dbTableName: 'Roles' });
         this.id = initParamObject.id;
         if (initParamObject.projectOurId)
             this.projectOurId = initParamObject.projectOurId;
@@ -31,7 +31,5 @@ export default class Role extends BusinessObject {
         this._group = initParamObject._group;
         if (initParamObject.managerId)
             this.managerId = initParamObject.managerId;
-
     }
 }
-

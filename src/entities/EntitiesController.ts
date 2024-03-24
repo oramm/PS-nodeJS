@@ -1,17 +1,16 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb'
-import Entity from "./Entity";
+import ToolsDb from '../tools/ToolsDb';
+import Entity from './Entity';
 
 export type EntitiesSearchParams = {
     projectId?: string;
     id?: number;
     name?: string;
     searchText?: string;
-}
+};
 
 export default class EntitiesController {
     static async getEntitiesList(orConditions: EntitiesSearchParams[] = []) {
-
         const sql = `SELECT  Entities.Id,
                 Entities.Name,
                 Entities.Address,
@@ -21,8 +20,11 @@ export default class EntitiesController {
                 Entities.Phone,
                 Entities.Fax
             FROM Entities
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
-            ORDER BY Entities.Name;`
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
+            ORDER BY Entities.Name;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processEntitiesResult(result);
@@ -30,7 +32,9 @@ export default class EntitiesController {
 
     static makeAndConditions(searchParams: EntitiesSearchParams) {
         const projectCondition = searchParams.projectId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [searchParams.projectId])
+            ? mysql.format(`Contracts.ProjectOurId = ?`, [
+                  searchParams.projectId,
+              ])
             : '1';
 
         const idCondition = searchParams.id
@@ -41,7 +45,9 @@ export default class EntitiesController {
             ? mysql.format(`Entities.Name LIKE ?`, [`%${searchParams.name}%`])
             : '1';
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         return `${projectCondition} 
             AND ${idCondition}
@@ -50,20 +56,23 @@ export default class EntitiesController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Entities.Name LIKE ?
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Entities.Name LIKE ?
                 OR Entities.Address LIKE ?
                 OR Entities.Email LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
-    static processEntitiesResult(result: any[]): [Entity?] {
-        let newResult: [Entity?] = [];
+    static processEntitiesResult(result: any[]): Entity[] {
+        let newResult: Entity[] = [];
 
         for (const row of result) {
             const item = new Entity({
@@ -74,7 +83,7 @@ export default class EntitiesController {
                 www: row.Www,
                 email: row.Email,
                 phone: row.Phone,
-                fax: row.Fax
+                fax: row.Fax,
             });
             newResult.push(item);
         }

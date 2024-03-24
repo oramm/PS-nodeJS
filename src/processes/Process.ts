@@ -11,18 +11,16 @@ export default class Process extends BusinessObject {
     _lastUpdated: any;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Processes' });
+        super({ ...initParamObject, _dbTableName: 'Processes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;
 
-        this._caseType = initParamObject._caseType
-        this.caseTypeId = initParamObject._caseType.id
+        this._caseType = initParamObject._caseType;
+        this.caseTypeId = initParamObject._caseType.id;
 
-        if (initParamObject.status)
-            this.status = 'ACTIVE';
+        if (initParamObject.status) this.status = 'ACTIVE';
 
         this._lastUpdated = initParamObject._lastUpdated;
     }
 }
-

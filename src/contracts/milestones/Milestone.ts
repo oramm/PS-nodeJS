@@ -48,7 +48,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     _FolderNumber_TypeName_Name?: string;
 
     constructor(initParamObject: MilestoneData) {
-        super({ _dbTableName: 'Milestones' });
+        super({ ...initParamObject, _dbTableName: 'Milestones' });
         if (!initParamObject._contract && !initParamObject._offer)
             throw new Error('Contract or offer is not defined for Milestone');
 

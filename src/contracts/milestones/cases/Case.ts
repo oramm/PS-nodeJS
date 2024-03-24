@@ -33,7 +33,7 @@ export default class Case extends BusinessObject implements CaseData {
     _folderName?: string;
 
     constructor(initParamObject: CaseData) {
-        super({ _dbTableName: 'Cases' });
+        super({ ...initParamObject, _dbTableName: 'Cases' });
         this.id = initParamObject.id;
         this.number = initParamObject.number;
         this._type = initParamObject._type;

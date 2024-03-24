@@ -11,11 +11,11 @@ export default class ProcessStep extends BusinessObject {
     status?: string;
     _lastUpdated?: string;
     _documentOpenUrl?: string;
-    _documentTemplate?: any
+    _documentTemplate?: any;
     documentTemplateContentsId?: number | null;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'ProcessesSteps' });
+        super({ ...initParamObject, _dbTableName: 'ProcessesSteps' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;
@@ -23,19 +23,25 @@ export default class ProcessStep extends BusinessObject {
             this._parent = initParamObject._parent;
             this.processId = initParamObject._parent.id;
         }
-        if (initParamObject.status)
-            this.status = initParamObject.status;
+        if (initParamObject.status) this.status = initParamObject.status;
 
         this._lastUpdated = initParamObject._lastUpdated;
-        this._documentTemplate = new DocumentTemplate(initParamObject._documentTemplate);
+        this._documentTemplate = new DocumentTemplate(
+            initParamObject._documentTemplate
+        );
         if (this.hasTemplate(initParamObject))
-            this.setDocumentTemplateContentsIdandUrl(initParamObject._documentTemplate._contents.id);
+            this.setDocumentTemplateContentsIdandUrl(
+                initParamObject._documentTemplate._contents.id
+            );
     }
 
     setDocumentTemplateContentsIdandUrl(id: number) {
         if (id) {
-            this.documentTemplateContentsId = this._documentTemplate._contents.id;
-            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(this._documentTemplate.gdId);
+            this.documentTemplateContentsId =
+                this._documentTemplate._contents.id;
+            this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+                this._documentTemplate.gdId
+            );
         } else {
             this.documentTemplateContentsId = null;
             this._documentOpenUrl = undefined;
@@ -43,8 +49,9 @@ export default class ProcessStep extends BusinessObject {
     }
 
     private hasTemplate(initParamObject: any) {
-        return initParamObject._documentTemplate && initParamObject._documentTemplate._contents;
+        return (
+            initParamObject._documentTemplate &&
+            initParamObject._documentTemplate._contents
+        );
     }
-
 }
-

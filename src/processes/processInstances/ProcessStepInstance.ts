@@ -18,7 +18,7 @@ export default class ProcessStepInstance extends BusinessObject {
     _extRepoTmpDataObject?: any;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'ProcessesStepsInstances' });
+        super({ ...initParamObject, _dbTableName: 'ProcessesStepsInstances' });
         this.id = initParamObject.id;
         this.processInstanceId = initParamObject.processInstanceId;
         if (initParamObject._processStep) {

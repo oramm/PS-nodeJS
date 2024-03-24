@@ -11,10 +11,13 @@ export default class MilestoneTypeContractType extends BusinessObject {
     id: string;
     _milestoneType: MilestoneType;
     _contractType: ContractType;
-    _folderNumber_MilestoneTypeName?: any
+    _folderNumber_MilestoneTypeName?: any;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'MilestoneTypes_ContractTypes' });
+        super({
+            ...initParamObject,
+            _dbTableName: 'MilestoneTypes_ContractTypes',
+        });
         this.milestoneTypeId = initParamObject._milestoneType.id;
         this.contractTypeId = initParamObject._contractType.id;
         this.folderNumber = '' + initParamObject.folderNumber;
@@ -23,11 +26,17 @@ export default class MilestoneTypeContractType extends BusinessObject {
         this.id = '' + this.milestoneTypeId + this.contractTypeId;
         this._milestoneType = initParamObject._milestoneType;
         this._contractType = initParamObject._contractType;
-        this._folderNumber_MilestoneTypeName = initParamObject._folderNumber_MilestoneTypeName;
+        this._folderNumber_MilestoneTypeName =
+            initParamObject._folderNumber_MilestoneTypeName;
     }
 
     async addInDb(externalConn?: any, isPartOfTransaction?: boolean) {
-        return await ToolsDb.addInDb(this._dbTableName, this, externalConn, isPartOfTransaction);
+        return await ToolsDb.addInDb(
+            this._dbTableName,
+            this,
+            externalConn,
+            isPartOfTransaction
+        );
     }
 
     async editInDb(externalConn?: any) {
@@ -35,12 +44,26 @@ export default class MilestoneTypeContractType extends BusinessObject {
             SET FolderNumber=?, \n
             IsDefault=?\n
             WHERE MilestoneTypeId=? AND ContractTypeId=?`;
-        const params = [this.folderNumber, this.isDefault, this.contractTypeId, this.milestoneTypeId];
-        return await ToolsDb.executePreparedStmt(sql, params, this, externalConn);
+        const params = [
+            this.folderNumber,
+            this.isDefault,
+            this.contractTypeId,
+            this.milestoneTypeId,
+        ];
+        return await ToolsDb.executePreparedStmt(
+            sql,
+            params,
+            this,
+            externalConn
+        );
     }
 
     async deleteFromDb() {
         const sql = `DELETE FROM ${this._dbTableName} WHERE MilestoneTypeId=? AND ContractTypeId=?`;
-        return await ToolsDb.executePreparedStmt(sql, [this.milestoneTypeId, this.contractTypeId], this);
+        return await ToolsDb.executePreparedStmt(
+            sql,
+            [this.milestoneTypeId, this.contractTypeId],
+            this
+        );
     }
 }

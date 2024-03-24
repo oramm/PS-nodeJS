@@ -12,7 +12,7 @@ export default class ContractType
     status: string;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'ContractTypes' });
+        super({ ...initParamObject, _dbTableName: 'ContractTypes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;

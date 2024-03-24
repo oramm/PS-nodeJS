@@ -1,13 +1,13 @@
-import InvoiceItem from "./InvoiceItem";
-import ToolsDate from "../tools/ToolsDate";
-import ToolsGd from "../tools/ToolsGd";
-import BusinessObject from "../BussinesObject";
-import Setup from "../setup/Setup";
+import InvoiceItem from './InvoiceItem';
+import ToolsDate from '../tools/ToolsDate';
+import ToolsGd from '../tools/ToolsGd';
+import BusinessObject from '../BussinesObject';
+import Setup from '../setup/Setup';
 import mysql from 'mysql2/promise';
-import ToolsDb from "../tools/ToolsDb";
-import InvoiceItemsController from "./InvoiceItemsController";
-import ContractsSettlementController from "../contracts/ContractsSettlementController";
-import ContractOur from "../contracts/ContractOur";
+import ToolsDb from '../tools/ToolsDb';
+import InvoiceItemsController from './InvoiceItemsController';
+import ContractsSettlementController from '../contracts/ContractsSettlementController';
+import ContractOur from '../contracts/ContractOur';
 
 export default class Invoice extends BusinessObject {
     id?: number;
@@ -35,9 +35,11 @@ export default class Invoice extends BusinessObject {
     _totalNetValue: number;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Invoices' })
+        super({ ...initParamObject, _dbTableName: 'Invoices' });
         this.daysToPay = initParamObject.daysToPay;
-        this.issueDate = ToolsDate.dateJsToSql(initParamObject.issueDate) as string;
+        this.issueDate = ToolsDate.dateJsToSql(
+            initParamObject.issueDate
+        ) as string;
         this.initByStatus(initParamObject.status, initParamObject);
 
         this.id = initParamObject.id;
@@ -46,20 +48,18 @@ export default class Invoice extends BusinessObject {
         this._lastUpdated = initParamObject._lastUpdated;
 
         this._entity = initParamObject._entity;
-        if (initParamObject._entity)
-            this.entityId = initParamObject._entity.id;
+        if (initParamObject._entity) this.entityId = initParamObject._entity.id;
 
         this._editor = initParamObject._editor;
-        if (initParamObject._editor)
-            this.editorId = initParamObject._editor.id;
+        if (initParamObject._editor) this.editorId = initParamObject._editor.id;
         if (initParamObject._owner) {
             this._owner = initParamObject._owner;
             this.ownerId = initParamObject._owner.id;
             this._owner._nameSurnameEmail =
                 this._owner.name +
-                " " +
+                ' ' +
                 this._owner.surname +
-                " " +
+                ' ' +
                 this._owner.email;
         }
         this._totalNetValue = initParamObject._totalNetValue as number;
@@ -69,24 +69,28 @@ export default class Invoice extends BusinessObject {
     }
 
     setGdIdAndUrl(gdId: string | undefined | null) {
-        this._documentOpenUrl = (typeof gdId === 'string') ? ToolsGd.createDocumentOpenUrl(gdId) : undefined;
+        this._documentOpenUrl =
+            typeof gdId === 'string'
+                ? ToolsGd.createDocumentOpenUrl(gdId)
+                : undefined;
         this.gdId = gdId;
-    };
+    }
 
     countPaymentDeadline() {
         if (!this.sentDate) return null;
         const payDay: Date = ToolsDate.addDays(this.sentDate, this.daysToPay);
         return ToolsDate.dateJsToSql(payDay);
-
     }
     /**ustawia parametry faktury w zależności od  statusu */
-    initByStatus(status: string, initParamObject: {
-        sentDate?: string | null;
-        paymentDeadline?: string | null;
-        number?: string | null;
-        gdId?: string | null;
-    }) {
-
+    initByStatus(
+        status: string,
+        initParamObject: {
+            sentDate?: string | null;
+            paymentDeadline?: string | null;
+            number?: string | null;
+            gdId?: string | null;
+        }
+    ) {
         if (initParamObject.sentDate) {
             this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
             this.paymentDeadline = this.countPaymentDeadline();
@@ -125,7 +129,9 @@ export default class Invoice extends BusinessObject {
                 ...this,
                 id: undefined,
                 description: this.description
-                    ? (this.description.endsWith(' KOPIA') ? this.description : this.description + ' KOPIA')
+                    ? this.description.endsWith(' KOPIA')
+                        ? this.description
+                        : this.description + ' KOPIA'
                     : 'KOPIA',
 
                 status: Setup.InvoiceStatus.FOR_LATER,
@@ -136,7 +142,10 @@ export default class Invoice extends BusinessObject {
             });
 
             await invoiceCopy.addInDb();
-            const originalItems = await InvoiceItemsController.getInvoiceItemsList([{ invoiceId: this.id }]);
+            const originalItems =
+                await InvoiceItemsController.getInvoiceItemsList([
+                    { invoiceId: this.id },
+                ]);
 
             for (const itemData of originalItems) {
                 delete itemData.id;

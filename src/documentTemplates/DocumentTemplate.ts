@@ -14,7 +14,7 @@ export default class DocumentTemplate
     _nameContentsAlias: string;
 
     constructor(initParamObject: DocumentTemplateData) {
-        super({ _dbTableName: 'DocumentTemplates' });
+        super({ ...initParamObject, _dbTableName: 'DocumentTemplates' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;

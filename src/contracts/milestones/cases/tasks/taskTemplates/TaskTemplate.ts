@@ -9,11 +9,8 @@ export default class TaskTemplate extends BusinessObject {
     _caseTemplate?: any;
     caseTemplateId?: number;
 
-
-
-
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'TaskTemplates' });
+        super({ ...initParamObject, _dbTableName: 'TaskTemplates' });
         this.id = initParamObject.id;
         //this.templateComment = initParamObject.templateComment;
         this.name = initParamObject.name;
@@ -27,4 +24,3 @@ export default class TaskTemplate extends BusinessObject {
         }
     }
 }
-

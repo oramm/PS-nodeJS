@@ -34,8 +34,8 @@ export class Security extends BusinessObject {
     _gdFolderUrl?: string;
     status: string;
 
-    constructor(initParms: SecurityInitParms) {
-        super({ _dbTableName: 'Securities' });
+    constructor(initParamObject: SecurityInitParms) {
+        super({ ...initParamObject, _dbTableName: 'Securities' });
         const {
             id,
             description,
@@ -52,7 +52,7 @@ export class Security extends BusinessObject {
             _editor,
             _lastUpdated,
             status,
-        } = initParms;
+        } = initParamObject;
         if (!_contract.id) throw new Error(`Nie podano id kontraktu`);
 
         this.id = id;

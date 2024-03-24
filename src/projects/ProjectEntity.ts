@@ -1,4 +1,3 @@
-
 import BusinessObject from '../BussinesObject';
 import Entity from '../entities/Entity';
 import Project from './Project';
@@ -11,7 +10,7 @@ export default class ProjectEntity extends BusinessObject {
     projectRole: 'EMPLOYER' | 'ENGINEER';
     id: string;
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Projects_Entities' })
+        super({ ...initParamObject, _dbTableName: 'Projects_Entities' });
         this.projectId = initParamObject._project.id;
         this._project = initParamObject._project;
 

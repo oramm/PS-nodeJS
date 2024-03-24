@@ -11,8 +11,6 @@ import { keys } from './setup/GAuth2/credentials';
 import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
-import Setup from './setup/Setup';
-import ToolsGapi from './setup/GAuth2/ToolsGapi';
 declare global {
     namespace Express {
         interface Request {
@@ -161,6 +159,8 @@ require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');
 
+require('./projects/ProjectsRouters');
+
 require('./contracts/ContractsRouters');
 require('./contracts/contractTypes/ContractTypesRouters');
 require('./contracts/milestones/MilestonesRouters');
@@ -170,41 +170,27 @@ require('./contracts/milestones/cases/CasesRouters');
 require('./contracts/milestones/cases/caseTypes/CaseTypesRouters');
 require('./contracts/milestones/cases/caseTemplates/CaseTemplatesRouters');
 require('./contracts/MilestoneTypeContractTypeAssociations/MilestoneTypeContractTypeAssociationsRouters');
-require('./Admin/Cities/CitiesRouters');
-
-const risksRouter = require('./contracts/milestones/cases/risks/RisksRouters');
-app.use(risksRouter);
-
-const risksReactionsRouter = require('./contracts/milestones/cases/risks/risksReactions/RisksReactionsRouters');
-app.use(risksReactionsRouter);
 
 require('./contracts/milestones/cases/tasks/TasksRouters');
 require('./contracts/milestones/cases/tasks/taskTemplates/TaskTemplatesRouters');
 require('./contracts/securities/SecuritiesRouters');
-require('./processes/ProcessesRouters');
-require('./processes/ProcessStepsRouters');
-require('./processes/processInstances/ProcessInstancesRouters');
-require('./processes/processInstances/ProcessStepInstancesRouters');
+
+require('./financialAidProgrammes/FinancialAidProgrammesRouters');
+require('./financialAidProgrammes/FocusAreasRouters');
+require('./financialAidProgrammes/NeedsRouters');
+require('./financialAidProgrammes/ApplicationCallsRouters');
+
+//require('./processes/ProcessesRouters');
+//require('./processes/ProcessStepsRouters');
+//require('./processes/processInstances/ProcessInstancesRouters');
+//require('./processes/processInstances/ProcessStepInstancesRouters');
 
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
 require('./offers/OffersRouters');
 
-const meetingsRouter = require('./meetings/MeetingsRouters');
-app.use(meetingsRouter);
-
-const meetingArrangementsRouter = require('./meetings/meetingArrangements/MeetingArrangementsRouters');
-app.use(meetingArrangementsRouter);
-
-const caseEventsRouter = require('./contracts/milestones/cases/caseEvents/CaseEventsRouters');
-app.use(caseEventsRouter);
-
-const materialCardsRouter = require('./contracts/materialCards/MaterialCardsRouters');
-app.use(materialCardsRouter);
-
-require('./projects/ProjectsRouters');
-Tools;
+require('./Admin/Cities/CitiesRouters');
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);

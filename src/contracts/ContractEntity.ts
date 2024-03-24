@@ -1,6 +1,6 @@
-import BusinessObject from "../BussinesObject";
-import Entity from "../entities/Entity";
-import Contract from "./Contract";
+import BusinessObject from '../BussinesObject';
+import Entity from '../entities/Entity';
+import Contract from './Contract';
 
 export default class ContractEntity extends BusinessObject {
     contractId: number;
@@ -10,7 +10,7 @@ export default class ContractEntity extends BusinessObject {
     contractRole: string;
     id: string;
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Contracts_Entities' });
+        super({ ...initParamObject, _dbTableName: 'Contracts_Entities' });
         this.contractId = initParamObject._contract.id;
         this._contract = initParamObject._contract;
         this.entityId = initParamObject._entity.id;

@@ -29,7 +29,7 @@ export default class Task extends BusinessObject {
     sheetRow?: any;
     milestoneId?: number;
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'Tasks' });
+        super({ ...initParamObject, _dbTableName: 'Tasks' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;

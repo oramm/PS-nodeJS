@@ -1,4 +1,4 @@
-import BusinessObject from "../../../../BussinesObject";
+import BusinessObject from '../../../../BussinesObject';
 
 export default class CaseType extends BusinessObject {
     id?: number;
@@ -12,9 +12,8 @@ export default class CaseType extends BusinessObject {
     _processes: any[];
     _folderName: string;
 
-
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'CaseTypes' });
+        super({ ...initParamObject, _dbTableName: 'CaseTypes' });
         this.id = initParamObject.id;
         this.id = initParamObject.id;
         this.name = initParamObject.name;
@@ -25,12 +24,13 @@ export default class CaseType extends BusinessObject {
         this.isUniquePerMilestone = initParamObject.isUniquePerMilestone;
         this._milestoneType = initParamObject._milestoneType;
         this.milestoneTypeId = initParamObject._milestoneType.id;
-        this._processes = (initParamObject._processes) ? initParamObject._processes : [];
+        this._processes = initParamObject._processes
+            ? initParamObject._processes
+            : [];
         this._folderName = this.setFolderName();
     }
 
     setFolderName() {
-        return this._folderName = this.folderNumber + ' ' + this.name;
+        return (this._folderName = this.folderNumber + ' ' + this.name);
     }
 }
-

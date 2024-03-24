@@ -1,7 +1,7 @@
-import BusinessObject from "../BussinesObject";
-import ContractOur from "../contracts/ContractOur";
-import Invoice from "./Invoice";
-import InvoiceValidator from "./InvoiceValidator";
+import BusinessObject from '../BussinesObject';
+import ContractOur from '../contracts/ContractOur';
+import Invoice from './Invoice';
+import InvoiceValidator from './InvoiceValidator';
 
 export default class InvoiceItem extends BusinessObject {
     id?: number;
@@ -19,9 +19,9 @@ export default class InvoiceItem extends BusinessObject {
     editorId: number;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'InvoiceItems' });
+        super({ ...initParamObject, _dbTableName: 'InvoiceItems' });
         this.id = initParamObject.id;
-        this._parent = initParamObject._parent
+        this._parent = initParamObject._parent;
         this.parentId = initParamObject._parent.id;
         this.description = initParamObject.description;
         this.quantity = initParamObject.quantity;

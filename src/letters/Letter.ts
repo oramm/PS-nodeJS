@@ -41,7 +41,7 @@ export default abstract class Letter
     _documentEditUrl?: string;
 
     constructor(initParamObject: LetterData) {
-        super({ _dbTableName: 'Letters' });
+        super({ ...initParamObject, _dbTableName: 'Letters' });
         if (!initParamObject.creationDate) {
             throw new Error('creationDate is required');
         }

@@ -50,7 +50,7 @@ export default abstract class Contract
     _lastUpdated?: string;
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
-        super({ _dbTableName: 'Contracts' });
+        super({ ...initParamObject, _dbTableName: 'Contracts' });
         this.id = initParamObject.id;
         this.alias = initParamObject.alias;
         this.typeId = initParamObject._type?.id;

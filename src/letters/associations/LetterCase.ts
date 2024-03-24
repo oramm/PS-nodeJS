@@ -11,7 +11,7 @@ export default class LetterCase extends BusinessObject {
     _case: any;
 
     constructor(initParamObject: { _letter: any; _case: CaseData }) {
-        super({ _dbTableName: 'Letters_Cases' });
+        super({ ...initParamObject, _dbTableName: 'Letters_Cases' });
         this.letterId = initParamObject._letter.id;
         this.caseId = <number>initParamObject._case.id;
         //id jest usuwane w addInDb(), więc przy asocjacjach musi byś ręcznie odtworeone w controllerze

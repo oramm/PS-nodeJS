@@ -16,7 +16,7 @@ export default class MilestoneTemplate extends BusinessObject {
     milestoneTypeId: number;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'MilestoneTemplates' });
+        super({ ...initParamObject, _dbTableName: 'MilestoneTemplates' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         this.description = initParamObject.description;

@@ -16,7 +16,7 @@ export default class ProcessInstance extends BusinessObject {
     _stepsInstances: any[];
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'ProcessInstances' });
+        super({ ...initParamObject, _dbTableName: 'ProcessInstances' });
         this.id = initParamObject.id;
         this.processId = initParamObject._process.id;
 
@@ -29,13 +29,23 @@ export default class ProcessInstance extends BusinessObject {
         this._case = initParamObject._case;
         this._task = initParamObject._task;
         this._process = initParamObject._process;
-        this._stepsInstances = (initParamObject._stepsInstances) ? initParamObject._stepsInstances : [];
+        this._stepsInstances = initParamObject._stepsInstances
+            ? initParamObject._stepsInstances
+            : [];
     }
     /** Jest odpalana przy każdym utworzeniu Sprawy posiadającej ProcessInstance w funkcji ProcessInstance.addInDb();
      */
-    async createProcessStepsInstances(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
-        const processSteps = await ProcessStepsController.getProcessStepsList({ processId: this.processId });
+    async createProcessStepsInstances(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction: boolean = false
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Transaction is not possible without external connection'
+            );
+        const processSteps = await ProcessStepsController.getProcessStepsList({
+            processId: this.processId,
+        });
         let item;
         for (const processStep of processSteps) {
             item = new ProcessStepInstance({
@@ -47,7 +57,7 @@ export default class ProcessInstance extends BusinessObject {
                     description: processStep.description,
                 },
                 _case: this._case,
-                editorId: this.editorId
+                editorId: this.editorId,
             });
 
             await item.addInDb(externalConn, isPartOfTransaction);
@@ -56,10 +66,19 @@ export default class ProcessInstance extends BusinessObject {
         if (item) return item.id;
     }
 
-    async addInDb(externalConn: mysql.PoolConnection, isPartOfTransaction: boolean = false) {
-        if (!externalConn && isPartOfTransaction) throw new Error('Transaction is not possible without external connection');
-        await super.addInDb(externalConn, isPartOfTransaction)
-        await this.createProcessStepsInstances(externalConn, isPartOfTransaction);
+    async addInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction: boolean = false
+    ) {
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Transaction is not possible without external connection'
+            );
+        await super.addInDb(externalConn, isPartOfTransaction);
+        await this.createProcessStepsInstances(
+            externalConn,
+            isPartOfTransaction
+        );
         return this;
     }
 }

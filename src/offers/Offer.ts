@@ -42,7 +42,7 @@ export default abstract class Offer
     _gdFolderUrl?: string;
 
     constructor(initParamObject: OfferData) {
-        super({ _dbTableName: 'Offers' });
+        super({ ...initParamObject, _dbTableName: 'Offers' });
         if (!initParamObject._city.id)
             throw new Error('City id is not defined');
         if (!initParamObject._type.id)
@@ -126,7 +126,7 @@ export default abstract class Offer
 
     setCity(cityOrCityName: City | string) {
         if (typeof cityOrCityName === 'string') {
-            const city = new City({ name: cityOrCityName });
+            const city = new City({ name: cityOrCityName, code: '' });
             city.addInDb();
             this._city = city;
             this.cityId = city.id as number;

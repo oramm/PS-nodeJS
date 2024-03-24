@@ -19,7 +19,7 @@ export default class CaseTemplate extends BusinessObject {
     caseTypeId: number;
 
     constructor(initParamObject: ICaseTemplate) {
-        super({ _dbTableName: 'CaseTemplates' });
+        super({ ...initParamObject, _dbTableName: 'CaseTemplates' });
         this.id = initParamObject.id;
         this.templateComment = initParamObject.templateComment;
         this.name = initParamObject.name;

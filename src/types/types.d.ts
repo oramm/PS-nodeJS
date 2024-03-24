@@ -302,7 +302,7 @@ export interface SecurityData extends RepositoryDataItem {
 
 export interface CityData extends RepositoryDataItem {
     name: string;
-    code: string;
+    code?: string;
 }
 
 export interface OfferData extends RepositoryDataItem {
@@ -334,3 +334,42 @@ export interface OurOfferData extends OfferData {
 }
 
 export interface ExternalOfferData extends OfferData {}
+
+export interface FinancialAidProgrammeData extends RepositoryDataItem {
+    name: string;
+    description: string;
+    url: string;
+}
+
+export interface FocusAreaData extends RepositoryDataItem {
+    programmeId?: number;
+    _programme: FinancialAidProgrammeData;
+    name: string;
+    description: string;
+}
+
+export interface ApplicationCallData extends RepositoryDataItem {
+    focusAreaId?: number;
+    _focusArea: FocusAreaData;
+    description: string;
+    url: string;
+    startDate: string | null;
+    endDate: string | null;
+    status: string;
+}
+
+export interface NeedData extends RepositoryDataItem {
+    clientId?: number;
+    _client: EntityData;
+    name: string;
+    description: string;
+    status: string;
+}
+
+export interface NeedsFocusAreasData {
+    needId?: number;
+    focusAreaId?: number;
+    _need: NeedData;
+    _focusArea: FocusAreaData;
+    comment: string;
+}

@@ -14,7 +14,7 @@ export default class LetterEntity extends BusinessObject {
         _entity: EntityData;
         letterRole: 'CC' | 'MAIN';
     }) {
-        super({ _dbTableName: 'Letters_Entities' });
+        super({ ...initParamObject, _dbTableName: 'Letters_Entities' });
         if (!initParamObject._letter.id)
             throw new Error('Letter id is required');
 

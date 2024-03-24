@@ -16,7 +16,10 @@ export default class TasksTemplateForProcess extends BusinessObject {
     processId?: number;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'TaskTemplatesForProcesses' });
+        super({
+            ...initParamObject,
+            _dbTableName: 'TaskTemplatesForProcesses',
+        });
         this.id = initParamObject.id;
         //this.templateComment = initParamObject.templateComment;
         this.name = initParamObject.name;
@@ -34,4 +37,3 @@ export default class TasksTemplateForProcess extends BusinessObject {
         }
     }
 }
-

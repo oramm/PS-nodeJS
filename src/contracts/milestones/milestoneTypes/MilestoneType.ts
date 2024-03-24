@@ -13,7 +13,7 @@ export default class MilestoneType extends BusinessObject {
     _folderNumber_MilestoneTypeName?: string;
 
     constructor(initParamObject: any) {
-        super({ _dbTableName: 'MilestoneTypes' });
+        super({ ...initParamObject, _dbTableName: 'MilestoneTypes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
         if (initParamObject.description)
@@ -24,6 +24,7 @@ export default class MilestoneType extends BusinessObject {
         //potrzebny przy dodawaniu i edycji milestonów do kontraktu - łatwiej wybrać typ znając nr folderu, przy zarządzaniu typami ignorować ten atrybut
         this._folderNumber = initParamObject._folderNumber;
         this._contractType = initParamObject._contractType;
-        this._folderNumber_MilestoneTypeName = this._folderNumber + ' ' + this.name
+        this._folderNumber_MilestoneTypeName =
+            this._folderNumber + ' ' + this.name;
     }
 }
