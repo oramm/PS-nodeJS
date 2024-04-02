@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import { NeedData, FocusAreaData, EntityData } from '../types/types';
+import ToolsDb from '../../tools/ToolsDb';
+import { NeedData, FocusAreaData, EntityData } from '../../types/types';
 
 type NeedSearchParams = {
     id?: number;

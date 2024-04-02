@@ -143,7 +143,9 @@ export default abstract class Offer
     /**tworzy folder główny oferty */
     async createGdElements(auth: OAuth2Client) {
         const offerGdController = new OfferGdController();
-        const gdFolder = await offerGdController.createOfferFolder(auth, this);
+        const gdFolder = await offerGdController.createOfferFolder(auth, {
+            ...this,
+        });
         if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }

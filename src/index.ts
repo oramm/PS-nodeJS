@@ -176,14 +176,9 @@ require('./contracts/milestones/cases/tasks/taskTemplates/TaskTemplatesRouters')
 require('./contracts/securities/SecuritiesRouters');
 
 require('./financialAidProgrammes/FinancialAidProgrammesRouters');
-require('./financialAidProgrammes/FocusAreasRouters');
-require('./financialAidProgrammes/NeedsRouters');
-require('./financialAidProgrammes/ApplicationCallsRouters');
-
-//require('./processes/ProcessesRouters');
-//require('./processes/ProcessStepsRouters');
-//require('./processes/processInstances/ProcessInstancesRouters');
-//require('./processes/processInstances/ProcessStepInstancesRouters');
+require('./financialAidProgrammes/FocusAreas/FocusAreasRouters');
+require('./financialAidProgrammes/FocusAreas/ApplicationCalls/ApplicationCallsRouters');
+require('./financialAidProgrammes/Needs/NeedsRouters');
 
 require('./documentTemplates/DocumentTemplatesRouters');
 

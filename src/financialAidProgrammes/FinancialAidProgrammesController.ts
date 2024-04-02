@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import { FinancialAidProgrammeData } from '../types/types';
+import ToolsGd from '../tools/ToolsGd';
 
 type FinancialAidProgrammesearchParams = {
     id?: number;
@@ -13,8 +14,10 @@ export default class FinancialAidProgrammesController {
     ) {
         const sql = `SELECT FinancialAidProgrammes.Id,
             FinancialAidProgrammes.Name,
+            FinancialAidProgrammes.Alias,
             FinancialAidProgrammes.Description,
-            FinancialAidProgrammes.Url
+            FinancialAidProgrammes.Url,
+            FinancialAidProgrammes.GdFolderId
         FROM FinancialAidProgrammes
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
@@ -60,8 +63,11 @@ export default class FinancialAidProgrammesController {
             const item: FinancialAidProgrammeData = {
                 id: row.Id,
                 name: row.Name,
+                alias: row.Alias,
                 description: ToolsDb.sqlToString(row.Description),
                 url: row.Url,
+                gdFolderId: row.GdFolderId,
+                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
             };
             newResult.push(item);
         }

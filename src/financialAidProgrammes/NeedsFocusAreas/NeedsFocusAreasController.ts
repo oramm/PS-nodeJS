@@ -1,6 +1,10 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import { FocusAreaData, NeedData, NeedsFocusAreasData } from '../types/types';
+import ToolsDb from '../../tools/ToolsDb';
+import {
+    FocusAreaData,
+    NeedData,
+    NeedsFocusAreasData,
+} from '../../types/types';
 
 type NeedsFocusAreasSearchParams = {
     needId?: number;
@@ -21,11 +25,15 @@ export default class NeedsFocusAreasController {
             Needs.Description as NeedDescription,
             Needs.Status as NeedStatus,
             FocusAreas.Name as FocusAreaName,
+            FocusAreas.Alias as FocusAreaAlias,
             FocusAreas.Description as FocusAreaDescription,
+            FocusAreas.GdFolderId as FocusAreaGdFolderId,
             FinancialAidProgrammes.Id as ProgrammeId,
             FinancialAidProgrammes.Name as ProgrammeName,
+            FinancialAidProgrammes.Alias as ProgrammeAlias,
             FinancialAidProgrammes.Description as ProgrammeDescription,
             FinancialAidProgrammes.Url as ProgrammeUrl,
+            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId,
             Entities.Id as ClientId,
             Entities.Name as ClientName,
 
@@ -107,13 +115,17 @@ export default class NeedsFocusAreasController {
                 _focusArea: {
                     id: row.FocusAreaId,
                     name: row.FocusAreaName,
+                    alias: row.FocusAreaAlias,
                     description: row.FocusAreaDescription,
                     _programme: {
                         id: row.ProgrammeId,
                         name: row.ProgrammeName,
+                        alias: row.ProgrammeAlias,
                         description: row.ProgrammeDescription,
                         url: row.ProgrammeUrl,
+                        gdFolderId: row.ProgrammeGdFolderId,
                     },
+                    gdFolderId: row.FocusAreaGdFolderId,
                 },
             };
             newResult.push(item);

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import NeedsController from './NeedsController';
 import Need from './Need';
-import { app } from '../index';
+import { app } from '../../index';
 
 app.post('/needs', async (req: Request, res: Response) => {
     try {

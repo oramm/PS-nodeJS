@@ -337,15 +337,21 @@ export interface ExternalOfferData extends OfferData {}
 
 export interface FinancialAidProgrammeData extends RepositoryDataItem {
     name: string;
+    alias: string;
     description: string;
     url: string;
+    gdFolderId: string;
+    _gdFolderUrl?: string;
 }
 
 export interface FocusAreaData extends RepositoryDataItem {
     programmeId?: number;
     _programme: FinancialAidProgrammeData;
     name: string;
+    alias: string;
     description: string;
+    gdFolderId: string;
+    _gdFolderUrl?: string;
 }
 
 export interface ApplicationCallData extends RepositoryDataItem {
@@ -356,6 +362,8 @@ export interface ApplicationCallData extends RepositoryDataItem {
     startDate: string | null;
     endDate: string | null;
     status: string;
+    gdFolderId: string;
+    _gdFolderUrl?: string;
 }
 
 export interface NeedData extends RepositoryDataItem {

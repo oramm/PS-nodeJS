@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import { ApplicationCallData, FocusAreaData } from '../types/types';
+import ToolsDb from '../../../tools/ToolsDb';
+import { ApplicationCallData, FocusAreaData } from '../../../types/types';
+import ToolsGd from '../../../tools/ToolsGd';
 
 type ApplicationCallSearchParams = {
     id?: number;
@@ -21,14 +22,19 @@ export default class FocusAreasController {
             ApplicationCalls.Url,
             ApplicationCalls.StartDate,
             ApplicationCalls.EndDate,
-            ApplicationCalls.Status
+            ApplicationCalls.Status,
+            ApplicationCalls.GdFolderId,
             FocusAreas.Id as FocusAreaId,
             FocusAreas.Name as FocusAreaName,
+            FocusAreas.Alias as FocusAreaAlias,
             FocusAreas.Description as FocusAreaDescription,
+            FocusAreas.GdFolderId as FocusAreaGdFolderId,
             Programmes.Id as ProgrammeId,
             Programmes.Name as ProgrammeName,
+            Programmes.Alias as ProgrammeAlias,
             Programmes.Description as ProgrammeDescription,
-            Programmes.Url as ProgrammeUrl
+            Programmes.Url as ProgrammeUrl,
+            Programmes.GdFolderId as ProgrammeGdFolderId
         FROM ApplicationCalls
         JOIN FocusAreas ON ApplicationCalls.FocusAreaId = FocusAreas.Id
         JOIN FinancialAidProgrammes ON FocusAreas.ProgrammeId = FinancialAidProgrammes.Id
@@ -103,6 +109,7 @@ export default class FocusAreasController {
                 _focusArea: {
                     id: row.FocusAreaId,
                     name: row.FocusAreaName,
+                    alias: row.FocusAreaAlias,
                     description: ToolsDb.sqlToString(row.FocusAreaDescription),
                     _programme: {
                         id: row.ProgrammeId,
@@ -111,13 +118,18 @@ export default class FocusAreasController {
                             row.ProgrammeDescription
                         ),
                         url: row.ProgrammeUrl,
+                        alias: row.ProgrammeAlias,
+                        gdFolderId: row.ProgrammeGdFolderId,
                     },
+                    gdFolderId: row.FocusAreaGdFolderId,
                 },
                 description: ToolsDb.sqlToString(row.Description),
                 url: row.Url,
                 startDate: row.StartDate,
                 endDate: row.EndDate,
                 status: row.Status,
+                gdFolderId: row.GdFolderId,
+                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
             };
             newResult.push(item);
         }

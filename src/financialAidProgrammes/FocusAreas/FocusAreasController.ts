@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import { FocusAreaData } from '../types/types';
+import ToolsDb from '../../tools/ToolsDb';
+import { FocusAreaData } from '../../types/types';
+import ToolsGd from '../../tools/ToolsGd';
 
 type FocusAreaSearchParams = {
     id?: number;
@@ -11,11 +12,15 @@ export default class FocusAreasController {
     static async getFocusAreasList(orConditions: FocusAreaSearchParams[] = []) {
         const sql = `SELECT FocusAreas.Id,
             FocusAreas.Name,
-            FocusAreas.Description
+            FocusAreas.Alias,
+            FocusAreas.Description,
             FocusAreas.ProgrammeId,
+            FocusAreas.GdFolderId,
             FinancialAidProgrammes.Name as ProgrammeName,
+            FinancialAidProgrammes.Alias as ProgrammeAlias,
             FinancialAidProgrammes.Description as ProgrammeDescription,
-            FinancialAidProgrammes.Url as ProgrammeUrl
+            FinancialAidProgrammes.Url as ProgrammeUrl,
+            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId
         FROM FocusAreas
         JOIN FinancialAidProgrammes ON FocusAreas.ProgrammeId = FinancialAidProgrammes.Id
         WHERE ${ToolsDb.makeOrGroupsConditions(
@@ -60,14 +65,19 @@ export default class FocusAreasController {
             const item: FocusAreaData = {
                 id: row.Id,
                 name: row.Name,
+                alias: row.Alias,
                 description: ToolsDb.sqlToString(row.Description),
                 programmeId: row.ProgrammeId,
                 _programme: {
                     id: row.ProgrammeId,
                     name: row.ProgrammeName,
+                    alias: row.ProgrammeAlias,
                     description: ToolsDb.sqlToString(row.ProgrammeDescription),
                     url: row.ProgrammeUrl,
+                    gdFolderId: row.ProgrammeGdFolderId,
                 },
+                gdFolderId: row.GdFolderId,
+                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
             };
             newResult.push(item);
         }

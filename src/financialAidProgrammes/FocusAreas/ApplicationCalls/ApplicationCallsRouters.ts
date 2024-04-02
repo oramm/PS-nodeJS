@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import ApplicationCallsController from './ApplicationCallsController';
 import ApplicationCall from './ApplicationCall';
-import { app } from '../index';
+import { app } from '../../../index';
+import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
 
 app.post('/applicationCalls', async (req: Request, res: Response) => {
     try {
@@ -20,9 +21,15 @@ app.post('/applicationCalls', async (req: Request, res: Response) => {
 
 app.post('/applicationCall', async (req: Request, res: Response) => {
     try {
-        let applicationCall = new ApplicationCall(req.body);
-        await applicationCall.addInDb();
-        res.send(applicationCall);
+        const item = new ApplicationCall(req.body);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.addNewController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -33,9 +40,15 @@ app.post('/applicationCall', async (req: Request, res: Response) => {
 
 app.put('/applicationCall/:id', async (req: Request, res: Response) => {
     try {
-        let applicationCall = new ApplicationCall(req.parsedBody);
-        await applicationCall.editInDb();
-        res.send(applicationCall);
+        const item = new ApplicationCall(req.parsedBody);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.editController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -46,9 +59,15 @@ app.put('/applicationCall/:id', async (req: Request, res: Response) => {
 
 app.delete('/applicationCall/:id', async (req: Request, res: Response) => {
     try {
-        let applicationCall = new ApplicationCall(req.body);
-        await applicationCall.deleteFromDb();
-        res.send(applicationCall);
+        const item = new ApplicationCall(req.body);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.deleteController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {

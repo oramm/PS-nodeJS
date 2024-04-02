@@ -50,35 +50,4 @@ export default class OfferGdController {
             console.log('Oferta nie miała folderu, więc nic nie usuwam');
         }
     }
-
-    /** Wrzuca pliki do folderu oferty - folder musi być wcześniej utworzony */
-    async appendAttachments(
-        auth: OAuth2Client,
-        files: Express.Multer.File[],
-        offerGdFolderId: string
-    ) {
-        await this.uploadAttachments(auth, files, offerGdFolderId);
-    }
-
-    /**
-     * Wgrywa pliki załączników na serwer - folder oferty musi istnieć
-     * @param auth
-     * @param files
-     * @param parentGdFolderId
-     */
-    protected async uploadAttachments(
-        auth: OAuth2Client,
-        files: Express.Multer.File[],
-        parentGdFolderId: string
-    ) {
-        const promises = files.map((file) => {
-            return ToolsGd.uploadFileMulter(
-                auth,
-                file,
-                undefined,
-                parentGdFolderId
-            );
-        });
-        await Promise.all(promises);
-    }
 }

@@ -1,5 +1,5 @@
-import BusinessObject from '../BussinesObject';
-import { EntityData, FocusAreaData, NeedData } from '../types/types';
+import BusinessObject from '../../BussinesObject';
+import { EntityData, FocusAreaData, NeedData } from '../../types/types';
 
 export default class Need extends BusinessObject {
     clientId: number;

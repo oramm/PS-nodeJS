@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import FocusAreasController from './FocusAreasController';
 import FocusArea from './FocusArea';
-import { app } from '../index';
+import { app } from '../../index';
+import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
 
 app.post('/focusAreas', async (req: Request, res: Response) => {
     try {
@@ -20,9 +21,15 @@ app.post('/focusAreas', async (req: Request, res: Response) => {
 
 app.post('/focusArea', async (req: Request, res: Response) => {
     try {
-        let focusArea = new FocusArea(req.body);
-        await focusArea.addInDb();
-        res.send(focusArea);
+        const item = new FocusArea(req.body);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.addNewController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -33,9 +40,15 @@ app.post('/focusArea', async (req: Request, res: Response) => {
 
 app.put('/focusArea/:id', async (req: Request, res: Response) => {
     try {
-        let focusArea = new FocusArea(req.parsedBody);
-        await focusArea.editInDb();
-        res.send(focusArea);
+        const item = new FocusArea(req.parsedBody);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.editController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -46,9 +59,15 @@ app.put('/focusArea/:id', async (req: Request, res: Response) => {
 
 app.delete('/focusArea/:id', async (req: Request, res: Response) => {
     try {
-        let focusArea = new FocusArea(req.body);
-        await focusArea.deleteFromDb(); // Assuming deleteFromDb is a method in FocusArea
-        res.send(focusArea);
+        const item = new FocusArea(req.body);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.deleteController,
+            undefined,
+            item
+        );
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
