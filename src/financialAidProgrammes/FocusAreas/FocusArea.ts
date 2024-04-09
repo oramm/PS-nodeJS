@@ -6,8 +6,8 @@ import FocusAreaGdController from './FocusAreaGdController';
 
 export default class FocusArea extends BusinessObject implements FocusAreaData {
     id?: number;
-    programmeId?: number;
-    _programme: FinancialAidProgrammeData;
+    financialAidProgrammeId?: number;
+    _financialAidProgramme: FinancialAidProgrammeData;
     name: string;
     alias: string;
     description: string;
@@ -16,9 +16,10 @@ export default class FocusArea extends BusinessObject implements FocusAreaData {
 
     constructor(initParamObject: FocusAreaData) {
         super({ ...initParamObject, _dbTableName: 'FocusAreas' });
-        this.programmeId =
-            initParamObject.programmeId || initParamObject._programme?.id;
-        this._programme = initParamObject._programme;
+        this.financialAidProgrammeId =
+            initParamObject.financialAidProgrammeId ||
+            initParamObject._financialAidProgramme?.id;
+        this._financialAidProgramme = initParamObject._financialAidProgramme;
         this.name = initParamObject.name;
         this.alias = initParamObject.alias;
         this.description = initParamObject.description;

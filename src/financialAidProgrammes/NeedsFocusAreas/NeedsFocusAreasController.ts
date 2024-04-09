@@ -28,7 +28,7 @@ export default class NeedsFocusAreasController {
             FocusAreas.Alias as FocusAreaAlias,
             FocusAreas.Description as FocusAreaDescription,
             FocusAreas.GdFolderId as FocusAreaGdFolderId,
-            FinancialAidProgrammes.Id as ProgrammeId,
+            FinancialAidProgrammes.Id as FinancialAidProgrammeIdFinancialAidProgrammeId,
             FinancialAidProgrammes.Name as ProgrammeName,
             FinancialAidProgrammes.Alias as ProgrammeAlias,
             FinancialAidProgrammes.Description as ProgrammeDescription,
@@ -40,7 +40,7 @@ export default class NeedsFocusAreasController {
         FROM Needs_FocusAreas
         JOIN Needs ON Needs_FocusAreas.NeedId = Needs.Id
         JOIN FocusAreas ON Needs_FocusAreas.FocusAreaId = FocusAreas.Id
-        LEFT JOIN FinancialAidProgrammes ON FocusAreas.ProgrammeId = FinancialAidProgrammes.Id
+        LEFT JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeIdFinancialAidProgrammeId = FinancialAidProgrammes.Id
         JOIN Entities ON Needs.ClientId = Entities.Id
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
@@ -117,8 +117,8 @@ export default class NeedsFocusAreasController {
                     name: row.FocusAreaName,
                     alias: row.FocusAreaAlias,
                     description: row.FocusAreaDescription,
-                    _programme: {
-                        id: row.ProgrammeId,
+                    _financialAidProgramme: {
+                        id: row.FinancialAidProgrammeId,
                         name: row.ProgrammeName,
                         alias: row.ProgrammeAlias,
                         description: row.ProgrammeDescription,

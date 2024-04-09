@@ -35,6 +35,9 @@ export default class InvoiceValidator {
     }
 
     private checkNewInvoiceValueAgainstContract() {
+        if (!this.invoice._totalNetValue) {
+            throw new Error('Wartość faktury nie została ustawiona');
+        }
         const contractValue = this.contract.value as number;
         if (contractValue <= this.invoice._totalNetValue) {
             throw new Error(
@@ -64,6 +67,8 @@ export default class InvoiceValidator {
         contractSettlementData: ContractSettlementData,
         isNewInvoice: boolean
     ) {
+        if (this.invoice._totalNetValue === undefined)
+            throw new Error('Wartość faktury nie została ustawiona');
         if (
             isNewInvoice &&
             this.invoice._totalNetValue >=

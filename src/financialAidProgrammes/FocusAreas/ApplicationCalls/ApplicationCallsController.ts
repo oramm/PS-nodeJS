@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../../../tools/ToolsDb';
 import { ApplicationCallData, FocusAreaData } from '../../../types/types';
 import ToolsGd from '../../../tools/ToolsGd';
+import ApplicationCall from './ApplicationCall';
 
 type ApplicationCallSearchParams = {
     id?: number;
@@ -29,15 +30,15 @@ export default class FocusAreasController {
             FocusAreas.Alias as FocusAreaAlias,
             FocusAreas.Description as FocusAreaDescription,
             FocusAreas.GdFolderId as FocusAreaGdFolderId,
-            Programmes.Id as ProgrammeId,
-            Programmes.Name as ProgrammeName,
-            Programmes.Alias as ProgrammeAlias,
-            Programmes.Description as ProgrammeDescription,
-            Programmes.Url as ProgrammeUrl,
-            Programmes.GdFolderId as ProgrammeGdFolderId
+            FinancialAidProgrammes.Id as FinancialAidProgrammeId,
+            FinancialAidProgrammes.Name as ProgrammeName,
+            FinancialAidProgrammes.Alias as ProgrammeAlias,
+            FinancialAidProgrammes.Description as ProgrammeDescription,
+            FinancialAidProgrammes.Url as ProgrammeUrl,
+            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId
         FROM ApplicationCalls
         JOIN FocusAreas ON ApplicationCalls.FocusAreaId = FocusAreas.Id
-        JOIN FinancialAidProgrammes ON FocusAreas.ProgrammeId = FinancialAidProgrammes.Id
+        JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
@@ -104,15 +105,15 @@ export default class FocusAreasController {
         let newResult: ApplicationCallData[] = [];
 
         for (const row of result) {
-            const item: ApplicationCallData = {
+            const item = new ApplicationCall({
                 id: row.Id,
-                _focusArea: {
+                _focusArea: <FocusAreaData>{
                     id: row.FocusAreaId,
                     name: row.FocusAreaName,
                     alias: row.FocusAreaAlias,
                     description: ToolsDb.sqlToString(row.FocusAreaDescription),
-                    _programme: {
-                        id: row.ProgrammeId,
+                    _financialAidProgramme: {
+                        id: row.FinancialAidProgrammeId,
                         name: row.ProgrammeName,
                         description: ToolsDb.sqlToString(
                             row.ProgrammeDescription
@@ -130,7 +131,8 @@ export default class FocusAreasController {
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
                 _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            };
+            });
+
             newResult.push(item);
         }
         return newResult;

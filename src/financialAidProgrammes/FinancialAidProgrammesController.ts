@@ -36,9 +36,10 @@ export default class FinancialAidProgrammesController {
         const conditions = words.map((word) =>
             mysql.format(
                 `(FinancialAidProgrammes.Name LIKE ? 
-                    OR FinancialAidProgrammes.Description LIKE ? 
+                    OR FinancialAidProgrammes.Description LIKE ?
+                    OR FinancialAidProgrammes.Alias LIKE ?
                  )`,
-                [`%${word}%`, `%${word}%`]
+                [`%${word}%`, `%${word}%`, `%${word}%`]
             )
         );
 

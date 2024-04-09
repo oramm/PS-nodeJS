@@ -1,25 +1,25 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb'
-import Project from "./Project";
+import ToolsDb from '../tools/ToolsDb';
+import Project from './Project';
 import Entity from '../entities/Entity';
 import ProjectEntity from './ProjectEntity';
 import { UserData } from '../setup/GAuth2/sessionTypes';
 import Setup from '../setup/Setup';
 
 type ProjectSearchParams = {
-    userData: UserData,
-    id?: number,
-    ourId?: string,
-    searchText?: string,
-    systemEmail?: string,
-    onlyKeyData?: boolean
-    contractId?: number
-    status?: string
-}
+    userData: UserData;
+    id?: number;
+    ourId?: string;
+    searchText?: string;
+    systemEmail?: string;
+    onlyKeyData?: boolean;
+    contractId?: number;
+    status?: string;
+};
 
 export default class ProjectsController {
     /**pobiera listę projektów
-     * @param {Object} searchParams.userData - dane użytkownika zalogowanego do systemu (z sesji)   
+     * @param {Object} searchParams.userData - dane użytkownika zalogowanego do systemu (z sesji)
      */
     static async getProjectsList(orConditions: ProjectSearchParams[]) {
         const sql = `SELECT  Projects.Id,
@@ -42,21 +42,27 @@ export default class ProjectsController {
                 Projects.LastUpdated
                 FROM Projects
                 /* JOIN Roles ON Roles.ProjectOurId = Projects.OurId */
-                WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+                WHERE ${ToolsDb.makeOrGroupsConditions(
+                    orConditions,
+                    this.makeAndConditions.bind(this)
+                )}
                 GROUP BY Projects.OurId ASC`;
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processProjectsResult(result, {});
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
 
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Projects.OurId LIKE ?
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Projects.OurId LIKE ?
         OR Projects.Name LIKE ?
         OR Projects.Alias LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
@@ -72,15 +78,20 @@ export default class ProjectsController {
 
         let status: string | string[] | undefined = searchParams.status;
         if (searchParams.status === 'ACTIVE') {
-            status = [Setup.ProjectStatuses.NOT_STARTED, Setup.ProjectStatuses.IN_PROGRESS];
+            status = [
+                Setup.ProjectStatuses.NOT_STARTED,
+                Setup.ProjectStatuses.IN_PROGRESS,
+            ];
         }
         const statusCondition = Array.isArray(status)
             ? mysql.format('Projects.Status IN (?)', [status])
             : searchParams.status
-                ? mysql.format('Projects.Status = ?', [status])
-                : '1';
+            ? mysql.format('Projects.Status = ?', [status])
+            : '1';
 
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
         const conditions = `${projectIdCondition}
             AND ${projectOurIdCondition}
             AND ${statusCondition}
@@ -88,12 +99,16 @@ export default class ProjectsController {
         return conditions;
     }
 
-    private static async processProjectsResult(result: any[], initParamObject: any) {
+    private static async processProjectsResult(
+        result: any[],
+        initParamObject: any
+    ) {
         let newResult: Project[] = [];
         let entitiesPerAllProjects: any = [];
         //zostawiam bo może w przyszłości będzie analiza instytucji vs projekty
         if (!initParamObject.onlyKeyData === true)
-            entitiesPerAllProjects = await this.getProjectEntityAssociationsList(initParamObject);
+            entitiesPerAllProjects =
+                await this.getProjectEntityAssociationsList(initParamObject);
 
         for (const row of result) {
             const item = new Project({
@@ -114,7 +129,7 @@ export default class ProjectsController {
                 lettersGdFolderId: row.LettersGdFolderId,
                 googleGroupId: row.GoogleGroupId,
                 googleCalendarId: row.GoogleCalendarId,
-                lastUpdated: row.LastUpdated
+                lastUpdated: row.LastUpdated,
             });
             item.setProjectEntityAssociations(entitiesPerAllProjects);
             newResult.push(item);
@@ -122,10 +137,16 @@ export default class ProjectsController {
         return newResult;
     }
 
-    static async getProjectEntityAssociationsList(initParamObject: { projectId: string }) {
-        const projectConditon = (initParamObject && initParamObject.projectId) ? 'Projects.OurId="' + initParamObject.projectId + '"' : '1';
+    static async getProjectEntityAssociationsList(initParamObject: {
+        projectId: string;
+    }) {
+        const projectConditon =
+            initParamObject && initParamObject.projectId
+                ? 'Projects.OurId="' + initParamObject.projectId + '"'
+                : '1';
 
-        const sql = 'SELECT  Projects_Entities.ProjectId, \n \t' +
+        const sql =
+            'SELECT  Projects_Entities.ProjectId, \n \t' +
             'Projects_Entities.EntityId, \n \t' +
             'Projects_Entities.ProjectRole, \n \t' +
             'Entities.Name, \n \t' +
@@ -133,12 +154,13 @@ export default class ProjectsController {
             'Entities.TaxNumber, \n \t' +
             'Entities.Www, \n \t' +
             'Entities.Email, \n \t' +
-            'Entities.Phone, \n \t' +
-            'Entities.Fax \n' +
+            'Entities.Phone \n \t' +
             'FROM Projects_Entities \n' +
             'JOIN Projects ON Projects_Entities.ProjectId = Projects.Id \n' +
             'JOIN Entities ON Projects_Entities.EntityId=Entities.Id \n' +
-            'WHERE ' + projectConditon + ' \n' +
+            'WHERE ' +
+            projectConditon +
+            ' \n' +
             'ORDER BY Projects_Entities.ProjectRole, Entities.Name';
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
@@ -152,7 +174,7 @@ export default class ProjectsController {
             const item = new ProjectEntity({
                 projectRole: row.ProjectRole,
                 _project: {
-                    id: row.ProjectId
+                    id: row.ProjectId,
                 },
                 _entity: new Entity({
                     id: row.EntityId,
@@ -162,8 +184,7 @@ export default class ProjectsController {
                     www: row.Www,
                     email: row.Email,
                     phone: row.Phone,
-                    fax: row.Fax
-                })
+                }),
             });
             newResult.push(item);
         }

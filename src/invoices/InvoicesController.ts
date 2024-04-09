@@ -1,22 +1,23 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb'
-import Invoice from "./Invoice";
+import ToolsDb from '../tools/ToolsDb';
+import Invoice from './Invoice';
 import Project from '../projects/Project';
 import Contract from '../contracts/Contract';
 import ContractOur from '../contracts/ContractOur';
 import ContractOther from '../contracts/ContractOther';
+import Person from '../persons/Person';
 
 type InvoiceSearchParams = {
-    id?: number,
-    projectId?: string,
-    _project?: Project,
-    contractId?: number,
-    _contract?: Contract,
-    searchText?: string,
-    issueDateFrom?: string,
-    issueDateTo?: string,
-    status?: string
-}
+    id?: number;
+    projectId?: string;
+    _project?: Project;
+    contractId?: number;
+    _contract?: Contract;
+    searchText?: string;
+    issueDateFrom?: string;
+    issueDateTo?: string;
+    status?: string;
+};
 
 export default class InvoicesController {
     static async getInvoicesList(orConditions: InvoiceSearchParams[] = []) {
@@ -67,7 +68,10 @@ export default class InvoicesController {
         LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
         LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+        WHERE ${ToolsDb.makeOrGroupsConditions(
+            orConditions,
+            this.makeAndConditions.bind(this)
+        )}
         GROUP BY Invoices.Id
         ORDER BY Invoices.IssueDate ASC`;
 
@@ -76,11 +80,12 @@ export default class InvoicesController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
         searchText = searchText.toString();
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Invoices.Number LIKE ? 
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Invoices.Number LIKE ? 
                           OR Invoices.Description LIKE ? 
                           OR Invoices.Status LIKE ? 
                           OR Entities.Name LIKE ?
@@ -94,15 +99,29 @@ export default class InvoicesController {
                               WHERE InvoiceItems.ParentId = Invoices.Id 
                                   AND InvoiceItems.Description LIKE ?
                           ))`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+                [
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                ]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
     static makeAndConditions(searchParams: InvoiceSearchParams) {
-        const projectOurId = searchParams._project?.ourId || searchParams.projectId;
-        const contractId = searchParams._contract?.id || searchParams.contractId;
+        const projectOurId =
+            searchParams._project?.ourId || searchParams.projectId;
+        const contractId =
+            searchParams._contract?.id || searchParams.contractId;
 
         const idCondition = searchParams.id
             ? mysql.format(`Invoices.Id = ?`, [searchParams.id])
@@ -115,15 +134,21 @@ export default class InvoicesController {
             ? mysql.format(`Invoices.ContractId = ?`, [contractId])
             : '1';
         const issueDateFromCondition = searchParams.issueDateFrom
-            ? mysql.format(`Invoices.IssueDate >= ?`, [searchParams.issueDateFrom])
+            ? mysql.format(`Invoices.IssueDate >= ?`, [
+                  searchParams.issueDateFrom,
+              ])
             : '1';
         const issueDateToCondition = searchParams.issueDateTo
-            ? mysql.format(`Invoices.IssueDate <= ?`, [searchParams.issueDateTo])
+            ? mysql.format(`Invoices.IssueDate <= ?`, [
+                  searchParams.issueDateTo,
+              ])
             : '1';
         const statusCondition = searchParams.status
             ? mysql.format(`Invoices.Status = ?`, [searchParams.status])
             : '1';
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         return `${idCondition} 
             AND ${projectCondition} 
@@ -134,8 +159,8 @@ export default class InvoicesController {
             AND ${searchTextCondition}`;
     }
 
-    static processInvoicesResult(result: any[]): [Invoice?] {
-        let newResult: [Invoice?] = [];
+    static processInvoicesResult(result: any[]): Invoice[] {
+        let newResult: Invoice[] = [];
 
         for (const row of result) {
             const contractInitParams = {
@@ -150,16 +175,16 @@ export default class InvoicesController {
                 _parent: {
                     ourId: row.ProjectOurId,
                     name: row.ProjectName,
-                    gdFolderId: row.ProjectGdFolderId
+                    gdFolderId: row.ProjectGdFolderId,
                 },
                 _type: {
                     id: row.ContractTypeId,
                     name: row.ContractTypeName,
                     description: row.ContractTypeDescription,
-                    isOur: row.ContractTypeIsOur
-                }
-            }
-            const _contract = contractInitParams.ourId ? new ContractOur(contractInitParams) : new ContractOther(contractInitParams);
+                    isOur: row.ContractTypeIsOur,
+                },
+            };
+            const _contract = new ContractOur(contractInitParams);
 
             const item = new Invoice({
                 id: row.Id,
@@ -171,29 +196,28 @@ export default class InvoicesController {
                 daysToPay: row.DaysToPay,
                 paymentDeadline: row.PaymentDeadline,
                 gdId: row.GdId,
+
                 _lastUpdated: row.LastUpdated,
                 _entity: {
                     id: row.EntityId,
                     name: ToolsDb.sqlToString(row.EntityName),
                     address: row.EntityAddress,
-                    taxNumber: row.EntityTaxNumber
+                    taxNumber: row.EntityTaxNumber,
                 },
                 _contract: _contract,
-                //ostatni edytujący
                 _editor: {
                     id: row.EditorId,
                     name: row.EditorName,
                     surname: row.EditorSurname,
-                    email: row.EditorEmail
+                    email: row.EditorEmail,
                 },
-                //odpowiedzialny za kolejną akcję
-                _owner: {
+                _owner: new Person({
                     id: row.OwnerId,
                     name: row.OwnerName,
                     surname: row.OwnerSurname,
-                    email: row.OwnerEmail
-                },
-                _totalNetValue: row.TotalNetValue
+                    email: row.OwnerEmail,
+                }),
+                _totalNetValue: row.TotalNetValue,
             });
             newResult.push(item);
         }

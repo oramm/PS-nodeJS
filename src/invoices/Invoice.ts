@@ -6,13 +6,19 @@ import Setup from '../setup/Setup';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import InvoiceItemsController from './InvoiceItemsController';
-import ContractsSettlementController from '../contracts/ContractsSettlementController';
 import ContractOur from '../contracts/ContractOur';
+import {
+    EntityData,
+    InvoiceData,
+    OurContractData,
+    PersonData,
+    ProjectData,
+} from '../types/types';
 
-export default class Invoice extends BusinessObject {
+export default class Invoice extends BusinessObject implements InvoiceData {
     id?: number;
     number?: string | null;
-    _entity: any;
+    _entity: EntityData;
     entityId?: number;
     description?: string;
     status: string = '';
@@ -21,20 +27,21 @@ export default class Invoice extends BusinessObject {
     paymentDeadline?: string | null;
     daysToPay: number;
     _lastUpdated?: string;
-    _editor?: any;
-    _owner?: any;
+    _editor?: PersonData;
+    _owner?: PersonData;
     ownerId?: number;
     editorId?: number;
     contractId?: number;
 
-    _contract: ContractOur;
+    _contract: OurContractData;
     _items?: InvoiceItem[];
-    _project: any;
+    _project?: ProjectData;
     gdId?: string | null;
     _documentOpenUrl?: string;
-    _totalNetValue: number;
+    _totalNetValue?: number;
+    _totalGrossValue?: number;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: InvoiceData) {
         super({ ...initParamObject, _dbTableName: 'Invoices' });
         this.daysToPay = initParamObject.daysToPay;
         this.issueDate = ToolsDate.dateJsToSql(
@@ -43,7 +50,7 @@ export default class Invoice extends BusinessObject {
         this.initByStatus(initParamObject.status, initParamObject);
 
         this.id = initParamObject.id;
-
+        this.number = initParamObject.number;
         this.description = initParamObject.description;
         this._lastUpdated = initParamObject._lastUpdated;
 
@@ -52,20 +59,28 @@ export default class Invoice extends BusinessObject {
 
         this._editor = initParamObject._editor;
         if (initParamObject._editor) this.editorId = initParamObject._editor.id;
-        if (initParamObject._owner) {
+        if (initParamObject._owner?.id) {
             this._owner = initParamObject._owner;
+            if (
+                !this._owner?.name ||
+                !this._owner?.surname ||
+                !this._owner?.email ||
+                !this._owner?._nameSurnameEmail
+            )
+                console.log('Invoice owner data is incomplete', this.number);
+            //throw new Error('Invoice owner data is incomplete');
             this.ownerId = initParamObject._owner.id;
             this._owner._nameSurnameEmail =
-                this._owner.name +
+                this._owner?.name +
                 ' ' +
-                this._owner.surname +
+                this._owner?.surname +
                 ' ' +
-                this._owner.email;
+                this._owner?.email;
         }
         this._totalNetValue = initParamObject._totalNetValue as number;
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
-        this._items = initParamObject._items;
+        //this._items = initParamObject._items;
     }
 
     setGdIdAndUrl(gdId: string | undefined | null) {

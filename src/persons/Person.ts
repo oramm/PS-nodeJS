@@ -1,8 +1,9 @@
 import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
+import { EntityData, PersonData } from '../types/types';
 
-export default class Person extends BusinessObject {
+export default class Person extends BusinessObject implements PersonData {
     id?: number;
     entityId?: number;
     name: string;
@@ -15,7 +16,7 @@ export default class Person extends BusinessObject {
     systemRoleId?: number;
     systemEmail?: string;
     _alias: string;
-    _entity: any;
+    _entity: EntityData;
     _nameSurnameEmail: string;
 
     constructor(initParamObject: any) {

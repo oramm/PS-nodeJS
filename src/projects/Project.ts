@@ -8,8 +8,9 @@ import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import Setup from '../setup/Setup';
 import mysql from 'mysql2/promise';
+import { EntityData, ProjectData } from '../types/types';
 
-export default class Project extends BusinessObject {
+export default class Project extends BusinessObject implements ProjectData {
     id?: number;
     ourId: string;
     name: string;
@@ -18,12 +19,7 @@ export default class Project extends BusinessObject {
     endDate: string | undefined;
     status: string;
     comment: string;
-    financialComment: any;
-    investorId: any;
-    totalValue: any;
-    qualifiedValue: any;
-    dotationValue: any;
-    gdFolderId: string | undefined;
+    investorId?: number;
     _gdFolderUrl: string | undefined;
     lettersGdFolderId?: string;
     googleGroupId: any;
@@ -31,9 +27,14 @@ export default class Project extends BusinessObject {
     googleCalendarId: any;
     _googleCalendarUrl: any;
     _ourId_Alias: string;
-    _lastUpdated: any;
-    _engineers: Entity[];
-    _employers: Entity[];
+    financialComment?: string;
+    totalValue?: string | number;
+    qualifiedValue?: string | number;
+    dotationValue?: string | number;
+    gdFolderId: string | undefined;
+    _lastUpdated?: string;
+    _engineers: EntityData[];
+    _employers?: EntityData[];
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Projects' });
@@ -58,9 +59,9 @@ export default class Project extends BusinessObject {
 
         if (initParamObject.gdFolderId) {
             this.gdFolderId = initParamObject.gdFolderId;
-            this._gdFolderUrl =
-                'https://drive.google.com/drive/folders/' +
-                initParamObject.gdFolderId;
+            this._gdFolderUrl = ToolsGd.createGdFolderUrl(
+                initParamObject.gdFolderId
+            );
         }
         this.lettersGdFolderId = initParamObject.lettersGdFolderId;
 
@@ -85,7 +86,8 @@ export default class Project extends BusinessObject {
         this._engineers = initParamObject._engineers
             ? initParamObject._engineers
             : [];
-        this.setProjectEngineersAssociations(this._engineers);
+        if (this._engineers)
+            this.setProjectEngineersAssociations(this._engineers);
     }
 
     gdFolderName() {
@@ -157,8 +159,7 @@ export default class Project extends BusinessObject {
             'Entities.TaxNumber, \n \t' +
             'Entities.Www, \n \t' +
             'Entities.Email, \n \t' +
-            'Entities.Phone, \n \t' +
-            'Entities.Fax \n' +
+            'Entities.Phone \n \t' +
             'FROM Projects_Entities \n' +
             'JOIN Projects ON Projects_Entities.ProjectId = Projects.Id \n' +
             'JOIN Entities ON Projects_Entities.EntityId=Entities.Id \n' +
@@ -191,7 +192,6 @@ export default class Project extends BusinessObject {
                     www: row.Www,
                     email: row.Email,
                     phone: row.Phone,
-                    fax: row.Fax,
                 }),
             });
             newResult.push(item);
@@ -199,8 +199,8 @@ export default class Project extends BusinessObject {
         return newResult;
     }
 
-    setProjectEngineersAssociations(engineers: Entity[]) {
-        this._engineers = engineers;
+    setProjectEngineersAssociations(engineers?: EntityData[]) {
+        this._engineers = engineers ?? [];
         if (this._engineers.length === 0)
             this._engineers.push(
                 new Entity({

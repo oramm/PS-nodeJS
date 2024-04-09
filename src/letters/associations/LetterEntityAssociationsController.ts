@@ -26,8 +26,7 @@ export default class LetterEntityAssociationsController {
                 Entities.TaxNumber AS EntityTaxNumber,
                 Entities.Www AS EntityWww,
                 Entities.Email AS EntityEmail,
-                Entities.Phone AS EntityPhone,
-                Entities.Fax AS EntityFax
+                Entities.Phone AS EntityPhone
             FROM Letters_Entities
             JOIN Letters ON Letters_Entities.LetterId = Letters.Id
             LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
@@ -64,7 +63,6 @@ export default class LetterEntityAssociationsController {
                     www: row.EntityWww,
                     email: row.EntityEmail,
                     phone: row.EntityPhone,
-                    fax: row.EntityFax,
                 }),
             });
             newResult.push(item);

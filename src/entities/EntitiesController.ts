@@ -17,8 +17,7 @@ export default class EntitiesController {
                 Entities.TaxNumber,
                 Entities.Www,
                 Entities.Email,
-                Entities.Phone,
-                Entities.Fax
+                Entities.Phone
             FROM Entities
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
@@ -83,7 +82,6 @@ export default class EntitiesController {
                 www: row.Www,
                 email: row.Email,
                 phone: row.Phone,
-                fax: row.Fax,
             });
             newResult.push(item);
         }

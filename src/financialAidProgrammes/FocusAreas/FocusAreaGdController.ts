@@ -9,7 +9,8 @@ export default class FocusAreaGdController extends FAPGenericGdController<FocusA
 
     /** Tworzy folder oferty w folderze _city - nie zmienia FinancialAidProgrammeData*/
     async createFolder(auth: OAuth2Client, focusAreaDataData: FocusAreaData) {
-        const parentFolderGdId = focusAreaDataData._programme.gdFolderId;
+        const parentFolderGdId =
+            focusAreaDataData._financialAidProgramme.gdFolderId;
         return await super.createFolder(
             auth,
             focusAreaDataData,

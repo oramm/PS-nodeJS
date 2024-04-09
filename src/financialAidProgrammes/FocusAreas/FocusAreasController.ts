@@ -14,7 +14,7 @@ export default class FocusAreasController {
             FocusAreas.Name,
             FocusAreas.Alias,
             FocusAreas.Description,
-            FocusAreas.ProgrammeId,
+            FocusAreas.FinancialAidProgrammeId,
             FocusAreas.GdFolderId,
             FinancialAidProgrammes.Name as ProgrammeName,
             FinancialAidProgrammes.Alias as ProgrammeAlias,
@@ -22,7 +22,7 @@ export default class FocusAreasController {
             FinancialAidProgrammes.Url as ProgrammeUrl,
             FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId
         FROM FocusAreas
-        JOIN FinancialAidProgrammes ON FocusAreas.ProgrammeId = FinancialAidProgrammes.Id
+        JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
@@ -67,9 +67,9 @@ export default class FocusAreasController {
                 name: row.Name,
                 alias: row.Alias,
                 description: ToolsDb.sqlToString(row.Description),
-                programmeId: row.ProgrammeId,
-                _programme: {
-                    id: row.ProgrammeId,
+                financialAidProgrammeId: row.FinancialAidProgrammeId,
+                _financialAidProgramme: {
+                    id: row.FinancialAidProgrammeId,
                     name: row.ProgrammeName,
                     alias: row.ProgrammeAlias,
                     description: ToolsDb.sqlToString(row.ProgrammeDescription),

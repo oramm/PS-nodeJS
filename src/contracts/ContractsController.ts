@@ -438,8 +438,7 @@ export default class ContractsController {
             Entities.TaxNumber,
             Entities.Www,
             Entities.Email,
-            Entities.Phone,
-            Entities.Fax
+            Entities.Phone
                     FROM Contracts_Entities
                     JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
                     JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
@@ -470,7 +469,6 @@ export default class ContractsController {
                     www: row.Www,
                     email: row.Email,
                     phone: row.Phone,
-                    fax: row.Fax,
                 }),
             };
 

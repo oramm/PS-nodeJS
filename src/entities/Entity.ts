@@ -10,7 +10,6 @@ export default class Entity extends BusinessObject implements EntityData {
     www?: string;
     email?: string;
     phone?: string;
-    fax?: string;
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Entities' });
         if (initParamObject) {
@@ -22,7 +21,6 @@ export default class Entity extends BusinessObject implements EntityData {
             this.www = initParamObject.www;
             this.email = initParamObject.email;
             this.phone = initParamObject.phone;
-            this.fax = initParamObject.fax;
         }
     }
 }

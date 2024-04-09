@@ -36,18 +36,26 @@ export interface UserData {
 }
 
 export interface ProjectData extends RepositoryDataItem {
+    ourId: string;
     name: string;
     alias: string;
     comment: string;
     ourId: string;
     status: string;
-    dotationValue: number;
-    lettersGdFolderId: string;
-    startDate: string;
-    endDate: string;
-    gdFolderId: string;
-    _gdFolderUrl: string;
+    lettersGdFolderId?: string;
+    startDate?: string;
+    endDate?: string;
+    gdFolderId?: string;
+    _gdFolderUrl?: string;
     _ourId_Alias: string;
+    financialComment?: string;
+    totalValue?: string | number;
+    qualifiedValue?: string | number;
+    dotationValue?: string | number;
+    gdFolderId: string | undefined;
+    _lastUpdated?: string;
+    _engineers?: EntityData[];
+    _employers?: EntityData[];
 }
 
 export interface ContractData extends RepositoryDataItem {
@@ -80,8 +88,10 @@ export interface OurContractData extends ContractData {
     _admin?: Person;
     _manager?: Person;
     ourId: string;
+    _ourType: string;
+    _admin?: Person;
+    _city?: City;
 }
-
 export interface OtherContractData extends ContractData {
     _contractors?: Entity[];
     _ourContract?: OurContract;
@@ -232,10 +242,14 @@ export interface PersonData extends RepositoryDataItem {
     name: string;
     surname: string;
     email: string;
+    phone?: string;
     cellPhone?: string;
+    comment?: string;
     _alias?: string;
     position?: string;
-    _entity?: Entity;
+    _entity?: EntityData;
+    _nameSurnameEmail?: string;
+    systemEmail?: string;
 }
 
 export interface DocumentTemplateData extends RepositoryDataItem {
@@ -252,21 +266,21 @@ export interface DocumentTemplateData extends RepositoryDataItem {
 }
 
 export interface InvoiceData extends RepositoryDataItem {
-    number: string;
-    description: string;
+    number?: string | null;
+    description?: string;
     issueDate: string;
-    sentDate: string;
-    paymentDeadline: string;
+    sentDate?: string | null;
+    paymentDeadline?: string | null;
     daysToPay: number;
     status: string;
-    gdId: string;
-    _contract: OurContract;
-    _editor: Person;
-    _owner: Person;
-    _entity: Entity;
-    _lastUpdated: string;
+    gdId?: string | null;
+    _contract: OurContractData;
+    _editor?: PersonData;
+    _owner?: PersonData;
+    _entity: EntityData;
+    _lastUpdated?: string;
     _documentOpenUrl?: string;
-    _totalGrossValue: number;
+    _totalGrossValue?: number;
     _totalNetValue?: number;
 }
 
@@ -294,7 +308,9 @@ export interface SecurityData extends RepositoryDataItem {
     firstPartExpiryDate: string;
     secondPartExpiryDate: string;
     isCash: boolean;
+    status: string;
     gdFolderId: string;
+    gdFolderUrl?: string;
     _contract: OurContract;
     _lastUpdated: string;
     _editor: Person;
@@ -345,8 +361,8 @@ export interface FinancialAidProgrammeData extends RepositoryDataItem {
 }
 
 export interface FocusAreaData extends RepositoryDataItem {
-    programmeId?: number;
-    _programme: FinancialAidProgrammeData;
+    financialAidProgrammeId?: number;
+    _financialAidProgramme: FinancialAidProgrammeData;
     name: string;
     alias: string;
     description: string;

@@ -13,8 +13,10 @@ import MilestoneTemplatesController from './milestones/milestoneTemplates/Milest
 import TasksController from './milestones/cases/tasks/TasksController';
 import {
     ContractData,
+    EntityData,
     OtherContractData,
     OurContractData,
+    ProjectData,
 } from '../types/types';
 
 export default abstract class Contract
@@ -41,11 +43,11 @@ export default abstract class Contract
     meetingProtocolsGdFolderId?: string;
     _ourIdOrNumber_Name?: string;
     _ourIdOrNumber_Alias?: string;
-    _contractors?: Entity[];
-    _engineers?: Entity[];
-    _employers?: Entity[];
+    _contractors?: EntityData[];
+    _engineers?: EntityData[];
+    _employers?: EntityData[];
     status: string;
-    _project: Project;
+    _project: ProjectData;
     _folderName?: string;
     _lastUpdated?: string;
 
