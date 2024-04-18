@@ -7,14 +7,14 @@ import ApplicationCall from './ApplicationCall';
 type ApplicationCallSearchParams = {
     id?: number;
     focusAreaId?: number;
-    _focusArea?: FocusAreaData;
+    _focusArea?: FocusAreaData | FocusAreaData[];
     startDate?: string;
     endDate?: string;
     status?: string;
     searchText?: string;
 };
 
-export default class FocusAreasController {
+export default class ApplicationCallsController {
     static async getApplicationCallsList(
         orConditions: ApplicationCallSearchParams[] = []
     ) {
@@ -44,7 +44,7 @@ export default class FocusAreasController {
             this.makeAndConditions.bind(this)
         )}
         ORDER BY ApplicationCalls.StartDate ASC`;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processApplicationCallsResult(result);
     }
@@ -74,12 +74,33 @@ export default class FocusAreasController {
             conditions.push(searchTextCondition);
         }
 
-        const focusAreaId =
-            searchParams.focusAreaId || searchParams._focusArea?.id;
-        if (focusAreaId) {
-            conditions.push(
-                mysql.format(`ApplicationCalls.FocusAreaId = ?`, [focusAreaId])
+        // Prepare an array to collect all focus area IDs.
+        let focusAreaIds: number[] = [];
+
+        // Check if there's a direct ID or a single _focusArea object.
+        if (searchParams.focusAreaId) {
+            focusAreaIds.push(searchParams.focusAreaId);
+        } else if (
+            !Array.isArray(searchParams._focusArea) &&
+            searchParams._focusArea?.id
+        ) {
+            focusAreaIds.push(searchParams._focusArea?.id);
+        }
+        // If _focusArea is an array, add all IDs from it.
+        else if (Array.isArray(searchParams._focusArea)) {
+            focusAreaIds = focusAreaIds.concat(
+                searchParams._focusArea.map((fa) => fa.id as number)
             );
+        }
+
+        // Create SQL condition using the IN clause if there are any IDs collected.
+        if (focusAreaIds.length) {
+            const placeholders = focusAreaIds.map(() => '?').join(', ');
+            const focusAreaCondition = mysql.format(
+                `ApplicationCalls.FocusAreaId IN (${placeholders})`,
+                focusAreaIds
+            );
+            conditions.push(focusAreaCondition);
         }
 
         if (searchParams.startDate) {

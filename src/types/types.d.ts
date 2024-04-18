@@ -388,6 +388,9 @@ export interface NeedData extends RepositoryDataItem {
     name: string;
     description: string;
     status: string;
+    applicationCallId?: number;
+    _applicationCall?: ApplicationCallData | null;
+    _focusAreas?: FocusAreaData[];
 }
 
 export interface NeedsFocusAreasData {
@@ -395,5 +398,5 @@ export interface NeedsFocusAreasData {
     focusAreaId?: number;
     _need: NeedData;
     _focusArea: FocusAreaData;
-    comment: string;
+    comment?: string;
 }

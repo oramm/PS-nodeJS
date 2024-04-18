@@ -1,6 +1,13 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
-import { NeedData, FocusAreaData, EntityData } from '../../types/types';
+import {
+    NeedData,
+    FocusAreaData,
+    EntityData,
+    FinancialAidProgrammeData,
+    ApplicationCallData,
+} from '../../types/types';
+import NeedsFocusAreasController from '../NeedsFocusAreas/NeedsFocusAreasController';
 
 type NeedSearchParams = {
     id?: number;
@@ -8,6 +15,9 @@ type NeedSearchParams = {
     _client?: EntityData;
     status?: string;
     searchText?: string;
+    _financialAidProgramme?: FinancialAidProgrammeData;
+    _focusArea?: FocusAreaData | FocusAreaData[];
+    _applicationCall?: ApplicationCallData;
 };
 
 export default class NeedsController {
@@ -17,17 +27,38 @@ export default class NeedsController {
             Needs.Name,
             Needs.Description,
             Needs.Status,
-            Entities.Name as ClientName
+            Entities.Name as ClientName,
+            ApplicationCalls.Id AS ApplicationCallId,
+            ApplicationCalls.StartDate AS ApplicationCallStartDate,
+            ApplicationCalls.EndDate AS ApplicationCallEndDate,
+            ApplicationCalls.Status AS ApplicationCallStatus,
+            ApplicationCalls.Description AS ApplicationCallDescription,
+            ApplicationCallFocusArea.Id AS ApplicationCallFocusAreaId,
+            ApplicationCallFocusArea.Name AS ApplicationCallFocusAreaName,
+            ApplicationCallFocusArea.Alias AS ApplicationCallFocusAreaAlias,
+            ApplicationCallFocusArea.Description AS ApplicationCallFocusAreaDescription,
+            ApplicationCallFinancialAidProgramme.Id AS ApplicationCallFinancialAidProgrammeId,
+            ApplicationCallFinancialAidProgramme.Name AS ApplicationCallFinancialAidProgrammeName,
+            ApplicationCallFinancialAidProgramme.Alias AS ApplicationCallFinancialAidProgrammeAlias,
+            GROUP_CONCAT(DISTINCT FocusAreas.Name ORDER BY FocusAreas.Name ASC SEPARATOR ', ') AS FocusAreasNames
         FROM Needs
         JOIN Entities ON Needs.ClientId = Entities.Id
+        LEFT JOIN Needs_FocusAreas ON Needs.Id = Needs_FocusAreas.NeedId
+        LEFT JOIN FocusAreas ON Needs_FocusAreas.FocusAreaId = FocusAreas.Id
+        LEFT JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
+        LEFT JOIN ApplicationCalls ON Needs.ApplicationCallId = ApplicationCalls.Id
+        LEFT JOIN FocusAreas AS ApplicationCallFocusArea ON ApplicationCalls.FocusAreaId = ApplicationCallFocusArea.Id
+        LEFT JOIN FinancialAidProgrammes AS ApplicationCallFinancialAidProgramme ON ApplicationCallFocusArea.FinancialAidProgrammeId = ApplicationCallFinancialAidProgramme.Id
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
         )}
+        GROUP BY Needs.Id
         ORDER BY Needs.Name ASC`;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processNeedsResult(result);
+        const specificNeedId = orConditions[0]?.id;
+        return await this.processNeedsResult(result, specificNeedId);
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
@@ -51,6 +82,9 @@ export default class NeedsController {
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
+        if (searchParams.id) {
+            conditions.push(mysql.format(`Needs.Id = ?`, [searchParams.id]));
+        }
         if (searchTextCondition !== '1') {
             conditions.push(searchTextCondition);
         }
@@ -68,10 +102,46 @@ export default class NeedsController {
         return conditions.length ? conditions.join(' AND ') : '1';
     }
 
-    static processNeedsResult(result: any[]): NeedData[] {
+    static async processNeedsResult(
+        result: any[],
+        specificNeedId: number | undefined
+    ) {
         let newResult: NeedData[] = [];
-
+        let focusAreas: FocusAreaData[] = [];
+        if (specificNeedId) {
+            const associations =
+                await NeedsFocusAreasController.getNeedsFocusAreasList([
+                    { needId: specificNeedId },
+                ]);
+            focusAreas = associations.map(
+                (association) => association._focusArea
+            );
+        }
         for (const row of result) {
+            const applicationCall = row.ApplicationCallId
+                ? <ApplicationCallData>{
+                      id: row.ApplicationCallId,
+                      startDate: row.ApplicationCallStartDate,
+                      endDate: row.ApplicationCallEndDate,
+                      status: row.ApplicationCallStatus,
+                      description: ToolsDb.sqlToString(
+                          row.ApplicationCallDescription
+                      ),
+                      _focusArea: <FocusAreaData>{
+                          id: row.ApplicationCallFocusAreaId,
+                          name: row.ApplicationCallFocusAreaName,
+                          _financialAidProgramme: <FinancialAidProgrammeData>{
+                              id: row.ApplicationCallFinancialAidProgrammeId,
+                              name: row.ApplicationCallFinancialAidProgrammeName,
+                              alias: row.ApplicationCallFinancialAidProgrammeAlias,
+                          },
+                          alias: row.ApplicationCallFocusAreaAlias,
+                          description: ToolsDb.sqlToString(
+                              row.ApplicationCallFocusAreaDescription
+                          ),
+                      },
+                  }
+                : undefined;
             const item: NeedData = {
                 id: row.Id,
                 _client: {
@@ -81,6 +151,8 @@ export default class NeedsController {
                 name: row.Name,
                 description: ToolsDb.sqlToString(row.Description),
                 status: row.Status,
+                _applicationCall: applicationCall,
+                _focusAreas: focusAreas,
             };
             newResult.push(item);
         }

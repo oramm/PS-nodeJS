@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import NeedsFocusAreasController from './NeedsFocusAreasController';
-import NeedFocusArea from '../Needs/NeedFocusArea';
+import NeedFocusArea from './NeedFocusArea';
 import { app } from '../../index';
 
 app.post('/needsFocusAreas', async (req: Request, res: Response) => {

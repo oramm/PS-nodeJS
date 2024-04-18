@@ -1,8 +1,6 @@
 import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
 import { OAuth2Client } from 'google-auth-library';
-import Project from '../projects/Project';
-import Entity from '../entities/Entity';
 import ContractType from './contractTypes/ContractType';
 import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
@@ -11,13 +9,7 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
-import {
-    ContractData,
-    EntityData,
-    OtherContractData,
-    OurContractData,
-    ProjectData,
-} from '../types/types';
+import { ContractData, EntityData, ProjectData } from '../types/types';
 
 export default abstract class Contract
     extends BusinessObject

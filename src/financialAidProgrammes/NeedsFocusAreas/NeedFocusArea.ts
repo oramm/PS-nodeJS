@@ -5,12 +5,15 @@ import {
     NeedsFocusAreasData,
 } from '../../types/types';
 
-export default class NeedsFocusAreas extends BusinessObject {
+export default class NeedsFocusArea
+    extends BusinessObject
+    implements NeedsFocusAreasData
+{
     needId: number;
     focusAreaId: number;
     _need: NeedData;
     _focusArea: FocusAreaData;
-    comment: string;
+    comment?: string;
 
     constructor(initParamObject: NeedsFocusAreasData) {
         super({ ...initParamObject, _dbTableName: 'Needs_FocusAreas' });

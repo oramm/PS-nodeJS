@@ -19,7 +19,7 @@ app.post('/needs', async (req: Request, res: Response) => {
 app.post('/need', async (req: Request, res: Response) => {
     try {
         let need = new Need(req.body);
-        await need.addInDb();
+        await need.addNewController();
         res.send(need);
     } catch (error) {
         console.error(error);
@@ -32,7 +32,7 @@ app.post('/need', async (req: Request, res: Response) => {
 app.put('/need/:id', async (req: Request, res: Response) => {
     try {
         let need = new Need(req.parsedBody);
-        await need.editInDb();
+        await need.editController();
         res.send(need);
     } catch (error) {
         console.error(error);
@@ -45,7 +45,7 @@ app.put('/need/:id', async (req: Request, res: Response) => {
 app.delete('/need/:id', async (req: Request, res: Response) => {
     try {
         let need = new Need(req.body);
-        await need.deleteFromDb();
+        await need.deleteController();
         res.send(need);
     } catch (error) {
         console.error(error);

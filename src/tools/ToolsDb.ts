@@ -386,35 +386,42 @@ export default class ToolsDb {
         }
     */
     static async transaction(
-        callback: (conn: mysql.PoolConnection) => Promise<any>
+        callback: (conn: mysql.PoolConnection) => Promise<any>,
+        externalConn?: mysql.PoolConnection
     ) {
-        const connection = await this.pool.getConnection();
+        const connection = externalConn || (await this.pool.getConnection());
         let transactionStarted = false;
 
         try {
-            console.log(
-                'transaction:: connection acquired',
-                connection.threadId
-            );
-            await connection.beginTransaction();
-            transactionStarted = true; // transaction started successfully
-
+            if (!externalConn) {
+                console.log(
+                    'transaction:: connection acquired',
+                    connection.threadId
+                );
+                await connection.beginTransaction();
+            }
+            transactionStarted = true;
             const result = await callback(connection);
-            await connection.commit();
+            if (!externalConn) {
+                await connection.commit();
+            }
             return result;
         } catch (err) {
-            if (transactionStarted) {
+            if (transactionStarted && !externalConn) {
                 await connection.rollback();
             }
             throw err;
         } finally {
-            connection.release();
-            console.log(
-                'transaction:: connection released ',
-                connection.threadId
-            );
+            if (!externalConn) {
+                connection.release();
+                console.log(
+                    'transaction:: connection released',
+                    connection.threadId
+                );
+            }
         }
     }
+
     /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
     static makeOrConditionFromValueOrArray(
         valueOrArray: string | string[] | undefined,
