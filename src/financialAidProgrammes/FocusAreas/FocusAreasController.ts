@@ -1,11 +1,12 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
-import { FocusAreaData } from '../../types/types';
+import { FinancialAidProgrammeData, FocusAreaData } from '../../types/types';
 import ToolsGd from '../../tools/ToolsGd';
 
 type FocusAreaSearchParams = {
     id?: number;
     searchText?: string;
+    _financialAidProgramme?: FinancialAidProgrammeData;
 };
 
 export default class FocusAreasController {
@@ -51,11 +52,24 @@ export default class FocusAreasController {
     }
 
     static makeAndConditions(searchParams: FocusAreaSearchParams) {
+        const conditions: string[] = [];
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
 
-        return `${searchTextCondition}`;
+        if (searchParams._financialAidProgramme) {
+            conditions.push(
+                mysql.format(`FinancialAidProgrammes.Id = ?`, [
+                    searchParams._financialAidProgramme.id,
+                ])
+            );
+        }
+
+        return conditions.length ? conditions.join(' AND ') : '1';
     }
 
     static processFocusAreasResult(result: any[]): FocusAreaData[] {
