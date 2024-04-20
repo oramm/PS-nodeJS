@@ -349,7 +349,9 @@ export interface OurOfferData extends OfferData {
     resourcesGdFolderId?: string;
 }
 
-export interface ExternalOfferData extends OfferData {}
+export interface ExternalOfferData extends OfferData {
+    tenderUrl?: string | null;
+}
 
 export interface FinancialAidProgrammeData extends RepositoryDataItem {
     name: string;

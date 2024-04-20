@@ -4,8 +4,10 @@ import { OAuth2Client } from 'google-auth-library';
 import ExternalOfferGdController from './gdControllers/ExternalOfferGdController';
 
 export default class ExternalOffer extends Offer implements ExternalOfferData {
+    tenderUrl?: string | null;
     constructor(initParamObject: ExternalOfferData) {
         super(initParamObject);
+        this.tenderUrl = initParamObject.tenderUrl;
     }
 
     async addNewController(auth: OAuth2Client) {

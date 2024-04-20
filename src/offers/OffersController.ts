@@ -5,7 +5,7 @@ import ContractType from '../contracts/contractTypes/ContractType';
 import City from '../Admin/Cities/City';
 import ExternalOffer from './ExternalOffer';
 import OurOffer from './OurOffer';
-import { OfferData, OurOfferData } from '../types/types';
+import { ExternalOfferData, OfferData, OurOfferData } from '../types/types';
 
 export type OffersSearchParams = {
     id?: number;
@@ -37,6 +37,7 @@ export default class OffersController {
                 Offers.GdFolderId,
                 Offers.GdDocumentId,
                 Offers.resourcesGdFolderId,
+                Offers.TenderUrl,
                 Cities.Id AS CityId,
                 Cities.Name AS CityName,
                 Cities.Code AS CityCode,
@@ -120,7 +121,7 @@ export default class OffersController {
         let newResult: Offer[] = [];
 
         for (const row of result) {
-            const offerInitData: OfferData | OurOfferData = {
+            const offerInitData: ExternalOfferData | OurOfferData = {
                 id: row.Id,
                 alias: ToolsDb.sqlToString(row.Alias),
                 description: ToolsDb.sqlToString(row.Description),
@@ -134,6 +135,7 @@ export default class OffersController {
                 bidProcedure: ToolsDb.sqlToString(row.BidProcedure),
                 gdFolderId: row.GdFolderId,
                 gdDocumentId: row.GdDocumentId,
+                tenderUrl: row.TenderUrl,
                 resourcesGdFolderId: row.resourcesGdFolderId,
                 _lastUpdated: row.LastUpdated,
                 _employer: { name: ToolsDb.sqlToString(row.EmployerName) },
