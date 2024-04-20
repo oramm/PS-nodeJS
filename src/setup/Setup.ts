@@ -145,6 +145,7 @@ export default class Setup {
         DONE: 'Czekamy na wynik',
         AWARDED: 'Wygrana',
         LOST: 'Przegrana',
+        CANCELED: 'Unieważnione',
         WITHDRAWN: 'Wycofana',
         NOT_INTERESTED: 'Nie składamy',
     };
