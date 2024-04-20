@@ -63,41 +63,48 @@ export default class OffersController {
     }
 
     static makeAndConditions(searchParams: OffersSearchParams) {
-        const idCondition = searchParams.id
-            ? mysql.format(`Offers.Id = ?`, [searchParams.id])
-            : '1';
-        const cityCondition = searchParams._city?.id
-            ? mysql.format(`Cities.Id = ?`, [searchParams._city.id])
-            : '1';
-        const submissionDeadlineFromCondition =
-            searchParams.submissionDeadlineFrom
-                ? mysql.format(`Offers.SubmissionDeadline >= ?`, [
-                      searchParams.submissionDeadlineFrom,
-                  ])
-                : '1';
-        const submissionDeadlineToCondition = searchParams.submissionDeadlineTo
-            ? mysql.format(`Offers.SubmissionDeadline <= ?`, [
-                  searchParams.submissionDeadlineTo,
-              ])
-            : '1';
-        const statusCondition = searchParams.status
-            ? mysql.format(`Offers.Status = ?`, [searchParams.status])
-            : '1';
-        const aliasCondition = searchParams.alias
-            ? mysql.format(`Offers.Alias LIKE ?`, [`%${searchParams.alias}%`])
-            : '1';
+        const conditions = [];
 
+        if (searchParams.id) {
+            conditions.push(mysql.format(`Offers.Id = ?`, [searchParams.id]));
+        }
+        if (searchParams._city?.id) {
+            conditions.push(
+                mysql.format(`Cities.Id = ?`, [searchParams._city.id])
+            );
+        }
+        if (searchParams.submissionDeadlineFrom) {
+            conditions.push(
+                mysql.format(`Offers.SubmissionDeadline >= ?`, [
+                    searchParams.submissionDeadlineFrom,
+                ])
+            );
+        }
+        if (searchParams.submissionDeadlineTo) {
+            conditions.push(
+                mysql.format(`Offers.SubmissionDeadline <= ?`, [
+                    searchParams.submissionDeadlineTo,
+                ])
+            );
+        }
+        if (searchParams.status) {
+            conditions.push(
+                mysql.format(`Offers.Status = ?`, [searchParams.status])
+            );
+        }
+        if (searchParams.alias) {
+            conditions.push(
+                mysql.format(`Offers.Alias LIKE ?`, [`%${searchParams.alias}%`])
+            );
+        }
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
 
-        return `${idCondition}
-            AND ${cityCondition}
-            AND ${submissionDeadlineFromCondition}
-            AND ${submissionDeadlineToCondition}
-            AND ${statusCondition}
-            AND ${aliasCondition}
-            AND ${searchTextCondition}`;
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
