@@ -8,6 +8,7 @@ import {
     ApplicationCallData,
 } from '../../types/types';
 import NeedsFocusAreasController from '../NeedsFocusAreas/NeedsFocusAreasController';
+import ApplicationCall from '../FocusAreas/ApplicationCalls/ApplicationCall';
 
 type NeedSearchParams = {
     id?: number;
@@ -41,6 +42,7 @@ export default class NeedsController {
             ApplicationCallFinancialAidProgramme.Id AS ApplicationCallFinancialAidProgrammeId,
             ApplicationCallFinancialAidProgramme.Name AS ApplicationCallFinancialAidProgrammeName,
             ApplicationCallFinancialAidProgramme.Alias AS ApplicationCallFinancialAidProgrammeAlias,
+            ApplicationCallFinancialAidProgramme.Url AS ApplicationCallFinancialAidProgrammeUrl,
             GROUP_CONCAT(DISTINCT FocusAreas.Name ORDER BY FocusAreas.Name ASC SEPARATOR ', ') AS FocusAreasNames
         FROM Needs
         JOIN Entities ON Needs.ClientId = Entities.Id
@@ -142,7 +144,7 @@ export default class NeedsController {
         }
         for (const row of result) {
             const applicationCall = row.ApplicationCallId
-                ? <ApplicationCallData>{
+                ? new ApplicationCall(<ApplicationCallData>{
                       id: row.ApplicationCallId,
                       startDate: row.ApplicationCallStartDate,
                       endDate: row.ApplicationCallEndDate,
@@ -159,13 +161,14 @@ export default class NeedsController {
                               id: row.ApplicationCallFinancialAidProgrammeId,
                               name: row.ApplicationCallFinancialAidProgrammeName,
                               alias: row.ApplicationCallFinancialAidProgrammeAlias,
+                              url: row.ApplicationCallFinancialAidProgrammeUrl,
                           },
                           alias: row.ApplicationCallFocusAreaAlias,
                           description: ToolsDb.sqlToString(
                               row.ApplicationCallFocusAreaDescription
                           ),
                       },
-                  }
+                  })
                 : undefined;
             const item: NeedData & { _focusAreasNames: string[] | undefined } =
                 {
