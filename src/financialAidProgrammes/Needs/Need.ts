@@ -18,6 +18,7 @@ export default class Need extends BusinessObject implements NeedData {
     description: string;
     status: string;
     _applicationCall?: ApplicationCallData | null;
+    applicationCallId?: number | null;
     _focusAreas?: FocusAreaData[] = [];
 
     constructor(initParamObject: NeedData) {
@@ -31,6 +32,12 @@ export default class Need extends BusinessObject implements NeedData {
         this.description = initParamObject.description;
         this.status = initParamObject.status;
         this._applicationCall = initParamObject._applicationCall;
+        if (initParamObject._applicationCall === null)
+            this.applicationCallId = null;
+        else
+            this.applicationCallId =
+                initParamObject.applicationCallId ??
+                initParamObject._applicationCall?.id;
         this._focusAreas = initParamObject._focusAreas;
     }
 

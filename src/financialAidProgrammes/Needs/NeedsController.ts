@@ -16,7 +16,7 @@ type NeedSearchParams = {
     status?: string;
     searchText?: string;
     _financialAidProgramme?: FinancialAidProgrammeData;
-    _focusArea?: FocusAreaData | FocusAreaData[];
+    _focusArea?: FocusAreaData;
     _applicationCall?: ApplicationCallData;
 };
 
@@ -33,6 +33,7 @@ export default class NeedsController {
             ApplicationCalls.EndDate AS ApplicationCallEndDate,
             ApplicationCalls.Status AS ApplicationCallStatus,
             ApplicationCalls.Description AS ApplicationCallDescription,
+            ApplicationCalls.Url AS ApplicationCallUrl,
             ApplicationCallFocusArea.Id AS ApplicationCallFocusAreaId,
             ApplicationCallFocusArea.Name AS ApplicationCallFocusAreaName,
             ApplicationCallFocusArea.Alias AS ApplicationCallFocusAreaAlias,
@@ -55,7 +56,7 @@ export default class NeedsController {
         )}
         GROUP BY Needs.Id
         ORDER BY Needs.Name ASC`;
-        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         const specificNeedId = orConditions[0]?.id;
         return await this.processNeedsResult(result, specificNeedId);
@@ -99,6 +100,28 @@ export default class NeedsController {
             );
         }
 
+        if (searchParams._financialAidProgramme) {
+            conditions.push(
+                mysql.format(`FinancialAidProgrammes.Id = ?`, [
+                    searchParams._financialAidProgramme.id,
+                ])
+            );
+        }
+
+        if (searchParams._focusArea) {
+            conditions.push(
+                mysql.format(`FocusAreas.Id = ?`, [searchParams._focusArea.id])
+            );
+        }
+
+        if (searchParams._applicationCall) {
+            conditions.push(
+                mysql.format(`ApplicationCalls.Id = ?`, [
+                    searchParams._applicationCall.id,
+                ])
+            );
+        }
+
         return conditions.length ? conditions.join(' AND ') : '1';
     }
 
@@ -107,7 +130,7 @@ export default class NeedsController {
         specificNeedId: number | undefined
     ) {
         let newResult: NeedData[] = [];
-        let focusAreas: FocusAreaData[] = [];
+        let focusAreas: FocusAreaData[] | undefined;
         if (specificNeedId) {
             const associations =
                 await NeedsFocusAreasController.getNeedsFocusAreasList([
@@ -127,6 +150,8 @@ export default class NeedsController {
                       description: ToolsDb.sqlToString(
                           row.ApplicationCallDescription
                       ),
+
+                      url: row.ApplicationCallUrl,
                       _focusArea: <FocusAreaData>{
                           id: row.ApplicationCallFocusAreaId,
                           name: row.ApplicationCallFocusAreaName,
@@ -142,18 +167,22 @@ export default class NeedsController {
                       },
                   }
                 : undefined;
-            const item: NeedData = {
-                id: row.Id,
-                _client: {
-                    id: row.ClientId,
-                    name: row.ClientName,
-                },
-                name: row.Name,
-                description: ToolsDb.sqlToString(row.Description),
-                status: row.Status,
-                _applicationCall: applicationCall,
-                _focusAreas: focusAreas,
-            };
+            const item: NeedData & { _focusAreasNames: string[] | undefined } =
+                {
+                    id: row.Id,
+                    _client: {
+                        id: row.ClientId,
+                        name: row.ClientName,
+                    },
+                    name: row.Name,
+                    description: ToolsDb.sqlToString(row.Description),
+                    status: row.Status,
+                    _applicationCall: applicationCall,
+                    _focusAreas: focusAreas,
+                    _focusAreasNames: row.FocusAreasNames
+                        ? row.FocusAreasNames.split(', ')
+                        : undefined,
+                };
             newResult.push(item);
         }
         return newResult;
