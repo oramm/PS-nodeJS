@@ -20,6 +20,7 @@ export default class Need extends BusinessObject implements NeedData {
     _applicationCall?: ApplicationCallData | null;
     applicationCallId?: number | null;
     _focusAreas?: FocusAreaData[] = [];
+    _focusAreasNames?: string[] | undefined;
 
     constructor(initParamObject: NeedData) {
         super({ ...initParamObject, _dbTableName: 'Needs' });
@@ -39,6 +40,19 @@ export default class Need extends BusinessObject implements NeedData {
                 initParamObject.applicationCallId ??
                 initParamObject._applicationCall?.id;
         this._focusAreas = initParamObject._focusAreas;
+        this.setFocusAreasNames(
+            initParamObject._focusAreasNames,
+            initParamObject._focusAreas
+        );
+    }
+
+    setFocusAreasNames(
+        _focusAreasNames: string[] | undefined,
+        _focusAreas: FocusAreaData[] | undefined
+    ) {
+        if (_focusAreas && _focusAreas.length > 0)
+            this._focusAreasNames = _focusAreas.map((fa) => fa.name);
+        else this._focusAreasNames = _focusAreasNames;
     }
 
     async addNewController() {

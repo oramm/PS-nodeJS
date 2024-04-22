@@ -170,22 +170,21 @@ export default class NeedsController {
                       },
                   })
                 : undefined;
-            const item: NeedData & { _focusAreasNames: string[] | undefined } =
-                {
-                    id: row.Id,
-                    _client: {
-                        id: row.ClientId,
-                        name: row.ClientName,
-                    },
-                    name: row.Name,
-                    description: ToolsDb.sqlToString(row.Description),
-                    status: row.Status,
-                    _applicationCall: applicationCall,
-                    _focusAreas: focusAreas,
-                    _focusAreasNames: row.FocusAreasNames
-                        ? row.FocusAreasNames.split(', ')
-                        : undefined,
-                };
+            const item: NeedData = {
+                id: row.Id,
+                _client: {
+                    id: row.ClientId,
+                    name: row.ClientName,
+                },
+                name: row.Name,
+                description: ToolsDb.sqlToString(row.Description),
+                status: row.Status,
+                _applicationCall: applicationCall,
+                _focusAreas: focusAreas,
+                _focusAreasNames: row.FocusAreasNames
+                    ? row.FocusAreasNames.split(', ')
+                    : undefined,
+            };
             newResult.push(item);
         }
         return newResult;
