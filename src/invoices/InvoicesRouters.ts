@@ -22,7 +22,7 @@ app.post('/invoices', async (req: Request, res: Response) => {
 
 app.post('/invoice', async (req: Request, res: Response) => {
     try {
-        let invoice = new Invoice(req.body);
+        const invoice = new Invoice(req.body);
         const validator = new InvoiceValidator(
             new ContractOur(invoice._contract),
             invoice

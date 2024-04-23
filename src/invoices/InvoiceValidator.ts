@@ -1,3 +1,4 @@
+import e from 'express';
 import ContractOur from '../contracts/ContractOur';
 import ContractsSettlementController, {
     ContractSettlementData,
@@ -17,7 +18,6 @@ export default class InvoiceValidator {
 
     async checkValueWithContract(isNewInvoice: boolean): Promise<boolean> {
         this.checkContractValueSet();
-        if (isNewInvoice) this.checkNewInvoiceValueAgainstContract();
 
         const contractSettlementData = await this.getContractSettlementData();
         this.checkInvoiceValueAgainstRemainingValue(
@@ -31,18 +31,6 @@ export default class InvoiceValidator {
     private checkContractValueSet() {
         if (!this.contract.value) {
             throw new Error('Wartość kontraktu nie została ustawiona');
-        }
-    }
-
-    private checkNewInvoiceValueAgainstContract() {
-        if (!this.invoice._totalNetValue) {
-            throw new Error('Wartość faktury nie została ustawiona');
-        }
-        const contractValue = this.contract.value as number;
-        if (contractValue <= this.invoice._totalNetValue) {
-            throw new Error(
-                `Nie można dodać nowej faktury, ponieważ jej wartość (${this.invoice._totalNetValue} zł) przekracza lub równa się wartości kontraktu (${contractValue} zł).`
-            );
         }
     }
 
@@ -68,7 +56,9 @@ export default class InvoiceValidator {
         isNewInvoice: boolean
     ) {
         if (this.invoice._totalNetValue === undefined)
-            throw new Error('Wartość faktury nie została ustawiona');
+            if (!isNewInvoice)
+                throw new Error('Wartość faktury nie została ustawiona');
+            else this.invoice._totalNetValue = 0;
         if (
             isNewInvoice &&
             this.invoice._totalNetValue >=
