@@ -1,4 +1,3 @@
-import e from 'express';
 import ContractOur from '../contracts/ContractOur';
 import ContractsSettlementController, {
     ContractSettlementData,
@@ -20,10 +19,11 @@ export default class InvoiceValidator {
         this.checkContractValueSet();
 
         const contractSettlementData = await this.getContractSettlementData();
-        this.checkInvoiceValueAgainstRemainingValue(
-            contractSettlementData,
-            isNewInvoice
-        );
+        if (isNewInvoice) {
+            this.checkNewInvoiceValue(contractSettlementData);
+        } else {
+            this.checkExistingInvoiceValue(contractSettlementData);
+        }
 
         return true;
     }
@@ -37,7 +37,7 @@ export default class InvoiceValidator {
     private async getContractSettlementData(): Promise<ContractSettlementData> {
         const invoiceStatuses = Object.values(Setup.InvoiceStatus).filter(
             (status) =>
-                status !== Setup.InvoiceStatus.WITHDRAWN ||
+                status !== Setup.InvoiceStatus.WITHDRAWN &&
                 status !== Setup.InvoiceStatus.TO_CORRECT
         );
         const contractSettlementData =
@@ -51,18 +51,15 @@ export default class InvoiceValidator {
         return contractSettlementData[0];
     }
 
-    private checkInvoiceValueAgainstRemainingValue(
-        contractSettlementData: ContractSettlementData,
-        isNewInvoice: boolean
+    private checkNewInvoiceValue(
+        contractSettlementData: ContractSettlementData
     ) {
-        if (this.invoice._totalNetValue === undefined)
-            if (!isNewInvoice)
-                throw new Error('Wartość faktury nie została ustawiona');
-            else this.invoice._totalNetValue = 0;
+        if (this.invoice._totalNetValue === undefined) {
+            this.invoice._totalNetValue = 0;
+        }
         if (
-            isNewInvoice &&
             this.invoice._totalNetValue >=
-                contractSettlementData.remainingRegisteredValue
+            contractSettlementData.remainingRegisteredValue
         ) {
             const contractValue = this.contract.value as number;
             throw new Error(
@@ -78,6 +75,14 @@ export default class InvoiceValidator {
                     )} zł \n` +
                     `Wskazówka: sprawdź w widoku kontraktu czy nie ma zapomnianych faktur o statusie "Na Później".`
             );
+        }
+    }
+
+    private checkExistingInvoiceValue(
+        contractSettlementData: ContractSettlementData
+    ) {
+        if (this.invoice._totalNetValue === undefined) {
+            throw new Error('Wartość faktury nie została ustawiona');
         }
     }
 }
