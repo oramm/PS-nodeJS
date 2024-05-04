@@ -22,6 +22,7 @@ export type OffersSearchParams = {
     _city?: City;
     _type?: ContractType;
     searchText?: string;
+    _offerBond?: OfferBondData;
 };
 
 export default class OffersController {
@@ -116,6 +117,14 @@ export default class OffersController {
         );
         if (searchTextCondition !== '1') {
             conditions.push(searchTextCondition);
+        }
+
+        if (searchParams._offerBond?.status) {
+            conditions.push(
+                mysql.format(`OfferBonds.Status = ?`, [
+                    searchParams._offerBond.status,
+                ])
+            );
         }
 
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
