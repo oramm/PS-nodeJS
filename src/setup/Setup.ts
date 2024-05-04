@@ -150,6 +150,19 @@ export default class Setup {
         NOT_INTERESTED: 'Nie składamy',
     };
 
+    static OfferBondStatus = {
+        TO_DO: 'Do złożenia',
+        TO_RENEW: 'Do przedłużenia',
+        DONE: 'Złożone',
+        TO_BE_RETURNED: 'Do zwrotu',
+        RETURNED: 'Zwrócone',
+    };
+
+    static OfferBondForm = {
+        CASH: 'Gotówka',
+        GUARANTEE: 'Gwarancja',
+    };
+
     static OfferBidProcedure = {
         REQUEST_FOR_QUOTATION: 'Zapytanie ofertowe',
         TENDER_PL: 'Przetarg BZP',

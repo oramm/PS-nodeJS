@@ -54,6 +54,43 @@ app.put('/offer/:id', async (req: Request, res: Response) => {
     }
 });
 
+app.put('/addNewOfferBond/:id', async (req: Request, res: Response) => {
+    try {
+        const item = makeOfferObject(req) as ExternalOffer;
+        await item.addNewOfferBondController();
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+app.put('/editOfferBond/:id', async (req: Request, res: Response) => {
+    try {
+        const offerData = req.parsedBody.offerData;
+        const item = makeOfferObject(req) as ExternalOffer;
+        await item.editOfferBondController();
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+app.put('/deleteOfferBond/:id', async (req: Request, res: Response) => {
+    try {
+        const item = makeOfferObject(req) as ExternalOffer;
+        await item.deleteOfferBondController();
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
 app.delete('/offer/:id', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);

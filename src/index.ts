@@ -184,6 +184,7 @@ require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
 require('./offers/OffersRouters');
+require('./offers/OfferBond/OfferBondsRouters');
 
 require('./Admin/Cities/CitiesRouters');
 

@@ -1,13 +1,23 @@
-import { ExternalOfferData } from '../types/types';
+import { ExternalOfferData, OfferBondData } from '../types/types';
 import Offer from './Offer';
 import { OAuth2Client } from 'google-auth-library';
 import ExternalOfferGdController from './gdControllers/ExternalOfferGdController';
+import OfferBond from './OfferBond/OfferBond';
 
 export default class ExternalOffer extends Offer implements ExternalOfferData {
     tenderUrl?: string | null;
+    _offerBond?: OfferBond | null;
     constructor(initParamObject: ExternalOfferData) {
         super(initParamObject);
+        this.initOfferBond(initParamObject._offerBond);
         this.tenderUrl = initParamObject.tenderUrl;
+    }
+
+    private initOfferBond(offerBondData: OfferBondData | undefined | null) {
+        if (offerBondData) {
+            offerBondData.offerId = this.id;
+            this._offerBond = new OfferBond(offerBondData);
+        } else this._offerBond = null;
     }
 
     async addNewController(auth: OAuth2Client) {
@@ -24,5 +34,22 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
             offerContentFolder,
             specsFolder
         );
+    }
+
+    async addNewOfferBondController() {
+        if (!this._offerBond) throw new Error('No OfferBond data');
+        await this._offerBond.addNewController();
+    }
+
+    async editOfferBondController() {
+        if (!this._offerBond) throw new Error('No OfferBond data');
+        await this._offerBond.editController();
+    }
+
+    async deleteOfferBondController() {
+        if (!this._offerBond) throw new Error('No OfferBond data');
+        await this._offerBond.deleteController();
+        console.log('OfferBond deleted', this._offerBond);
+        this._offerBond = null;
     }
 }
