@@ -68,7 +68,6 @@ export default class InvoiceItemValidator {
             FROM InvoiceItems
             JOIN Invoices ON Invoices.Id=InvoiceItems.ParentId
             WHERE ${this.makeAndConditions()}`;
-
         try {
             const result: any[] = <any[]>(
                 await ToolsDb.getQueryCallbackAsync(sql)
@@ -91,7 +90,6 @@ export default class InvoiceItemValidator {
             [
                 Setup.InvoiceStatus.FOR_LATER,
                 Setup.InvoiceStatus.TO_CORRECT,
-                Setup.InvoiceStatus.DONE,
                 Setup.InvoiceStatus.DONE,
                 Setup.InvoiceStatus.SENT,
                 Setup.InvoiceStatus.PAID,
@@ -133,10 +131,11 @@ export default class InvoiceItemValidator {
         const [otherItemsValueObject, thisItemSaved] = await Promise.all([
             this.getItemsValue(),
             InvoiceItemsController.getInvoiceItemsList([
-                { invoiceId: this.invoiceItem._parent.id },
+                { invoiceItemId: this.invoiceItem.id },
             ]),
         ]);
-        //vartość pozycji w bazie dla wszystkich faktur z bieżącego kontraktu bez bieżącej pozycji
+        console.log('thisItemSaved', thisItemSaved[0]._netValue);
+        //wartość pozycji w bazie dla wszystkich faktur z bieżącego kontraktu bez bieżącej pozycji
         const otherItemsValue =
             otherItemsValueObject.value - thisItemSaved[0]._netValue;
 

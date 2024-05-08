@@ -1,18 +1,20 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb'
-import ToolsDate from '../tools/ToolsDate'
-import InvoiceItem from "./InvoiceItem";
+import ToolsDb from '../tools/ToolsDb';
+import ToolsDate from '../tools/ToolsDate';
+import InvoiceItem from './InvoiceItem';
 
 type InvoiceItemSearchParams = {
-    invoiceId?: number,
-    startDate?: string,
-    endDate?: string,
-    contractId?: number,
-}
+    invoiceItemId?: number;
+    invoiceId?: number;
+    startDate?: string;
+    endDate?: string;
+    contractId?: number;
+};
 
 export default class InvoiceItemsController {
-    static async getInvoiceItemsList(orConditions: InvoiceItemSearchParams[] = []) {
-
+    static async getInvoiceItemsList(
+        orConditions: InvoiceItemSearchParams[] = []
+    ) {
         const sql = `SELECT InvoiceItems.Id,
                             InvoiceItems.Description,
                             InvoiceItems.Quantity,
@@ -50,7 +52,10 @@ export default class InvoiceItemsController {
                         JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
                         JOIN ContractTypes ON ContractTypes.Id=Contracts.TypeId
                         LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId
-                        WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+                        WHERE ${ToolsDb.makeOrGroupsConditions(
+                            orConditions,
+                            this.makeAndConditions.bind(this)
+                        )}
                         ORDER BY InvoiceItems.Id DESC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
@@ -58,16 +63,36 @@ export default class InvoiceItemsController {
     }
 
     static makeAndConditions(searchParams: InvoiceItemSearchParams) {
-        const invoiceCondition = searchParams.invoiceId
-            ? mysql.format(`InvoiceItems.ParentId = ? `, [searchParams.invoiceId])
+        const conditions: string[] = [];
+
+        const invoiceItemCondition = searchParams.invoiceItemId
+            ? mysql.format(`InvoiceItems.Id = ?`, [searchParams.invoiceItemId])
             : '1';
+        conditions.push(invoiceItemCondition);
 
-        searchParams.endDate = (!searchParams.endDate) ? searchParams.endDate = 'CURDATE()' : '"' + ToolsDate.dateDMYtoYMD(searchParams.endDate) + '"';
+        const invoiceCondition = searchParams.invoiceId
+            ? mysql.format(`InvoiceItems.ParentId = ?`, [
+                  searchParams.invoiceId,
+              ])
+            : '1';
+        conditions.push(invoiceCondition);
 
-        const dateCondition = (searchParams.startDate) ? 'Invoices.IssueDate BETWEEN "' + ToolsDate.dateDMYtoYMD(searchParams.startDate) + '" AND DATE_ADD(' + searchParams.endDate + ', INTERVAL 1 DAY)' : '1';
+        if (searchParams.startDate) {
+            conditions.push(
+                mysql.format(`Invoices.IssueDate >= ?`, [
+                    searchParams.startDate,
+                ])
+            );
+        }
 
-        return `${invoiceCondition} 
-        AND ${dateCondition} `;
+        if (searchParams.endDate) {
+            conditions.push(
+                mysql.format(`Invoices.IssueDate <= ?`, [searchParams.endDate])
+            );
+        }
+
+        // Combine all conditions using "AND" to form the final query clause.
+        return conditions.join(' AND ');
     }
 
     static processInvoiceItemsResult(result: any[]) {
@@ -99,9 +124,9 @@ export default class InvoiceItemsController {
                             id: row.ContractTypeId,
                             name: row.ContractTypeName,
                             description: row.ContractTypeDescription,
-                            isOur: row.ContractTypeIsOur
-                        }
-                    }
+                            isOur: row.ContractTypeIsOur,
+                        },
+                    },
                 },
                 description: ToolsDb.sqlToString(row.Description),
                 quantity: row.Quantity,
@@ -114,7 +139,7 @@ export default class InvoiceItemsController {
                     id: row.EditorId,
                     name: row.EditorName,
                     surname: row.EditorSurname,
-                    email: row.EditorEmail
+                    email: row.EditorEmail,
                 },
             });
             newResult.push(item);
