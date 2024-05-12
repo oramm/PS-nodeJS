@@ -19,7 +19,9 @@ app.post('/cases', async (req: Request, res: Response) => {
 
 app.post('/case', async (req: Request, res: Response) => {
     try {
-        let caseItem = new Case({ ...req.body, _parent: req.body._milestone });
+        const caseItem = new Case({
+            ...req.parsedBody,
+        });
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
