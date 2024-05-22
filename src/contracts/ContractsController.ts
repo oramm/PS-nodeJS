@@ -7,8 +7,14 @@ import ContractType from './contractTypes/ContractType';
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
-import { CityData, ContractTypeData } from '../types/types';
+import {
+    CityData,
+    ContractRangeContractData,
+    ContractRangeData,
+    ContractTypeData,
+} from '../types/types';
 import Person from '../persons/Person';
+import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
 
 export type ContractSearchParams = {
     id?: number;
@@ -32,6 +38,7 @@ export type ContractSearchParams = {
     getRemainingValue?: boolean;
     _admin?: Person;
     _manager?: Person;
+    _contractRanges?: ContractRangeData[];
 };
 
 export default class ContractsController {
@@ -77,7 +84,8 @@ export default class ContractsController {
             ContractTypes.Id AS MainContractTypeId, 
             ContractTypes.Name AS TypeName, 
             ContractTypes.IsOur AS TypeIsOur, 
-            ContractTypes.Description AS TypeDescription
+            ContractTypes.Description AS TypeDescription,
+            GROUP_CONCAT(DISTINCT ContractRanges.Name ORDER BY ContractRanges.Name SEPARATOR ', ') AS ContractRangesNames
           FROM Contracts AS mainContracts
           LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
           LEFT JOIN Cities ON Cities.Id=OurContractsData.CityId
@@ -88,7 +96,9 @@ export default class ContractsController {
           LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
           LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
           LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
-          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
+          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id
+          LEFT JOIN ContractRangesContracts ON ContractRangesContracts.ContractId=mainContracts.Id
+          LEFT JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
           WHERE ${ToolsDb.makeOrGroupsConditions(
               orConditions,
               this.makeAndConditions.bind(this)
@@ -179,6 +189,13 @@ export default class ContractsController {
             'mainContracts',
             'Status'
         );
+
+        const contractRangesCondition = searchParams._contractRanges?.length
+            ? mysql.format(`ContractRangesContracts.ContractRangeId IN (?)`, [
+                  searchParams._contractRanges.map((range) => range.id),
+              ])
+            : '1';
+
         const adminId = searchParams._admin?.id;
         const adminIdCondition = adminId
             ? mysql.format(
@@ -223,7 +240,8 @@ export default class ContractsController {
             AND ${typeCondition}
             AND ${statusCondition}
             AND ${adminIdCondition}
-            AND ${typesToIncudeCondition} `;
+            AND ${typesToIncudeCondition} 
+            AND ${contractRangesCondition}`;
         return conditions;
     }
 
@@ -254,13 +272,23 @@ export default class ContractsController {
     ) {
         const newResult: (ContractOur | ContractOther)[] = [];
         let entitiesPerProject: any[] = [];
-
+        let rangesPerContract: ContractRangeContractData[] = [];
+        //wybrano widok szczegółowy dla projketu lub kontraktu
         if (initParamObject.projectId || initParamObject.id) {
             entitiesPerProject = await this.getContractEntityAssociationsList({
                 projectId: initParamObject.projectId,
                 contractId: initParamObject.id,
                 isArchived: initParamObject.isArchived,
             });
+            rangesPerContract =
+                await ContractRangesContractsController.getContractRangesContractsList(
+                    [
+                        {
+                            contractId: initParamObject.id,
+                        },
+                    ]
+                );
+            console.log('rangesPerContract', rangesPerContract);
         }
         for (const row of result) {
             const contractors = entitiesPerProject.filter(
@@ -279,7 +307,7 @@ export default class ContractsController {
                     item.contractRole == 'EMPLOYER'
             );
 
-            const _city = row.CityId
+            const _city: CityData | undefined = row.CityId
                 ? {
                       id: row.CityId,
                       name: row.CityName,
@@ -339,6 +367,12 @@ export default class ContractsController {
                 _contractors: contractors.map((item) => item._entity),
                 _engineers: engineers.map((item) => item._entity),
                 _employers: employers.map((item) => item._entity),
+                _contractRanges: rangesPerContract.map(
+                    (item) => item._contractRange
+                ),
+                _contractRangesNames: row.ContractRangesNames
+                    ? row.ContractRangesNames.split(', ')
+                    : undefined,
                 _lastUpdated: row.LastUpdated,
             };
             let item: ContractOur | ContractOther;

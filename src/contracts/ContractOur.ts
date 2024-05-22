@@ -69,6 +69,7 @@ export default class ContractOur extends Contract implements OurContractData {
                 true
             );
             await this.addEntitiesAssociationsInDb(conn, true);
+            await this.addContractRangesAssociationsInDb(conn, true);
         });
     }
 
@@ -126,6 +127,7 @@ export default class ContractOur extends Contract implements OurContractData {
             );
             console.log('Edytuję powiązania z podmiotami');
             await this.editEntitiesAssociationsInDb(conn, true);
+            await this.editContractRangesAssociationsInDb(conn, true);
         });
     }
 

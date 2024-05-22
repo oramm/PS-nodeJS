@@ -61,6 +61,7 @@ export default class ContractOther
         return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             await super.addInDb(conn, true);
             await this.addEntitiesAssociationsInDb(conn, true);
+            await this.addContractRangesAssociationsInDb(conn, true);
         });
     }
 
@@ -72,6 +73,7 @@ export default class ContractOther
         const res = await ToolsDb.transaction(async (conn) => {
             await super.editInDb(conn, true, fieldsToUpdate);
             await this.editEntitiesAssociationsInDb(conn, true);
+            await this.editContractRangesAssociationsInDb(conn, true);
         });
     }
 

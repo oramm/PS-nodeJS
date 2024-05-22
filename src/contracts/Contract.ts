@@ -9,7 +9,14 @@ import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 import TasksController from './milestones/cases/tasks/TasksController';
-import { ContractData, EntityData, ProjectData } from '../types/types';
+import {
+    ContractData,
+    ContractRangeContractData,
+    ContractRangeData,
+    EntityData,
+    ProjectData,
+} from '../types/types';
+import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
 
 export default abstract class Contract
     extends BusinessObject
@@ -42,6 +49,8 @@ export default abstract class Contract
     _project: ProjectData;
     _folderName?: string;
     _lastUpdated?: string;
+    _contractRanges: ContractRangeData[] = [];
+    _contractRangesNames?: string[] = [];
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super({ ...initParamObject, _dbTableName: 'Contracts' });
@@ -113,7 +122,6 @@ export default abstract class Contract
         this._contractors = initParamObject._contractors
             ? initParamObject._contractors
             : [];
-
         this._engineers = initParamObject._engineers
             ? initParamObject._engineers
             : [];
@@ -121,6 +129,10 @@ export default abstract class Contract
             ? initParamObject._employers
             : [];
 
+        this._contractRanges = initParamObject._contractRanges
+            ? initParamObject._contractRanges
+            : [];
+        this._contractRangesNames = initParamObject._contractRangesNames;
         this._project = initParamObject._project;
         this.projectOurId = this._project?.ourId;
 
@@ -261,7 +273,7 @@ export default abstract class Contract
         }
     }
     /** wywoływana w EditContractHandler */
-    async editEntitiesAssociationsInDb(
+    protected async editEntitiesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
@@ -281,6 +293,52 @@ export default abstract class Contract
     ) {
         console.log('deleting entities associations from db');
         const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
+        return await ToolsDb.executePreparedStmt(
+            sql,
+            [this.id],
+            this,
+            externalConn,
+            isPartOfTransaction
+        );
+    }
+
+    protected async addContractRangesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        console.log('contractRanges', this._contractRanges);
+        for (const range of this._contractRanges) {
+            const associationData: ContractRangeContractData = {
+                _contract: this,
+                _contractRange: range,
+            };
+            const associationObject = new ContractRangeContract(
+                associationData
+            );
+            await associationObject.addInDb(externalConn, isPartOfTransaction);
+        }
+    }
+
+    protected async editContractRangesAssociationsInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        await this.deleteContractRangesContractsFromDb(
+            externalConn,
+            isPartOfTransaction
+        );
+        await this.addContractRangesAssociationsInDb(
+            externalConn,
+            isPartOfTransaction
+        );
+    }
+
+    protected async deleteContractRangesContractsFromDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        console.log('Deleting ContractRanges associations from db');
+        const sql = `DELETE FROM ContractRangesContracts WHERE ContractId = ?`;
         return await ToolsDb.executePreparedStmt(
             sql,
             [this.id],

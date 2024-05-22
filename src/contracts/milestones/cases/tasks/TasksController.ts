@@ -267,7 +267,7 @@ export default class TasksController {
                                   }
                                 : undefined,
                             _project: {},
-                        },
+                        } as OurContractData | OtherContractData,
                         _offer: {
                             id: row.OfferId,
                             status: '',

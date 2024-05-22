@@ -82,6 +82,8 @@ export interface ContractData extends RepositoryDataItem {
     _contractors?: Entity[];
     _engineers?: Entity[];
     _employers?: Entity[];
+    _contractRanges?: ContractRangeData[];
+    _contractRangesNames?: string[];
 }
 
 export interface OurContractData extends ContractData {
@@ -96,6 +98,20 @@ export interface OtherContractData extends ContractData {
     _contractors?: Entity[];
     _ourContract?: OurContract;
     materialCardsGdFolderId?: string;
+}
+
+export interface ContractRangeData {
+    id: number;
+    name: string;
+    description: string;
+}
+
+export interface ContractRangeContractData {
+    contractRangeId?: number;
+    contractId?: number;
+    _contractRange: ContractRangeData;
+    _contract?: ContractData;
+    comment?: string | null;
 }
 
 export interface ContractsSettlementDataData {

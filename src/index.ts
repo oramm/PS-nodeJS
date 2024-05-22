@@ -187,6 +187,7 @@ require('./offers/OffersRouters');
 require('./offers/OfferBond/OfferBondsRouters');
 
 require('./Admin/Cities/CitiesRouters');
+require('./Admin/ContractRanges/ContractRangesRouters');
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
