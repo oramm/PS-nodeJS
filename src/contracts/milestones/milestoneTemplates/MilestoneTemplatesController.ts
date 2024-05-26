@@ -4,6 +4,7 @@ import MilestoneTemplate from './MilestoneTemplate';
 export type MilestoneTemplatesSearchParams = {
     isDefaultOnly?: boolean;
     contractTypeId?: number;
+    milestoneTypeId?: number;
 };
 
 export default class MilestoneTemplatesController {
@@ -33,6 +34,13 @@ export default class MilestoneTemplatesController {
                 ? 'MilestoneTypes_ContractTypes.MilestoneTypeId IS NOT NULL'
                 : 'MilestoneTypes_Offers.MilestoneTypeId IS NOT NULL';
 
+        const milestoneTypeIdCondition =
+            searchParams.milestoneTypeId !== undefined
+                ? mysql.format('MilestoneTemplates.MilestoneTypeId = ?', [
+                      searchParams.milestoneTypeId,
+                  ])
+                : '1';
+
         const sql = `SELECT MilestoneTemplates.Id,
             MilestoneTemplates.Name,
             MilestoneTemplates.Description,
@@ -51,6 +59,7 @@ export default class MilestoneTemplatesController {
             WHERE   ${isDefaultCondition} 
                 AND ${contractTypeCondition}
                 AND ${templateTypeCondition}
+                AND ${milestoneTypeIdCondition}
             GROUP BY MilestoneTemplates.Id
             ORDER BY MilestoneTemplates.Name`;
 

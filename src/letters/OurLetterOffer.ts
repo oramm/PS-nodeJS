@@ -13,11 +13,13 @@ export default class OurLetterOffer
     implements OurLetterOfferData
 {
     _offer: OurOfferData | ExternalOfferData;
+    offerId?: number;
     _letterGdController = new OurLetterOfferGdController();
 
     constructor(initParamObject: OurLetterOfferData) {
         super(initParamObject);
         this._offer = initParamObject._offer;
+        this.offerId = initParamObject._offer.id;
     }
 
     makeLetterGdFileController(_template?: DocumentTemplateData) {

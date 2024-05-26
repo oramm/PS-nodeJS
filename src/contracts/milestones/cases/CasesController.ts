@@ -25,6 +25,7 @@ export type CasesSearchParams = {
     milestoneId?: number;
     caseId?: number;
     typeId?: number;
+    milestoneTypeId?: number;
     searchText?: string;
 };
 
@@ -121,6 +122,12 @@ export default class CasesController {
             ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
             : '1';
 
+        const milestoneTypeCondition = searchParams.milestoneTypeId
+            ? mysql.format('MilestoneTypes.Id = ?', [
+                  searchParams.milestoneTypeId,
+              ])
+            : '1';
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
@@ -131,7 +138,8 @@ export default class CasesController {
             AND ${milestoneCondition} 
             AND ${caseCondition}
             AND ${searchTextCondition}
-            AND ${typeIdCondition}`;
+            AND ${typeIdCondition}
+            AND ${milestoneTypeCondition}`;
     }
 
     static makeSearchTextCondition(searchText?: string) {

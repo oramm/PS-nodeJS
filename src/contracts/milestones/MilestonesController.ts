@@ -9,6 +9,7 @@ type MilestonesSearchParams = {
     projectId?: string;
     contractId?: number;
     typeId?: number;
+    offerId?: number;
 };
 
 export default class MilestonesController {
@@ -16,6 +17,7 @@ export default class MilestonesController {
         orConditions: MilestonesSearchParams[] = [],
         parentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
     ) {
+        this.validateConditions(orConditions, parentType);
         const typeCondition =
             parentType === 'CONTRACT'
                 ? 'Milestones.ContractId IS NOT NULL'
@@ -61,7 +63,7 @@ export default class MilestonesController {
         FROM Milestones
         JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
         LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
-        LEFT JOIN Offers ON Offers.Id = Contracts.OfferId
+        LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
         LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
         LEFT JOIN ContractTypes AS OfferTypes ON OfferTypes.Id = Offers.TypeId
         LEFT JOIN Cities ON Cities.Id = Offers.CityId
@@ -93,13 +95,38 @@ export default class MilestonesController {
                   searchParams.contractId,
               ])
             : '1';
+
+        const offerCondition = searchParams.offerId
+            ? mysql.format('Milestones.OfferId = ?', [searchParams.offerId])
+            : '1';
         const typeCondition = searchParams.typeId
             ? mysql.format('Milestones.TypeId = ?', [searchParams.typeId])
             : '1';
 
         return `${projectCondition} 
             AND ${contractCondition}
+            AND ${offerCondition}
             AND ${typeCondition}`;
+    }
+
+    static validateConditions(
+        orConditions: MilestonesSearchParams[],
+        parentType: 'CONTRACT' | 'OFFER'
+    ) {
+        orConditions.map((condition) => {
+            if (condition.contractId && condition.offerId)
+                throw new Error(
+                    'MilestonesController.getMilestonesList: contractId and offerId cannot be used together'
+                );
+            if (condition.contractId && parentType === 'OFFER')
+                throw new Error(
+                    'MilestonesController.getMilestonesList: contractId cannot be used with parentType OFFER'
+                );
+            if (condition.offerId && parentType === 'CONTRACT')
+                throw new Error(
+                    'MilestonesController.getMilestonesList: offerId cannot be used with parentType CONTRACT'
+                );
+        });
     }
 
     static processMilestonesResult(result: any[]): Milestone[] {

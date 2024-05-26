@@ -15,6 +15,8 @@ import Milestone from '../contracts/milestones/Milestone';
 import ToolsDb from '../tools/ToolsDb';
 import OfferGdController from './gdControllers/OfferGdController';
 import Setup from '../setup/Setup';
+import MilestonesController from '../contracts/milestones/MilestonesController';
+import CasesController from '../contracts/milestones/cases/CasesController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -94,8 +96,14 @@ export default abstract class Offer
             console.log('Offer folder created');
             await this.addInDb();
             console.log('Offer added to db');
-            console.group('Creating default milestones');
-            await this.createDefaultMilestones(auth);
+            console.group(
+                'Creating default milestones for offer submission milestone'
+            );
+            await this.createDefaultMilestones(
+                auth,
+                Setup.MilestoneTypes.OFFER_SUBMISSION
+            );
+            await this.createOfferEvaluationMilestoneOrCases(auth);
             console.groupEnd();
         } catch (err) {
             this.deleteController(auth);
@@ -110,6 +118,8 @@ export default abstract class Offer
             console.log('Offer folder edited');
             await this.editInDb();
             console.log('Offer edited in db');
+            await this.createOfferEvaluationMilestoneOrCases(auth);
+            console.log('Offer succesfully edited');
             console.groupEnd();
         } catch (err) {
             console.log('Offer edit error');
@@ -122,6 +132,69 @@ export default abstract class Offer
         if (this.id) await this.deleteFromDb();
         const offerGdController = new OfferGdController();
         await offerGdController.deleteFromGd(auth, this.gdFolderId);
+    }
+
+    async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
+        const offerEvaluationMilestone =
+            await this.getOfferEvaluationMilestone();
+
+        if (
+            this.status === Setup.OfferStatus.NOT_INTERESTED ||
+            this.status === Setup.OfferStatus.DECISION_PENDING
+        ) {
+            if (offerEvaluationMilestone) {
+                await this.deleteOfferEvaluationMilestone(auth);
+            }
+            return;
+        }
+        if (!offerEvaluationMilestone) {
+            await this.createOfferEvaluationMilestone(auth);
+            return;
+        }
+
+        await this.ensureDefaultCases(offerEvaluationMilestone, auth);
+    }
+
+    private async getOfferEvaluationMilestone() {
+        return (
+            await MilestonesController.getMilestonesList(
+                [
+                    {
+                        typeId: Setup.MilestoneTypes.OFFER_EVALUATION,
+                        offerId: this.id,
+                    },
+                ],
+                'OFFER'
+            )
+        )[0];
+    }
+
+    private async ensureDefaultCases(milestone: any, auth: OAuth2Client) {
+        const offerEvaluationCases = await CasesController.getCasesList([
+            {
+                offerId: this.id,
+                milestoneTypeId: Setup.MilestoneTypes.OFFER_EVALUATION,
+            },
+        ]);
+
+        if (offerEvaluationCases.length === 0) {
+            await milestone.createDefaultCases(auth, { isPartOfBatch: false });
+        }
+    }
+
+    private async createOfferEvaluationMilestone(auth: OAuth2Client) {
+        console.log('Creating milestone for offer evaluation');
+        await this.createDefaultMilestones(
+            auth,
+            Setup.MilestoneTypes.OFFER_EVALUATION
+        );
+    }
+
+    private async deleteOfferEvaluationMilestone(auth: OAuth2Client) {
+        const milestone = await this.getOfferEvaluationMilestone();
+        if (milestone) {
+            await milestone.deleteController(auth);
+        }
     }
 
     setCity(cityOrCityName: City | string) {
@@ -149,8 +222,10 @@ export default abstract class Offer
         if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
-
-    async createDefaultMilestones(auth: OAuth2Client) {
+    /**tworzy domyślne kamienie milowe dla oferty ale tylko
+     * dla kamienni typu OFFER_SUBMISSION. pozostałe kamienie będą tworzone przy ustawieniu statusu
+     */
+    async createDefaultMilestones(auth: OAuth2Client, milestoneTypeId: number) {
         const defaultMilestones: Milestone[] = [];
 
         const defaultMilestoneTemplates =
@@ -158,6 +233,7 @@ export default abstract class Offer
                 {
                     isDefaultOnly: true,
                     contractTypeId: this.typeId,
+                    milestoneTypeId,
                 },
                 'OFFER'
             );

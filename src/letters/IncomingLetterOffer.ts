@@ -11,11 +11,13 @@ export default class IncomingLetterOffer
     implements IncomingLetterOfferData
 {
     _offer: OurOfferData | ExternalOfferData;
+    offerId?: number;
     _letterGdController = new IncomingLetterOfferGdController();
 
     constructor(initParamObject: IncomingLetterOfferData) {
         super(initParamObject);
         this._offer = initParamObject._offer;
+        this.offerId = initParamObject._offer.id;
     }
 
     makeParentFolderGdId(): string {

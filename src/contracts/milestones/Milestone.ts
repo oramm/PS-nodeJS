@@ -87,6 +87,15 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this._offer = initParamObject._offer;
     }
 
+    async deleteController(auth: OAuth2Client) {
+        console.group('Deleting Milestone', this.id);
+        await this.deleteFromDb();
+        await Promise.all([
+            this.deleteFolder(auth),
+            this.deleteFromScrum(auth),
+        ]);
+    }
+
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);

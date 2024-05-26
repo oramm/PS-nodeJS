@@ -97,6 +97,8 @@ export default class Setup {
 
     static MilestoneTypes = {
         OURCONTRACT_ADMINISTRATION: 1,
+        OFFER_SUBMISSION: 51,
+        OFFER_EVALUATION: 52,
     };
 
     static InvoiceStatus = {
@@ -141,6 +143,7 @@ export default class Setup {
     };
 
     static OfferStatus = {
+        DECISION_PENDING: 'Składamy czy nie?',
         TO_DO: 'Do złożenia',
         DONE: 'Czekamy na wynik',
         AWARDED: 'Wygrana',
