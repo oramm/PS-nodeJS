@@ -6,6 +6,8 @@ export default class Setup {
         password: process.env.DB_PASSWORD,
         database: process.env.DB_NAME,
         multipleStatements: true,
+        timezone:
+            process.env.NODE_ENV === 'production' ? process.env.TZ : undefined,
     };
 
     static Gd = {
