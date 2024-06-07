@@ -191,13 +191,4 @@ require('./Admin/ContractRanges/ContractRangesRouters');
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
-    try {
-        const results = await ToolsDb.pool.query('SELECT NOW() as Time');
-        console.log(
-            'Current time in database (UTC or set timezone):',
-            results[0]
-        );
-    } catch (error) {
-        console.error('Error querying database:', error);
-    }
 });

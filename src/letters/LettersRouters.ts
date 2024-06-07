@@ -5,6 +5,7 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
+import ToolsDb from '../tools/ToolsDb';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
@@ -194,4 +195,23 @@ app.delete('/letter/:id', async (req: Request, res: Response) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
     }
+});
+
+app.get('/check-time', async (req: Request, res: Response) => {
+    const now = new Date();
+    console.log(`Current TZ setting: ${process.env.TZ}`); // Logowanie zmiennej TZ
+    console.log('Current time on server (Local):', now);
+
+    try {
+        const [rows] = await ToolsDb.pool.query('SELECT NOW() as Time');
+        const results = rows as { Time: string }[];
+
+        if (results.length > 0) {
+            console.log('Current time in database (UTC):', results[0].Time);
+        }
+    } catch (error) {
+        console.error('Error querying database:', error);
+    }
+
+    res.send('Check time in console');
 });
