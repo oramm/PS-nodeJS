@@ -9,6 +9,7 @@ import ToolsDb from '../tools/ToolsDb';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
+        await getCurrentTimeAndTimeZone();
         const orConditions = req.parsedBody.orConditions;
         const result = await LettersController.getLettersList(
             orConditions,
@@ -198,6 +199,11 @@ app.delete('/letter/:id', async (req: Request, res: Response) => {
 });
 
 app.get('/check-time', async (req: Request, res: Response) => {
+    await getCurrentTimeAndTimeZone();
+
+    res.send('Check time in console');
+});
+async function getCurrentTimeAndTimeZone() {
     const now = new Date();
     console.log(`Current TZ setting: ${process.env.TZ}`); // Logowanie zmiennej TZ
     console.log('Current time on server (Local):', now);
@@ -212,6 +218,4 @@ app.get('/check-time', async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error querying database:', error);
     }
-
-    res.send('Check time in console');
-});
+}
