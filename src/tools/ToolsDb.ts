@@ -6,6 +6,13 @@ import ToolsDate from './ToolsDate';
 export default class ToolsDb {
     static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
 
+    static initialize() {
+        // Ustawienie strefy czasowej dla każdego nowego połączenia
+        ToolsDb.pool.on('connection', async (connection) => {
+            connection.query("SET time_zone = '+00:00'");
+        });
+    }
+
     static async getPoolConnectionWithTimeout() {
         const promiseGetConnection = this.pool.getConnection();
         let timer: NodeJS.Timeout | null = null; // Dodajemy null jako wartość początkową

@@ -151,6 +151,25 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+app.use(async (req, res, next) => {
+    const now = new Date();
+    console.log(`Current TZ setting: ${process.env.TZ}`); // Logowanie zmiennej TZ
+    console.log('Current time on server:\t', now);
+
+    try {
+        const [rows] = await ToolsDb.pool.query('SELECT NOW() as Time');
+        const results = rows as { Time: string }[];
+
+        if (results.length > 0) {
+            console.log('Current time in database:\t', results[0].Time);
+        }
+    } catch (error) {
+        console.error('Error querying database:', error);
+    }
+
+    next();
+});
+
 require('./setup/GAuth2/Gauth2Routers');
 require('./persons/PersonsRouters');
 
@@ -191,4 +210,6 @@ require('./Admin/ContractRanges/ContractRangesRouters');
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
+    ToolsDb.initialize();
+    console.log('Db time zone set to +00:00');
 });
