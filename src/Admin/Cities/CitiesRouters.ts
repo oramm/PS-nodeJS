@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express'
+import express, { Request, Response } from 'express';
 import { app } from '../../index';
 import CitiesController from './CitiesController';
 import City from './City';
@@ -15,25 +15,24 @@ app.post('/cities', async (req: Request, res: Response) => {
     }
 });
 
-
 app.post('/city', async (req: Request, res: Response) => {
     try {
         const item = new City(req.parsedBody);
-        await item.addInDb();
+        await item.addNewController();
         res.send(item);
     } catch (error) {
-
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
 app.put('/city/:id', async (req: Request, res: Response) => {
     try {
         const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
         const itemFromClient = req.parsedBody;
-        if (!itemFromClient || !itemFromClient.id) throw new Error(`Próba edycji  bez Id`);
+        if (!itemFromClient || !itemFromClient.id)
+            throw new Error(`Próba edycji  bez Id`);
 
         const item = new City(itemFromClient);
         item.editInDb(undefined, false, fieldsToUpdate);

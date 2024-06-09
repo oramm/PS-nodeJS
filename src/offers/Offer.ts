@@ -45,8 +45,6 @@ export default abstract class Offer
 
     constructor(initParamObject: OfferData) {
         super({ ...initParamObject, _dbTableName: 'Offers' });
-        if (!initParamObject._city.id)
-            throw new Error('City id is not defined');
         if (!initParamObject._type.id)
             throw new Error('Type id is not defined');
         if (!initParamObject._employer && !initParamObject.employerName)
@@ -94,6 +92,7 @@ export default abstract class Offer
             console.group('Creating new offer');
             await this.createGdElements(auth);
             console.log('Offer folder created');
+            if (!this._city.id) this.generateCityCode();
             await this.addInDb();
             console.log('Offer added to db');
             console.group(
@@ -132,6 +131,13 @@ export default abstract class Offer
         if (this.id) await this.deleteFromDb();
         const offerGdController = new OfferGdController();
         await offerGdController.deleteFromGd(auth, this.gdFolderId);
+    }
+
+    private async generateCityCode() {
+        const _city = new City(this._city);
+        await _city.generateCityCode();
+        this._city.code = _city.code;
+        console.log('City code generated', _city.code);
     }
 
     async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
