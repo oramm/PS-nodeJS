@@ -16,6 +16,7 @@ export default class City extends BusinessObject implements CityData {
     async addNewController() {
         this.code = await this.generateCityCode();
         await this.addInDb();
+        console.log(`City ${this.name} ${this.code} added in db`);
     }
 
     async generateCityCode(): Promise<string> {

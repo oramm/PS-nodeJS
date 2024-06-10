@@ -90,11 +90,11 @@ export default abstract class Offer
     async addNewController(auth: OAuth2Client) {
         try {
             console.group('Creating new offer');
-            if (!this._city.id) this.addNewCity();
+            if (!this._city.id) await this.addNewCity();
             await this.createGdElements(auth);
             console.log('Offer folder created');
             await this.addInDb();
-            console.log('Offer added to db');
+            console.log('Offer added in db');
             console.group(
                 'Creating default milestones for offer submission milestone'
             );

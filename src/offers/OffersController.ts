@@ -63,7 +63,7 @@ export default class OffersController {
                 Persons.Surname AS EditorSurname,
                 Persons.Email AS EditorEmail
             FROM Offers
-            JOIN Cities ON Cities.Id=Offers.CityId
+            LEFT JOIN Cities ON Cities.Id=Offers.CityId
             LEFT JOIN ContractTypes ON ContractTypes.Id = Offers.TypeId
             LEFT JOIN OfferBonds ON OfferBonds.OfferId = Offers.Id
             LEFT JOIN Persons ON Persons.Id = Offers.EditorId
@@ -72,6 +72,7 @@ export default class OffersController {
                 this.makeAndConditions.bind(this)
             )}
             ORDER BY Offers.SubmissionDeadline DESC;`;
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processOffersResult(result);
     }
