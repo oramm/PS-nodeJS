@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { app } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import OurOffer from './OurOffer';
-import { OfferData } from '../types/types';
+import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
 
@@ -111,8 +111,13 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
 
 function makeOfferObject(req: Request) {
     const isOur = req.parsedBody.isOur as boolean;
+    let _city: CityData;
+    typeof req.parsedBody._city === 'string'
+        ? (_city = { name: req.parsedBody._city })
+        : (_city = req.parsedBody._city);
     const offerInitParams: OfferData = {
         ...req.parsedBody,
+        _city,
         _editor: req.parsedBody._editor || {
             id: req.session.userData?.enviId as number,
         },

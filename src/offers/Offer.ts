@@ -90,9 +90,9 @@ export default abstract class Offer
     async addNewController(auth: OAuth2Client) {
         try {
             console.group('Creating new offer');
+            if (!this._city.id) this.addNewCity();
             await this.createGdElements(auth);
             console.log('Offer folder created');
-            if (!this._city.id) this.generateCityCode();
             await this.addInDb();
             console.log('Offer added to db');
             console.group(
@@ -113,6 +113,7 @@ export default abstract class Offer
     async editController(auth: OAuth2Client) {
         try {
             console.group('Editing offer');
+            if (!this._city.id) this.addNewCity();
             await this.editGdElements(auth);
             console.log('Offer folder edited');
             await this.editInDb();
@@ -133,11 +134,15 @@ export default abstract class Offer
         await offerGdController.deleteFromGd(auth, this.gdFolderId);
     }
 
-    private async generateCityCode() {
+    private async addNewCity() {
         const _city = new City(this._city);
-        await _city.generateCityCode();
-        this._city.code = _city.code;
-        console.log('City code generated', _city.code);
+        await _city.addNewController();
+        this._city = _city;
+        console.log(
+            'City added inDB with generated code:',
+            _city.name,
+            _city.code
+        );
     }
 
     async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
