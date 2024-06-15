@@ -22,7 +22,7 @@ app.post('/offerBonds', async (req: Request, res: Response) => {
 // POST a new Offer Bond
 app.post('/offerBond', async (req: Request, res: Response) => {
     try {
-        let offerBond = new OfferBond(req.body);
+        const offerBond = new OfferBond(req.body);
         await offerBond.addNewController();
         res.send(offerBond);
     } catch (error) {

@@ -68,7 +68,6 @@ app.put('/addNewOfferBond/:id', async (req: Request, res: Response) => {
 
 app.put('/editOfferBond/:id', async (req: Request, res: Response) => {
     try {
-        const offerData = req.parsedBody.offerData;
         const item = makeOfferObject(req) as ExternalOffer;
         await item.editOfferBondController();
         res.send(item);
@@ -115,7 +114,7 @@ function makeOfferObject(req: Request) {
         typeof req.parsedBody._city === 'string'
             ? { name: req.parsedBody._city }
             : req.parsedBody._city;
-    let employerName: string | undefined = undefined;
+    let employerName: string | undefined = req.parsedBody.employerName;
     if (typeof req.parsedBody._employer === 'string')
         employerName = req.parsedBody._employer;
     const offerInitParams: OfferData = {
