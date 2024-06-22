@@ -22,7 +22,10 @@ export default abstract class OurLetter
             this._template = initParamObject._template;
     }
 
-    async initialise(auth: OAuth2Client, files: Express.Multer.File[] = []) {
+    async addNewController(
+        auth: OAuth2Client,
+        files: Express.Multer.File[] = []
+    ) {
         try {
             const gdFolder = await this._letterGdController.createLetterFolder(
                 auth,

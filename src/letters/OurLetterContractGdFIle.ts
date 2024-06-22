@@ -40,12 +40,8 @@ export default class OurLetterContractGdFile extends OurLetterGdFile {
             if (!currentCase._parent?._contract)
                 throw new Error('Case must have _parent._contract');
 
-            const currentOurId =
-                'ourId' in currentCase._parent?._contract
-                    ? currentCase._parent?._contract.ourId
-                    : undefined;
             casesLabel += 'kontrakt: ';
-            casesLabel += currentOurId || currentCase._parent._contract?.number;
+            casesLabel += this.makeContractLabel(currentCase) + ',';
             casesLabel += ' ' + currentCase._parent._contract?.name + ', ';
             casesLabel +=
                 casesByContracts[contractIdItem].length > 1
@@ -56,5 +52,15 @@ export default class OurLetterContractGdFile extends OurLetterGdFile {
                     caseItem._typeFolderNumber_TypeName_Number_Name + ', ';
         }
         return casesLabel.substring(0, casesLabel.length - 2);
+    }
+
+    private makeContractLabel(_case: CaseData) {
+        if (!_case._parent?._contract)
+            throw new Error('Case must have _parent._contract');
+        const currentOurId =
+            'ourId' in _case._parent?._contract
+                ? _case._parent?._contract.ourId
+                : undefined;
+        return currentOurId || _case._parent._contract?.number;
     }
 }

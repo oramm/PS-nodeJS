@@ -256,17 +256,15 @@ export default class CasesController {
         if (!row.ContractId) return;
         const contractInitParam = {
             id: row.ContractId,
-            ourId: row.ParentOurId,
-            number: row.ParentNumber,
-            _ourContract: { ourId: row.ParentOurIdRelated },
-            _manager: { id: row.ParentManagerId },
-            _admin: { id: row.ParentAdminId },
-            projectId: row.ProjectOurId,
+            ourId: row.ContractOurId,
+            number: row.ContractNumber,
+            alias: row.ContractAlias,
+            name: row.ContractName,
             _type: {
-                id: row.ContractTypeId,
-                name: row.ContractTypeName,
-                description: row.ContractTypeDescription,
-                isOur: row.ContractTypeIsOur,
+                id: row.MainContractTypeId,
+                name: row.TypeName,
+                description: row.TypeDescription,
+                isOur: row.TypeIsOur,
             },
         };
 

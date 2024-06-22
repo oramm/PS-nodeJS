@@ -17,7 +17,10 @@ export default abstract class IncomingLetter
         this.number = initParamObject.number;
     }
 
-    async initialise(auth: OAuth2Client, files: Express.Multer.File[] = []) {
+    async addNewController(
+        auth: OAuth2Client,
+        files: Express.Multer.File[] = []
+    ) {
         try {
             this.letterFilesCount = files.length;
             if (files.length > 1) {

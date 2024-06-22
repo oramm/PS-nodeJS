@@ -107,12 +107,12 @@ app.post('/letterReact', async (req: Request, res: Response) => {
     try {
         console.log('req.files', req.files);
         const item = LettersController.createProperLetter(req.parsedBody);
-
+        item.setContractFromClientData(req.parsedBody._contract);
         try {
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.initialise,
+                item.addNewController,
                 [req.files],
                 item
             );
@@ -140,7 +140,7 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.edit,
+            item.editController,
             [req.files],
             item
         );

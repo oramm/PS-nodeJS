@@ -3,8 +3,8 @@ import IncomingLetterGdController from './IncomingLetterGdController';
 
 export default class IncomingLetterContractGdController extends IncomingLetterGdController {
     makeParentFolderGdId(letterData: IncomingLetterContractData): string {
-        if (!letterData._project.gdFolderId)
-            throw new Error('Project gdFolderId is not defined');
-        return letterData._project.gdFolderId;
+        if (!letterData._project.lettersGdFolderId)
+            throw new Error('Project .lettersGdFolderId is not defined');
+        return letterData._project.lettersGdFolderId;
     }
 }

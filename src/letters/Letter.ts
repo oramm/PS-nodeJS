@@ -1,5 +1,4 @@
 import BusinessObject from '../BussinesObject';
-import Project from '../projects/Project';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
@@ -9,10 +8,10 @@ import LetterCase from './associations/LetterCase';
 import { OAuth2Client } from 'google-auth-library';
 import {
     CaseData,
+    ContractData,
     EntityData,
     LetterData,
     PersonData,
-    ProjectData,
 } from '../types/types';
 
 export default abstract class Letter
@@ -141,7 +140,7 @@ export default abstract class Letter
         }
     }
 
-    async edit(auth: OAuth2Client, files: Express.Multer.File[]) {
+    async editController(auth: OAuth2Client, files: Express.Multer.File[]) {
         console.group('Letter edit');
         await this.editLetterGdElements(auth, files);
         console.log('Letter folder and file in GD edited');
@@ -208,7 +207,16 @@ export default abstract class Letter
         this.letterFilesCount += files.length;
     }
 
-    abstract initialise(
+    setContractFromClientData(contract: ContractData) {
+        this._cases.map((item) => {
+            if (!item._parent) throw new Error('Case must have _parent');
+            if (!item._parent._contract)
+                throw new Error('Case must have _parent._contract');
+            item._parent._contract = contract;
+        });
+    }
+
+    abstract addNewController(
         auth: OAuth2Client,
         files: Express.Multer.File[]
     ): Promise<void>;
