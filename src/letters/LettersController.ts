@@ -354,18 +354,32 @@ export default class LettersController {
 
     /** tworzy obiekt odpowiedniej podklasy Letter na podstawie atrybutów */
     static createProperLetter(initParam: any) {
+        let item:
+            | OurLetterContract
+            | OurOldTypeLetter
+            | OurLetterOffer
+            | IncomingLetterContract
+            | IncomingLetterOffer;
         if (
             initParam.isOur &&
             initParam.id == initParam.number &&
             initParam._project?.id
-        )
-            return new OurLetterContract(initParam);
+        ) {
+            item = new OurLetterContract(initParam);
+            if (initParam._contract)
+                item.setContractFromClientData(initParam._contract);
+            return item;
+        }
         if (initParam.isOur && initParam.id !== initParam.number)
             return new OurOldTypeLetter(initParam);
         if (initParam.isOur && initParam._offer?.id)
             return new OurLetterOffer(initParam);
-        if (!initParam.isOur && initParam._project)
-            return new IncomingLetterContract(initParam);
+        if (!initParam.isOur && initParam._project) {
+            item = new IncomingLetterContract(initParam);
+            if (initParam._contract)
+                item.setContractFromClientData(initParam._contract);
+            return item;
+        }
         return new IncomingLetterOffer(initParam);
     }
 }
