@@ -1,11 +1,16 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../../tools/ToolsDb';
-import { ApplicationCallData, FocusAreaData } from '../../../types/types';
+import {
+    ApplicationCallData,
+    FinancialAidProgrammeData,
+    FocusAreaData,
+} from '../../../types/types';
 import ToolsGd from '../../../tools/ToolsGd';
 import ApplicationCall from './ApplicationCall';
 
 type ApplicationCallSearchParams = {
     id?: number;
+    _financialAidProgramme?: FinancialAidProgrammeData;
     focusAreaId?: number;
     _focusArea?: FocusAreaData | FocusAreaData[];
     startDate?: string;
@@ -44,7 +49,6 @@ export default class ApplicationCallsController {
             this.makeAndConditions.bind(this)
         )}
         ORDER BY ApplicationCalls.StartDate ASC`;
-        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processApplicationCallsResult(result);
     }
@@ -72,6 +76,13 @@ export default class ApplicationCallsController {
         );
         if (searchTextCondition !== '1') {
             conditions.push(searchTextCondition);
+        }
+        if (searchParams._financialAidProgramme?.id) {
+            conditions.push(
+                mysql.format(`FocusAreas.FinancialAidProgrammeId = ?`, [
+                    searchParams._financialAidProgramme.id,
+                ])
+            );
         }
 
         // Prepare an array to collect all focus area IDs.
@@ -102,6 +113,12 @@ export default class ApplicationCallsController {
             );
             conditions.push(focusAreaCondition);
         }
+        if (searchParams.status)
+            conditions.push(
+                mysql.format(`ApplicationCalls.Status = ?`, [
+                    searchParams.status,
+                ])
+            );
 
         if (searchParams.startDate) {
             conditions.push(
