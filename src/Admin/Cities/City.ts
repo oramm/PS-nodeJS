@@ -23,7 +23,6 @@ export default class City extends BusinessObject implements CityData {
         const cityName = this.name;
         const normalizedCityName = this.normalizeCityName(cityName);
 
-        // Wykonanie jednego zapytania do bazy danych na początku
         const existingCities = await CitiesController.getCitiesList([]);
         const existingCodes = new Set(
             existingCities
@@ -39,48 +38,36 @@ export default class City extends BusinessObject implements CityData {
         existingCodes: Set<string>,
         attempts = 0
     ): Promise<string> {
-        let code = normalizedCityName[0]; // Zawsze pierwsza litera
+        const maxAttempts = 100;
 
-        for (let i = 1; i < normalizedCityName.length && code.length < 3; i++) {
-            const char = normalizedCityName[i];
-            if (/^[A-Z]$/.test(char)) {
-                code += char;
+        for (let i = 0; i < maxAttempts; i++) {
+            const code = this.generateCodeFromName(normalizedCityName, i);
+            if (!existingCodes.has(code)) {
+                existingCodes.add(code);
+                console.log(
+                    `Generated unique code for city: ${this.name} in ${attempts} attempts`
+                );
+                return code;
             }
         }
 
-        while (code.length < 3) {
-            code += 'X';
-        }
-
-        let uniqueCode = code;
-
-        const suffixGenerator =
-            this.generateSuffixesFromName(normalizedCityName);
-        uniqueCode = code.slice(0, 1) + suffixGenerator.next().value;
-
-        if (existingCodes.has(uniqueCode)) {
-            if (attempts >= 100) {
-                console.error(
-                    `Failed to generate unique code after ${attempts} attempts for city: ${this.name}`
-                );
-                throw new Error(
-                    'Cannot generate unique code for the city name.'
-                );
-            }
-            return this.generateUniqueCode(
-                normalizedCityName,
-                existingCodes,
-                attempts + 1
-            );
-        }
-
-        existingCodes.add(uniqueCode);
-        console.log(
-            `Generated unique code for city: ${this.name} in ${attempts} attempts`
+        console.error(
+            `Failed to generate unique code after ${maxAttempts} attempts for city: ${this.name}`
         );
-        return uniqueCode;
+        throw new Error('Cannot generate unique code for the city name.');
     }
 
+    private generateCodeFromName(name: string, attempt: number): string {
+        let code = name[0]; // Zawsze pierwsza litera
+
+        const letters = name.slice(1).split('');
+        for (let i = 0; i < 2; i++) {
+            const index = (attempt + i) % letters.length;
+            code += letters[index] || 'X';
+        }
+
+        return code;
+    }
     private normalizeCityName(cityName: string): string {
         const polishChars: { [key: string]: string } = {
             Ą: 'A',
@@ -106,31 +93,10 @@ export default class City extends BusinessObject implements CityData {
         return cityName
             .split('')
             .map((char) => polishChars[char] || char)
-            .filter((char) => /^[A-Z]$/i.test(char)) // Ignorowanie spacji i znaków nieliterowych
+            .filter((char) => /^[A-Z]$/i.test(char))
             .join('')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase();
-    }
-
-    private *generateSuffixesFromName(name: string) {
-        const uniqueLetters = [...new Set(name)].join('');
-        for (let i = 1; i < uniqueLetters.length; i++) {
-            for (let j = 1; j < uniqueLetters.length; j++) {
-                if (i !== j) {
-                    yield uniqueLetters[i] + uniqueLetters[j];
-                }
-            }
-        }
-        yield* this.generateSuffixes();
-    }
-
-    private *generateSuffixes() {
-        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        for (let i = 0; i < alphabet.length; i++) {
-            for (let j = 0; j < alphabet.length; j++) {
-                yield alphabet[i] + alphabet[j];
-            }
-        }
     }
 }
