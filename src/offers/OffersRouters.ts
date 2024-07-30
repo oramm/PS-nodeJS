@@ -5,6 +5,7 @@ import OurOffer from './OurOffer';
 import { CityData, EntityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
+import EnviErrors from '../tools/Errors';
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {
@@ -103,8 +104,19 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
         res.send(item);
     } catch (error) {
         console.error(error);
-        if (error instanceof Error)
+        if (
+            error instanceof EnviErrors.NoGdIdError ||
+            error instanceof EnviErrors.DbError
+        ) {
+            res.status(500).send({
+                errorMessage: error.message,
+                errorCode: error.code,
+            });
+        } else if (error instanceof Error) {
             res.status(500).send({ errorMessage: error.message });
+        } else {
+            res.status(500).send({ errorMessage: 'Nieznany błąd' });
+        }
     }
 });
 

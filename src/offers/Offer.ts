@@ -17,6 +17,7 @@ import OfferGdController from './gdControllers/OfferGdController';
 import Setup from '../setup/Setup';
 import MilestonesController from '../contracts/milestones/MilestonesController';
 import CasesController from '../contracts/milestones/cases/CasesController';
+import EnviErrors from '../tools/Errors';
 
 export default abstract class Offer
     extends BusinessObject
@@ -128,10 +129,42 @@ export default abstract class Offer
     }
 
     async deleteController(auth: OAuth2Client) {
-        if (!this.gdFolderId) throw new Error('Brak folderu oferty');
-        if (this.id) await this.deleteFromDb();
-        const offerGdController = new OfferGdController();
-        await offerGdController.deleteFromGd(auth, this.gdFolderId);
+        console.group('Deleting offer');
+        if (!this.gdFolderId)
+            throw new EnviErrors.NoGdIdError(
+                'Brak folderu oferty',
+                'NO_FOLDER'
+            );
+        try {
+            if (this.id) await this.deleteFromDb();
+            console.log('Offer deleted from db');
+        } catch (err) {
+            console.error('Failed to delete from db:', err);
+            if (err instanceof Error) {
+                // Przekształcenie komunikatu błędu
+                let userFriendlyMessage =
+                    'Wystąpił błąd podczas usuwania oferty.';
+                let errorCode = 'DB_ERROR';
+                if ('errno' in err && err.errno === 1451) {
+                    userFriendlyMessage =
+                        'Nie można usunąć oferty, ponieważ są dla niej zarejestrowane pisma. \n\n Aby usunąć ofertę należy najpierw usunąć wszystkie pisma z nią związane.';
+                    errorCode = 'FOREIGN_KEY_CONSTRAINT';
+                }
+                throw new EnviErrors.DbError(userFriendlyMessage, errorCode);
+            }
+            throw err; // Rzucenie pierwotnego błędu, jeśli nie jest to instancja Error
+        }
+        try {
+            const offerGdController = new OfferGdController();
+            await offerGdController.deleteFromGd(auth, this.gdFolderId);
+            console.log('Offer folder deleted');
+        } catch (err) {
+            console.error('Failed to delete from Google Drive:', err);
+            throw new EnviErrors.NoGdIdError(
+                'Błąd podczas usuwania folderu z Google Drive.'
+            );
+        }
+        console.groupEnd();
     }
 
     private async addNewCity() {
