@@ -71,7 +71,7 @@ export default class OffersController {
                 orConditions,
                 this.makeAndConditions.bind(this)
             )}
-            ORDER BY Offers.SubmissionDeadline DESC;`;
+            ORDER BY Offers.SubmissionDeadline ASC;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processOffersResult(result);
