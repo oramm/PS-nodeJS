@@ -116,12 +116,33 @@ export default abstract class IncomingLetter
         const oldGdFolderId = this.gdFolderId;
         const oldGdDocumentId = this.gdDocumentId;
 
-        await this.initAttachmentsHandler(auth, files);
-        await this._letterGdController.deleteFromGd(
-            auth,
-            oldGdDocumentId,
-            oldGdFolderId
-        );
+        try {
+            await this.initAttachmentsHandler(auth, files);
+        } catch (error) {
+            console.error('Error during initAttachmentsHandler:', error);
+            if (!(error instanceof Error))
+                throw new Error(
+                    'Unexpected error during initAttachmentsHandler'
+                );
+            throw new Error(
+                `Error during initAttachmentsHandler: ${error.message}`
+            );
+        }
+
+        try {
+            await this._letterGdController.deleteFromGd(
+                auth,
+                oldGdDocumentId,
+                oldGdFolderId
+            );
+        } catch (error) {
+            console.error('Error during deleteFromGd:', error);
+            if (!(error instanceof Error))
+                throw new Error(
+                    'Unexpected error during initAttachmentsHandler'
+                );
+            throw new Error(`Error during deleteFromGd: ${error.message}`);
+        }
     }
 
     /** Wykonuje operacje na Gd związane z dodaniem kolejnych załączników używać gdy jest pewność, że utworzono letterFolder
