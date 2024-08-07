@@ -103,7 +103,7 @@ export default class OurOfferGdFile extends DocumentGdFile {
             throw new Error('Document must have alias');
         if (!this.enviDocumentData.creationDate)
             throw new Error('Document must have creationDate');
-        return `${this.enviDocumentData._type?.name} ${this.enviDocumentData.alias} ${this.enviDocumentData.creationDate}`;
+        return `Oferta ${this.enviDocumentData._type?.name} ${this.enviDocumentData.alias} ${this.enviDocumentData.creationDate}`;
     }
 
     async editFileName(auth: OAuth2Client) {
