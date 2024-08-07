@@ -268,9 +268,8 @@ export default class ToolsGd {
 
     static async trashFile(auth: OAuth2Client, fileId: string) {
         try {
-            console.log(`Przenoszę do kosza na Gd plik ${fileId} ...`);
             await this.updateFile(auth, { id: fileId, trashed: true });
-            console.log(`z Dysku Google usunięto plik ${fileId}`);
+            console.log(`Plik przeniesiono do kosza na GD: ${fileId}`);
             return 'ok';
         } catch (error) {
             throw error;
@@ -280,7 +279,7 @@ export default class ToolsGd {
     static async trashFolder(auth: OAuth2Client, fileId: string) {
         try {
             await this.trashFile(auth, fileId);
-            console.log(`z Dysku Google usunięto folder ${fileId}`);
+            console.log(`Folder przeniesiono ko kosza na GD: ${fileId}`);
             return 'ok';
         } catch (error) {
             throw error;
@@ -289,8 +288,6 @@ export default class ToolsGd {
 
     static async deleteFile(auth: OAuth2Client, fileId: string) {
         try {
-            console.log(`z Dysku Google usuwam plik ${fileId} ...`);
-
             const drive = google.drive({ version: 'v3', auth });
             await drive.files.delete({
                 fileId: fileId,

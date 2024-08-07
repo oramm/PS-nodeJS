@@ -5,7 +5,6 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
-import ToolsDb from '../tools/ToolsDb';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {

@@ -24,9 +24,9 @@ export default abstract class Letter
     creationDate?: string;
     registrationDate?: string;
     _documentOpenUrl?: string;
-    gdDocumentId?: string;
+    gdDocumentId?: string | null;
     _gdFolderUrl?: string;
-    gdFolderId?: string;
+    gdFolderId?: string | null;
     _lastUpdated?: string;
     _cases: CaseData[];
     _entitiesMain: EntityData[];

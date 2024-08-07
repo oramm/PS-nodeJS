@@ -115,6 +115,7 @@ export default abstract class IncomingLetter
     ): Promise<void> {
         const oldGdFolderId = this.gdFolderId;
         const oldGdDocumentId = this.gdDocumentId;
+
         await this.initAttachmentsHandler(auth, files);
         await this._letterGdController.deleteFromGd(
             auth,
@@ -161,22 +162,20 @@ export default abstract class IncomingLetter
             await this._letterGdController.createLetterFolder(auth, {
                 ...this,
             });
-        const letterGdDocumentId = this.gdDocumentId;
         if (!newLetterGdFolder.id)
             throw new EnviErrors.NoGdIdError(
                 ` - incoming letter folder not created for ${this.number}`
             );
-        if (!letterGdDocumentId)
-            throw new EnviErrors.NoGdIdError(
-                `no letter  GdId for ${this.number}`
-            );
-        //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
 
-        await this._letterGdController.moveLetterFiletoFolder(
-            letterGdDocumentId,
-            auth,
-            newLetterGdFolder.id
-        );
+        const letterGdDocumentId = this.gdDocumentId;
+
+        //był tylko jeden plik pisma bez załaczników - teraz trzeba przenieść poprzedni plik do nowego folderu
+        if (letterGdDocumentId)
+            await this._letterGdController.moveLetterFiletoFolder(
+                letterGdDocumentId,
+                auth,
+                newLetterGdFolder.id
+            );
         this.setDataToMultiFileState(newLetterGdFolder.id, files.length);
         await this._letterGdController.appendAttachments(
             auth,
@@ -189,13 +188,13 @@ export default abstract class IncomingLetter
         this.gdDocumentId = gdDocumentId;
         this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(gdDocumentId);
         this._gdFolderUrl = '';
-        this.gdFolderId = undefined;
+        this.gdFolderId = null;
         this.letterFilesCount = 1;
     }
 
     private setDataToMultiFileState(gdFolderId: string, filesCount: number) {
         this.gdFolderId = gdFolderId;
-        this.gdDocumentId = undefined;
+        this.gdDocumentId = null;
         this._gdFolderUrl = ToolsGd.createDocumentOpenUrl(gdFolderId);
         this._documentOpenUrl = undefined;
         this.letterFilesCount = filesCount;
