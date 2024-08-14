@@ -44,7 +44,7 @@ app.put('/offer/:id', async (req: Request, res: Response) => {
             req,
             res,
             item.editController,
-            undefined,
+            [req.parsedBody._fieldsToUpdate],
             item
         );
         res.send(item);

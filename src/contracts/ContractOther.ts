@@ -68,10 +68,10 @@ export default class ContractOther
     async editInDb(
         extenalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
-        fieldsToUpdate?: string[]
+        _fieldsToUpdate?: string[]
     ) {
         const res = await ToolsDb.transaction(async (conn) => {
-            await super.editInDb(conn, true, fieldsToUpdate);
+            await super.editInDb(conn, true, _fieldsToUpdate);
             await this.editEntitiesAssociationsInDb(conn, true);
             await this.editContractRangesAssociationsInDb(conn, true);
         });

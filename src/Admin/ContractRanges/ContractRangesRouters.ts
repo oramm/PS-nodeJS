@@ -33,13 +33,13 @@ app.post('/contractRange', async (req: Request, res: Response) => {
 
 app.put('/contractRange/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.body.fieldsToUpdate;
+        const _fieldsToUpdate = req.body._fieldsToUpdate;
         const itemFromClient: ContractRangeData = req.body;
         if (!itemFromClient || !itemFromClient.id)
             throw new Error('Próba edycji bez Id');
 
         const item = new ContractRange(itemFromClient);
-        item.editInDb(undefined, false, fieldsToUpdate);
+        item.editInDb(undefined, false, _fieldsToUpdate);
         res.send(item);
     } catch (error) {
         console.error(error);

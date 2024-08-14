@@ -94,15 +94,15 @@ export default class ContractOur extends Contract implements OurContractData {
     async editInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false,
-        fieldsToUpdate?: string[]
+        _fieldsToUpdate?: string[]
     ) {
         const ourContractFields = ['ourId', 'managerId', 'adminId', 'cityId'];
         const ourContractFieldsToUpdate =
-            fieldsToUpdate?.filter((field) =>
+            _fieldsToUpdate?.filter((field) =>
                 ourContractFields.includes(field)
             ) || [];
         const contractFieldsToUpdate =
-            fieldsToUpdate?.filter(
+            _fieldsToUpdate?.filter(
                 (field) => !ourContractFields.includes(field)
             ) || [];
 

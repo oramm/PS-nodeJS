@@ -15,7 +15,7 @@ declare global {
     namespace Express {
         interface Request {
             parsedBody: any;
-            fieldsToUpdate?: string[];
+            _fieldsToUpdate?: string[];
             parsedQuery: any;
         }
     }
@@ -129,14 +129,6 @@ app.use((req, res, next) => {
 });
 
 app.enable('trust proxy');
-
-app.use((req, res, next) => {
-    if (req.method === 'PUT') {
-        req.fieldsToUpdate = req.parsedBody.fieldsToUpdate;
-        delete req.parsedBody.fieldsToUpdate;
-    }
-    next();
-});
 
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {

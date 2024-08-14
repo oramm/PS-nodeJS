@@ -40,7 +40,7 @@ app.post('/case', async (req: Request, res: Response) => {
 
 app.put('/case/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)

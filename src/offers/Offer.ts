@@ -111,13 +111,14 @@ export default abstract class Offer
         }
     }
 
-    async editController(auth: OAuth2Client) {
+    async editController(auth: OAuth2Client, _fieldsToUpdate?: string[]) {
         try {
             console.group('Editing offer');
             if (!this._city.id) this.addNewCity();
-            await this.editGdElements(auth);
+            if (this.shouldEditGdElements(_fieldsToUpdate))
+                await this.editGdElements(auth);
             console.log('Offer folder edited');
-            await this.editInDb();
+            await this.editInDb(undefined, undefined, _fieldsToUpdate);
             console.log('Offer edited in db');
             await this.createOfferEvaluationMilestoneOrCases(auth);
             console.log('Offer succesfully edited');
@@ -126,6 +127,11 @@ export default abstract class Offer
             console.log('Offer edit error');
             throw err;
         }
+    }
+
+    private shouldEditGdElements(_fieldsToUpdate: string[] | undefined) {
+        if (!_fieldsToUpdate) return true;
+        return _fieldsToUpdate.includes('submissionDeadline');
     }
 
     async deleteController(auth: OAuth2Client) {

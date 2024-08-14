@@ -162,7 +162,7 @@ export default class ToolsDb {
         object: any,
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
-        fieldsToUpdate?: string[]
+        _fieldsToUpdate?: string[]
     ): Promise<any> {
         if (!externalConn && isPartOfTransaction)
             throw new Error(
@@ -179,7 +179,7 @@ export default class ToolsDb {
             stmt = this.dynamicUpdatePreparedStmt(
                 tableName,
                 object,
-                fieldsToUpdate
+                _fieldsToUpdate
             );
             console.log(stmt.string);
             const result = await conn.execute(stmt.string, stmt.values);
@@ -297,16 +297,16 @@ export default class ToolsDb {
     private static dynamicUpdatePreparedStmt(
         tableName: string,
         object: any,
-        fieldsToUpdate?: string[]
+        _fieldsToUpdate?: string[]
     ) {
         if (!object.id)
             throw new Error('Edytowany obiekt musi mieć atrybut Id!');
 
         let keys: string[] = Object.keys(object);
 
-        //Jeśli fieldsToUpdate istnieje, przefiltruj klucze
-        if (fieldsToUpdate && fieldsToUpdate.length) {
-            keys = keys.filter((key) => fieldsToUpdate.includes(key));
+        //Jeśli _fieldsToUpdate istnieje, przefiltruj klucze
+        if (_fieldsToUpdate && _fieldsToUpdate.length) {
+            keys = keys.filter((key) => _fieldsToUpdate.includes(key));
         }
 
         let stmt: { string: string; values: any[] } = {
@@ -355,16 +355,15 @@ export default class ToolsDb {
 
         return stmt;
     }
-    /*
-     *jeśli nie chcę aby zmienna była zmieniana w DB trzeba:
-     *  dodać znak '_' albo
+    /** jeśli nie chcę aby zmienna była zmieniana w DB trzeba:
+     *  dodać prafix  '_' albo
      *  skasować parametr z obiektu: 'delete parametr'
      */
     private static isValidDbAttribute(key: string, object: any) {
         if (key === 'id')
             if (object._isIdNonIncrement) return true;
             else return typeof object[key] === 'number' ? false : true;
-        if (!key.includes('_') && object[key] !== undefined) return true;
+        if (!key.startsWith('_') && object[key] !== undefined) return true;
         else return false;
     }
 

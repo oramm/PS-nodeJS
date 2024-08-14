@@ -127,7 +127,7 @@ app.post('/letterReact', async (req: Request, res: Response) => {
 
 app.put('/letter/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const initParamsFromClient = req.parsedBody;
 
         if (!req.files) req.files = [];

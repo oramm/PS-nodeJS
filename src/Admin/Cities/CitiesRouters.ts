@@ -29,13 +29,13 @@ app.post('/city', async (req: Request, res: Response) => {
 
 app.put('/city/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         if (!itemFromClient || !itemFromClient.id)
             throw new Error(`Próba edycji  bez Id`);
 
         const item = new City(itemFromClient);
-        item.editInDb(undefined, false, fieldsToUpdate);
+        item.editInDb(undefined, false, _fieldsToUpdate);
         res.send(item);
     } catch (error) {
         console.error(error);

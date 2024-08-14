@@ -57,7 +57,7 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
 app.put('/invoice/:id', async (req: Request, res: Response) => {
     try {
         //nie ma validacji przy edycji bo jest zbędna - jest w edycji pozycji
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         let item = new Invoice(itemFromClient);
         if (item.gdId && item.status?.match(/Na później|Do zrobienia/i)) {
@@ -82,7 +82,7 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         let item = new Invoice({ ...itemFromClient, status: 'Do zrobienia' });
         await item.editInDb();
@@ -96,7 +96,7 @@ app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         const parentGdFolderId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71';
         if (!req.files) req.files = [];
@@ -134,7 +134,7 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         const item = new Invoice({ ...itemFromClient, status: 'Wysłana' });
 
@@ -149,7 +149,7 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
 
 app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         const item = new Invoice({ ...itemFromClient, status: 'Zapłacona' });
         await item.editInDb();

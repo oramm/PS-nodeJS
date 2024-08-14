@@ -38,14 +38,14 @@ export default class BusinessObject {
     async editInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false,
-        fieldsToUpdate?: string[]
+        _fieldsToUpdate?: string[]
     ) {
         return await ToolsDb.editInDb(
             this._dbTableName,
             this,
             externalConn,
             isPartOfTransaction,
-            fieldsToUpdate
+            _fieldsToUpdate
         );
     }
 

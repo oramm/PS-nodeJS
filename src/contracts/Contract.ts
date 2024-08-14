@@ -176,7 +176,7 @@ export default abstract class Contract
     /** batch dla edycji kontraktów
      *  jeśli pole nie wymaga zmian w innych elentach niż w db to pomijane sa handlery tych elementów
      */
-    async editHandler(auth: OAuth2Client, fieldsToUpdate: string[] = []) {
+    async editHandler(auth: OAuth2Client, _fieldsToUpdate: string[] = []) {
         console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
         const onlyDbfields = [
             'status',
@@ -188,8 +188,8 @@ export default abstract class Contract
             'name',
         ];
         const isOnlyDbFields =
-            fieldsToUpdate.length > 0 &&
-            fieldsToUpdate.every((field) => onlyDbfields.includes(field));
+            _fieldsToUpdate.length > 0 &&
+            _fieldsToUpdate.every((field) => onlyDbfields.includes(field));
 
         if (!isOnlyDbFields) {
             await Promise.all([
@@ -201,7 +201,7 @@ export default abstract class Contract
                 ),
             ]);
         }
-        await this.editInDb(undefined, undefined, fieldsToUpdate).then(() =>
+        await this.editInDb(undefined, undefined, _fieldsToUpdate).then(() =>
             console.log('Contract edited in db')
         );
         console.groupEnd();

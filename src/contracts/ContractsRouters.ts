@@ -92,7 +92,7 @@ app.post('/contractReact', async (req: Request, res: Response) => {
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;
+        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         if (!itemFromClient || !itemFromClient.id)
             throw new Error(`Próba edycji kontraktu bez Id`);
@@ -107,7 +107,7 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
                 req,
                 res,
                 contractInstance.editHandler,
-                [fieldsToUpdate],
+                [_fieldsToUpdate],
                 contractInstance
             ),
         ]);
