@@ -8,9 +8,10 @@ export default class OfferGdController {
     makeFolderName(
         typeName: string,
         alias: string,
-        submissionDeadline: string
+        submissionDeadline: string,
+        cityName: string
     ) {
-        return `${typeName} ${alias} ${submissionDeadline}`;
+        return `${typeName} ${cityName} ${alias} ${submissionDeadline}`;
     }
 
     /** Tworzy folder oferty w folderze _city - nie zmienia offerData*/
@@ -31,7 +32,8 @@ export default class OfferGdController {
         const folderName = this.makeFolderName(
             _type.name,
             alias,
-            offerData.submissionDeadline
+            offerData.submissionDeadline,
+            _city.name
         );
         const offerFolder = await ToolsGd.createFolder(auth, {
             name: folderName,
