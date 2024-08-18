@@ -1,6 +1,5 @@
 import { drive_v3, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import fs from 'fs';
 import { Envi } from './EnviTypes';
 import { Readable } from 'stream';
 
@@ -108,46 +107,6 @@ export default class ToolsGd {
             body: Readable.from(file.buffer), // użyj bezpośrednio buffer z Express.Multer.File
         };
 
-        try {
-            const res = await drive.files.create({
-                requestBody: {
-                    name: name,
-                    parents: parent ? [parent] : [],
-                },
-                media,
-                fields,
-                ...otherOptions,
-            });
-            return res.data;
-        } catch (err) {
-            console.error(`Failed to upload file ${name}`, err);
-            throw err;
-        }
-    }
-
-    /**wgrywa plik na serwer
-     * @param auth
-     * @param file - blob64 do wgrania
-     * @param options - paramentry pliku wg api
-     * @param parentFolderId - opcjonalny jeśłi nie podany parent jest brany z bloba - file
-     * @deprecated - do zastąpienia
-     */
-    static async uploadFileBase64(
-        auth: OAuth2Client,
-        file: Envi._blobEnviObject,
-        options: drive_v3.Params$Resource$Files$Create = {},
-        parentFolderId?: string
-    ) {
-        const drive = google.drive({ version: 'v3', auth });
-        let { name, mimeType, parent } = file;
-        const { fields = 'id', ...otherOptions } = options;
-
-        if (parentFolderId) parent = parentFolderId;
-        const media = {
-            mimeType,
-            body: Readable.from(Buffer.from(file.blobBase64String, 'base64')),
-        };
-        let x: drive_v3.Params$Resource$Files$Create = { media };
         try {
             const res = await drive.files.create({
                 requestBody: {

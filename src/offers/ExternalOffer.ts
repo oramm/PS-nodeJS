@@ -3,6 +3,7 @@ import Offer from './Offer';
 import { OAuth2Client } from 'google-auth-library';
 import ExternalOfferGdController from './gdControllers/ExternalOfferGdController';
 import OfferBond from './OfferBond/OfferBond';
+import ToolsMail from '../tools/ToolsMail';
 
 export default class ExternalOffer extends Offer implements ExternalOfferData {
     tenderUrl?: string | null;
@@ -43,7 +44,7 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
 
     async editOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
-        await this._offerBond.editController();
+        await this._offerBond.editController(this);
     }
 
     async deleteOfferBondController() {

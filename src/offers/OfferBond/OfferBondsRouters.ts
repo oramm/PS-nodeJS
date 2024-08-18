@@ -33,20 +33,6 @@ app.post('/offerBond', async (req: Request, res: Response) => {
     }
 });
 
-// PUT to update an existing Offer Bond
-app.put('/offerBond/:id', async (req: Request, res: Response) => {
-    try {
-        let offerBond = new OfferBond(req.parsedBody);
-        await offerBond.editController();
-        res.send(offerBond);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
-        }
-    }
-});
-
 // DELETE an existing Offer Bond
 app.delete('/offerBond/:id', async (req: Request, res: Response) => {
     try {

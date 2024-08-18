@@ -66,8 +66,6 @@ export default abstract class LetterGdController {
                 undefined,
                 parentGdFolderId
             );
-            //blobEnvi.parent = parentGdFolderId;
-            //promises.push(ToolsGd.uploadFileBase64(auth, blobEnvi, undefined, parentGdFolderId));
         });
         await Promise.all(promises);
     }

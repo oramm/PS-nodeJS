@@ -383,8 +383,7 @@ export default abstract class Offer
         const newFolderName = offerGdController.makeFolderName(
             this._type.name,
             this.alias,
-            this.submissionDeadline,
-            this._city.name
+            this.submissionDeadline
         );
         if (letterGdFolder.name !== newFolderName)
             await ToolsGd.updateFolder(auth, {

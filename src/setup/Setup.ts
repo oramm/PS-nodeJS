@@ -157,7 +157,8 @@ export default class Setup {
     };
 
     static OfferBondStatus = {
-        TO_DO: 'Do złożenia',
+        NEW: 'Jeszcze nie płacić',
+        TO_PAY: 'Do zapłacenia',
         PAID: 'Zapłacone',
         TO_RENEW: 'Do przedłużenia',
         DONE: 'Złożone',
