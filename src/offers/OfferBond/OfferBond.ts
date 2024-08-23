@@ -141,7 +141,7 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
                 <strong>Uwaga:</strong>    
                 <ul>
                     <li>W kolenym mailu z banku otrzymasz potwierdzenie wpłaty składki</li>
-                    <li>Wyślij plik z potwierdzeniem niezwłocznie do PZU</li>
+                    <li>Wyślij plik z potwierdzeniem <strong>niezwłocznie</strong do PZU</li>
                     <li>Po złożeniu oferty pamiętaj o ustawieniu statusu w ${offersLink}</li>
                 </ul>
             </div>`;
@@ -155,8 +155,8 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
                 : `Zapłacono składkę za gwarancję wadialną: `;
         subject += `${offer._type.name} ${offer._city.name} | ${offer.alias}`;
         ToolsMail.sendMail({
-            to: ['faktury@envi.com.pl'], //, 'monika.tymczyszyn@envi.com.pl'],
-            //cc: 'stecula@op.pl',
+            to: ['monika.tymczyszyn@envi.com.pl'],
+            cc: ['marek@envi.com.pl', 'stecula@op.pl'],
             subject: `Zapłacono wadium za ofertę: ${offer._type.name} ${offer._city.name} | ${offer.alias}`,
             html,
         });
