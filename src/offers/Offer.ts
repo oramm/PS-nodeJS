@@ -7,6 +7,7 @@ import {
     CityData,
     ContractTypeData,
     OfferData,
+    OfferEventData,
     PersonData,
 } from '../types/types';
 import { OAuth2Client } from 'google-auth-library';
@@ -18,6 +19,9 @@ import Setup from '../setup/Setup';
 import MilestonesController from '../contracts/milestones/MilestonesController';
 import CasesController from '../contracts/milestones/cases/CasesController';
 import EnviErrors from '../tools/Errors';
+import OfferEvent from './offerEvent/OfferEvent';
+import PersonsController from '../persons/PersonsController';
+import { UserData } from '../setup/GAuth2/sessionTypes';
 
 export default abstract class Offer
     extends BusinessObject
@@ -28,6 +32,7 @@ export default abstract class Offer
     creationDate?: string;
     description?: string;
     comment?: string;
+    emailAdditionalContent?: string;
     submissionDeadline?: string;
     _type: ContractTypeData;
     typeId: number;
@@ -36,13 +41,11 @@ export default abstract class Offer
     form?: string;
     isOur: boolean;
     bidProcedure?: string;
-    _editor?: PersonData;
-    editorId?: number;
-    _lastUpdated?: string;
     employerName?: string;
     status?: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
+    _lastEvent?: OfferEvent | null;
 
     constructor(initParamObject: OfferData) {
         super({ ...initParamObject, _dbTableName: 'Offers' });
@@ -50,8 +53,6 @@ export default abstract class Offer
             throw new Error('Type id is not defined');
         if (!initParamObject._employer && !initParamObject.employerName)
             throw new Error('Employer name or is not defined');
-        if (!initParamObject._editor?.id)
-            throw new Error('Editor id is not defined');
 
         this.id = initParamObject.id;
         this.alias = initParamObject.alias.trim();
@@ -74,9 +75,6 @@ export default abstract class Offer
         this.form = initParamObject.form?.trim() ?? undefined;
         this.isOur = initParamObject.isOur;
         this.bidProcedure = initParamObject.bidProcedure?.trim() ?? undefined;
-        this._editor = initParamObject._editor;
-        this.editorId = initParamObject._editor.id;
-        this._lastUpdated = initParamObject._lastUpdated;
         this.employerName =
             initParamObject._employer?.name?.trim() ||
             (<string>initParamObject.employerName).trim();
@@ -86,9 +84,18 @@ export default abstract class Offer
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(
                 initParamObject.gdFolderId
             );
+        this.initLastEvent(initParamObject._lastEvent); //przy nowej ofercie lastEvent jeszcze nie istnieje
     }
 
-    async addNewController(auth: OAuth2Client) {
+    private initLastEvent(lastEventData: OfferEventData | undefined | null) {
+        if (!lastEventData?.offerId) return;
+        if (lastEventData) {
+            lastEventData.offerId = this.id;
+            this._lastEvent = new OfferEvent(lastEventData);
+        } else this._lastEvent = null;
+    }
+
+    async addNewController(auth: OAuth2Client, userData: UserData) {
         try {
             console.group('Creating new offer');
             if (!this._city.id) await this.addNewCity();
@@ -104,6 +111,14 @@ export default abstract class Offer
                 Setup.MilestoneTypes.OFFER_SUBMISSION
             );
             await this.createOfferEvaluationMilestoneOrCases(auth);
+            const _editor =
+                await PersonsController.getPersonFromSessionUserData(userData);
+            this._lastEvent = new OfferEvent({
+                offerId: this.id as number,
+                eventType: Setup.OfferEventType.CREATED,
+                _editor,
+            });
+            await this._lastEvent.addNewController();
             console.groupEnd();
         } catch (err) {
             this.deleteController(auth);
@@ -171,6 +186,22 @@ export default abstract class Offer
             );
         }
         console.groupEnd();
+    }
+
+    async addEventController() {
+        if (!this._lastEvent) throw new Error('No last event');
+        await this._lastEvent.addNewController();
+    }
+
+    async editEventController() {
+        if (!this._lastEvent) throw new Error('No last event');
+        await this._lastEvent.editController();
+    }
+
+    async deleteEventController() {
+        if (!this._lastEvent) throw new Error('No last event');
+        await this._lastEvent.deleteController();
+        this._lastEvent = null;
     }
 
     private async addNewCity() {
@@ -375,7 +406,7 @@ export default abstract class Offer
 
     async editGdElements(auth: OAuth2Client) {
         if (!this.submissionDeadline) throw new Error('Brak terminu składania');
-        const letterGdFolder = await ToolsGd.getFileOrFolderById(
+        const letterGdFolder = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
             <string>this.gdFolderId
         );
@@ -391,5 +422,65 @@ export default abstract class Offer
                 id: letterGdFolder.id,
             });
         return letterGdFolder;
+    }
+    /**
+     * Zwraca dane folderu "01 Przygotowanie oferty" z folderu głównego oferty
+     * @param auth - obiekt autoryzacji
+     * @returns
+     */
+    async getOfferPreparationFolderDataFromGd(auth: OAuth2Client) {
+        if (!this.gdFolderId)
+            throw new EnviErrors.NoGdIdError('Brak Id folderu głównego oferty');
+        const offerIssueMilestoneFolderData =
+            await ToolsGd.getFileMetaDataByName(auth, {
+                parentId: this.gdFolderId,
+                fileName: '01 Składanie ofert',
+            });
+        if (!offerIssueMilestoneFolderData || !offerIssueMilestoneFolderData.id)
+            throw new Error('Brak folderu "01 Składanie ofert"');
+
+        const offerPreparationFolderData = await ToolsGd.getFileMetaDataByName(
+            auth,
+            {
+                parentId: offerIssueMilestoneFolderData.id,
+                fileName: '01 Przygotowanie oferty',
+            }
+        );
+        if (!offerPreparationFolderData || !offerPreparationFolderData.id)
+            throw new Error('Brak folderu "01 Przygotowanie oferty"');
+
+        return offerPreparationFolderData;
+    }
+
+    /**
+     * Zwraca dane folderu z plikami oferty pliki są w folderze "01. Przygotowanie oferty"
+     * Nie ma folderu "oferta" jak w ExternalOffer
+     */
+    async getOfferFilesData(auth: OAuth2Client) {
+        const offerFilesFolderData =
+            await this.getOfferPreparationFolderDataFromGd(auth);
+
+        // Get all files from the folder
+        const offerFiles = await ToolsGd.getFilesMetaData(
+            auth,
+            offerFilesFolderData.id!
+        );
+
+        // Filter files to include only PDF, Excel, ZIP, and Word files
+        const filteredFiles = offerFiles.filter((file) => {
+            const mimeType = file.mimeType;
+            return (
+                mimeType === 'application/pdf' ||
+                mimeType === 'application/vnd.ms-excel' ||
+                mimeType ===
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                mimeType ===
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                mimeType === 'application/msword' ||
+                mimeType === 'application/zip'
+            );
+        });
+
+        return filteredFiles;
     }
 }

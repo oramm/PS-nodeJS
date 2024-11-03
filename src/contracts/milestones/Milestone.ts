@@ -185,7 +185,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         //sytuacja normalna - folder itnieje
         if (await this.checkFolder(auth)) {
             try {
-                await ToolsGd.getFileOrFolderById(
+                await ToolsGd.getFileOrFolderMetaDataById(
                     auth,
                     <string>this.gdFolderId
                 );

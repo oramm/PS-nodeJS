@@ -1,6 +1,5 @@
 import { drive_v3, google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { Envi } from './EnviTypes';
 import { Readable } from 'stream';
 
 export default class ToolsGd {
@@ -21,27 +20,108 @@ export default class ToolsGd {
     }
 
     /**
-     * Lists the names and IDs of up to 10 files.
+     * Pobiera metadane plików z folderu na dysku Google
      * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
+     * @param {string} parentFolderID Id folderu, z którego pobieramy pliki
      */
-    static async listFiles(auth: OAuth2Client) {
+    static async getFilesMetaData(auth: OAuth2Client, parentFolderID: string) {
         const drive = google.drive({ version: 'v3', auth });
         const filesSchema = await drive.files.list({
-            pageSize: 10,
-            fields: 'nextPageToken, files(id, name)',
+            fields: 'nextPageToken, files(id, name, mimeType, lastModifyingUser, modifiedTime)',
+            q: `'${parentFolderID}' in parents`, // Query to list files in the folder
         });
-        if (filesSchema.data.files && filesSchema.data.files.length) {
-            console.log('Files:');
-            filesSchema.data.files.map((file: drive_v3.Schema$File) => {
-                console.log(`${file.id}: ${file.name}`);
-            });
-        } else console.log('No files found.');
+        if (!filesSchema.data.files || !filesSchema.data.files.length)
+            return [];
+        return filesSchema.data.files;
     }
 
-    static async getFileOrFolderById(auth: OAuth2Client, id: string) {
+    static async getFileOrFolderMetaDataById(auth: OAuth2Client, id: string) {
         const drive = google.drive({ version: 'v3', auth });
         const fileSchema = await drive.files.get({ fileId: id });
-        return await fileSchema.data;
+        return fileSchema.data;
+    }
+
+    /**
+     * Pobiera plik z dysku google i zwraca go jako stream z metadanymi
+     */
+    static async getFileStreamWithMetaDataFromGd(
+        gdFilesBasicData: any[],
+        auth: OAuth2Client
+    ) {
+        const drive = google.drive({ version: 'v3', auth });
+        // Use Promise.all to ensure all asynchronous operations complete
+        const filesData = await Promise.all(
+            gdFilesBasicData.map(async (fileData) => {
+                const fileId = fileData.id;
+                // Pobierz strumień pliku
+                const res = await drive.files.get(
+                    { fileId, alt: 'media' },
+                    { responseType: 'stream' }
+                );
+                // Pobierz metadane pliku, aby uzyskać oryginalną nazwę
+                const fileMetadata = await drive.files.get({
+                    fileId,
+                    fields: 'name',
+                });
+
+                return {
+                    stream: res.data as Readable,
+                    metadata: fileMetadata.data,
+                };
+            })
+        );
+        return filesData;
+    }
+
+    /**
+     * Tworzy plik na dysku Google i zwraca jego id
+     * @param auth
+     * @param gdDocumentId
+     * @param newFileName
+     */
+    static async exportDocToPdfAndUpload(
+        auth: OAuth2Client,
+        gdDocumentId: string,
+        newFileName?: string
+    ): Promise<string> {
+        const drive = google.drive({ version: 'v3', auth });
+
+        // Pobierz metadane pliku Google Docs, aby uzyskać nazwę i folder
+        const fileMetadata = await drive.files.get({
+            fileId: gdDocumentId,
+            fields: 'name, parents',
+        });
+        const docName = fileMetadata.data.name || newFileName;
+        const parentFolderId = fileMetadata.data.parents?.[0];
+
+        if (!parentFolderId) {
+            throw new Error('Nie można znaleźć folderu dla dokumentu');
+        }
+
+        // Eksportuj dokument Google Docs jako PDF
+        const res = await drive.files.export(
+            {
+                fileId: gdDocumentId,
+                mimeType: 'application/pdf',
+            },
+            { responseType: 'stream' }
+        );
+
+        // Prześlij PDF do tego samego folderu na Google Drive bez bufora
+        const uploadedPdf = await drive.files.create({
+            requestBody: {
+                name: `${docName}.pdf`,
+                parents: [parentFolderId],
+            },
+            media: {
+                mimeType: 'application/pdf',
+                body: res.data as Readable, // Using the stream directly from export
+            },
+            fields: 'id',
+        });
+
+        console.log(`Plik PDF utworzony i przesłany: ${uploadedPdf.data.id}`);
+        return uploadedPdf.data.id!;
     }
 
     /**
@@ -49,7 +129,7 @@ export default class ToolsGd {
      * Do sprawdzenia czy plik istnieje użyj this.fileOrFolderExists()
      * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
      */
-    static async getFileByName(
+    static async getFileMetaDataByName(
         auth: OAuth2Client,
         parameters: { parentId: string; fileName: string; isTrashed?: boolean }
     ) {
@@ -58,16 +138,11 @@ export default class ToolsGd {
         const q = `name = '${parameters.fileName}' and '${parameters.parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = ${parameters.isTrashed}`;
         const filesSchema = await drive.files.list({
             q,
-            //pageSize: 10,
-            //fields: 'nextPageToken, files(id, name, parents, mimeType)',
         });
         if (filesSchema.data.files && filesSchema.data.files.length) {
-            //console.log('Files:');
-            filesSchema.data.files.map((file: drive_v3.Schema$File) => {
-                //console.log(`${file.name} (${file.id})`);
-            });
+            filesSchema.data.files.map((file: drive_v3.Schema$File) => {});
             return filesSchema.data.files[0];
-        } //else { console.log('No files found.'); }
+        }
     }
     /**
      * Sprawdza czy plik lub folder istnieje
@@ -77,7 +152,7 @@ export default class ToolsGd {
         fileOrFolderId: string
     ) {
         try {
-            const fileSchema = await this.getFileOrFolderById(
+            const fileSchema = await this.getFileOrFolderMetaDataById(
                 auth,
                 fileOrFolderId
             );
@@ -150,10 +225,11 @@ export default class ToolsGd {
     ) {
         parameters.name = parameters.name.trim();
 
-        let folder: drive_v3.Schema$File | undefined = await this.getFileByName(
-            auth,
-            { fileName: parameters.name, parentId: parameters.parentId }
-        );
+        let folder: drive_v3.Schema$File | undefined =
+            await this.getFileMetaDataByName(auth, {
+                fileName: parameters.name,
+                parentId: parameters.parentId,
+            });
         if (!folder) {
             folder = (await this.createFolder(auth, {
                 name: parameters.name,

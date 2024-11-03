@@ -1,22 +1,22 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb'
-import Person from "./Person";
+import ToolsDb from '../tools/ToolsDb';
+import Person from './Person';
 import Entity from '../entities/Entity';
+import { UserData } from '../setup/GAuth2/sessionTypes';
 
 type PersonsSearchParams = {
-    projectId?: string,
-    contractId?: number,
-    systemRoleName?: string,
-    systemEmail?: string,
-    id?: number,
-    showPrivateData?: boolean
-    _entities?: Entity[],
-    searchText?: string
-}
+    projectId?: string;
+    contractId?: number;
+    systemRoleName?: string;
+    systemEmail?: string;
+    id?: number;
+    showPrivateData?: boolean;
+    _entities?: Entity[];
+    searchText?: string;
+};
 
 export default class PersonsController {
     static async getPersonsList(orConditions: PersonsSearchParams[] = []) {
-
         const sql = `SELECT  Persons.Id,
                 Persons.EntityId,
                 Persons.Name,
@@ -32,9 +32,12 @@ export default class PersonsController {
             JOIN Entities ON Persons.EntityId=Entities.Id
             LEFT JOIN Roles ON Roles.PersonId = Persons.Id
             JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
             GROUP BY Persons.Id
-            ORDER BY Persons.Surname, Persons.Name;`
+            ORDER BY Persons.Surname, Persons.Name;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processPersonsResult(result);
@@ -56,7 +59,9 @@ export default class PersonsController {
         }
 
         const systemRoleCondition = searchParams.systemRoleName
-            ? mysql.format(`SystemRoles.Name REGEXP ?`, [searchParams.systemRoleName])
+            ? mysql.format(`SystemRoles.Name REGEXP ?`, [
+                  searchParams.systemRoleName,
+              ])
             : '1';
 
         const systemEmailCondition = searchParams.systemEmail
@@ -67,8 +72,15 @@ export default class PersonsController {
             ? mysql.format(`Persons.Id=?`, [searchParams.id])
             : '1';
 
-        const entityCondition = ToolsDb.makeOrConditionFromValueOrArray1(searchParams._entities, 'Persons', 'EntityId', 'id');
-        const searchTextCondition = this.makeSearchTextCondition(searchParams.searchText);
+        const entityCondition = ToolsDb.makeOrConditionFromValueOrArray1(
+            searchParams._entities,
+            'Persons',
+            'EntityId',
+            'id'
+        );
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
 
         const conditions = `${projectCondition} 
             AND ${contractCondition} 
@@ -82,22 +94,36 @@ export default class PersonsController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1'
+        if (!searchText) return '1';
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
-        const conditions = words.map(word =>
-            mysql.format(`(Persons.Name LIKE ?
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(Persons.Name LIKE ?
                 OR Persons.Surname LIKE ?
                 OR Persons.Comment LIKE ?
                 OR Persons.Position LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]));
+                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
+            )
+        );
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
     }
 
+    static async getPersonFromSessionUserData(userData: UserData) {
+        const person = (
+            await PersonsController.getPersonsList([{ id: userData.enviId }])
+        )[0];
+        if (!person) throw new Error('No person found');
+        return person;
+    }
     static async getPersonBySystemEmail(systemEmail: string) {
-        return (await this.getPersonsList([{ systemEmail: systemEmail, showPrivateData: true }]))[0];
+        return (
+            await this.getPersonsList([
+                { systemEmail: systemEmail, showPrivateData: true },
+            ])
+        )[0];
     }
 
     static processPersonsResult(result: any[]): Person[] {
@@ -116,8 +142,8 @@ export default class PersonsController {
                 systemRoleName: row.SystemRoleName,
                 _entity: {
                     id: row.EntityId,
-                    name: row.EntityName
-                }
+                    name: row.EntityName,
+                },
             });
             newResult.push(item);
         }

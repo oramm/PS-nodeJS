@@ -171,6 +171,16 @@ export default class Setup {
         GUARANTEE: 'Gwarancja',
     };
 
+    static OfferEventType = {
+        CREATED: 'Oferta Utworzona',
+        SEND: 'Oferta wysłana',
+        CHANGED: 'Oferta zmieniona',
+        AWARDED: 'Oferta wygrana',
+        LOST: 'Oferta przegrana',
+        CANCELED: 'Przetarg unieważniony',
+        WITHDRAWN: 'Oferta wycofana',
+    };
+
     static OfferBidProcedure = {
         REQUEST_FOR_QUOTATION: 'Zapytanie ofertowe',
         TENDER_PL: 'Przetarg BZP',

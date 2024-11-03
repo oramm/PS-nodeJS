@@ -73,6 +73,7 @@ export default class ToolsDb {
         )
             return value;
         if (value === undefined) return null;
+        if (Tools.isValidJsonString(value)) return value;
         if (typeof value === 'string') {
             if (ToolsDate.isStringADate(value))
                 //czy mamy datę

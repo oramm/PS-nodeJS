@@ -1,11 +1,4 @@
-import {
-    CityData,
-    ContractTypeData,
-    EntityData,
-    OtherContractData,
-    OurContractData,
-    RepositoryDataItem,
-} from '../types/types';
+import { RepositoryDataItem } from '../types/types';
 
 export namespace Envi {
     export interface _blobEnviObject {

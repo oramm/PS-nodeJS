@@ -128,7 +128,7 @@ export default class OurOfferGdFile extends DocumentGdFile {
             throw new Error('Wrong number of cases');
         const makeOferCase = makeOfferCases[0];
 
-        const gDocument = await ToolsGd.getFileOrFolderById(
+        const gDocument = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
             this.enviDocumentData.gdDocumentId
         );

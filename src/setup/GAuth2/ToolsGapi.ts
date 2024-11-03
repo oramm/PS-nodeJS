@@ -1,14 +1,10 @@
-import session from 'express-session';
 import { OAuth2Client } from 'google-auth-library';
-import url from 'url';
 import Person from '../../persons/Person';
 import { Envi } from '../../tools/Tools';
 import ToolsDb from '../../tools/ToolsDb';
 import { Request, Response, NextFunction } from 'express';
 import { keys } from './credentials';
 
-
-export let refresh_token: string = '1//09de9o3oImgwxCgYIARAAGAkSNwF-L9IrFqZe55vzOdJThCZGCsxoXU7PKWGxHIuYPLcN5lb6FVlzd2LiHuU1RIMUyxy7Hdfwp7g'
 export const oAuthClient: OAuth2Client = new OAuth2Client(
     keys.installed.client_id,
     keys.installed.client_secret,
@@ -24,43 +20,24 @@ export default class ToolsGapi {
         'https://www.googleapis.com/auth/calendar.events',
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/drive',
-        'https://www.googleapis.com/auth/spreadsheets'
-    ]
+        'https://www.googleapis.com/auth/spreadsheets',
+    ];
     //'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/userinfo.profile openid https://www.googleapis.com/auth/drive'
 
     // Generate the url that will be used for the consent dialog.
     static getAuthUrl(oauth2Client: OAuth2Client) {
-        if (!oauth2Client)
-            oauth2Client = oauth2Client;
+        if (!oauth2Client) oauth2Client = oauth2Client;
 
         return oauth2Client.generateAuthUrl({
             access_type: 'offline',
             scope: this.scopes,
-            prompt: 'consent'
+            prompt: 'consent',
         });
     }
 
-    static calculateTimeToExpiry(expiryDate: number = 0) {
-        return (expiryDate - new Date().getTime());
-    }
-
-    static async setNewAccessToken(req: any) {
-        // acquire the code from the querystring, and close the web server.
-        const qs = new url.URL(req.url, 'http://localhost:3000')
-            .searchParams;
-        const code = qs.get('code');
-        console.log(`Code is ${code}`);
-        //res.end('Authentication successful! Please return to the console.');
-
-        // Now that we have the code, use that to acquire tokens.
-        const r = await oAuthClient.getToken(code as string);
-        console.log(r.tokens);
-        // Make sure to set the credentials on the OAuth2 client.
-        oAuthClient.setCredentials(r.tokens);
-        console.info('Tokens acquired.');
-
-        req.session.credentials = oAuthClient.credentials;
-        return r.tokens;
+    static calculateTimeToExpiry(expiryDate: number | undefined | null) {
+        if (!expiryDate) return -1;
+        return expiryDate - new Date().getTime();
     }
 
     static async loginHandler(req: Request, res: Response) {
@@ -73,15 +50,21 @@ export default class ToolsGapi {
                 audience: [
                     keys.installed.client_id,
                     '386403657277-9mh2cnqb9dneoh8lc6o2m339eemj24he.apps.googleusercontent.com',
-                    '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com'],
+                    '386403657277-21tus25hgaoe7jdje73plc2qbgakht05.apps.googleusercontent.com',
+                ],
             });
 
             const payload = ticket.getPayload();
             if (!payload) throw new Error('No payload provided');
-            if (!payload.email) throw new Error(`Twoje konto Google nie ma przypisanego adresu email. 
+            if (!payload.email)
+                throw new Error(`Twoje konto Google nie ma przypisanego adresu email. 
             Zaloguj się na konto Google i przypisz adres email.`);
-            if (!payload.name) throw new Error(`Twoje konto Google nie ma przypisanego imienia i nazwiska.`);
-            if (!payload.picture) payload.picture = 'https://www.gravatar.com/avatar/    ?d=mp';
+            if (!payload.name)
+                throw new Error(
+                    `Twoje konto Google nie ma przypisanego imienia i nazwiska.`
+                );
+            if (!payload.picture)
+                payload.picture = 'https://www.gravatar.com/avatar/    ?d=mp';
 
             const systemRole = await this.determineSystemRole(payload.email);
 
@@ -97,9 +80,10 @@ export default class ToolsGapi {
             console.log('User data set in session:', req.session.userData);
             //jeśli nie ma googleId w bazie danych, to go wpisuje (po pierwszym zalogowaniu)
             if (!systemRole.googleId)
-                await ToolsGapi.editUserGoogleIdInDb(systemRole.personId, req.session.userData.googleId);
-
-
+                await ToolsGapi.editUserGoogleIdInDb(
+                    systemRole.personId,
+                    req.session.userData.googleId
+                );
         } catch (error) {
             res.status(401).json({ error: 'Unauthorized' });
         }
@@ -111,73 +95,112 @@ export default class ToolsGapi {
         return role;
     }
 
-    static authenticateUser(req: Request, res: Response, next: NextFunction) {
-        console.log(`Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `);
-        if (req.session && req.session.userData) {
-            next();
-        } else {
-            res.status(401).json({ error: 'Unauthorized' });
+    static async getNewCredentials(refreshToken: string) {
+        try {
+            // Ustawienie refresh tokena w OAuth2Client
+            oAuthClient.setCredentials({
+                refresh_token: refreshToken,
+            });
+
+            // Uzyskanie nowego access_tokena
+            const tokens = await oAuthClient.getAccessToken();
+
+            // Sprawdzenie, czy token został poprawnie uzyskany
+            if (!tokens.token) {
+                throw new Error('Failed to obtain access token');
+            }
+
+            // Uzyskanie pełnych credentials z tokenami
+            const newCredentials = oAuthClient.credentials;
+
+            console.log('New credentials:', newCredentials);
+
+            return newCredentials;
+        } catch (error) {
+            console.error('Error obtaining new credentials:', error);
+            throw error;
         }
     }
 
-    /** @deprecated  wymaga przeglądu*/
-    static async getAdminGoogleUserPayload() {
-        const idToken = oAuthClient.credentials.id_token;
-        if (!idToken) throw new Error('No token provided');
-        const ticket = await oAuthClient.verifyIdToken({
-            idToken: idToken,
-            audience: keys.installed.client_id, // Specify the CLIENT_ID of the app that accesses the backend
-        });
-        const payload = ticket.getPayload();
-        return payload
-    }
-
-    static async gapiReguestHandler(req: any, res: any, gapiFunction: Function, argObject?: any, thisObject?: any) {
+    static async gapiReguestHandler(
+        req: Request,
+        res: Response,
+        gapiFunction: Function,
+        argObject?: any,
+        thisObject?: any
+    ) {
         let result;
-        console.log('--------------- authenticate ----------------')
+        console.log('--------------- authenticate ----------------');
         let credentials: any = req.session.credentials;
         let refreshToken: string;
         //zmieniły się zakresy
-        if (credentials && !Envi.ToolsArray.equalsIgnoreOrder(credentials.scope.split(' '), ToolsGapi.scopes)) {
+        if (
+            credentials &&
+            !Envi.ToolsArray.equalsIgnoreOrder(
+                credentials.scope.split(' '),
+                ToolsGapi.scopes
+            )
+        ) {
             let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
             return { authorizeUrl: authorizeUrl };
         }
         //pierwsze logowanie zarejestrowanego użytkownika
-        if (!req.session.credentials || ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2) {
-            //pobierzez refreshToken z bazy
-            //----- do przywrócoenia po opanowaniu sesji  CORS
-            //const user = new Person({ systemEmail: req.session.userData.email });
-            //refreshToken = <string>(await user.getSystemRole()).googleRefreshToken;
-            refreshToken = refresh_token;
+        if (
+            !req.session.credentials ||
+            ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2
+        ) {
+            if (!process.env.REFRESH_TOKEN)
+                throw new Error("Can't get refresh token");
+            refreshToken = process.env.REFRESH_TOKEN;
+
             //pierwsze logowanie nowego użytkownika
             if (!refreshToken) {
                 let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
                 return { authorizeUrl: authorizeUrl };
-            } else
+            } else {
                 credentials = { refresh_token: refreshToken };
+                console.log('credentials:', credentials);
+            }
         }
 
-        console.log('credentials valid for: %d s', ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) / 1000);
+        console.log(
+            'credentials valid for: %d s',
+            ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) / 1000
+        );
         oAuthClient.setCredentials(credentials);
 
-        const args = [oAuthClient]
-        if (typeof argObject === "object" && argObject !== null && argObject !== undefined)
+        const args: any[] = [oAuthClient];
+        if (
+            typeof argObject === 'object' &&
+            argObject !== null &&
+            argObject !== undefined
+        )
             args.push(...argObject);
-        else
-            args.push(argObject);
+        else args.push(argObject);
 
-        result = (thisObject) ? await gapiFunction.apply(thisObject, args) : await gapiFunction(...args);
+        result = thisObject
+            ? await gapiFunction.apply(thisObject, args)
+            : await gapiFunction(...args);
         return result;
     }
 
-    private static async editUserDataInDb(data: { id: number, googleId?: string, googleRefreshToken?: string }) {
+    private static async editUserDataInDb(data: {
+        id: number;
+        googleId?: string;
+        googleRefreshToken?: string;
+    }) {
         return await ToolsDb.editInDb('Persons', data);
     }
     static async editUserGoogleIdInDb(userId: number, googleId: string) {
-        return await this.editUserDataInDb({ id: userId, googleId: googleId })
+        return await this.editUserDataInDb({ id: userId, googleId: googleId });
     }
-    static async editUserGoogleRefreshTokenInDb(userId: number, googleRefreshToken: string) {
-        return await this.editUserDataInDb({ id: userId, googleRefreshToken: googleRefreshToken })
+    static async editUserGoogleRefreshTokenInDb(
+        userId: number,
+        googleRefreshToken: string
+    ) {
+        return await this.editUserDataInDb({
+            id: userId,
+            googleRefreshToken: googleRefreshToken,
+        });
     }
-
 }

@@ -275,12 +275,6 @@ export default class TasksController {
                             _type: { name: '', isOur: false },
                             _city: { code: '', name: '' },
                             bidProcedure: '',
-                            _editor: {
-                                id: 0,
-                                name: '',
-                                surname: '',
-                                email: '',
-                            },
                             isOur: false,
                             form: '',
                         },

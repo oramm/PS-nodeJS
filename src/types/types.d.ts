@@ -21,20 +21,6 @@ export interface RepositoryDataItem {
     id?: number;
 }
 
-export interface SystemRoleData {
-    id: number;
-    systemName: SystemRoleName;
-}
-
-export interface UserData {
-    googleId: string;
-    picture: string;
-    systemEmail: string;
-    systemRoleId: number;
-    systemRoleName: SystemRoleName;
-    userName: string;
-}
-
 export interface ProjectData extends RepositoryDataItem {
     ourId: string;
     name: string;
@@ -350,14 +336,12 @@ export interface OfferData extends RepositoryDataItem {
     form?: string;
     isOur: boolean;
     bidProcedure?: string;
-    editorId?: number;
-    _lastUpdated?: string;
     employerName?: string;
     _employer?: EntityData;
-    _editor?: PersonData;
     status?: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
+    _lastEvent?: OfferEventData | null;
 }
 
 export interface OurOfferData extends OfferData {
@@ -378,6 +362,21 @@ export interface OfferBondData extends RepositoryDataItem {
     comment?: string | null;
     status: string;
     expiryDate?: string | null;
+}
+
+export interface OfferEventData extends RepositoryDataItem {
+    offerId?: number;
+    editorId?: number;
+    _editor: PersonData;
+    eventType: string;
+    _lastUpdated?: string;
+    comment?: string | null;
+    additionalMessage?: string | null;
+    versionNumber?: number | null;
+    _recipients?: PersonData[] | null;
+    recipientsJSON?: string | null;
+    _gdFilesBasicData?: drive_v3.Schema$File[];
+    gdFilesJSON?: string | null;
 }
 
 export interface FinancialAidProgrammeData extends RepositoryDataItem {

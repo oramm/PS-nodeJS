@@ -76,7 +76,7 @@ export default abstract class IncomingLetter
 
     /**zmienia tylko nazwę folderu */
     protected async editLetterGdFolder(auth: OAuth2Client) {
-        const letterGdFolder = await ToolsGd.getFileOrFolderById(
+        const letterGdFolder = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
             <string>this.gdFolderId
         );

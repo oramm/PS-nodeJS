@@ -112,7 +112,7 @@ export default abstract class OurLetter
         auth: OAuth2Client,
         files: Express.Multer.File[]
     ) {
-        const letterGdFolder = await ToolsGd.getFileOrFolderById(
+        const letterGdFolder = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
             <string>this.gdFolderId
         );

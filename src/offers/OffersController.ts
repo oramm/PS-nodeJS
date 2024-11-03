@@ -12,6 +12,7 @@ import {
     OurOfferData,
 } from '../types/types';
 import OfferBond from './OfferBond/OfferBond';
+import OfferEvent from './offerEvent/OfferEvent';
 
 export type OffersSearchParams = {
     id?: number;
@@ -38,9 +39,7 @@ export default class OffersController {
                 Offers.IsOur,
                 Offers.Status,
                 Offers.BidProcedure,
-                Offers.EditorId,
                 Offers.EmployerName,
-                Offers.LastUpdated,
                 Offers.GdFolderId,
                 Offers.GdDocumentId,
                 Offers.resourcesGdFolderId,
@@ -52,6 +51,17 @@ export default class OffersController {
                 OfferBonds.Comment AS BondComment,
                 OfferBonds.Status AS BondStatus,
                 OfferBonds.ExpiryDate AS BondExpiryDate,
+                
+                -- Pobieramy dane z LastOfferEvent, a nie LatestOfferEvents
+                LastOfferEvent.Id AS LastEventId,
+                LastOfferEvent.EventType AS LastEventType,
+                LastOfferEvent.Comment AS LastEventComment,
+                LastOfferEvent.AdditionalMessage AS LastEventAdditionalMessage,
+                LastOfferEvent.VersionNumber AS LastEventVersionNumber,
+                LastOfferEvent.LastUpdated AS LastEventDate,
+                LastOfferEvent.GdFilesJSON AS LastEventGdFilesJSON,
+                LastOfferEvent.RecipientsJSON AS LastEventRecipientsJSON,
+
                 Cities.Id AS CityId,
                 Cities.Name AS CityName,
                 Cities.Code AS CityCode,
@@ -62,11 +72,25 @@ export default class OffersController {
                 Persons.Name AS EditorName,
                 Persons.Surname AS EditorSurname,
                 Persons.Email AS EditorEmail
+
             FROM Offers
-            LEFT JOIN Cities ON Cities.Id=Offers.CityId
+            LEFT JOIN Cities ON Cities.Id = Offers.CityId
             LEFT JOIN ContractTypes ON ContractTypes.Id = Offers.TypeId
             LEFT JOIN OfferBonds ON OfferBonds.OfferId = Offers.Id
-            LEFT JOIN Persons ON Persons.Id = Offers.EditorId
+
+            -- Podzapytanie, które zwraca dla każdej oferty (OfferId) największe Id z tabeli OfferEvents (najświeższe zdarzenie)
+            LEFT JOIN (
+                SELECT OfferId, MAX(Id) AS MaxEventId
+                FROM OfferEvents
+                GROUP BY OfferId
+            ) AS LatestOfferEvents ON LatestOfferEvents.OfferId = Offers.Id
+
+            -- Łączymy z tabelą OfferEvents, aby pobrać pełne dane o zdarzeniu na podstawie MaxEventId wyciągniętego w podzapytaniu
+            LEFT JOIN OfferEvents AS LastOfferEvent ON LastOfferEvent.Id = LatestOfferEvents.MaxEventId
+
+            -- Łączymy z tabelą Persons, aby pobrać informacje o osobie, która utworzyła zdarzenie
+            LEFT JOIN Persons ON Persons.Id = LastOfferEvent.EditorId
+
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
@@ -139,8 +163,23 @@ export default class OffersController {
                 `(Offers.Alias LIKE ?
                 OR Offers.Description LIKE ?
                 OR Cities.Name LIKE ?
-                OR Offers.EmployerName LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
+                OR Offers.EmployerName LIKE ?
+                OR Offers.Comment LIKE ?
+                OR OfferBonds.Comment LIKE ?
+                OR LastOfferEvent.Comment LIKE ?
+                OR LastOfferEvent.AdditionalMessage LIKE ?
+                OR LastOfferEvent.RecipientsJSON LIKE ?)`,
+                [
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                    `%${word}%`,
+                ]
             )
         );
 
@@ -167,7 +206,6 @@ export default class OffersController {
                 gdDocumentId: row.GdDocumentId,
                 tenderUrl: row.TenderUrl,
                 resourcesGdFolderId: row.resourcesGdFolderId,
-                _lastUpdated: row.LastUpdated,
                 _employer: { name: ToolsDb.sqlToString(row.EmployerName) },
                 _type: {
                     id: row.MainContractTypeId,
@@ -180,12 +218,6 @@ export default class OffersController {
                     id: row.CityId,
                     name: row.CityName,
                     code: row.CityCode,
-                },
-                _editor: {
-                    id: row.EditorId,
-                    name: ToolsDb.sqlToString(row.EditorName),
-                    surname: ToolsDb.sqlToString(row.EditorSurname),
-                    email: ToolsDb.sqlToString(row.EditorEmail),
                 },
                 _offerBond: this.makeOfferBond(
                     {
@@ -200,6 +232,25 @@ export default class OffersController {
                     },
                     row.IsOur
                 ),
+                _lastEvent: new OfferEvent({
+                    id: row.LastEventId,
+                    offerId: row.Id,
+                    eventType: row.LastEventType,
+                    _lastUpdated: row.LastEventDate,
+                    comment: ToolsDb.sqlToString(row.LastEventComment),
+                    additionalMessage: ToolsDb.sqlToString(
+                        row.LastEventAdditionalMessage
+                    ),
+                    versionNumber: row.LastEventVersionNumber,
+                    _editor: {
+                        id: row.EditorId,
+                        name: ToolsDb.sqlToString(row.EditorName),
+                        surname: ToolsDb.sqlToString(row.EditorSurname),
+                        email: ToolsDb.sqlToString(row.EditorEmail),
+                    },
+                    gdFilesJSON: row.LastEventGdFilesJSON,
+                    recipientsJSON: row.LastEventRecipientsJSON,
+                }),
             };
 
             const item = row.IsOur

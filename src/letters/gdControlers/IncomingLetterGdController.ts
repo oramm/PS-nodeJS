@@ -14,7 +14,7 @@ export default abstract class IncomingLetterGdController extends LetterGdControl
         auth: OAuth2Client,
         letterGdFolderId: string
     ) {
-        const letterFile = await ToolsGd.getFileOrFolderById(
+        const letterFile = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
             letterGdDocumentId
         );

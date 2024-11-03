@@ -90,26 +90,21 @@ export default class Tools {
         return string.charAt(0).toUpperCase() + string.slice(1);
     }
 
-    static stringToJSONValue(string: string) {
-        var sqlString = '';
-        sqlString = string.replace(/\'/gi, "\\'");
-        sqlString = sqlString.replace(/\"/gi, '\\"');
-        sqlString = sqlString.replace(/\//gi, '\\/');
-        sqlString = sqlString.replace(/\\/gi, '\\\\');
-        return sqlString;
-    }
-
-    static stringToJSON(string: string) {
-        var values: any = string.match(/(:)(.*?)(","|"})/gm);
-        for (var i = 0; i < values.length - 1; i++) {
-            values[i] = values[i].substring(2, values[i].length - 3);
-            var escapedvalue = this.stringToJSONValue(values[i]);
-            string.replace(escapedvalue, values[i]);
+    /**
+     * Sprawdza czy wartość jest poprawnym JSONem
+     */
+    static isValidJsonString(value: string): boolean {
+        if (typeof value !== 'string') {
+            return false;
         }
-        values[i] = values[i].substring(2, values[i].length - 2);
-
-        return string;
+        try {
+            JSON.parse(value);
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
+
     /**formatuje liczbę dodając odstępy i dokładność po przecinku*/
     static formatNumber(number: number, digits: number = 2) {
         const formatter = new Intl.NumberFormat('pl-PL', {
@@ -133,12 +128,6 @@ export default class Tools {
         const before = text.slice(0, start);
         const after = text.slice(end);
         return before + after;
-    }
-
-    static testStringToJSON(string: string) {
-        string = this.stringToJSON('{"comment":"/n<div>- sieciowe</div>"}');
-        var x = JSON.parse(string);
-        return string;
     }
 
     //returns row Number in scheet by DbId of en alement

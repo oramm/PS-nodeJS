@@ -3,7 +3,6 @@ import ProjectsController from './ProjectsController';
 import { app } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import Project from './Project';
-import { UserData } from '../setup/GAuth2/sessionTypes';
 
 app.post('/projects', async (req: Request, res: Response) => {
     try {

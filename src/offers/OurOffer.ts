@@ -1,9 +1,14 @@
 import Offer from './Offer';
 import { OAuth2Client } from 'google-auth-library';
-import { OurOfferData } from '../types/types';
+import { OfferEventData, OurOfferData, PersonData } from '../types/types';
 import OurOfferGdFile from './OurOfferGdFIle';
 import EnviErrors from '../tools/Errors';
+import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
+import OfferEvent from './offerEvent/OfferEvent';
+import { UserData } from '../setup/GAuth2/sessionTypes';
+import PersonsController from '../persons/PersonsController';
+import ToolsDb from '../tools/ToolsDb';
 
 export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
@@ -20,12 +25,39 @@ export default class OurOffer extends Offer implements OurOfferData {
         }
     }
 
-    async addNewController(auth: OAuth2Client) {
-        await super.addNewController(auth);
+    async addNewController(auth: OAuth2Client, userData: UserData) {
+        await super.addNewController(auth, userData);
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...this },
         });
         await ourOfferGdFile.moveToMakeOfferFolder(auth);
+    }
+
+    async sendOfferController(
+        auth: OAuth2Client,
+        userData: UserData,
+        newEventData: OfferEventData
+    ) {
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            userData
+        );
+
+        const newEvent = new OfferEvent({
+            ...newEventData,
+            eventType: Setup.OfferEventType.SEND,
+            _editor, //editorId: ustawia się w BussinesObject,
+            offerId: this.id,
+            versionNumber:
+                this._lastEvent?.versionNumber &&
+                this._lastEvent?.versionNumber > 0
+                    ? this._lastEvent?.versionNumber + 1
+                    : 0,
+        });
+        await newEvent.addNewController();
+        newEvent.sendMailWithOffer(auth, this, [userData.systemEmail]);
+        this._lastEvent = newEvent;
+        this.status = Setup.OfferStatus.DONE;
+        await this.editController(auth, ['status']);
     }
 
     async createGdElements(auth: OAuth2Client) {
@@ -66,5 +98,15 @@ export default class OurOffer extends Offer implements OurOfferData {
             ourOfferGdFile.editFileName(auth),
         ]);
         return letterGdFolder;
+    }
+
+    async getCurrentOfferVersionNumber(offerId: number) {
+        const sql = `SELECT MAX(VersionNumber) as VersionNumber
+        FROM OfferEvents
+        WHERE OfferId = ?`;
+
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+
+        return result[0].VersionNumber;
     }
 }

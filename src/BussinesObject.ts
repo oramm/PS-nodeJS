@@ -1,21 +1,26 @@
 import Person from './persons/Person';
 import ToolsDb from './tools/ToolsDb';
 import mysql from 'mysql2/promise';
+import { PersonData } from './types/types';
 
 export default class BusinessObject {
     id?: number | string;
     _dbTableName: string;
-    _editor?: any;
+    _editor?: PersonData;
     editorId?: number;
     constructor(initParamObject: {
         _dbTableName: string;
         id?: number;
-        _editor?: any;
+        _editor?: PersonData;
     }) {
         this.id = initParamObject.id;
         this._dbTableName = initParamObject._dbTableName;
+        this._editor = initParamObject._editor;
+        this.editorId = this._editor?.id;
     }
 
+    /** Zamiast tego używać metody PersonsController.getPersonFromSessionUserData()
+     * @deprecated */
     async setEditorId() {
         if (!this._editor) return; // throw new Error('Brakuje obiektu _editor!');
         const editor = new Person(this._editor);

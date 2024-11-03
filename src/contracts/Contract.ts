@@ -430,7 +430,10 @@ export default abstract class Contract
         //sytuacja normalna - folder itnieje
         if (this.gdFolderId) {
             try {
-                await ToolsGd.getFileOrFolderById(auth, this.gdFolderId);
+                await ToolsGd.getFileOrFolderMetaDataById(
+                    auth,
+                    this.gdFolderId
+                );
             } catch (err) {
                 console.log('folder not found, creating new one');
                 return await this.createFolders(auth);
