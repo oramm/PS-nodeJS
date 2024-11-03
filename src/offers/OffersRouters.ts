@@ -81,6 +81,25 @@ app.put('/sendOffer/:id', async (req: Request, res: Response) => {
     }
 });
 
+app.put('/exportOurOfferToPDF/:id', async (req: Request, res: Response) => {
+    try {
+        const item = makeOfferObject(req);
+        if (item instanceof OurOffer)
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.exportToPDF,
+                [req.session.userData],
+                item
+            );
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
 app.post('/getFilesDataFromGdFolder', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);

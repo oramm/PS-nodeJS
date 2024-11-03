@@ -87,6 +87,11 @@ export default class OurOffer extends Offer implements OurOfferData {
         return document;
     }
 
+    async exportToPDF(auth: OAuth2Client) {
+        if (!this.gdDocumentId) throw new EnviErrors.NoGdIdError();
+        await ToolsGd.exportDocToPdfAndUpload(auth, this.gdDocumentId);
+    }
+
     async editGdElements(auth: OAuth2Client) {
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...this },
