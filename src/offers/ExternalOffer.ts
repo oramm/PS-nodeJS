@@ -49,7 +49,7 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
 
     async addNewOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
-        await this._offerBond.addNewController();
+        await this._offerBond.addNewController(this);
     }
 
     async editOfferBondController() {

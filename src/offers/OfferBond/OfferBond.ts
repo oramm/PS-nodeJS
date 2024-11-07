@@ -1,4 +1,9 @@
-import { ExternalOfferData, OfferBondData, OfferData } from '../../types/types';
+import {
+    ExternalOfferData,
+    OfferBondData,
+    OfferData,
+    OurOfferData,
+} from '../../types/types';
 import BusinessObject from '../../BussinesObject';
 import ToolsDate from '../../tools/ToolsDate';
 import Setup from '../../setup/Setup';
@@ -39,11 +44,16 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
             ? ToolsDate.dateJsToSql(initParamObject.expiryDate)
             : null;
     }
-    async addNewController() {
+    async addNewController(offer?: ExternalOfferData | OurOfferData) {
         try {
-            console.group('Creating new ApplicationCall');
+            console.group('Creating new OfferBond');
             await this.addInDb();
-            console.log('ApplicationCall added to db');
+            if (
+                offer?.status === Setup.OfferStatus.TO_DO &&
+                this.status === Setup.OfferBondStatus.TO_PAY
+            )
+                this.sendMailOnToDo(offer);
+            console.log('OfferBond added to db');
             console.groupEnd();
         } catch (err) {
             this.deleteController();
@@ -53,13 +63,13 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
 
     async editController(offer: ExternalOfferData) {
         try {
-            console.group('Editing ApplicationCall');
+            console.group('Editing OfferBond');
             await this.editInDb();
-            console.log('ApplicationCall edited in db');
+            console.log('OfferBond edited in db');
             this.sendMailOnStatusChange(offer);
             console.groupEnd();
         } catch (err) {
-            console.log('ApplicationCall edit error');
+            console.log('OfferBond edit error');
             throw err;
         }
     }
@@ -119,7 +129,7 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
         const html = `${header} ${paymentDataBlock} ${offerBondDataBlock} ${offerDataBlock}`;
 
         ToolsMail.sendMail({
-            to: ['marek@envi.com.pl', 'monika.tymczyszyn@envi.com.pl'],
+            to: ['faktury@envi.com.pl', 'monika.tymczyszyn@envi.com.pl'],
             cc: 'stecula@op.pl',
             subject: `Wadium za ofertę: ${offer._type.name} ${offer._city.name} | ${offer.alias}`,
             html,
