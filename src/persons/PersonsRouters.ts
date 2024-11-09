@@ -1,12 +1,13 @@
 import Person from './Person';
 import PersonsController from './PersonsController';
-import { app } from '../index'
+import { app } from '../index';
 import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import Planning from '../ScrumSheet/Planning';
 import CurrentSprint from '../ScrumSheet/CurrentSprint';
+import { Request, Response } from 'express';
 
-app.post('/persons', async (req: any, res: any) => {
+app.post('/persons', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await PersonsController.getPersonsList(orConditions);
@@ -18,9 +19,10 @@ app.post('/persons', async (req: any, res: any) => {
     }
 });
 
-app.post('/person', async (req: any, res: any) => {
+app.post('/person', async (req: Request, res: Response) => {
     try {
         let item = new Person(req.body);
+        if (!item._entity.id) throw new Error('No entity id');
         delete item.systemRoleId;
         delete item.systemEmail;
         await item.addInDb();
@@ -29,10 +31,10 @@ app.post('/person', async (req: any, res: any) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
-app.put('/person/:id', async (req: any, res: any) => {
+app.put('/person/:id', async (req: Request, res: Response) => {
     try {
         let item = new Person(req.body);
         delete item.systemRoleId;
@@ -46,13 +48,25 @@ app.put('/person/:id', async (req: any, res: any) => {
     }
 });
 //TODO: dorobić
-app.put('/user/:id', async (req: any, res: any) => {
+app.put('/user/:id', async (req: Request, res: Response) => {
     try {
         let item = new Person(req.body);
         await item.editInDb();
         //jeśłi użytjownik ENVI to trzeba zaktualizować scrumboard
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.Planning.refreshTimeAvailable, undefined, Planning);
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas, undefined, CurrentSprint);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            ScrumSheet.Planning.refreshTimeAvailable,
+            undefined,
+            Planning
+        );
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas,
+            undefined,
+            CurrentSprint
+        );
 
         res.send(item);
     } catch (error) {
@@ -62,9 +76,15 @@ app.put('/user/:id', async (req: any, res: any) => {
     }
 });
 
-app.get('/personsRefresh', async (req: any, res: any) => {
+app.get('/personsRefresh', async (req: Request, res: Response) => {
     try {
-        await ToolsGapi.gapiReguestHandler(req, res, ScrumSheet.personsRefresh, undefined, ScrumSheet);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            ScrumSheet.personsRefresh,
+            undefined,
+            ScrumSheet
+        );
         res.send('scrum refreshed');
     } catch (error) {
         console.error(error);
@@ -73,7 +93,7 @@ app.get('/personsRefresh', async (req: any, res: any) => {
     }
 });
 
-app.delete('/person/:id', async (req: any, res: any) => {
+app.delete('/person/:id', async (req: Request, res: Response) => {
     try {
         let item = new Person(req.body);
         await item.deleteFromDb();

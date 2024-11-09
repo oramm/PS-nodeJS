@@ -11,6 +11,16 @@ export default class Setup {
         timezone: '+00:00',
     };
 
+    static biuroImapMailClient = {
+        host: process.env.BIURO_IMAP_HOST as string,
+        port: parseInt(process.env.BIURO_IMAP_PORT!),
+        secure: process.env.BIURO_IMAP_SECURE === 'true',
+        auth: {
+            user: process.env.BIURO_IMAP_USER as string,
+            pass: process.env.BIURO_IMAP_PASSWORD as string,
+        },
+    };
+
     static Gd = {
         rootFolderId: '1C_wMgQJtzsFmgsmHp7Dr_F1VJx4v1mjo',
         meetingProtocoTemlateId: '1B5D2ZUkPgNft0-0JZCtkxSk8eAZa91DnwQY8Bbln9Bo',
