@@ -274,7 +274,7 @@ export default class CurrentSprint {
             Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName
         );
 
-        const firstContractRow =
+        const firstContractRowNumber =
             <number>(
                 Tools.findFirstInRange(
                     ourId,
@@ -282,12 +282,12 @@ export default class CurrentSprint {
                     contractOurIdColIndex
                 )
             ) + 1;
-        if (!firstContractRow)
+        if (!firstContractRowNumber)
             throw new Error(
                 'sortContract:: w arkuszu scrumboard nie znaleziono kontraktu ' +
                     ourId
             );
-        const lastContractRow =
+        const lastContractRowNumber =
             <number>(
                 Tools.findLastInRange(
                     ourId,
@@ -297,11 +297,15 @@ export default class CurrentSprint {
             ) + 1;
 
         // Ensure consistency of contract ID in column C for the current range
-        for (let i = firstContractRow; i <= lastContractRow; i++) {
+        for (
+            let i = firstContractRowNumber - 1;
+            i <= lastContractRowNumber - 1;
+            i++
+        ) {
             const currentRow = currentSprintValues[i];
             const currentValue = currentRow[contractOurIdColIndex] as string;
             if (currentValue.trim() !== ourId.trim()) {
-                console.log(currentRow);
+                console.log('Row with problem:', currentRow);
                 throw new Error(
                     `Inconsistent contractOurId in row ${
                         i + 1
@@ -314,8 +318,8 @@ export default class CurrentSprint {
             sortRange: {
                 range: {
                     sheetId: Setup.ScrumSheet.CurrentSprint.id,
-                    startRowIndex: firstContractRow,
-                    endRowIndex: lastContractRow,
+                    startRowIndex: firstContractRowNumber - 1,
+                    endRowIndex: lastContractRowNumber,
                 },
                 sortSpecs: [
                     {
