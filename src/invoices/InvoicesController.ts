@@ -4,7 +4,6 @@ import Invoice from './Invoice';
 import Project from '../projects/Project';
 import Contract from '../contracts/Contract';
 import ContractOur from '../contracts/ContractOur';
-import ContractOther from '../contracts/ContractOther';
 import Person from '../persons/Person';
 
 type InvoiceSearchParams = {
@@ -16,7 +15,7 @@ type InvoiceSearchParams = {
     searchText?: string;
     issueDateFrom?: string;
     issueDateTo?: string;
-    status?: string;
+    statuses?: string[];
 };
 
 export default class InvoicesController {
@@ -118,45 +117,58 @@ export default class InvoicesController {
     }
 
     static makeAndConditions(searchParams: InvoiceSearchParams) {
+        const conditions = [];
+
+        if (searchParams.id) {
+            conditions.push(mysql.format(`Invoices.Id = ?`, [searchParams.id]));
+        }
         const projectOurId =
             searchParams._project?.ourId || searchParams.projectId;
+        if (projectOurId) {
+            conditions.push(
+                mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
+            );
+        }
         const contractId =
             searchParams._contract?.id || searchParams.contractId;
-
-        const idCondition = searchParams.id
-            ? mysql.format(`Invoices.Id = ?`, [searchParams.id])
-            : '1';
-
-        const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
-            : '1';
-        const contractCondition = contractId
-            ? mysql.format(`Invoices.ContractId = ?`, [contractId])
-            : '1';
-        const issueDateFromCondition = searchParams.issueDateFrom
-            ? mysql.format(`Invoices.IssueDate >= ?`, [
-                  searchParams.issueDateFrom,
-              ])
-            : '1';
-        const issueDateToCondition = searchParams.issueDateTo
-            ? mysql.format(`Invoices.IssueDate <= ?`, [
-                  searchParams.issueDateTo,
-              ])
-            : '1';
-        const statusCondition = searchParams.status
-            ? mysql.format(`Invoices.Status = ?`, [searchParams.status])
-            : '1';
+        if (contractId) {
+            conditions.push(
+                mysql.format(`Invoices.ContractId = ?`, [contractId])
+            );
+        }
+        if (searchParams.issueDateFrom) {
+            conditions.push(
+                mysql.format(`Invoices.IssueDate >= ?`, [
+                    searchParams.issueDateFrom,
+                ])
+            );
+        }
+        if (searchParams.issueDateTo) {
+            conditions.push(
+                mysql.format(`Invoices.IssueDate <= ?`, [
+                    searchParams.issueDateTo,
+                ])
+            );
+        }
+        if (searchParams.statuses?.length) {
+            const statusPlaceholders = searchParams.statuses
+                .map(() => '?')
+                .join(',');
+            conditions.push(
+                mysql.format(
+                    `Invoices.Status IN (${statusPlaceholders})`,
+                    searchParams.statuses
+                )
+            );
+        }
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
 
-        return `${idCondition} 
-            AND ${projectCondition} 
-            AND ${contractCondition} 
-            AND ${issueDateFromCondition}
-            AND ${issueDateToCondition}
-            AND ${statusCondition}
-            AND ${searchTextCondition}`;
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
     static processInvoicesResult(result: any[]): Invoice[] {

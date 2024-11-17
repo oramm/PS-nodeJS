@@ -5,12 +5,7 @@ import ContractType from '../contracts/contractTypes/ContractType';
 import City from '../Admin/Cities/City';
 import ExternalOffer from './ExternalOffer';
 import OurOffer from './OurOffer';
-import {
-    ExternalOfferData,
-    OfferBondData,
-    OfferData,
-    OurOfferData,
-} from '../types/types';
+import { ExternalOfferData, OfferBondData, OurOfferData } from '../types/types';
 import OfferBond from './OfferBond/OfferBond';
 import OfferEvent from './offerEvent/OfferEvent';
 
@@ -19,11 +14,11 @@ export type OffersSearchParams = {
     alias?: string;
     submissionDeadlineFrom?: string;
     submissionDeadlineTo?: string;
-    status?: string;
+    statuses?: string[];
     _city?: City;
     _type?: ContractType;
     searchText?: string;
-    _offerBond?: OfferBondData;
+    offerBondStatuses: string[];
 };
 
 export default class OffersController {
@@ -126,11 +121,18 @@ export default class OffersController {
                 ])
             );
         }
-        if (searchParams.status) {
+        if (searchParams.statuses?.length) {
+            const statusPlaceholders = searchParams.statuses
+                .map(() => '?')
+                .join(',');
             conditions.push(
-                mysql.format(`Offers.Status = ?`, [searchParams.status])
+                mysql.format(
+                    `Offers.Status IN (${statusPlaceholders})`,
+                    searchParams.statuses
+                )
             );
         }
+
         if (searchParams.alias) {
             conditions.push(
                 mysql.format(`Offers.Alias LIKE ?`, [`%${searchParams.alias}%`])
@@ -143,11 +145,15 @@ export default class OffersController {
             conditions.push(searchTextCondition);
         }
 
-        if (searchParams._offerBond?.status) {
+        if (searchParams.offerBondStatuses?.length) {
+            const statusPlaceholders = searchParams.offerBondStatuses
+                .map(() => '?')
+                .join(',');
             conditions.push(
-                mysql.format(`OfferBonds.Status = ?`, [
-                    searchParams._offerBond.status,
-                ])
+                mysql.format(
+                    `OfferBonds.Status IN (${statusPlaceholders})`,
+                    searchParams.offerBondStatuses
+                )
             );
         }
 

@@ -15,7 +15,7 @@ type ApplicationCallSearchParams = {
     _focusArea?: FocusAreaData | FocusAreaData[];
     startDate?: string;
     endDate?: string;
-    status?: string;
+    statuses?: string[];
     searchText?: string;
 };
 
@@ -113,12 +113,17 @@ export default class ApplicationCallsController {
             );
             conditions.push(focusAreaCondition);
         }
-        if (searchParams.status)
+        if (searchParams.statuses?.length) {
+            const statusPlaceholders = searchParams.statuses
+                .map(() => '?')
+                .join(',');
             conditions.push(
-                mysql.format(`ApplicationCalls.Status = ?`, [
-                    searchParams.status,
-                ])
+                mysql.format(
+                    `ApplicationCalls.Status IN (${statusPlaceholders})`,
+                    searchParams.statuses
+                )
             );
+        }
 
         if (searchParams.startDate) {
             conditions.push(

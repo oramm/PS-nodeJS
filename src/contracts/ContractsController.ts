@@ -33,7 +33,7 @@ export type ContractSearchParams = {
     typesToInclude?: 'our' | 'other' | 'all';
     onlyOurs?: boolean; //@deprecated
     isArchived?: boolean;
-    status?: string | string[];
+    statuses?: string | string[];
     onlyKeyData?: boolean;
     getRemainingValue?: boolean;
     _admin?: Person;
@@ -185,7 +185,7 @@ export default class ContractsController {
             : '1';
 
         const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
-            searchParams.status,
+            searchParams.statuses,
             'mainContracts',
             'Status'
         );

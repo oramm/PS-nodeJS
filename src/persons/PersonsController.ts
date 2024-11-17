@@ -44,33 +44,42 @@ export default class PersonsController {
     }
 
     static makeAndConditions(searchParams: PersonsSearchParams) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId])
-            : '1';
+        const conditions = [];
 
-        let contractCondition;
-        if (searchParams.contractId) {
-            contractCondition = mysql.format(
-                `(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`,
-                [searchParams.contractId]
+        if (searchParams.projectId) {
+            conditions.push(
+                mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId])
             );
-        } else {
-            contractCondition = '1';
         }
 
-        const systemRoleCondition = searchParams.systemRoleName
-            ? mysql.format(`SystemRoles.Name REGEXP ?`, [
-                  searchParams.systemRoleName,
-              ])
-            : '1';
+        if (searchParams.contractId) {
+            conditions.push(
+                mysql.format(
+                    `(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`,
+                    [searchParams.contractId]
+                )
+            );
+        }
 
-        const systemEmailCondition = searchParams.systemEmail
-            ? mysql.format(`Persons.systemEmail=?`, [searchParams.systemEmail])
-            : '1';
+        if (searchParams.systemRoleName) {
+            conditions.push(
+                mysql.format(`SystemRoles.Name REGEXP ?`, [
+                    searchParams.systemRoleName,
+                ])
+            );
+        }
 
-        const idCondition = searchParams.id
-            ? mysql.format(`Persons.Id=?`, [searchParams.id])
-            : '1';
+        if (searchParams.systemEmail) {
+            conditions.push(
+                mysql.format(`Persons.systemEmail=?`, [
+                    searchParams.systemEmail,
+                ])
+            );
+        }
+
+        if (searchParams.id) {
+            conditions.push(mysql.format(`Persons.Id=?`, [searchParams.id]));
+        }
 
         const entityCondition = ToolsDb.makeOrConditionFromValueOrArray1(
             searchParams._entities,
@@ -78,19 +87,18 @@ export default class PersonsController {
             'EntityId',
             'id'
         );
+        if (entityCondition !== '1') {
+            conditions.push(entityCondition);
+        }
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
 
-        const conditions = `${projectCondition} 
-            AND ${contractCondition} 
-            AND ${systemRoleCondition} 
-            AND ${idCondition} 
-            AND ${systemEmailCondition}
-            AND ${entityCondition}
-            AND ${searchTextCondition}`;
-
-        return conditions;
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
