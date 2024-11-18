@@ -5,6 +5,8 @@ import { Readable } from 'stream';
 import ToolsGd from './ToolsGd';
 import Mail from 'nodemailer/lib/mailer';
 import { PersonData } from '../types/types';
+import { ImapFlow, SearchObject } from 'imapflow';
+import Fuse from 'fuse.js';
 
 export default class ToolsMail {
     // Tworzenie wspólnego transportera dla Nodemailer
@@ -36,13 +38,13 @@ export default class ToolsMail {
             footer?: string;
         }
     ) {
-        let { to, subject, text, html, attachments, footer } = params;
+        let { to, cc, subject, text, html, attachments, footer } = params;
         const transporter = this.createTransporter();
         if (!footer) footer = this.makeERPFooter();
         const mailOptions: nodemailer.SendMailOptions = {
             from: '"ERP ENVI" <erp@envi.com.pl.com>',
             to,
-            cc: '',
+            cc,
             subject,
             html: this.makeHtmlBody(text, html, footer),
             text: this.makeTextBody(text),
@@ -117,7 +119,7 @@ export default class ToolsMail {
             footer: string;
         }
     ) {
-        const { to, subject, text, html, footer } = params;
+        const { to, cc, subject, text, html, footer } = params;
         console.log(
             'pobieranie plików z Google Drive na potstawie id:',
             gdFilesBasicData
@@ -129,6 +131,7 @@ export default class ToolsMail {
 
         return this.sendMail({
             to,
+            cc,
             subject,
             html,
             text,

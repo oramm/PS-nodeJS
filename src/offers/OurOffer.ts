@@ -47,11 +47,6 @@ export default class OurOffer extends Offer implements OurOfferData {
             eventType: Setup.OfferEventType.SEND,
             _editor, //editorId: ustawia się w BussinesObject,
             offerId: this.id,
-            versionNumber:
-                this._lastEvent?.versionNumber &&
-                this._lastEvent?.versionNumber > 0
-                    ? this._lastEvent?.versionNumber + 1
-                    : 0,
         });
         await newEvent.addNewController();
         newEvent.sendMailWithOffer(auth, this, [userData.systemEmail]);
