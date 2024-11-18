@@ -120,13 +120,7 @@ export default class OfferEvent
         const html = `${body}`;
         ToolsMail.sendEmailWithGdAttachments(auth, gdFilesBasicData, {
             to: ToolsMail.getMailListFromPersons(_recipients),
-            cc:
-                cc ||
-                [
-                    //'monika.tymczyszyn@envi.com.pl',
-                    //'marek@envi.com.pl',
-                    //'stecula@op.pl',
-                ],
+            cc: [...(cc || []), 'biuro@envi.com.pl'],
             subject,
             html,
             footer: ToolsMail.makeENVIFooter(),
