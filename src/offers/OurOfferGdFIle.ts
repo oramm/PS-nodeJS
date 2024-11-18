@@ -7,6 +7,7 @@ import Setup from '../setup/Setup';
 import EnviErrors from '../tools/Errors';
 import CasesController from '../contracts/milestones/cases/CasesController';
 import ToolsGd from '../tools/ToolsGd';
+import ToolsDate from '../tools/ToolsDate';
 
 export default class OurOfferGdFile extends DocumentGdFile {
     protected enviDocumentData: OurOfferData;
@@ -84,7 +85,9 @@ export default class OurOfferGdFile extends DocumentGdFile {
         return [
             {
                 rangeName: 'creationDate',
-                newText: this.enviDocumentData.creationDate,
+                newText: ToolsDate.dateYMDtoDMY(
+                    this.enviDocumentData.creationDate
+                ) as string,
             },
             {
                 rangeName: 'description',

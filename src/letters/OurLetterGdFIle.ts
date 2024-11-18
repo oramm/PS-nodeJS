@@ -7,6 +7,7 @@ import {
     EntityData,
     OurLetterData,
 } from '../types/types';
+import ToolsDate from '../tools/ToolsDate';
 
 export default abstract class OurLetterGdFile extends DocumentGdFile {
     protected enviDocumentData: OurLetterData;
@@ -94,7 +95,9 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
         return [
             {
                 rangeName: 'creationDate',
-                newText: this.enviDocumentData.creationDate,
+                newText: ToolsDate.dateYMDtoDMY(
+                    this.enviDocumentData.creationDate
+                ) as string,
             },
             { rangeName: 'number', newText: number },
             {

@@ -109,32 +109,24 @@ export default class ToolsDate {
         }
     }
 
-    static dateDMYtoYMD(inputDate: string) {
-        if (inputDate) {
-            var parts = inputDate.split('-');
-            if (parts[2].length == 4)
-                return parts[2] + '-' + parts[1] + '-' + parts[0];
-            else return inputDate;
+    static dateDMYtoYMD(inputDate: string): string | undefined {
+        if (!inputDate) return;
+
+        const parts = inputDate.split('-');
+        if (parts.length === 3 && parts[2].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
+        return inputDate;
     }
 
     static dateYMDtoDMY(inputDate: string) {
-        if (inputDate) {
-            var parts = inputDate.split('-');
-            if (parts[0].length == 4)
-                return parts[2] + '-' + parts[1] + '-' + parts[0];
-            else return inputDate;
-        }
-    }
+        if (!inputDate) return;
 
-    static timestampToString(timestamp: string | Date) {
-        if (typeof timestamp === 'string') timestamp = new Date(timestamp);
-        var day = Tools.addZero(timestamp.getDate());
-        var month = Tools.addZero(timestamp.getMonth() + 1);
-        var year = timestamp.getFullYear();
-        var h = Tools.addZero(timestamp.getHours());
-        var m = Tools.addZero(timestamp.getMinutes());
-        return day + '&#8209;' + month + '&#8209;' + year + ' ' + h + ':' + m;
+        const parts = inputDate.split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+        return inputDate;
     }
 
     static dateDiff(first: number, second: number) {
