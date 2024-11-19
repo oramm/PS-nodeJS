@@ -6,9 +6,21 @@ import { CityData, EntityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
 import EnviErrors from '../tools/Errors';
-import ToolsGd from '../tools/ToolsGd';
-import Setup from '../setup/Setup';
-import OfferEvent from './offerEvent/OfferEvent';
+import ToolsMail from '../tools/ToolsMail';
+
+app.post('/testMailSearch', async (req: Request, res: Response) => {
+    try {
+        //const result = await ToolsMail.searchEmails(req.parsedBody.searchText);
+        const result = await ToolsMail.fuzzySearchEmails(
+            req.parsedBody.searchText
+        );
+        res.send(result);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {

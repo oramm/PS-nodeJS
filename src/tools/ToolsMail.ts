@@ -164,4 +164,138 @@ export default class ToolsMail {
     static getMailListFromPersons(persons: PersonData[]) {
         return persons.map((person) => person.email).join(', ');
     }
+
+    static async searchEmails(
+        searchText: string,
+        searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all',
+        daysBefore?: number
+    ) {
+        const client = new ImapFlow({
+            host: 'mail.envi.com.pl',
+            port: 143,
+            secure: false,
+            auth: {
+                user: 'biuro@envi.com.pl',
+                pass: 'h576u7YkDTzMu7UanP4t',
+            },
+        });
+
+        console.log('Wyszukiwanie wiadomości:', searchText, searchFields);
+        const emails: Email[] = [];
+
+        try {
+            await client.connect();
+            await client.mailboxOpen('INBOX');
+
+            // Zbuduj kryteria wyszukiwania na podstawie podanych pól
+            let criteria: SearchObject = {};
+
+            if (searchText) {
+                switch (searchFields) {
+                    case 'subject':
+                        criteria = { header: { subject: searchText } };
+                        break;
+                    case 'body':
+                        criteria = { body: searchText };
+                        break;
+                    case 'from':
+                        criteria = { header: { from: searchText } };
+                        break;
+                    case 'to':
+                        criteria = { header: { to: searchText } };
+                        break;
+                    case 'all':
+                        criteria = {
+                            or: [
+                                { header: { subject: searchText } },
+                                { body: searchText },
+                                { header: { from: searchText } },
+                                { header: { to: searchText } },
+                            ],
+                        };
+                        break;
+                }
+            }
+
+            if (daysBefore && daysBefore > 0) {
+                const dateThreshold = new Date();
+                dateThreshold.setDate(dateThreshold.getDate() - daysBefore);
+                criteria.since = dateThreshold.toISOString().split('T')[0];
+            }
+
+            console.log('Kryteria:', criteria);
+
+            if (Object.keys(criteria).length === 0) {
+                console.error(
+                    'Brak kryteriów wyszukiwania. Kryteria nie zostały ustawione.'
+                );
+                return emails;
+            }
+
+            const messageUids = (await client.search(criteria)) || [];
+
+            // Pobierz szczegóły każdej wiadomości
+            for (const uid of messageUids) {
+                const message = await client.fetchOne(uid.toString(), {
+                    envelope: true,
+                });
+                if (message && message.envelope) {
+                    emails.push({
+                        uid,
+                        subject: message.envelope.subject || '(bez tematu)',
+                        from: message.envelope.from
+                            ? message.envelope.from[0].address ||
+                              '(bez nadawcy)'
+                            : '(bez nadawcy)',
+                        to: message.envelope.to
+                            ? message.envelope.to
+                                  .map((to) => to.address)
+                                  .join(', ') || '(bez odbiorcy)'
+                            : '(bez odbiorcy)',
+                        date: message.envelope.date || new Date(),
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Błąd podczas wyszukiwania wiadomości:', error);
+        } finally {
+            await client.logout();
+        }
+
+        return emails;
+    }
+
+    static async fuzzySearchEmails(searchText: string): Promise<Email[]> {
+        const emails: Email[] = await this.searchEmails('', 'all', 7);
+
+        try {
+            console.log('-----Pobrane wiadomości:', emails.length);
+
+            // Krok 3: Lokalnie wyszukaj fuzzy w pobranych wiadomościach
+            const fuse = new Fuse(emails, {
+                keys: ['subject', 'content'], // wyszukiwanie po temacie i treści
+                threshold: 0.3, // tolerancja fuzzy
+                includeScore: false,
+                ignoreLocation: true,
+            });
+
+            const fuzzyResults = fuse.search(searchText);
+
+            return fuzzyResults.map((result) => {
+                const { uid, subject, from, to, date } = result.item;
+                return { uid, subject, from, to, date };
+            });
+        } catch (error) {
+            console.error('Błąd podczas wyszukiwania wiadomości:', error);
+            return [];
+        }
+    }
+}
+
+interface Email {
+    uid: string | number;
+    subject: string;
+    from: string;
+    to: string;
+    date: Date;
 }
