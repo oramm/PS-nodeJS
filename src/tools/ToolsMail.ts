@@ -4,9 +4,11 @@ import { OAuth2Client } from 'google-auth-library';
 import { Readable } from 'stream';
 import ToolsGd from './ToolsGd';
 import Mail from 'nodemailer/lib/mailer';
-import { PersonData } from '../types/types';
-import { ImapFlow, SearchObject } from 'imapflow';
+import { MailData, PersonData } from '../types/types';
+import { FetchMessageObject, ImapFlow, SearchObject } from 'imapflow';
 import Fuse from 'fuse.js';
+import Setup from '../setup/Setup';
+import { raw } from 'mysql2';
 
 export default class ToolsMail {
     // Tworzenie wspólnego transportera dla Nodemailer
@@ -166,22 +168,18 @@ export default class ToolsMail {
     }
 
     static async searchEmails(
-        searchText: string,
-        searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all',
-        daysBefore?: number
+        conditions: MailsSearchParams,
+        searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all'
     ) {
-        const client = new ImapFlow({
-            host: 'mail.envi.com.pl',
-            port: 143,
-            secure: false,
-            auth: {
-                user: 'biuro@envi.com.pl',
-                pass: 'h576u7YkDTzMu7UanP4t',
-            },
-        });
+        let { searchText, incomingDateFrom, incomingDateTo } = conditions;
+        const client = new ImapFlow(Setup.biuroImapMailClient);
 
-        console.log('Wyszukiwanie wiadomości:', searchText, searchFields);
-        const emails: Email[] = [];
+        console.log(
+            'Wyszukiwanie wiadomości:',
+            conditions.searchText,
+            searchFields
+        );
+        const emails: MailData[] = [];
 
         try {
             await client.connect();
@@ -217,10 +215,11 @@ export default class ToolsMail {
                 }
             }
 
-            if (daysBefore && daysBefore > 0) {
-                const dateThreshold = new Date();
-                dateThreshold.setDate(dateThreshold.getDate() - daysBefore);
-                criteria.since = dateThreshold.toISOString().split('T')[0];
+            if (incomingDateFrom) {
+                criteria.since = new Date(incomingDateFrom);
+            }
+            if (incomingDateTo) {
+                criteria.before = new Date(incomingDateTo);
             }
 
             console.log('Kryteria:', criteria);
@@ -238,7 +237,9 @@ export default class ToolsMail {
             for (const uid of messageUids) {
                 const message = await client.fetchOne(uid.toString(), {
                     envelope: true,
+                    source: true,
                 });
+
                 if (message && message.envelope) {
                     emails.push({
                         uid,
@@ -252,7 +253,8 @@ export default class ToolsMail {
                                   .map((to) => to.address)
                                   .join(', ') || '(bez odbiorcy)'
                             : '(bez odbiorcy)',
-                        date: message.envelope.date || new Date(),
+                        date: message.envelope.date?.toISOString(),
+                        body: this.decodeMailBody(message),
                     });
                 }
             }
@@ -265,9 +267,59 @@ export default class ToolsMail {
         return emails;
     }
 
-    static async fuzzySearchEmails(searchText: string): Promise<Email[]> {
-        const emails: Email[] = await this.searchEmails('', 'all', 7);
+    static decodeMailBody(message: FetchMessageObject) {
+        const rawEmail = message.source.toString('utf-8');
+        // Rozdzielenie wiadomości na części MIME
+        const boundaryMatch = rawEmail.match(/boundary="([^"]+)"/i);
+        if (!boundaryMatch) {
+            console.warn('Brak boundary w wiadomości MIME');
+            return 'Nie znaleziono treści wiadomości';
+        }
+        const boundary = boundaryMatch[1];
+        const parts = rawEmail.split(`--${boundary}`);
 
+        let plainText = '';
+        let htmlText = '';
+
+        // Iteracja po częściach MIME
+        for (const part of parts) {
+            if (part.includes('Content-Type: text/plain')) {
+                const base64Match = part.match(
+                    /Content-Transfer-Encoding: base64([\s\S]*?)(?:--|$)/i
+                );
+                if (base64Match) {
+                    const base64Content = base64Match[1].trim();
+                    plainText = Buffer.from(base64Content, 'base64').toString(
+                        'utf-8'
+                    );
+                }
+            } else if (part.includes('Content-Type: text/html')) {
+                const base64Match = part.match(
+                    /Content-Transfer-Encoding: base64([\s\S]*?)(?:--|$)/i
+                );
+                if (base64Match) {
+                    const base64Content = base64Match[1].trim();
+                    htmlText = Buffer.from(base64Content, 'base64').toString(
+                        'utf-8'
+                    );
+                }
+            }
+        }
+
+        // Preferuj plain text, jeśli istnieje, w przeciwnym razie HTML
+        return (
+            plainText ||
+            htmlText ||
+            'Nie znaleziono treści text/plain ani text/html'
+        );
+    }
+
+    static async fuzzySearchEmails(
+        orConditions: MailsSearchParams
+    ): Promise<MailData[]> {
+        const emails: MailData[] = await this.searchEmails(orConditions, 'all');
+        if (!emails || emails.length === 0) return [];
+        if (!orConditions.searchText) return emails;
         try {
             console.log('-----Pobrane wiadomości:', emails.length);
 
@@ -279,23 +331,21 @@ export default class ToolsMail {
                 ignoreLocation: true,
             });
 
-            const fuzzyResults = fuse.search(searchText);
+            const fuzzyResults = fuse.search(orConditions.searchText);
 
             return fuzzyResults.map((result) => {
-                const { uid, subject, from, to, date } = result.item;
-                return { uid, subject, from, to, date };
+                const { uid, subject, body, from, to, date } = result.item;
+                return { uid, subject, body, from, to, date };
             });
         } catch (error) {
             console.error('Błąd podczas wyszukiwania wiadomości:', error);
-            return [];
+            throw error;
         }
     }
 }
 
-interface Email {
-    uid: string | number;
-    subject: string;
-    from: string;
-    to: string;
-    date: Date;
-}
+export type MailsSearchParams = {
+    searchText?: string;
+    incomingDateFrom?: string;
+    incomingDateTo?: string;
+};

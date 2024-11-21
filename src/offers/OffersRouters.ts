@@ -1,18 +1,19 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
-import ToolsGapi, { oAuthClient } from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import OurOffer from './OurOffer';
-import { CityData, EntityData, OfferData } from '../types/types';
+import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
 import EnviErrors from '../tools/Errors';
 import ToolsMail from '../tools/ToolsMail';
 
-app.post('/testMailSearch', async (req: Request, res: Response) => {
+app.post('/mailInvitations', async (req: Request, res: Response) => {
     try {
-        //const result = await ToolsMail.searchEmails(req.parsedBody.searchText);
+        if (!req.parsedBody.orConditions[0])
+            throw new Error('Brak warunków wyszukiwania');
         const result = await ToolsMail.fuzzySearchEmails(
-            req.parsedBody.searchText
+            req.parsedBody.orConditions[0]
         );
         res.send(result);
     } catch (error) {
