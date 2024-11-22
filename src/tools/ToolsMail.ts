@@ -8,7 +8,7 @@ import { MailData, PersonData } from '../types/types';
 import { FetchMessageObject, ImapFlow, SearchObject } from 'imapflow';
 import Fuse from 'fuse.js';
 import Setup from '../setup/Setup';
-import { raw } from 'mysql2';
+import { simpleParser } from 'mailparser';
 
 export default class ToolsMail {
     // Tworzenie wspólnego transportera dla Nodemailer
@@ -186,43 +186,12 @@ export default class ToolsMail {
             await client.mailboxOpen('INBOX');
 
             // Zbuduj kryteria wyszukiwania na podstawie podanych pól
-            let criteria: SearchObject = {};
-
-            if (searchText) {
-                switch (searchFields) {
-                    case 'subject':
-                        criteria = { header: { subject: searchText } };
-                        break;
-                    case 'body':
-                        criteria = { body: searchText };
-                        break;
-                    case 'from':
-                        criteria = { header: { from: searchText } };
-                        break;
-                    case 'to':
-                        criteria = { header: { to: searchText } };
-                        break;
-                    case 'all':
-                        criteria = {
-                            or: [
-                                { header: { subject: searchText } },
-                                { body: searchText },
-                                { header: { from: searchText } },
-                                { header: { to: searchText } },
-                            ],
-                        };
-                        break;
-                }
-            }
-
-            if (incomingDateFrom) {
-                criteria.since = new Date(incomingDateFrom);
-            }
-            if (incomingDateTo) {
-                criteria.before = new Date(incomingDateTo);
-            }
-
-            console.log('Kryteria:', criteria);
+            const criteria: SearchObject = ToolsMail.makeSearchCriteria(
+                '',
+                searchFields,
+                incomingDateFrom,
+                incomingDateTo
+            );
 
             if (Object.keys(criteria).length === 0) {
                 console.error(
@@ -254,7 +223,7 @@ export default class ToolsMail {
                                   .join(', ') || '(bez odbiorcy)'
                             : '(bez odbiorcy)',
                         date: message.envelope.date?.toISOString(),
-                        body: this.decodeMailBody(message),
+                        body: await this.decodeMailBody(message),
                     });
                 }
             }
@@ -267,51 +236,69 @@ export default class ToolsMail {
         return emails;
     }
 
-    static decodeMailBody(message: FetchMessageObject) {
-        const rawEmail = message.source.toString('utf-8');
-        // Rozdzielenie wiadomości na części MIME
-        const boundaryMatch = rawEmail.match(/boundary="([^"]+)"/i);
-        if (!boundaryMatch) {
-            console.warn('Brak boundary w wiadomości MIME');
-            return 'Nie znaleziono treści wiadomości';
-        }
-        const boundary = boundaryMatch[1];
-        const parts = rawEmail.split(`--${boundary}`);
+    private static makeSearchCriteria(
+        searchText: string | undefined,
+        searchFields: string,
+        incomingDateFrom: string | undefined,
+        incomingDateTo: string | undefined
+    ) {
+        let criteria: SearchObject = {};
 
-        let plainText = '';
-        let htmlText = '';
-
-        // Iteracja po częściach MIME
-        for (const part of parts) {
-            if (part.includes('Content-Type: text/plain')) {
-                const base64Match = part.match(
-                    /Content-Transfer-Encoding: base64([\s\S]*?)(?:--|$)/i
-                );
-                if (base64Match) {
-                    const base64Content = base64Match[1].trim();
-                    plainText = Buffer.from(base64Content, 'base64').toString(
-                        'utf-8'
-                    );
-                }
-            } else if (part.includes('Content-Type: text/html')) {
-                const base64Match = part.match(
-                    /Content-Transfer-Encoding: base64([\s\S]*?)(?:--|$)/i
-                );
-                if (base64Match) {
-                    const base64Content = base64Match[1].trim();
-                    htmlText = Buffer.from(base64Content, 'base64').toString(
-                        'utf-8'
-                    );
-                }
+        if (searchText) {
+            switch (searchFields) {
+                case 'subject':
+                    criteria = { header: { subject: searchText } };
+                    break;
+                case 'body':
+                    criteria = { body: searchText };
+                    break;
+                case 'from':
+                    criteria = { header: { from: searchText } };
+                    break;
+                case 'to':
+                    criteria = { header: { to: searchText } };
+                    break;
+                case 'all':
+                    criteria = {
+                        or: [
+                            { header: { subject: searchText } },
+                            { body: searchText },
+                            { header: { from: searchText } },
+                            { header: { to: searchText } },
+                        ],
+                    };
+                    break;
             }
         }
 
-        // Preferuj plain text, jeśli istnieje, w przeciwnym razie HTML
-        return (
-            plainText ||
-            htmlText ||
-            'Nie znaleziono treści text/plain ani text/html'
-        );
+        if (incomingDateFrom) {
+            criteria.since = new Date(incomingDateFrom);
+        }
+        if (incomingDateTo) {
+            criteria.before = new Date(incomingDateTo);
+        }
+
+        console.log('Kryteria:', criteria);
+        return criteria;
+    }
+
+    private static async decodeMailBody(message: FetchMessageObject) {
+        const rawEmail = message.source.toString('utf-8');
+
+        try {
+            // Parsowanie wiadomości za pomocą mailparser
+            const parsedMessage = await simpleParser(rawEmail);
+
+            // Preferuj treść text/plain, jeśli istnieje, w przeciwnym razie text/html
+            return (
+                parsedMessage.text ||
+                parsedMessage.html ||
+                'Nie znaleziono treści text/plain ani text/html'
+            );
+        } catch (error) {
+            console.error('Błąd podczas parsowania wiadomości:', error);
+            return 'Błąd podczas przetwarzania wiadomości';
+        }
     }
 
     static async fuzzySearchEmails(
@@ -325,7 +312,7 @@ export default class ToolsMail {
 
             // Krok 3: Lokalnie wyszukaj fuzzy w pobranych wiadomościach
             const fuse = new Fuse(emails, {
-                keys: ['subject', 'content'], // wyszukiwanie po temacie i treści
+                keys: ['subject', 'body'], // wyszukiwanie po temacie i treści
                 threshold: 0.3, // tolerancja fuzzy
                 includeScore: false,
                 ignoreLocation: true,
