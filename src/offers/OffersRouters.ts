@@ -94,7 +94,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/exportOurOfferToPDF/:id', async (req: Request, res: Response) => {
+app.put('/exportOurOfferToPDF', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
         if (item instanceof OurOffer)
