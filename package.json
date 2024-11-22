@@ -20,7 +20,6 @@
         "@types/mailparser": "^3.4.5",
         "@types/multer": "^1.4.7",
         "@types/node": "^22.4.0",
-        "mailparser": "^3.7.1",
         "ts-node": "^10.8.1",
         "typescript": "^5.0.2"
     },
@@ -42,6 +41,7 @@
         "googleapis": "^99.0.0",
         "imapflow": "^1.0.169",
         "js-base64": "^3.6.0",
+        "mailparser": "^3.7.1",
         "mongodb": "^5.1.0",
         "multer": "^1.4.5-lts.1",
         "mysql2": "^3.2.0",
