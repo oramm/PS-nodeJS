@@ -104,7 +104,7 @@ export default class ContractsController {
               this.makeAndConditions.bind(this)
           )}
           GROUP BY mainContracts.Id
-          ORDER BY mainContracts.ProjectOurId, OurContractsData.OurId DESC, mainContracts.Number`;
+          ORDER BY mainContracts.EndDate, mainContracts.ProjectOurId, OurContractsData.OurId, mainContracts.Number`;
 
         try {
             const result: any[] = <any[]>(

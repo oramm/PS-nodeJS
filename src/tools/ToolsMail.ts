@@ -167,24 +167,51 @@ export default class ToolsMail {
         return persons.map((person) => person.email).join(', ');
     }
 
+    static async getEmailDetails(uid: number) {
+        const client = new ImapFlow(Setup.biuroImapMailClient);
+        try {
+            await client.connect();
+            await client.mailboxOpen('INBOX');
+            const message = await client.fetchOne(uid.toString(), {
+                envelope: true,
+                source: true,
+                flags: true,
+            });
+            return {
+                id: uid,
+                uid: uid,
+                subject: message.envelope.subject || '(bez tematu)',
+                from: message.envelope.from
+                    ? message.envelope.from[0].address || '(bez nadawcy)'
+                    : '(bez nadawcy)',
+                to: message.envelope.to
+                    ? message.envelope.to.map((to) => to.address).join(', ') ||
+                      '(bez odbiorcy)'
+                    : '(bez odbiorcy)',
+                date: this.parseDate(message.envelope.date),
+                flags: message.flags,
+                body: await this.decodeMailBody(message),
+            } as MailData;
+        } catch (error) {
+            console.error('Błąd podczas pobierania szczegółów maila:', error);
+        } finally {
+            client.logout();
+        }
+    }
+
     static async searchEmails(
         conditions: MailsSearchParams,
         searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all'
     ) {
         let { searchText, incomingDateFrom, incomingDateTo } = conditions;
-        const client = new ImapFlow(Setup.biuroImapMailClient);
 
-        console.log(
-            'Wyszukiwanie wiadomości:',
-            conditions.searchText,
-            searchFields
-        );
+        console.log('Wyszukiwanie wiadomości:', searchText, searchFields);
         const emails: MailData[] = [];
-
+        const client = new ImapFlow(Setup.biuroImapMailClient);
         try {
             await client.connect();
             await client.mailboxOpen('INBOX');
-
+            console.log('Połączono z serwerem IMAP, szukanie wiadomości...');
             // Zbuduj kryteria wyszukiwania na podstawie podanych pól
             const criteria: SearchObject = ToolsMail.makeSearchCriteria(
                 '',
@@ -201,14 +228,14 @@ export default class ToolsMail {
             }
 
             const messageUids = (await client.search(criteria)) || [];
-
+            console.log('Znaleziono wiadomości:', messageUids.length);
             // Pobierz szczegóły każdej wiadomości
             for (const uid of messageUids) {
                 const message = await client.fetchOne(uid.toString(), {
                     envelope: true,
-                    source: true,
+                    source: false,
+                    flags: false,
                 });
-
                 if (message && message.envelope) {
                     emails.push({
                         uid,
@@ -222,11 +249,12 @@ export default class ToolsMail {
                                   .map((to) => to.address)
                                   .join(', ') || '(bez odbiorcy)'
                             : '(bez odbiorcy)',
-                        date: message.envelope.date?.toISOString(),
-                        body: await this.decodeMailBody(message),
+                        date: this.parseDate(message.envelope.date),
                     });
                 }
             }
+
+            console.log('Przetworzono wiadomości:', emails.length);
         } catch (error) {
             console.error('Błąd podczas wyszukiwania wiadomości:', error);
         } finally {
@@ -234,6 +262,21 @@ export default class ToolsMail {
         }
 
         return emails;
+    }
+
+    private static parseDate(date: Date | string) {
+        if (typeof date === 'string') {
+            const parsedDate = new Date(date);
+            if (!isNaN(parsedDate.getTime())) {
+                date = parsedDate.toISOString();
+            } else {
+                console.warn(`Nieprawidłowa wartość daty: ${date}`);
+                date = new Date().toISOString(); // Możesz ustawić wartość domyślną, jeśli chcesz
+            }
+        } else if (date instanceof Date) {
+            date = date.toISOString();
+        }
+        return date;
     }
 
     private static makeSearchCriteria(
@@ -306,10 +349,13 @@ export default class ToolsMail {
     ): Promise<MailData[]> {
         const emails: MailData[] = await this.searchEmails(orConditions, 'all');
         if (!emails || emails.length === 0) return [];
+
+        emails.forEach((email) => {
+            email.id = email.uid;
+        });
+
         if (!orConditions.searchText) return emails;
         try {
-            console.log('-----Pobrane wiadomości:', emails.length);
-
             // Krok 3: Lokalnie wyszukaj fuzzy w pobranych wiadomościach
             const fuse = new Fuse(emails, {
                 keys: ['subject', 'body'], // wyszukiwanie po temacie i treści
@@ -319,14 +365,27 @@ export default class ToolsMail {
             });
 
             const fuzzyResults = fuse.search(orConditions.searchText);
-
-            return fuzzyResults.map((result) => {
-                const { uid, subject, body, from, to, date } = result.item;
-                return { uid, subject, body, from, to, date };
-            });
+            console.log('Wiadomości po fuzzysearch:', fuzzyResults.length);
+            return fuzzyResults.map((result) => result.item);
         } catch (error) {
             console.error('Błąd podczas wyszukiwania wiadomości:', error);
             throw error;
+        }
+    }
+
+    static async deleteMail(uid: string): Promise<void> {
+        const client = new ImapFlow(Setup.biuroImapMailClient);
+        try {
+            await client.connect();
+            await client.mailboxOpen('INBOX');
+
+            await client.messageDelete(uid);
+
+            console.log(`Wiadomość o UID: ${uid} została usunięta`);
+        } catch (error) {
+            console.error('Błąd podczas usuwania wiadomości:', error);
+        } finally {
+            await client.logout();
         }
     }
 }

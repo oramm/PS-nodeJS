@@ -1,3 +1,4 @@
+import { ImapFlowOptions, Logger } from 'imapflow';
 import mysql from 'mysql2/promise';
 
 export default class Setup {
@@ -11,13 +12,19 @@ export default class Setup {
         timezone: '+00:00',
     };
 
-    static biuroImapMailClient = {
+    static biuroImapMailClient: ImapFlowOptions = {
         host: process.env.BIURO_IMAP_HOST as string,
         port: parseInt(process.env.BIURO_IMAP_PORT!),
         secure: process.env.BIURO_IMAP_SECURE === 'true',
         auth: {
             user: process.env.BIURO_IMAP_USER as string,
             pass: process.env.BIURO_IMAP_PASSWORD as string,
+        },
+        logger: {
+            debug: () => {}, // Wyłącz DEBUG
+            info: () => {}, // Wyłącz INFO
+            warn: (msg, ...args) => console.warn(`[WARN] ${msg}`, ...args),
+            error: (msg, ...args) => console.error(`[ERROR] ${msg}`, ...args),
         },
     };
 

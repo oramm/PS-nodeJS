@@ -177,6 +177,7 @@ require('./documentTemplates/DocumentTemplatesRouters');
 require('./letters/LettersRouters');
 require('./offers/OffersRouters');
 require('./offers/OfferBond/OfferBondsRouters');
+require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
 require('./Admin/Cities/CitiesRouters');
 require('./Admin/ContractRanges/ContractRangesRouters');

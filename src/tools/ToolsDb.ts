@@ -324,12 +324,15 @@ export default class ToolsDb {
                     keyWithoutLocalData = key.substring(0, end);
                 }
                 stmt.string +=
-                    Tools.capitalizeFirstLetter(keyWithoutLocalData) + '=?, ';
+                    '`' +
+                    Tools.capitalizeFirstLetter(keyWithoutLocalData) +
+                    '`=?, ';
             }
         }
         //obetnij ostatni przecinek
         stmt.string = stmt.string.substring(0, stmt.string.length - 2);
         stmt.string += ' WHERE Id = ?';
+        console.log(stmt.string);
         return stmt;
     }
 
@@ -344,7 +347,7 @@ export default class ToolsDb {
         let questionMarks = '';
         for (const key of keys) {
             if (this.isValidDbAttribute(key, object)) {
-                stmt.string += Tools.capitalizeFirstLetter(key) + ', ';
+                stmt.string += '`' + Tools.capitalizeFirstLetter(key) + '`, ';
                 questionMarks += '?, ';
             }
         }

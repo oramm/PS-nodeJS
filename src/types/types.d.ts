@@ -367,10 +367,15 @@ export interface OfferBondData extends RepositoryDataItem {
 export interface MailData extends RepositoryDataItem {
     uid: number;
     subject: string;
-    body: string;
+    body?: string;
     from: string;
     to: string;
     date: string;
+    flags?: Set<string>;
+    _ourOfferId?: number;
+    _lastUpdated?: string;
+    editorId?: number | null;
+    _editor?: PersonData;
 }
 
 export interface OfferEventData extends RepositoryDataItem {

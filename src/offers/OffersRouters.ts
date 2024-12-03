@@ -6,22 +6,6 @@ import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
 import EnviErrors from '../tools/Errors';
-import ToolsMail from '../tools/ToolsMail';
-
-app.post('/mailInvitations', async (req: Request, res: Response) => {
-    try {
-        if (!req.parsedBody.orConditions[0])
-            throw new Error('Brak warunków wyszukiwania');
-        const result = await ToolsMail.fuzzySearchEmails(
-            req.parsedBody.orConditions[0]
-        );
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {
