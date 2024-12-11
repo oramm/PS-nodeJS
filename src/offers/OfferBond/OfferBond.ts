@@ -97,7 +97,9 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
             'style="line-height: 1.2; margin: 20px; background-color: #f5f5f5; padding: 20px; margin:20px; border-radius: 10px;"';
         let paymentInstructions: string = '<div>';
         if (this.form === Setup.OfferBondForm.CASH) {
-            paymentInstructions += `<p>Do zapłaty przelewem: ${this.value} zł</p>`;
+            paymentInstructions += `<p>Do zapłaty przelewem: ${this.value} zł</p>
+            <p>Dodatkowy komentarz: ${offer.comment}</p>
+            `;
         } else {
             paymentInstructions += `
             <strong>Uwaga:</strong>    

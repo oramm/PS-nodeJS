@@ -44,7 +44,7 @@ export default class ToolsMail {
         const transporter = this.createTransporter();
         if (!footer) footer = this.makeERPFooter();
         const mailOptions: nodemailer.SendMailOptions = {
-            from: '"ERP ENVI" <erp@envi.com.pl.com>',
+            from: '"ERP ENVI" <erp@envi.com.pl>',
             to,
             cc,
             subject,

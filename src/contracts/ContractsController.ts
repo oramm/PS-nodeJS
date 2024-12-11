@@ -528,12 +528,14 @@ export default class ContractsController {
 
     private static async getItemsCount(city: CityData, type: ContractTypeData) {
         const typeCondition = mysql.format(`ContractTypes.Id = ?`, [type.id]);
+        //const typeCondition = `SUBSTRING_INDEX(SUBSTRING_INDEX(OurContractsData.OurId, '.', 2), '.', -1) = ${mysql.escape(
+        //    type.name
+        //)}`;
         const cityCondition = mysql.format(`OurContractsData.CityId = ?`, [
             city.id,
         ]);
 
         const sql = this.getPrevNumberSQL(typeCondition, cityCondition);
-        console.log(sql);
 
         try {
             const result: any[] = <any[]>(
