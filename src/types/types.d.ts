@@ -378,6 +378,11 @@ export interface MailData extends RepositoryDataItem {
     _editor?: PersonData;
 }
 
+export interface MailDataToProcess extends MailData {
+    status: string;
+    _ourOffer?: OurOfferData;
+}
+
 export interface OfferEventData extends RepositoryDataItem {
     offerId?: number;
     editorId?: number;

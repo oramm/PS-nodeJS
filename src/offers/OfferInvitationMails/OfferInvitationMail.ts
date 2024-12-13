@@ -1,7 +1,9 @@
 import BusinessObject from '../../BussinesObject';
 import PersonsController from '../../persons/PersonsController';
 import { UserData } from '../../setup/GAuth2/sessionTypes';
-import { MailData, PersonData } from '../../types/types';
+import Setup from '../../setup/Setup';
+import ToolsMail from '../../tools/ToolsMail';
+import { MailData, MailDataToProcess, PersonData } from '../../types/types';
 
 export default class OfferInvitationMail
     extends BusinessObject
@@ -15,12 +17,13 @@ export default class OfferInvitationMail
     to: string;
     date: string;
     flags?: Set<string>;
+    status?: string;
     _ourOfferId?: number;
     _lastUpdated?: string;
     editorId?: number;
     _editor?: PersonData;
 
-    constructor(initParamObject: MailData) {
+    constructor(initParamObject: MailDataToProcess) {
         super({ ...initParamObject, _dbTableName: 'OfferInvitationMails' });
 
         if (!initParamObject.uid) {
@@ -35,6 +38,7 @@ export default class OfferInvitationMail
         this.flags = initParamObject.flags
             ? new Set(initParamObject.flags)
             : undefined;
+        this.status = initParamObject.status;
         this._ourOfferId = initParamObject._ourOfferId;
         this._lastUpdated = initParamObject._lastUpdated;
     }
@@ -47,6 +51,10 @@ export default class OfferInvitationMail
                 await PersonsController.getPersonFromSessionUserData(userData);
             this._editor = _editor;
             this.editorId = _editor.id;
+            this.status = Setup.OfferInvitationMailStatus.NEW;
+            if (!this.body)
+                this.body = (await ToolsMail.getEmailDetails(this.uid))?.body;
+
             await this.addInDb();
             console.log('OfferInvitationMail added to db');
             console.groupEnd();

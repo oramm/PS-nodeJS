@@ -7,6 +7,7 @@ type MailSearchParams = {
     id?: number;
     uid?: number;
     editorId?: number;
+    status?: string;
     searchText?: string;
 };
 
@@ -23,6 +24,7 @@ export default class OfferInvitationMailsController {
             OfferInvitationMails.To,
             OfferInvitationMails.Date,
             OfferInvitationMails.Flags,
+            OfferInvitationMails.Status,
             OfferInvitationMails.LastUpdated,
             Persons.Name as PersonName,
             Persons.Surname as PersonSurname,
@@ -102,6 +104,7 @@ export default class OfferInvitationMailsController {
                 to: row.To,
                 date: row.Date,
                 flags: row.Flags ? new Set(row.Flags.split(',')) : undefined,
+                status: row.Status,
                 _lastUpdated: row.LastUpdated,
                 _editor: {
                     name: row.PersonName,

@@ -432,25 +432,28 @@ export default class ToolsDb {
         }
     }
 
-    /** W ramach pojedynczego warunku tworzy fragment WHERE gdzie elementy tablicy połączene przez OR */
+    /** Tworzy warunek WHERE z IN lub prostym porównaniem */
     static makeOrConditionFromValueOrArray(
-        valueOrArray: string | string[] | undefined,
+        valueOrArray: string | string[] | number[] | undefined,
         tableName: string,
         fieldName: string
     ): string {
         if (!valueOrArray) return '1';
 
-        if (typeof valueOrArray === 'string') {
+        if (
+            typeof valueOrArray === 'string' ||
+            typeof valueOrArray === 'number'
+        ) {
             return mysql.format(`${tableName}.${fieldName} = ?`, [
                 valueOrArray,
             ]);
-        } else if (Array.isArray(valueOrArray)) {
-            const conditions = valueOrArray.map((value) =>
-                mysql.format(`${tableName}.${fieldName} = ?`, [value])
-            );
-            return '(' + conditions.join(' OR ') + ')';
+        } else if (Array.isArray(valueOrArray) && valueOrArray.length > 0) {
+            return mysql.format(`${tableName}.${fieldName} IN (?)`, [
+                valueOrArray,
+            ]);
         }
 
+        // Dla pustej tablicy
         return '1';
     }
 

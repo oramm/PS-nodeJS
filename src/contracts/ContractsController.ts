@@ -120,7 +120,7 @@ export default class ContractsController {
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
+        if (!searchText) return '';
         if (searchText) searchText = searchText.toString();
         const words = searchText.split(' ');
         const conditions = words.map((word) =>
@@ -143,106 +143,124 @@ export default class ContractsController {
         const typeId = searchParams._contractType?.id || searchParams.typeId;
         const isArchived = typeof searchParams.isArchived === 'string';
 
-        const idCondition = searchParams.id
-            ? mysql.format(`mainContracts.Id = ? `, [searchParams.id])
-            : '1';
-        const projectCondition = projectOurId
-            ? mysql.format(`mainContracts.ProjectOurId = ? `, [projectOurId])
-            : '1';
-        const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ? `, [
-                  `%${searchParams.contractOurId}%`,
-              ])
-            : '1';
-        const contractNameCondition = searchParams.contractName
-            ? mysql.format(`mainContracts.Name = ? `, [
-                  searchParams.contractName,
-              ])
-            : '1';
-        const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`mainContracts.StartDate >= ? `, [
-                  searchParams.startDateFrom,
-              ])
-            : '1';
-        const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`mainContracts.StartDate <= ? `, [
-                  searchParams.startDateTo,
-              ])
-            : '1';
+        const conditions: string[] = [];
 
-        const endDateFromCondition = searchParams.endDateFrom
-            ? mysql.format(`mainContracts.EndDate >= ? `, [
-                  searchParams.endDateFrom,
-              ])
-            : '1';
-        const endDateToCondition = searchParams.endDateTo
-            ? mysql.format(`mainContracts.EndDate <= ? `, [
-                  searchParams.endDateTo,
-              ])
-            : '1';
-        const typeCondition = typeId
-            ? mysql.format(`mainContracts.TypeId = ? `, [typeId])
-            : '1';
+        if (searchParams.id) {
+            conditions.push(
+                mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+            );
+        }
+        if (projectOurId) {
+            conditions.push(
+                mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
+            );
+        }
+        if (searchParams.contractOurId) {
+            conditions.push(
+                mysql.format(`OurContractsData.OurId LIKE ?`, [
+                    `%${searchParams.contractOurId}%`,
+                ])
+            );
+        }
+        if (searchParams.contractName) {
+            conditions.push(
+                mysql.format(`mainContracts.Name = ?`, [
+                    searchParams.contractName,
+                ])
+            );
+        }
+        if (searchParams.startDateFrom) {
+            conditions.push(
+                mysql.format(`mainContracts.StartDate >= ?`, [
+                    searchParams.startDateFrom,
+                ])
+            );
+        }
+        if (searchParams.startDateTo) {
+            conditions.push(
+                mysql.format(`mainContracts.StartDate <= ?`, [
+                    searchParams.startDateTo,
+                ])
+            );
+        }
+        if (searchParams.endDateFrom) {
+            conditions.push(
+                mysql.format(`mainContracts.EndDate >= ?`, [
+                    searchParams.endDateFrom,
+                ])
+            );
+        }
+        if (searchParams.endDateTo) {
+            conditions.push(
+                mysql.format(`mainContracts.EndDate <= ?`, [
+                    searchParams.endDateTo,
+                ])
+            );
+        }
+        if (typeId) {
+            conditions.push(mysql.format(`mainContracts.TypeId = ?`, [typeId]));
+        }
 
-        const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
-            searchParams.statuses,
-            'mainContracts',
-            'Status'
-        );
+        if (searchParams.statuses?.length) {
+            const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+                searchParams.statuses,
+                'mainContracts',
+                'Status'
+            );
+            conditions.push(statusCondition);
+        }
 
-        const contractRangesCondition = searchParams._contractRanges?.length
-            ? mysql.format(`ContractRangesContracts.ContractRangeId IN (?)`, [
-                  searchParams._contractRanges.map((range) => range.id),
-              ])
-            : '1';
+        if (searchParams._contractRanges?.length) {
+            const contractRangesCondition =
+                ToolsDb.makeOrConditionFromValueOrArray(
+                    searchParams._contractRanges?.map((range) => range.id),
+                    'ContractRangesContracts',
+                    'ContractRangeId'
+                );
+            conditions.push(contractRangesCondition);
+        }
 
         const adminId = searchParams._admin?.id;
-        const adminIdCondition = adminId
-            ? mysql.format(
-                  `(OurContractsData.AdminId = ? OR RelatedOurContractsData.AdminId = ?)`,
-                  [adminId, adminId]
-              )
-            : '1';
+        if (adminId) {
+            conditions.push(
+                mysql.format(
+                    `(OurContractsData.AdminId = ? OR RelatedOurContractsData.AdminId = ?)`,
+                    [adminId, adminId]
+                )
+            );
+        }
 
-        let typesToIncudeCondition;
         switch (searchParams.typesToInclude) {
             case 'our':
-                typesToIncudeCondition = 'OurContractsData.OurId IS NOT NULL';
+                conditions.push('OurContractsData.OurId IS NOT NULL');
                 break;
             case 'other':
-                typesToIncudeCondition = 'OurContractsData.OurId IS NULL';
+                conditions.push('OurContractsData.OurId IS NULL');
                 break;
             default:
-                typesToIncudeCondition = '1';
+                // Default case does not add a condition
+                break;
         }
-        //@deprecated
-        const onlyOursContractsCondition = searchParams.onlyOurs
-            ? 'OurContractsData.OurId IS NOT NULL'
-            : '1';
-        const isArchivedConditon = isArchived
-            ? `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL} `
-            : 1; //'mainContracts.Status!="Archiwalny"';
+
+        if (searchParams.onlyOurs) {
+            conditions.push('OurContractsData.OurId IS NOT NULL');
+        }
+
+        if (isArchived) {
+            conditions.push(
+                `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL}`
+            );
+        }
 
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
-        const conditions = `${idCondition} 
-            AND ${projectCondition} 
-            AND ${onlyOursContractsCondition} 
-            AND ${contractOurIdCondition} 
-            AND ${isArchivedConditon}
-            AND ${contractNameCondition}
-            AND ${startDateFromCondition}
-            AND ${startDateToCondition}
-            AND ${endDateFromCondition}
-            AND ${endDateToCondition}
-            AND ${searchTextCondition}
-            AND ${typeCondition}
-            AND ${statusCondition}
-            AND ${adminIdCondition}
-            AND ${typesToIncudeCondition} 
-            AND ${contractRangesCondition}`;
-        return conditions;
+        if (searchTextCondition) {
+            conditions.push(searchTextCondition);
+        }
+
+        // Return the combined conditions or default to '1' if empty
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
     private static makeOptionalColumns(searchParams: ContractSearchParams) {
@@ -543,7 +561,7 @@ export default class ContractsController {
             );
             const row = result[0];
             const itemsCount = row.Number as number;
-            console.log('@@@@@itemsCount', itemsCount);
+            //console.log('@@@@@itemsCount', itemsCount);
             return itemsCount + 1;
         } catch (err) {
             throw err;

@@ -183,6 +183,13 @@ export default class Setup {
         RETURNED: 'Zwrócone',
     };
 
+    static OfferInvitationMailStatus = {
+        NEW: 'Nowy',
+        TO_OFFER: 'Przekazać do ofertowania',
+        DONE: 'Oferta utworzona',
+        REJECTED: 'Odrzucony',
+    };
+
     static OfferBondForm = {
         CASH: 'Gotówka',
         GUARANTEE: 'Gwarancja',
