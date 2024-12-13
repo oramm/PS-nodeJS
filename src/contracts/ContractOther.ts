@@ -211,7 +211,10 @@ export default class ContractOther
         } else throw new Error('Kontrakt nie został przypisany do umowy ENVI');
     }
 
-    async isUnique(): Promise<boolean> {
+    /**
+     * @returns true jeśli kontrakt ma unikalny numer w ramach projektu
+     */
+    async isUniquePerProject(): Promise<boolean> {
         const sql = `SELECT Id FROM Contracts WHERE 
             Number = '${this.number}' AND ProjectOurId = "${this.projectOurId}"`;
 
@@ -223,5 +226,11 @@ export default class ContractOther
         } catch (err) {
             throw err;
         }
+    }
+    protected makeNotUniqueErrorMessage(): string {
+        return (
+            `Kontrakt o numerze ${this.number} już istnieje w projekcie ${this.projectOurId} \n` +
+            `Wprowadź inny numer kontraktu`
+        );
     }
 }

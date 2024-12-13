@@ -334,7 +334,7 @@ export default class ContractOur extends Contract implements OurContractData {
         }
     }
 
-    async isUnique(): Promise<boolean> {
+    async isUniquePerProject(): Promise<boolean> {
         const sql = `SELECT Id FROM OurContractsData WHERE OurId = "${this.ourId}"`;
 
         try {
@@ -345,5 +345,9 @@ export default class ContractOur extends Contract implements OurContractData {
         } catch (err) {
             throw err;
         }
+    }
+
+    protected makeNotUniqueErrorMessage(): string {
+        return `Umowa ENVI o numerze ${this.ourId} już istnieje`;
     }
 }

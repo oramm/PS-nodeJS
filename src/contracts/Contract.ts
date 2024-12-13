@@ -142,10 +142,8 @@ export default abstract class Contract
 
     /**batch dla dodawania kontraktów */
     async addNewController(auth: OAuth2Client) {
-        if (await this.isUnique())
-            throw new Error(
-                `Kontrakt ${this._ourIdOrNumber_Name} już istnieje.`
-            );
+        if (await this.isUniquePerProject())
+            throw new Error(this.makeNotUniqueErrorMessage());
 
         try {
             console.group(`Creating a new Contract ${this.id}`);
@@ -479,5 +477,6 @@ export default abstract class Contract
     abstract editInScrum(auth: OAuth2Client): Promise<void>;
     abstract setFolderName(): void;
     abstract shouldBeInScrum(): Promise<boolean>;
-    abstract isUnique(): Promise<boolean>;
+    abstract isUniquePerProject(): Promise<boolean>;
+    protected abstract makeNotUniqueErrorMessage(): string;
 }
