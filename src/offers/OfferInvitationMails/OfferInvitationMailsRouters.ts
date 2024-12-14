@@ -33,8 +33,7 @@ app.post('/mailToCheck', async (req: Request, res: Response) => {
 
 app.post('/getEmailDetails', async (req: Request, res: Response) => {
     try {
-        console.log(req.parsedBody.orConditions[0].uid);
-        const uid = req.parsedBody.orConditions[0].uid;
+        const uid = req.parsedBody.id;
         const item = await ToolsMail.getEmailDetails(uid);
         res.send(item);
     } catch (error) {

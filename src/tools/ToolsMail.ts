@@ -177,6 +177,7 @@ export default class ToolsMail {
                 source: true,
                 flags: true,
             });
+            console.log('Pobrano szczegóły maila: flagi', message.flags);
             return {
                 id: uid,
                 uid: uid,

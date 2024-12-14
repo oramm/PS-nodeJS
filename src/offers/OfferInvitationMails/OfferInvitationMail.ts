@@ -35,7 +35,7 @@ export default class OfferInvitationMail
         this.from = initParamObject.from;
         this.to = initParamObject.to;
         this.date = initParamObject.date;
-        this.flags = initParamObject.flags
+        this.flags = Array.isArray(initParamObject.flags)
             ? new Set(initParamObject.flags)
             : undefined;
         this.status = initParamObject.status;
