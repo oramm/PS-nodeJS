@@ -7,7 +7,7 @@ type MailSearchParams = {
     id?: number;
     uid?: number;
     editorId?: number;
-    status?: string;
+    statuses?: string[];
     searchText?: string;
 };
 
@@ -36,7 +36,6 @@ export default class OfferInvitationMailsController {
             this.makeAndConditions.bind(this)
         )}
         ORDER BY OfferInvitationMails.Id ASC`;
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processOfferInvitationMailsResult(result);
     }
@@ -53,6 +52,16 @@ export default class OfferInvitationMailsController {
         if (searchParams.uid) {
             conditions.push(
                 mysql.format(`OfferInvitationMails.Uid = ?`, [searchParams.uid])
+            );
+        }
+
+        if (searchParams.statuses?.length) {
+            conditions.push(
+                ToolsDb.makeOrConditionFromValueOrArray(
+                    searchParams.statuses,
+                    'OfferInvitationMails',
+                    'Status'
+                )
             );
         }
 
