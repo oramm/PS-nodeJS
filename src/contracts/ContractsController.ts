@@ -306,7 +306,6 @@ export default class ContractsController {
                         },
                     ]
                 );
-            console.log('rangesPerContract', rangesPerContract);
         }
         for (const row of result) {
             const contractors = entitiesPerProject.filter(
