@@ -22,7 +22,6 @@ app.post('/offers', async (req: Request, res: Response) => {
 app.post('/offer', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
-        return res.send(item);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
