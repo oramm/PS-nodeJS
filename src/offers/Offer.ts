@@ -149,7 +149,7 @@ export default abstract class Offer
         return _fieldsToUpdate.includes('submissionDeadline');
     }
 
-    async deleteController(auth: OAuth2Client) {
+    async deleteController(auth: OAuth2Client, userData?: UserData) {
         console.group('Deleting offer');
         if (!this.gdFolderId)
             throw new EnviErrors.NoGdIdError(

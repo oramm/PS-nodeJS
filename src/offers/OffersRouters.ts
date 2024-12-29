@@ -22,6 +22,7 @@ app.post('/offers', async (req: Request, res: Response) => {
 app.post('/offer', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
+        return res.send(item);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
@@ -184,6 +185,7 @@ app.delete('/offer/:id', async (req: Request, res: Response) => {
 
 function makeOfferObject(req: Request) {
     const isOur = req.parsedBody.isOur as boolean;
+    const invitationMail = req.parsedBody._contextData?.mail;
     const _city: CityData =
         typeof req.parsedBody._city === 'string'
             ? { name: req.parsedBody._city }
@@ -211,7 +213,7 @@ function makeOfferObject(req: Request) {
         },
     };
     const item = isOur
-        ? new OurOffer(offerInitParams)
+        ? new OurOffer({ ...offerInitParams, _invitationMail: invitationMail })
         : new ExternalOffer(offerInitParams);
     return item;
 }

@@ -3,11 +3,14 @@ import PersonsController from '../../persons/PersonsController';
 import { UserData } from '../../setup/GAuth2/sessionTypes';
 import Setup from '../../setup/Setup';
 import ToolsMail from '../../tools/ToolsMail';
-import { MailData, MailDataToProcess, PersonData } from '../../types/types';
+import {
+    OfferInvitationMailToProcessData,
+    PersonData,
+} from '../../types/types';
 
 export default class OfferInvitationMail
     extends BusinessObject
-    implements MailData
+    implements OfferInvitationMailToProcessData
 {
     id?: number;
     uid: number;
@@ -17,13 +20,13 @@ export default class OfferInvitationMail
     to: string;
     date: string;
     flags?: Set<string>;
-    status?: string;
+    status: string;
     _ourOfferId?: number;
     _lastUpdated?: string;
     editorId?: number;
     _editor?: PersonData;
 
-    constructor(initParamObject: MailDataToProcess) {
+    constructor(initParamObject: OfferInvitationMailToProcessData) {
         super({ ...initParamObject, _dbTableName: 'OfferInvitationMails' });
 
         if (!initParamObject.uid) {

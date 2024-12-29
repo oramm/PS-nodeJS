@@ -39,6 +39,7 @@ export default class OffersController {
                 Offers.GdDocumentId,
                 Offers.resourcesGdFolderId,
                 Offers.TenderUrl,
+                Offers.InvitationMailId,
                 OfferBonds.Id AS BondId,
                 OfferBonds.Value AS BondValue,
                 OfferBonds.Form AS BondForm,
@@ -211,6 +212,7 @@ export default class OffersController {
                 gdFolderId: row.GdFolderId,
                 gdDocumentId: row.GdDocumentId,
                 tenderUrl: row.TenderUrl,
+                invitationMailId: row.InvitationMailId,
                 resourcesGdFolderId: row.resourcesGdFolderId,
                 _employer: { name: ToolsDb.sqlToString(row.EmployerName) },
                 _type: {
