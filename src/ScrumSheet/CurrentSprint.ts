@@ -4,6 +4,7 @@ import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import Person from '../persons/Person';
 import ScrumSheet from './ScrumSheet';
+import CurrentSprintValidator from './CurrentSprintValidator';
 
 export default class CurrentSprint {
     /** Usuwa usuwa wiersze posiadające tą samą wartość w danej kolumnie currentSprint*/
@@ -173,13 +174,29 @@ export default class CurrentSprint {
     }
 
     static async sortProjects(auth: OAuth2Client) {
-        const currentSprintValues = <any[][]>(
+        const currentSprintValues = (
             await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
                 rangeA1: Setup.ScrumSheet.CurrentSprint.name,
             })
         ).values;
 
+        if (!currentSprintValues) {
+            throw new Error('NIe udało się pobrać danych z arkusza scrumboard');
+        }
+
+        try {
+            const validator = new CurrentSprintValidator();
+
+            validator.checkColumns(currentSprintValues);
+        } catch (err) {
+            console.error(err);
+            if (err instanceof Error)
+                throw new Error(
+                    'sortProjects:: błąd walidacji arkusza scrumboard \n' +
+                        err.message
+                );
+        }
         const projectIdColIndex = currentSprintValues[0].indexOf(
             Setup.ScrumSheet.CurrentSprint.projectIdColName
         );
@@ -243,11 +260,18 @@ export default class CurrentSprint {
                 ],
             },
         };
-        await ToolsSheets.batchUpdateSheet(
-            auth,
-            [sortRequest],
-            Setup.ScrumSheet.GdId
-        );
+        console.log('sortRequest', sortRequest);
+
+        try {
+            await ToolsSheets.batchUpdateSheet(
+                auth,
+                [sortRequest],
+                Setup.ScrumSheet.GdId
+            );
+        } catch (err) {
+            console.error(err);
+            throw new Error('sortProjects:: błąd sortowania scrumboard');
+        }
     }
 
     static async sortContract(auth: OAuth2Client, ourId: string) {

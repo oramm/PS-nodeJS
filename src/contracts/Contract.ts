@@ -17,6 +17,9 @@ import {
     ProjectData,
 } from '../types/types';
 import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
+import ToolsSheets from '../tools/ToolsSheets';
+import Setup from '../setup/Setup';
+import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
 
 export default abstract class Contract
     extends BusinessObject
@@ -26,7 +29,6 @@ export default abstract class Contract
     alias: string;
     typeId: number;
     _type: ContractType;
-    _tmpId?: any;
     number: string;
     name: string = '';
     projectOurId: string;
@@ -58,8 +60,6 @@ export default abstract class Contract
         this.alias = initParamObject.alias;
         this.typeId = initParamObject._type?.id;
         this._type = initParamObject._type;
-        //id tworzone tymczasowo po stronie klienta do obsługi tymczasowego wiersza resultsecie
-        this._tmpId = initParamObject._tmpId;
         this.number = initParamObject.number;
         this.name = initParamObject.name;
 
@@ -144,6 +144,15 @@ export default abstract class Contract
     async addNewController(auth: OAuth2Client) {
         if (await this.isUniquePerProject())
             throw new Error(this.makeNotUniqueErrorMessage());
+
+        let currentSprintValues = <any[][]>(
+            await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+            })
+        ).values;
+        const validator = new CurrentSprintValidator();
+        await validator.checkColumns(currentSprintValues);
 
         try {
             console.group(`Creating a new Contract ${this.id}`);

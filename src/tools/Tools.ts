@@ -147,7 +147,7 @@ export default class Tools {
         dataValues: any[][],
         column: number
     ) {
-        for (var i = 0; i < dataValues.length; i++) {
+        for (let i = 0; i < dataValues.length; i++) {
             if (dataValues[i][column] == valueToFind) {
                 return i;
             }

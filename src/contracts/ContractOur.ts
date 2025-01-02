@@ -9,6 +9,7 @@ import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import City from '../Admin/Cities/City';
 import { OurContractData } from '../types/types';
+import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
 
 export default class ContractOur extends Contract implements OurContractData {
     ourId: string;
@@ -326,10 +327,33 @@ export default class ContractOur extends Contract implements OurContractData {
             await ScrumSheet.CurrentSprint.setSumInContractRow(
                 auth,
                 this.ourId
-            );
-            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
+            ).catch((err) => {
+                console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
+                throw new Error(
+                    'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
+                        err.message
+                );
+            });
 
-            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId).catch(
+                (err) => {
+                    console.log('Błąd przy sortowaniu kontraktu', err);
+                    throw new Error(
+                        'Błąd przy sortowaniu kontraktów w scrumie po dodaniu kamieni \n' +
+                            err.message
+                    );
+                }
+            );
+
+            await ScrumSheet.CurrentSprint.makeTimesSummary(auth).catch(
+                (err) => {
+                    console.log('Błąd przy tworzeniu sumy czasów', err);
+                    throw new Error(
+                        'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
+                            err.message
+                    );
+                }
+            );
             await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
         }
     }
