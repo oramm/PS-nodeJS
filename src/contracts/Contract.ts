@@ -145,14 +145,7 @@ export default abstract class Contract
         if (await this.isUniquePerProject())
             throw new Error(this.makeNotUniqueErrorMessage());
 
-        let currentSprintValues = <any[][]>(
-            await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
-            })
-        ).values;
-        const validator = new CurrentSprintValidator();
-        await validator.checkColumns(currentSprintValues);
+        await CurrentSprintValidator.checkColumns(auth);
 
         try {
             console.group(`Creating a new Contract ${this.id}`);

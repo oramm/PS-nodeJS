@@ -1,17 +1,27 @@
+import { sheets_v4 } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
 import Setup from '../setup/Setup';
-import CurrentSprint from './CurrentSprint';
+import ToolsSheets from '../tools/ToolsSheets';
 
 export default class CurrentSprintValidator {
-    async checkColumns(values: any[][]) {
+    static async checkColumns(auth: OAuth2Client, values?: any[][] | null) {
+        if (!values) {
+            if (!auth) throw new Error('Brak danych arkusza');
+            values = (
+                await ToolsSheets.getValues(auth, {
+                    spreadsheetId: Setup.ScrumSheet.GdId,
+                    rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+                })
+            ).values;
+            if (!values)
+                throw new Error('Brak wartości w arkuszu bieżącego sprintu');
+        }
         if (values.length === 0) throw new Error('Arkusz jest pusty');
         if (values[0].length === 0) throw new Error('Brak kolumn w arkuszu');
         if (!values) throw new Error('Brak wartości w arkuszu');
 
         const firsRowValues = values[0];
         const secondRowValues = values[1];
-
-        console.log(firsRowValues);
-        console.log(secondRowValues);
 
         const projectIdColIndex = firsRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.projectIdColName
@@ -32,7 +42,7 @@ export default class CurrentSprintValidator {
             Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName
         );
 
-        const milestoneIdColIndex = secondRowValues.indexOf(
+        const milestoneIdColIndex = firsRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.milestoneIdColName
         );
         const caseTypeIdColIndex = firsRowValues.indexOf(
@@ -99,49 +109,54 @@ export default class CurrentSprintValidator {
             Setup.ScrumSheet.CurrentSprint.timesColName
         );
 
+        const errorMessage = 'Arkusz Scrum uszkodzony! Brak kolumny';
         if (projectIdColIndex === -1)
-            throw new Error('Brak kolumny Id projektu');
+            throw new Error(`${errorMessage} Id projektu`);
         if (contractOurIdColIndex === -1)
-            throw new Error('Brak kolumny ourId kontraktu');
+            throw new Error(`${errorMessage} ourId kontraktu`);
         if (contractDbIdColIndex === -1)
-            throw new Error('Brak kolumny dbId kontraktu');
+            throw new Error(`${errorMessage} dbId kontraktu`);
         if (milestoneTypeNameColIndex === -1)
-            throw new Error('Brak kolumny nazwa kamienia milowego');
+            throw new Error(`${errorMessage} nazwa kamienia milowego`);
         if (caseTypeNameColIndex === -1)
-            throw new Error('Brak kolumny typ sprawy i numer sprawy');
-        if (taskOwnerNameColIndex === -1) throw new Error('Brak kolumny Kto');
+            throw new Error(`${errorMessage} typ sprawy i numer sprawy`);
+        if (taskOwnerNameColIndex === -1)
+            throw new Error(`${errorMessage} Kto`);
 
         if (milestoneIdColIndex === -1)
-            throw new Error('Brak kolumny Id kamienia milowego');
+            throw new Error(`${errorMessage} Id kamienia milowego`);
         if (caseTypeIdColIndex === -1)
-            throw new Error('Brak kolumny Id typu sprawy');
-        if (caseIdColIndex === -1) throw new Error('Brak kolumny Id sprawy');
-        if (taskIdColIndex === -1) throw new Error('Brak kolumny Id zadania');
+            throw new Error(`${errorMessage} Id typu sprawy`);
+        if (caseIdColIndex === -1) throw new Error(`${errorMessage} Id sprawy`);
+        if (taskIdColIndex === -1)
+            throw new Error(`${errorMessage} Id zadania`);
         if (rowStatusColIndex === -1)
-            throw new Error('Brak kolumny #ImportStatus');
+            throw new Error(`${errorMessage} #ImportStatus`);
         if (contractNumberColIndex === -1)
-            throw new Error('Brak kolumny Nr kontraktu na roboty/ dostawy');
+            throw new Error(`${errorMessage} Nr kontraktu na roboty/ dostawy`);
         if (caseNameColIndex === -1)
-            throw new Error('Brak kolumny Nazwa sprawy');
+            throw new Error(`${errorMessage} Nazwa sprawy`);
         if (taskNameColIndex === -1)
-            throw new Error('Brak kolumny Nazwa zadania');
+            throw new Error(`${errorMessage} Nazwa zadania`);
         if (taskDeadlineColIndex === -1)
-            throw new Error('Brak kolumny Deadline');
+            throw new Error(`${errorMessage} Deadline`);
         if (taskEstimatedTimeColIndex === -1)
-            throw new Error('Brak kolumny szac. czas');
-        if (taskStatusColIndex === -1) throw new Error('Brak kolumny Status');
+            throw new Error(`${errorMessage} szac. czas`);
+        if (taskStatusColIndex === -1)
+            throw new Error(`${errorMessage} Status`);
         if (taskOwnerIdColIndex === -1)
-            throw new Error('Brak kolumny Id właściciela');
-        if (monColIndex === -1) throw new Error('Brak kolumny PON.');
-        if (tueColIndex === -1) throw new Error('Brak kolumny WTO.');
-        if (wedColIndex === -1) throw new Error('Brak kolumny SR.');
-        if (thuColIndex === -1) throw new Error('Brak kolumny CZW.');
-        if (friColIndex === -1) throw new Error('Brak kolumny PT.');
-        if (sprintSumColIndex === -1) throw new Error('Brak kolumny Razem');
-        if (sprintDiffColIndex === -1) throw new Error('Brak kolumny Różnica');
-        if (modeColIndex === -1) throw new Error('Brak kolumny tryb');
+            throw new Error(`${errorMessage} Id właściciela`);
+        if (monColIndex === -1) throw new Error(`${errorMessage} PON.`);
+        if (tueColIndex === -1) throw new Error(`${errorMessage} WTO.`);
+        if (wedColIndex === -1) throw new Error(`${errorMessage} SR.`);
+        if (thuColIndex === -1) throw new Error(`${errorMessage} CZW.`);
+        if (friColIndex === -1) throw new Error(`${errorMessage} PT.`);
+        if (sprintSumColIndex === -1) throw new Error(`${errorMessage} Razem`);
+        if (sprintDiffColIndex === -1)
+            throw new Error(`${errorMessage} Różnica`);
+        if (modeColIndex === -1) throw new Error(`${errorMessage} tryb`);
         if (timesSummaryColIndex === -1)
-            throw new Error('Brak kolumny #TimesSummary');
-        if (timesColIndex === -1) throw new Error('Brak kolumny #Times');
+            throw new Error(`${errorMessage} #TimesSummary`);
+        if (timesColIndex === -1) throw new Error(`${errorMessage} #Times`);
     }
 }

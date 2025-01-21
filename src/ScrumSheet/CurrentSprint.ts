@@ -186,9 +186,10 @@ export default class CurrentSprint {
         }
 
         try {
-            const validator = new CurrentSprintValidator();
-
-            validator.checkColumns(currentSprintValues);
+            await CurrentSprintValidator.checkColumns(
+                auth,
+                currentSprintValues
+            );
         } catch (err) {
             console.error(err);
             if (err instanceof Error)
@@ -260,7 +261,6 @@ export default class CurrentSprint {
                 ],
             },
         };
-        console.log('sortRequest', sortRequest);
 
         try {
             await ToolsSheets.batchUpdateSheet(
