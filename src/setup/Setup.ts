@@ -197,7 +197,7 @@ export default class Setup {
 
     static OfferEventType = {
         CREATED: 'Oferta Utworzona',
-        SEND: 'Oferta wysłana',
+        SENT: 'Oferta wysłana',
         CHANGED: 'Oferta zmieniona',
         AWARDED: 'Oferta wygrana',
         LOST: 'Oferta przegrana',
@@ -238,5 +238,28 @@ export default class Setup {
         BUILDING_PERMIT: 'Pozwolenie na budowę',
         DECISION: 'Decyzja lokalizacyjna',
         MPZPT: 'MPZPT',
+    };
+
+    static LetterEventType = {
+        CREATED: 'CREATED',
+        TO_CORRECT: 'TO_CORRECT',
+        CHANGED: 'CHANGED',
+        APPROVED: 'APPROVED',
+        SENT: 'SENT',
+        CANCELED: 'CANCELED',
+    } as const;
+
+    static LetterStatus = {
+        CREATED: 'CREATED',
+        TO_CORRECT: 'TO_CORRECT',
+        CHANGED: 'CHANGED',
+        APPROVED: 'APPROVED',
+        SENT: 'SENT',
+        CANCELED: 'CANCELED',
+    } as const;
+
+    static LetterForm = {
+        EMAIL: 'Email',
+        PAPER: 'Papier',
     };
 }

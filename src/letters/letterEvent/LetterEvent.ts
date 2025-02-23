@@ -1,24 +1,24 @@
 import { drive_v3 } from 'googleapis';
 import BusinessObject from '../../BussinesObject';
-import { OfferEventData, PersonData } from '../../types/types';
+import { LetterEventData, PersonData } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
-import OurOffer from '../OurOffer';
 import ToolsMail from '../../tools/ToolsMail';
 import ToolsDb from '../../tools/ToolsDb';
-import OfferEventsController from './OfferEventsController';
+import LetterEventsController from './LetterEventsController';
 import Setup from '../../setup/Setup';
 import { PoolConnection } from 'mysql2/promise';
+import OurLetterContract from '../OurLetterContract';
 
 /**
  * Przy odczytywaniu z bazy danych, jeśli w bazie danych jest zapisany JSON, to trzeba go przekonwertować na obiekt
  * Przy zapiswaniu do bazy danych, jeśli zapisywany obiekt ma pole, które jest obiektem, to trzeba je przekonwertować na JSON
  */
-export default class OfferEvent
+export default class LetterEvent
     extends BusinessObject
-    implements OfferEventData
+    implements LetterEventData
 {
     id?: number;
-    offerId: number;
+    letterId: number;
     _editor: PersonData;
     eventType: string;
     _lastUpdated?: string;
@@ -30,13 +30,13 @@ export default class OfferEvent
     gdFilesJSON?: string | null | undefined;
     _gdFilesBasicData?: drive_v3.Schema$File[] | undefined;
 
-    constructor(initParamObject: OfferEventData) {
-        super({ ...initParamObject, _dbTableName: 'OfferEvents' });
+    constructor(initParamObject: LetterEventData) {
+        super({ ...initParamObject, _dbTableName: 'LetterEvents' });
         this._editor = initParamObject._editor;
-        if (!initParamObject.offerId)
-            throw new Error('Offer id is not defined');
+        if (!initParamObject.letterId)
+            throw new Error('Letter id is not defined');
 
-        this.offerId = initParamObject.offerId;
+        this.letterId = initParamObject.letterId;
         this.eventType = initParamObject.eventType;
         this._lastUpdated = initParamObject._lastUpdated;
         this.comment = initParamObject.comment || null;
@@ -54,17 +54,19 @@ export default class OfferEvent
 
     async addNewController() {
         try {
-            const conn = await ToolsDb.getPoolConnectionWithTimeout();
-            const previousEvents = OfferEventsController.getOfferEventsList([
-                { offerId: this.offerId, eventType: Setup.OfferEventType.SENT },
+            const previousEvents = LetterEventsController.getLetterEventsList([
+                {
+                    letterId: this.letterId,
+                    eventType: Setup.LetterEventType.SENT,
+                },
             ]);
             this.versionNumber =
                 (await previousEvents).filter(
-                    (event) => event.eventType === Setup.OfferEventType.SENT
+                    (event) => event.eventType === Setup.LetterEventType.SENT
                 ).length + 1;
-            console.group('Creating new OfferEvent');
+            console.group('Creating new LetterEvent');
             await this.addInDb();
-            console.log('OfferEvent added to db');
+            console.log('LetterEvent added to db');
             console.groupEnd();
         } catch (err) {
             this.deleteController();
@@ -84,12 +86,12 @@ export default class OfferEvent
 
     async editController() {
         try {
-            console.group('Editing OfferEvent');
+            console.group('Editing LetterEvent');
             await this.editInDb();
-            console.log('OfferEvent edited in db');
+            console.log('LetterEvent edited in db');
             console.groupEnd();
         } catch (err) {
-            console.log('OfferEvent edit error');
+            console.log('LetterEvent edit error');
             throw err;
         }
     }
@@ -99,7 +101,11 @@ export default class OfferEvent
         await this.deleteFromDb();
     }
 
-    sendMailWithOffer(auth: OAuth2Client, offer: OurOffer, cc?: string[]) {
+    sendMailWithLetter(
+        auth: OAuth2Client,
+        letter: OurLetterContract,
+        cc?: string[]
+    ) {
         const _recipients = this._recipients;
         const gdFilesBasicData = this._gdFilesBasicData;
         if (!_recipients?.length)
@@ -107,14 +113,14 @@ export default class OfferEvent
         if (!gdFilesBasicData?.length)
             throw new Error('Brak plików do wysłania');
 
-        const subject = `Oferta: ${offer._type.name} ${offer._city.name} | ${offer.alias}`;
+        const subject = `Pismo nr ${letter.number} - ${letter.description}`;
         let body = `<p>
                     Szanowni Państwo, <br>
-                    W załączniku przesyłamy ofertę: ${offer.description}.
+                    W załączniku przesyłamy pismo dotyczącę: ${letter.description}.
                 </p>`;
         if (this.additionalMessage) body += `<p>${this.additionalMessage}</p>`;
         body += `<p>
-                Proszę o potwierdzenie otrzymania oferty na adres: <a href="mailto:biuro@envi.com.pl">biuro@envi.com.pl</a>
+                Proszę o potwierdzenie otrzymania pisma na adres: <a href="mailto:biuro@envi.com.pl">biuro@envi.com.pl</a>
                 </p>`;
 
         const html = `${body}`;

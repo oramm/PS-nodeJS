@@ -11,8 +11,13 @@ import {
     ContractData,
     EntityData,
     LetterData,
+    LetterEventData,
     PersonData,
 } from '../types/types';
+import { UserData } from '../setup/GAuth2/sessionTypes';
+import LetterEvent from './letterEvent/LetterEvent';
+import PersonsController from '../persons/PersonsController';
+import Setup from '../setup/Setup';
 
 export default abstract class Letter
     extends BusinessObject
@@ -34,10 +39,11 @@ export default abstract class Letter
     letterFilesCount: number = 0;
     _editor: PersonData;
     _fileOrFolderChanged?: boolean;
-
+    status: string;
     editorId?: number;
     _canUserChangeFileOrFolder?: boolean;
     _documentEditUrl?: string;
+    _lastEvent?: LetterEvent | null;
 
     constructor(initParamObject: LetterData) {
         super({ ...initParamObject, _dbTableName: 'Letters' });
@@ -84,6 +90,30 @@ export default abstract class Letter
         this._editor = initParamObject._editor;
         this._canUserChangeFileOrFolder;
         this._fileOrFolderChanged;
+        this.status = initParamObject.status;
+        this.initLastEvent(initParamObject._lastEvent); //przy nowej ofercie lastEvent jeszcze nie istnieje
+    }
+
+    private initLastEvent(lastEventData: LetterEventData | undefined | null) {
+        if (!lastEventData?.letterId) return;
+        if (lastEventData) {
+            lastEventData.letterId = this.id;
+            this._lastEvent = new LetterEvent(lastEventData);
+        } else this._lastEvent = null;
+    }
+
+    protected async createNewLetterEvent(userData: UserData) {
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            userData
+        );
+
+        this._lastEvent = new LetterEvent({
+            letterId: this.id as number,
+            eventType: Setup.LetterEventType.CREATED,
+
+            _editor,
+        });
+        await this._lastEvent.addNewController();
     }
 
     async addInDb() {
@@ -140,7 +170,11 @@ export default abstract class Letter
         }
     }
 
-    async editController(auth: OAuth2Client, files: Express.Multer.File[]) {
+    async editController(
+        auth: OAuth2Client,
+        files: Express.Multer.File[],
+        userData: UserData
+    ) {
         console.group('Letter edit');
         await this.editLetterGdElements(auth, files);
         console.log('Letter folder and file in GD edited');
@@ -218,7 +252,8 @@ export default abstract class Letter
 
     abstract addNewController(
         auth: OAuth2Client,
-        files: Express.Multer.File[]
+        files: Express.Multer.File[],
+        userData: UserData
     ): Promise<void>;
     abstract editLetterGdElements(
         auth: OAuth2Client,

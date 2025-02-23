@@ -4,6 +4,7 @@ import ToolsGd from '../tools/ToolsGd';
 import IncomingLetterGdController from './gdControlers/IncomingLetterGdController';
 import EnviErrors from '../tools/Errors';
 import { IncomingLetterData } from '../types/types';
+import { UserData } from '../setup/GAuth2/sessionTypes';
 
 export default abstract class IncomingLetter
     extends Letter
@@ -19,7 +20,8 @@ export default abstract class IncomingLetter
 
     async addNewController(
         auth: OAuth2Client,
-        files: Express.Multer.File[] = []
+        files: Express.Multer.File[] = [],
+        userData: UserData
     ) {
         try {
             this.letterFilesCount = files.length;
@@ -35,6 +37,7 @@ export default abstract class IncomingLetter
                 this.setDataToSingleFileState(letterGdFile.id);
             }
             await this.addInDb();
+            await this.createNewLetterEvent(userData);
         } catch (err) {
             this.deleteFromDb();
             this._letterGdController.deleteFromGd(

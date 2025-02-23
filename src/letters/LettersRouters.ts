@@ -5,6 +5,7 @@ import ToolsGapi from '../setup/GAuth2/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
+import OurLetter from './OurLetter';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
@@ -111,7 +112,7 @@ app.post('/letterReact', async (req: Request, res: Response) => {
                 req,
                 res,
                 item.addNewController,
-                [req.files],
+                [req.files, req.session.userData],
                 item
             );
         } catch (err) {
@@ -139,7 +140,7 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
             req,
             res,
             item.editController,
-            [req.files],
+            [req.files, req.session.userData],
             item
         );
         res.send(item);
@@ -168,6 +169,46 @@ app.put('/appendLetterAttachments/:id', async (req: Request, res: Response) => {
         );
         await item.editInDb();
 
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+app.put('/exportOurLetterToPDF', async (req: Request, res: Response) => {
+    try {
+        const item = LettersController.createProperLetter(req.body);
+        if (!(item instanceof OurLetter))
+            throw new Error('Nie można wyeksportować listu otrzymanego do PDF');
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.exportToPDF,
+            [req.session.userData],
+            item
+        );
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+app.put('/approveOurLetter/:id', async (req: Request, res: Response) => {
+    const item = LettersController.createProperLetter(req.body);
+    if (!(item instanceof OurLetter))
+        throw new Error('Błąd przy zatwierdzaniu pisma');
+    try {
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.approveLetter,
+            [req.session.userData],
+            item
+        );
         res.send(item);
     } catch (error) {
         if (error instanceof Error)

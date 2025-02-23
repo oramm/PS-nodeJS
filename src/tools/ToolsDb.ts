@@ -1,4 +1,4 @@
-import mysql from 'mysql2/promise';
+import mysql, { ResultSetHeader } from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import Tools from './Tools';
 import ToolsDate from './ToolsDate';
@@ -428,6 +428,32 @@ export default class ToolsDb {
                     'transaction:: connection released',
                     connection.threadId
                 );
+            }
+        }
+    }
+    /** Wykonuje zapytanie SQL typu INSERT, UPDATE, DELETE */
+    static async executeSQL(
+        sql: string,
+        params: any[] = [],
+        externalConn?: mysql.PoolConnection
+    ): Promise<ResultSetHeader> {
+        const conn = externalConn || (await this.pool.getConnection());
+        if (!externalConn)
+            console.log('[DB] executeSQL:: conn acquired', conn.threadId);
+        try {
+            console.log('[DB] Wykonywanie SQL:', sql, 'Parametry:', params);
+            const [result] = await conn.execute(sql, params);
+            if (!externalConn) await conn.commit(); // Zatwierdzenie transakcji
+            return result as ResultSetHeader;
+        } catch (error) {
+            if (!externalConn) await conn.rollback(); // Cofnięcie zmian w razie błędu
+            console.error('[DB] Błąd w executeSQL:', error);
+            console.log(sql);
+            throw error;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+                console.log('[DB] executeSQL:: conn released', conn.threadId);
             }
         }
     }

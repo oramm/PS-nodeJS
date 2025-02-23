@@ -86,7 +86,7 @@ export default class OurOffer extends Offer implements OurOfferData {
 
         const newEvent = new OfferEvent({
             ...newEventData,
-            eventType: Setup.OfferEventType.SEND,
+            eventType: Setup.OfferEventType.SENT,
             _editor, //editorId: ustawia się w BussinesObject,
             offerId: this.id,
         });

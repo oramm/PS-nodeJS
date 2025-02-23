@@ -5,6 +5,10 @@ import OurLetterGdFile from './OurLetterGdFIle';
 import EnviErrors from '../tools/Errors';
 import { DocumentTemplateData, OurLetterData } from '../types/types';
 import OurLetterGdController from './gdControlers/OurLetterGdController';
+import { UserData } from '../setup/GAuth2/sessionTypes';
+import PersonsController from '../persons/PersonsController';
+import Setup from '../setup/Setup';
+import LetterEvent from './letterEvent/LetterEvent';
 
 export default abstract class OurLetter
     extends Letter
@@ -24,7 +28,8 @@ export default abstract class OurLetter
 
     async addNewController(
         auth: OAuth2Client,
-        files: Express.Multer.File[] = []
+        files: Express.Multer.File[] = [],
+        userData: UserData
     ) {
         try {
             const gdFolder = await this._letterGdController.createLetterFolder(
@@ -72,6 +77,8 @@ export default abstract class OurLetter
             ]).catch((error) => {
                 throw error;
             });
+
+            await this.createNewLetterEvent(userData);
         } catch (err) {
             if (this.id) this.deleteFromDb();
             this._letterGdController.deleteFromGd(auth, null, this.gdFolderId);
@@ -142,6 +149,24 @@ export default abstract class OurLetter
             throw error;
         });
     }
+
+    async approveLetter(auth: OAuth2Client, userData: UserData) {
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            userData
+        );
+        this._lastEvent = new LetterEvent({
+            letterId: this.id,
+            eventType: Setup.LetterEventType.APPROVED,
+            _editor,
+        });
+        await this._lastEvent.addNewController();
+    }
+
+    async exportToPDF(auth: OAuth2Client) {
+        if (!this.gdDocumentId) throw new EnviErrors.NoGdIdError();
+        await ToolsGd.exportDocToPdfAndUpload(auth, this.gdDocumentId);
+    }
+
     abstract makeLetterGdFileController(
         _template?: DocumentTemplateData
     ): OurLetterGdFile;

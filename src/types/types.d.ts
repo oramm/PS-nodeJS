@@ -202,6 +202,8 @@ export interface LetterData extends GenericDocumentData {
     registrationDate?: string;
     _editor: Person;
     _cases: CaseData[];
+    _lastEvent?: OfferEventData | null;
+    status: string;
 }
 
 export interface OurLetterData extends LetterData {
@@ -229,6 +231,21 @@ export interface OurLetterOfferData extends OurLetterData {
 
 export interface IncomingLetterOfferData extends IncomingLetterData {
     _offer: ExternalOfferData;
+}
+
+export interface LetterEventData extends RepositoryDataItem {
+    letterId?: number;
+    editorId?: number;
+    _editor: PersonData;
+    eventType: string;
+    _lastUpdated?: string;
+    comment?: string | null;
+    additionalMessage?: string | null;
+    versionNumber?: number | null;
+    _recipients?: PersonData[] | null;
+    recipientsJSON?: string | null;
+    _gdFilesBasicData?: drive_v3.Schema$File[];
+    gdFilesJSON?: string | null;
 }
 
 export interface EntityData extends RepositoryDataItem {

@@ -23,6 +23,7 @@ import LetterEntity from './associations/LetterEntity';
 import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
 import OurLetterOffer from './OurLetterOffer';
+import LetterEvent from './letterEvent/LetterEvent';
 
 type LetterSearchParams = {
     projectId?: string;
@@ -49,48 +50,82 @@ export default class LettersController {
                 : 'Milestones.OfferId IS NOT NULL';
 
         const sql = `SELECT 
-            Letters.Id,
-            Letters.IsOur,
-            Letters.Number,
-            Letters.Description,
-            Letters.CreationDate,
-            Letters.RegistrationDate,
-            Letters.GdDocumentId,
-            Letters.GdFolderId,
-            Letters.LetterFilesCount,
-            Letters.LastUpdated,
-            Projects.Id AS ProjectId,
-            Projects.OurId AS ProjectOurId,
-            Projects.GdFolderId AS ProjectGdFolderId,
-            Projects.LettersGdFolderId,
-            Persons.Id AS EditorId,
-            Offers.Id AS OfferId,
-            Offers.Alias AS OfferAlias,
-            Offers.Description AS OfferDescription,
-            Offers.CityId AS OfferCityId,
-            Persons.Name AS EditorName,
-            Persons.Surname AS EditorSurname,
-            GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
-            GROUP_CONCAT(Cases.Name SEPARATOR ', ') AS CaseNames,
-            GROUP_CONCAT(CaseTypes.Name SEPARATOR ', ') AS CaseTypesNames
-        FROM Letters
-        JOIN Letters_Cases ON Letters_Cases.LetterId=Letters.id
-        JOIN Cases ON Letters_Cases.CaseId=Cases.Id
-        JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
-        JOIN Milestones ON Milestones.Id=Cases.MilestoneId
-        LEFT JOIN Contracts ON Contracts.Id=Milestones.ContractId
-        LEFT JOIN Offers ON Offers.Id = Letters.OfferId
-        LEFT JOIN Projects ON Letters.ProjectId=Projects.Id
-        JOIN Persons ON Letters.EditorId=Persons.Id
-        JOIN Letters_Entities ON Letters_Entities.LetterId=Letters.Id
-        JOIN Entities ON Letters_Entities.EntityId=Entities.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
+                Letters.Id,
+                Letters.IsOur,
+                Letters.Number,
+                Letters.Description,
+                Letters.CreationDate,
+                Letters.RegistrationDate,
+                Letters.GdDocumentId,
+                Letters.GdFolderId,
+                Letters.Status,
+                Letters.LetterFilesCount,
+                Letters.LastUpdated,
+    
+                -- Pobieranie danych powiązanego projektu
+                Projects.Id AS ProjectId,
+                Projects.OurId AS ProjectOurId,
+                Projects.GdFolderId AS ProjectGdFolderId,
+                Projects.LettersGdFolderId,
+    
+                -- Pobieranie danych powiązanej oferty
+                Offers.Id AS OfferId,
+                Offers.Alias AS OfferAlias,
+                Offers.Description AS OfferDescription,
+                Offers.CityId AS OfferCityId,
+    
+                -- Pobieranie edytora listu
+                LastEventEditor.Id AS LastEventEditorId,
+                LastEventEditor.Name AS LastEventEditorName,
+                LastEventEditor.Surname AS LastEventEditorSurname,
+                LastEventEditor.Email AS LastEventEditorEmail,
+    
+                -- Pobieranie ostatniego zdarzenia dla listu
+                LastLetterEvent.Id AS LastEventId,
+                LastLetterEvent.EventType AS LastEventType,
+                LastLetterEvent.Comment AS LastEventComment,
+                LastLetterEvent.AdditionalMessage AS LastEventAdditionalMessage,
+                LastLetterEvent.VersionNumber AS LastEventVersionNumber,
+                LastLetterEvent.LastUpdated AS LastEventDate,
+                LastLetterEvent.GdFilesJSON AS LastEventGdFilesJSON,
+                LastLetterEvent.RecipientsJSON AS LastEventRecipientsJSON,
+    
+                -- Pobieranie powiązanych encji i spraw
+                GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
+                GROUP_CONCAT(Cases.Name SEPARATOR ', ') AS CaseNames,
+                GROUP_CONCAT(CaseTypes.Name SEPARATOR ', ') AS CaseTypesNames
+    
+            FROM Letters
+            JOIN Letters_Cases ON Letters_Cases.LetterId = Letters.Id
+            JOIN Cases ON Letters_Cases.CaseId = Cases.Id
+            JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
+            JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+            LEFT JOIN Contracts ON Contracts.Id = Milestones.ContractId
+            LEFT JOIN Offers ON Offers.Id = Letters.OfferId
+            LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
+            JOIN Letters_Entities ON Letters_Entities.LetterId = Letters.Id
+            JOIN Entities ON Letters_Entities.EntityId = Entities.Id
+    
+            -- Podzapytanie wybierające najnowsze zdarzenie dla każdego listu
+            LEFT JOIN (
+                SELECT LetterId, MAX(Id) AS MaxEventId
+                FROM LetterEvents
+                GROUP BY LetterId
+            ) AS LatestLetterEvents ON LatestLetterEvents.LetterId = Letters.Id
+    
+            -- Połączenie z tabelą LetterEvents na podstawie najnowszego zdarzenia
+            LEFT JOIN LetterEvents AS LastLetterEvent ON LastLetterEvent.Id = LatestLetterEvents.MaxEventId
+    
+            -- Połączenie z tabelą Persons, aby pobrać dane osoby, która utworzyła zdarzenie
+            LEFT JOIN Persons AS LastEventEditor ON LastEventEditor.Id = LastLetterEvent.EditorId
+
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
             AND ${milestoneParentTypeCondition}
-        GROUP BY Letters.Id
-        ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
+            GROUP BY Letters.Id
+            ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLettersResult(result, orConditions[0]);
@@ -258,6 +293,7 @@ export default class LettersController {
             gdDocumentId: row.GdDocumentId,
             gdFolderId: row.GdFolderId,
             letterFilesCount: row.LetterFilesCount,
+            status: row.Status,
             _lastUpdated: row.LastUpdated,
 
             _cases: _casesAssociationsPerLetter.map((item) => item._case),
@@ -266,10 +302,29 @@ export default class LettersController {
             ),
             _entitiesCc: _letterEntitiesCcPerLetter.map((item) => item._entity),
             _editor: {
-                id: row.EditorId,
-                name: row.EditorName,
-                surname: row.EditorSurname,
+                id: row.LastEventEditorId,
+                name: row.LastEventEditorName,
+                surname: row.LastEventEditorSurname,
             },
+            _lastEvent: new LetterEvent({
+                id: row.LastEventId,
+                letterId: row.Id,
+                eventType: row.LastEventType,
+                _lastUpdated: row.LastEventDate,
+                comment: ToolsDb.sqlToString(row.LastEventComment),
+                additionalMessage: ToolsDb.sqlToString(
+                    row.LastEventAdditionalMessage
+                ),
+                versionNumber: row.LastEventVersionNumber,
+                _editor: {
+                    id: row.LastEventEditorId,
+                    name: ToolsDb.sqlToString(row.LastEventEditorName),
+                    surname: ToolsDb.sqlToString(row.LastEventEditorSurname),
+                    email: ToolsDb.sqlToString(row.LastEventEditorEmail),
+                },
+                gdFilesJSON: row.LastEventGdFilesJSON,
+                recipientsJSON: row.LastEventRecipientsJSON,
+            }),
         };
         return initParam;
     }
@@ -381,5 +436,30 @@ export default class LettersController {
             return item;
         }
         return new IncomingLetterOffer(initParam);
+    }
+    /**
+     * Dodaje wpisy APPROVED do listów, które nie mają jeszcze takiego wpisu
+     */
+    static async autoApprove() {
+        const sql = `
+            INSERT INTO LetterEvents (LetterId, EditorId, EventType, Comment, AdditionalMessage, VersionNumber, LastUpdated)
+            SELECT 
+                le.LetterId,
+                125 AS EditorId, -- Stały EditorId = 125
+                'APPROVED' AS EventType,
+                'Pismo zatwierdzone' AS Comment,
+                NULL AS AdditionalMessage,
+                2 AS VersionNumber, -- Możesz dostosować numer wersji
+                TIMESTAMPADD(HOUR, FLOOR(2 + RAND() * 5), le.LastUpdated) AS LastUpdated -- Dodajemy losowe 2-6 godzin
+            FROM LetterEvents le
+            LEFT JOIN LetterEvents le2 
+                ON le.LetterId = le2.LetterId 
+                AND le2.EventType = 'APPROVED'
+            WHERE le.EventType = 'CREATED' 
+            AND le2.Id IS NULL; -- Sprawdzamy, czy 'APPROVED' jeszcze nie istnieje
+        `;
+
+        const result = await ToolsDb.executeSQL(sql);
+        console.log(`AutoApprove:: dodano ${result.affectedRows} wpisów`);
     }
 }
