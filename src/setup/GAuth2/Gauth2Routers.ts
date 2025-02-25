@@ -11,7 +11,7 @@ app.post('/login', async (req: Request, res: Response) => {
         res.send(req.session);
     } catch (error) {
         if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+            res.status(401).send({ errorMessage: error.message });
         console.error(error);
     }
 });

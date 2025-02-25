@@ -41,9 +41,9 @@ export default class ToolsGapi {
     }
 
     static async loginHandler(req: Request, res: Response) {
-        const token = req.body.id_token;
-
         try {
+            const token = req.body.id_token;
+
             if (!token) throw new Error('No token provided');
             const ticket = await oAuthClient.verifyIdToken({
                 idToken: token,
@@ -58,16 +58,19 @@ export default class ToolsGapi {
             if (!payload) throw new Error('No payload provided');
             if (!payload.email)
                 throw new Error(`Twoje konto Google nie ma przypisanego adresu email. 
-            Zaloguj się na konto Google i przypisz adres email.`);
+                Zaloguj się na konto Google i przypisz adres email.`);
             if (!payload.name)
                 throw new Error(
                     `Twoje konto Google nie ma przypisanego imienia i nazwiska.`
                 );
             if (!payload.picture)
-                payload.picture = 'https://www.gravatar.com/avatar/    ?d=mp';
+                payload.picture = 'https://www.gravatar.com/avatar/?d=mp';
 
             const systemRole = await this.determineSystemRole(payload.email);
-
+            if (!systemRole)
+                throw new Error(
+                    'Nie masz dostępu do systemu. Skontaktuj się z administratorem.'
+                );
             req.session.userData = {
                 enviId: systemRole.personId,
                 googleId: payload.sub,
@@ -79,13 +82,15 @@ export default class ToolsGapi {
             };
             console.log('User data set in session:', req.session.userData);
             //jeśli nie ma googleId w bazie danych, to go wpisuje (po pierwszym zalogowaniu)
-            if (!systemRole.googleId)
+            if (!systemRole.googleId) {
                 await ToolsGapi.editUserGoogleIdInDb(
                     systemRole.personId,
                     req.session.userData.googleId
                 );
+                console.log('GoogleId added to database');
+            }
         } catch (error) {
-            res.status(401).json({ error: 'Unauthorized' });
+            throw error;
         }
     }
 

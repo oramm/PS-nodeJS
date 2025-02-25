@@ -72,6 +72,7 @@ export default class Person extends BusinessObject implements PersonData {
                 await ToolsDb.getQueryCallbackAsync(sql)
             );
             const row = result[0];
+            if (!row) return undefined;
             return {
                 id: <number>row.SystemRoleId,
                 name: <string>row.SystemRoleName,

@@ -400,6 +400,8 @@ export default class Task extends BusinessObject {
             if (this._owner && this._owner.id) {
                 let owner = new Person(this._owner);
                 const systemRole = await owner.getSystemRole();
+                if (!systemRole)
+                    throw new Error('Użytkownik nie zarejestrowany w systemie');
                 test =
                     this.status !== 'Backlog' &&
                     systemRole &&
