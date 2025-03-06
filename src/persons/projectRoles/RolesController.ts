@@ -1,77 +1,125 @@
-import ToolsDb from "../../tools/ToolsDb";
-import Person from "../Person";
+import ToolsDb from '../../tools/ToolsDb';
+import {
+    OtherContractData,
+    OurContractData,
+    ProjectData,
+} from '../../types/types';
+import Person from '../Person';
+import Role from './Role';
+import mysql from 'mysql2/promise';
 
-import Role from "./Role";
+export type RolesSearchParams = {
+    projectId?: string;
+    personId?: number;
+    groupName?: string;
+};
 
 export default class RolesController {
-    static async getRolesList(initParamObject: any) {
-        const projectCondition = (initParamObject && initParamObject.projectId) ? 'Roles.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-
-        const sql = 'SELECT \n \t' +
-            'Roles.Id, \n \t' +
-            'Roles.ProjectOurId, \n \t' +
-            'Roles.Name, \n \t' +
-            'Roles.Description, \n \t' +
-            'Roles.GroupName, \n \t' +
-            'Roles.ManagerId, \n \t' +
-            'Persons.Id AS PersonId, \n \t' +
-            'Persons.Name AS PersonName, \n \t' +
-            'Persons.Surname AS PersonSurName, \n \t' +
-            'Persons.Email AS PersonEmail, \n \t' +
-            'Persons.Cellphone AS PersonCellphone, \n \t' +
-            'Persons.Phone AS PersonPhone, \n \t' +
-            'Entities.Name AS EntityName, \n \t' +
-            'Contracts.Id AS ContractId, \n \t' +
-            'Contracts.Number AS ContractNumber, \n \t' +
-            'OurContractsData.OurId AS ContractOurId, \n \t' +
-            'SystemRoles.Name AS SystemRoleName\n' +
-            'FROM Roles \n' +
-            'JOIN Persons ON Persons.Id=Roles.PersonId \n' +
-            'JOIN Entities ON Entities.Id=Persons.EntityId \n' +
-            'JOIN SystemRoles ON SystemRoles.Id=Persons.SystemRoleId \n' +
-            'LEFT JOIN Contracts ON Contracts.Id=Roles.ContractId \n' +
-            'LEFT JOIN OurContractsData ON Contracts.Id=OurContractsData.Id \n' +
-            'WHERE ' + projectCondition + ' \n' +
-            'ORDER BY Roles.Name';
+    static async getRolesList(
+        orConditions: RolesSearchParams[] = []
+    ): Promise<Role[]> {
+        const sql = `
+            SELECT 
+                Roles.Id, 
+                Roles.Name, 
+                Roles.Description, 
+                Roles.GroupName, 
+                Persons.Id AS PersonId,
+                Persons.Name AS PersonName, 
+                Persons.Surname AS PersonSurName, 
+                Persons.Email AS PersonEmail, 
+                Persons.Cellphone AS PersonCellphone, 
+                Persons.Phone AS PersonPhone, 
+                Entities.Name AS EntityName, 
+                Contracts.Id AS ContractId, 
+                Contracts.Number AS ContractNumber, 
+                OurContractsData.OurId AS ContractOurId,
+                Projects.Id AS ProjectId,
+                Projects.OurId AS ProjectOurId,
+                SystemRoles.Name AS SystemRoleName
+            FROM Roles 
+            JOIN Persons ON Persons.Id = Roles.PersonId 
+            JOIN Entities ON Entities.Id = Persons.EntityId 
+            JOIN SystemRoles ON SystemRoles.Id = Persons.SystemRoleId 
+            LEFT JOIN Contracts ON Contracts.Id = Roles.ContractId 
+            LEFT JOIN Projects ON Projects.Id = Roles.ProjectId
+            LEFT JOIN OurContractsData ON Contracts.Id = OurContractsData.Id 
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
+            ORDER BY Roles.Name ASC
+        `;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processRolesResult(result);
-
-
     }
 
-    static processRolesResult(result: any[]) {
-        let newResult: Role[] = [];
+    static makeAndConditions(params: RolesSearchParams) {
+        const conditions: string[] = [];
+
+        if (params.projectId) {
+            conditions.push(
+                `Roles.ProjectOurId = ${mysql.escape(params.projectId)}`
+            );
+        }
+        if (params.personId) {
+            conditions.push(
+                `Roles.PersonId = ${mysql.escape(params.personId)}`
+            );
+        }
+        if (params.groupName) {
+            conditions.push(
+                `Roles.GroupName = ${mysql.escape(params.groupName)}`
+            );
+        }
+
+        return conditions.length ? conditions.join(' AND ') : '1';
+    }
+
+    static processRolesResult(result: any[]): Role[] {
+        const newResult: Role[] = [];
 
         for (const row of result) {
-            var item = new Role({
+            const roleItem = new Role({
                 id: row.Id,
-                projectOurId: row.ProjectOurId,
+                projectId: row.ProjectId,
+                _project: {
+                    id: row.ProjectId as number | undefined,
+                    ourId: row.ProjectOurId as string,
+                } as ProjectData,
                 name: row.Name,
                 description: row.Description,
+                groupName: row.GroupName,
+                managerId: row.ManagerId,
+                // Wykorzystanie pola RoleType, jeśli masz je w modelu
+                type: row.RoleType,
+                personId: row.PersonId,
+                _person: new Person({
+                    id: row.PersonId,
+                    name: row.PersonName?.trim(),
+                    surname: row.PersonSurName?.trim(),
+                    email: row.PersonEmail?.trim(),
+                    cellphone: row.PersonCellphone,
+                    phone: row.PersonPhone,
+                    _entity: {
+                        name:
+                            row.SystemRoleName === 'ENVI_COOPERATOR'
+                                ? 'ENVI'
+                                : row.EntityName?.trim(),
+                    },
+                }),
+                contractId: row.ContractId,
                 _contract: {
                     id: row.ContractId,
                     ourId: row.ContractOurId,
                     number: row.ContractNumber,
-                },
-                _person: new Person({
-                    id: row.PersonId,
-                    name: row.PersonName.trim(),
-                    surname: row.PersonSurName.trim(),
-                    email: row.PersonEmail.trim(),
-                    cellphone: row.PersonCellphone,
-                    phone: row.PersonPhone,
-                    _entity: {
-                        name: (row.SystemRoleName == 'ENVI_COOPERATOR') ? 'ENVI' : row.EntityName.trim()
-                    },
-                }),
-                _group: {
-                    id: row.GroupName,
-                    name: row.GroupName
-                },
-                managerId: row.ManagerId
-            })
-            newResult.push(item);
+                    name: row.ContractName,
+                    alias: row.ContractAlias,
+                } as OurContractData | OtherContractData,
+            });
+
+            newResult.push(roleItem);
         }
         return newResult;
     }

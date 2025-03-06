@@ -113,11 +113,12 @@ export default class OfferEvent
                     W załączniku przesyłamy ofertę: ${offer.description}.
                 </p>`;
         if (this.additionalMessage) body += `<p>${this.additionalMessage}</p>`;
-        body += `<p>
-                Proszę o potwierdzenie otrzymania oferty na adres: <a href="mailto:biuro@envi.com.pl">biuro@envi.com.pl</a>
-                </p>`;
+        body += `<p>Proszę o potwierdzenie otrzymania oferty na adres: <a href="mailto:biuro@envi.com.pl">biuro@envi.com.pl</a>
+                </p>
+                <p>To jest automatyczna wiadomość, proszę nie odpowiadać na adres erp... </p>`;
 
         const html = `${body}`;
+
         ToolsMail.sendEmailWithGdAttachments(auth, gdFilesBasicData, {
             to: ToolsMail.getMailListFromPersons(_recipients),
             cc: [...(cc || []), 'biuro@envi.com.pl'],

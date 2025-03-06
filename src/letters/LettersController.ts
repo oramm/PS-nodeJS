@@ -452,6 +452,7 @@ export default class LettersController {
                 2 AS VersionNumber, -- Możesz dostosować numer wersji
                 TIMESTAMPADD(HOUR, FLOOR(2 + RAND() * 5), le.LastUpdated) AS LastUpdated -- Dodajemy losowe 2-6 godzin
             FROM LetterEvents le
+            JOIN Letters l ON le.LetterId = l.Id AND l.IsOur = TRUE -- Warunek: tylko nasze listy
             LEFT JOIN LetterEvents le2 
                 ON le.LetterId = le2.LetterId 
                 AND le2.EventType = 'APPROVED'

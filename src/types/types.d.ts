@@ -26,7 +26,6 @@ export interface ProjectData extends RepositoryDataItem {
     name: string;
     alias: string;
     comment: string;
-    ourId: string;
     status: string;
     lettersGdFolderId?: string;
     startDate?: string;
@@ -144,11 +143,13 @@ export interface CaseData extends RepositoryDataItem {
 
 export interface TaskData extends RepositoryDataItem {
     name: string;
-    description: string;
-    deadline: string;
+    description?: string;
+    deadline?: string | Date | null;
     _parent: Case;
-    _editor: Person;
-    _lastUpdated: string;
+    _lastUpdated?: string;
+    status: string;
+    ownerId?: number | null;
+    _owner?: PersonData;
 }
 
 export interface ContractTypeData extends RepositoryDataItem {
@@ -467,3 +468,28 @@ export interface NeedsFocusAreasData {
     _focusArea: FocusAreaData;
     comment?: string;
 }
+
+export interface RoleData extends RepositoryDataItem {
+    id: number;
+    // Jeśli rola jest projektowa, projectOurId powinno być ustawione; dla roli kontraktowej może być null
+    projectId?: number | null;
+    _project?: ProjectData;
+    // Jeśli rola jest kontraktowa, contractId powinno być ustawione; dla roli projektowej może być null
+    contractId?: number | null;
+    _contract?: OurContractData | OtherContractData;
+    personId: number | null;
+    _person?: PersonData;
+    name: string;
+    description: string;
+    groupName: RoleGroup;
+    type: RoleType;
+    managerId?: number | null;
+}
+
+export type RoleGroup =
+    | 'Zamawiający'
+    | 'Inżynier'
+    | 'Wykonawca/Podwykonawcy'
+    | 'Pozostali';
+
+export type RoleType = 'Projektowa' | 'Kontraktowa';

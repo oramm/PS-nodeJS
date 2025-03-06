@@ -1,34 +1,22 @@
-import RolesController from './RolesController'
-import { app } from '../../index'
+import RolesController from './RolesController';
+import { app } from '../../index';
 import Role from './Role';
+import { Request, Response } from 'express';
 
-app.get('/roles', async (req: any, res: any) => {
+app.post('/roles', async (req: Request, res: Response) => {
     try {
-        const result = await RolesController.getRolesList(req.query);
+        const orConditions = req.parsedBody.orConditions;
+        const result = await RolesController.getRolesList(orConditions);
         res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+    } catch (err) {
+        if (err instanceof Error) {
+            res.status(500).send(err.message);
+            console.error(err);
+        }
     }
-
-
 });
 
-app.get('/role/:id', async (req: any, res: any) => {
-    try {
-        const result = await RolesController.getRolesList(req.params);
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-
-
-});
-
-app.post('/role', async (req: any, res: any) => {
+app.post('/role', async (req: Request, res: Response) => {
     try {
         let item = new Role(req.body);
         await item.addInDb();
@@ -37,10 +25,10 @@ app.post('/role', async (req: any, res: any) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
-app.put('/role/:id', async (req: any, res: any) => {
+app.put('/role/:id', async (req: Request, res: Response) => {
     try {
         let item = new Role(req.body);
         await item.editInDb();
@@ -52,7 +40,7 @@ app.put('/role/:id', async (req: any, res: any) => {
     }
 });
 
-app.delete('/role/:id', async (req: any, res: any) => {
+app.delete('/role/:id', async (req: Request, res: Response) => {
     try {
         let item = new Role(req.body);
         console.log('delete');

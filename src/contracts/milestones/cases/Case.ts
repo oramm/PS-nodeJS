@@ -158,7 +158,11 @@ export default class Case extends BusinessObject implements CaseData {
         //typ sprawy może mieć wiele procesów - sprawa automatycznie też
         for (const process of this._type._processes) {
             //dodaj zadanie ramowe z szablonu
-            let processInstanceTask = new Task({ _parent: this });
+            let processInstanceTask = new Task({
+                _parent: this,
+                name: 'Zadanie ramowe dla procesu ' + process.name,
+                status: Setup.TaskStatus.NOT_STARTED,
+            });
             await processInstanceTask.addInDbFromTemplateForProcess(
                 process,
                 externalConn,

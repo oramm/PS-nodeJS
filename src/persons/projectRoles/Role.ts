@@ -1,35 +1,39 @@
 import BusinessObject from '../../BussinesObject';
+import {
+    OtherContractData,
+    OurContractData,
+    PersonData,
+    ProjectData,
+    RoleData,
+    RoleGroup as RoleGroupName,
+    RoleType,
+} from '../../types/types';
 
-export default class Role extends BusinessObject {
+export default class Role extends BusinessObject implements RoleData {
     id: number;
-    projectOurId?: string;
-    contractId?: number;
+    projectId?: number | null;
+    _project?: ProjectData;
+    contractId?: number | null;
+    _contract?: OurContractData | OtherContractData;
     name: string;
     description: string;
-    groupName: string;
-    managerId?: number;
-    personId: number;
-    _person: any;
-    _nameSurnameEmail: string;
-    _group: any;
-    _contract: any;
+    groupName: RoleGroupName;
+    type: RoleType;
+    personId: number | null;
+    _person?: PersonData;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: RoleData) {
         super({ ...initParamObject, _dbTableName: 'Roles' });
         this.id = initParamObject.id;
-        if (initParamObject.projectOurId)
-            this.projectOurId = initParamObject.projectOurId;
+        this.projectId = initParamObject.projectId ?? null;
+        this._project = initParamObject._project;
+        this.contractId = initParamObject.contractId ?? null;
         this._contract = initParamObject._contract;
-        if (initParamObject._contract && initParamObject._contract.id)
-            this.contractId = initParamObject._contract.id;
-        this._person = initParamObject._person;
-        this.personId = initParamObject._person.id;
-        this._nameSurnameEmail = initParamObject._person._nameSurnameEmail;
         this.name = initParamObject.name;
         this.description = initParamObject.description;
-        this.groupName = initParamObject._group.name;
-        this._group = initParamObject._group;
-        if (initParamObject.managerId)
-            this.managerId = initParamObject.managerId;
+        this.groupName = initParamObject.groupName;
+        this.type = initParamObject.type;
+        this.personId = initParamObject.personId ?? null;
+        this._person = initParamObject._person;
     }
 }

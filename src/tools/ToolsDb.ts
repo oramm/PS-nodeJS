@@ -95,14 +95,11 @@ export default class ToolsDb {
     }
 
     static sqlToString(sqlString: string): string {
-        let string = '';
-        if (!sqlString) return string;
+        if (!sqlString) return '';
         if (sqlString === 'LAST_INSERT_ID()') return sqlString;
 
-        return sqlString
-            .replace(/\\'/gi, "'")
-            .replace(/\\"/gi, '"')
-            .replace(/\\%/gi, '%');
+        // Usuwa backslash przed ', ", lub %
+        return sqlString.replace(/\\(['"%])/g, '$1');
     }
     /** dodaje do bazy obiekt
      * @argument object może mieć atrybut '_isIdNonIncrement' - wtedy id jest trakrowany jak normalne pole
