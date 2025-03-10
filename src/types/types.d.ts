@@ -481,15 +481,6 @@ export interface RoleData extends RepositoryDataItem {
     _person?: PersonData;
     name: string;
     description: string;
-    groupName: RoleGroup;
-    type: RoleType;
+    groupName: string;
     managerId?: number | null;
 }
-
-export type RoleGroup =
-    | 'Zamawiający'
-    | 'Inżynier'
-    | 'Wykonawca/Podwykonawcy'
-    | 'Pozostali';
-
-export type RoleType = 'Projektowa' | 'Kontraktowa';

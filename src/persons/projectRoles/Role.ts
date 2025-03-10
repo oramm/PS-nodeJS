@@ -5,8 +5,6 @@ import {
     PersonData,
     ProjectData,
     RoleData,
-    RoleGroup as RoleGroupName,
-    RoleType,
 } from '../../types/types';
 
 export default class Role extends BusinessObject implements RoleData {
@@ -17,8 +15,7 @@ export default class Role extends BusinessObject implements RoleData {
     _contract?: OurContractData | OtherContractData;
     name: string;
     description: string;
-    groupName: RoleGroupName;
-    type: RoleType;
+    groupName: string;
     personId: number | null;
     _person?: PersonData;
 
@@ -32,7 +29,6 @@ export default class Role extends BusinessObject implements RoleData {
         this.name = initParamObject.name;
         this.description = initParamObject.description;
         this.groupName = initParamObject.groupName;
-        this.type = initParamObject.type;
         this.personId = initParamObject.personId ?? null;
         this._person = initParamObject._person;
     }
