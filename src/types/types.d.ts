@@ -471,16 +471,19 @@ export interface NeedsFocusAreasData {
 
 export interface RoleData extends RepositoryDataItem {
     id: number;
-    // Jeśli rola jest projektowa, projectOurId powinno być ustawione; dla roli kontraktowej może być null
-    projectId?: number | null;
-    _project?: ProjectData;
-    // Jeśli rola jest kontraktowa, contractId powinno być ustawione; dla roli projektowej może być null
-    contractId?: number | null;
-    _contract?: OurContractData | OtherContractData;
     personId: number | null;
     _person?: PersonData;
     name: string;
     description: string;
     groupName: string;
-    managerId?: number | null;
+}
+
+export interface ContractRoleData extends RoleData {
+    contractId?: number | null;
+    _contract?: OurContract | OtherContract;
+}
+
+export interface ProjectRoleData extends RoleData {
+    projectId?: number | null;
+    _project?: ProjectData;
 }

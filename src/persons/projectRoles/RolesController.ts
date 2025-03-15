@@ -1,12 +1,17 @@
 import ContractRange from '../../Admin/ContractRanges/ContractRange';
 import ToolsDb from '../../tools/ToolsDb';
 import {
+    ContractRoleData,
     ContractTypeData,
     OtherContractData,
     OurContractData,
     ProjectData,
+    ProjectRoleData,
+    RoleData,
 } from '../../types/types';
 import Person from '../Person';
+import ContractRole from './ContractRole';
+import ProjectRole from './ProjectRole';
 import Role from './Role';
 import mysql from 'mysql2/promise';
 
@@ -31,7 +36,7 @@ export type RolesSearchParams = {
 export default class RolesController {
     static async getRolesList(
         orConditions: RolesSearchParams[] = []
-    ): Promise<Role[]> {
+    ): Promise<ProjectRoleData | ContractRoleData[]> {
         const sql = `
             SELECT 
                 Roles.Id, 
@@ -189,56 +194,76 @@ export default class RolesController {
         return conditions.join(' AND ');
     }
 
-    static processRolesResult(result: any[]): Role[] {
-        const newResult: Role[] = [];
+    static processRolesResult(
+        result: any[]
+    ): ContractRoleData | ProjectRoleData[] {
+        const newResult: ContractRoleData | ProjectRoleData[] = [];
 
         for (const row of result) {
-            const roleItem = new Role({
-                id: row.Id,
-                projectId: row.ProjectId,
-                _project: {
-                    id: row.ProjectId as number | undefined,
-                    ourId: row.ProjectOurId as string,
-                    alias: row.ProjectAlias,
-                    name: row.ProjectName,
-                } as ProjectData,
-                name: row.Name,
-                description: row.Description,
-                groupName: row.GroupName,
-                managerId: row.ManagerId,
-                personId: row.PersonId,
-                _person: new Person({
-                    id: row.PersonId,
-                    name: row.PersonName?.trim(),
-                    surname: row.PersonSurName?.trim(),
-                    email: row.PersonEmail?.trim(),
-                    cellphone: row.PersonCellphone,
-                    phone: row.PersonPhone,
-                    _entity: {
-                        name:
-                            row.SystemRoleName === 'ENVI_COOPERATOR'
-                                ? 'ENVI'
-                                : row.EntityName?.trim(),
-                    },
-                }),
-                contractId: row.ContractId,
-                _contract: {
-                    id: row.ContractId,
-                    ourId: row.ContractOurId,
-                    number: row.ContractNumber,
-                    name: row.ContractName,
-                    alias: row.ContractAlias,
-                    startDate: row.ContractStartDate,
-                    endDate: row.ContractEndDate,
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                    },
-                } as OurContractData | OtherContractData,
-            });
-
+            const roleItem = row.ProjectId
+                ? new ProjectRole(this.makeProjectRoleInitParams(row))
+                : new ContractRole(this.makeContractRoleInitParams(row));
             newResult.push(roleItem);
         }
         return newResult;
+    }
+
+    private static makeRoleInitParams(row: any): RoleData {
+        return {
+            id: row.Id,
+            name: row.Name,
+            description: row.Description,
+            groupName: row.GroupName,
+            personId: row.PersonId,
+            _person: new Person({
+                id: row.PersonId,
+                name: row.PersonName?.trim(),
+                surname: row.PersonSurName?.trim(),
+                email: row.PersonEmail?.trim(),
+                cellphone: row.PersonCellphone,
+                phone: row.PersonPhone,
+                _entity: {
+                    name:
+                        row.SystemRoleName === 'ENVI_COOPERATOR'
+                            ? 'ENVI'
+                            : row.EntityName?.trim(),
+                },
+            }),
+        };
+    }
+
+    private static makeProjectRoleInitParams(row: any): ProjectRoleData {
+        const roleData: RoleData = this.makeRoleInitParams(row);
+        return {
+            ...roleData,
+            projectId: row.ProjectId,
+            _project: {
+                id: row.ProjectId as number | undefined,
+                ourId: row.ProjectOurId as string,
+                alias: row.ProjectAlias,
+                name: row.ProjectName,
+            } as ProjectData,
+        };
+    }
+
+    private static makeContractRoleInitParams(row: any): ContractRoleData {
+        const roleData: RoleData = this.makeRoleInitParams(row);
+        return {
+            ...roleData,
+            contractId: row.ContractId,
+            _contract: {
+                id: row.ContractId,
+                ourId: row.ContractOurId,
+                number: row.ContractNumber,
+                name: row.ContractName,
+                alias: row.ContractAlias,
+                startDate: row.ContractStartDate,
+                endDate: row.ContractEndDate,
+                _type: {
+                    id: row.ContractTypeId,
+                    name: row.ContractTypeName,
+                },
+            } as OurContractData | OtherContractData,
+        };
     }
 }

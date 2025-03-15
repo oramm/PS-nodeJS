@@ -125,7 +125,7 @@ export default class LettersController {
             )}
             AND ${milestoneParentTypeCondition}
             GROUP BY Letters.Id
-            ORDER BY Letters.RegistrationDate, Letters.CreationDate;`;
+            ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLettersResult(result, orConditions[0]);

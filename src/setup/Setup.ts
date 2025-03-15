@@ -262,4 +262,6 @@ export default class Setup {
         EMAIL: 'Email',
         PAPER: 'Papier',
     };
+
+    static x: 'sss' | 'ddd';
 }
