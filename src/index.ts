@@ -98,7 +98,6 @@ app.use((req, res, next) => {
         req.parsedQuery = Tools.parseObjectsJSON(req.query);
     next();
 });
-
 app.use(
     session({
         store: MongoStore.create({

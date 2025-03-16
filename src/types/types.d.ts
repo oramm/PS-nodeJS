@@ -2,6 +2,7 @@
 import exp from 'constants';
 import e from 'express';
 import 'express-session';
+import { SystemRoleName } from '../setup/GAuth2/sessionTypes';
 
 declare module 'express-session' {
     interface SessionData {
@@ -11,7 +12,7 @@ declare module 'express-session' {
             systemEmail: string;
             userName: string;
             picture: string;
-            systemRoleName: string;
+            systemRoleName: SystemRoleName;
             systemRoleId: number;
         };
     }
