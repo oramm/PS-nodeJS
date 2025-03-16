@@ -15,6 +15,14 @@ export interface UserData {
     systemEmail: string;
     userName: string;
     picture: string;
-    systemRoleName: string;
+    systemRoleName: SystemRoleName;
     systemRoleId: number;
+}
+
+export enum SystemRoleName {
+    ADMIN = 'ADMIN',
+    ENVI_MANAGER = 'ENVI_MANAGER',
+    ENVI_EMPLOYEE = 'ENVI_EMPLOYEE',
+    ENVI_COOPERATOR = 'ENVI_COOPERATOR',
+    EXTERNAL_USER = 'EXTERNAL_USER',
 }

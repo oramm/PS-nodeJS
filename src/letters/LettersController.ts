@@ -24,6 +24,7 @@ import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
 import OurLetterOffer from './OurLetterOffer';
 import LetterEvent from './letterEvent/LetterEvent';
+import { SystemRoleName, UserData } from '../setup/GAuth2/sessionTypes';
 
 type LetterSearchParams = {
     projectId?: string;
@@ -42,7 +43,8 @@ type LetterSearchParams = {
 export default class LettersController {
     static async getLettersList(
         orConditions: LetterSearchParams[],
-        milestoneParentType: 'CONTRACT' | 'OFFER'
+        milestoneParentType: 'CONTRACT' | 'OFFER',
+        userData: UserData
     ) {
         const milestoneParentTypeCondition =
             milestoneParentType === 'CONTRACT'
@@ -118,7 +120,9 @@ export default class LettersController {
     
             -- Połączenie z tabelą Persons, aby pobrać dane osoby, która utworzyła zdarzenie
             LEFT JOIN Persons AS LastEventEditor ON LastEventEditor.Id = LastLetterEvent.EditorId
-
+            ${this.makeUserJoinCondition(
+                userData
+            )} -- Dodawanie warunku dla EXTERNAL-USER
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
@@ -126,9 +130,15 @@ export default class LettersController {
             AND ${milestoneParentTypeCondition}
             GROUP BY Letters.Id
             ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processLettersResult(result, orConditions[0]);
+    }
+
+    private static makeUserJoinCondition(userData: UserData) {
+        if (userData.systemRoleName !== SystemRoleName.EXTERNAL_USER) return '';
+        return `JOIN Persons_Contracts ON Persons_Contracts.ContractId = Contracts.Id
+                AND Persons_Contracts.PersonId = ${userData.enviId}`;
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {

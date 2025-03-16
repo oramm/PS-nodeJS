@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 import { EntityData, PersonData } from '../types/types';
+import { SystemRoleName } from '../setup/GAuth2/sessionTypes';
 
 export default class Person extends BusinessObject implements PersonData {
     id?: number;
@@ -75,7 +76,7 @@ export default class Person extends BusinessObject implements PersonData {
             if (!row) return undefined;
             return {
                 id: <number>row.SystemRoleId,
-                name: <string>row.SystemRoleName,
+                name: <SystemRoleName>row.SystemRoleName,
                 personId: <number>row.PersonId,
                 googleId: <string | undefined>row.GoogleId,
                 googleRefreshToken: <string | undefined>row.GoogleRefreshToken,

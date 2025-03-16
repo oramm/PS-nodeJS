@@ -9,10 +9,12 @@ import OurLetter from './OurLetter';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
         const result = await LettersController.getLettersList(
             orConditions,
-            'CONTRACT'
+            'CONTRACT',
+            req.session.userData
         );
         res.send(result);
     } catch (error) {
@@ -24,10 +26,12 @@ app.post('/contractsLetters', async (req: Request, res: Response) => {
 
 app.post('/offersLetters', async (req: Request, res: Response) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
         const result = await LettersController.getLettersList(
             orConditions,
-            'OFFER'
+            'OFFER',
+            req.session.userData
         );
         res.send(result);
     } catch (error) {
