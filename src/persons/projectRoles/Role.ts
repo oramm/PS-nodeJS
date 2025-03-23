@@ -1,11 +1,5 @@
 import BusinessObject from '../../BussinesObject';
-import {
-    OtherContractData,
-    OurContractData,
-    PersonData,
-    ProjectData,
-    RoleData,
-} from '../../types/types';
+import { PersonData, RoleData } from '../../types/types';
 
 export default class Role extends BusinessObject implements RoleData {
     id: number;
@@ -21,7 +15,8 @@ export default class Role extends BusinessObject implements RoleData {
         this.name = initParamObject.name;
         this.description = initParamObject.description;
         this.groupName = initParamObject.groupName;
-        this.personId = initParamObject.personId ?? null;
         this._person = initParamObject._person;
+        this.personId =
+            initParamObject._person?.id ?? initParamObject.personId ?? null;
     }
 }

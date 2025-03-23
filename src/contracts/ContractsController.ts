@@ -18,7 +18,8 @@ import ContractRangesContractsController from './contractRangesContracts/Contrac
 
 export type ContractSearchParams = {
     id?: number;
-    projectId?: string;
+    projectId?: number;
+    projectOurId?: string;
     _project?: Project;
     searchText?: string;
     contractOurId?: string;
@@ -65,6 +66,7 @@ export default class ContractsController {
             Cities.Id AS CityId,
             Cities.Name AS CityName,
             Cities.Code AS CityCode,
+            Projects.Id AS ProjectId,
             Projects.OurId AS ProjectOurId,
             Projects.Name AS ProjectName,
             Projects.Alias AS ProjectAlias,
@@ -139,7 +141,7 @@ export default class ContractsController {
 
     static makeAndConditions(searchParams: ContractSearchParams) {
         const projectOurId =
-            searchParams._project?.ourId || searchParams.projectId;
+            searchParams._project?.ourId || searchParams.projectOurId;
         const typeId = searchParams._contractType?.id || searchParams.typeId;
         const isArchived = typeof searchParams.isArchived === 'string';
 
@@ -148,6 +150,11 @@ export default class ContractsController {
         if (searchParams.id) {
             conditions.push(
                 mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+            );
+        }
+        if (searchParams.projectId) {
+            conditions.push(
+                mysql.format(`Projects.Id = ?`, [searchParams.projectId])
             );
         }
         if (projectOurId) {
@@ -292,9 +299,9 @@ export default class ContractsController {
         let entitiesPerProject: any[] = [];
         let rangesPerContract: ContractRangeContractData[] = [];
         //wybrano widok szczegółowy dla projketu lub kontraktu
-        if (initParamObject.projectId || initParamObject.id) {
+        if (initParamObject.projectOurId || initParamObject.id) {
             entitiesPerProject = await this.getContractEntityAssociationsList({
-                projectId: initParamObject.projectId,
+                projectId: initParamObject.projectOurId,
                 contractId: initParamObject.id,
                 isArchived: initParamObject.isArchived,
             });
@@ -346,6 +353,7 @@ export default class ContractsController {
                     gdFolderId: row.RelatedGdFolderId,
                 },
                 _project: {
+                    id: row.ProjectId,
                     ourId: row.ProjectOurId,
                     name: row.ProjectName,
                     alias: row.ProjectAlias,

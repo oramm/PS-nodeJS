@@ -12,12 +12,11 @@ import {
 import Person from '../Person';
 import ContractRole from './ContractRole';
 import ProjectRole from './ProjectRole';
-import Role from './Role';
 import mysql from 'mysql2/promise';
 
 export type RolesSearchParams = {
     searchText?: string;
-    projectId?: string;
+    projectOurId?: string;
     _project?: ProjectData;
     _contract?: OurContractData | OtherContractData;
     contractId?: number;
@@ -36,7 +35,7 @@ export type RolesSearchParams = {
 export default class RolesController {
     static async getRolesList(
         orConditions: RolesSearchParams[] = []
-    ): Promise<ProjectRoleData | ContractRoleData[]> {
+    ): Promise<(ProjectRoleData | ContractRoleData)[]> {
         const sql = `
             SELECT 
                 Roles.Id, 
@@ -59,7 +58,6 @@ export default class RolesController {
                 OurContractsData.OurId AS ContractOurId,
                 ContractTypes.Id AS ContractTypeId,
                 ContractTypes.Name AS ContractTypeName,
-                Projects.Id AS ProjectId,
                 Projects.OurId AS ProjectOurId,
                 Projects.Alias AS ProjectAlias,
                 Projects.Name AS ProjectName,
@@ -71,32 +69,42 @@ export default class RolesController {
             LEFT JOIN Contracts ON Contracts.Id = Roles.ContractId
             LEFT JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
             LEFT JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
-            LEFT JOIN Projects ON Projects.Id = Roles.ProjectId
+            LEFT JOIN Projects ON Projects.OurId = Roles.ProjectOurId
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
             )}
             ORDER BY Roles.Name ASC
         `;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processRolesResult(result);
     }
 
     static makeAndConditions(searchParams: RolesSearchParams) {
+        console.log(searchParams);
         const conditions: string[] = [];
-        const projectId = searchParams._project?.id || searchParams.projectId;
+        const projectOurId =
+            searchParams._project?.ourId || searchParams.projectOurId;
         const contractId =
             searchParams._contract?.id || searchParams.contractId;
 
-        if (projectId) {
+        if (projectOurId) {
             conditions.push(
-                `Roles.ProjectOurId = ${mysql.escape(searchParams.projectId)}`
+                `Roles.ProjectOurId = ${mysql.escape(projectOurId)}`
             );
         }
         if (contractId) {
-            conditions.push(`Roles.ContractId = ${mysql.escape(contractId)}`);
+            conditions.push(`
+                    Roles.ContractId = ${mysql.escape(contractId)}
+                    OR Roles.ProjectOurId = (
+                        SELECT Projects.OurId 
+                        FROM Contracts 
+                        JOIN Projects ON Projects.OurId = Contracts.ProjectOurId 
+                        WHERE Contracts.Id = ${mysql.escape(contractId)}
+                    )`);
         }
+
         if (searchParams.personId) {
             conditions.push(
                 `Roles.PersonId = ${mysql.escape(searchParams.personId)}`
@@ -196,11 +204,11 @@ export default class RolesController {
 
     static processRolesResult(
         result: any[]
-    ): ContractRoleData | ProjectRoleData[] {
-        const newResult: ContractRoleData | ProjectRoleData[] = [];
+    ): (ContractRoleData | ProjectRoleData)[] {
+        const newResult: (ContractRoleData | ProjectRoleData)[] = [];
 
         for (const row of result) {
-            const roleItem = row.ProjectId
+            const roleItem = row.ProjectOurId
                 ? new ProjectRole(this.makeProjectRoleInitParams(row))
                 : new ContractRole(this.makeContractRoleInitParams(row));
             newResult.push(roleItem);
@@ -236,9 +244,7 @@ export default class RolesController {
         const roleData: RoleData = this.makeRoleInitParams(row);
         return {
             ...roleData,
-            projectId: row.ProjectId,
             _project: {
-                id: row.ProjectId as number | undefined,
                 ourId: row.ProjectOurId as string,
                 alias: row.ProjectAlias,
                 name: row.ProjectName,
@@ -250,7 +256,6 @@ export default class RolesController {
         const roleData: RoleData = this.makeRoleInitParams(row);
         return {
             ...roleData,
-            contractId: row.ContractId,
             _contract: {
                 id: row.ContractId,
                 ourId: row.ContractOurId,
@@ -265,5 +270,20 @@ export default class RolesController {
                 },
             } as OurContractData | OtherContractData,
         };
+    }
+
+    static validateRole(role: ContractRoleData | ProjectRoleData) {
+        if (
+            !(role as ProjectRoleData)._project?.id &&
+            !(role as ContractRoleData)._contract?.id
+        ) {
+            throw new Error('Role must have either a project or a contract');
+        }
+    }
+
+    static createProperRole(initParams: ProjectRoleData | ContractRoleData) {
+        return (initParams as ProjectRoleData)._project?.id
+            ? new ProjectRole(initParams)
+            : new ContractRole(initParams);
     }
 }

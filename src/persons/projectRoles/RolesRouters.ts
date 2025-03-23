@@ -18,7 +18,8 @@ app.post('/roles', async (req: Request, res: Response) => {
 
 app.post('/role', async (req: Request, res: Response) => {
     try {
-        let item = new Role(req.body);
+        RolesController.validateRole(req.parsedBody);
+        const item = RolesController.createProperRole(req.parsedBody);
         await item.addInDb();
         res.send(item);
     } catch (error) {
@@ -30,7 +31,8 @@ app.post('/role', async (req: Request, res: Response) => {
 
 app.put('/role/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Role(req.body);
+        RolesController.validateRole(req.parsedBody);
+        const item = RolesController.createProperRole(req.parsedBody);
         await item.editInDb();
         res.send(item);
     } catch (error) {

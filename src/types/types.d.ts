@@ -485,6 +485,6 @@ export interface ContractRoleData extends RoleData {
 }
 
 export interface ProjectRoleData extends RoleData {
-    projectId?: number | null;
+    projectOurId?: string | null;
     _project?: ProjectData;
 }
