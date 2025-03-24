@@ -1,6 +1,6 @@
 import RolesController from './RolesController';
 import { app } from '../../index';
-import Role from './Role';
+import ContractRole from './ContractRole';
 import { Request, Response } from 'express';
 
 app.post('/roles', async (req: Request, res: Response) => {
@@ -44,8 +44,8 @@ app.put('/role/:id', async (req: Request, res: Response) => {
 
 app.delete('/role/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Role(req.body);
-        console.log('delete');
+        RolesController.validateRole(req.parsedBody);
+        const item = RolesController.createProperRole(req.parsedBody);
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {

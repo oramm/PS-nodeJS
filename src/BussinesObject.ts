@@ -57,7 +57,15 @@ export default class BusinessObject {
         );
     }
 
-    async deleteFromDb() {
-        return await ToolsDb.deleteFromDb(this._dbTableName, this);
+    async deleteFromDb(
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        return await ToolsDb.deleteFromDb(
+            this._dbTableName,
+            this,
+            externalConn,
+            isPartOfTransaction
+        );
     }
 }

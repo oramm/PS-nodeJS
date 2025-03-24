@@ -470,21 +470,18 @@ export interface NeedsFocusAreasData {
     comment?: string;
 }
 
-export interface RoleData extends RepositoryDataItem {
+export interface ContractRoleData extends RepositoryDataItem {
     id: number;
     personId: number | null;
     _person?: PersonData;
     name: string;
     description: string;
     groupName: string;
-}
-
-export interface ContractRoleData extends RoleData {
     contractId?: number | null;
     _contract?: OurContract | OtherContract;
 }
 
-export interface ProjectRoleData extends RoleData {
+export interface ProjectRoleData extends ContractRoleData {
     projectOurId?: string | null;
     _project?: ProjectData;
 }
