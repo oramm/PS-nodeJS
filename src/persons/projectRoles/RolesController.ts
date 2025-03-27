@@ -61,7 +61,8 @@ export default class RolesController {
                 Projects.OurId AS ProjectOurId,
                 Projects.Alias AS ProjectAlias,
                 Projects.Name AS ProjectName,
-                SystemRoles.Name AS SystemRoleName
+                SystemRoles.Name AS SystemRoleName,
+                GROUP_CONCAT(ContractRanges.Name SEPARATOR ', ') AS RangeNames
             FROM Roles 
             JOIN Persons ON Persons.Id = Roles.PersonId 
             JOIN Entities ON Entities.Id = Persons.EntityId 
@@ -70,12 +71,17 @@ export default class RolesController {
             LEFT JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
             LEFT JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
             LEFT JOIN Projects ON Projects.OurId = Roles.ProjectOurId
+            LEFT JOIN ContractRangesContracts ON Contracts.Id = ContractRangesContracts.ContractId
+            LEFT JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
             )}
-            ORDER BY Roles.Name ASC
-        `;
+            GROUP BY Roles.Id
+            ORDER BY Roles.Name ASC`;
+
+        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processRolesResult(result);
     }
@@ -214,7 +220,7 @@ export default class RolesController {
         return newResult;
     }
 
-    private static makeRoleInitParams(row: any): ContractRoleData {
+    private static makeContractRoleInitParams(row: any): ContractRoleData {
         return {
             id: row.Id,
             name: row.Name,
@@ -235,25 +241,6 @@ export default class RolesController {
                             : row.EntityName?.trim(),
                 },
             }),
-        };
-    }
-
-    private static makeProjectRoleInitParams(row: any): ProjectRoleData {
-        const roleData: ContractRoleData = this.makeRoleInitParams(row);
-        return {
-            ...roleData,
-            _project: {
-                ourId: row.ProjectOurId as string,
-                alias: row.ProjectAlias,
-                name: row.ProjectName,
-            } as ProjectData,
-        };
-    }
-
-    private static makeContractRoleInitParams(row: any): ContractRoleData {
-        const roleData: ContractRoleData = this.makeRoleInitParams(row);
-        return {
-            ...roleData,
             _contract: {
                 id: row.ContractId,
                 ourId: row.ContractOurId,
@@ -262,11 +249,27 @@ export default class RolesController {
                 alias: row.ContractAlias,
                 startDate: row.ContractStartDate,
                 endDate: row.ContractEndDate,
+                _contractRangesNames:
+                    (<string | undefined>row.RangeNames)
+                        ?.split(',')
+                        .map((name) => name.trim()) || [],
                 _type: {
                     id: row.ContractTypeId,
                     name: row.ContractTypeName,
                 },
             } as OurContractData | OtherContractData,
+        };
+    }
+
+    private static makeProjectRoleInitParams(row: any): ProjectRoleData {
+        const roleData: ContractRoleData = this.makeContractRoleInitParams(row);
+        return {
+            ...roleData,
+            _project: {
+                ourId: row.ProjectOurId as string,
+                alias: row.ProjectAlias,
+                name: row.ProjectName,
+            } as ProjectData,
         };
     }
 
