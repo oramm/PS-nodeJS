@@ -314,7 +314,7 @@ export default class ContractsWithChildrenController {
             }
 
             // Dodajemy zadanie do sprawy
-            caseWithTasks.tasks.push(task);
+            if (task.id) caseWithTasks.tasks.push(task);
         }
 
         return contractsWithChildren;
