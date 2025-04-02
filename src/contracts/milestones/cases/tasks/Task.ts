@@ -12,7 +12,7 @@ import Person from '../../../../persons/Person';
 import Case from '../Case';
 import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
 import ToolsGd from '../../../../tools/ToolsGd';
-import { PersonData, TaskData } from '../../../../types/types';
+import { MilestoneData, PersonData, TaskData } from '../../../../types/types';
 
 export default class Task extends BusinessObject {
     id?: number;
@@ -185,7 +185,10 @@ export default class Task extends BusinessObject {
             const parentCase = new Case({
                 number: parents.caseNumber,
                 _type: {},
-                _parent: { name: parents.milestoneName, _type: {} },
+                _parent: {
+                    name: parents.milestoneName,
+                    _type: {},
+                } as MilestoneData,
             });
             const parentCaseDisplayNumber = parentCase.number
                 ? ' | ' + parentCase._displayNumber

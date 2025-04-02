@@ -61,7 +61,8 @@ export default class LetterCaseAssociationsController {
                 Milestones.Id AS MilestoneId, 
                 Milestones.Name AS MilestoneName, 
                 MilestoneTypes.Id AS MilestoneTypeId, 
-                MilestoneTypes.Name AS MilestoneTypeName, 
+                MilestoneTypes.Name AS MilestoneTypeName,
+                MilestoneTypes.IsUniquePerContract AS MilestoneTypeIsUniquePerContract,
                 COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
                 OurContractsData.OurId AS ContractOurId, 
                 ContractTypes.Id AS ContractTypeId, 
@@ -138,6 +139,8 @@ export default class LetterCaseAssociationsController {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
                             _folderNumber: row.MilestoneTypeFolderNumber,
+                            isUniquePerContract:
+                                row.MilestoneTypeIsUniquePerContract,
                         },
                         _contract,
                         _offer,

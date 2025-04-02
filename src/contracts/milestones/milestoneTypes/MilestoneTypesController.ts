@@ -1,17 +1,17 @@
-
 import mysql from 'mysql2/promise';
-import ToolsDb from "../../../tools/ToolsDb";
-import MilestoneType from "./MilestoneType";
+import ToolsDb from '../../../tools/ToolsDb';
+import MilestoneType from './MilestoneType';
 import Project from '../../../projects/Project';
 
 export type MilestoneTypesSearchParams = {
-    _project?: Project,
-}
+    _project?: Project;
+};
 
 export default class MilestoneTypesController {
-    static async getMilestoneTypesList(orConditions: MilestoneTypesSearchParams[] = []) {
-
-        const sql = `SELECT  
+    static async getMilestoneTypesList(
+        orConditions: MilestoneTypesSearchParams[] = []
+    ) {
+        const sql = `SELECT DISTINCT
                 MilestoneTypes_ContractTypes.MilestoneTypeId,
                 MilestoneTypes_ContractTypes.ContractTypeId,
                 MilestoneTypes_ContractTypes.FolderNumber,
@@ -23,15 +23,17 @@ export default class MilestoneTypesController {
                 MilestoneTypes.LastUpdated,
                 MilestoneTypes.EditorId,
                 ContractTypes.Name AS "ContractTypeName",
-                ContractTypes.Description AS "ContractTypeDescription"
+                ContractTypes.Description AS "ContractTypeDescription",
+                ContractTypes.IsOur AS "ContractTypeIsOur"
             FROM MilestoneTypes_ContractTypes
             JOIN MilestoneTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId = MilestoneTypes.Id
             JOIN ContractTypes ON MilestoneTypes_ContractTypes.ContractTypeId = ContractTypes.Id
             JOIN Contracts ON Contracts.TypeId = MilestoneTypes_ContractTypes.ContractTypeId
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}
-            GROUP BY MilestoneTypes_ContractTypes.MilestoneTypeId
+            WHERE ${ToolsDb.makeOrGroupsConditions(
+                orConditions,
+                this.makeAndConditions.bind(this)
+            )}
             ORDER BY ContractTypes.Name, MilestoneTypes.Name`;
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneTypesResult(result);
     }
@@ -57,6 +59,7 @@ export default class MilestoneTypesController {
                     id: row.ContractTypeId,
                     name: row.ContractTypeName,
                     description: row.ContractTypeDescription,
+                    isOur: row.ContractTypeIsOur,
                 },
                 _folderNumber: row.FolderNumber,
                 _isDefault: row.IsDefault,

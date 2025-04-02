@@ -80,8 +80,6 @@ export default class RolesController {
             GROUP BY Roles.Id
             ORDER BY Roles.Name ASC`;
 
-        console.log(sql);
-
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processRolesResult(result);
     }

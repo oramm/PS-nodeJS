@@ -116,7 +116,7 @@ export interface MilestoneData extends RepositoryDataItem {
     startDate?: string;
     endDate?: string;
     gdFolderId?: string;
-    _type: MilestoneType;
+    _type: MilestoneTypeData;
     _contract?: OurContractData | OtherContractData;
     _offer?: OurOfferData | ExternalOfferData;
     contractId?: number;
@@ -162,13 +162,14 @@ export interface ContractTypeData extends RepositoryDataItem {
 
 export interface MilestoneTypeData extends RepositoryDataItem {
     name: string;
-    description: string;
-    isInScrumByDefault: boolean;
+    description?: string;
+    isInScrumByDefault?: boolean;
     isUniquePerContract: boolean;
-    _isDefault: boolean;
-    _contractType: ContractTypeData;
-    _folderNumber_MilestoneTypeName: string;
-    _folderNumber: string;
+    _isDefault?: boolean;
+    _contractType?: ContractTypeData;
+    _folderNumber_MilestoneTypeName?: string;
+    _folderNumber?: string;
+    lastUpdated?: string;
 }
 
 export interface CaseTypeData extends RepositoryDataItem {

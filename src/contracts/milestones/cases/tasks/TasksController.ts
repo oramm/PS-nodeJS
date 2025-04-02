@@ -66,6 +66,7 @@ export default class TasksController {
                 Milestones.GdFolderId AS MilestoneGdFolderId,
                 MilestoneTypes.Id AS MilestoneTypeId,
                 MilestoneTypes.Name AS MilestoneTypeName,
+                MilestoneTypes.IsUniquePerContract,
                 COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
                 OurContractsData.OurId AS ContractOurId,
                 Contracts.Id AS ContractId,
@@ -227,6 +228,7 @@ export default class TasksController {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
                             _folderNumber: row.MilestoneTypeFolderNumber,
+                            isUniquePerContract: row.IsUniquePerContract,
                         },
                         _contract: {
                             //Contract

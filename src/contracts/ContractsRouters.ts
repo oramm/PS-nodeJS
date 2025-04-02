@@ -92,7 +92,8 @@ app.post('/contractReact', async (req: Request, res: Response) => {
 
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
-        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+        const _fieldsToUpdate: string[] | undefined =
+            req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         if (!itemFromClient || !itemFromClient.id)
             throw new Error(`Próba edycji kontraktu bez Id`);

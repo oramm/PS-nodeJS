@@ -54,6 +54,7 @@ export default class CaseTemplatesController {
                 CaseTypes.IsDefault AS CaseTypeIsDefault,
                 MilestoneTypes.Id AS MilestoneTypeId,
                 MilestoneTypes.Name AS MilestoneTypeName,
+                MilestoneTypes.IsUniquePerContract AS MilestoneTypeIsUniquePerContract,
                 COALESCE(MilestoneTypes_ContractTypes.IsDefault, TRUE) AS MilestoneTypeIsDefault
             FROM CaseTemplates
             JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
@@ -91,6 +92,8 @@ export default class CaseTemplatesController {
                         id: row.MilestoneTypeId,
                         name: row.MilestoneTypeName,
                         _isDefault: row.MilestoneTypeIsDefault,
+                        isUniquePerContract:
+                            row.MilestoneTypeIsUniquePerContract,
                     }),
                 }),
                 caseTypeId: row.CaseTypeId,

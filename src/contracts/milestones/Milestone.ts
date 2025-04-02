@@ -19,11 +19,12 @@ import ContractsController from '../ContractsController';
 import {
     ExternalOfferData,
     MilestoneData,
-    OfferData,
+    MilestoneTypeData,
     OtherContractData,
     OurContractData,
     OurOfferData,
 } from '../../types/types';
+import { UserData } from '../../setup/GAuth2/sessionTypes';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
@@ -35,8 +36,8 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     startDate?: string;
     endDate?: string;
     status?: string;
-    typeId: string;
-    _type: MilestoneType;
+    typeId?: number;
+    _type: MilestoneTypeData;
     contractId?: number;
     offerId?: number;
     _contract?: OurContractData | OtherContractData;
@@ -44,7 +45,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     gdFolderId?: string;
     _gdFolderUrl?: string;
     _folderName?: string;
-    isOur?: boolean;
     _FolderNumber_TypeName_Name?: string;
 
     constructor(initParamObject: MilestoneData) {
@@ -85,6 +85,43 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this.offerId = initParamObject._offer?.id;
         this._contract = initParamObject._contract;
         this._offer = initParamObject._offer;
+    }
+
+    async addNewController(auth: OAuth2Client, userData: UserData) {
+        try {
+            console.group('Adding Milestone', this._FolderNumber_TypeName_Name);
+            if (!this._contract && !this._offer)
+                throw new Error(
+                    'Contract or offer is not defined for Milestone'
+                );
+
+            if (!this.typeId) throw new Error('Milestone type is not defined');
+            await this.createFolders(auth);
+            await this.addInDb();
+            await this.createDefaultCases(auth, { isPartOfBatch: false });
+            await this.editFolder(auth);
+        } catch (err) {
+            console.error('Error in addNewController:', err);
+            this.deleteFolder(auth).catch((error) => {
+                console.error('Error deleting folder:', error);
+            });
+            this.deleteFromDb().catch((error) => {
+                console.error('Error deleting from DB:', error);
+            });
+            throw err;
+        }
+        console.groupEnd();
+    }
+
+    async editController(auth: OAuth2Client, userData: UserData) {
+        console.group('Editing Milestone', this._FolderNumber_TypeName_Name);
+        if (!this.typeId) throw new Error('Milestone type is not defined');
+        if (!this.gdFolderId)
+            throw new Error('Milestone folder is not defined');
+
+        await this.editFolder(auth);
+        await this.editInDb();
+        await this.editInScrum(auth);
     }
 
     async deleteController(auth: OAuth2Client) {
@@ -210,7 +247,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         const defaultCaseTemplates = await this.getCaseTemplates({
             isDefaultOnly: true,
         });
-        if (defaultCaseTemplates.length == 0 && this.isOur)
+        if (defaultCaseTemplates.length == 0)
             throw new Error(
                 'Typ kontraktu, który próbujesz dodać nie ma przypisanego żadnego szablonu sprawy!\n' +
                     'Zgłoś administratorowi potrzebę utworzenia szablonów spraw i zadań'
@@ -433,7 +470,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
                         name: row.MilestoneTypeName,
                         _folderNumber: row.MilestoneTypeFolderNumber,
                         _isDefault: row.MilestoneTypeIsDefault,
-                    }),
+                    } as MilestoneTypeData),
                 });
 
                 newResult.push(item);
@@ -491,7 +528,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
                             id: row.MilestoneTypeId,
                             name: row.MilestoneTypeName,
                             _isDefault: row.MilestoneTypeIsDefault,
-                        }),
+                        } as MilestoneTypeData),
                     }),
                     caseTypeId: row.CaseTypeId,
                 });

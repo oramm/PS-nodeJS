@@ -1,18 +1,22 @@
 import BusinessObject from '../../../BussinesObject';
-import ToolsDb from '../../../tools/ToolsDb';
+import { MilestoneTypeData } from '../../../types/types';
 
-export default class MilestoneType extends BusinessObject {
+export default class MilestoneType
+    extends BusinessObject
+    implements MilestoneTypeData
+{
     id?: number;
-    name: any;
-    description: any;
-    _isDefault: any;
-    isInScrumByDefault: any;
-    isUniquePerContract: any;
-    _folderNumber: any;
+    name: string;
+    description?: string;
+    _isDefault?: boolean;
+    isInScrumByDefault?: boolean;
+    isUniquePerContract: boolean;
+    _folderNumber?: string;
     _contractType: any;
     _folderNumber_MilestoneTypeName?: string;
+    lastUpdated?: string;
 
-    constructor(initParamObject: any) {
+    constructor(initParamObject: MilestoneTypeData) {
         super({ ...initParamObject, _dbTableName: 'MilestoneTypes' });
         this.id = initParamObject.id;
         this.name = initParamObject.name;
@@ -26,5 +30,6 @@ export default class MilestoneType extends BusinessObject {
         this._contractType = initParamObject._contractType;
         this._folderNumber_MilestoneTypeName =
             this._folderNumber + ' ' + this.name;
+        this.lastUpdated = initParamObject.lastUpdated;
     }
 }
