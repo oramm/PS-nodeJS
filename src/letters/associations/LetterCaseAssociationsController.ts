@@ -144,6 +144,7 @@ export default class LetterCaseAssociationsController {
                         },
                         _contract,
                         _offer,
+                        _dates: [],
                     },
                 }),
             });

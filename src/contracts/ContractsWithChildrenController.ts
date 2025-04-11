@@ -61,10 +61,13 @@ export default class ContractsWithChildrenController {
                 Milestones.Id AS MilestoneId,
                 Milestones.Name AS MilestoneName,
                 Milestones.ContractId,
-                Milestones.StartDate AS MilestoneStartDate,
-                Milestones.EndDate AS MilestoneEndDate,
                 Milestones.Status AS MilestoneStatus,
                 Milestones.GdFolderId AS MilestoneGdFolderId,
+                MilestoneDates.Id AS MilestoneDateId,
+                MilestoneDates.StartDate AS MilestoneDateStart,
+                MilestoneDates.EndDate AS MilestoneDateEnd,
+                MilestoneDates.Description AS MilestoneDateDescription,
+                MilestoneDates.LastUpdated AS MilestoneDateLastUpdated,
                 MilestoneTypes.Id AS MilestoneTypeId,
                 MilestoneTypes.Name AS MilestoneTypeName,
                 MilestoneTypes.IsUniquePerContract,
@@ -104,11 +107,13 @@ export default class ContractsWithChildrenController {
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
                 AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId 
             LEFT JOIN Persons AS TasksOwners ON TasksOwners.Id = Tasks.OwnerId
+            LEFT JOIN MilestoneDates ON MilestoneDates.MilestoneId = Milestones.Id
             WHERE ${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
             )}
             ORDER BY Contracts.Id, MilestoneTypeFolderNumber, CaseTypeFolderNumber, Cases.Id`;
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processContractsResult(result);
     }
@@ -177,6 +182,8 @@ export default class ContractsWithChildrenController {
     static processContractsResult(result: any[]) {
         const contracts: { [id: string]: ContractOur | ContractOther } = {};
         const contractsWithChildren: ContractsWithChildren[] = [];
+        // Tworzymy zbiór kamieni milowych, aby uniknąć duplikacji
+        const milestonesById: { [id: number]: Milestone } = {};
 
         for (const row of result) {
             let contract = contracts[row.ContractId];
@@ -225,21 +232,39 @@ export default class ContractsWithChildrenController {
                 contracts[row.ContractId] = contract;
             }
 
-            const milestone = new Milestone({
-                id: row.MilestoneId,
-                name: row.MilestoneName,
-                gdFolderId: row.MilestoneGdFolderId,
-                status: row.MilestoneStatus,
-                startDate: row.MilestoneStartDate,
-                endDate: row.MilestoneEndDate,
-                _type: {
-                    id: row.MilestoneTypeId,
-                    name: row.MilestoneTypeName,
-                    _folderNumber: row.MilestoneTypeFolderNumber,
-                    isUniquePerContract: row.IsUniquePerContract,
-                },
-                _contract: contract,
-            });
+            if (!milestonesById[row.MilestoneId])
+                milestonesById[row.MilestoneId] = new Milestone({
+                    id: row.MilestoneId,
+                    name: row.MilestoneName,
+                    gdFolderId: row.MilestoneGdFolderId,
+                    status: row.MilestoneStatus,
+                    _dates: [],
+                    _type: {
+                        id: row.MilestoneTypeId,
+                        name: row.MilestoneTypeName,
+                        _folderNumber: row.MilestoneTypeFolderNumber,
+                        isUniquePerContract: row.IsUniquePerContract,
+                    },
+                    _contract: contract,
+                });
+
+            const uniqueMilestone = milestonesById[row.MilestoneId];
+            if (
+                row.MilestoneDateId &&
+                !uniqueMilestone._dates.some(
+                    (d) => d.id === row.MilestoneDateId
+                )
+            )
+                uniqueMilestone._dates.push({
+                    id: row.MilestoneDateId,
+                    milestoneId: row.MilestoneId,
+                    startDate: row.MilestoneDateStart,
+                    endDate: row.MilestoneDateEnd,
+                    description: ToolsDb.sqlToString(
+                        row.MilestoneDateDescription
+                    ),
+                    lastUpdated: row.MilestoneDateLastUpdated,
+                });
 
             const caseItem = new Case({
                 id: row.CaseId,
@@ -255,7 +280,7 @@ export default class ContractsWithChildrenController {
                     milestoneTypeId: row.MilestoneTypeId,
                     folderNumber: row.CaseTypeFolderNumber,
                 },
-                _parent: milestone,
+                _parent: uniqueMilestone,
             });
 
             const task = new Task({
@@ -289,11 +314,11 @@ export default class ContractsWithChildrenController {
             // Znajdujemy kamień milowy w kontrakcie lub tworzymy nowy, jeśli go nie ma
             let milestoneWithCases =
                 contractWithChildren.milestonesWithCases.find(
-                    (m) => m.milestone.id === milestone.id
+                    (m) => m.milestone.id === uniqueMilestone.id
                 );
             if (!milestoneWithCases) {
                 milestoneWithCases = {
-                    milestone: milestone,
+                    milestone: uniqueMilestone,
                     casesWithTasks: [],
                 };
                 contractWithChildren.milestonesWithCases.push(
@@ -301,20 +326,26 @@ export default class ContractsWithChildrenController {
                 );
             }
 
-            // Znajdujemy sprawę w kamieniu milowym lub tworzymy nową, jeśli jej nie ma
-            let caseWithTasks = milestoneWithCases.casesWithTasks.find(
-                (c) => c.caseItem.id === caseItem.id
-            );
-            if (!caseWithTasks) {
-                caseWithTasks = {
-                    caseItem: caseItem,
-                    tasks: [],
-                };
-                milestoneWithCases.casesWithTasks.push(caseWithTasks);
-            }
+            if (caseItem.id) {
+                // Znajdujemy sprawę w kamieniu milowym lub tworzymy nową, jeśli jej nie ma
+                let caseWithTasks = milestoneWithCases.casesWithTasks.find(
+                    (c) => c.caseItem.id === caseItem.id
+                );
+                if (!caseWithTasks) {
+                    caseWithTasks = {
+                        caseItem: caseItem,
+                        tasks: [],
+                    };
+                    milestoneWithCases.casesWithTasks.push(caseWithTasks);
+                }
 
-            // Dodajemy zadanie do sprawy
-            if (task.id) caseWithTasks.tasks.push(task);
+                // Dodajemy zadanie do sprawy
+                if (
+                    task.id &&
+                    !caseWithTasks.tasks.some((t) => t.id === task.id)
+                )
+                    caseWithTasks.tasks.push(task);
+            }
         }
 
         return contractsWithChildren;

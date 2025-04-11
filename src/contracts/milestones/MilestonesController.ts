@@ -147,8 +147,7 @@ export default class MilestonesController {
                 },
                 name: ToolsDb.sqlToString(row.Name),
                 description: ToolsDb.sqlToString(row.Description),
-                startDate: row.StartDate,
-                endDate: row.EndDate,
+                _dates: [],
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
                 //może to być kontrakt na roboty (wtedy ma _ourContract), albo OurContract(wtedy ma OurId)

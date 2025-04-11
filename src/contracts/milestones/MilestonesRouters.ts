@@ -41,7 +41,7 @@ app.post('/milestone', async (req: Request, res: Response) => {
 
 app.put('/milestone/:id', async (req: Request, res: Response) => {
     try {
-        let item = new Milestone(req.body);
+        const item = new Milestone(req.parsedBody);
         item._contract = await item.getParentContractFromDb();
         await ToolsGapi.gapiReguestHandler(
             req,

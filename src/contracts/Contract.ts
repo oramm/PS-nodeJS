@@ -366,6 +366,7 @@ export default abstract class Contract
                 _type: template._milestoneType,
                 _contract: this as any,
                 status: 'Nie rozpoczęty',
+                _dates: [],
             });
             //zasymuluj numer kamienia nieunikalnego.
             //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu

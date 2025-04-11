@@ -19,12 +19,15 @@ import ContractsController from '../ContractsController';
 import {
     ExternalOfferData,
     MilestoneData,
+    MilestoneDateData,
     MilestoneTypeData,
     OtherContractData,
     OurContractData,
     OurOfferData,
 } from '../../types/types';
 import { UserData } from '../../setup/GAuth2/sessionTypes';
+import MilestoneDate from './MilestoneDates';
+import e from 'express';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
@@ -33,8 +36,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     name: string;
     _folderNumber?: string;
     description: string;
-    startDate?: string;
-    endDate?: string;
+    _dates: MilestoneDateData[] = [];
     status?: string;
     typeId?: number;
     _type: MilestoneTypeData;
@@ -57,16 +59,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this.name = initParamObject.name;
         this._folderNumber = initParamObject._folderNumber;
         this.description = initParamObject.description || '';
-        const startDateRaw =
-            initParamObject.startDate || initParamObject._contract?.startDate;
-        if (typeof startDateRaw === 'string') {
-            this.startDate = ToolsDate.dateJsToSql(startDateRaw);
-        }
-        const endDateRaw =
-            initParamObject.endDate || initParamObject._contract?.endDate;
-        if (typeof endDateRaw === 'string') {
-            this.endDate = ToolsDate.dateJsToSql(endDateRaw);
-        }
+        this._dates = initParamObject._dates || [];
 
         this.status = initParamObject.status;
         if (initParamObject.gdFolderId)
@@ -120,8 +113,88 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             throw new Error('Milestone folder is not defined');
 
         await this.editFolder(auth);
+        console.log('Milestone folder edited in GD');
         await this.editInDb();
+        console.log('Milestone edited in DB');
         await this.editInScrum(auth);
+        console.log('Milestone edited in Scrum');
+        console.groupEnd();
+    }
+
+    async addInDb(
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<this> {
+        // jeśli jest w transakcji to robimy wewnętrzną transakcję
+        if (!isPartOfTransaction) {
+            return await ToolsDb.transaction(async (conn) => {
+                await super.addInDb(conn, true);
+                await this.addDatesInDb(conn, true);
+                return this;
+            }, externalConn);
+        }
+
+        if (!externalConn) throw new Error('No connection provided');
+        await super.addInDb(externalConn, isPartOfTransaction);
+        await this.addDatesInDb(externalConn, isPartOfTransaction);
+        return this;
+    }
+
+    async addDatesInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        if (this.id === undefined)
+            throw new Error('addDatesInDb:: Milestone id is not defined');
+        const associations: MilestoneDate[] = [];
+        this._dates.map((item) => {
+            associations.push(
+                new MilestoneDate({ ...item, milestoneId: this.id! })
+            );
+        });
+        for (const association of associations) {
+            await association.addInDb(externalConn, isPartOfTransaction);
+        }
+    }
+
+    async deleteDatesFromDb(externalConn: mysql.PoolConnection) {
+        const sql = `DELETE FROM MilestoneDates WHERE MilestoneId =?`;
+        return await ToolsDb.executePreparedStmt(
+            sql,
+            [this.id],
+            this,
+            externalConn
+        );
+    }
+
+    async editDatesInDb(
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ) {
+        await Promise.all([
+            this.deleteDatesFromDb(externalConn),
+            this.addDatesInDb(externalConn, isPartOfTransaction),
+        ]);
+    }
+
+    async editInDb(
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        _fieldsToUpdate?: string[]
+    ): Promise<this> {
+        if (_fieldsToUpdate && !_fieldsToUpdate.includes('_dates'))
+            return await super.editInDb(
+                externalConn,
+                isPartOfTransaction,
+                _fieldsToUpdate
+            );
+        return await ToolsDb.transaction(async (conn) => {
+            const [, updated] = await Promise.all([
+                this.editDatesInDb(conn, true),
+                super.editInDb(conn, isPartOfTransaction, _fieldsToUpdate),
+            ]);
+            return updated;
+        }, externalConn);
     }
 
     async deleteController(auth: OAuth2Client) {

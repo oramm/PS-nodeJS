@@ -231,6 +231,7 @@ export default class CasesController {
                     },
                     _contract,
                     _offer,
+                    _dates: [],
                 }),
                 _risk: new Risk({
                     id: row.RiskId,

@@ -280,6 +280,7 @@ export default class TasksController {
                             isOur: false,
                             form: '',
                         },
+                        _dates: [],
                     }),
                 }),
             });

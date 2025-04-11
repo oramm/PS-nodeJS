@@ -392,7 +392,7 @@ export default class ToolsDb {
             });
         }
     */
-    static async transaction(
+    static async transaction<Type>(
         callback: (conn: mysql.PoolConnection) => Promise<any>,
         externalConn?: mysql.PoolConnection
     ) {
@@ -412,7 +412,7 @@ export default class ToolsDb {
             if (!externalConn) {
                 await connection.commit();
             }
-            return result;
+            return result as Type;
         } catch (err) {
             if (transactionStarted && !externalConn) {
                 await connection.rollback();

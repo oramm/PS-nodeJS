@@ -6,6 +6,7 @@ import ToolsGd from '../tools/ToolsGd';
 import {
     CityData,
     ContractTypeData,
+    MilestoneDateData as MilestoneDateData,
     OfferData,
     OfferEventData,
     PersonData,
@@ -327,9 +328,13 @@ export default abstract class Offer
                 _type: template._milestoneType,
                 _offer: this as any,
                 status: 'Nie rozpoczęty',
-                endDate: i
-                    ? this.submissionDeadline
-                    : this.setBidValidityDate(),
+                _dates: [
+                    {
+                        endDate: i
+                            ? <string>this.submissionDeadline
+                            : this.setBidValidityDate(),
+                    } as MilestoneDateData,
+                ],
             });
 
             await milestone.createFolders(auth);
