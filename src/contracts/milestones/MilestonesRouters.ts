@@ -1,14 +1,35 @@
-import MilestonesController from './MilestonesController';
+import MilestonesController, {
+    MilestoneParentType,
+} from './MilestonesController';
 import { app } from '../../index';
 import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
 import Milestone from './Milestone';
 import { Request, Response } from 'express';
+import MilestoneDatesController from './MilestoneDatesController';
+import MilestoneDate from './MilestoneDate';
+import { MilestoneDateData } from '../../types/types';
 
 app.post('/milestones', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const parentType = req.parsedBody.parentType;
+        const parentType = req.parsedBody.parentType as MilestoneParentType;
         const result = await MilestonesController.getMilestonesList(
+            orConditions,
+            parentType
+        );
+        res.send(result);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.post('/milestoneDates', async (req: Request, res: Response) => {
+    try {
+        const orConditions = req.parsedBody.orConditions;
+        const parentType = req.parsedBody.parentType as MilestoneParentType;
+        const result = await MilestoneDatesController.getMilestoneDatesList(
             orConditions,
             parentType
         );
@@ -58,6 +79,24 @@ app.put('/milestone/:id', async (req: Request, res: Response) => {
     }
 });
 
+app.put('/milestoneDate/:id', async (req: Request, res: Response) => {
+    try {
+        const item = new MilestoneDate(req.parsedBody);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.editController,
+            [req.session.userData, req.parsedBody._fieldsToUpdate],
+            item
+        );
+        res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
 app.delete('/milestone/:id', async (req: Request, res: Response) => {
     try {
         let item = new Milestone(req.body);
@@ -79,6 +118,25 @@ app.delete('/milestone/:id', async (req: Request, res: Response) => {
                 item
             ),
         ]);
+        res.send(item);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+    }
+});
+
+app.delete('/milestoneDate/:id', async (req: Request, res: Response) => {
+    try {
+        const item = new MilestoneDate(req.parsedBody);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            item.deleteController,
+            [req.session.userData],
+            item
+        );
+
         res.send(item);
     } catch (error) {
         console.error(error);

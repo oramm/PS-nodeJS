@@ -26,8 +26,7 @@ import {
     OurOfferData,
 } from '../../types/types';
 import { UserData } from '../../setup/GAuth2/sessionTypes';
-import MilestoneDate from './MilestoneDates';
-import e from 'express';
+import MilestoneDate from './MilestoneDate';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;

@@ -126,15 +126,14 @@ export interface MilestoneData extends RepositoryDataItem {
     _gdFolderUrl?: string;
 }
 
-export interface MilestoneDateData {
-    id?: number;
+export interface MilestoneDateData extends RepositoryDataItem {
     milestoneId: number;
+    _milestone?: MilestoneData;
     startDate: string;
     endDate: string;
     description?: string | null;
     lastUpdated?: string;
 }
-
 export interface CaseData extends RepositoryDataItem {
     name?: string | null;
     number?: number;

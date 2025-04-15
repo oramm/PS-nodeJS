@@ -3,23 +3,42 @@ import ToolsDb from '../../tools/ToolsDb';
 import ContractOther from '../ContractOther';
 import ContractOur from '../ContractOur';
 import Milestone from './Milestone';
-import { OfferData } from '../../types/types';
+import {
+    ContractTypeData,
+    MilestoneDateData,
+    OfferData,
+    OtherContractData,
+    OurContractData,
+    PersonData,
+    ProjectData,
+} from '../../types/types';
+import MilestonesController, {
+    MilestoneParentType,
+} from './MilestonesController';
 
-export type MilestonesSearchParams = {
-    projectId?: string;
+export type MilestoneDatesSearchParams = {
+    searchText?: string;
+    projectOurId?: string;
+    _project?: ProjectData;
+    _contract?: OurContractData | OtherContractData;
     contractId?: number;
-    typeId?: number;
+    personId?: number;
+    startDateFrom?: string;
+    startDateTo?: string;
+    endDateFrom?: string;
+    endDateTo?: string;
+    _contractType?: ContractTypeData;
+    contractStatuses?: string[];
+    _person?: PersonData;
     offerId?: number;
 };
 
-export type MilestoneParentType = 'CONTRACT' | 'OFFER';
-
-export default class MilestonesController {
-    static async getMilestonesList(
-        orConditions: MilestonesSearchParams[] = [],
+export default class MilestoneDatesController {
+    static async getMilestoneDatesList(
+        orConditions: MilestoneDatesSearchParams[] = [],
         parentType: MilestoneParentType = 'CONTRACT'
     ) {
-        this.validateConditions(orConditions, parentType);
+        MilestonesController.validateConditions(orConditions, parentType);
         const typeCondition =
             parentType === 'CONTRACT'
                 ? 'Milestones.ContractId IS NOT NULL'
@@ -40,6 +59,8 @@ export default class MilestonesController {
             OurContractsData.AdminId AS ParentAdminId,
             Contracts.Id AS ContractId,
             Contracts.Number AS ParentNumber,
+            Contracts.Name AS ParentName,
+            Contracts.Alias AS ParentAlias,
             Contracts.OurIdRelated AS ParentOurIdRelated,
             ContractTypes.Id AS ContractTypeId,
             ContractTypes.Name AS ContractTypeName,
@@ -59,9 +80,13 @@ export default class MilestonesController {
             OfferTypes.IsOur AS OfferTypeIsOur,
             Cities.Id AS CityId,
             Cities.Name AS CityName,
-            Cities.Code AS CityCode
+            Cities.Code AS CityCode,
+            MilestoneDates.Id AS DateId,
+            MilestoneDates.StartDate,
+            MilestoneDates.EndDate,
+            MilestoneDates.Description AS DateDescription,
+            MilestoneDates.LastUpdated AS DateLastUpdated
         FROM Milestones
-        LEFT JOIN MilestoneDates ON Milestones.Id = MilestoneDates.MilestoneId
         JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
         LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
         LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
@@ -73,71 +98,143 @@ export default class MilestonesController {
             AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
         LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
         LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
+        LEFT JOIN MilestoneDates ON Milestones.Id = MilestoneDates.MilestoneId
         WHERE 
         ${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
         )}  
             AND ${typeCondition}
-        ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
+        ORDER BY MilestoneDates.EndDate,ContractId ASC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processMilestonesResult(result);
+        return this.processMilestoneDatesResult(result);
     }
 
-    static makeAndConditions(searchParams: MilestonesSearchParams) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [
-                  searchParams.projectId,
-              ])
-            : '1';
-        const contractCondition = searchParams.contractId
-            ? mysql.format('Milestones.ContractId = ?', [
-                  searchParams.contractId,
-              ])
-            : '1';
+    private static makeAndConditions(searchParams: MilestoneDatesSearchParams) {
+        const conditions: string[] = [];
 
-        const offerCondition = searchParams.offerId
-            ? mysql.format('Milestones.OfferId = ?', [searchParams.offerId])
-            : '1';
-        const typeCondition = searchParams.typeId
-            ? mysql.format('Milestones.TypeId = ?', [searchParams.typeId])
-            : '1';
+        const projectOurId =
+            searchParams._project?.ourId || searchParams.projectOurId;
+        const contractId =
+            searchParams._contract?.id || searchParams.contractId;
+        const personId = searchParams._person?.id || searchParams.personId;
 
-        return `${projectCondition} 
-            AND ${contractCondition}
-            AND ${offerCondition}
-            AND ${typeCondition}`;
+        if (projectOurId) {
+            conditions.push(
+                mysql.format('Contracts.ProjectOurId = ?', [projectOurId])
+            );
+        }
+
+        if (contractId) {
+            conditions.push(
+                mysql.format('Milestones.ContractId = ?', [contractId])
+            );
+        }
+
+        if (personId) {
+            conditions.push(
+                mysql.format('Milestones.PersonId = ?', [personId])
+            );
+        }
+
+        if (searchParams.offerId) {
+            conditions.push(
+                mysql.format('Milestones.OfferId = ?', [searchParams.offerId])
+            );
+        }
+
+        if (searchParams._contractType?.id) {
+            conditions.push(
+                mysql.format('ContractTypes.Id = ?', [
+                    searchParams._contractType.id,
+                ])
+            );
+        }
+
+        if (searchParams.contractStatuses?.length) {
+            const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+                searchParams.contractStatuses,
+                'Contracts',
+                'Status'
+            );
+            conditions.push(statusCondition);
+        }
+
+        if (searchParams.startDateFrom) {
+            conditions.push(
+                mysql.format('MilestoneDates.StartDate >= ?', [
+                    searchParams.startDateFrom,
+                ])
+            );
+        }
+
+        if (searchParams.startDateTo) {
+            conditions.push(
+                mysql.format('MilestoneDates.StartDate <= ?', [
+                    searchParams.startDateTo,
+                ])
+            );
+        }
+
+        if (searchParams.endDateFrom) {
+            conditions.push(
+                mysql.format('MilestoneDates.EndDate >= ?', [
+                    searchParams.endDateFrom,
+                ])
+            );
+        }
+
+        if (searchParams.endDateTo) {
+            conditions.push(
+                mysql.format('MilestoneDates.EndDate <= ?', [
+                    searchParams.endDateTo,
+                ])
+            );
+        }
+
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
-    static validateConditions(
-        orConditions: MilestonesSearchParams[],
-        parentType: 'CONTRACT' | 'OFFER'
-    ) {
-        orConditions.map((condition) => {
-            if (condition.contractId && condition.offerId)
-                throw new Error(
-                    'MilestonesController.getMilestonesList: contractId and offerId cannot be used together'
-                );
-            if (condition.contractId && parentType === 'OFFER')
-                throw new Error(
-                    'MilestonesController.getMilestonesList: contractId cannot be used with parentType OFFER'
-                );
-            if (condition.offerId && parentType === 'CONTRACT')
-                throw new Error(
-                    'MilestonesController.getMilestonesList: offerId cannot be used with parentType CONTRACT'
-                );
-        });
+    static makeSearchTextCondition(searchText: string | undefined) {
+        if (!searchText) return '1';
+
+        const words = searchText.trim().split(/\s+/);
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(
+                    Milestones.Name LIKE ?
+                    OR Milestones.Description LIKE ?
+                    OR MilestoneDates.Description LIKE ?
+                    OR Contracts.Name LIKE ?
+                    OR Offers.EmployerName LIKE ?
+                    OR OurContractsData.OurId LIKE ?
+                    OR Contracts.Alias LIKE ?
+                    OR Contracts.Number LIKE ?
+                )`,
+                Array(8).fill(`%${word}%`)
+            )
+        );
+
+        return conditions.join(' AND ');
     }
 
-    static processMilestonesResult(result: any[]): Milestone[] {
-        const newResult: Milestone[] = [];
+    private static processMilestoneDatesResult(
+        result: any[]
+    ): MilestoneDateData[] {
+        const newResult: MilestoneDateData[] = [];
 
         for (const row of result) {
             const _contract = this.makeContractObject(row);
             const _offer = this.makeOfferObject(row);
 
-            const item = new Milestone({
+            const _milestone = new Milestone({
                 id: row.Id,
                 _type: {
                     id: row.TypeId,
@@ -148,21 +245,23 @@ export default class MilestonesController {
                 },
                 name: ToolsDb.sqlToString(row.Name),
                 description: ToolsDb.sqlToString(row.Description),
-                _dates: [
-                    {
-                        startDate: row.StartDate,
-                        endDate: row.EndDate,
-                        milestoneId: row.Id,
-                        description: row.DateDescription,
-                        lastUpdated: row.DateLastUpdated,
-                    },
-                ],
+                _dates: [],
                 status: row.Status,
                 gdFolderId: row.GdFolderId,
                 //może to być kontrakt na roboty (wtedy ma _ourContract), albo OurContract(wtedy ma OurId)
                 _contract,
                 _offer,
             });
+
+            const item = {
+                id: row.DateId,
+                startDate: row.StartDate,
+                endDate: row.EndDate,
+                milestoneId: row.Id,
+                _milestone,
+                description: row.DateDescription,
+                lastUpdated: row.DateLastUpdated,
+            };
             newResult.push(item);
         }
         return newResult;
@@ -174,6 +273,8 @@ export default class MilestonesController {
             id: row.ContractId,
             ourId: row.ParentOurId,
             number: row.ParentNumber,
+            name: ToolsDb.sqlToString(row.ParentName),
+            alias: row.ParentAlias,
             _ourContract: { ourId: row.ParentOurIdRelated },
             _manager: { id: row.ParentManagerId },
             _admin: { id: row.ParentAdminId },
@@ -184,9 +285,9 @@ export default class MilestonesController {
                 description: row.ContractTypeDescription,
                 isOur: row.ContractTypeIsOur,
             },
-        };
+        } as Partial<OurContractData | OtherContractData>;
 
-        return contractInitParam.ourId
+        return row.ParentOurId
             ? new ContractOur(contractInitParam)
             : new ContractOther(contractInitParam);
     }
