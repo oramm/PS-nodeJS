@@ -144,7 +144,10 @@ export default abstract class Contract
     async addNewController(auth: OAuth2Client) {
         if (await this.isUniquePerProject())
             throw new Error(this.makeNotUniqueErrorMessage());
-
+        if (!this.startDate || !this.endDate)
+            throw new Error(
+                'addNewController: Start date or end date is not set'
+            );
         await CurrentSprintValidator.checkColumns(auth);
 
         try {
@@ -366,7 +369,13 @@ export default abstract class Contract
                 _type: template._milestoneType,
                 _contract: this as any,
                 status: 'Nie rozpoczęty',
-                _dates: [],
+                _dates: [
+                    {
+                        startDate: this.startDate!,
+                        endDate: this.endDate!,
+                        milestoneId: 0, //will be set in Milestone addInDb()
+                    },
+                ],
             });
             //zasymuluj numer kamienia nieunikalnego.
             //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu

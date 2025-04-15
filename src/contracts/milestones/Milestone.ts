@@ -80,6 +80,10 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     }
 
     async addNewController(auth: OAuth2Client, userData: UserData) {
+        if (!this._dates.length)
+            throw new Error(
+                'addNewController:: Milestone dates are not defined'
+            );
         try {
             console.group('Adding Milestone', this._FolderNumber_TypeName_Name);
             if (!this._contract && !this._offer)
@@ -124,6 +128,8 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ): Promise<this> {
+        if (!this._dates.length)
+            throw new Error('Milestone dates are not defined');
         // jeśli jest w transakcji to robimy wewnętrzną transakcję
         if (!isPartOfTransaction) {
             return await ToolsDb.transaction(async (conn) => {

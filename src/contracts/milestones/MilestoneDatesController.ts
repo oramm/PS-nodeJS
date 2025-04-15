@@ -62,6 +62,7 @@ export default class MilestoneDatesController {
             Contracts.Name AS ParentName,
             Contracts.Alias AS ParentAlias,
             Contracts.OurIdRelated AS ParentOurIdRelated,
+            Contracts.ProjectOurId AS ProjectOurId,
             ContractTypes.Id AS ContractTypeId,
             ContractTypes.Name AS ContractTypeName,
             ContractTypes.Description AS ContractTypeDescription,
@@ -278,7 +279,7 @@ export default class MilestoneDatesController {
             _ourContract: { ourId: row.ParentOurIdRelated },
             _manager: { id: row.ParentManagerId },
             _admin: { id: row.ParentAdminId },
-            projectId: row.ProjectOurId,
+            _project: { ourId: row.ProjectOurId },
             _type: {
                 id: row.ContractTypeId,
                 name: row.ContractTypeName,

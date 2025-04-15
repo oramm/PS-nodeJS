@@ -46,6 +46,7 @@ export interface ProjectData extends RepositoryDataItem {
 
 export interface ContractData extends RepositoryDataItem {
     name: string;
+    projectOurId?: string;
     number: string;
     alias: string;
     comment: string;
