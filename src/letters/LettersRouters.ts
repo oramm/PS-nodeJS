@@ -6,6 +6,7 @@ import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
+import Letter from './Letter';
 
 app.post('/contractsLetters', async (req: Request, res: Response) => {
     try {
@@ -214,6 +215,18 @@ app.put('/approveOurLetter/:id', async (req: Request, res: Response) => {
             item
         );
         res.send(item);
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+//autoApproveOurLetter
+app.get('/autoApproveOurLetters', async (req: Request, res: Response) => {
+    try {
+        await LettersController.autoApprove();
+        res.send('All our letters approved');
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });

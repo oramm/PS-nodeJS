@@ -29,6 +29,7 @@ export type MilestoneDatesSearchParams = {
     endDateTo?: string;
     _contractType?: ContractTypeData;
     contractStatuses?: string[];
+    milestoneStatuses?: string[];
     _person?: PersonData;
     offerId?: number;
 };
@@ -174,6 +175,15 @@ export default class MilestoneDatesController {
             const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
                 searchParams.contractStatuses,
                 'MainContracts',
+                'Status'
+            );
+            conditions.push(statusCondition);
+        }
+
+        if (searchParams.milestoneStatuses?.length) {
+            const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
+                searchParams.milestoneStatuses,
+                'Milestones',
                 'Status'
             );
             conditions.push(statusCondition);
