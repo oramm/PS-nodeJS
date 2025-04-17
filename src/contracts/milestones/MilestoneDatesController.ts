@@ -55,19 +55,18 @@ export default class MilestoneDatesController {
             Milestones.Status,
             Milestones.GdFolderId,
             OurContractsData.OurId AS ParentOurId,
-            OurContractsData.ManagerId AS ParentManagerId,
-            OurContractsData.AdminId AS ParentAdminId,
-            Contracts.Id AS ContractId,
-            Contracts.Number AS ParentNumber,
-            Contracts.Name AS ParentName,
-            Contracts.Alias AS ParentAlias,
-            Contracts.OurIdRelated AS ParentOurIdRelated,
-            Contracts.ProjectOurId AS ProjectOurId,
+            MainContracts.Id AS ContractId,
+            MainContracts.Number AS ParentNumber,
+            MainContracts.Name AS ParentName,
+            MainContracts.Status AS ParentStatus,
+            MainContracts.Alias AS ParentAlias,
+            MainContracts.OurIdRelated AS ParentOurIdRelated,
+            MainContracts.ProjectOurId AS ProjectOurId,
             ContractTypes.Id AS ContractTypeId,
             ContractTypes.Name AS ContractTypeName,
             ContractTypes.Description AS ContractTypeDescription,
             ContractTypes.IsOur AS ContractTypeIsOur,
-            Contracts.ProjectOurId,
+            MainContracts.ProjectOurId,
             Offers.Id AS OfferId,
             Offers.Alias AS OfferAlias,
             Offers.IsOur AS OfferIsOur,
@@ -86,20 +85,35 @@ export default class MilestoneDatesController {
             MilestoneDates.StartDate,
             MilestoneDates.EndDate,
             MilestoneDates.Description AS DateDescription,
-            MilestoneDates.LastUpdated AS DateLastUpdated
+            MilestoneDates.LastUpdated AS DateLastUpdated,
+            Admins.Id AS ParentAdminId,
+            Admins.Name AS ParentAdminName,
+            Admins.Surname AS ParentAdminSurname,
+            Admins.Email AS ParentAdminEmail,
+            RelatedContractAdmins.Id AS RelatedContractAdminId,
+            RelatedContractAdmins.Name AS RelatedContractAdminName,
+            RelatedContractAdmins.Surname AS RelatedContractAdminSurname,
+            RelatedContractAdmins.Email AS RelatedContractAdminEmail
         FROM Milestones
         JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
-        LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
+        -- Główny kontrakt przypisany bezpośrednio do milestone
+        LEFT JOIN Contracts AS MainContracts ON Milestones.ContractId = MainContracts.Id
+        -- Powiązany rekord z OurContractsData na podstawie OurIdRelated z MainContracts
+        LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = MainContracts.OurIdRelated
+        -- Kontrakt powiązany (np. „związany kontrakt robót” do „kontraktu głównego”)
+        LEFT JOIN Contracts AS RelatedContracts ON RelatedContracts.Id = RelatedOurContractsData.Id
         LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
-        LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+        LEFT JOIN ContractTypes ON ContractTypes.Id = MainContracts.TypeId
         LEFT JOIN ContractTypes AS OfferTypes ON OfferTypes.Id = Offers.TypeId
         LEFT JOIN Cities ON Cities.Id = Offers.CityId
         LEFT JOIN MilestoneTypes_ContractTypes 
             ON  MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
-            AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
+            AND MilestoneTypes_ContractTypes.ContractTypeId = MainContracts.TypeId
         LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
         LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
         LEFT JOIN MilestoneDates ON Milestones.Id = MilestoneDates.MilestoneId
+        LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
+        LEFT JOIN Persons AS RelatedContractAdmins ON RelatedOurContractsData.AdminId = RelatedContractAdmins.Id
         WHERE 
         ${ToolsDb.makeOrGroupsConditions(
             orConditions,
@@ -107,7 +121,7 @@ export default class MilestoneDatesController {
         )}  
             AND ${typeCondition}
         ORDER BY MilestoneDates.EndDate,ContractId ASC`;
-
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneDatesResult(result);
     }
@@ -119,11 +133,11 @@ export default class MilestoneDatesController {
             searchParams._project?.ourId || searchParams.projectOurId;
         const contractId =
             searchParams._contract?.id || searchParams.contractId;
-        const personId = searchParams._person?.id || searchParams.personId;
+        const adminId = searchParams._person?.id || searchParams.personId;
 
         if (projectOurId) {
             conditions.push(
-                mysql.format('Contracts.ProjectOurId = ?', [projectOurId])
+                mysql.format('MainContracts.ProjectOurId = ?', [projectOurId])
             );
         }
 
@@ -133,9 +147,12 @@ export default class MilestoneDatesController {
             );
         }
 
-        if (personId) {
+        if (adminId) {
             conditions.push(
-                mysql.format('Milestones.PersonId = ?', [personId])
+                mysql.format(
+                    'OurContractsData.AdminId = ? OR RelatedContractAdmins.Id = ?',
+                    [adminId, adminId]
+                )
             );
         }
 
@@ -156,7 +173,7 @@ export default class MilestoneDatesController {
         if (searchParams.contractStatuses?.length) {
             const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
                 searchParams.contractStatuses,
-                'Contracts',
+                'MainContracts',
                 'Status'
             );
             conditions.push(statusCondition);
@@ -213,11 +230,11 @@ export default class MilestoneDatesController {
                     Milestones.Name LIKE ?
                     OR Milestones.Description LIKE ?
                     OR MilestoneDates.Description LIKE ?
-                    OR Contracts.Name LIKE ?
                     OR Offers.EmployerName LIKE ?
+                    OR MainContracts.Name LIKE ?
+                    OR MainContracts.Alias LIKE ?
+                    OR MainContracts.Number LIKE ?
                     OR OurContractsData.OurId LIKE ?
-                    OR Contracts.Alias LIKE ?
-                    OR Contracts.Number LIKE ?
                 )`,
                 Array(8).fill(`%${word}%`)
             )
@@ -276,9 +293,23 @@ export default class MilestoneDatesController {
             number: row.ParentNumber,
             name: ToolsDb.sqlToString(row.ParentName),
             alias: row.ParentAlias,
-            _ourContract: { ourId: row.ParentOurIdRelated },
+            status: row.ParentStatus,
+            _ourContract: {
+                ourId: row.ParentOurIdRelated,
+                _admin: {
+                    id: row.RelatedContractAdminId,
+                    name: row.RelatedContractAdminName,
+                    surname: row.RelatedContractAdminSurname,
+                    email: row.RelatedContractAdminEmail,
+                } as Partial<PersonData>,
+            } as Partial<OurContractData>,
             _manager: { id: row.ParentManagerId },
-            _admin: { id: row.ParentAdminId },
+            _admin: {
+                id: row.ParentAdminId,
+                name: row.ParentAdminName,
+                surname: row.ParentAdminSurname,
+                email: row.ParentAdminEmail,
+            },
             _project: { ourId: row.ProjectOurId },
             _type: {
                 id: row.ContractTypeId,
@@ -288,7 +319,7 @@ export default class MilestoneDatesController {
             },
         } as Partial<OurContractData | OtherContractData>;
 
-        return row.ParentOurId
+        return row.ContractTypeIsOur
             ? new ContractOur(contractInitParam)
             : new ContractOther(contractInitParam);
     }
