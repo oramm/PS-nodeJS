@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { app, upload } from '../../index';
-import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 import SecuritiesController from './SecuritiesController';
 import { Security } from './Security';
 

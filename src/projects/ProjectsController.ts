@@ -3,7 +3,7 @@ import ToolsDb from '../tools/ToolsDb';
 import Project from './Project';
 import Entity from '../entities/Entity';
 import ProjectEntity from './ProjectEntity';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 import Setup from '../setup/Setup';
 
 type ProjectSearchParams = {

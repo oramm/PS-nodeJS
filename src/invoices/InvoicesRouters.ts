@@ -1,5 +1,5 @@
 import { drive_v3 } from 'googleapis';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ToolsGd from '../tools/ToolsGd';
 import Invoice from './Invoice';
 import InvoicesController from './InvoicesController';

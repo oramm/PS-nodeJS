@@ -1,6 +1,6 @@
 import BusinessObject from '../../BussinesObject';
 import PersonsController from '../../persons/PersonsController';
-import { UserData } from '../../setup/GAuth2/sessionTypes';
+import { UserData } from '../../types/sessionTypes';
 import Setup from '../../setup/Setup';
 import ToolsMail from '../../tools/ToolsMail';
 import {

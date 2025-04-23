@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import LettersController from './LettersController';
 import { app } from '../index';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';

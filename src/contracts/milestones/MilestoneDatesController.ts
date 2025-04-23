@@ -122,7 +122,7 @@ export default class MilestoneDatesController {
         )}  
             AND ${typeCondition}
         ORDER BY MilestoneDates.EndDate,ContractId ASC`;
-        console.log(sql);
+
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneDatesResult(result);
     }

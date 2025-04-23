@@ -26,3 +26,12 @@ export enum SystemRoleName {
     ENVI_COOPERATOR = 'ENVI_COOPERATOR',
     EXTERNAL_USER = 'EXTERNAL_USER',
 }
+
+export type SessionTask = {
+    status: 'processing' | 'done' | 'error';
+    result?: any;
+    error?: string;
+    progressMesage?: string;
+    percent?: number;
+    timeout?: NodeJS.Timeout;
+};

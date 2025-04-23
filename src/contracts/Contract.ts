@@ -17,9 +17,9 @@ import {
     ProjectData,
 } from '../types/types';
 import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
-import ToolsSheets from '../tools/ToolsSheets';
-import Setup from '../setup/Setup';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import e from 'express';
 
 export default abstract class Contract
     extends BusinessObject
@@ -141,7 +141,7 @@ export default abstract class Contract
     }
 
     /**batch dla dodawania kontraktów */
-    async addNewController(auth: OAuth2Client) {
+    async addNewController(auth: OAuth2Client, taskId: string) {
         if (await this.isUniquePerProject())
             throw new Error(this.makeNotUniqueErrorMessage());
         if (!this.startDate || !this.endDate)
@@ -152,14 +152,18 @@ export default abstract class Contract
 
         try {
             console.group(`Creating a new Contract ${this.id}`);
+            TaskStore.update(taskId, 'Tworzę foldery', 4);
             await this.createFolders(auth);
             console.log('Contract folders created');
+            TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             await this.addInDb();
             console.log('Contract added in db');
+            TaskStore.update(taskId, 'Dodaję do scrum', 22);
             await this.addInScrum(auth);
             console.log('Contract added in scrum');
             console.group('Creating default milestones');
-            await this.createDefaultMilestones(auth);
+            TaskStore.update(taskId, 'Tworzę kamienie milowe', 45);
+            await this.createDefaultMilestones(auth, taskId);
             console.log('Default milestones, cases & tasks created');
             console.groupEnd();
             console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
@@ -351,8 +355,9 @@ export default abstract class Contract
         );
     }
 
-    async createDefaultMilestones(auth: OAuth2Client) {
+    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
         const defaultMilestones: Milestone[] = [];
+        const sessionTask = TaskStore.get(taskId);
 
         const defaultMilestoneTemplates =
             await MilestoneTemplatesController.getMilestoneTemplatesList(
@@ -362,7 +367,13 @@ export default abstract class Contract
                 },
                 'CONTRACT'
             );
-        for (const template of defaultMilestoneTemplates) {
+        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
+            const template = defaultMilestoneTemplates[i];
+            const startPercent = sessionTask?.percent || 0;
+            const endPercent = 90;
+            const step =
+                (endPercent - startPercent) / defaultMilestoneTemplates.length;
+            const percent = startPercent + step * i;
             const milestone = new Milestone({
                 name: template.name,
                 description: template.description,
@@ -377,6 +388,12 @@ export default abstract class Contract
                     },
                 ],
             });
+
+            TaskStore.update(
+                taskId,
+                `Tworzę kamień milowy ${milestone._FolderNumber_TypeName_Name}`,
+                percent
+            );
             //zasymuluj numer kamienia nieunikalnego.
             //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
             if (!milestone._type.isUniquePerContract) {

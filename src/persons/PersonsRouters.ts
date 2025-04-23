@@ -1,7 +1,7 @@
 import Person from './Person';
 import PersonsController from './PersonsController';
 import { app } from '../index';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import Planning from '../ScrumSheet/Planning';
 import CurrentSprint from '../ScrumSheet/CurrentSprint';

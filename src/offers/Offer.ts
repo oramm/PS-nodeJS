@@ -22,7 +22,7 @@ import CasesController from '../contracts/milestones/cases/CasesController';
 import EnviErrors from '../tools/Errors';
 import OfferEvent from './offerEvent/OfferEvent';
 import PersonsController from '../persons/PersonsController';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 
 export default abstract class Offer
     extends BusinessObject
@@ -307,7 +307,11 @@ export default abstract class Offer
     /**tworzy domyślne kamienie milowe dla oferty ale tylko
      * dla kamienni typu OFFER_SUBMISSION. pozostałe kamienie będą tworzone przy ustawieniu statusu
      */
-    async createDefaultMilestones(auth: OAuth2Client, milestoneTypeId: number) {
+    async createDefaultMilestones(
+        auth: OAuth2Client,
+        milestoneTypeId: number,
+        taskId?: string
+    ) {
         const defaultMilestones: Milestone[] = [];
 
         const defaultMilestoneTemplates =

@@ -11,6 +11,7 @@ import ToolsDb from '../tools/ToolsDb';
 import { drive_v3 } from 'googleapis';
 import { OtherContractData } from '../types/types';
 import Entity from '../entities/Entity';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default class ContractOther
     extends Contract
@@ -194,9 +195,10 @@ export default class ContractOther
         });
     }
 
-    async createDefaultMilestones(auth: OAuth2Client) {
+    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
         if (this.ourIdRelated) {
-            super.createDefaultMilestones(auth);
+            super.createDefaultMilestones(auth, taskId);
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
             await ScrumSheet.CurrentSprint.setSumInContractRow(
                 auth,
                 this.ourIdRelated

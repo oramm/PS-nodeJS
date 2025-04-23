@@ -2,7 +2,7 @@
 import exp from 'constants';
 import e from 'express';
 import 'express-session';
-import { SystemRoleName } from '../setup/GAuth2/sessionTypes';
+import { SystemRoleName } from './sessionTypes';
 
 declare module 'express-session' {
     interface SessionData {

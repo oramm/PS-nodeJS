@@ -2,7 +2,7 @@ import MilestonesController, {
     MilestoneParentType,
 } from './MilestonesController';
 import { app } from '../../index';
-import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 import Milestone from './Milestone';
 import { Request, Response } from 'express';
 import MilestoneDatesController from './MilestoneDatesController';

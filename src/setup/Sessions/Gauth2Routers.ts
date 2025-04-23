@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import ToolsGd from '../../tools/ToolsGd';
 import ToolsGapi, { oAuthClient } from './ToolsGapi';
 import { app } from '../..';
-import './sessionTypes';
+import '../../types/sessionTypes';
 
 app.post('/login', async (req: Request, res: Response) => {
     try {
@@ -85,10 +85,7 @@ oAuthClient.on('tokens', async (tokens) => {
     console.log('tokens event triggered: oAuthClient.credentials');
 
     if (tokens.refresh_token) {
-        // store the refresh_token in my database!
-        //ToolsGapi.editUserGoogleRefreshTokenInDb(userSystemData?.id as number, tokens.refresh_token);
         console.log('new refreshToken:' + tokens.refresh_token);
     }
     oAuthClient.setCredentials(tokens);
-    //console.log('tokens event triggered: oAuthClient.credentials %o', oAuthClient.credentials);
 });

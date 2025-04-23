@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { app } from '../index';
 import FinancialAidProgrammesController from './FinancialAidProgrammesController';
 import FinancialAidProgramme from './FinancialAidProgramme';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 
 export const financialAidProgrammesRouter = express.Router();
 app.post('/financialAidProgrammes', async (req: Request, res: Response) => {

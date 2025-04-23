@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import ProjectsController from './ProjectsController';
 import { app } from '../index';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import Project from './Project';
 
 app.post('/projects', async (req: Request, res: Response) => {

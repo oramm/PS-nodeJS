@@ -10,6 +10,7 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import City from '../Admin/Cities/City';
 import { OurContractData } from '../types/types';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default class ContractOur extends Contract implements OurContractData {
     ourId: string;
@@ -321,9 +322,10 @@ export default class ContractOur extends Contract implements OurContractData {
         });
     }
 
-    async createDefaultMilestones(auth: OAuth2Client) {
-        await super.createDefaultMilestones(auth);
+    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
+        await super.createDefaultMilestones(auth, taskId);
         if (await this.shouldBeInScrum()) {
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
             await ScrumSheet.CurrentSprint.setSumInContractRow(
                 auth,
                 this.ourId

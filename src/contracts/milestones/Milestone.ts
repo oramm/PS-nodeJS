@@ -25,7 +25,7 @@ import {
     OurContractData,
     OurOfferData,
 } from '../../types/types';
-import { UserData } from '../../setup/GAuth2/sessionTypes';
+import { UserData } from '../../types/sessionTypes';
 import MilestoneDate from './MilestoneDate';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
@@ -325,11 +325,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         const defaultCaseTemplates = await this.getCaseTemplates({
             isDefaultOnly: true,
         });
-        if (defaultCaseTemplates.length == 0)
-            throw new Error(
-                'Typ kontraktu, który próbujesz dodać nie ma przypisanego żadnego szablonu sprawy!\n' +
-                    'Zgłoś administratorowi potrzebę utworzenia szablonów spraw i zadań'
-            );
+        console.log(this._contract?._type);
         for (const template of defaultCaseTemplates) {
             const caseItem = new Case({
                 name: template.name,
@@ -585,6 +581,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
             JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id
             WHERE ${isDefaultCondition} AND ${isInScrumDefaultCondition} AND MilestoneTypes.Id=${this._type.id}`;
+        console.log(sql);
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {

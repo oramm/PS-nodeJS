@@ -14,7 +14,7 @@ import {
     LetterEventData,
     PersonData,
 } from '../types/types';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 import LetterEvent from './letterEvent/LetterEvent';
 import PersonsController from '../persons/PersonsController';
 import Setup from '../setup/Setup';

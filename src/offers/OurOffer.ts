@@ -11,7 +11,7 @@ import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import OfferEvent from './offerEvent/OfferEvent';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';

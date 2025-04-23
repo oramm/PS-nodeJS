@@ -4,7 +4,7 @@ import ToolsGd from '../tools/ToolsGd';
 import IncomingLetterGdController from './gdControlers/IncomingLetterGdController';
 import EnviErrors from '../tools/Errors';
 import { IncomingLetterData } from '../types/types';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 
 export default abstract class IncomingLetter
     extends Letter

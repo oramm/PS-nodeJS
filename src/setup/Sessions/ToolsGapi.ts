@@ -126,52 +126,21 @@ export default class ToolsGapi {
             throw error;
         }
     }
-
+    /** WYkonuje operacje na podstawie mojego Refresh tokena. */
     static async gapiReguestHandler(
+        /**@deprecated  */
         req: any,
+        /**@deprecated */
         res: Response,
         gapiFunction: Function,
         argObject?: any,
         thisObject?: any
     ) {
-        let result;
         console.log('--------------- authenticate ----------------');
-        let credentials: any = req.session?.credentials;
-        let refreshToken: string;
-        //zmieniły się zakresy
-        if (
-            credentials &&
-            !Envi.ToolsArray.equalsIgnoreOrder(
-                credentials.scope.split(' '),
-                ToolsGapi.scopes
-            )
-        ) {
-            let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
-            return { authorizeUrl: authorizeUrl };
-        }
-        //pierwsze logowanie zarejestrowanego użytkownika
-        if (
-            !req.session?.credentials ||
-            ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) < 2
-        ) {
-            if (!process.env.REFRESH_TOKEN)
-                throw new Error("Can't get refresh token");
-            refreshToken = process.env.REFRESH_TOKEN;
+        const refreshToken = process.env.REFRESH_TOKEN;
+        if (!refreshToken) throw new Error("Can't get refresh token");
+        const credentials = { refresh_token: refreshToken };
 
-            //pierwsze logowanie nowego użytkownika
-            if (!refreshToken) {
-                let authorizeUrl = ToolsGapi.getAuthUrl(oAuthClient);
-                return { authorizeUrl: authorizeUrl };
-            } else {
-                credentials = { refresh_token: refreshToken };
-                console.log('credentials:', credentials);
-            }
-        }
-
-        console.log(
-            'credentials valid for: %d s',
-            ToolsGapi.calculateTimeToExpiry(credentials.expiry_date) / 1000
-        );
         oAuthClient.setCredentials(credentials);
 
         const args: any[] = [oAuthClient];
@@ -183,7 +152,7 @@ export default class ToolsGapi {
             args.push(...argObject);
         else args.push(argObject);
 
-        result = thisObject
+        const result = thisObject
             ? await gapiFunction.apply(thisObject, args)
             : await gapiFunction(...args);
         return result;

@@ -5,7 +5,7 @@ import ExternalOfferGdController from './gdControllers/ExternalOfferGdController
 import OfferBond from './OfferBond/OfferBond';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 
 export default class ExternalOffer extends Offer implements ExternalOfferData {
     tenderUrl?: string | null;

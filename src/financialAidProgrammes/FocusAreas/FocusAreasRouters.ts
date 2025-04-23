@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import FocusAreasController from './FocusAreasController';
 import FocusArea from './FocusArea';
 import { app } from '../../index';
-import ToolsGapi from '../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 
 app.post('/focusAreas', async (req: Request, res: Response) => {
     try {

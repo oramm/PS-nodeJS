@@ -2,7 +2,7 @@ import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 import { EntityData, PersonData } from '../types/types';
-import { SystemRoleName } from '../setup/GAuth2/sessionTypes';
+import { SystemRoleName } from '../types/sessionTypes';
 
 export default class Person extends BusinessObject implements PersonData {
     id?: number;

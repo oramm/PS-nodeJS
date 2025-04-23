@@ -1,5 +1,5 @@
 import BusinessObject from '../../BussinesObject';
-import { UserData } from '../../setup/GAuth2/sessionTypes';
+import { UserData } from '../../types/sessionTypes';
 import ToolsDate from '../../tools/ToolsDate';
 import { MilestoneData, MilestoneDateData } from '../../types/types';
 

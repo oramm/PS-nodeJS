@@ -1,7 +1,7 @@
 import CasesController from './CasesController';
 import { app } from '../../../index';
 import Case from './Case';
-import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../../setup/Sessions/ToolsGapi';
 import { Request, Response } from 'express';
 
 app.post('/cases', async (req: Request, res: Response) => {

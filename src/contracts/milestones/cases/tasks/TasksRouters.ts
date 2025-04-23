@@ -1,4 +1,4 @@
-import ToolsGapi from '../../../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../../../setup/Sessions/ToolsGapi';
 import Task from './Task';
 import TasksController from './TasksController';
 import { app } from '../../../../index';

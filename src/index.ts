@@ -6,8 +6,8 @@ import MongoStore from 'connect-mongo';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import './setup/GAuth2/sessionTypes';
-import { keys } from './setup/GAuth2/credentials';
+import './types/sessionTypes';
+import { keys } from './setup/Sessions/credentials';
 import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
@@ -142,7 +142,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-require('./setup/GAuth2/Gauth2Routers');
+require('./setup/Sessions/Gauth2Routers');
 require('./persons/PersonsRouters');
 
 require('./persons/projectRoles/RolesRouters');

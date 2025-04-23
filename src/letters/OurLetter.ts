@@ -5,7 +5,7 @@ import OurLetterGdFile from './OurLetterGdFIle';
 import EnviErrors from '../tools/Errors';
 import { DocumentTemplateData, OurLetterData } from '../types/types';
 import OurLetterGdController from './gdControlers/OurLetterGdController';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import Setup from '../setup/Setup';
 import LetterEvent from './letterEvent/LetterEvent';

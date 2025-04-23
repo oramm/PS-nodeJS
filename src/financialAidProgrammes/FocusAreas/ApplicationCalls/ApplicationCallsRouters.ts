@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import ApplicationCallsController from './ApplicationCallsController';
 import ApplicationCall from './ApplicationCall';
 import { app } from '../../../index';
-import ToolsGapi from '../../../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../../../setup/Sessions/ToolsGapi';
 
 app.post('/applicationCalls', async (req: Request, res: Response) => {
     try {

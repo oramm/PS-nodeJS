@@ -2,7 +2,7 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import Person from './Person';
 import Entity from '../entities/Entity';
-import { UserData } from '../setup/GAuth2/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 
 type PersonsSearchParams = {
     projectId?: string;

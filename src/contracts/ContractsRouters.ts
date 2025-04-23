@@ -1,13 +1,18 @@
-import express, { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import ContractsController from './ContractsController';
-import { app, upload } from '../index';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import { app } from '../index';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import ContractsWithChildrenController from './ContractsWithChildrenController';
 import ContractsSettlementController from './ContractsSettlementController';
 import { CityData, ContractTypeData } from '../types/types';
+import crypto from 'crypto'; // u góry pliku
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import { SessionTask } from '../types/sessionTypes';
+
+const taskStore: Record<string, any> = {};
 
 app.post('/contracts', async (req: Request, res: Response) => {
     try {
@@ -57,11 +62,14 @@ app.post('/contractsSettlementData', async (req: Request, res: Response) => {
 
 app.post('/contractReact', async (req: Request, res: Response) => {
     try {
+        console.log('req.session', req.session);
         let item: ContractOur | ContractOther;
+
         if (typeof req.parsedBody.value === 'string')
             req.body.value = parseFloat(
                 req.parsedBody.value.replace(/ /g, '').replace(',', '.')
             );
+
         if (req.parsedBody._type.isOur) {
             const ourId = await ContractsController.makeOurId(
                 req.parsedBody._city as CityData,
@@ -71,22 +79,91 @@ app.post('/contractReact', async (req: Request, res: Response) => {
         } else {
             item = new ContractOther(req.parsedBody);
         }
+
         if (!item._project || !item._project.id)
             throw new Error('Nie przypisano projektu do kontraktu');
 
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.addNewController,
-            undefined,
-            item
-        );
+        const taskId = crypto.randomUUID();
+        TaskStore.create(taskId);
 
-        res.send(item);
+        res.status(202).send({
+            progressMesage: 'Kontrakt w trakcie przetwarzania',
+            status: 'processing',
+            percent: 0,
+            taskId,
+        } as SessionTask);
+
+        // Przetwarzanie w tle
+        setImmediate(async () => {
+            try {
+                await ToolsGapi.gapiReguestHandler(
+                    req,
+                    res,
+                    item.addNewController,
+                    [taskId],
+                    item
+                );
+                TaskStore.complete(
+                    taskId,
+                    item,
+                    'Kontrakt pomyślnie zarejestrowany'
+                );
+            } catch (err) {
+                console.error('Błąd async GAPI:', err);
+                TaskStore.fail(taskId, (err as Error).message);
+            }
+        });
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
+    }
+});
+
+async function simulateTaskProgress(
+    taskId: string,
+    processedItem: any,
+    throwError = false
+) {
+    try {
+        TaskStore.update(taskId, 'Rozpoczęcie przetwarzania', 0);
+        // Krok 1
+        TaskStore.update(taskId, 'Krok 1 z 3', 33);
+        await new Promise((res) => setTimeout(res, 3000));
+
+        // Krok 2
+        TaskStore.update(taskId, 'Krok 2 z 3', 66);
+        await new Promise((res) => setTimeout(res, 2000));
+
+        // Krok 3
+        TaskStore.update(taskId, 'Krok 3 z 3', 100);
+        await new Promise((res) => setTimeout(res, 2000));
+
+        // Ewentualny błąd
+        if (throwError) throw new Error('Błąd symulowany w kroku 3');
+
+        // Zakończ
+        TaskStore.complete(
+            taskId,
+            processedItem,
+            '✅ Wszystkie kroki zakończone'
+        );
+    } catch (err) {
+        TaskStore.fail(taskId, (err as Error).message);
+        console.error('simulateTaskProgress error:', err);
+    }
+}
+
+app.get('/contractStatus/:taskId', (req: Request, res: Response) => {
+    const taskId = req.params.taskId;
+    const task = TaskStore.get(taskId);
+    if (!task) return res.status(404).send({ error: 'Nie znaleziono taska' });
+    const { timeout, ...taskWithoutTimeout } = task;
+    res.send(taskWithoutTimeout);
+
+    // usuń po odebraniu, jeśli zakończony
+    if (['done', 'error'].includes(task.status)) {
+        TaskStore.remove(taskId);
     }
 });
 

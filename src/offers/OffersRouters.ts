@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
-import ToolsGapi from '../setup/GAuth2/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import OurOffer from './OurOffer';
 import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';

@@ -24,7 +24,7 @@ import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
 import OurLetterOffer from './OurLetterOffer';
 import LetterEvent from './letterEvent/LetterEvent';
-import { SystemRoleName, UserData } from '../setup/GAuth2/sessionTypes';
+import { SystemRoleName, UserData } from '../types/sessionTypes';
 
 type LetterSearchParams = {
     projectId?: string;
