@@ -19,7 +19,6 @@ import {
 import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
-import e from 'express';
 
 export default abstract class Contract
     extends BusinessObject

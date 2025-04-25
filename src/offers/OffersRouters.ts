@@ -6,6 +6,8 @@ import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
 import ExternalOffer from './ExternalOffer';
 import EnviErrors from '../tools/Errors';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import { SessionTask } from '../types/sessionTypes';
 
 app.post('/offers', async (req: Request, res: Response) => {
     try {
@@ -22,14 +24,36 @@ app.post('/offers', async (req: Request, res: Response) => {
 app.post('/offer', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.addNewController,
-            [req.session.userData],
-            item
-        );
-        res.send(item);
+
+        const taskId = crypto.randomUUID();
+        TaskStore.create(taskId);
+
+        res.status(202).send({
+            progressMesage: 'Oferta w trakcie przetwarzania',
+            status: 'processing',
+            percent: 0,
+            taskId,
+        } as SessionTask);
+
+        setImmediate(async () => {
+            try {
+                await ToolsGapi.gapiReguestHandler(
+                    req,
+                    res,
+                    item.addNewController,
+                    [req.session.userData, taskId],
+                    item
+                );
+                TaskStore.complete(
+                    taskId,
+                    item,
+                    'Oferta pomyślnie zarejestrowana'
+                );
+            } catch (err) {
+                console.error('Błąd async GAPI:', err);
+                TaskStore.fail(taskId, (err as Error).message);
+            }
+        });
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
@@ -40,14 +64,32 @@ app.post('/offer', async (req: Request, res: Response) => {
 app.put('/offer/:id', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.editController,
-            [req.parsedBody._fieldsToUpdate],
-            item
-        );
-        res.send(item);
+
+        const taskId = crypto.randomUUID();
+        TaskStore.create(taskId);
+
+        res.status(202).send({
+            progressMesage: 'Oferta w trakcie przetwarzania',
+            status: 'processing',
+            percent: 0,
+            taskId,
+        } as SessionTask);
+
+        setImmediate(async () => {
+            try {
+                await ToolsGapi.gapiReguestHandler(
+                    req,
+                    res,
+                    item.editController,
+                    [taskId],
+                    item
+                );
+                TaskStore.complete(taskId, item, 'Oferta zmnieniona pomyślnie');
+            } catch (err) {
+                console.error('Błąd async GAPI:', err);
+                TaskStore.fail(taskId, (err as Error).message);
+            }
+        });
     } catch (error) {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });

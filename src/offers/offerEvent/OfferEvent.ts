@@ -99,7 +99,11 @@ export default class OfferEvent
         await this.deleteFromDb();
     }
 
-    sendMailWithOffer(auth: OAuth2Client, offer: OurOffer, cc?: string[]) {
+    async sendMailWithOffer(
+        auth: OAuth2Client,
+        offer: OurOffer,
+        cc?: string[]
+    ) {
         const _recipients = this._recipients;
         const gdFilesBasicData = this._gdFilesBasicData;
         if (!_recipients?.length)
@@ -119,7 +123,7 @@ export default class OfferEvent
 
         const html = `${body}`;
 
-        ToolsMail.sendEmailWithGdAttachments(auth, gdFilesBasicData, {
+        await ToolsMail.sendEmailWithGdAttachments(auth, gdFilesBasicData, {
             to: ToolsMail.getMailListFromPersons(_recipients),
             cc: [...(cc || []), 'biuro@envi.com.pl'],
             subject,

@@ -23,8 +23,12 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
         } else this._offerBond = null;
     }
 
-    async addNewController(auth: OAuth2Client, userData: UserData) {
-        await super.addNewController(auth, userData);
+    async addNewController(
+        auth: OAuth2Client,
+        userData: UserData,
+        taskId: string
+    ) {
+        await super.addNewController(auth, userData, taskId);
         const offerGdController = new ExternalOfferGdController();
         const { offerContentFolder, specsFolder } =
             await offerGdController.createExternalOfferFolders(auth, {
@@ -39,8 +43,12 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
         );
     }
 
-    async editController(auth: OAuth2Client) {
-        await super.editController(auth);
+    async editController(
+        auth: OAuth2Client,
+        taskId: string,
+        _fieldsToUpdate?: string[]
+    ) {
+        await super.editController(auth, taskId, _fieldsToUpdate);
         if (this._offerBond) {
             this._offerBond.status = Setup.OfferBondStatus.DONE;
         }

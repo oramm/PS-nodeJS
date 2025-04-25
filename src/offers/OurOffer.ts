@@ -15,6 +15,7 @@ import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
@@ -37,8 +38,12 @@ export default class OurOffer extends Offer implements OurOfferData {
         }
     }
 
-    async addNewController(auth: OAuth2Client, userData: UserData) {
-        await super.addNewController(auth, userData);
+    async addNewController(
+        auth: OAuth2Client,
+        userData: UserData,
+        taskId: string
+    ) {
+        await super.addNewController(auth, userData, taskId);
         await this.bindInvitationMail(userData);
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...this },
@@ -94,7 +99,7 @@ export default class OurOffer extends Offer implements OurOfferData {
         newEvent.sendMailWithOffer(auth, this, [userData.systemEmail]);
         this._lastEvent = newEvent;
         this.status = Setup.OfferStatus.DONE;
-        await this.editController(auth, ['status']);
+        await this.editController(auth, undefined, ['status']);
     }
 
     async createGdElements(auth: OAuth2Client) {
@@ -129,7 +134,7 @@ export default class OurOffer extends Offer implements OurOfferData {
         await ToolsGd.exportDocToPdfAndUpload(auth, this.gdDocumentId);
     }
 
-    async editGdElements(auth: OAuth2Client) {
+    async editGdElements(auth: OAuth2Client, taskId: string) {
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...this },
         });

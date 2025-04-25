@@ -18,7 +18,12 @@ export default class TaskStore {
         this.scheduleCleanup(taskId);
     }
 
-    static update(taskId: string, message: string, percent: number) {
+    static update(
+        taskId: string | undefined,
+        message: string,
+        percent: number
+    ) {
+        if (!taskId) return;
         const task = this.items[taskId];
         if (task) {
             task.status = 'processing';
@@ -26,6 +31,16 @@ export default class TaskStore {
             task.percent = percent;
         }
     }
+
+    static getPercent(taskId: string | undefined) {
+        if (!taskId) return;
+        const task = this.items[taskId];
+        if (task) {
+            return task.percent;
+        }
+        return 0;
+    }
+
     /**
      *
      * @param taskId

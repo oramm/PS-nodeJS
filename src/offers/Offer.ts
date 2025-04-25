@@ -23,6 +23,7 @@ import EnviErrors from '../tools/Errors';
 import OfferEvent from './offerEvent/OfferEvent';
 import PersonsController from '../persons/PersonsController';
 import { UserData } from '../types/sessionTypes';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default abstract class Offer
     extends BusinessObject
@@ -96,21 +97,37 @@ export default abstract class Offer
         } else this._lastEvent = null;
     }
 
-    async addNewController(auth: OAuth2Client, userData: UserData) {
+    async addNewController(
+        auth: OAuth2Client,
+        userData: UserData,
+        taskId: string
+    ) {
         try {
             console.group('Creating new offer');
-            if (!this._city.id) await this.addNewCity();
+            if (!this._city.id) {
+                TaskStore.update(taskId, 'Dodaję nowe miasto', 5);
+                await this.addNewCity();
+            }
+            TaskStore.update(taskId, 'Tworzę foldery', 15);
             await this.createGdElements(auth);
             console.log('Offer folder created');
+            TaskStore.update(taskId, 'Zapisuję ofertę do bazy', 30);
             await this.addInDb();
             console.log('Offer added in db');
             console.group(
                 'Creating default milestones for offer submission milestone'
             );
+            TaskStore.update(
+                taskId,
+                'Tworzę kamień milowy składania oferty',
+                50
+            );
             await this.createDefaultMilestones(
                 auth,
-                Setup.MilestoneTypes.OFFER_SUBMISSION
+                Setup.MilestoneTypes.OFFER_SUBMISSION,
+                taskId
             );
+            TaskStore.update(taskId, 'Tworzę kamień milowy oceny oferty', 80);
             await this.createOfferEvaluationMilestoneOrCases(auth);
             const _editor =
                 await PersonsController.getPersonFromSessionUserData(userData);
@@ -119,6 +136,7 @@ export default abstract class Offer
                 eventType: Setup.OfferEventType.CREATED,
                 _editor,
             });
+            TaskStore.update(taskId, 'Zapisuję nowe wydarzenie dla oferty', 95);
             await this._lastEvent.addNewController();
             console.groupEnd();
         } catch (err) {
@@ -127,15 +145,27 @@ export default abstract class Offer
         }
     }
 
-    async editController(auth: OAuth2Client, _fieldsToUpdate?: string[]) {
+    async editController(
+        auth: OAuth2Client,
+        taskId?: string,
+        _fieldsToUpdate?: string[]
+    ) {
         try {
             console.group('Editing offer');
-            if (!this._city.id) this.addNewCity();
-            if (this.shouldEditGdElements(_fieldsToUpdate))
-                await this.editGdElements(auth);
+            TaskStore.update(taskId, 'Edytuję ofertę', 5);
+            if (!this._city.id) {
+                TaskStore.update(taskId, 'Dodaję nowe miasto', 10);
+                await this.addNewCity();
+            }
+            if (this.shouldEditGdElements(_fieldsToUpdate)) {
+                TaskStore.update(taskId, 'Edytuję ofertę na Dysku Google', 20);
+                await this.editGdElements(auth, taskId);
+            }
             console.log('Offer folder edited');
+            TaskStore.update(taskId, 'Edytuję ofertę w bazie', 50);
             await this.editInDb(undefined, undefined, _fieldsToUpdate);
             console.log('Offer edited in db');
+            TaskStore.update(taskId, 'Edytuję kamienie milowe', 80);
             await this.createOfferEvaluationMilestoneOrCases(auth);
             console.log('Offer succesfully edited');
             console.groupEnd();
@@ -146,6 +176,7 @@ export default abstract class Offer
     }
 
     private shouldEditGdElements(_fieldsToUpdate: string[] | undefined) {
+        console.log('shouldEditGdElements', _fieldsToUpdate);
         if (!_fieldsToUpdate) return true;
         return _fieldsToUpdate.includes('submissionDeadline');
     }
@@ -326,6 +357,7 @@ export default abstract class Offer
 
         for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
             const template = defaultMilestoneTemplates[i];
+            TaskStore.update(taskId, 'Tworzę kamień milowy', i * 15);
             const milestone = new Milestone({
                 name: template.name,
                 description: template.description,
@@ -413,7 +445,8 @@ export default abstract class Offer
         }
     }
 
-    async editGdElements(auth: OAuth2Client) {
+    async editGdElements(auth: OAuth2Client, taskId?: string) {
+        const percent = TaskStore.getPercent(taskId) || 0;
         if (!this.submissionDeadline) throw new Error('Brak terminu składania');
         const letterGdFolder = await ToolsGd.getFileOrFolderMetaDataById(
             auth,
@@ -425,11 +458,17 @@ export default abstract class Offer
             this.alias,
             this.submissionDeadline
         );
-        if (letterGdFolder.name !== newFolderName)
+        if (letterGdFolder.name !== newFolderName) {
+            TaskStore.update(
+                taskId,
+                'Edytuję nazwę folderu oferty',
+                percent + 10
+            );
             await ToolsGd.updateFolder(auth, {
                 name: newFolderName,
                 id: letterGdFolder.id,
             });
+        }
         return letterGdFolder;
     }
     /**

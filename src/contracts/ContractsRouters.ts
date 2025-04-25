@@ -12,8 +12,6 @@ import crypto from 'crypto'; // u góry pliku
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 
-const taskStore: Record<string, any> = {};
-
 app.post('/contracts', async (req: Request, res: Response) => {
     try {
         const orConditions = req.parsedBody.orConditions;
