@@ -167,6 +167,9 @@ export default class ToolsDb {
                 'Cannot be part of transaction without external connection!'
             );
 
+        if (_fieldsToUpdate && _fieldsToUpdate.length === 0)
+            throw new Error('No fields to update!');
+
         const conn: mysql.PoolConnection =
             externalConn || (await this.pool.getConnection());
         if (!externalConn)

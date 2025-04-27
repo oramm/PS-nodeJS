@@ -121,7 +121,7 @@ export default class MilestoneDatesController {
             this.makeAndConditions.bind(this)
         )}  
             AND ${typeCondition}
-        ORDER BY MilestoneDates.EndDate,ContractId ASC`;
+        ORDER BY MilestoneDates.EndDate, ContractId, FolderNumber ASC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processMilestoneDatesResult(result);

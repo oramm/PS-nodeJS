@@ -9,7 +9,6 @@ import Setup from '../setup/Setup';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import City from '../Admin/Cities/City';
 import { OurContractData } from '../types/types';
-import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default class ContractOur extends Contract implements OurContractData {
@@ -99,37 +98,70 @@ export default class ContractOur extends Contract implements OurContractData {
         _fieldsToUpdate?: string[]
     ) {
         const ourContractFields = ['ourId', 'managerId', 'adminId', 'cityId'];
-        const ourContractFieldsToUpdate =
-            _fieldsToUpdate?.filter((field) =>
-                ourContractFields.includes(field)
-            ) || [];
-        const contractFieldsToUpdate =
-            _fieldsToUpdate?.filter(
-                (field) => !ourContractFields.includes(field)
-            ) || [];
+        const ourContractFieldsToUpdate = _fieldsToUpdate?.filter((field) =>
+            ourContractFields.includes(field)
+        );
+        const contractFieldsToUpdate = _fieldsToUpdate?.filter(
+            (field) => !ourContractFields.includes(field)
+        );
 
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             const datatoDb = Tools.cloneOfObject(this);
             this.prepareToDboperation(datatoDb);
-            await ToolsDb.editInDb(
-                'Contracts',
-                datatoDb,
-                conn,
-                true,
-                contractFieldsToUpdate
-            );
-            this.id = datatoDb.id;
+
+            //1) Contracts
+            if (!_fieldsToUpdate || (contractFieldsToUpdate?.length ?? 0) > 0) {
+                await ToolsDb.editInDb(
+                    'Contracts',
+                    datatoDb,
+                    conn,
+                    true,
+                    contractFieldsToUpdate
+                );
+                this.id = datatoDb.id;
+            }
+
+            //2) OurContractsData
             const ourContractDbFields = this.getourContractDbFIelds();
-            await ToolsDb.editInDb(
-                'OurContractsData',
-                ourContractDbFields,
-                conn,
-                true,
-                ourContractFieldsToUpdate
+            if (
+                !_fieldsToUpdate ||
+                (_fieldsToUpdate &&
+                    (ourContractFieldsToUpdate?.length ?? 0) > 0)
+            ) {
+                await ToolsDb.editInDb(
+                    'OurContractsData',
+                    ourContractDbFields,
+                    conn,
+                    true,
+                    ourContractFieldsToUpdate
+                );
+            }
+
+            // 3) Entities
+            const entityKeys = ['_employers', '_engineers', '_contractors'];
+            const anyEntityToUpdate = entityKeys.some((key) =>
+                _fieldsToUpdate?.includes(key)
             );
-            console.log('Edytuję powiązania z podmiotami');
-            await this.editEntitiesAssociationsInDb(conn, true);
-            await this.editContractRangesAssociationsInDb(conn, true);
+            const hasAnyEntity =
+                (this._employers?.length ?? 0) +
+                    (this._engineers?.length ?? 0) +
+                    (this._contractors?.length ?? 0) >
+                0;
+
+            if (!_fieldsToUpdate || (anyEntityToUpdate && hasAnyEntity)) {
+                console.log('Edytuję powiązania z podmiotami');
+                await this.editEntitiesAssociationsInDb(conn, true);
+            }
+
+            // 4) Contract Ranges
+            if (
+                (!_fieldsToUpdate ||
+                    _fieldsToUpdate.includes('_contractRanges')) &&
+                this._contractRanges
+            ) {
+                console.log('Edytuję powiązania z zakresami');
+                await this.editContractRangesAssociationsInDb(conn, true);
+            }
         });
     }
 

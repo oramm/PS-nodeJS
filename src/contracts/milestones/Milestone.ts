@@ -109,18 +109,30 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         console.groupEnd();
     }
 
-    async editController(auth: OAuth2Client, userData: UserData) {
+    async editController(
+        auth: OAuth2Client,
+        userData: UserData,
+        _fieldsToUpdate?: string[]
+    ) {
         console.group('Editing Milestone', this._FolderNumber_TypeName_Name);
         if (!this.typeId) throw new Error('Milestone type is not defined');
         if (!this.gdFolderId)
             throw new Error('Milestone folder is not defined');
 
-        await this.editFolder(auth);
-        console.log('Milestone folder edited in GD');
-        await this.editInDb();
+        const onlyDbfields = ['status', 'description', 'number', 'name'];
+        const isOnlyDbFields =
+            _fieldsToUpdate &&
+            _fieldsToUpdate.length > 0 &&
+            _fieldsToUpdate.every((field) => onlyDbfields.includes(field));
+        await this.editInDb(undefined, undefined, _fieldsToUpdate);
         console.log('Milestone edited in DB');
-        await this.editInScrum(auth);
-        console.log('Milestone edited in Scrum');
+
+        if (!isOnlyDbFields) {
+            await this.editFolder(auth);
+            console.log('Milestone folder edited in GD');
+            await this.editInScrum(auth);
+            console.log('Milestone edited in Scrum');
+        }
         console.groupEnd();
     }
 

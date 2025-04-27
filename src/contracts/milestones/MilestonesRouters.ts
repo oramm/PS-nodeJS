@@ -8,6 +8,8 @@ import { Request, Response } from 'express';
 import MilestoneDatesController from './MilestoneDatesController';
 import MilestoneDate from './MilestoneDate';
 import { MilestoneDateData } from '../../types/types';
+import ContractOur from '../ContractOur';
+import ContractOther from '../ContractOther';
 
 app.post('/milestones', async (req: Request, res: Response) => {
     try {
@@ -76,6 +78,56 @@ app.put('/milestone/:id', async (req: Request, res: Response) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
+    }
+});
+
+app.put('/milestoneDateMilestone/:id', async (req: Request, res: Response) => {
+    try {
+        const item = req.parsedBody as MilestoneDateData;
+        const _milestone = new Milestone(req.parsedBody._milestone);
+        _milestone._contract = await _milestone.getParentContractFromDb();
+
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            _milestone.editController,
+            [req.session.userData, req.parsedBody._fieldsToUpdate],
+            _milestone
+        );
+        res.send({ ...item, _milestone });
+    } catch (error) {
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
+        console.error(error);
+    }
+});
+
+app.put('/milestoneDateContract/:id', async (req: Request, res: Response) => {
+    try {
+        const item = req.parsedBody as MilestoneDateData;
+        const _contract = (req.parsedBody as MilestoneDateData)._milestone
+            ?._contract;
+        if (!_contract?.id) throw new Error('Brak danych kontraktu');
+
+        //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
+        const contractInstance = _contract._type.isOur
+            ? new ContractOur(_contract)
+            : new ContractOther(_contract);
+        await Promise.all([
+            ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                contractInstance.editHandler,
+                [req.parsedBody._fieldsToUpdate],
+                contractInstance
+            ),
+        ]);
+        item._milestone!._contract = contractInstance;
+        res.send(item);
+    } catch (error) {
+        console.error(error);
+        if (error instanceof Error)
+            res.status(500).send({ errorMessage: error.message });
     }
 });
 
