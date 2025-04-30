@@ -145,7 +145,7 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
             req,
             res,
             item.editController,
-            [req.files, req.session.userData],
+            [req.files, req.session.userData, _fieldsToUpdate],
             item
         );
         res.send(item);

@@ -173,32 +173,61 @@ export default abstract class Letter
     async editController(
         auth: OAuth2Client,
         files: Express.Multer.File[],
-        userData: UserData
+        userData: UserData,
+        _fieldsToUpdate?: string[]
     ) {
+        const onlyDbfields = [
+            'status',
+            'description',
+            'number',
+            'name',
+            'editorId',
+        ];
+        const isOnlyDbFields =
+            _fieldsToUpdate &&
+            _fieldsToUpdate?.length > 0 &&
+            _fieldsToUpdate.every((field) => onlyDbfields.includes(field));
+
         console.group('Letter edit');
-        await this.editLetterGdElements(auth, files);
-        console.log('Letter folder and file in GD edited');
-        await this.editInDb();
+        await this.editInDb(undefined, undefined, _fieldsToUpdate);
         console.log('Letter edited in DB');
+
+        if (!isOnlyDbFields) {
+            await this.editLetterGdElements(auth, files);
+            console.log('Letter folder and file in GD edited');
+        }
         console.groupEnd();
     }
 
-    async editInDb() {
+    async editInDb(
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        _fieldsToUpdate?: string[]
+    ) {
         console.log('Letter edit in Db Start');
         await ToolsDb.transaction(async (conn) => {
-            await Promise.all([
-                this.deleteCasesAssociationsFromDb(),
-                this.deleteEntitiesAssociationsFromDb(),
-            ]);
-            console.log('associacions deleted');
+            const shouldUpdateCases =
+                !_fieldsToUpdate || _fieldsToUpdate.includes('_cases');
+            const shouldUpdateEntities =
+                !_fieldsToUpdate ||
+                _fieldsToUpdate.includes('_entitiesMain') ||
+                _fieldsToUpdate.includes('_entitiesCc');
 
-            await Promise.all([
-                super.editInDb(conn, true).then(() => {
+            const dbOperations: Promise<any>[] = [
+                super.editInDb(conn, true, _fieldsToUpdate).then(() => {
                     console.log('letterData edited');
                 }),
-                this.addCaseAssociationsInDb(conn, true),
-                this.addEntitiesAssociationsInDb(conn, true),
-            ]);
+            ];
+
+            if (shouldUpdateCases) {
+                dbOperations.push(this.editCasesAssociationsInDb(conn, true));
+            }
+            if (shouldUpdateEntities) {
+                dbOperations.push(
+                    this.editEntitiesAssociationsInDb(conn, true)
+                );
+            }
+            await Promise.all(dbOperations);
             console.log('associaciont renewed');
         });
     }
