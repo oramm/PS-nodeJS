@@ -9,7 +9,6 @@ import {
     MilestoneDateData as MilestoneDateData,
     OfferData,
     OfferEventData,
-    PersonData,
 } from '../types/types';
 import { OAuth2Client } from 'google-auth-library';
 import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';

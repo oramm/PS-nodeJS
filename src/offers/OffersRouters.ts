@@ -64,7 +64,6 @@ app.post('/offer', async (req: Request, res: Response) => {
 app.put('/offer/:id', async (req: Request, res: Response) => {
     try {
         const item = makeOfferObject(req);
-
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
 
@@ -81,7 +80,7 @@ app.put('/offer/:id', async (req: Request, res: Response) => {
                     req,
                     res,
                     item.editController,
-                    [taskId],
+                    [taskId, req.parsedBody._fieldsToUpdate],
                     item
                 );
                 TaskStore.complete(taskId, item, 'Oferta zmnieniona pomyślnie');

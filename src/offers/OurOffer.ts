@@ -15,7 +15,6 @@ import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
-import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 
 export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
