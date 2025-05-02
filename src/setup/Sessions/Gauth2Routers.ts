@@ -16,6 +16,22 @@ app.post('/login', async (req: Request, res: Response) => {
     }
 });
 
+app.post('/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.clearCookie('connect.sid');
+        res.send({ message: 'Logged out' });
+    });
+});
+
+/**do sprawdzenia czy użytokwnik jest już wcześniej zalogoway */
+app.get('/session', (req: Request, res: Response) => {
+    if (req.session?.userData) {
+        res.send({ userData: req.session.userData });
+    } else {
+        res.status(401).send({ errorMessage: 'Brak aktywnej sesji' });
+    }
+});
+
 //ostatnio dodane - działa poprawnie
 app.post('/get-token', async (req: Request, res: Response) => {
     try {

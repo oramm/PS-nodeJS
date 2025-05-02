@@ -165,9 +165,11 @@ export default class ToolsGapi {
     }) {
         return await ToolsDb.editInDb('Persons', data);
     }
+
     static async editUserGoogleIdInDb(userId: number, googleId: string) {
         return await this.editUserDataInDb({ id: userId, googleId: googleId });
     }
+
     static async editUserGoogleRefreshTokenInDb(
         userId: number,
         googleRefreshToken: string
