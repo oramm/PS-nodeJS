@@ -1,8 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import Person from '../../persons/Person';
-import { Envi } from '../../tools/Tools';
 import ToolsDb from '../../tools/ToolsDb';
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { keys } from './credentials';
 
 export const oAuthClient: OAuth2Client = new OAuth2Client(
@@ -83,6 +82,8 @@ export default class ToolsGapi {
             console.log('User data set in session:', req.session.userData);
             //jeśli nie ma googleId w bazie danych, to go wpisuje (po pierwszym zalogowaniu)
             if (!systemRole.googleId) {
+                if (!req.session.userData.googleId)
+                    throw new Error('No user  googleId provided');
                 await ToolsGapi.editUserGoogleIdInDb(
                     systemRole.personId,
                     req.session.userData.googleId

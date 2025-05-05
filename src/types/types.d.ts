@@ -8,7 +8,8 @@ declare module 'express-session' {
     interface SessionData {
         userData: {
             enviId: number;
-            googleId: string;
+            googleId?: string;
+            microsoftId?: string;
             systemEmail: string;
             userName: string;
             picture: string;

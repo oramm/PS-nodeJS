@@ -3,6 +3,7 @@ import ToolsGd from '../../tools/ToolsGd';
 import ToolsGapi, { oAuthClient } from './ToolsGapi';
 import { app } from '../..';
 import '../../types/sessionTypes';
+import TaskStore from './IntersessionsTasksStore';
 
 app.post('/login', async (req: Request, res: Response) => {
     try {
@@ -29,6 +30,19 @@ app.get('/session', (req: Request, res: Response) => {
         res.send({ userData: req.session.userData });
     } else {
         res.status(401).send({ errorMessage: 'Brak aktywnej sesji' });
+    }
+});
+
+app.get('/sessionTaskStatus/:taskId', (req: Request, res: Response) => {
+    const taskId = req.params.taskId;
+    const task = TaskStore.get(taskId);
+    if (!task) return res.status(404).send({ error: 'Nie znaleziono taska' });
+    const { timeout, ...taskWithoutTimeout } = task;
+    res.send(taskWithoutTimeout);
+
+    // usuń po odebraniu, jeśli zakończony
+    if (['done', 'error'].includes(task.status)) {
+        TaskStore.remove(taskId);
     }
 });
 

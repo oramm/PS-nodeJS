@@ -79,6 +79,7 @@ export default class Person extends BusinessObject implements PersonData {
                 name: <SystemRoleName>row.SystemRoleName,
                 personId: <number>row.PersonId,
                 googleId: <string | undefined>row.GoogleId,
+                microsofId: <string | undefined>row.MicrosoftId,
                 googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
             };
         } catch (err) {

@@ -152,19 +152,6 @@ async function simulateTaskProgress(
     }
 }
 
-app.get('/contractStatus/:taskId', (req: Request, res: Response) => {
-    const taskId = req.params.taskId;
-    const task = TaskStore.get(taskId);
-    if (!task) return res.status(404).send({ error: 'Nie znaleziono taska' });
-    const { timeout, ...taskWithoutTimeout } = task;
-    res.send(taskWithoutTimeout);
-
-    // usuń po odebraniu, jeśli zakończony
-    if (['done', 'error'].includes(task.status)) {
-        TaskStore.remove(taskId);
-    }
-});
-
 app.put('/contract/:id', async (req: Request, res: Response) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
