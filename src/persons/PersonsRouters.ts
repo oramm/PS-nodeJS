@@ -7,19 +7,17 @@ import Planning from '../ScrumSheet/Planning';
 import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import { Request, Response } from 'express';
 
-app.post('/persons', async (req: Request, res: Response) => {
+app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await PersonsController.getPersonsList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/person', async (req: Request, res: Response) => {
+app.post('/person', async (req: Request, res: Response, next) => {
     try {
         let item = new Person(req.body);
         if (!item._entity.id) throw new Error('No entity id');
@@ -34,7 +32,7 @@ app.post('/person', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/person/:id', async (req: Request, res: Response) => {
+app.put('/person/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Person(req.body);
         delete item.systemRoleId;
@@ -42,13 +40,11 @@ app.put('/person/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 //TODO: dorobić
-app.put('/user/:id', async (req: Request, res: Response) => {
+app.put('/user/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Person(req.body);
         await item.editInDb();
@@ -70,13 +66,11 @@ app.put('/user/:id', async (req: Request, res: Response) => {
 
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.get('/personsRefresh', async (req: Request, res: Response) => {
+app.get('/personsRefresh', async (req: Request, res: Response, next) => {
     try {
         await ToolsGapi.gapiReguestHandler(
             req,
@@ -87,20 +81,16 @@ app.get('/personsRefresh', async (req: Request, res: Response) => {
         );
         res.send('scrum refreshed');
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/person/:id', async (req: Request, res: Response) => {
+app.delete('/person/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Person(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

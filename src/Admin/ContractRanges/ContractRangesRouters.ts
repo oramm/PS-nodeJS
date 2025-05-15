@@ -4,7 +4,7 @@ import ContractRangesController from './ContractRangesController';
 import ContractRange from './ContractRange';
 import { ContractRangeData } from '../../types/types';
 
-app.post('/contractRanges', async (req: Request, res: Response) => {
+app.post('/contractRanges', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.body.orConditions; // assuming parsedBody is replaced with body
         const result = await ContractRangesController.getContractRangesList(
@@ -12,13 +12,11 @@ app.post('/contractRanges', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/contractRange', async (req: Request, res: Response) => {
+app.post('/contractRange', async (req: Request, res: Response, next) => {
     try {
         const itemData: ContractRangeData = req.body;
         const item = new ContractRange(itemData);
@@ -31,7 +29,7 @@ app.post('/contractRange', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/contractRange/:id', async (req: Request, res: Response) => {
+app.put('/contractRange/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.body._fieldsToUpdate;
         const itemFromClient: ContractRangeData = req.body;
@@ -42,13 +40,11 @@ app.put('/contractRange/:id', async (req: Request, res: Response) => {
         item.editInDb(undefined, false, _fieldsToUpdate);
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/contractRange/:id', async (req: Request, res: Response) => {
+app.delete('/contractRange/:id', async (req: Request, res: Response, next) => {
     try {
         const itemData: ContractRangeData = req.body;
         const item = new ContractRange(itemData);
@@ -56,8 +52,6 @@ app.delete('/contractRange/:id', async (req: Request, res: Response) => {
         res.send(item);
         console.log(`Contract range ${item.name} deleted`);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

@@ -4,7 +4,7 @@ import FocusArea from './FocusArea';
 import { app } from '../../index';
 import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 
-app.post('/focusAreas', async (req: Request, res: Response) => {
+app.post('/focusAreas', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await FocusAreasController.getFocusAreasList(
@@ -19,7 +19,7 @@ app.post('/focusAreas', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/focusArea', async (req: Request, res: Response) => {
+app.post('/focusArea', async (req: Request, res: Response, next) => {
     try {
         const item = new FocusArea(req.body);
         await ToolsGapi.gapiReguestHandler(
@@ -38,7 +38,7 @@ app.post('/focusArea', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/focusArea/:id', async (req: Request, res: Response) => {
+app.put('/focusArea/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new FocusArea(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
@@ -57,7 +57,7 @@ app.put('/focusArea/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/focusArea/:id', async (req: Request, res: Response) => {
+app.delete('/focusArea/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new FocusArea(req.body);
         await ToolsGapi.gapiReguestHandler(

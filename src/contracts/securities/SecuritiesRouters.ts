@@ -4,7 +4,7 @@ import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 import SecuritiesController from './SecuritiesController';
 import { Security } from './Security';
 
-app.post('/securities', async (req: Request, res: Response) => {
+app.post('/securities', async (req: Request, res: Response, next) => {
     try {
         let isArchived = false;
         if (typeof req.body.isArchived === 'string')
@@ -17,13 +17,11 @@ app.post('/securities', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/security', async (req: Request, res: Response) => {
+app.post('/security', async (req: Request, res: Response, next) => {
     try {
         console.log(req.parsedBody);
         if (typeof req.parsedBody.value === 'string')
@@ -47,7 +45,7 @@ app.post('/security', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/security/:id', async (req: Request, res: Response) => {
+app.put('/security/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -68,13 +66,11 @@ app.put('/security/:id', async (req: Request, res: Response) => {
 
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/security/:id', async (req: Request, res: Response) => {
+app.delete('/security/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new Security(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
@@ -87,8 +83,6 @@ app.delete('/security/:id', async (req: Request, res: Response) => {
 
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

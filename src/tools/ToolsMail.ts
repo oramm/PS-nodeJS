@@ -9,6 +9,8 @@ import { FetchMessageObject, ImapFlow, SearchObject } from 'imapflow';
 import Fuse from 'fuse.js';
 import Setup from '../setup/Setup';
 import { simpleParser } from 'mailparser';
+import session from 'express-session';
+import { Request } from 'express';
 
 export default class ToolsMail {
     // Tworzenie wspólnego transportera dla Nodemailer
@@ -387,6 +389,82 @@ export default class ToolsMail {
             console.error('Błąd podczas usuwania wiadomości:', error);
         } finally {
             await client.logout();
+        }
+    }
+
+    private static escapeHtml(str: string) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    static async sendServerErrorReport(error: unknown, req?: Request) {
+        const to = process.env.PS_ADMIN_MAIL!;
+        const now = new Date().toISOString();
+        const errorText =
+            typeof error === 'string'
+                ? this.escapeHtml(error)
+                : error instanceof Error
+                ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
+                : this.escapeHtml(JSON.stringify(error, null, 2));
+
+        const subject = `[ERP ENVI] Błąd serwera${
+            req ? ` ${req.method} ${req.originalUrl}` : ''
+        }`;
+
+        let requestInfoHtml = '';
+        if (req) {
+            const sessionJson = this.escapeHtml(
+                JSON.stringify(req.session, null, 2)
+            );
+            const bodyJson = this.escapeHtml(
+                JSON.stringify(req.parsedBody ?? req.body, null, 2)
+            );
+            const queryJson = this.escapeHtml(
+                JSON.stringify(req.parsedQuery ?? req.query, null, 2)
+            );
+            requestInfoHtml = `
+            <h5>Informacje o żądaniu:</h5>
+            <ul>
+              <li><strong>Metoda:</strong> ${req.method}</li>
+              <li><strong>URL:</strong> ${req.originalUrl}</li>
+              <li><strong>IP:</strong> ${req.ip}</li>
+              <li><strong>Data:</strong> ${now}</li>
+              <li><strong>Użytkownik:</strong> ${
+                  req.session?.userData?.systemEmail || 'Brak'
+              }</li>
+            </ul>
+            <h5>Sesja:</h5>
+            <pre><code>${sessionJson}</code></pre>
+            <h5>Body:</h5>
+            <pre><code>${bodyJson}</code></pre>
+            <h5>Query:</h5>
+            <pre><code>${queryJson}</code></pre>
+        `;
+        }
+
+        const html = `
+        <h5>Szczegóły błędu:</h5>
+        <pre><code>${errorText}</code></pre>
+        ${requestInfoHtml}
+    `;
+
+        try {
+            await this.sendMail({
+                to,
+                subject,
+                html,
+                footer: this.makeENVIFooter(),
+            });
+            console.log('Raport błędu serwera został wysłany na adres:', to);
+        } catch (mailError) {
+            console.error(
+                'Nie udało się wysłać raportu błędu przez e-mail:',
+                mailError
+            );
         }
     }
 }

@@ -4,7 +4,7 @@ import ToolsMail from '../../tools/ToolsMail';
 import OfferInvitationMail from './OfferInvitationMail';
 import OfferInvitationMailsController from './OfferInvitationMailsController';
 
-app.post('/mailsToCheck', async (req: Request, res: Response) => {
+app.post('/mailsToCheck', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody.orConditions[0])
             throw new Error('Brak warunków wyszukiwania');
@@ -13,13 +13,11 @@ app.post('/mailsToCheck', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/mailToCheck', async (req: Request, res: Response) => {
+app.post('/mailToCheck', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
         await item.addNewController(req.session.userData!);
@@ -31,7 +29,7 @@ app.post('/mailToCheck', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/getEmailDetails', async (req: Request, res: Response) => {
+app.post('/getEmailDetails', async (req: Request, res: Response, next) => {
     try {
         const uid = req.parsedBody.id;
         const item = await ToolsMail.getEmailDetails(uid);
@@ -43,7 +41,7 @@ app.post('/getEmailDetails', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/mailToCheck/:id', async (req: Request, res: Response) => {
+app.delete('/mailToCheck/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
         await ToolsMail.deleteMail(item.uid.toString());
@@ -55,7 +53,7 @@ app.delete('/mailToCheck/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/mailInvitations', async (req: Request, res: Response) => {
+app.post('/mailInvitations', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody.orConditions[0])
             throw new Error('Brak warunków wyszukiwania');
@@ -65,13 +63,11 @@ app.post('/mailInvitations', async (req: Request, res: Response) => {
             );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.put('/mailInvitation/:id', async (req: Request, res: Response) => {
+app.put('/mailInvitation/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
         await item.editController(req.session.userData!);
@@ -83,7 +79,7 @@ app.put('/mailInvitation/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/mailInvitation/:id', async (req: Request, res: Response) => {
+app.delete('/mailInvitation/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
         await item.deleteFromDb();

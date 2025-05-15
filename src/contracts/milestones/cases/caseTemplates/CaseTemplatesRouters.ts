@@ -1,30 +1,31 @@
-import CaseTemplatesController from './CaseTemplatesController'
+import CaseTemplatesController from './CaseTemplatesController';
 import { app } from '../../../../index';
 import CaseTemplate from './CaseTemplate';
 
-app.get('/caseTemplates', async (req: any, res: any) => {
+app.get('/caseTemplates', async (req: any, res: any, next) => {
     try {
-        const result = await CaseTemplatesController.getCaseTemplatesList(req.query);
+        const result = await CaseTemplatesController.getCaseTemplatesList(
+            req.query
+        );
         res.send(result);
     } catch (err) {
         console.error(err);
-        if (err instanceof Error)
-            res.status(500).send(err.message);
+        if (err instanceof Error) res.status(500).send(err.message);
     }
 });
 
-app.get('/caseTemplate/:id', async (req: any, res: any) => {
+app.get('/caseTemplate/:id', async (req: any, res: any, next) => {
     try {
-        const result = await CaseTemplatesController.getCaseTemplatesList(req.params);
+        const result = await CaseTemplatesController.getCaseTemplatesList(
+            req.params
+        );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/caseTemplate', async (req: any, res: any) => {
+app.post('/caseTemplate', async (req: any, res: any, next) => {
     try {
         let item = new CaseTemplate(req.body);
         await item.setEditorId();
@@ -34,30 +35,26 @@ app.post('/caseTemplate', async (req: any, res: any) => {
         if (error instanceof Error)
             res.status(500).send({ errorMessage: error.message });
         console.error(error);
-    };
+    }
 });
 
-app.put('/caseTemplate/:id', async (req: any, res: any) => {
+app.put('/caseTemplate/:id', async (req: any, res: any, next) => {
     try {
         let item = new CaseTemplate(req.body);
         await item.setEditorId();
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/caseTemplate/:id', async (req: any, res: any) => {
+app.delete('/caseTemplate/:id', async (req: any, res: any, next) => {
     try {
         let item = new CaseTemplate(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

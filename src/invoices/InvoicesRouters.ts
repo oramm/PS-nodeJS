@@ -8,19 +8,17 @@ import { Request, Response } from 'express';
 import InvoiceValidator from './InvoiceValidator';
 import ContractOur from '../contracts/ContractOur';
 
-app.post('/invoices', async (req: Request, res: Response) => {
+app.post('/invoices', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await InvoicesController.getInvoicesList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/invoice', async (req: Request, res: Response) => {
+app.post('/invoice', async (req: Request, res: Response, next) => {
     try {
         const invoice = new Invoice(req.body);
         const validator = new InvoiceValidator(
@@ -37,7 +35,7 @@ app.post('/invoice', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/copyInvoice', async (req: Request, res: Response) => {
+app.post('/copyInvoice', async (req: Request, res: Response, next) => {
     try {
         let item = new Invoice(req.body);
         const validator = new InvoiceValidator(
@@ -54,7 +52,7 @@ app.post('/copyInvoice', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/invoice/:id', async (req: Request, res: Response) => {
+app.put('/invoice/:id', async (req: Request, res: Response, next) => {
     try {
         //nie ma validacji przy edycji bo jest zbędna - jest w edycji pozycji
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
@@ -80,21 +78,25 @@ app.put('/invoice/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/setAsToMakeInvoice/:id', async (req: Request, res: Response) => {
-    try {
-        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const itemFromClient = req.parsedBody;
-        let item = new Invoice({ ...itemFromClient, status: 'Do zrobienia' });
-        await item.editInDb();
-        res.send(item);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+app.put(
+    '/setAsToMakeInvoice/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+            const itemFromClient = req.parsedBody;
+            let item = new Invoice({
+                ...itemFromClient,
+                status: 'Do zrobienia',
+            });
+            await item.editInDb();
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
 
-app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
+app.put('/issueInvoice/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -126,13 +128,11 @@ app.put('/issueInvoice/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
+app.put('/setAsSentInvoice/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -141,13 +141,11 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
+app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -155,13 +153,11 @@ app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/invoice/:id', async (req: Request, res: Response) => {
+app.delete('/invoice/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Invoice(req.body);
         await item.deleteFromDb();
@@ -174,8 +170,6 @@ app.delete('/invoice/:id', async (req: Request, res: Response) => {
             );
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

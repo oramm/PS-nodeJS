@@ -4,19 +4,17 @@ import TasksController from './TasksController';
 import { app } from '../../../../index';
 import { Request, Response } from 'express';
 
-app.post('/tasks', async (req: Request, res: Response) => {
+app.post('/tasks', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await TasksController.getTasksList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/task', async (req: Request, res: Response) => {
+app.post('/task', async (req: Request, res: Response, next) => {
     try {
         let item = new Task({ ...req.body, _parent: req.body._case });
         await item.addInDb();
@@ -35,7 +33,7 @@ app.post('/task', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/task/:id', async (req: Request, res: Response) => {
+app.put('/task/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -59,7 +57,7 @@ app.put('/task/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/task/:id', async (req: Request, res: Response) => {
+app.delete('/task/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Task(req.body);
         console.log('delete');
@@ -75,8 +73,6 @@ app.delete('/task/:id', async (req: Request, res: Response) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

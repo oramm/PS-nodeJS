@@ -8,7 +8,7 @@ import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import Letter from './Letter';
 
-app.post('/contractsLetters', async (req: Request, res: Response) => {
+app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
@@ -19,13 +19,11 @@ app.post('/contractsLetters', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/offersLetters', async (req: Request, res: Response) => {
+app.post('/offersLetters', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
@@ -36,9 +34,7 @@ app.post('/offersLetters', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
@@ -108,7 +104,7 @@ app.post(
     }
 );
 
-app.post('/letterReact', async (req: Request, res: Response) => {
+app.post('/letterReact', async (req: Request, res: Response, next) => {
     try {
         console.log('req.files', req.files);
         const item = LettersController.createProperLetter(req.parsedBody);
@@ -131,7 +127,7 @@ app.post('/letterReact', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/letter/:id', async (req: Request, res: Response) => {
+app.put('/letter/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const initParamsFromClient = req.parsedBody;
@@ -156,33 +152,36 @@ app.put('/letter/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/appendLetterAttachments/:id', async (req: Request, res: Response) => {
-    try {
-        const item = LettersController.createProperLetter(req.body);
-        if (
-            !req.body._blobEnviObjects ||
-            !Array.isArray(req.body._blobEnviObjects)
-        )
-            throw new Error(`No blobs to upload for Letter ${item.number}`);
+app.put(
+    '/appendLetterAttachments/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = LettersController.createProperLetter(req.body);
+            if (
+                !req.body._blobEnviObjects ||
+                !Array.isArray(req.body._blobEnviObjects)
+            )
+                throw new Error(`No blobs to upload for Letter ${item.number}`);
 
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.appendAttachmentsHandler,
-            [req.body._blobEnviObjects],
-            item
-        );
-        await item.editInDb();
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.appendAttachmentsHandler,
+                [req.body._blobEnviObjects],
+                item
+            );
+            await item.editInDb();
 
-        res.send(item);
-    } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+            res.send(item);
+        } catch (error) {
+            if (error instanceof Error)
+                res.status(500).send({ errorMessage: error.message });
+            console.error(error);
+        }
     }
-});
+);
 
-app.put('/exportOurLetterToPDF', async (req: Request, res: Response) => {
+app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
     try {
         const item = LettersController.createProperLetter(req.body);
         if (!(item instanceof OurLetter))
@@ -202,7 +201,7 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/approveOurLetter/:id', async (req: Request, res: Response) => {
+app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
     const item = LettersController.createProperLetter(req.body);
     if (!(item instanceof OurLetter))
         throw new Error('Błąd przy zatwierdzaniu pisma');
@@ -223,7 +222,7 @@ app.put('/approveOurLetter/:id', async (req: Request, res: Response) => {
 });
 
 //autoApproveOurLetter
-app.get('/autoApproveOurLetters', async (req: Request, res: Response) => {
+app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
     try {
         await LettersController.autoApprove();
         res.send('All our letters approved');
@@ -234,7 +233,7 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/letter/:id', async (req: Request, res: Response) => {
+app.delete('/letter/:id', async (req: Request, res: Response, next) => {
     try {
         const item = LettersController.createProperLetter(req.body);
         await ToolsGapi.gapiReguestHandler(
@@ -247,8 +246,6 @@ app.delete('/letter/:id', async (req: Request, res: Response) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

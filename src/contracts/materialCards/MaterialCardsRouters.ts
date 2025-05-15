@@ -1,31 +1,27 @@
-import express from 'express'
-import MaterialCardsController from './MaterialCardsController'
+import express from 'express';
+import MaterialCardsController from './MaterialCardsController';
 var app = express();
 
-app.get('/materialCards', async (req: any, res: any) => {
+app.get('/materialCards', async (req: any, res: any, next) => {
     try {
-        const result = await MaterialCardsController.getMaterialCardsList(req.query);
+        const result = await MaterialCardsController.getMaterialCardsList(
+            req.query
+        );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
-
-
 });
 
-app.get('/materialCard/:id', async (req: any, res: any) => {
+app.get('/materialCard/:id', async (req: any, res: any, next) => {
     try {
-        const result = await MaterialCardsController.getMaterialCardsList(req.params);
+        const result = await MaterialCardsController.getMaterialCardsList(
+            req.params
+        );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
-
-
 });
 
 module.exports = app;

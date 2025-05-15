@@ -12,7 +12,7 @@ import crypto from 'crypto'; // u góry pliku
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 
-app.post('/contracts', async (req: Request, res: Response) => {
+app.post('/contracts', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         let isArchived = false;
@@ -21,44 +21,45 @@ app.post('/contracts', async (req: Request, res: Response) => {
         const result = await ContractsController.getContractsList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/contractsWithChildren', async (req: Request, res: Response) => {
-    try {
-        const orConditions = req.parsedBody.orConditions;
-        let isArchived = false;
-        if (typeof orConditions.isArchived === 'string')
-            isArchived = orConditions.isArchived === 'true';
-        const result = await ContractsWithChildrenController.getContractsList(
-            orConditions
-        );
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+app.post(
+    '/contractsWithChildren',
+    async (req: Request, res: Response, next) => {
+        try {
+            const orConditions = req.parsedBody.orConditions;
+            let isArchived = false;
+            if (typeof orConditions.isArchived === 'string')
+                isArchived = orConditions.isArchived === 'true';
+            const result =
+                await ContractsWithChildrenController.getContractsList(
+                    orConditions
+                );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
 
-app.post('/contractsSettlementData', async (req: Request, res: Response) => {
-    try {
-        const orConditions = req.parsedBody.orConditions;
-        const result = await ContractsSettlementController.getSums(
-            orConditions
-        );
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+app.post(
+    '/contractsSettlementData',
+    async (req: Request, res: Response, next) => {
+        try {
+            const orConditions = req.parsedBody.orConditions;
+            const result = await ContractsSettlementController.getSums(
+                orConditions
+            );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
 
-app.post('/contractReact', async (req: Request, res: Response) => {
+app.post('/contractReact', async (req: Request, res: Response, next) => {
     try {
         console.log('req.session', req.session);
         let item: ContractOur | ContractOther;
@@ -152,7 +153,7 @@ async function simulateTaskProgress(
     }
 }
 
-app.put('/contract/:id', async (req: Request, res: Response) => {
+app.put('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
             req.parsedBody._fieldsToUpdate;
@@ -177,13 +178,11 @@ app.put('/contract/:id', async (req: Request, res: Response) => {
 
         res.send(contractInstance);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.put('/sortProjects', async (req: Request, res: Response) => {
+app.put('/sortProjects', async (req: Request, res: Response, next) => {
     try {
         await ToolsGapi.gapiReguestHandler(
             req,
@@ -198,7 +197,7 @@ app.put('/sortProjects', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/contract/:id', async (req: Request, res: Response) => {
+app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const item = req.body._type.isOur
             ? new ContractOur(req.body)
@@ -223,8 +222,6 @@ app.delete('/contract/:id', async (req: Request, res: Response) => {
         res.send(item);
         console.log(`Contract ${item.name} deleted`);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

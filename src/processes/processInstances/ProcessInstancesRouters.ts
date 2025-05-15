@@ -1,30 +1,26 @@
-import ProcessInstancesController from './ProcessInstancesController'
+import ProcessInstancesController from './ProcessInstancesController';
 import { app } from '../../index';
 
-app.get('/processInstances', async (req: any, res: any) => {
+app.get('/processInstances', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessInstancesController.getProcessInstancesList(req.query);
+        const result = await ProcessInstancesController.getProcessInstancesList(
+            req.query
+        );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
-
-
 });
 
-app.get('/processInstance/:id', async (req: any, res: any) => {
+app.get('/processInstance/:id', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessInstancesController.getProcessInstancesList(req.params);
+        const result = await ProcessInstancesController.getProcessInstancesList(
+            req.params
+        );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
-
-
 });
 
 module.exports = app;

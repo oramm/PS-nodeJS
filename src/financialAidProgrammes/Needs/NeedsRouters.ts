@@ -3,7 +3,7 @@ import NeedsController from './NeedsController';
 import Need from './Need';
 import { app } from '../../index';
 
-app.post('/needs', async (req: Request, res: Response) => {
+app.post('/needs', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await NeedsController.getNeedsList(orConditions);
@@ -16,7 +16,7 @@ app.post('/needs', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/need', async (req: Request, res: Response) => {
+app.post('/need', async (req: Request, res: Response, next) => {
     try {
         let need = new Need(req.body);
         await need.addNewController();
@@ -29,7 +29,7 @@ app.post('/need', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/need/:id', async (req: Request, res: Response) => {
+app.put('/need/:id', async (req: Request, res: Response, next) => {
     try {
         let need = new Need(req.parsedBody);
         await need.editController();
@@ -42,7 +42,7 @@ app.put('/need/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/need/:id', async (req: Request, res: Response) => {
+app.delete('/need/:id', async (req: Request, res: Response, next) => {
     try {
         let need = new Need(req.body);
         await need.deleteController();

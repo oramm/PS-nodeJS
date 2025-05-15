@@ -5,7 +5,7 @@ import { app } from '../..';
 import '../../types/sessionTypes';
 import TaskStore from './IntersessionsTasksStore';
 
-app.post('/login', async (req: Request, res: Response) => {
+app.post('/login', async (req: Request, res: Response, next) => {
     try {
         await ToolsGapi.loginHandler(req, res);
         console.log(`user: ${JSON.stringify(req.session.userData)} logged in`);
@@ -47,7 +47,7 @@ app.get('/sessionTaskStatus/:taskId', (req: Request, res: Response) => {
 });
 
 //ostatnio dodane - działa poprawnie
-app.post('/get-token', async (req: Request, res: Response) => {
+app.post('/get-token', async (req: Request, res: Response, next) => {
     try {
         let credentials =
             req.session.credentials ||
@@ -95,7 +95,7 @@ app.post('/get-token', async (req: Request, res: Response) => {
 
 /**odpalany przez google po przyznaniu dostepu przez użytkownika Google
  */
-app.get('/oauthcallback', async (req: Request, res: Response) => {
+app.get('/oauthcallback', async (req: Request, res: Response, next) => {
     try {
         const credentials = await ToolsGapi.getNewCredentials(
             process.env.REFRESH_TOKEN!
@@ -105,9 +105,7 @@ app.get('/oauthcallback', async (req: Request, res: Response) => {
         //req.session.userData = await ToolsGapi.getAdminGoogleUserPayload();
         res.send(req.session);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 

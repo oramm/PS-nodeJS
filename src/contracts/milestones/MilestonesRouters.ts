@@ -11,7 +11,7 @@ import { MilestoneDateData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 
-app.post('/milestones', async (req: Request, res: Response) => {
+app.post('/milestones', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const parentType = req.parsedBody.parentType as MilestoneParentType;
@@ -21,13 +21,11 @@ app.post('/milestones', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/milestoneDates', async (req: Request, res: Response) => {
+app.post('/milestoneDates', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const parentType = req.parsedBody.parentType as MilestoneParentType;
@@ -37,13 +35,11 @@ app.post('/milestoneDates', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/milestone', async (req: Request, res: Response) => {
+app.post('/milestone', async (req: Request, res: Response, next) => {
     try {
         let item = new Milestone(req.parsedBody);
         //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Milestones
@@ -62,7 +58,7 @@ app.post('/milestone', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/milestone/:id', async (req: Request, res: Response) => {
+app.put('/milestone/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new Milestone(req.parsedBody);
         item._contract = await item.getParentContractFromDb();
@@ -81,57 +77,61 @@ app.put('/milestone/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/milestoneDateMilestone/:id', async (req: Request, res: Response) => {
-    try {
-        const item = req.parsedBody as MilestoneDateData;
-        const _milestone = new Milestone(req.parsedBody._milestone);
-        _milestone._contract = await _milestone.getParentContractFromDb();
+app.put(
+    '/milestoneDateMilestone/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = req.parsedBody as MilestoneDateData;
+            const _milestone = new Milestone(req.parsedBody._milestone);
+            _milestone._contract = await _milestone.getParentContractFromDb();
 
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            _milestone.editController,
-            [req.session.userData, req.parsedBody._fieldsToUpdate],
-            _milestone
-        );
-        res.send({ ...item, _milestone });
-    } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
-    }
-});
-
-app.put('/milestoneDateContract/:id', async (req: Request, res: Response) => {
-    try {
-        const item = req.parsedBody as MilestoneDateData;
-        const _contract = (req.parsedBody as MilestoneDateData)._milestone
-            ?._contract;
-        if (!_contract?.id) throw new Error('Brak danych kontraktu');
-
-        //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
-        const contractInstance = _contract._type.isOur
-            ? new ContractOur(_contract)
-            : new ContractOther(_contract);
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
+            await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                contractInstance.editHandler,
-                [req.parsedBody._fieldsToUpdate],
-                contractInstance
-            ),
-        ]);
-        item._milestone!._contract = contractInstance;
-        res.send(item);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+                _milestone.editController,
+                [req.session.userData, req.parsedBody._fieldsToUpdate],
+                _milestone
+            );
+            res.send({ ...item, _milestone });
+        } catch (error) {
+            if (error instanceof Error)
+                res.status(500).send({ errorMessage: error.message });
+            console.error(error);
+        }
     }
-});
+);
 
-app.put('/milestoneDate/:id', async (req: Request, res: Response) => {
+app.put(
+    '/milestoneDateContract/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = req.parsedBody as MilestoneDateData;
+            const _contract = (req.parsedBody as MilestoneDateData)._milestone
+                ?._contract;
+            if (!_contract?.id) throw new Error('Brak danych kontraktu');
+
+            //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
+            const contractInstance = _contract._type.isOur
+                ? new ContractOur(_contract)
+                : new ContractOther(_contract);
+            await Promise.all([
+                ToolsGapi.gapiReguestHandler(
+                    req,
+                    res,
+                    contractInstance.editHandler,
+                    [req.parsedBody._fieldsToUpdate],
+                    contractInstance
+                ),
+            ]);
+            item._milestone!._contract = contractInstance;
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new MilestoneDate(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
@@ -149,7 +149,7 @@ app.put('/milestoneDate/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/milestone/:id', async (req: Request, res: Response) => {
+app.delete('/milestone/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Milestone(req.body);
         console.log('delete');
@@ -172,13 +172,11 @@ app.delete('/milestone/:id', async (req: Request, res: Response) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/milestoneDate/:id', async (req: Request, res: Response) => {
+app.delete('/milestoneDate/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new MilestoneDate(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
@@ -191,8 +189,6 @@ app.delete('/milestoneDate/:id', async (req: Request, res: Response) => {
 
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

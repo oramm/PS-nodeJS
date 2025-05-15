@@ -4,7 +4,7 @@ import OfferBond from './OfferBond';
 import { app } from '../../index';
 
 // GET Offer Bonds
-app.post('/offerBonds', async (req: Request, res: Response) => {
+app.post('/offerBonds', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await OfferBondsController.getOfferBondsList(
@@ -20,7 +20,7 @@ app.post('/offerBonds', async (req: Request, res: Response) => {
 });
 
 // POST a new Offer Bond
-app.post('/offerBond', async (req: Request, res: Response) => {
+app.post('/offerBond', async (req: Request, res: Response, next) => {
     try {
         const offerBond = new OfferBond(req.body);
         await offerBond.addNewController();
@@ -34,7 +34,7 @@ app.post('/offerBond', async (req: Request, res: Response) => {
 });
 
 // DELETE an existing Offer Bond
-app.delete('/offerBond/:id', async (req: Request, res: Response) => {
+app.delete('/offerBond/:id', async (req: Request, res: Response, next) => {
     try {
         let offerBond = new OfferBond(req.body);
         await offerBond.deleteController();

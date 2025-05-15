@@ -9,19 +9,17 @@ import EnviErrors from '../tools/Errors';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 
-app.post('/offers', async (req: Request, res: Response) => {
+app.post('/offers', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await OffersController.getOffersList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/offer', async (req: Request, res: Response) => {
+app.post('/offer', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req);
 
@@ -61,7 +59,7 @@ app.post('/offer', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/offer/:id', async (req: Request, res: Response) => {
+app.put('/offer/:id', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req);
         const taskId = crypto.randomUUID();
@@ -96,7 +94,7 @@ app.put('/offer/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/sendOffer/:id', async (req: Request, res: Response) => {
+app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody._newEvent)
             throw new Error('Brak danych nowego wydarzenia');
@@ -119,7 +117,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/exportOurOfferToPDF', async (req: Request, res: Response) => {
+app.put('/exportOurOfferToPDF', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req);
         if (item instanceof OurOffer)
@@ -138,27 +136,28 @@ app.put('/exportOurOfferToPDF', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/getFilesDataFromGdFolder', async (req: Request, res: Response) => {
-    try {
-        const item = makeOfferObject(req);
-        if (item instanceof OurOffer) {
-            const result = await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.getOfferFilesData,
-                undefined,
-                item
-            );
-            res.send(result);
+app.post(
+    '/getFilesDataFromGdFolder',
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = makeOfferObject(req);
+            if (item instanceof OurOffer) {
+                const result = await ToolsGapi.gapiReguestHandler(
+                    req,
+                    res,
+                    item.getOfferFilesData,
+                    undefined,
+                    item
+                );
+                res.send(result);
+            }
+        } catch (error) {
+            next(error);
         }
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
     }
-});
+);
 
-app.put('/addNewOfferBond/:id', async (req: Request, res: Response) => {
+app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req) as ExternalOffer;
         await item.addNewOfferBondController();
@@ -170,7 +169,7 @@ app.put('/addNewOfferBond/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/editOfferBond/:id', async (req: Request, res: Response) => {
+app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req) as ExternalOffer;
         await item.editOfferBondController();
@@ -182,7 +181,7 @@ app.put('/editOfferBond/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/deleteOfferBond/:id', async (req: Request, res: Response) => {
+app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req) as ExternalOffer;
         await item.deleteOfferBondController();
@@ -194,7 +193,7 @@ app.put('/deleteOfferBond/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/offer/:id', async (req: Request, res: Response) => {
+app.delete('/offer/:id', async (req: Request, res: Response, next) => {
     try {
         const item = makeOfferObject(req);
         await ToolsGapi.gapiReguestHandler(

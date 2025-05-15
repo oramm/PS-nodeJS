@@ -5,7 +5,7 @@ import { app } from '../index';
 import InvoiceItemValidator from './InvoiceItemValidator';
 import ContractOur from '../contracts/ContractOur';
 
-app.post('/invoiceItems', async (req: Request, res: Response) => {
+app.post('/invoiceItems', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await InvoiceItemsController.getInvoiceItemsList(
@@ -13,13 +13,11 @@ app.post('/invoiceItems', async (req: Request, res: Response) => {
         );
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/invoiceItem', async (req: Request, res: Response) => {
+app.post('/invoiceItem', async (req: Request, res: Response, next) => {
     try {
         let item = new InvoiceItem(req.body);
         const validator = new InvoiceItemValidator(
@@ -37,7 +35,7 @@ app.post('/invoiceItem', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
+app.post('/copyInvoiceItem', async (req: Request, res: Response, next) => {
     try {
         let item = new InvoiceItem(req.body);
         const validator = new InvoiceItemValidator(
@@ -55,7 +53,7 @@ app.post('/copyInvoiceItem', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/invoiceItem/:id', async (req: Request, res: Response) => {
+app.put('/invoiceItem/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new InvoiceItem(req.parsedBody);
         const validator = new InvoiceItemValidator(
@@ -67,20 +65,16 @@ app.put('/invoiceItem/:id', async (req: Request, res: Response) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.delete('/invoiceItem/:id', async (req: Request, res: Response) => {
+app.delete('/invoiceItem/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new InvoiceItem(req.body);
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

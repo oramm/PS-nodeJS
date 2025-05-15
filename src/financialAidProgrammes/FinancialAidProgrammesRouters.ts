@@ -5,56 +5,61 @@ import FinancialAidProgramme from './FinancialAidProgramme';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
 
 export const financialAidProgrammesRouter = express.Router();
-app.post('/financialAidProgrammes', async (req: Request, res: Response) => {
-    try {
-        const orConditions = req.parsedBody.orConditions;
-        const result =
-            await FinancialAidProgrammesController.getFinancialAidProgrammesList(
-                orConditions
+app.post(
+    '/financialAidProgrammes',
+    async (req: Request, res: Response, next) => {
+        try {
+            const orConditions = req.parsedBody.orConditions;
+            const result =
+                await FinancialAidProgrammesController.getFinancialAidProgrammesList(
+                    orConditions
+                );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+app.post(
+    '/financialAidProgramme',
+    async (req: Request, res: Response, next) => {
+        try {
+            let item = new FinancialAidProgramme(req.body);
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.addNewController,
+                undefined,
+                item
             );
-        res.send(result);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+            res.send(item);
+        } catch (error) {
+            if (error instanceof Error)
+                res.status(500).send({ errorMessage: error.message });
+            console.error(error);
+        }
     }
-});
+);
 
-app.post('/financialAidProgramme', async (req: Request, res: Response) => {
-    try {
-        let item = new FinancialAidProgramme(req.body);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.addNewController,
-            undefined,
-            item
-        );
-        res.send(item);
-    } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+app.put(
+    '/financialAidProgramme/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            let item = new FinancialAidProgramme(req.parsedBody);
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.editController,
+                undefined,
+                item
+            );
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
     }
-});
-
-app.put('/financialAidProgramme/:id', async (req: Request, res: Response) => {
-    try {
-        let item = new FinancialAidProgramme(req.parsedBody);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.editController,
-            undefined,
-            item
-        );
-        res.send(item);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-    }
-});
+);
 
 app.delete(
     '/financialAidProgramme/:id',

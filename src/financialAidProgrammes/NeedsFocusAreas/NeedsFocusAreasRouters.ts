@@ -3,7 +3,7 @@ import NeedsFocusAreasController from './NeedsFocusAreasController';
 import NeedFocusArea from './NeedFocusArea';
 import { app } from '../../index';
 
-app.post('/needsFocusAreas', async (req: Request, res: Response) => {
+app.post('/needsFocusAreas', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await NeedsFocusAreasController.getNeedsFocusAreasList(
@@ -18,7 +18,7 @@ app.post('/needsFocusAreas', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/needFocusArea', async (req: Request, res: Response) => {
+app.post('/needFocusArea', async (req: Request, res: Response, next) => {
     try {
         let needFocusArea = new NeedFocusArea(req.parsedBody);
         await needFocusArea.addInDb();
@@ -31,7 +31,7 @@ app.post('/needFocusArea', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/needFocusArea/:id', async (req: Request, res: Response) => {
+app.put('/needFocusArea/:id', async (req: Request, res: Response, next) => {
     try {
         let needFocusArea = new NeedFocusArea(req.parsedBody);
         await needFocusArea.editInDb();
@@ -44,7 +44,7 @@ app.put('/needFocusArea/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/needFocusArea/:id', async (req: Request, res: Response) => {
+app.delete('/needFocusArea/:id', async (req: Request, res: Response, next) => {
     try {
         let needFocusArea = new NeedFocusArea(req.body);
         await needFocusArea.deleteFromDb();

@@ -4,19 +4,17 @@ import { app } from '../index';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import Project from './Project';
 
-app.post('/projects', async (req: Request, res: Response) => {
+app.post('/projects', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await ProjectsController.getProjectsList(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });
 
-app.post('/project', async (req: Request, res: Response) => {
+app.post('/project', async (req: Request, res: Response, next) => {
     try {
         let item = new Project(req.parsedBody);
         //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Projects
@@ -48,7 +46,7 @@ app.post('/project', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/project/:id', async (req: Request, res: Response) => {
+app.put('/project/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -72,7 +70,7 @@ app.put('/project/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/project/:id', async (req: Request, res: Response) => {
+app.delete('/project/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Project(req.body);
         await item.deleteFromDb();
@@ -88,8 +86,6 @@ app.delete('/project/:id', async (req: Request, res: Response) => {
         console.log(`Project: ${item.ourId} ${item.alias} deleted`);
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

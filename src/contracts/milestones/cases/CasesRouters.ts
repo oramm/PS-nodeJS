@@ -4,7 +4,7 @@ import Case from './Case';
 import ToolsGapi from '../../../setup/Sessions/ToolsGapi';
 import { Request, Response } from 'express';
 
-app.post('/cases', async (req: Request, res: Response) => {
+app.post('/cases', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await CasesController.getCasesList(orConditions);
@@ -17,7 +17,7 @@ app.post('/cases', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/case', async (req: Request, res: Response) => {
+app.post('/case', async (req: Request, res: Response, next) => {
     try {
         const caseItem = new Case({
             ...req.parsedBody,
@@ -38,7 +38,7 @@ app.post('/case', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/case/:id', async (req: Request, res: Response) => {
+app.put('/case/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
@@ -69,7 +69,7 @@ app.put('/case/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/case/:id', async (req: Request, res: Response) => {
+app.delete('/case/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Case(req.body);
         console.log('delete');
@@ -92,8 +92,6 @@ app.delete('/case/:id', async (req: Request, res: Response) => {
         ]);
         res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
     }
 });

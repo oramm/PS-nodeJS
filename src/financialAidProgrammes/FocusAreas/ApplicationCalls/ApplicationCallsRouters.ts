@@ -4,7 +4,7 @@ import ApplicationCall from './ApplicationCall';
 import { app } from '../../../index';
 import ToolsGapi from '../../../setup/Sessions/ToolsGapi';
 
-app.post('/applicationCalls', async (req: Request, res: Response) => {
+app.post('/applicationCalls', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await ApplicationCallsController.getApplicationCallsList(
@@ -19,7 +19,7 @@ app.post('/applicationCalls', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/applicationCall', async (req: Request, res: Response) => {
+app.post('/applicationCall', async (req: Request, res: Response, next) => {
     try {
         const item = new ApplicationCall(req.body);
         await ToolsGapi.gapiReguestHandler(
@@ -38,7 +38,7 @@ app.post('/applicationCall', async (req: Request, res: Response) => {
     }
 });
 
-app.put('/applicationCall/:id', async (req: Request, res: Response) => {
+app.put('/applicationCall/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new ApplicationCall(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
@@ -57,21 +57,24 @@ app.put('/applicationCall/:id', async (req: Request, res: Response) => {
     }
 });
 
-app.delete('/applicationCall/:id', async (req: Request, res: Response) => {
-    try {
-        const item = new ApplicationCall(req.body);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.deleteController,
-            undefined,
-            item
-        );
-        res.send(item);
-    } catch (error) {
-        console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
+app.delete(
+    '/applicationCall/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = new ApplicationCall(req.body);
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item.deleteController,
+                undefined,
+                item
+            );
+            res.send(item);
+        } catch (error) {
+            console.error(error);
+            if (error instanceof Error) {
+                res.status(500).send({ errorMessage: error.message });
+            }
         }
     }
-});
+);

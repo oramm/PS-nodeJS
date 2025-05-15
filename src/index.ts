@@ -1,4 +1,4 @@
-import express, { NextFunction } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
@@ -11,6 +11,7 @@ import { keys } from './setup/Sessions/credentials';
 import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
+import ToolsMail from './tools/ToolsMail';
 declare global {
     namespace Express {
         interface Request {
@@ -28,6 +29,20 @@ const uri = process.env.MONGODB_URI || keys.mongoDb.uri;
 const client = new MongoClient(uri);
 
 export const app = express();
+
+//https://github.com/expressjs/session/issues/374#issuecomment-405282149
+const corsOptions = {
+    origin: [
+        'http://localhost',
+        'https://erp-envi.herokuapp.com',
+        'https://erp.envi.com.pl',
+        'https://ps.envi.com.pl',
+    ],
+    optionsSuccessStatus: 200, // For legacy browser support
+    credentials: true,
+};
+app.use(cors(corsOptions));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use((req, res, next) => {
@@ -77,6 +92,7 @@ process.on('SIGTERM', async () => {
 
 process.on('uncaughtException', (err) => {
     console.error('Wystąpił nieobsłużony wyjątek:', err);
+    ToolsMail.sendServerErrorReport(err);
     // Można tutaj również dodać kod do łagodnego zamykania aplikacji, jeśli to konieczne
 });
 
@@ -98,6 +114,9 @@ app.use((req, res, next) => {
         req.parsedQuery = Tools.parseObjectsJSON(req.query);
     next();
 });
+
+app.enable('trust proxy');
+
 app.use(
     session({
         store: MongoStore.create({
@@ -126,21 +145,6 @@ app.use((req, res, next) => {
     );
     next();
 });
-
-app.enable('trust proxy');
-
-//https://github.com/expressjs/session/issues/374#issuecomment-405282149
-const corsOptions = {
-    origin: [
-        'http://localhost',
-        'https://erp-envi.herokuapp.com',
-        'https://erp.envi.com.pl',
-        'https://ps.envi.com.pl',
-    ],
-    optionsSuccessStatus: 200, // For legacy browser support
-    credentials: true,
-};
-app.use(cors(corsOptions));
 
 require('./setup/Sessions/Gauth2Routers');
 require('./persons/PersonsRouters');
@@ -180,6 +184,17 @@ require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
 require('./Admin/Cities/CitiesRouters');
 require('./Admin/ContractRanges/ContractRangesRouters');
+
+app.use(
+    async (err: unknown, req: Request, res: Response, next: NextFunction) => {
+        console.error('Wystąpił błąd:', err);
+
+        await ToolsMail.sendServerErrorReport(err, req);
+
+        const message = err instanceof Error ? err.message : 'Nieznany błąd';
+        res.status(500).send({ errorMessage: message });
+    }
+);
 
 app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
