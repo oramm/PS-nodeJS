@@ -1,5 +1,4 @@
 import BusinessObject from '../../BussinesObject';
-import ToolsDate from '../../tools/ToolsDate';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
 import CaseType from './cases/caseTypes/CaseType';
@@ -277,8 +276,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         );
     }
 
-    /**
-     * Służy do tworzenia domyślnych folderów przy dodawaniu pojedynczego milestona
+    /** Służy do tworzenia domyślnych folderów przy dodawaniu pojedynczego milestona
      */
     async createFolders(auth: OAuth2Client) {
         const parentGdId =

@@ -29,9 +29,7 @@ app.post('/invoice', async (req: Request, res: Response, next) => {
         await invoice.addInDb();
         res.send(invoice);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -46,9 +44,7 @@ app.post('/copyInvoice', async (req: Request, res: Response, next) => {
         await item.copyController();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -72,9 +68,7 @@ app.put('/invoice/:id', async (req: Request, res: Response, next) => {
         await item.editInDb();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

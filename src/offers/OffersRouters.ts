@@ -53,9 +53,7 @@ app.post('/offer', async (req: Request, res: Response, next) => {
             }
         });
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -88,9 +86,7 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
             }
         });
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -111,9 +107,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
             );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -130,9 +124,7 @@ app.put('/exportOurOfferToPDF', async (req: Request, res: Response, next) => {
             );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -163,9 +155,7 @@ app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
         await item.addNewOfferBondController();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -175,9 +165,7 @@ app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
         await item.editOfferBondController();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -187,9 +175,7 @@ app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
         await item.deleteOfferBondController();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

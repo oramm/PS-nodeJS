@@ -32,9 +32,7 @@ app.post('/case', async (req: Request, res: Response, next) => {
 
         res.send(caseItem);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -63,9 +61,7 @@ app.put('/case/:id', async (req: Request, res: Response, next) => {
 
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

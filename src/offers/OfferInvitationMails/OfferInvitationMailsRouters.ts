@@ -23,9 +23,7 @@ app.post('/mailToCheck', async (req: Request, res: Response, next) => {
         await item.addNewController(req.session.userData!);
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -35,9 +33,7 @@ app.post('/getEmailDetails', async (req: Request, res: Response, next) => {
         const item = await ToolsMail.getEmailDetails(uid);
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -47,9 +43,7 @@ app.delete('/mailToCheck/:id', async (req: Request, res: Response, next) => {
         await ToolsMail.deleteMail(item.uid.toString());
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -73,9 +67,7 @@ app.put('/mailInvitation/:id', async (req: Request, res: Response, next) => {
         await item.editController(req.session.userData!);
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -85,8 +77,6 @@ app.delete('/mailInvitation/:id', async (req: Request, res: Response, next) => {
         await item.deleteFromDb();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });

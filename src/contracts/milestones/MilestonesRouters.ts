@@ -52,9 +52,7 @@ app.post('/milestone', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -71,9 +69,7 @@ app.put('/milestone/:id', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -143,9 +139,7 @@ app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

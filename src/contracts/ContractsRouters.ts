@@ -113,9 +113,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             }
         });
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -191,9 +189,7 @@ app.put('/sortProjects', async (req: Request, res: Response, next) => {
         );
         res.send('sorted');
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

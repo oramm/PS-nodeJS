@@ -23,9 +23,7 @@ app.post('/documentTemplate', async (req: any, res: any, next) => {
         await item.addInDb();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

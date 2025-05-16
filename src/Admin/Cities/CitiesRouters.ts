@@ -19,9 +19,7 @@ app.post('/city', async (req: Request, res: Response, next) => {
         await item.addNewController();
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 

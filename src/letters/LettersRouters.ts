@@ -121,9 +121,7 @@ app.post('/letterReact', async (req: Request, res: Response, next) => {
         }
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -146,9 +144,7 @@ app.put('/letter/:id', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -195,9 +191,7 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -215,9 +209,7 @@ app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
         );
         res.send(item);
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
@@ -227,9 +219,7 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
         await LettersController.autoApprove();
         res.send('All our letters approved');
     } catch (error) {
-        if (error instanceof Error)
-            res.status(500).send({ errorMessage: error.message });
-        console.error(error);
+        next(error);
     }
 });
 
