@@ -49,6 +49,8 @@ export default class InvoicesController {
             Projects.OurId AS ProjectOurId,
             Projects.Name AS ProjectName,
             Projects.GdFolderId AS ProjectGdFolderId,
+            Cities.Id AS CityId,
+            Cities.Name AS CityName,
             Editors.Id AS EditorId,
             Editors.Name AS EditorName,
             Editors.Surname AS EditorSurname,
@@ -67,6 +69,7 @@ export default class InvoicesController {
         LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
         LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+        LEFT JOIN Cities ON Cities.Id = OurContractsData.CityId
         WHERE ${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
@@ -194,6 +197,10 @@ export default class InvoicesController {
                     name: row.ContractTypeName,
                     description: row.ContractTypeDescription,
                     isOur: row.ContractTypeIsOur,
+                },
+                _city: {
+                    id: row.CityId,
+                    name: row.CityName,
                 },
             };
             const _contract = new ContractOur(contractInitParams);
