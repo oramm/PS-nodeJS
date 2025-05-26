@@ -13,8 +13,10 @@ type ApplicationCallSearchParams = {
     _financialAidProgramme?: FinancialAidProgrammeData;
     focusAreaId?: number;
     _focusArea?: FocusAreaData | FocusAreaData[];
-    startDate?: string;
-    endDate?: string;
+    startDateFrom?: string;
+    startDateTo?: string;
+    endDateFrom?: string;
+    endDateTo?: string;
     statuses?: string[];
     searchText?: string;
 };
@@ -49,6 +51,8 @@ export default class ApplicationCallsController {
             this.makeAndConditions.bind(this)
         )}
         ORDER BY ApplicationCalls.StartDate ASC`;
+
+        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processApplicationCallsResult(result);
     }
@@ -125,18 +129,34 @@ export default class ApplicationCallsController {
             );
         }
 
-        if (searchParams.startDate) {
+        if (searchParams.startDateFrom) {
             conditions.push(
                 mysql.format(`ApplicationCalls.StartDate >= ?`, [
-                    searchParams.startDate,
+                    searchParams.startDateFrom,
                 ])
             );
         }
 
-        if (searchParams.endDate) {
+        if (searchParams.startDateTo) {
+            conditions.push(
+                mysql.format(`ApplicationCalls.StartDate <= ?`, [
+                    searchParams.startDateTo,
+                ])
+            );
+        }
+
+        if (searchParams.endDateFrom) {
+            conditions.push(
+                mysql.format(`ApplicationCalls.EndDate >= ?`, [
+                    searchParams.endDateFrom,
+                ])
+            );
+        }
+
+        if (searchParams.endDateTo) {
             conditions.push(
                 mysql.format(`ApplicationCalls.EndDate <= ?`, [
-                    searchParams.endDate,
+                    searchParams.endDateTo,
                 ])
             );
         }
