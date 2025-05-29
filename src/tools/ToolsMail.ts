@@ -467,6 +467,66 @@ export default class ToolsMail {
             );
         }
     }
+    static async sendClientErrorReport(req: Request) {
+        const to = process.env.PS_ADMIN_MAIL!;
+        const now = new Date().toISOString();
+        const error = req.body.error;
+        const errorText =
+            typeof error === 'string'
+                ? this.escapeHtml(error)
+                : error instanceof Error
+                ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
+                : this.escapeHtml(JSON.stringify(error, null, 2));
+
+        // Pobierz userData z sesji, jeśli dostępne
+        const userData = req.session?.userData;
+        const userEmail = userData?.systemEmail;
+
+        const subject = `[ERP ENVI] Błąd klienta${
+            req.body.url ? ` na ${req.body.url}` : ''
+        }`;
+
+        const additionalDataJson = req.body.additionalData
+            ? this.escapeHtml(JSON.stringify(req.body.additionalData, null, 2))
+            : 'Brak';
+
+        const clientInfoHtml = `
+            <h5>Informacje o kliencie:</h5>
+            <ul>
+              <li><strong>URL:</strong> ${req.body.url || 'Brak'}</li>
+              <li><strong>User Agent:</strong> ${
+                  req.headers['user-agent'] || 'Brak'
+              }</li>
+              <li><strong>Data błędu:</strong> ${req.body.timestamp || now}</li>
+              <li><strong>Email użytkownika:</strong> ${
+                  userEmail || 'Brak'
+              }</li>
+            </ul>
+            <h5>Dodatkowe dane:</h5>
+            <pre><code>${additionalDataJson}</code></pre>
+        `;
+
+        const html = `
+        <h5>Szczegóły błędu klienta:</h5>
+        <pre><code>${errorText}</code></pre>
+        ${clientInfoHtml}
+    `;
+
+        try {
+            await this.sendMail({
+                to,
+                subject,
+                html,
+                footer: this.makeENVIFooter(),
+            });
+            console.log('Raport błędu klienta został wysłany na adres:', to);
+        } catch (mailError) {
+            console.error(
+                'Nie udało się wysłać raportu błędu klienta przez e-mail:',
+                mailError
+            );
+        }
+    }
 }
 
 export type MailsSearchParams = {

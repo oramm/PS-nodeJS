@@ -4,6 +4,7 @@ import ToolsGapi, { oAuthClient } from './ToolsGapi';
 import { app } from '../..';
 import '../../types/sessionTypes';
 import TaskStore from './IntersessionsTasksStore';
+import ToolsMail from '../../tools/ToolsMail';
 
 app.post('/login', async (req: Request, res: Response, next) => {
     try {
@@ -43,6 +44,16 @@ app.get('/sessionTaskStatus/:taskId', (req: Request, res: Response) => {
     // usuń po odebraniu, jeśli zakończony
     if (['done', 'error'].includes(task.status)) {
         TaskStore.remove(taskId);
+    }
+});
+
+app.post('/client-error', async (req: Request, res: Response) => {
+    try {
+        await ToolsMail.sendClientErrorReport(req);
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Błąd podczas wysyłania raportu błędu klienta:', error);
+        res.status(500).json({ error: 'Nie udało się wysłać raportu błędu' });
     }
 });
 
