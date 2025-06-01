@@ -35,14 +35,16 @@ app.post('/invoice', async (req: Request, res: Response, next) => {
 
 app.post('/copyInvoice', async (req: Request, res: Response, next) => {
     try {
-        let item = new Invoice(req.body);
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+
+        const item = new Invoice(req.body);
         const validator = new InvoiceValidator(
             new ContractOur(item._contract),
             item
         );
         await validator.checkValueWithContract(true);
-        await item.copyController();
-        res.send(item);
+        const copy = await item.copyController(req.session.userData);
+        res.send(copy);
     } catch (error) {
         next(error);
     }

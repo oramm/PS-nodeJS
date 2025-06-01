@@ -193,6 +193,14 @@ export default class MilestonesController {
 
     private static makeOfferObject(row: any) {
         if (!row.OfferId) return;
+
+        // Validate city data before creating offer object
+        if (!row.CityId && (!row.CityName || !row.CityName.trim())) {
+            console.warn(
+                `Offer ${row.OfferId} has invalid city data in MilestonesController`
+            );
+        }
+
         const offerInitParam: OfferData = {
             id: row.OfferId,
             alias: row.OfferAlias,

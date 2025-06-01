@@ -197,6 +197,12 @@ export default class OffersController {
         let newResult: Offer[] = [];
 
         for (const row of result) {
+            // Validate city data - handle NULL values from LEFT JOIN
+            if (!row.CityId && (!row.CityName || !row.CityName.trim()))
+                console.warn(
+                    `Offer ${row.Id} has invalid city data - skipping`
+                );
+
             const offerInitData: ExternalOfferData | OurOfferData = {
                 id: row.Id,
                 alias: ToolsDb.sqlToString(row.Alias),
@@ -268,6 +274,17 @@ export default class OffersController {
             newResult.push(item);
         }
         return newResult;
+    }
+
+    static async makeNewCityObject(name: string) {
+        const _city = new City({ name });
+        await _city.addNewController();
+        console.log(
+            'City added inDB with generated code:',
+            _city.name,
+            _city.code
+        );
+        return _city;
     }
 
     private static makeOfferBond(initData: OfferBondData, isOurOffer: boolean) {

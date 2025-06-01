@@ -47,13 +47,20 @@ export default abstract class Offer
     gdFolderId?: string;
     _gdFolderUrl?: string;
     _lastEvent?: OfferEvent | null;
-
     constructor(initParamObject: OfferData) {
         super({ ...initParamObject, _dbTableName: 'Offers' });
         if (!initParamObject._type.id)
             throw new Error('Type id is not defined');
         if (!initParamObject._employer && !initParamObject.employerName)
             throw new Error('Employer name or is not defined');
+
+        // Validate city data - require either id or valid name
+        if (
+            !initParamObject._city.id &&
+            (!initParamObject._city.name ||
+                initParamObject._city.name.trim() === '')
+        )
+            throw new Error('City id or name must be defined');
 
         this.id = initParamObject.id;
         this.alias = initParamObject.alias.trim();
@@ -103,10 +110,6 @@ export default abstract class Offer
     ) {
         try {
             console.group('Creating new offer');
-            if (!this._city.id) {
-                TaskStore.update(taskId, 'Dodaję nowe miasto', 5);
-                await this.addNewCity();
-            }
             TaskStore.update(taskId, 'Tworzę foldery', 15);
             await this.createGdElements(auth);
             console.log('Offer folder created');
@@ -152,10 +155,7 @@ export default abstract class Offer
         try {
             console.group('Editing offer');
             TaskStore.update(taskId, 'Edytuję ofertę', 5);
-            if (!this._city.id) {
-                TaskStore.update(taskId, 'Dodaję nowe miasto', 10);
-                await this.addNewCity();
-            }
+
             if (this.shouldEditGdElements(_fieldsToUpdate)) {
                 TaskStore.update(taskId, 'Edytuję ofertę na Dysku Google', 20);
                 await this.editGdElements(auth, taskId);
@@ -235,17 +235,6 @@ export default abstract class Offer
         this._lastEvent = null;
     }
 
-    private async addNewCity() {
-        const _city = new City(this._city);
-        await _city.addNewController();
-        this._city = _city;
-        console.log(
-            'City added inDB with generated code:',
-            _city.name,
-            _city.code
-        );
-    }
-
     async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
         const offerEvaluationMilestone =
             await this.getOfferEvaluationMilestone();
@@ -308,11 +297,10 @@ export default abstract class Offer
             await milestone.deleteController(auth);
         }
     }
-
-    setCity(cityOrCityName: City | string) {
+    async setCity(cityOrCityName: City | string) {
         if (typeof cityOrCityName === 'string') {
-            const city = new City({ name: cityOrCityName, code: '' });
-            city.addInDb();
+            const city = new City({ name: cityOrCityName });
+            await city.addNewController(); // Use proper controller method instead of addInDb
             this._city = city;
             this.cityId = city.id as number;
         } else {

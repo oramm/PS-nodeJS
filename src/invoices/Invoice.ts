@@ -6,7 +6,6 @@ import Setup from '../setup/Setup';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import InvoiceItemsController from './InvoiceItemsController';
-import ContractOur from '../contracts/ContractOur';
 import {
     EntityData,
     InvoiceData,
@@ -14,6 +13,8 @@ import {
     PersonData,
     ProjectData,
 } from '../types/types';
+import PersonsController from '../persons/PersonsController';
+import { UserData } from '../types/sessionTypes';
 
 export default class Invoice extends BusinessObject implements InvoiceData {
     id?: number;
@@ -137,8 +138,8 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this.setGdIdAndUrl(initParamObject.gdId);
     }
 
-    async copyController() {
-        ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+    async copyController(userData: UserData) {
+        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             console.log('copyController for invoice', this.id);
             const invoiceCopy = new Invoice({
                 ...this,
@@ -166,11 +167,17 @@ export default class Invoice extends BusinessObject implements InvoiceData {
                 delete itemData.id;
                 itemData._parent = invoiceCopy;
                 let itemCopy = new InvoiceItem(itemData);
-                await itemCopy.setEditorId();
+                itemCopy._editor =
+                    await PersonsController.getPersonFromSessionUserData(
+                        userData
+                    );
+
+                itemCopy.editorId = itemCopy._editor.id!;
                 console.log('itemCopy editorSet');
                 await itemCopy.addInDb();
                 console.log('itemCopy added', itemCopy);
             }
+            return invoiceCopy;
         });
     }
 }

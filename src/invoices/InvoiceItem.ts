@@ -1,7 +1,6 @@
 import BusinessObject from '../BussinesObject';
-import ContractOur from '../contracts/ContractOur';
-import Invoice from './Invoice';
-import InvoiceValidator from './InvoiceValidator';
+import Person from '../persons/Person';
+import { PersonData } from '../types/types';
 
 export default class InvoiceItem extends BusinessObject {
     id?: number;
@@ -15,7 +14,7 @@ export default class InvoiceItem extends BusinessObject {
     parentId: number;
     quantity: any;
     _lastUpdated?: any;
-    _editor: any;
+    _editor: PersonData;
     editorId: number;
 
     constructor(initParamObject: any) {

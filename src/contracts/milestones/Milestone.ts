@@ -591,7 +591,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
             JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id
             WHERE ${isDefaultCondition} AND ${isInScrumDefaultCondition} AND MilestoneTypes.Id=${this._type.id}`;
-        console.log(sql);
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         try {

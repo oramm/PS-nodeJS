@@ -21,11 +21,11 @@ app.post('/offers', async (req: Request, res: Response, next) => {
 
 app.post('/offer', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req);
-
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
 
+        const item = await makeOfferObject(req);
+        TaskStore.update(taskId, 'Rejestracja oferty w toku', 5);
         res.status(202).send({
             progressMesage: 'Oferta w trakcie przetwarzania',
             status: 'processing',
@@ -59,7 +59,7 @@ app.post('/offer', async (req: Request, res: Response, next) => {
 
 app.put('/offer/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req);
+        const item = await makeOfferObject(req);
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
 
@@ -94,7 +94,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody._newEvent)
             throw new Error('Brak danych nowego wydarzenia');
-        const item = makeOfferObject(req);
+        const item = await makeOfferObject(req);
         if (!req.parsedBody._newEvent?._gdFilesBasicData?.length)
             throw new Error('Brak plików do wysłania');
         if (item instanceof OurOffer)
@@ -113,7 +113,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
 
 app.put('/exportOurOfferToPDF', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req);
+        const item = await makeOfferObject(req);
         if (item instanceof OurOffer)
             await ToolsGapi.gapiReguestHandler(
                 req,
@@ -132,7 +132,7 @@ app.post(
     '/getFilesDataFromGdFolder',
     async (req: Request, res: Response, next) => {
         try {
-            const item = makeOfferObject(req);
+            const item = await makeOfferObject(req);
             if (item instanceof OurOffer) {
                 const result = await ToolsGapi.gapiReguestHandler(
                     req,
@@ -151,7 +151,7 @@ app.post(
 
 app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req) as ExternalOffer;
+        const item = (await makeOfferObject(req)) as ExternalOffer;
         await item.addNewOfferBondController();
         res.send(item);
     } catch (error) {
@@ -161,7 +161,7 @@ app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
 
 app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req) as ExternalOffer;
+        const item = (await makeOfferObject(req)) as ExternalOffer;
         await item.editOfferBondController();
         res.send(item);
     } catch (error) {
@@ -171,7 +171,7 @@ app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
 
 app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req) as ExternalOffer;
+        const item = (await makeOfferObject(req)) as ExternalOffer;
         await item.deleteOfferBondController();
         res.send(item);
     } catch (error) {
@@ -181,7 +181,7 @@ app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/offer/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = makeOfferObject(req);
+        const item = await makeOfferObject(req);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
@@ -208,13 +208,24 @@ app.delete('/offer/:id', async (req: Request, res: Response, next) => {
     }
 });
 
-function makeOfferObject(req: Request) {
+async function makeOfferObject(req: Request) {
     const isOur = req.parsedBody.isOur as boolean;
     const invitationMail = req.parsedBody._contextData?.mail;
-    const _city: CityData =
-        typeof req.parsedBody._city === 'string'
-            ? { name: req.parsedBody._city }
-            : req.parsedBody._city;
+    if (!req.parsedBody._city) throw new Error('Brak danych miasta w ofercie');
+
+    // Przygotowanie danych miasta
+    let _city: CityData;
+    if (typeof req.parsedBody._city === 'string') {
+        // Tworzenie nowego miasta z string
+        _city = await OffersController.makeNewCityObject(req.parsedBody._city);
+    } else {
+        // Walidacja istniejących danych miasta
+        const cityData = req.parsedBody._city as CityData;
+        if (!cityData.id && (!cityData.name || cityData.name.trim() === '')) {
+            throw new Error('Dane miasta są niepełne - brak id i nazwy');
+        }
+        _city = cityData;
+    }
     let employerName: string | undefined = req.parsedBody.employerName;
     if (typeof req.parsedBody._employer === 'string')
         employerName = req.parsedBody._employer;
