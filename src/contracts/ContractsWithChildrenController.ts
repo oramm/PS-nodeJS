@@ -82,7 +82,6 @@ export default class ContractsWithChildrenController {
                 CaseTypes.Name AS CaseTypeName,
                 CaseTypes.IsDefault,
                 CaseTypes.IsUniquePerMilestone,
-                CaseTypes.MilestoneTypeId,
                 CaseTypes.FolderNumber AS CaseTypeFolderNumber,
                 Tasks.Name AS TaskName,
                 Tasks.Description AS TaskDescription,
