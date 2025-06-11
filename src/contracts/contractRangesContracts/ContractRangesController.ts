@@ -3,7 +3,7 @@ import ToolsDb from '../../tools/ToolsDb';
 import {
     ContractRangeData,
     ContractData,
-    ContractRangeContractData,
+    ContractRangePerContractData,
 } from '../../types/types';
 
 type ContractRangesContractsSearchParams = {
@@ -20,7 +20,7 @@ export default class ContractRangesContractsController {
     ) {
         const sql = `SELECT ContractRangesContracts.ContractRangeId,
             ContractRangesContracts.ContractId,
-            ContractRangesContracts.Comment,
+            ContractRangesContracts.AssociationComment,
             ContractRanges.Id AS ContractRangeId,
             ContractRanges.Name AS ContractRangeName,
             ContractRanges.Description AS ContractRangeDescription
@@ -43,7 +43,7 @@ export default class ContractRangesContractsController {
         const words = searchText.split(' ');
         const conditions = words.map((word) =>
             mysql.format(
-                `(ContractRanges.Name LIKE ? OR Contracts.Name LIKE ? OR ContractRangesContracts.Comment LIKE ?)`,
+                `(ContractRanges.Name LIKE ? OR Contracts.Name LIKE ? OR ContractRangesContracts.AssociationComment LIKE ?)`,
                 [`%${word}%`, `%${word}%`, `%${word}%`]
             )
         );
@@ -85,17 +85,16 @@ export default class ContractRangesContractsController {
 
         return conditions.length ? conditions.join(' AND ') : '1';
     }
-
     static processContractRangesContractsResult(
         result: any[]
-    ): ContractRangeContractData[] {
-        let newResult: ContractRangeContractData[] = [];
+    ): ContractRangePerContractData[] {
+        let newResult: ContractRangePerContractData[] = [];
 
         for (const row of result) {
-            const item: ContractRangeContractData = {
+            const item: ContractRangePerContractData = {
                 contractRangeId: row.ContractRangeId,
                 contractId: row.ContractId,
-                comment: row.Comment,
+                associationComment: row.AssociationComment,
                 _contractRange: {
                     id: row.ContractRangeId,
                     name: row.ContractRangeName,

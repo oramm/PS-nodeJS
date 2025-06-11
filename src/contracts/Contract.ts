@@ -11,7 +11,7 @@ import MilestoneTemplatesController from './milestones/milestoneTemplates/Milest
 import TasksController from './milestones/cases/tasks/TasksController';
 import {
     ContractData,
-    ContractRangeContractData,
+    ContractRangePerContractData,
     ContractRangeData,
     EntityData,
     ProjectData,
@@ -50,7 +50,7 @@ export default abstract class Contract
     _project: ProjectData;
     _folderName?: string;
     _lastUpdated?: string;
-    _contractRanges: ContractRangeData[] = [];
+    _contractRangesPerContract: ContractRangePerContractData[] = [];
     _contractRangesNames?: string[] = [];
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
@@ -128,9 +128,10 @@ export default abstract class Contract
             ? initParamObject._employers
             : [];
 
-        this._contractRanges = initParamObject._contractRanges
-            ? initParamObject._contractRanges
-            : [];
+        this._contractRangesPerContract =
+            initParamObject._contractRangesPerContract
+                ? initParamObject._contractRangesPerContract
+                : [];
         this._contractRangesNames = initParamObject._contractRangesNames;
         this._project = initParamObject._project;
         this.projectOurId = this._project?.ourId;
@@ -308,16 +309,16 @@ export default abstract class Contract
             isPartOfTransaction
         );
     }
-
     protected async addContractRangesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        console.log('contractRanges', this._contractRanges);
-        for (const range of this._contractRanges) {
-            const associationData: ContractRangeContractData = {
+        console.log('contractRanges', this._contractRangesPerContract);
+        for (const rangeAssociation of this._contractRangesPerContract) {
+            const associationData: ContractRangePerContractData = {
                 _contract: this,
-                _contractRange: range,
+                _contractRange: rangeAssociation._contractRange,
+                associationComment: rangeAssociation.associationComment,
             };
             const associationObject = new ContractRangeContract(
                 associationData

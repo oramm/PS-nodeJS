@@ -9,7 +9,7 @@ import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import {
     CityData,
-    ContractRangeContractData,
+    ContractRangePerContractData,
     ContractRangeData,
     ContractTypeData,
 } from '../types/types';
@@ -39,7 +39,7 @@ export type ContractSearchParams = {
     getRemainingValue?: boolean;
     _admin?: Person;
     _manager?: Person;
-    _contractRanges?: ContractRangeData[];
+    _contractRangesPerContract?: ContractRangePerContractData[];
 };
 
 export default class ContractsController {
@@ -216,11 +216,12 @@ export default class ContractsController {
             );
             conditions.push(statusCondition);
         }
-
-        if (searchParams._contractRanges?.length) {
+        if (searchParams._contractRangesPerContract?.length) {
             const contractRangesCondition =
                 ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRanges?.map((range) => range.id),
+                    searchParams._contractRangesPerContract?.map(
+                        (range) => range._contractRange.id
+                    ),
                     'ContractRangesContracts',
                     'ContractRangeId'
                 );
@@ -297,7 +298,7 @@ export default class ContractsController {
     ) {
         const newResult: (ContractOur | ContractOther)[] = [];
         let entitiesPerProject: any[] = [];
-        let rangesPerContract: ContractRangeContractData[] = [];
+        let rangesPerContract: ContractRangePerContractData[] = [];
         //wybrano widok szczegółowy dla projketu lub kontraktu
         if (initParamObject.projectOurId || initParamObject.id) {
             entitiesPerProject = await this.getContractEntityAssociationsList({
@@ -392,9 +393,7 @@ export default class ContractsController {
                 _contractors: contractors.map((item) => item._entity),
                 _engineers: engineers.map((item) => item._entity),
                 _employers: employers.map((item) => item._entity),
-                _contractRanges: rangesPerContract.map(
-                    (item) => item._contractRange
-                ),
+                _contractRangesPerContract: rangesPerContract,
                 _contractRangesNames: row.ContractRangesNames
                     ? row.ContractRangesNames.split(', ')
                     : undefined,

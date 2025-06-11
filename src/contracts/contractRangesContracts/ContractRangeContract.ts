@@ -2,22 +2,22 @@ import BusinessObject from '../../BussinesObject';
 import {
     ContractRangeData,
     ContractData,
-    ContractRangeContractData,
+    ContractRangePerContractData,
     OurContractData,
     OtherContractData,
 } from '../../types/types';
 
 export default class ContractRangeContract
     extends BusinessObject
-    implements ContractRangeContractData
+    implements ContractRangePerContractData
 {
     contractRangeId: number;
     contractId: number;
     _contractRange: ContractRangeData;
     _contract?: OurContractData | OtherContractData;
-    comment?: string | null;
+    associationComment?: string | null;
 
-    constructor(initParamObject: ContractRangeContractData) {
+    constructor(initParamObject: ContractRangePerContractData) {
         super({ ...initParamObject, _dbTableName: 'ContractRangesContracts' });
 
         if (
@@ -32,10 +32,9 @@ export default class ContractRangeContract
             initParamObject._contractRange.id) as number;
         this.contractId = (initParamObject.contractId ||
             initParamObject._contract?.id) as number;
-
         this._contractRange = initParamObject._contractRange;
         this._contract = initParamObject._contract;
-        this.comment = initParamObject.comment;
+        this.associationComment = initParamObject.associationComment;
         //id jest usuwane w addInDb(), więc przy asocjacjach musi byś ręcznie odtworzone w controllerze
         this.id = '' + this.contractRangeId + this.contractId;
     }

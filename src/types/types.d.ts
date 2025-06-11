@@ -70,7 +70,7 @@ export interface ContractData extends RepositoryDataItem {
     _contractors?: Entity[];
     _engineers?: Entity[];
     _employers?: Entity[];
-    _contractRanges?: ContractRangeData[];
+    _contractRangesPerContract?: ContractRangePerContractData[];
     _contractRangesNames?: string[];
 }
 
@@ -94,12 +94,12 @@ export interface ContractRangeData {
     description: string;
 }
 
-export interface ContractRangeContractData {
+export interface ContractRangePerContractData {
     contractRangeId?: number;
     contractId?: number;
     _contractRange: ContractRangeData;
     _contract?: ContractData;
-    comment?: string | null;
+    associationComment?: string | null;
 }
 
 export interface ContractsSettlementDataData {

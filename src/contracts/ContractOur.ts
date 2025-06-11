@@ -151,13 +151,11 @@ export default class ContractOur extends Contract implements OurContractData {
             if (!_fieldsToUpdate || (anyEntityToUpdate && hasAnyEntity)) {
                 console.log('Edytuję powiązania z podmiotami');
                 await this.editEntitiesAssociationsInDb(conn, true);
-            }
-
-            // 4) Contract Ranges
+            } // 4) Contract Ranges
             if (
                 (!_fieldsToUpdate ||
-                    _fieldsToUpdate.includes('_contractRanges')) &&
-                this._contractRanges
+                    _fieldsToUpdate.includes('_contractRangesPerContract')) &&
+                this._contractRangesPerContract
             ) {
                 console.log('Edytuję powiązania z zakresami');
                 await this.editContractRangesAssociationsInDb(conn, true);

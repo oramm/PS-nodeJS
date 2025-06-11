@@ -8,6 +8,7 @@ import {
     ProjectRoleData,
     ContractRoleData,
     PersonData,
+    ContractRangePerContractData,
 } from '../../types/types';
 import Person from '../Person';
 import ProjectRole from './ProjectRole';
@@ -28,7 +29,7 @@ export type RolesSearchParams = {
     _contractType?: ContractTypeData;
     statuses?: string[];
     _person?: PersonData;
-    _contractRanges?: ContractRange[];
+    _contractRangesPerContract?: ContractRangePerContractData[];
     groupName?: string;
 };
 
@@ -161,11 +162,12 @@ export default class RolesController {
             );
             conditions.push(statusCondition);
         }
-
-        if (searchParams._contractRanges?.length) {
+        if (searchParams._contractRangesPerContract?.length) {
             const contractRangesCondition =
                 ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRanges?.map((range) => range.id),
+                    searchParams._contractRangesPerContract?.map(
+                        (range) => range._contractRange.id
+                    ),
                     'ContractRangesContracts',
                     'ContractRangeId'
                 );
