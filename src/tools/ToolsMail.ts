@@ -9,7 +9,6 @@ import { FetchMessageObject, ImapFlow, SearchObject } from 'imapflow';
 import Fuse from 'fuse.js';
 import Setup from '../setup/Setup';
 import { simpleParser } from 'mailparser';
-import session from 'express-session';
 import { Request } from 'express';
 
 export default class ToolsMail {

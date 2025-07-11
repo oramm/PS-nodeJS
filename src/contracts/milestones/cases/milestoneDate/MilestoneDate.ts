@@ -1,7 +1,7 @@
-import BusinessObject from '../../BussinesObject';
-import { UserData } from '../../types/sessionTypes';
-import ToolsDate from '../../tools/ToolsDate';
-import { MilestoneData, MilestoneDateData } from '../../types/types';
+import BusinessObject from '../../../../BussinesObject';
+import { UserData } from '../../../../types/sessionTypes';
+import ToolsDate from '../../../../tools/ToolsDate';
+import { MilestoneData, MilestoneDateData } from '../../../../types/types';
 
 export default class MilestoneDate
     extends BusinessObject

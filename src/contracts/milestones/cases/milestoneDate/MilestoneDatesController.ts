@@ -1,8 +1,8 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import ContractOther from '../ContractOther';
-import ContractOur from '../ContractOur';
-import Milestone from './Milestone';
+import ToolsDb from '../../../../tools/ToolsDb';
+import ContractOther from '../../../ContractOther';
+import ContractOur from '../../../ContractOur';
+import Milestone from '../../Milestone';
 import {
     ContractTypeData,
     MilestoneDateData,
@@ -11,10 +11,10 @@ import {
     OurContractData,
     PersonData,
     ProjectData,
-} from '../../types/types';
+} from '../../../../types/types';
 import MilestonesController, {
     MilestoneParentType,
-} from './MilestonesController';
+} from '../../MilestonesController';
 
 export type MilestoneDatesSearchParams = {
     searchText?: string;

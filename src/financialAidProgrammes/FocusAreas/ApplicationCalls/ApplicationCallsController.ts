@@ -52,7 +52,6 @@ export default class ApplicationCallsController {
         )}
         ORDER BY ApplicationCalls.StartDate ASC`;
 
-        console.log(sql);
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return this.processApplicationCallsResult(result);
     }

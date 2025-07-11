@@ -3,7 +3,6 @@ import BusinessObject from '../../BussinesObject';
 import { LetterEventData, PersonData } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsMail from '../../tools/ToolsMail';
-import ToolsDb from '../../tools/ToolsDb';
 import LetterEventsController from './LetterEventsController';
 import Setup from '../../setup/Setup';
 import { PoolConnection } from 'mysql2/promise';

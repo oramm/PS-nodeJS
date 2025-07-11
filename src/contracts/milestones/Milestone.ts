@@ -25,7 +25,7 @@ import {
     OurOfferData,
 } from '../../types/types';
 import { UserData } from '../../types/sessionTypes';
-import MilestoneDate from './MilestoneDate';
+import MilestoneDate from './cases/milestoneDate/MilestoneDate';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
