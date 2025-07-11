@@ -6,7 +6,8 @@
     "scripts": {
         "start": "nodemon --exec ts-node src/index.ts",
         "build": "tsc",
-        "debug": "nodemon --inspect-brk ts-node src/index.ts"
+        "debug": "nodemon --inspect-brk ts-node src/index.ts",
+        "send-milestone-report": "node -r ts-node/register src/scripts/send-milestone-report.ts"
     },
     "keywords": [],
     "author": "Marek Gazda",
