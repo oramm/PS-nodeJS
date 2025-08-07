@@ -1,6 +1,5 @@
 import BusinessObject from '../../BussinesObject';
 import { CityData } from '../../types/types';
-import CitiesController from './CitiesController';
 
 export default class City extends BusinessObject implements CityData {
     id?: number;
@@ -13,62 +12,38 @@ export default class City extends BusinessObject implements CityData {
         this.code = initParamObject.code;
     }
 
+    /**
+     * @deprecated Użyj CitiesController.addNewCity() zamiast tej metody
+     */
     async addNewController() {
-        this.code = await this.generateCityCode();
-        await this.addInDb();
-        console.log(`City ${this.name} ${this.code} added in db`);
+        console.warn(
+            'addNewController() is deprecated. Use CitiesController.addNewCity() instead.'
+        );
+        // Logika przeniesiona do CitiesController
     }
 
-    async generateCityCode(): Promise<string> {
+    /**
+     * @deprecated Przekaż existingCodes jako parametr zamiast pobierać je w metodzie
+     */
+    async generateCityCode(existingCodes?: Set<string>): Promise<string> {
+        console.warn(
+            'generateCityCode() is deprecated. Use static methods instead.'
+        );
         const cityName = this.name;
-        const normalizedCityName = this.normalizeCityName(cityName);
+        const normalizedCityName = City.normalizeCityName(cityName);
 
-        const existingCities = await CitiesController.getCitiesList([]);
-        const existingCodes = new Set(
-            existingCities
-                .map((city) => city.code)
-                .filter((code) => code !== undefined) as string[]
-        );
-
-        return this.generateUniqueCode(normalizedCityName, existingCodes);
-    }
-
-    private async generateUniqueCode(
-        normalizedCityName: string,
-        existingCodes: Set<string>,
-        attempts = 0
-    ): Promise<string> {
-        const maxAttempts = 100;
-
-        for (let i = 0; i < maxAttempts; i++) {
-            const code = this.generateCodeFromName(normalizedCityName, i);
-            if (!existingCodes.has(code)) {
-                existingCodes.add(code);
-                console.log(
-                    `Generated unique code for city: ${this.name} in ${attempts} attempts`
-                );
-                return code;
-            }
+        // Jeśli nie przekazano kodów, zwróć błąd
+        if (!existingCodes) {
+            throw new Error('ExistingCodes parameter is required');
         }
 
-        console.error(
-            `Failed to generate unique code after ${maxAttempts} attempts for city: ${this.name}`
-        );
-        throw new Error('Cannot generate unique code for the city name.');
+        return City.generateUniqueCode(normalizedCityName, existingCodes);
     }
 
-    private generateCodeFromName(name: string, attempt: number): string {
-        let code = name[0]; // Zawsze pierwsza litera
-
-        const letters = name.slice(1).split('');
-        for (let i = 0; i < 2; i++) {
-            const index = (attempt + i) % letters.length;
-            code += letters[index] || 'X';
-        }
-
-        return code;
-    }
-    private normalizeCityName(cityName: string): string {
+    /**
+     * Normalizuje nazwę miasta (usuwa polskie znaki, zostawia tylko litery)
+     */
+    static normalizeCityName(cityName: string): string {
         const polishChars: { [key: string]: string } = {
             Ą: 'A',
             Ć: 'C',
@@ -98,5 +73,40 @@ export default class City extends BusinessObject implements CityData {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toUpperCase();
+    }
+
+    /**
+     * Generuje unikalny kod dla miasta
+     */
+    static generateUniqueCode(
+        normalizedCityName: string,
+        existingCodes: Set<string>
+    ): string {
+        const maxAttempts = 100;
+
+        for (let i = 0; i < maxAttempts; i++) {
+            const code = this.generateCodeFromName(normalizedCityName, i);
+            if (!existingCodes.has(code)) {
+                existingCodes.add(code);
+                return code;
+            }
+        }
+
+        throw new Error('Cannot generate unique code for the city name.');
+    }
+
+    /**
+     * Generuje kod z nazwy miasta
+     */
+    static generateCodeFromName(name: string, attempt: number): string {
+        let code = name[0]; // Zawsze pierwsza litera
+
+        const letters = name.slice(1).split('');
+        for (let i = 0; i < 2; i++) {
+            const index = (attempt + i) % letters.length;
+            code += letters[index] || 'X';
+        }
+
+        return code;
     }
 }

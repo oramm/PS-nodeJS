@@ -1,4 +1,3 @@
-import Person from './persons/Person';
 import ToolsDb from './tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import { PersonData } from './types/types';
@@ -23,6 +22,7 @@ export default class BusinessObject {
      * @deprecated */
     async setEditorId() {
         if (!this._editor) return; // throw new Error('Brakuje obiektu _editor!');
+        const Person = (await import('./persons/Person')).default;
         const editor = new Person(this._editor);
         const editorRole = await editor.getSystemRole();
         if (!editorRole)
@@ -31,6 +31,7 @@ export default class BusinessObject {
         this._editor.id = this.editorId;
     }
 
+    /** @deprecated */
     async addInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean
@@ -43,6 +44,7 @@ export default class BusinessObject {
         );
     }
 
+    /** @deprecated */
     async editInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false,
@@ -57,6 +59,7 @@ export default class BusinessObject {
         );
     }
 
+    /** @deprecated */
     async deleteFromDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean

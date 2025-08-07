@@ -1,8 +1,25 @@
+console.log('Initializing minimal environment...');
+
+// Tylko podstawowe inicjalizacje - bez routerów!
+import dotenv from 'dotenv';
+import ToolsDb from '../tools/ToolsDb';
+dotenv.config();
+
+// Import typów wymaganych przez aplikację
+import '../types/sessionTypes';
+
+console.log('Environment initialized');
+console.log('Importing MilestoneDateMailReport...');
 import MilestoneDateMailReport from '../contracts/milestones/cases/milestoneDate/MilestoneDateMailReport';
+console.log('Import successful!');
 
 async function main() {
     try {
+        console.log('Initialize DB pool…');
+        ToolsDb.initialize(); // <-- TO jest kluczowe!
+        console.log('Db time zone set to +00:00');
         console.log('Uruchamianie raportu terminów...');
+        console.log('MilestoneDateMailReport:', MilestoneDateMailReport);
         await MilestoneDateMailReport.sendOverdueAndUpcomingReport();
         console.log('Raport terminów wysłany pomyślnie');
         process.exit(0);

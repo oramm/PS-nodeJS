@@ -1,96 +1,60 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
 import City from './City';
+import BaseController from '../../controllers/BaseController';
+import CityRepository, {
+    CitiesSearchParams,
+} from '../../repositories/CityRepository';
 
-export type CitiesSearchParams = {
-    searchText?: string;
-    id?: number;
-    code?: string;
-    name?: string;
-};
+// Eksportuj typ dla kompatybilności wstecznej
+export type { CitiesSearchParams };
 
-export default class CitiesController {
-    static async getCitiesList(orConditions: CitiesSearchParams[] = []) {
-        const sql = `SELECT Cities.Id, 
-            Cities.Name, 
-            Cities.Code
-          FROM Cities
-          WHERE ${ToolsDb.makeOrGroupsConditions(
-              orConditions,
-              this.makeAndConditions.bind(this)
-          )}
-          ORDER BY Cities.Name ASC`;
+export default class CitiesController extends BaseController<
+    City,
+    CityRepository
+> {
+    private static instance: CitiesController;
 
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return await this.processCitiesResult(result, orConditions[0]);
-        } catch (err) {
-            console.log(sql);
-            throw err;
-        }
+    constructor() {
+        super(new CityRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        if (searchText) searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Cities.Name LIKE ?
-                OR Cities.Code LIKE ?)`,
-                [`%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+    private static getInstance(): CitiesController {
+        if (!this.instance) {
+            this.instance = new CitiesController();
+        }
+        return this.instance;
     }
 
-    static makeAndConditions(searchParams: CitiesSearchParams) {
-        const conditions = [];
+    /**
+     * NOWE API - Rekomendowany sposób dodawania miast
+     */
+    static async addNewCity(cityData: {
+        name: string;
+        code?: string;
+    }): Promise<City> {
+        const instance = this.getInstance();
+        const city = new City(cityData);
 
-        if (searchParams.id) {
-            conditions.push(mysql.format(`Cities.Id = ?`, [searchParams.id]));
-        }
-        if (searchParams.code) {
-            conditions.push(
-                mysql.format(`Cities.Code = ?`, [searchParams.code])
-            );
-        }
-        if (searchParams.name) {
-            conditions.push(
-                mysql.format(`Cities.Name = ?`, [searchParams.name])
-            );
-        }
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
+        // Generuj kod jeśli nie podano
+        if (!city.code) {
+            const repository = instance.repository;
+            const existingCodes = await repository.findAllCodes();
+            const normalizedName = City.normalizeCityName(city.name);
+            city.code = City.generateUniqueCode(normalizedName, existingCodes);
         }
 
-        return conditions.length > 0 ? conditions.join(' AND ') : '1';
+        await instance.create(city);
+        console.log(`City ${city.name} ${city.code} added in db`);
+        return city;
     }
 
-    private static async processCitiesResult(
-        result: any[],
-        initParamObject: CitiesSearchParams
-    ) {
-        const newResult: City[] = [];
-
-        for (const row of result) {
-            let item: City;
-            item = new City({
-                id: row.Id,
-                name: ToolsDb.sqlToString(row.Name),
-                code: row.Code,
-            });
-
-            newResult.push(item);
-        }
-        return newResult;
+    /**
+     * NOWE API - Rekomendowany sposób pobierania listy miast
+     */
+    static async find(
+        searchParams: CitiesSearchParams[] = []
+    ): Promise<City[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
     }
 }

@@ -6,7 +6,7 @@ import City from './City';
 app.post('/cities', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await CitiesController.getCitiesList(orConditions);
+        const result = await CitiesController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);
