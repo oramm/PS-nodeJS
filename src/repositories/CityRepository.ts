@@ -52,18 +52,6 @@ export default class CityRepository extends BaseRepository<City> {
     }
 
     /**
-     * Pobiera miasto po ID
-     */
-    async findB1yId(id: number | string): Promise<City | null> {
-        const sql = `SELECT Cities.Id, Cities.Name, Cities.Code
-                     FROM Cities
-                     WHERE Cities.Id = ${mysql.escape(id)}`;
-
-        const rows = await this.executeQuery(sql);
-        return rows.length > 0 ? this.mapRowToEntity(rows[0]) : null;
-    }
-
-    /**
      * Pobiera wszystkie kody miast (do sprawdzania unikalności)
      */
     async findAllCodes(): Promise<Set<string>> {
