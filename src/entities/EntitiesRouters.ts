@@ -7,7 +7,7 @@ import { app } from '../index';
 app.post('/entities', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await EntitiesController.getEntitiesList(orConditions);
+        const result = await EntitiesController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);

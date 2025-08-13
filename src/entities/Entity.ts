@@ -1,5 +1,4 @@
 import BusinessObject from '../BussinesObject';
-import ToolsDb from '../tools/ToolsDb';
 import { EntityData } from '../types/types';
 
 export default class Entity extends BusinessObject implements EntityData {
