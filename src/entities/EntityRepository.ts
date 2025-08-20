@@ -1,9 +1,9 @@
-import BaseRepository from "./BaseRepository";
-import Entity from "../entities/Entity";
+import BaseRepository from "../repositories/BaseRepository";
+import Entity from "./Entity";
 import mysql from "mysql2/promise";
 import ToolsDb from "../tools/ToolsDb";
 
-export type EntitiesSearchParams = {
+export interface EntitiesSearchParams {
     projectId?: string;
     id?: number;
     name?: string;
@@ -51,21 +51,26 @@ export default class EntityRepository extends BaseRepository<Entity> {
         return rows.map((row) => this.mapRowToEntity(row));
     }
 
-    private makeAndConditions(searchParams: EntitiesSearchParams) {
-        const projectCondition = searchParams.projectId ? mysql.format(`Contracts.ProjectOurId = ?`, [searchParams.projectId,]): '1';
-
-        const idCondition = searchParams.id ? mysql.format(`Entities.Id = ?`, [searchParams.id]) : '1';
-
-        const nameCondition = searchParams.name ? mysql.format(`Entities.Name LIKE ?`, [`%${searchParams.name}%`]): '1';
-
+    private makeAndConditions(searchParams: EntitiesSearchParams): string {
+        const conditions: string[] = [];
+        
+        if (searchParams.projectId) {
+            conditions.push(mysql.format(`Contracts.ProjectOurId = ?`, [searchParams.projectId]));
+        }
+        if (searchParams.id) {
+            conditions.push(mysql.format(`Entities.Id = ?`, [searchParams.id]));
+        }
+        if (searchParams.name) {
+            conditions.push(mysql.format(`Entities.Name LIKE ?`, [`%${searchParams.name}%`]));
+        }
+ 
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
-
-        return `${projectCondition} 
-            AND ${idCondition}
-            AND ${nameCondition}
-            AND ${searchTextCondition}`;
+       if (searchTextCondition) {
+           conditions.push(searchTextCondition);
+    }
+        return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
     private makeSearchTextCondition(searchText: string | undefined) : string {
@@ -78,7 +83,6 @@ export default class EntityRepository extends BaseRepository<Entity> {
                 OR Entities.Address LIKE ${mysql.escape(`%${word}%`)}
                 OR Entities.Email LIKE ${mysql.escape(`%${word}%`)})`
         );
-
         return conditions.join(' AND ');
     }
 

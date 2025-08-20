@@ -15,7 +15,7 @@ export default class ScrumSheet {
         const orConditions = systemRoleNames.map((systemRoleName) => ({
             systemRoleName,
         }));
-        return (await PersonsController.getPersonsList(orConditions)) || [];
+        return (await PersonsController.find(orConditions)) || [];
     }
 
     static async personsRefresh(auth: OAuth2Client) {

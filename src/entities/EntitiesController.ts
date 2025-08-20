@@ -3,10 +3,9 @@ import BaseController
  from '../controllers/BaseController';
 import EntityRepository, {
     EntitiesSearchParams,
-} from '../repositories/EntityRepository';
+} from './EntityRepository';
 
 export type { EntitiesSearchParams };
-
 
 export default class EntitiesController extends BaseController<
     Entity,
@@ -45,5 +44,30 @@ export default class EntitiesController extends BaseController<
     ): Promise<Entity[]> {
         const instance = this.getInstance();
         return await instance.repository.find(searchParams);
+    }
+
+    static async updateEntity(entityData: {
+        id: number;
+        name?: string;
+        address?: string;
+        taxNumber?: string;
+        www?: string;
+        email?: string;
+        phone?: string;
+    }): Promise<Entity> {
+        const instance = this.getInstance();
+        const entity = new Entity(entityData);
+        await instance.edit(entity, undefined, undefined, ['name', 'address', 'taxNumber', 'www', 'email', 'phone']);
+        console.log(`Entity ${entity.name} updated in db`);
+        return entity;
+    }
+
+    static async deleteEntity(
+        entityData: Entity
+    ): Promise<void> {
+        const instance = this.getInstance();
+        const entity = new Entity(entityData);
+        await instance.delete(entity);
+        console.log(`Entity with id ${entity.id} deleted from db`);
     }
 }

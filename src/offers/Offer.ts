@@ -23,6 +23,7 @@ import OfferEvent from './offerEvent/OfferEvent';
 import PersonsController from '../persons/PersonsController';
 import { UserData } from '../types/sessionTypes';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import CitiesController from '../Admin/Cities/CitiesController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -300,7 +301,7 @@ export default abstract class Offer
     async setCity(cityOrCityName: City | string) {
         if (typeof cityOrCityName === 'string') {
             const city = new City({ name: cityOrCityName });
-            await city.addNewController(); // Use proper controller method instead of addInDb
+            await CitiesController.addNewCity(city);
             this._city = city;
             this.cityId = city.id as number;
         } else {

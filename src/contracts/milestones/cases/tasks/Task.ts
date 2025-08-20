@@ -8,7 +8,7 @@ import Setup from '../../../../setup/Setup';
 import ToolsSheets from '../../../../tools/ToolsSheets';
 import { OAuth2Client } from 'google-auth-library';
 import Tools from '../../../../tools/Tools';
-import Person from '../../../../persons/Person';
+import PersonsController from '../../../../persons/PersonsController';
 import Case from '../Case';
 import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
 import ToolsGd from '../../../../tools/ToolsGd';
@@ -407,8 +407,7 @@ export default class Task extends BusinessObject {
         console.log('Task shouldBeInScrum conn', conn.threadId);
         try {
             if (this._owner && this._owner.id) {
-                let owner = new Person(this._owner);
-                const systemRole = await owner.getSystemRole();
+                const systemRole = await PersonsController.getSystemRole({ id: this._owner.id });
                 if (!systemRole)
                     throw new Error('Użytkownik nie zarejestrowany w systemie');
                 test =

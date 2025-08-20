@@ -10,6 +10,7 @@ import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import City from '../Admin/Cities/City';
 import { OurContractData } from '../types/types';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import PersonsController from '../persons/PersonsController';
 
 export default class ContractOur extends Contract implements OurContractData {
     ourId: string;
@@ -173,10 +174,10 @@ export default class ContractOur extends Contract implements OurContractData {
         if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i))
             return false;
 
-        const adminSystemRole = await this._admin?.getSystemRole();
+        const adminSystemRole = await PersonsController.getSystemRole({ id: this._admin?.id });
         if (adminSystemRole?.id && adminSystemRole?.id <= 3) return true;
 
-        const managerSystemRole = await this._manager?.getSystemRole();
+        const managerSystemRole = await PersonsController.getSystemRole({ id: this._manager?.id });
         if (managerSystemRole?.id && managerSystemRole?.id <= 3) return true;
 
         return false;

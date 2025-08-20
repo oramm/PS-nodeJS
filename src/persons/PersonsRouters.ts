@@ -10,7 +10,7 @@ import { Request, Response } from 'express';
 app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await PersonsController.getPersonsList(orConditions);
+        const result = await PersonsController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);

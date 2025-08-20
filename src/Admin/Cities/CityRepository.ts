@@ -1,5 +1,5 @@
-import BaseRepository from './BaseRepository';
-import City from '../Admin/Cities/City';
+import BaseRepository from '../../repositories/BaseRepository';
+import City from './City';
 import mysql from 'mysql2/promise';
 
 export interface CitiesSearchParams {
@@ -95,9 +95,8 @@ export default class CityRepository extends BaseRepository<City> {
         const words = searchText.toString().split(' ');
         const conditions = words.map(
             (word) =>
-                `(Cities.Name LIKE ${mysql.escape(
-                    `%${word}%`
-                )} OR Cities.Code LIKE ${mysql.escape(`%${word}%`)})`
+                `(Cities.Name LIKE ${mysql.escape(`%${word}%`)}
+                OR Cities.Code LIKE ${mysql.escape(`%${word}%`)})`
         );
 
         return conditions.join(' AND ');

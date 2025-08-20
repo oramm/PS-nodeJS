@@ -2,7 +2,7 @@ import City from './City';
 import BaseController from '../../controllers/BaseController';
 import CityRepository, {
     CitiesSearchParams,
-} from '../../repositories/CityRepository';
+} from './CityRepository';
 
 // Eksportuj typ dla kompatybilności wstecznej
 export type { CitiesSearchParams };
@@ -56,5 +56,31 @@ export default class CitiesController extends BaseController<
     ): Promise<City[]> {
         const instance = this.getInstance();
         return await instance.repository.find(searchParams);
+    }
+
+    /**
+     * NOWE API - Rekomendowany sposób aktualizacji miasta
+     */
+    static async updateCity(
+        cityData: City, 
+        fieldsToUpdate?: string[]
+    ): Promise<City> {
+        const instance = this.getInstance();
+        const city = new City(cityData);
+        await instance.edit(city, undefined, false, fieldsToUpdate);
+        console.log(`City ${city.name} ${city.code} updated in db`);
+        return city;
+    }
+
+    /**
+     * NOWE API - Rekomendowany sposób usuwania miasta
+     */
+    static async deleteCity(
+        cityData: City
+    ): Promise<void> {
+        const instance = this.getInstance();
+        const city = new City(cityData);
+        await instance.delete(city);
+        console.log(`City ${city.name} ${city.code} deleted from db`);
     }
 }

@@ -13,16 +13,6 @@ export default class City extends BusinessObject implements CityData {
     }
 
     /**
-     * @deprecated Użyj CitiesController.addNewCity() zamiast tej metody
-     */
-    async addNewController() {
-        console.warn(
-            'addNewController() is deprecated. Use CitiesController.addNewCity() instead.'
-        );
-        // Logika przeniesiona do CitiesController
-    }
-
-    /**
      * @deprecated Przekaż existingCodes jako parametr zamiast pobierać je w metodzie
      */
     async generateCityCode(existingCodes?: Set<string>): Promise<string> {

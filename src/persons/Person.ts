@@ -1,8 +1,5 @@
-import mysql from 'mysql2/promise';
 import BusinessObject from '../BussinesObject';
-import ToolsDb from '../tools/ToolsDb';
 import { EntityData, PersonData } from '../types/types';
-import { SystemRoleName } from '../types/sessionTypes';
 
 export default class Person extends BusinessObject implements PersonData {
     id?: number;
@@ -41,49 +38,5 @@ export default class Person extends BusinessObject implements PersonData {
         if (this.name && this.surname)
             this._alias =
                 this.name.substring(0, 1) + this.surname.substring(0, 3);
-    }
-
-    async getSystemRole() {
-        if (!this.id && !this.systemEmail)
-            throw new Error('Person should have an ID or systemEmail');
-        const personIdCondition = this.id
-            ? mysql.format('Persons.Id = ?', [this.id])
-            : '1';
-
-        const systemEmailCondition = this.systemEmail
-            ? mysql.format('Persons.SystemEmail = ?', [this.systemEmail])
-            : '1';
-
-        const sql =
-            'SELECT \n \t' +
-            'Persons.SystemRoleId, \n \t ' +
-            'Persons.Id AS PersonId, \n \t ' +
-            'Persons.GoogleId AS GoogleId, \n \t ' +
-            'Persons.GoogleRefreshToken AS GoogleRefreshToken, \n \t ' +
-            'SystemRoles.Name AS SystemRoleName \n' +
-            'FROM Persons \n ' +
-            'JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id \n' +
-            'WHERE ' +
-            systemEmailCondition +
-            ' AND ' +
-            personIdCondition;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            const row = result[0];
-            if (!row) return undefined;
-            return {
-                id: <number>row.SystemRoleId,
-                name: <SystemRoleName>row.SystemRoleName,
-                personId: <number>row.PersonId,
-                googleId: <string | undefined>row.GoogleId,
-                microsofId: <string | undefined>row.MicrosoftId,
-                googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
-            };
-        } catch (err) {
-            throw err;
-        }
     }
 }

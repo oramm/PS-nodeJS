@@ -8,6 +8,7 @@ import OurOffer from './OurOffer';
 import { ExternalOfferData, OfferBondData, OurOfferData } from '../types/types';
 import OfferBond from './OfferBond/OfferBond';
 import OfferEvent from './offerEvent/OfferEvent';
+import CitiesController from '../Admin/Cities/CitiesController';
 
 export type OffersSearchParams = {
     id?: number;
@@ -278,7 +279,7 @@ export default class OffersController {
 
     static async makeNewCityObject(name: string) {
         const _city = new City({ name });
-        await _city.addNewController();
+        await CitiesController.addNewCity(_city);
         console.log(
             'City added inDB with generated code:',
             _city.name,
