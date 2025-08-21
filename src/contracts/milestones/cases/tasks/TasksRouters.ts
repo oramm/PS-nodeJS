@@ -1,5 +1,4 @@
 import ToolsGapi from '../../../../setup/Sessions/ToolsGapi';
-import Task from './Task';
 import TasksController from './TasksController';
 import { app } from '../../../../index';
 import { Request, Response } from 'express';
@@ -17,16 +16,14 @@ app.post('/tasks', async (req: Request, res: Response, next) => {
 
 app.post('/task', async (req: Request, res: Response, next) => {
     try {
-        let item = new Task({ ...req.body, _parent: req.body._case });
-        await item.addInDb();
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            (auth: OAuth2Client) => TasksController.addInScrum(item, auth),
-            undefined,
-            item
+            (auth: OAuth2Client) => {
+                const item = TasksController.addNewTask(req.body, auth);
+                res.send(item);
+            }
         );
-        res.send(item);
     } catch (error) {
         next(error);
     }
@@ -34,21 +31,15 @@ app.post('/task', async (req: Request, res: Response, next) => {
 
 app.put('/task/:id', async (req: Request, res: Response, next) => {
     try {
-        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const itemFromClient = req.parsedBody;
-
-        let item = new Task(itemFromClient);
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                (auth: OAuth2Client) => TasksController.addInScrum(item, auth),
-                undefined,
-                item
-            ),
-            item.editInDb(),
-        ]);
-        res.send(item);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            async (auth: OAuth2Client) => {
+                const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+                const item = await TasksController.updateTask(req.parsedBody, fieldsToUpdate, auth);
+                res.send(item);
+            }
+        );
     } catch (error) {
         next(error);
     }
@@ -56,19 +47,14 @@ app.put('/task/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/task/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new Task(req.body);
-        console.log('delete');
-        await Promise.all([
-            item.deleteFromDb(),
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                (auth: OAuth2Client) => TasksController.deleteFromScrum(item, auth),
-                undefined,
-                item
-            ),
-        ]);
-        res.send(item);
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            async (auth: OAuth2Client) => {
+                const result = await TasksController.deleteTask(req.body, auth);
+                res.send(result);
+            }
+        );
     } catch (error) {
         next(error);
     }

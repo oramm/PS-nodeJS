@@ -1,6 +1,6 @@
 import BusinessObject from '../../../../BussinesObject';
 import ToolsDate from '../../../../tools/ToolsDate';
-import { MilestoneData, PersonData, TaskData } from '../../../../types/types';
+import { PersonData, TaskData } from '../../../../types/types';
 
 export default class Task extends BusinessObject {
     id?: number;

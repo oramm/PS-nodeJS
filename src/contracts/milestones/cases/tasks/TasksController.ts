@@ -20,9 +20,11 @@ import Tools from '../../../../tools/Tools';
 import Setup from '../../../../setup/Setup';
 import { MilestoneData } from '../../../../types/types';
 import PersonsController from '../../../../persons/PersonsController';
-
+import { TaskData } from '../../../../types/types';
 
 export type {TasksSearchParams};
+
+type TaskPayload = TaskData & { _case?: any };
 
 export default class TasksController extends BaseController<
     Task, 
@@ -41,11 +43,60 @@ export default class TasksController extends BaseController<
         return this.instance;
     }
 
+static async addNewTask(
+    taskPayload: TaskPayload, 
+    auth?: OAuth2Client
+) : Promise<Task> {
+        const instance = this.getInstance();
+        const { _case, ...rest } = taskPayload;
+        const task = new Task({ ...rest, _parent: _case });
+        await instance.create(task);
+        
+        if(auth) {
+            await this.addInScrum(task, auth);
+        }
+        console.log(`Task ${task.name} added`);
+        return task;
+    }
+
     static async find(
         searchParams: TasksSearchParams[] = []
     ): Promise<Task[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
+    }
+
+    static async updateTask(
+        taskPayload: TaskPayload, 
+        fieldsToUpdate: string[], 
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        const instance = this.getInstance();
+        const { _case, ...rest } = taskPayload;
+        const task = new Task({ ...rest, _parent: _case });
+
+        const dbPromise = instance.edit(task, undefined, undefined, fieldsToUpdate);
+        const scrumPromise = auth ? this.editInScrum(task, auth) : Promise.resolve();
+        await Promise.all([dbPromise, scrumPromise]);
+
+        console.log(`Task ${task.name} updated`);
+        return task;
+    }
+    
+    static async deleteTask(
+        taskPayload: TaskPayload, 
+        auth?: OAuth2Client
+    ): Promise<{id: number | undefined}> {
+        const instance = this.getInstance();
+        const { _case, ...rest } = taskPayload;
+        const task = new Task({ ...rest, _parent: _case });
+
+        const dbPromise = instance.delete(task);
+        const scrumPromise = auth ? this.deleteFromScrum(task, auth) : Promise.resolve();
+        await Promise.all([dbPromise, scrumPromise]);
+
+        console.log(`Task with id ${task.id} deleted`);
+        return {id: task.id};
     }
 
     static processTasksResult(result: any[]): Task[] {
