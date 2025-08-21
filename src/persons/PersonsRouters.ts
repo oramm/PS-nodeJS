@@ -1,11 +1,9 @@
-import Person from './Person';
 import PersonsController from './PersonsController';
 import { app } from '../index';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
-import Planning from '../ScrumSheet/Planning';
-import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import { Request, Response } from 'express';
+import { OAuth2Client } from 'google-auth-library';
 
 app.post('/persons', async (req: Request, res: Response, next) => {
     try {
@@ -19,11 +17,7 @@ app.post('/persons', async (req: Request, res: Response, next) => {
 
 app.post('/person', async (req: Request, res: Response, next) => {
     try {
-        let item = new Person(req.body);
-        if (!item._entity.id) throw new Error('No entity id');
-        delete item.systemRoleId;
-        delete item.systemEmail;
-        await item.addInDb();
+        let item = await PersonsController.addNewPerson(req.body);
         res.send(item);
     } catch (error) {
         next(error);
@@ -32,37 +26,25 @@ app.post('/person', async (req: Request, res: Response, next) => {
 
 app.put('/person/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new Person(req.body);
-        delete item.systemRoleId;
-        delete item.systemEmail;
-        await item.editInDb();
+        const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+        const item = await PersonsController.updatePerson(req.parsedBody, fieldsToUpdate);
         res.send(item);
     } catch (error) {
         next(error);
     }
 });
-//TODO: dorobić
+
 app.put('/user/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new Person(req.body);
-        await item.editInDb();
-        //jeśłi użytjownik ENVI to trzeba zaktualizować scrumboard
+        // Router obsługuje przepływ autoryzacji, a kontroler logikę biznesową
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            ScrumSheet.Planning.refreshTimeAvailable,
-            undefined,
-            Planning
+            async (auth: OAuth2Client) => {
+                const item = await PersonsController.updateUser(req.body, auth);
+                res.send(item);
+            }
         );
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas,
-            undefined,
-            CurrentSprint
-        );
-
-        res.send(item);
     } catch (error) {
         next(error);
     }
@@ -85,9 +67,8 @@ app.get('/personsRefresh', async (req: Request, res: Response, next) => {
 
 app.delete('/person/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new Person(req.body);
-        await item.deleteFromDb();
-        res.send(item);
+        const result = await PersonsController.deletePerson(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }

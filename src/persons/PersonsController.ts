@@ -4,6 +4,8 @@ import PersonRepository, {
     PersonsSearchParams,
 } from './PersonRepository';
 import BaseController from '../controllers/BaseController';
+import { OAuth2Client } from 'google-auth-library';
+import ScrumSheet from '../ScrumSheet/ScrumSheet';
 
 export type { PersonsSearchParams };
 
@@ -44,9 +46,47 @@ export default class PersonsController extends BaseController<
     }) : Promise<Person> {
         const instance = this.getInstance();
         const person = new Person(personData);
+        if (!person._entity?.id) throw new Error('Person must be associated with an entity.');
+        
+        delete person.systemRoleId;
+        delete person.systemEmail;
+
         await instance.create(person);
         console.log(`Person ${person.name} ${person.surname} added in db`);
         return person;
+    }
+
+    static async updatePerson(personData: any, fieldsToUpdate: string[]): Promise<Person> {
+        const instance = this.getInstance();
+        const person = new Person(personData);
+        await instance.edit(person, undefined, undefined, fieldsToUpdate);
+        console.log(`Person ${person.name} ${person.surname} updated in db`);
+        return person;
+    }
+
+    static async deletePerson(personData: any): Promise<{id: number | undefined}> {
+        const instance = this.getInstance();
+        const person = new Person(personData);
+        await instance.delete(person);
+        console.log(`Person with id ${person.id} deleted from db`);
+        return { id: person.id };
+    }
+
+    static async updateUser(userData: any, auth: OAuth2Client): Promise<Person> {
+        const instance = this.getInstance();
+        const user = new Person(userData);
+
+        const fieldsToUpdate = ['name', 'surname', 'position', 'email', 'cellphone', 'phone', 'comment', 'systemRoleId', 'systemEmail'];
+        await instance.edit(user, undefined, undefined, fieldsToUpdate);
+
+        //jeśli użytkownik ENVI to trzeba zaktualizować scrumboard
+        await Promise.all([
+            ScrumSheet.Planning.refreshTimeAvailable(auth),
+            ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth)
+        ]);
+        
+        console.log(`User ${user.name} ${user.surname} updated in db and Scrum`);
+        return user;
     }
 
     static async getPersonFromSessionUserData(userData: UserData): Promise<Person> {
