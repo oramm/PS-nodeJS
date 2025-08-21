@@ -480,7 +480,7 @@ export default abstract class Contract
     }
 
     async getTasks() {
-        return await TasksController.getTasksList([{ contractId: this.id }]);
+        return await TasksController.find([{ contractId: this.id }]);
     }
     /**dodaje isteniejące zadania  */
     async addExistingTasksInScrum(auth: OAuth2Client) {
@@ -490,7 +490,7 @@ export default abstract class Contract
             console.log(`adding ${tasks.length} tasks in scrum`);
             conn = await ToolsDb.pool.getConnection();
             for (const task of tasks) {
-                await task.addInScrum(auth, conn, true);
+                await TasksController.addInScrum(task, auth, conn, true);
             }
         } catch (error) {
             console.error('An error occurred:', error);

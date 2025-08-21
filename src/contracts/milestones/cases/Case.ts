@@ -13,6 +13,7 @@ import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 import CaseType from './caseTypes/CaseType';
 import { CaseData, MilestoneData } from '../../../types/types';
+import TasksController from './tasks/TasksController';
 
 export default class Case extends BusinessObject implements CaseData {
     id?: number;
@@ -158,16 +159,14 @@ export default class Case extends BusinessObject implements CaseData {
         //typ sprawy może mieć wiele procesów - sprawa automatycznie też
         for (const process of this._type._processes) {
             //dodaj zadanie ramowe z szablonu
-            let processInstanceTask = new Task({
-                _parent: this,
-                name: 'Zadanie ramowe dla procesu ' + process.name,
-                status: Setup.TaskStatus.NOT_STARTED,
-            });
-            await processInstanceTask.addInDbFromTemplateForProcess(
+            const processInstanceTask = await TasksController.addInDbFromTemplateForProcess(
                 process,
+                this,
                 externalConn,
                 isPartOfTransaction
             );
+
+            if (!processInstanceTask) continue;
 
             const processInstance = new ProcessInstance({
                 _process: process,
@@ -474,7 +473,7 @@ export default class Case extends BusinessObject implements CaseData {
         //dodaj sprawę do arkusza currentSprint
         console.groupCollapsed('adding default tasks to scrumboard');
         for (const task of parameters.defaultTasks)
-            await task.addInScrum(auth, undefined, parameters.isPartOfBatch);
+            await TasksController.addInScrum(task, auth, undefined, parameters.isPartOfBatch);
         console.log('default tasks added to scrumboard');
         console.groupEnd();
     }

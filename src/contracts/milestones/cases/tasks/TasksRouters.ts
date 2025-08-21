@@ -3,11 +3,12 @@ import Task from './Task';
 import TasksController from './TasksController';
 import { app } from '../../../../index';
 import { Request, Response } from 'express';
+import {OAuth2Client} from 'google-auth-library';
 
 app.post('/tasks', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await TasksController.getTasksList(orConditions);
+        const result = await TasksController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);
@@ -21,7 +22,7 @@ app.post('/task', async (req: Request, res: Response, next) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.addInScrum,
+            (auth: OAuth2Client) => TasksController.addInScrum(item, auth),
             undefined,
             item
         );
@@ -41,7 +42,7 @@ app.put('/task/:id', async (req: Request, res: Response, next) => {
             ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.editInScrum,
+                (auth: OAuth2Client) => TasksController.addInScrum(item, auth),
                 undefined,
                 item
             ),
@@ -62,7 +63,7 @@ app.delete('/task/:id', async (req: Request, res: Response, next) => {
             ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.deleteFromScrum,
+                (auth: OAuth2Client) => TasksController.deleteFromScrum(item, auth),
                 undefined,
                 item
             ),

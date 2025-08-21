@@ -1,194 +1,51 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../../../tools/ToolsDb';
 import Case from '../Case';
-
 import Task from './Task';
 import Milestone from '../../Milestone';
-import Person from '../../../../persons/Person';
-import Project from '../../../../projects/Project';
-
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
 import {
-    OfferData,
     OtherContractData,
     OurContractData,
 } from '../../../../types/types';
+import TaskRepository,{TasksSearchParams,} from './TaskRepository';
+import Process from '../../../../processes/Process';
+import TasksTemplateForProcesssController from './taskTemplates/TasksTemplatesForProcessesController';
+import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
+import BaseController from '../../../../controllers/BaseController';
+import { OAuth2Client } from 'google-auth-library';
+import ToolsSheets from '../../../../tools/ToolsSheets';
+import Tools from '../../../../tools/Tools';
+import Setup from '../../../../setup/Setup';
+import { MilestoneData } from '../../../../types/types';
+import PersonsController from '../../../../persons/PersonsController';
 
-type TaskSearchParams = {
-    _project?: Project;
-    _contract?: OurContractData | OtherContractData;
-    _offer?: OfferData;
-    contractId?: number;
-    _milestone?: Milestone;
-    milestoneId?: number;
-    _case?: Case;
-    contractStatusCondition?: string;
-    _owner?: Person;
-    deadlineFrom?: string;
-    deadlineTo?: string;
-    searchText?: string;
-    status?: string;
-};
 
-export default class TasksController {
-    static async getTasksList(
-        orConditions: TaskSearchParams[] = [],
-        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
-    ) {
-        const milestoneParentTypeCondition =
-            milestoneParentType === 'CONTRACT'
-                ? 'Milestones.ContractId IS NOT NULL'
-                : 'Milestones.OfferId IS NOT NULL';
+export type {TasksSearchParams};
 
-        const sql = `SELECT  
-                Tasks.Id,
-                Tasks.Name AS TaskName,
-                Tasks.Description AS TaskDescription,
-                Tasks.Deadline AS TaskDeadline,
-                Tasks.Status AS TaskStatus,
-                Tasks.OwnerId,
-                Cases.Id AS CaseId,
-                Cases.Name AS CaseName,
-                Cases.Description AS CaseDescription,
-                Cases.TypeId AS CaseTypeId,
-                Cases.GdFolderId AS CaseGdFolderId,
-                CaseTypes.Id AS CaseTypeId,
-                CaseTypes.Name AS CaseTypeName,
-                CaseTypes.IsDefault,
-                CaseTypes.IsUniquePerMilestone,
-                CaseTypes.MilestoneTypeId,
-                CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-                Milestones.Id AS MilestoneId,
-                Milestones.Name AS MilestoneName,
-                Milestones.ContractId,
-                Milestones.OfferId,
-                Milestones.GdFolderId AS MilestoneGdFolderId,
-                MilestoneTypes.Id AS MilestoneTypeId,
-                MilestoneTypes.Name AS MilestoneTypeName,
-                MilestoneTypes.IsUniquePerContract,
-                COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
-                OurContractsData.OurId AS ContractOurId,
-                Contracts.Id AS ContractId,
-                Contracts.Alias AS ContractAlias,
-                Contracts.Number AS ContractNumber,
-                Contracts.Name AS ContractName,
-                Contracts.Comment AS ContractComment,
-                Contracts.StartDate AS ContractStartDate,
-                Contracts.EndDate AS ContractEndDate,
-                Contracts.Value AS ContractValue,
-                Contracts.Status AS ContractStatus,
-                Contracts.GdFolderId AS ContractGdFolderId,
-                ContractTypes.Name AS ContractTypeName,
-                ContractManagers.Id AS ContractManagerId,
-                ContractManagers.Name AS ContractManagerName, 
-                ContractManagers.Surname AS ContractManagerSurname, 
-                ContractManagers.Email AS ContractManagerEmail,
-                ContractAdmins.Id AS ContractAdminId,
-                ContractAdmins.Name AS ContractAdminName,
-                ContractAdmins.Surname AS ContractAdminSurname,
-                ContractAdmins.Email AS ContractAdminEmail,
-                Owners.Name AS OwnerName,
-                Owners.Surname AS OwnerSurname,
-                Owners.Email AS OwnerEmail
-            FROM Tasks
-            JOIN Cases ON Tasks.CaseId = Cases.Id
-            JOIN Milestones ON Cases.MilestoneId = Milestones.Id
-            JOIN MilestoneTypes ON Milestones.TypeId = MilestoneTypes.Id
-            LEFT JOIN CaseTypes ON Cases.typeId = CaseTypes.Id
-            LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
-            LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
-            LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-            LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-            LEFT JOIN Contracts AS relatedContracts ON relatedContracts.Id = (SELECT OurContractsData.Id FROM OurContractsData WHERE OurId = Contracts.OurIdRelated)
-            LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
-            LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
-            LEFT JOIN MilestoneTypes_ContractTypes 
-                ON  MilestoneTypes_ContractTypes.MilestoneTypeId = Milestones.TypeId 
-                AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
-            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = Milestones.TypeId
-            LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
-            WHERE ${ToolsDb.makeOrGroupsConditions(
-                orConditions,
-                this.makeAndConditions.bind(this)
-            )}
-                AND ${milestoneParentTypeCondition}
-            ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
+export default class TasksController extends BaseController<
+    Task, 
+    TaskRepository
+> {    
+    private static instance: TasksController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processTasksResult(result);
+    constructor() {
+        super(new TaskRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Tasks.Name LIKE ?
-        OR Tasks.Description LIKE ?)`,
-                [`%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    private static getInstance(): TasksController {
+        if (!this.instance) {
+            this.instance = new TasksController();
+        }
+        return this.instance;
     }
 
-    private static makeAndConditions(searchParams: any) {
-        const projectOurId = searchParams._project?.ourId;
-        const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
-            : '1';
-
-        const caseId = searchParams._case?.id;
-        const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ? `, [caseId])
-            : '1';
-        const contractId =
-            searchParams.contractId || searchParams._contract?.id;
-        const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
-            : '1';
-        const milestoneId =
-            searchParams._milestone?.id || searchParams.milestoneId;
-        const milestoneCondition = milestoneId
-            ? mysql.format('Milestones.Id = ?', [milestoneId])
-            : '1';
-        const contractStatusCondition = searchParams.contractStatusCondition
-            ? mysql.format('Contracts.Status REGEXP ?', [
-                  searchParams.contractStatusCondition,
-              ])
-            : '1';
-        const ownerCondition = searchParams._owner
-            ? mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email])
-            : '1';
-        const deadlineFromCondition = searchParams.deadlineFrom
-            ? mysql.format(`Tasks.Deadline >= ? `, [searchParams.deadlineFrom])
-            : '1';
-        const deadlineToCondition = searchParams.deadlineTo
-            ? mysql.format(`Tasks.Deadline <= ? `, [searchParams.deadlineTo])
-            : '1';
-        const statusCondition = searchParams.status
-            ? mysql.format(`Tasks.Status = ? `, [searchParams.status])
-            : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-
-        const conditions = `${contractCondition} 
-            AND ${milestoneCondition}
-            AND ${caseCondition} 
-            AND ${contractStatusCondition} 
-            AND ${projectCondition}
-            AND ${ownerCondition}
-            AND ${deadlineFromCondition}
-            AND ${deadlineToCondition}
-            AND ${statusCondition}
-            AND ${searchTextCondition} `;
-
-        return conditions;
+    static async find(
+        searchParams: TasksSearchParams[] = []
+    ): Promise<Task[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(searchParams);
     }
 
     static processTasksResult(result: any[]): Task[] {
@@ -287,5 +144,414 @@ export default class TasksController {
             newResult.push(item);
         }
         return newResult;
+    }
+
+/* Służy do dodwania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
+        *
+        */
+    static async addInDbFromTemplateForProcess(
+        process: Process,
+        parentCase: Case,
+        conn: mysql.PoolConnection,
+        isPartOfTransaction: boolean
+    ) {
+        console.log(
+            'addInDbFromTemplateForProcess:: connection Id',
+            conn.threadId
+        );
+        const taskTemplate = (
+            await TasksTemplateForProcesssController.getTasksTemplateForProcesssList(
+                { processId: process.id }
+            )
+        )[0];
+        if (taskTemplate) {
+            const task = new Task({
+                name: taskTemplate.name,
+                description: taskTemplate.description,
+                status: 'Backlog',
+                _parent: parentCase,
+            });
+
+            return await task.addInDb(conn, isPartOfTransaction);
+        }
+    }
+
+    private static async getParents(
+        caseId: number,
+        externalConnection: mysql.PoolConnection
+    ) {
+        console.log('Task getParents', externalConnection.threadId);
+        const caseCondition = mysql.format('Cases.Id = ?', [caseId]);
+
+        const sql = `SELECT
+            Cases.Name AS CaseName,
+            Cases.TypeId AS CaseTypeId,
+            Cases.Number AS CaseNumber,
+            CaseTypes.Name AS CaseTypeName,
+            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+            Milestones.Id AS MilestoneId,
+            Milestones.Name AS MilestoneName,
+            Milestones.GdFolderId AS MilestoneGdFolderId,
+            MilestoneTypes.Name AS MilestoneTypeName,
+            COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
+            ParentContracts.Id AS ParentContractId,
+            OurContractsData.OurId AS OurContractsDataOurId,
+            ParentContracts.OurIdRelated AS ParentContractOurIdRelated,
+            ParentContracts.Number AS ParentContractNumber,
+            ParentContracts.Alias AS ParentContractAlias,
+            ParentContracts.ProjectOurId
+            FROM Cases
+            LEFT JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId
+            JOIN Milestones ON Milestones.Id=Cases.MilestoneId
+            LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            JOIN Contracts AS ParentContracts ON Milestones.ContractId = ParentContracts.Id
+            LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
+            JOIN ContractTypes ON ContractTypes.Id = ParentContracts.TypeId
+            LEFT JOIN MilestoneTypes_ContractTypes 
+                ON  MilestoneTypes_ContractTypes.ContractTypeId=ContractTypes.Id 
+                AND MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
+            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=MilestoneTypes.Id
+            WHERE ${caseCondition}`;
+
+        const result: any[] = <any[]>(
+            await ToolsDb.getQueryCallbackAsync(sql, externalConnection)
+        );
+        try {
+            var row = result[0];
+            return {
+                caseName: <string | undefined>row.CaseName,
+                caseTypeId: <number>row.CaseTypeId,
+                caseNumber: <number>row.CaseNumber,
+                caseTypeName: <string>row.CaseTypeName,
+                caseTypeFolderNumber: <string>row.CaseTypeFolderNumber,
+                milestoneId: <number>row.MilestoneId,
+                milestoneName: <string>row.MilestoneName,
+                milestoneTypeName: <string>row.MilestoneTypeName,
+                milestoneTypeFolderNumber: <string>(
+                    row.MilestoneTypeFolderNumber
+                ),
+                milestoneGdFolderId: <string>row.MilestoneGdFolderId,
+                contractId: <number>row.ParentContractId,
+                contractOurId: <string>row.OurContractsDataOurId, //dla ourContracts
+                contractOurIdRelated: <string>row.ParentContractOurIdRelated, //dla kontraktów na roboty
+                contractNumber: <string>row.ParentContractNumber,
+                contractAlias: <string>row.ParentContractAlias,
+                projectId: <string>row.ProjectOurId,
+            };
+        } catch (err) {
+            throw err;
+        }
+    }
+    
+    static async addInScrum(
+        task: Task,
+        auth: OAuth2Client,
+        externalConn?: mysql.PoolConnection,
+        isPartOfBatch?: boolean
+    ) {
+        const conn: mysql.PoolConnection = externalConn
+            ? externalConn
+            : await ToolsDb.pool.getConnection();
+        console.log('Task addInScrum:: connection Id', conn.threadId);
+
+        try {
+            if (!(await this.shouldBeInScrum(task, auth, conn))) {
+                //console.log(`Nie dodaję do Scruma zadania: "${this.name}"`);
+                return;
+            }
+            if (!task.caseId) {
+                throw new Error('Task must have a caseId to be added to Scrum.');
+            }
+            const parents = await this.getParents(task.caseId, conn);
+            let currentSprintValues = <any[][]>(
+                await ToolsSheets.getValues(auth, {
+                    spreadsheetId: Setup.ScrumSheet.GdId,
+                    rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+                })
+            ).values;
+
+            const contractOurIdColIndex = currentSprintValues[0].indexOf(
+                Setup.ScrumSheet.CurrentSprint.contractOurIdColName
+            );
+            //dla kontraktu 'Our' bierz dane z ourData, dla kontraktu na roboty bież dane z kolumny OurIdRelated
+            const ourContractOurId = parents.contractOurId
+                ? parents.contractOurId
+                : parents.contractOurIdRelated;
+            //const headerContractRow = <number>Tools.findFirstInRange(ourContractOurId, currentSprintValues, contractOurIdColIndex) + 1;
+            const lastContractRow =
+                <number>(
+                    Tools.findLastInRange(
+                        ourContractOurId,
+                        currentSprintValues,
+                        contractOurIdColIndex
+                    )
+                ) + 1;
+            //const contractTasksRowsCount = lastContractRow - headerContractRow;
+            //wstaw wiersz nowej sprawy
+            await ToolsSheets.insertRows(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                startIndex: lastContractRow,
+                endIndex: lastContractRow + 1,
+            });
+
+            task.scrumSheetRow = lastContractRow + 1;
+            console.log(`new blank row no ${lastContractRow} inserted`);
+            //wyełnij danymi https://developers.google.com/sheets/api/samples/data#copy_and_paste_cell_formatting
+            const timesColIndex = currentSprintValues[0].indexOf(
+                Setup.ScrumSheet.CurrentSprint.timesColName
+            );
+            await Promise.all([
+                ToolsSheets.copyPasteRows(auth, {
+                    source: {
+                        sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                        startRowIndex: lastContractRow + 2,
+                        endRowIndex: lastContractRow + 3,
+                    },
+                    destination: {
+                        sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                        startRowIndex: lastContractRow,
+                        endRowIndex: lastContractRow + 1,
+                    },
+                    spreadsheetId: Setup.ScrumSheet.GdId,
+                    pasteType: 'PASTE_FORMAT',
+                }),
+                ToolsSheets.copyPasteRows(auth, {
+                    source: {
+                        sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                        startRowIndex: lastContractRow + 2,
+                        endRowIndex: lastContractRow + 3,
+                        startColumnIndex: timesColIndex,
+                        endColumnIndex: timesColIndex + 20,
+                    },
+                    destination: {
+                        sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                        startRowIndex: lastContractRow,
+                        endRowIndex: lastContractRow + 1,
+                        startColumnIndex: timesColIndex,
+                    },
+                    spreadsheetId: Setup.ScrumSheet.GdId,
+                }),
+            ]);
+            const milestoneGdFolderUrl = ToolsGd.createGdFolderUrl(
+                parents.milestoneGdFolderId
+            );
+            const milestoneNameCaption = parents.milestoneName
+                ? ` | ${parents.milestoneName}`
+                : '';
+            let milestoneLabel = `=HYPERLINK("${milestoneGdFolderUrl}";"${parents.milestoneTypeFolderNumber} ${parents.milestoneTypeName}${milestoneNameCaption}")`;
+
+            const parentCase = new Case({
+                number: parents.caseNumber,
+                _type: {},
+                _parent: {
+                    name: parents.milestoneName,
+                    _type: {},
+                } as MilestoneData,
+            });
+            const parentCaseDisplayNumber = parentCase.number
+                ? ' | ' + parentCase._displayNumber
+                : '';
+            let contract_Number_Alias = parents.contractNumber;
+            contract_Number_Alias += parents.contractAlias
+                ? ' ' + parents.contractAlias
+                : '';
+
+            const parentsData = [
+                [
+                    parents.projectId,
+                    parents.contractId,
+                    parents.contractOurId
+                        ? parents.contractOurId
+                        : parents.contractOurIdRelated, //dla kontrakty our bież dane z ourData, dla kontraktu na roboty bież dane z kolimny OurIdRelated
+                    parents.milestoneId,
+                    parents.caseTypeId,
+                    task.caseId,
+                    task.id,
+                    task.ownerId ? task.ownerId : '',
+                    '{"caseSynchronized":true,"taskSynchronized":true}',
+                    !parents.contractOurId ? contract_Number_Alias : ' ',
+                    milestoneLabel,
+                    parents.caseTypeFolderNumber +
+                        ' ' +
+                        parents.caseTypeName +
+                        parentCaseDisplayNumber,
+                    parents.caseName,
+                    task.name,
+                    task.deadline ? task.deadline : '',
+                    '',
+                    task.status,
+                ],
+            ];
+            const projectIdColNumber =
+                currentSprintValues[0].indexOf(
+                    Setup.ScrumSheet.CurrentSprint.projectIdColName
+                ) + 1;
+            await ToolsSheets.updateValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: `${
+                    Setup.ScrumSheet.CurrentSprint.name
+                }!${ToolsSheets.R1C1toA1(
+                    lastContractRow + 1,
+                    projectIdColNumber
+                )}`,
+                values: parentsData,
+            });
+
+            await ScrumSheet.CurrentSprint.setSprintSumsInRows(
+                auth,
+                lastContractRow + 1
+            );
+
+            if (!isPartOfBatch) {
+                //odtwórz #Times (ostatnie kolumny arkusza)
+                await ScrumSheet.CurrentSprint.setSumInContractRow(
+                    auth,
+                    ourContractOurId
+                );
+                await ScrumSheet.CurrentSprint.sortContract(
+                    auth,
+                    ourContractOurId
+                );
+                console.log('tasks rows in contract sorted');
+                if (lastContractRow < 13) {
+                    await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    console.log('times Summary table is rebuilt');
+                }
+            }
+            return lastContractRow;
+        } catch (err) {
+            throw err;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+                console.log('Task addInScrum conn released', conn.threadId);
+            }
+        }
+    }
+    
+    /**
+     * sprawdza czy zadanie powinno znaleźć się w arkuszu SCRUM
+     * @param externalConn
+     * @returns
+     */
+    static async shouldBeInScrum(
+        task: Task,
+        auth: OAuth2Client,
+        externalConn?: mysql.PoolConnection
+    ) {
+        let test = false;
+        const conn = externalConn
+            ? externalConn
+            : await ToolsDb.pool.getConnection();
+        console.log('Task shouldBeInScrum conn', conn.threadId);
+        try {
+            if (task._owner && task._owner.id) {
+                const systemRole = await PersonsController.getSystemRole({ id: task._owner.id });
+                if (!systemRole)
+                    throw new Error('Użytkownik nie zarejestrowany w systemie');
+                test =
+                    task.status !== 'Backlog' &&
+                    systemRole &&
+                    systemRole.id <= 3;
+            } else test = task.status !== 'Backlog';
+
+            if (!test) return test;
+            
+            if (!task.caseId) {
+                throw new Error('Task must have a caseId to be checked in Scrum.');
+            }
+            const parents = await this.getParents(task.caseId, conn);
+            const result = await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+            });
+
+            if (result && result.values && result.values.length > 0) {
+                const currentSprintValues = result.values;
+                const contractOurIdColNumber = currentSprintValues[0].indexOf(
+                    Setup.ScrumSheet.CurrentSprint.contractOurIdColName
+                );
+                const ourContractOurId = parents.contractOurId
+                    ? parents.contractOurId
+                    : parents.contractOurIdRelated;
+                const headerContractRow = Tools.findFirstInRange(
+                    ourContractOurId,
+                    currentSprintValues,
+                    contractOurIdColNumber
+                );
+                if (!headerContractRow) test = false;
+            } else {
+                test = false;
+            }
+        } catch (error) {
+            console.error('An error occurred:', error);
+            test = false;
+        } finally {
+            if (!externalConn) {
+                conn.release();
+                console.log(
+                    'conn released in task shouldBeInScrum',
+                    conn.threadId
+                );
+            }
+        }
+        return test;
+    }
+
+    static async editInScrum(task: Task, auth: OAuth2Client) {
+        let currentSprintValues = <any[][]>(
+            await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+            })
+        ).values;
+        const taskNameColNumber =
+            currentSprintValues[0].indexOf(
+                Setup.ScrumSheet.CurrentSprint.taskNameColName
+            ) + 1;
+        const taskIdColIndex = currentSprintValues[0].indexOf(
+            Setup.ScrumSheet.CurrentSprint.taskIdColName
+        );
+        const taskDataRow =
+            <number>(
+                Tools.findFirstInRange(
+                    <number>task.id,
+                    currentSprintValues,
+                    taskIdColIndex
+                )
+            ) + 1;
+        if (taskDataRow) {
+            if (await this.shouldBeInScrum(task, auth)) {
+                const taskData = [
+                    [
+                        task.name,
+                        task.deadline ? task.deadline : '',
+                        '',
+                        task.status,
+                        task._owner && task._owner.id
+                            ? task._owner.name + ' ' + task._owner.surname
+                            : '',
+                    ],
+                ];
+                await ToolsSheets.updateValues(auth, {
+                    spreadsheetId: Setup.ScrumSheet.GdId,
+                    rangeA1: `${
+                        Setup.ScrumSheet.CurrentSprint.name
+                    }!${ToolsSheets.R1C1toA1(taskDataRow, taskNameColNumber)}`,
+                    values: taskData,
+                });
+            } else await this.deleteFromScrum(task, auth);
+        } else {
+            //zmieniono status z 'Backlog' albo przypisano do pracownika ENVI
+            await this.addInScrum(task, auth);
+        }
+    }
+
+    static async deleteFromScrum(task: Task, auth: OAuth2Client) {
+        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+            searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
+            valueToFind: <number>task.id,
+        });
     }
 }
