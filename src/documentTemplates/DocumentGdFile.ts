@@ -1,6 +1,4 @@
-import { Envi } from '../tools/EnviTypes';
 import ToolsDocs from '../tools/ToolsDocs';
-import DocumentTemplate from './DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsGd from '../tools/ToolsGd';
 import EnviErrors from '../tools/Errors';

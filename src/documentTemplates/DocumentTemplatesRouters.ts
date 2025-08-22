@@ -1,48 +1,40 @@
 import DocumentTemplatesController from './DocumentTemplatesController';
 import { app } from '../index';
-import DocumentTemplate from './DocumentTemplate';
 import { Request, Response } from 'express';
 
 app.post('/documentTemplates', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result =
-            await DocumentTemplatesController.getDocumentTemplatesList(
-                orConditions
-            );
+        const result = await DocumentTemplatesController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);
     }
 });
 
-app.post('/documentTemplate', async (req: any, res: any, next) => {
+app.post('/documentTemplate', async (req: Request, res: Response, next) => {
     try {
-        let item = new DocumentTemplate(req.body);
-        await item.setEditorId();
-        await item.addInDb();
+        const item = await DocumentTemplatesController.addNewTemplate(req.body);
         res.send(item);
     } catch (error) {
         next(error);
     }
 });
 
-app.put('/documentTemplate/:id', async (req: any, res: any, next) => {
+app.put('/documentTemplate/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new DocumentTemplate(req.body);
-        await item.setEditorId();
-        await item.editInDb();
+        const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+        const item = await DocumentTemplatesController.updateTemplate(req.parsedBody, fieldsToUpdate);
         res.send(item);
     } catch (error) {
         next(error);
     }
 });
 
-app.delete('/documentTemplate/:id', async (req: any, res: any, next) => {
+app.delete('/documentTemplate/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new DocumentTemplate(req.body);
-        await item.deleteFromDb();
-        res.send(item);
+        const result = await DocumentTemplatesController.deleteTemplate(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }
