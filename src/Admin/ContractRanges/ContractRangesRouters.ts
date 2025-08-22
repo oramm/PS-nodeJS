@@ -1,13 +1,12 @@
-import express, { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { app } from '../../index';
 import ContractRangesController from './ContractRangesController';
-import ContractRange from './ContractRange';
 import { ContractRangeData } from '../../types/types';
 
 app.post('/contractRanges', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.body.orConditions; // assuming parsedBody is replaced with body
-        const result = await ContractRangesController.getContractRangesList(
+        const result = await ContractRangesController.find(
             orConditions
         );
         res.send(result);
@@ -18,9 +17,7 @@ app.post('/contractRanges', async (req: Request, res: Response, next) => {
 
 app.post('/contractRange', async (req: Request, res: Response, next) => {
     try {
-        const itemData: ContractRangeData = req.body;
-        const item = new ContractRange(itemData);
-        await item.addInDb();
+        const item= await ContractRangesController.addNewContractRange(req.body);
         res.send(item);
     } catch (error) {
         next(error);
@@ -29,14 +26,12 @@ app.post('/contractRange', async (req: Request, res: Response, next) => {
 
 app.put('/contractRange/:id', async (req: Request, res: Response, next) => {
     try {
-        const _fieldsToUpdate = req.body._fieldsToUpdate;
+        const fieldsToUpdate = req.body._fieldsToUpdate;
         const itemFromClient: ContractRangeData = req.body;
         if (!itemFromClient || !itemFromClient.id)
             throw new Error('Próba edycji bez Id');
-
-        const item = new ContractRange(itemFromClient);
-        item.editInDb(undefined, false, _fieldsToUpdate);
-        res.send(item);
+        const updateContractRange = await ContractRangesController.updateContractRange(itemFromClient, fieldsToUpdate);
+        res.send(updateContractRange);
     } catch (error) {
         next(error);
     }
@@ -44,11 +39,12 @@ app.put('/contractRange/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/contractRange/:id', async (req: Request, res: Response, next) => {
     try {
-        const itemData: ContractRangeData = req.body;
-        const item = new ContractRange(itemData);
-        await item.deleteFromDb();
-        res.send(item);
-        console.log(`Contract range ${item.name} deleted`);
+        const itemFromClient: ContractRangeData = req.body;
+        if (!itemFromClient || !itemFromClient.id)
+            throw new Error('Próba usunięcia bez Id');
+
+        await ContractRangesController.deleteContractRange(itemFromClient);
+        res.json({id: itemFromClient.id, name: itemFromClient.name});
     } catch (error) {
         next(error);
     }
