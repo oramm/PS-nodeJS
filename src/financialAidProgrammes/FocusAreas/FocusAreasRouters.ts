@@ -1,13 +1,13 @@
 import { Request, Response } from 'express';
 import FocusAreasController from './FocusAreasController';
-import FocusArea from './FocusArea';
 import { app } from '../../index';
 import ToolsGapi from '../../setup/Sessions/ToolsGapi';
+import { OAuth2Client } from 'google-auth-library';
 
 app.post('/focusAreas', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await FocusAreasController.getFocusAreasList(
+        const result = await FocusAreasController.find(
             orConditions
         );
         res.send(result);
@@ -21,15 +21,14 @@ app.post('/focusAreas', async (req: Request, res: Response, next) => {
 
 app.post('/focusArea', async (req: Request, res: Response, next) => {
     try {
-        const item = new FocusArea(req.body);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.addNewController,
-            undefined,
-            item
+            async (auth: OAuth2Client) => {
+                const item = await FocusAreasController.addNewFocusArea(req.body, auth);
+                res.send(item);
+            }
         );
-        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -40,15 +39,15 @@ app.post('/focusArea', async (req: Request, res: Response, next) => {
 
 app.put('/focusArea/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = new FocusArea(req.parsedBody);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.editController,
-            undefined,
-            item
+            async (auth: OAuth2Client) => {
+                const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+                const item = await FocusAreasController.updateFocusArea(req.parsedBody, fieldsToUpdate, auth);
+                res.send(item);
+            }
         );
-        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -59,15 +58,14 @@ app.put('/focusArea/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/focusArea/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = new FocusArea(req.body);
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.deleteController,
-            undefined,
-            item
+            async (auth: OAuth2Client) => {
+                const result = await FocusAreasController.deleteFocusArea(req.body, auth);
+                res.json({message: 'FocusArea deleted', id: req.body.id });
+            }
         );
-        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {

@@ -1,100 +1,107 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import { FinancialAidProgrammeData, FocusAreaData } from '../../types/types';
+import FocusArea from './FocusArea';
+import FocusAreaRepository, { FocusAreasSearchParams } from './FocusAreaRepository';
+import BaseController from '../../controllers/BaseController';
+import { OAuth2Client } from 'google-auth-library';
+import FocusAreaGdController from './FocusAreaGdController';
 import ToolsGd from '../../tools/ToolsGd';
+import { FocusAreaData } from '../../types/types';
 
-type FocusAreaSearchParams = {
-    id?: number;
-    searchText?: string;
-    _financialAidProgramme?: FinancialAidProgrammeData;
-};
+export type {FocusAreasSearchParams };
 
-export default class FocusAreasController {
-    static async getFocusAreasList(orConditions: FocusAreaSearchParams[] = []) {
-        const sql = `SELECT FocusAreas.Id,
-            FocusAreas.Name,
-            FocusAreas.Alias,
-            FocusAreas.Description,
-            FocusAreas.FinancialAidProgrammeId,
-            FocusAreas.GdFolderId,
-            FinancialAidProgrammes.Name as ProgrammeName,
-            FinancialAidProgrammes.Alias as ProgrammeAlias,
-            FinancialAidProgrammes.Description as ProgrammeDescription,
-            FinancialAidProgrammes.Url as ProgrammeUrl,
-            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId
-        FROM FocusAreas
-        JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY FocusAreas.Name ASC`;
+export default class FocusAreasController extends BaseController<
+    FocusArea,
+    FocusAreaRepository
+> {
+    private static instance: FocusAreasController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processFocusAreasResult(result);
+    constructor() {
+        super(new FocusAreaRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(FocusAreas.Name LIKE ? 
-                    OR FocusAreas.Description LIKE ? 
-                 )`,
-                [`%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
-    }
-
-    static makeAndConditions(searchParams: FocusAreaSearchParams) {
-        const conditions: string[] = [];
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
+    private static getInstance(): FocusAreasController {
+        if (!this.instance) {
+            this.instance = new FocusAreasController();
         }
-
-        if (searchParams._financialAidProgramme) {
-            conditions.push(
-                mysql.format(`FinancialAidProgrammes.Id = ?`, [
-                    searchParams._financialAidProgramme.id,
-                ])
-            );
-        }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
+        return this.instance;
     }
 
-    static processFocusAreasResult(result: any[]): FocusAreaData[] {
-        let newResult: FocusAreaData[] = [];
-
-        for (const row of result) {
-            const item: FocusAreaData = {
-                id: row.Id,
-                name: row.Name,
-                alias: row.Alias,
-                description: ToolsDb.sqlToString(row.Description),
-                financialAidProgrammeId: row.FinancialAidProgrammeId,
-                _financialAidProgramme: {
-                    id: row.FinancialAidProgrammeId,
-                    name: row.ProgrammeName,
-                    alias: row.ProgrammeAlias,
-                    description: ToolsDb.sqlToString(row.ProgrammeDescription),
-                    url: row.ProgrammeUrl,
-                    gdFolderId: row.ProgrammeGdFolderId,
-                },
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            };
-            newResult.push(item);
-        }
-        return newResult;
+    static async find(
+        searchParams: FocusAreasSearchParams[] = []
+    ): Promise<FocusArea[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
     }
+
+    static async addNewFocusArea(
+        focusAreaData: FocusAreaData, 
+        auth: OAuth2Client
+    ): Promise<FocusArea> {
+        const instance = this.getInstance();
+        const item = new FocusArea(focusAreaData);
+        const gdController = new FocusAreaGdController();
+        try {
+            console.group('Creating new FocusArea');
+            const gdFolder = await gdController
+                .createFolder(auth, item)
+                .catch((err) => {
+                    console.log('FocusArea folder creation error');
+                    throw err;
+                });
+            item.setGdFolderIdAndUrl(gdFolder.id as string);
+            console.log('FocusArea folder created');
+            await instance.create(item);
+            console.log(`FocusArea ${item.name} added in db`);
+            console.groupEnd();
+            return item;
+        } catch (err) {
+            console.error('Error creating FocusArea, attempting cleanup...');
+            if (item.gdFolderId) {
+                await gdController.deleteFromGd(auth, item.gdFolderId).catch(cleanupErr => console.error('Cleanup failed:', cleanupErr));
+            }
+            throw err;
+        }
+    }
+
+    static async updateFocusArea(
+        focusAreaData: FocusAreaData,
+        fieldsToUpdate: string[],
+        auth: OAuth2Client
+    ): Promise<FocusArea> {
+        const instance = this.getInstance();
+        const item = new FocusArea(focusAreaData);
+        const gdController = new FocusAreaGdController();
+        try {
+            console.group('Editing FocusArea');
+            await ToolsGd.updateFolder(auth, {
+                name: gdController.makeFolderName(item),
+                id: item.gdFolderId,
+            });
+            console.log('FocusArea folder edited');
+            await instance.edit(item, undefined, undefined, fieldsToUpdate);
+            console.log('FocusArea edited in db');
+            console.groupEnd();
+            return item;
+        } catch (err) {
+            console.log('FocusArea edit error');
+            throw err;
+        }
+    }
+
+    static async deleteFocusArea(
+        focusAreaData: FocusAreaData, 
+        auth: OAuth2Client
+    ): Promise<void> {
+        const instance = this.getInstance();
+        const item = new FocusArea(focusAreaData);
+        const gdController = new FocusAreaGdController();
+        console.group('Deleting FocusArea');
+        await Promise.all([
+            instance.delete(item),
+            gdController.deleteFromGd(auth, item.gdFolderId)
+        ]);
+        console.log(`FocusArea with id ${item.id} deleted from db and Google Drive`);
+        console.groupEnd();
+    }
+
+    
 }
