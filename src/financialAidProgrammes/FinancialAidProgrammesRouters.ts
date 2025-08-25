@@ -3,6 +3,7 @@ import { app } from '../index';
 import FinancialAidProgrammesController from './FinancialAidProgrammesController';
 import FinancialAidProgramme from './FinancialAidProgramme';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
+import { OAuth2Client } from 'google-auth-library';
 
 export const financialAidProgrammesRouter = express.Router();
 app.post(
@@ -11,7 +12,7 @@ app.post(
         try {
             const orConditions = req.parsedBody.orConditions;
             const result =
-                await FinancialAidProgrammesController.getFinancialAidProgrammesList(
+                await FinancialAidProgrammesController.find(
                     orConditions
                 );
             res.send(result);
@@ -29,9 +30,10 @@ app.post(
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.addNewController,
-                undefined,
-                item
+                async (auth: OAuth2Client) => {
+                    const item = await FinancialAidProgrammesController.addNewFinancialAidProgramme(req.body, auth);
+                    res.send(item);
+                }
             );
             res.send(item);
         } catch (error) {
@@ -50,9 +52,11 @@ app.put(
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.editController,
-                undefined,
-                item
+                async (auth: OAuth2Client) => {
+                    const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+                    const item = await FinancialAidProgrammesController.updateFinancialAidProgramme(req.parsedBody, fieldsToUpdate, auth);
+                    res.send(item);
+                }
             );
             res.send(item);
         } catch (error) {
@@ -69,9 +73,10 @@ app.delete(
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.deleteController,
-                undefined,
-                item
+                async (auth: OAuth2Client) => {
+                    await FinancialAidProgrammesController.deleteFinancialAidProgramme(req.body, auth);
+                    res.send({ id: item.id });
+                }
             );
             res.send(item);
         } catch (error) {

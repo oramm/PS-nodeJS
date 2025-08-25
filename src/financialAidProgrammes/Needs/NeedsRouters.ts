@@ -1,56 +1,40 @@
 import { Request, Response } from 'express';
 import NeedsController from './NeedsController';
-import Need from './Need';
 import { app } from '../../index';
 
 app.post('/needs', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await NeedsController.getNeedsList(orConditions);
+        const result = await NeedsController.find(orConditions);
         res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
-        }
-    }
-});
+        next(error);}
+    });
 
 app.post('/need', async (req: Request, res: Response, next) => {
     try {
-        let need = new Need(req.body);
-        await need.addNewController();
-        res.send(need);
+        const item = await NeedsController.addNewNeed(req.body);
+        res.send(item);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
+        next(error);
         }
-    }
-});
+    });
 
 app.put('/need/:id', async (req: Request, res: Response, next) => {
     try {
-        let need = new Need(req.parsedBody);
-        await need.editController();
-        res.send(need);
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;  
+        const item = await NeedsController.updateNeed(req.body, fieldsToUpdate);
+        res.send(item);  
     } catch (error) {
         console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
-        }
-    }
-});
+            next(error);}
+    });
 
 app.delete('/need/:id', async (req: Request, res: Response, next) => {
     try {
-        let need = new Need(req.body);
-        await need.deleteController();
-        res.send(need);
+    const result = await NeedsController.deleteNeed(req.body);
+    res.send(result);
     } catch (error) {
-        console.error(error);
-        if (error instanceof Error) {
-            res.status(500).send({ errorMessage: error.message });
-        }
+        next(error);
     }
 });

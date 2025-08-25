@@ -2,8 +2,6 @@ import BusinessObject from '../../../BussinesObject';
 import ToolsDate from '../../../tools/ToolsDate';
 import ToolsGd from '../../../tools/ToolsGd';
 import { ApplicationCallData, FocusAreaData } from '../../../types/types';
-import { OAuth2Client } from 'google-auth-library';
-import ApplicationCallGdController from './ApplicationCallGdController';
 
 export default class ApplicationCall
     extends BusinessObject
@@ -38,55 +36,6 @@ export default class ApplicationCall
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate) as string;
         this.status = initParamObject.status;
         this.setGdFolderIdAndUrl(initParamObject.gdFolderId);
-    }
-
-    async addNewController(auth: OAuth2Client) {
-        try {
-            const gdController = new ApplicationCallGdController();
-            console.group('Creating new ApplicationCall');
-            const gdFolder = await gdController
-                .createFolder(auth, {
-                    ...this,
-                })
-                .catch((err) => {
-                    console.log('ApplicationCall folder creation error');
-                    throw err;
-                });
-            this.setGdFolderIdAndUrl(gdFolder.id as string);
-
-            console.log('ApplicationCall folder created');
-            await this.addInDb();
-            console.log('ApplicationCall added to db');
-            console.groupEnd();
-        } catch (err) {
-            this.deleteController(auth);
-            throw err;
-        }
-    }
-
-    async editController(auth: OAuth2Client) {
-        try {
-            console.group('Editing ApplicationCall');
-            const gdController = new ApplicationCallGdController();
-            await ToolsGd.updateFolder(auth, {
-                name: gdController.makeFolderName({ ...this }),
-                id: this.gdFolderId,
-            });
-            console.log('ApplicationCall folder edited');
-            await this.editInDb();
-            console.log('ApplicationCall edited in db');
-            console.groupEnd();
-        } catch (err) {
-            console.log('ApplicationCall edit error');
-            throw err;
-        }
-    }
-
-    async deleteController(auth: OAuth2Client) {
-        if (!this.gdFolderId) throw new Error('Brak folderu programu');
-        if (this.id) await this.deleteFromDb();
-        const gdController = new ApplicationCallGdController();
-        await gdController.deleteFromGd(auth, this.gdFolderId);
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {

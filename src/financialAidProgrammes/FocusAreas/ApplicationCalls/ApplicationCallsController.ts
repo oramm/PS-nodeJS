@@ -1,59 +1,105 @@
 import mysql from 'mysql2/promise';
-import ToolsDb from '../../../tools/ToolsDb';
-import {
-    ApplicationCallData,
-    FinancialAidProgrammeData,
-    FocusAreaData,
-} from '../../../types/types';
+import { ApplicationCallData } from '../../../types/types';
 import ToolsGd from '../../../tools/ToolsGd';
 import ApplicationCall from './ApplicationCall';
+import ApplicationCallRepository, { ApplicationCallSearchParams } from './ApplicationCallRepository';
+import BaseController from '../../../controllers/BaseController';
+import { OAuth2Client } from 'google-auth-library';
+import ApplicationCallGdController from './ApplicationCallGdController';
 
-type ApplicationCallSearchParams = {
-    id?: number;
-    _financialAidProgramme?: FinancialAidProgrammeData;
-    focusAreaId?: number;
-    _focusArea?: FocusAreaData | FocusAreaData[];
-    startDateFrom?: string;
-    startDateTo?: string;
-    endDateFrom?: string;
-    endDateTo?: string;
-    statuses?: string[];
-    searchText?: string;
-};
+export type { ApplicationCallSearchParams };
 
-export default class ApplicationCallsController {
-    static async getApplicationCallsList(
-        orConditions: ApplicationCallSearchParams[] = []
-    ) {
-        const sql = `SELECT ApplicationCalls.Id,
-            ApplicationCalls.Description,
-            ApplicationCalls.Url,
-            ApplicationCalls.StartDate,
-            ApplicationCalls.EndDate,
-            ApplicationCalls.Status,
-            ApplicationCalls.GdFolderId,
-            FocusAreas.Id as FocusAreaId,
-            FocusAreas.Name as FocusAreaName,
-            FocusAreas.Alias as FocusAreaAlias,
-            FocusAreas.Description as FocusAreaDescription,
-            FocusAreas.GdFolderId as FocusAreaGdFolderId,
-            FinancialAidProgrammes.Id as FinancialAidProgrammeId,
-            FinancialAidProgrammes.Name as ProgrammeName,
-            FinancialAidProgrammes.Alias as ProgrammeAlias,
-            FinancialAidProgrammes.Description as ProgrammeDescription,
-            FinancialAidProgrammes.Url as ProgrammeUrl,
-            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId
-        FROM ApplicationCalls
-        JOIN FocusAreas ON ApplicationCalls.FocusAreaId = FocusAreas.Id
-        JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY ApplicationCalls.StartDate ASC`;
+export default class ApplicationCallsController extends BaseController<
+    ApplicationCall, 
+    ApplicationCallRepository 
+    > {
+        private static instance: ApplicationCallsController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processApplicationCallsResult(result);
+        constructor() {
+            super(new ApplicationCallRepository);
+        }
+        private static getInstance(): ApplicationCallsController {
+            if (!this.instance) {
+                this.instance = new ApplicationCallsController();
+            }
+            return this.instance;
+        }
+
+        static async addNewApplicationCall(
+            CallData: ApplicationCallData, 
+            auth: OAuth2Client
+        ) : Promise<ApplicationCall> {
+            const instance = this.getInstance();
+            const item = new ApplicationCall(CallData);
+            const gdController = new ApplicationCallGdController();
+            try {
+                console.group('Creating ApplicationCall');
+                const gdFolder = await gdController
+                .createFolder(auth, item)
+                .catch((err) => {
+                    throw new Error(`ApplicationCall folder creation error: ${err}`);
+                });
+                item.setGdFolderIdAndUrl(gdFolder.id as string);
+                console.log(`ApplicationCall folder created`);
+                await instance.create(item);
+                console.log(`ApplicationCall added to db`);
+                console.groupEnd();
+                return item;
+            }
+            catch (err) {
+                console.error('ApplicationCall creation error');
+                if (item.gdFolderId) {
+                    await gdController.deleteFromGd(auth, item.gdFolderId).catch(cleanupErr => console.error('Cleanup error', cleanupErr));
+                }
+                throw err;
+            }
+
+        }
+     
+
+        static async find(
+            searchParams: ApplicationCallSearchParams[] = []
+        ): Promise<ApplicationCall[]> {
+            const instance = this.getInstance();
+            return await instance.repository.find(searchParams);
+        }
+       
+    static async updateApplicationCall(        
+        applicationCallData: ApplicationCallData, 
+        fieldstoUpdate: string[],
+        auth: OAuth2Client
+    ) : Promise<ApplicationCall> {
+        const instance = this.getInstance();
+        const item = new ApplicationCall(applicationCallData);
+        const gdController = new ApplicationCallGdController();
+        try {
+            console.group('Editing ApplicationCall');
+            await ToolsGd.updateFolder(auth, {
+                name : gdController.makeFolderName(item),
+                id: item.gdFolderId,
+            });
+            console.log('ApplicationCall folder edited');
+            await instance.edit(item, undefined, undefined, fieldstoUpdate);
+            console.log(`ApplicationCall edited in db`);
+            console.groupEnd();
+            return item;
+        }
+        catch (err) {
+            console.error('ApplicationCall edit error');
+            throw err;
+        }
+    }
+
+    static async deleteApplicationCall(
+        ApplicationCallData: ApplicationCallData,
+        auth: OAuth2Client,
+    ): Promise<void> {
+        const instance = this.getInstance();
+        const gdController = new ApplicationCallGdController();
+        await gdController.deleteFromGd(auth, ApplicationCallData.gdFolderId);
+        const applicationCall = new ApplicationCall(ApplicationCallData);
+        await instance.delete(applicationCall);
+        console.log(`Contract range ${applicationCall.focusAreaId} deleted from db`);
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
@@ -161,42 +207,5 @@ export default class ApplicationCallsController {
         }
 
         return conditions.length ? conditions.join(' AND ') : '1';
-    }
-
-    static processApplicationCallsResult(result: any[]): ApplicationCallData[] {
-        let newResult: ApplicationCallData[] = [];
-
-        for (const row of result) {
-            const item = new ApplicationCall({
-                id: row.Id,
-                _focusArea: <FocusAreaData>{
-                    id: row.FocusAreaId,
-                    name: row.FocusAreaName,
-                    alias: row.FocusAreaAlias,
-                    description: ToolsDb.sqlToString(row.FocusAreaDescription),
-                    _financialAidProgramme: {
-                        id: row.FinancialAidProgrammeId,
-                        name: row.ProgrammeName,
-                        description: ToolsDb.sqlToString(
-                            row.ProgrammeDescription
-                        ),
-                        url: row.ProgrammeUrl,
-                        alias: row.ProgrammeAlias,
-                        gdFolderId: row.ProgrammeGdFolderId,
-                    },
-                    gdFolderId: row.FocusAreaGdFolderId,
-                },
-                description: ToolsDb.sqlToString(row.Description),
-                url: row.Url,
-                startDate: row.StartDate,
-                endDate: row.EndDate,
-                status: row.Status,
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            });
-
-            newResult.push(item);
-        }
-        return newResult;
     }
 }

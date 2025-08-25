@@ -1,77 +1,102 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import { FinancialAidProgrammeData } from '../types/types';
 import ToolsGd from '../tools/ToolsGd';
+import FinancialAidProgrammeRepository, {FinancialAidProgrammesSearchParams} from './FinancialAidProgrammeRepository';
+import FinancialAidProgramme from './FinancialAidProgramme';
+import { OAuth2Client } from 'google-auth-library';
+import BaseController from '../controllers/BaseController';
+import FinancialAidProgrammeGdController from './FinancialAidProgrammeGdController';
+import { FinancialAidProgrammeData } from '../types/types';
 
-type FinancialAidProgrammesearchParams = {
-    id?: number;
-    searchText?: string;
-};
+export type { FinancialAidProgrammesSearchParams };
 
-export default class FinancialAidProgrammesController {
-    static async getFinancialAidProgrammesList(
-        orConditions: FinancialAidProgrammesearchParams[] = []
-    ) {
-        const sql = `SELECT FinancialAidProgrammes.Id,
-            FinancialAidProgrammes.Name,
-            FinancialAidProgrammes.Alias,
-            FinancialAidProgrammes.Description,
-            FinancialAidProgrammes.Url,
-            FinancialAidProgrammes.GdFolderId
-        FROM FinancialAidProgrammes
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY FinancialAidProgrammes.Name ASC`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processFinancialAidProgrammesResult(result);
+export default class FinancialAidProgrammesController extends BaseController<
+    FinancialAidProgramme, 
+    FinancialAidProgrammeRepository
+> {
+    private static instance: FinancialAidProgrammesController;
+    
+    constructor() {
+        super(new FinancialAidProgrammeRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(FinancialAidProgrammes.Name LIKE ? 
-                    OR FinancialAidProgrammes.Description LIKE ?
-                    OR FinancialAidProgrammes.Alias LIKE ?
-                 )`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
-    }
-
-    static makeAndConditions(searchParams: FinancialAidProgrammesearchParams) {
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-
-        return `${searchTextCondition}`;
-    }
-
-    static processFinancialAidProgrammesResult(
-        result: any[]
-    ): FinancialAidProgrammeData[] {
-        let newResult: FinancialAidProgrammeData[] = [];
-
-        for (const row of result) {
-            const item: FinancialAidProgrammeData = {
-                id: row.Id,
-                name: row.Name,
-                alias: row.Alias,
-                description: ToolsDb.sqlToString(row.Description),
-                url: row.Url,
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            };
-            newResult.push(item);
+    private static getInstance(): FinancialAidProgrammesController {
+        if (!this.instance) {
+            this.instance = new FinancialAidProgrammesController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    static async find(
+        searchParams: FinancialAidProgrammesSearchParams[] = []
+    ): Promise<FinancialAidProgramme[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
+    }
+
+    static async addNewFinancialAidProgramme(
+        financialAidProgrammeData: FinancialAidProgrammeData,
+        auth: OAuth2Client
+    ): Promise<FinancialAidProgramme> {
+        const instance = this.getInstance();
+        const item = new FinancialAidProgramme(financialAidProgrammeData);
+        const gdController = new FinancialAidProgrammeGdController();
+        try {
+            console.group('Creating new Programme');
+            const gdFolder = await gdController
+                .createFolder(auth, item)
+                .catch((err) => {
+                    console.log('Programme folder creation error');
+                    throw err;
+                });
+            item.setGdFolderIdAndUrl(gdFolder.id as string);
+            console.log('Programme folder created');
+            await instance.create(item);
+            console.log('Programme added to db');
+            console.groupEnd();
+            return item;
+        } catch (err) {
+            await gdController.deleteFromGd(auth, item.gdFolderId).catch(cleanupErr => console.error('Cleanup failed:', cleanupErr));
+            throw err;
+        }
+    }
+
+    static async updateFinancialAidProgramme(
+        financialAidProgrammeData: FinancialAidProgrammeData,
+        fieldsToUpdate: string[],
+        auth: OAuth2Client
+    ): Promise<FinancialAidProgramme> {
+        const instance = this.getInstance();
+        const item = new FinancialAidProgramme(financialAidProgrammeData);
+        const gdController = new FinancialAidProgrammeGdController();
+        try {
+            console.group('Editing Programme');
+            await ToolsGd.updateFolder(auth, {
+                name: gdController.makeFolderName(item),
+                id: item.gdFolderId,
+            });
+            console.log('Programme folder edited');
+            await instance.edit(item, undefined, undefined, fieldsToUpdate);
+            console.log('Programme edited in db');
+            console.groupEnd();
+            return item;
+        } catch (err) {
+            console.log('Programme edit error');
+            throw err;
+        }
+    }
+
+    static async deleteFinancialAidProgramme(
+        financialAidProgrammeData: FinancialAidProgrammeData,
+        auth: OAuth2Client
+    ): Promise<void> {
+        const instance = this.getInstance();
+        const item = new FinancialAidProgramme(financialAidProgrammeData);
+        const gdController = new FinancialAidProgrammeGdController();
+        console.group('Deleting Programme');
+        await Promise.all([
+            instance.delete(item),
+            gdController.deleteFromGd(auth, item.gdFolderId)
+        ]);
+        console.log(`Programme with id ${item.id} deleted from db and GDrive`);
+        console.groupEnd();
     }
 }
