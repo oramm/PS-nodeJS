@@ -6,8 +6,6 @@ import {
 } from '../../types/types';
 import mysql from 'mysql2/promise';
 import Need from './Need';
-import ToolsDb from '../../tools/ToolsDb';
-import ApplicationCall from '../FocusAreas/ApplicationCalls/ApplicationCall';
 import BaseRepository from '../../repositories/BaseRepository';
 
 export interface NeedSearchParams {
@@ -25,28 +23,53 @@ export default class NeedRepository extends BaseRepository<Need> {
     constructor() {
         super('Needs');
     }
+
     protected mapRowToEntity(row: any): Need {
-        return new Need({
-            id: row.Id,
-            name: row.Name,
-            description: ToolsDb.sqlToString(row.Description),
-            status: row.Status,
-            applicationCallId: row.ApplicationCallId,
-            clientId: row.ClientId,
-            _client: {
-                id: row.ClientId,
-                name: row.ClientName,
-            },
-            _applicationCall: <ApplicationCall>{
-                id: row.ApplicationCallId,
-                startDate: row.ApplicationCallStartDate,
-                status: row.ApplicationCallStatus,
-                endDate: row.ApplicationCallEndDate,
-            },
-            // _focusAreas will be set later from Needs_FocusAreas table
-            _focusAreasNames: row.FocusAreasNames ? row.FocusAreasNames.split(', ') : [],
-        });
-    }
+    const applicationCall: ApplicationCallData | undefined =
+        row.ApplicationCallId
+            ? {
+                  id: row.ApplicationCallId,
+                  startDate: row.ApplicationCallStartDate,
+                  endDate: row.ApplicationCallEndDate,
+                  status: row.ApplicationCallStatus,
+                  description: row.ApplicationCallDescription,
+                  url: row.ApplicationCallUrl,
+                  gdFolderId: row.ApplicationCallGdFolderId,
+                  _focusArea: {
+                      id: row.ApplicationCallFocusAreaId,
+                      name: row.ApplicationCallFocusAreaName,
+                      alias: row.ApplicationCallFocusAreaAlias,
+                      description: row.ApplicationCallFocusAreaDescription,
+                      gdFolderId: row.ApplicationCallFocusAreaGdFolderId,
+                      _financialAidProgramme: {
+                          id: row.ApplicationCallFinancialAidProgrammeId,
+                          name: row.ApplicationCallFinancialAidProgrammeName,
+                          alias: row.ApplicationCallFinancialAidProgrammeAlias,
+                          url: row.ApplicationCallFinancialAidProgrammeUrl,
+                          description: row.ApplicationCallFinancialAidProgrammeDescription,
+                          gdFolderId: row.ApplicationCallFinancialAidProgrammeGdFolderId,
+                      },
+                  },
+              }
+            : undefined;
+
+    const focusAreasNames: string[] | undefined = row.FocusAreasNames
+        ? row.FocusAreasNames.split(', ')
+        : undefined;
+
+    return new Need({
+        id: row.Id,
+        name: row.Name,
+        description: row.Description,
+        status: row.Status,
+        _client: {
+            id: row.ClientId,
+            name: row.ClientName,
+        },
+        _applicationCall: applicationCall,
+        _focusAreasNames: focusAreasNames,
+    });
+}
 
     async find(
         orConditions: NeedSearchParams[] = []): Promise<Need[]> {
@@ -57,6 +80,7 @@ export default class NeedRepository extends BaseRepository<Need> {
                 this.makeAndConditions.bind(this)
             )
             : '1';
+        
         const sql = `SELECT Needs.Id,
             Needs.ClientId,
             Needs.Name,
@@ -87,7 +111,9 @@ export default class NeedRepository extends BaseRepository<Need> {
         LEFT JOIN FocusAreas AS ApplicationCallFocusArea ON ApplicationCalls.FocusAreaId = ApplicationCallFocusArea.Id
         LEFT JOIN FinancialAidProgrammes AS ApplicationCallFinancialAidProgramme ON ApplicationCallFocusArea.FinancialAidProgrammeId = ApplicationCallFinancialAidProgramme.Id
         WHERE ${conditions}
-          ORDER BY Needs.Name DESC`;
+        GROUP BY Needs.Id
+        ORDER BY Needs.Name ASC`;
+
         const rows = await this.executeQuery(sql);
         return rows.map((row) => this.mapRowToEntity(row));
     }
@@ -100,8 +126,7 @@ export default class NeedRepository extends BaseRepository<Need> {
             (word) =>
                 `(Needs.Name LIKE ${mysql.escape(`%${word}%`)}
                 OR Needs.Description LIKE ${mysql.escape(`%${word}%`)})`
-            )
-        ;
+            );
 
         return conditions.join(' AND ');
     }

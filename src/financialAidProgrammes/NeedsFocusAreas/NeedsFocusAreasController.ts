@@ -1,134 +1,54 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import {
-    FocusAreaData,
-    NeedData,
-    NeedsFocusAreasData,
-} from '../../types/types';
+import BaseController from '../../controllers/BaseController';
+import NeedFocusAreaRepository, { NeedsFocusAreasSearchParams } from './NeedFocusAreaRepository';
+import NeedsFocusArea from './NeedFocusArea';
+import { NeedsFocusAreasData } from '../../types/types';
 
-type NeedsFocusAreasSearchParams = {
-    needId?: number;
-    _need?: NeedData;
-    _focusArea?: FocusAreaData;
-    focusAreaId?: number;
-    searchText?: string;
-};
+export type { NeedsFocusAreasSearchParams };
 
-export default class NeedsFocusAreasController {
-    static async getNeedsFocusAreasList(
-        orConditions: NeedsFocusAreasSearchParams[] = []
-    ) {
-        const sql = `SELECT Needs_FocusAreas.NeedId,
-            Needs_FocusAreas.FocusAreaId,
-            Needs_FocusAreas.Comment,
-            Needs.Name as NeedName,
-            Needs.Description as NeedDescription,
-            Needs.Status as NeedStatus,
-            FocusAreas.Name as FocusAreaName,
-            FocusAreas.Alias as FocusAreaAlias,
-            FocusAreas.Description as FocusAreaDescription,
-            FocusAreas.GdFolderId as FocusAreaGdFolderId,
-            FinancialAidProgrammes.Id as FinancialAidProgrammeId,
-            FinancialAidProgrammes.Name as ProgrammeName,
-            FinancialAidProgrammes.Alias as ProgrammeAlias,
-            FinancialAidProgrammes.Description as ProgrammeDescription,
-            FinancialAidProgrammes.Url as ProgrammeUrl,
-            FinancialAidProgrammes.GdFolderId as ProgrammeGdFolderId,
-            Entities.Id as ClientId,
-            Entities.Name as ClientName
-        FROM Needs_FocusAreas
-        JOIN Needs ON Needs_FocusAreas.NeedId = Needs.Id
-        JOIN FocusAreas ON Needs_FocusAreas.FocusAreaId = FocusAreas.Id
-        LEFT JOIN FinancialAidProgrammes ON FocusAreas.FinancialAidProgrammeId = FinancialAidProgrammes.Id
-        JOIN Entities ON Needs.ClientId = Entities.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY Needs.Name ASC, FocusAreas.Name ASC`;
+export default class NeedsFocusAreasController extends BaseController<
+    NeedsFocusArea,
+    NeedFocusAreaRepository
+> {
+    private static instance: NeedsFocusAreasController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processNeedsFocusAreasResult(result);
+    constructor() {
+        super(new NeedFocusAreaRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Needs.Name LIKE ? OR FocusAreas.Name LIKE ? OR Needs_FocusAreas.Comment LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    private static getInstance(): NeedsFocusAreasController {
+        if (!this.instance) {
+            this.instance = new NeedsFocusAreasController();
+        }
+        return this.instance;
+    }
+    
+    static async find(
+        searchParams: NeedsFocusAreasSearchParams[] = []
+    ): Promise<NeedsFocusArea[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
     }
 
-    static makeAndConditions(searchParams: NeedsFocusAreasSearchParams) {
-        const conditions: string[] = [];
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
-        }
-
-        const needId = searchParams.needId || searchParams._need?.id;
-        if (needId) {
-            conditions.push(
-                mysql.format(`Needs_FocusAreas.NeedId = ?`, [needId])
-            );
-        }
-
-        const focusAreaId =
-            searchParams.focusAreaId || searchParams._focusArea?.id;
-        if (focusAreaId) {
-            conditions.push(
-                mysql.format(`Needs_FocusAreas.FocusAreaId = ?`, [focusAreaId])
-            );
-        }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
+    static async addNewNeedFocusArea(needFocusAreaData: NeedsFocusAreasData): Promise<NeedsFocusArea> {
+        const instance = this.getInstance();
+        const item = new NeedsFocusArea(needFocusAreaData);
+        await instance.create(item);
+        console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) added in db`);
+        return item;
     }
 
-    static processNeedsFocusAreasResult(result: any[]): NeedsFocusAreasData[] {
-        let newResult: NeedsFocusAreasData[] = [];
+    static async updateNeedFocusArea(needFocusAreaData: NeedsFocusAreasData, fieldsToUpdate: string[]): Promise<NeedsFocusArea> {
+        const instance = this.getInstance();
+        const item = new NeedsFocusArea(needFocusAreaData);
+        await instance.edit(item, undefined, undefined, fieldsToUpdate);
+        console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) updated in db`);
+        return item;
+    }
 
-        for (const row of result) {
-            const item: NeedsFocusAreasData = {
-                needId: row.NeedId,
-                focusAreaId: row.FocusAreaId,
-                comment: row.Comment,
-                _need: {
-                    id: row.NeedId,
-                    name: row.NeedName,
-                    description: row.NeedDescription,
-                    _client: {
-                        id: row.ClientId,
-                        name: row.ClientName,
-                    },
-                    status: row.NeedStatus,
-                },
-                _focusArea: {
-                    id: row.FocusAreaId,
-                    name: row.FocusAreaName,
-                    alias: row.FocusAreaAlias,
-                    description: row.FocusAreaDescription,
-                    _financialAidProgramme: {
-                        id: row.FinancialAidProgrammeId,
-                        name: row.ProgrammeName,
-                        alias: row.ProgrammeAlias,
-                        description: row.ProgrammeDescription,
-                        url: row.ProgrammeUrl,
-                        gdFolderId: row.ProgrammeGdFolderId,
-                    },
-                    gdFolderId: row.FocusAreaGdFolderId,
-                },
-            };
-            newResult.push(item);
-        }
-        return newResult;
+    static async deleteNeedFocusArea(needFocusAreaData: NeedsFocusAreasData): Promise<void> {
+        const instance = this.getInstance();
+        const item = new NeedsFocusArea(needFocusAreaData);
+        await instance.delete(item);
+        console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) deleted from db`);
     }
 }

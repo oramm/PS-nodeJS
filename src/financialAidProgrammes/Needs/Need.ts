@@ -1,14 +1,10 @@
 import BusinessObject from '../../BussinesObject';
-import ToolsDb from '../../tools/ToolsDb';
 import {
     ApplicationCallData,
     EntityData,
     FocusAreaData,
     NeedData,
-    NeedsFocusAreasData,
 } from '../../types/types';
-import mysql from 'mysql2/promise';
-import NeedsFocusArea from '../NeedsFocusAreas/NeedFocusArea';
 
 export default class Need extends BusinessObject implements NeedData {
     id?: number;
@@ -54,6 +50,4 @@ export default class Need extends BusinessObject implements NeedData {
             this._focusAreasNames = _focusAreas.map((fa) => fa.name);
         else this._focusAreasNames = _focusAreasNames;
     }
-
-
 }

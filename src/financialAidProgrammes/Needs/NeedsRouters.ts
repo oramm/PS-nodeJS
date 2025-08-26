@@ -32,8 +32,8 @@ app.put('/need/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/need/:id', async (req: Request, res: Response, next) => {
     try {
-    const result = await NeedsController.deleteNeed(req.body);
-    res.send(result);
+        const result = await NeedsController.deleteNeed(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }

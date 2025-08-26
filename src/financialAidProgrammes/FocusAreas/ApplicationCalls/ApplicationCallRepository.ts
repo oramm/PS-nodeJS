@@ -94,12 +94,12 @@ export default class ApplicationCallRepository extends BaseRepository<Applicatio
 
     private makeSearchTextCondition(searchText: string | undefined) {
         if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
+
+        const words = searchText.toString().split(' ');
         const conditions = words.map((word) =>
             mysql.format(
                 `(ApplicationCalls.Description LIKE ${mysql.escape(`%${word}%`)}
-                    OR ApplicationCalls.Url LIKE ${mysql.escape(`%${word}%`)})`
+                OR ApplicationCalls.Url LIKE ${mysql.escape(`%${word}%`)})`
             )
         );
         return conditions.join(' AND ');

@@ -1,14 +1,11 @@
 import { Request, Response } from 'express';
 import NeedsFocusAreasController from './NeedsFocusAreasController';
-import NeedFocusArea from './NeedFocusArea';
 import { app } from '../../index';
 
 app.post('/needsFocusAreas', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await NeedsFocusAreasController.getNeedsFocusAreasList(
-            orConditions
-        );
+        const result = await NeedsFocusAreasController.find(orConditions);
         res.send(result);
     } catch (error) {
         console.error(error);
@@ -20,9 +17,8 @@ app.post('/needsFocusAreas', async (req: Request, res: Response, next) => {
 
 app.post('/needFocusArea', async (req: Request, res: Response, next) => {
     try {
-        let needFocusArea = new NeedFocusArea(req.parsedBody);
-        await needFocusArea.addInDb();
-        res.send(needFocusArea);
+        const item = await NeedsFocusAreasController.addNewNeedFocusArea(req.body);
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -33,9 +29,9 @@ app.post('/needFocusArea', async (req: Request, res: Response, next) => {
 
 app.put('/needFocusArea/:id', async (req: Request, res: Response, next) => {
     try {
-        let needFocusArea = new NeedFocusArea(req.parsedBody);
-        await needFocusArea.editInDb();
-        res.send(needFocusArea);
+        const fieldsToUpdate = req.parsedBody.fieldsToUpdate;  
+        const item = await NeedsFocusAreasController.updateNeedFocusArea(req.body, fieldsToUpdate);
+        res.send(item);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
@@ -46,9 +42,8 @@ app.put('/needFocusArea/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/needFocusArea/:id', async (req: Request, res: Response, next) => {
     try {
-        let needFocusArea = new NeedFocusArea(req.body);
-        await needFocusArea.deleteFromDb();
-        res.send(needFocusArea);
+        const result = await NeedsFocusAreasController.deleteNeedFocusArea(req.body);
+        res.send(result);
     } catch (error) {
         console.error(error);
         if (error instanceof Error) {
