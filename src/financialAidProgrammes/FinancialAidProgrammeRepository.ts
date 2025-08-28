@@ -62,8 +62,7 @@ export default class FinancialAidProgrammeRepository extends BaseRepository<Fina
                     )`
             );
 
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+        return conditions.join(' AND ');
     }
 
     private makeAndConditions(searchParams: FinancialAidProgrammesSearchParams) {
@@ -73,23 +72,4 @@ export default class FinancialAidProgrammeRepository extends BaseRepository<Fina
 
         return `${searchTextCondition}`;
     }
-
-    static processFinancialAidProgrammesResult(
-        result: any[]
-    ): FinancialAidProgrammeData[] {
-        let newResult: FinancialAidProgrammeData[] = [];
-
-        for (const row of result) {
-            const item: FinancialAidProgrammeData = {
-                id: row.Id,
-                name: row.Name,
-                alias: row.Alias,
-                description: ToolsDb.sqlToString(row.Description),
-                url: row.Url,
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            };
-            newResult.push(item);
-        }
-        return newResult;
-    }}
+}

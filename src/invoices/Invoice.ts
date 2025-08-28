@@ -3,9 +3,6 @@ import ToolsDate from '../tools/ToolsDate';
 import ToolsGd from '../tools/ToolsGd';
 import BusinessObject from '../BussinesObject';
 import Setup from '../setup/Setup';
-import mysql from 'mysql2/promise';
-import ToolsDb from '../tools/ToolsDb';
-import InvoiceItemsController from './InvoiceItemsController';
 import {
     EntityData,
     InvoiceData,
@@ -13,8 +10,6 @@ import {
     PersonData,
     ProjectData,
 } from '../types/types';
-import PersonsController from '../persons/PersonsController';
-import { UserData } from '../types/sessionTypes';
 
 export default class Invoice extends BusinessObject implements InvoiceData {
     id?: number;
@@ -136,48 +131,5 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         }
 
         this.setGdIdAndUrl(initParamObject.gdId);
-    }
-
-    async copyController(userData: UserData) {
-        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            console.log('copyController for invoice', this.id);
-            const invoiceCopy = new Invoice({
-                ...this,
-                id: undefined,
-                description: this.description
-                    ? this.description.endsWith(' KOPIA')
-                        ? this.description
-                        : this.description + ' KOPIA'
-                    : 'KOPIA',
-
-                status: Setup.InvoiceStatus.FOR_LATER,
-                gdId: null,
-                number: null,
-                sentDate: null,
-                paymentDeadline: null,
-            });
-
-            await invoiceCopy.addInDb();
-            const originalItems =
-                await InvoiceItemsController.getInvoiceItemsList([
-                    { invoiceId: this.id },
-                ]);
-
-            for (const itemData of originalItems) {
-                delete itemData.id;
-                itemData._parent = invoiceCopy;
-                let itemCopy = new InvoiceItem(itemData);
-                itemCopy._editor =
-                    await PersonsController.getPersonFromSessionUserData(
-                        userData
-                    );
-
-                itemCopy.editorId = itemCopy._editor.id!;
-                console.log('itemCopy editorSet');
-                await itemCopy.addInDb();
-                console.log('itemCopy added', itemCopy);
-            }
-            return invoiceCopy;
-        });
     }
 }

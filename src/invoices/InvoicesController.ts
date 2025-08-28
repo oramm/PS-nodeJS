@@ -1,245 +1,198 @@
+import Invoice from './Invoice';
+import InvoiceRepository, { InvoicesSearchParams } from './InvoiceRepository';
+import BaseController from '../controllers/BaseController';
+import { InvoiceData } from '../types/types';
+import { UserData } from '../types/sessionTypes';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
-import Invoice from './Invoice';
-import Project from '../projects/Project';
-import Contract from '../contracts/Contract';
+import Setup from '../setup/Setup';
+import InvoiceItemsController from './InvoiceItemsController';
+import PersonsController from '../persons/PersonsController';
+import { OAuth2Client } from 'google-auth-library';
 import ContractOur from '../contracts/ContractOur';
-import Person from '../persons/Person';
+import ToolsGd from '../tools/ToolsGd';
+import InvoiceValidator from './InvoiceValidator';
+import { drive_v3 } from 'googleapis';
 
-type InvoiceSearchParams = {
-    id?: number;
-    projectId?: string;
-    _project?: Project;
-    contractId?: number;
-    _contract?: Contract;
-    searchText?: string;
-    issueDateFrom?: string;
-    issueDateTo?: string;
-    statuses?: string[];
-};
+export type {InvoicesSearchParams};
 
-export default class InvoicesController {
-    static async getInvoicesList(orConditions: InvoiceSearchParams[] = []) {
-        const sql = `SELECT Invoices.Id,
-            Invoices.Number,
-            Invoices.Description,
-            Invoices.Status,
-            Invoices.CreationDate,
-            Invoices.IssueDate,
-            Invoices.SentDate,
-            Invoices.DaysToPay,
-            Invoices.PaymentDeadline,
-            Invoices.GdId,
-            Invoices.LastUpdated,
-            Invoices.ContractId,
-            Entities.Id AS EntityId,
-            Entities.Name AS EntityName,
-            Entities.Address AS EntityAddress,
-            Entities.TaxNumber AS EntityTaxNumber,
-            Contracts.Number AS ContractNumber,
-            Contracts.Name AS ContractName,
-            Contracts.Value AS ContractValue,
-            Contracts.Alias AS ContractAlias,
-            Contracts.GdFolderId AS ContractGdFolderId,
-            OurContractsData.OurId AS ContractOurId,
-            ContractTypes.Id AS ContractTypeId,
-            ContractTypes.Name AS ContractTypeName,
-            ContractTypes.IsOur AS ContractTypeIsOur,
-            ContractTypes.Id AS ContractTypeDescription,
-            Projects.OurId AS ProjectOurId,
-            Projects.Name AS ProjectName,
-            Projects.GdFolderId AS ProjectGdFolderId,
-            Cities.Id AS CityId,
-            Cities.Name AS CityName,
-            Editors.Id AS EditorId,
-            Editors.Name AS EditorName,
-            Editors.Surname AS EditorSurname,
-            Editors.Email AS EditorEmail,
-            Owners.Id AS OwnerId,
-            Owners.Name AS OwnerName,
-            Owners.Surname AS OwnerSurname,
-            Owners.Email AS OwnerEmail,
-            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
-        FROM Invoices
-        JOIN Entities ON Entities.Id=Invoices.EntityId
-        JOIN Contracts ON Contracts.Id=Invoices.ContractId
-        JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-        JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-        JOIN Projects ON Projects.OurId=Contracts.ProjectOurId
-        LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
-        LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
-        LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
-        LEFT JOIN Cities ON Cities.Id = OurContractsData.CityId
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        GROUP BY Invoices.Id
-        ORDER BY Invoices.IssueDate ASC`;
+export default class InvoicesController extends BaseController<
+    Invoice, 
+    InvoiceRepository
+> {
+    private static instance: InvoicesController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processInvoicesResult(result);
+    constructor() {
+        super(new InvoiceRepository());
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Invoices.Number LIKE ? 
-                          OR Invoices.Description LIKE ? 
-                          OR Invoices.Status LIKE ? 
-                          OR Entities.Name LIKE ?
-                          OR OurContractsData.OurId LIKE ?
-                          OR Contracts.Number LIKE ?
-                          OR Contracts.Name LIKE ?
-                          OR Contracts.Alias LIKE ?
-                          OR EXISTS (
-                              SELECT 1 
-                              FROM InvoiceItems
-                              WHERE InvoiceItems.ParentId = Invoices.Id 
-                                  AND InvoiceItems.Description LIKE ?
-                          ))`,
-                [
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                ]
-            )
+    private static getInstance(): InvoicesController {
+        if (!this.instance) {
+            this.instance = new InvoicesController();
+        }
+        return this.instance;
+    }
+
+    static async find(
+        searchParams: InvoicesSearchParams[] = []
+    ): Promise<Invoice[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
+    }
+    
+    static async addNewInvoice(
+        invoiceData: InvoiceData,
+    ): Promise<Invoice> {
+        const instance = this.getInstance();
+        const invoice = new Invoice(invoiceData);
+        const validator = new InvoiceValidator(
+            new ContractOur(invoice._contract),
+            invoice
+        );
+        await validator.checkValueWithContract(true);
+
+        await instance.create(invoice);
+        console.log(`Invoice for contract ${invoice._contract.ourId} added in db`);
+        return invoice;
+    }
+
+    static async updateInvoice(
+        invoiceData: InvoiceData,
+        fieldsToUpdate?: string[],
+        auth?: OAuth2Client
+    ): Promise<Invoice> {
+        const instance = this.getInstance();
+        const invoice = new Invoice(invoiceData);
+        
+        if (auth && invoice.gdId && invoice.status?.match(/Na później|Do zrobienia/i)) {
+            await ToolsGd.trashFile(auth, invoice.gdId);
+            invoice.setGdIdAndUrl(null);
+            if (fieldsToUpdate && !fieldsToUpdate.includes('gdId')) {
+                fieldsToUpdate.push('gdId');
+            }
+        }
+        await instance.edit(invoice, undefined, undefined, fieldsToUpdate);
+        console.log(`Invoice ${invoice.id} updated in db`);
+        return invoice;
+    }
+
+    static async issueInvoice(
+        invoiceData: InvoiceData,
+        invoiceFile: Express.Multer.File,
+        auth: OAuth2Client
+    ): Promise<Invoice> {
+        const parentGdFolderId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71';
+        const item = new Invoice({ ...invoiceData, status: 'Zrobiona' });
+        const instance = this.getInstance();
+
+        if (item.gdId) {
+            await ToolsGd.trashFile(auth, item.gdId);
+        }
+        
+        const fileData: drive_v3.Schema$File = await ToolsGd.uploadFileMulter(
+            auth,
+            invoiceFile,
+            undefined,
+            parentGdFolderId
         );
 
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+        item.setGdIdAndUrl(fileData.id);
+
+        const fieldsToUpdate = ['status', 'gdId'];
+        await instance.edit(item, undefined, undefined, fieldsToUpdate);
+        
+        console.log(`Invoice ${item.number} issued and file uploaded`);
+        return item;
     }
 
-    static makeAndConditions(searchParams: InvoiceSearchParams) {
-        const conditions = [];
+    static async updateInvoiceStatus(
+        invoiceData: InvoiceData,
+        newStatus: string
+    ): Promise<Invoice> {        
+        const instance = this.getInstance();
+        const invoice = new Invoice({ ...invoiceData, status: newStatus });
+        await instance.edit(invoice, undefined, undefined, ['status']);
+        console.log(`Invoice ${invoice.id} status updated to "${newStatus}" in db`);
+        return invoice;
+    }
 
-        if (searchParams.id) {
-            conditions.push(mysql.format(`Invoices.Id = ?`, [searchParams.id]));
+    static async deleteInvoice(
+        invoiceData: InvoiceData,
+        auth?: OAuth2Client
+    ): Promise<{ id: number | undefined }> {
+        const instance = this.getInstance();
+        const invoice = new Invoice(invoiceData);
+
+        const promises = [
+            instance.delete(invoice)
+        ];
+
+        if (auth && invoice.gdId) {
+            promises.push(ToolsGd.trashFile(auth, invoice.gdId));
+        } else if (!auth && invoice.gdId) {
+            console.warn(`Invoice ${invoice.id} has a gdId, but no auth client was provided. File will not be deleted from Google Drive.`);
         }
-        const projectOurId =
-            searchParams._project?.ourId || searchParams.projectId;
-        if (projectOurId) {
-            conditions.push(
-                mysql.format(`Contracts.ProjectOurId = ?`, [projectOurId])
-            );
-        }
-        const contractId =
-            searchParams._contract?.id || searchParams.contractId;
-        if (contractId) {
-            conditions.push(
-                mysql.format(`Invoices.ContractId = ?`, [contractId])
-            );
-        }
-        if (searchParams.issueDateFrom) {
-            conditions.push(
-                mysql.format(`Invoices.IssueDate >= ?`, [
-                    searchParams.issueDateFrom,
-                ])
-            );
-        }
-        if (searchParams.issueDateTo) {
-            conditions.push(
-                mysql.format(`Invoices.IssueDate <= ?`, [
-                    searchParams.issueDateTo,
-                ])
-            );
-        }
-        if (searchParams.statuses?.length) {
-            const statusPlaceholders = searchParams.statuses
-                .map(() => '?')
-                .join(',');
-            conditions.push(
-                mysql.format(
-                    `Invoices.Status IN (${statusPlaceholders})`,
-                    searchParams.statuses
-                )
-            );
-        }
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
+
+        await Promise.all(promises);
+
+        console.log(`Invoice with id ${invoice.id} deleted`);
+        return { id: invoice.id };
+    }
+
+    static async copyInvoice(
+        invoiceToCopyData: InvoiceData,
+        userData: UserData
+    ): Promise<Invoice> {
+        const item = new Invoice(invoiceToCopyData);
+        const validator = new InvoiceValidator(
+            new ContractOur(item._contract),
+            item
         );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
-        }
+        await validator.checkValueWithContract(true);
 
-        return conditions.length > 0 ? conditions.join(' AND ') : '1';
-    }
+        return await ToolsDb.transaction(
+            async (conn: mysql.PoolConnection) => {
+                console.log(
+                    'copyController for invoice',
+                    invoiceToCopyData.id
+                );
 
-    static processInvoicesResult(result: any[]): Invoice[] {
-        let newResult: Invoice[] = [];
+                const invoiceCopyData: InvoiceData = {
+                    ...invoiceToCopyData,
+                    id: undefined,
+                    description: invoiceToCopyData.description
+                        ? invoiceToCopyData.description.endsWith(' KOPIA')
+                            ? invoiceToCopyData.description
+                            : invoiceToCopyData.description + ' KOPIA'
+                        : 'KOPIA',
+                    status: Setup.InvoiceStatus.FOR_LATER,
+                    gdId: null,
+                    _documentOpenUrl: undefined,
+                    number: null,
+                    sentDate: null,
+                    paymentDeadline: null,
+                };
 
-        for (const row of result) {
-            const contractInitParams = {
-                id: row.ContractId,
-                ourId: row.ContractOurId,
-                number: row.ContractNumber,
-                alias: row.ContractAlias,
-                value: row.ContractValue,
-                name: ToolsDb.sqlToString(row.ContractName),
-                _totalNetValue: row.TotalValue,
-                gdFolderId: row.ContractGdFolderId,
-                _parent: {
-                    ourId: row.ProjectOurId,
-                    name: row.ProjectName,
-                    gdFolderId: row.ProjectGdFolderId,
-                },
-                _type: {
-                    id: row.ContractTypeId,
-                    name: row.ContractTypeName,
-                    description: row.ContractTypeDescription,
-                    isOur: row.ContractTypeIsOur,
-                },
-                _city: {
-                    id: row.CityId,
-                    name: row.CityName,
-                },
-            };
-            const _contract = new ContractOur(contractInitParams);
+                const invoiceCopy = await this.addNewInvoice(invoiceCopyData);
 
-            const item = new Invoice({
-                id: row.Id,
-                number: row.Number,
-                description: ToolsDb.sqlToString(row.Description),
-                status: row.Status,
-                issueDate: row.IssueDate,
-                sentDate: row.SentDate,
-                daysToPay: row.DaysToPay,
-                paymentDeadline: row.PaymentDeadline,
-                gdId: row.GdId,
+                const originalItems = await InvoiceItemsController.find([
+                    { invoiceId: invoiceToCopyData.id },
+                ]);
 
-                _lastUpdated: row.LastUpdated,
-                _entity: {
-                    id: row.EntityId,
-                    name: ToolsDb.sqlToString(row.EntityName),
-                    address: row.EntityAddress,
-                    taxNumber: row.EntityTaxNumber,
-                },
-                _contract: _contract,
-                _editor: {
-                    id: row.EditorId,
-                    name: row.EditorName,
-                    surname: row.EditorSurname,
-                    email: row.EditorEmail,
-                },
-                _owner: new Person({
-                    id: row.OwnerId,
-                    name: row.OwnerName,
-                    surname: row.OwnerSurname,
-                    email: row.OwnerEmail,
-                }),
-                _totalNetValue: row.TotalNetValue,
-            });
-            newResult.push(item);
-        }
-        return newResult;
+                for (const itemData of originalItems) {
+                    const newItemData = {
+                        ...itemData,
+                        id: undefined,
+                        _parent: invoiceCopy, // Przypisz do nowo utworzonej faktury
+                        _editor:
+                            await PersonsController.getPersonFromSessionUserData(
+                                userData
+                            ),
+                    };
+                    await InvoiceItemsController.addNewInvoiceItem(newItemData, userData);
+                }
+                return invoiceCopy;
+            }
+        );
     }
 }

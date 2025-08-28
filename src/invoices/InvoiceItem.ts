@@ -1,5 +1,4 @@
 import BusinessObject from '../BussinesObject';
-import Person from '../persons/Person';
 import { PersonData } from '../types/types';
 
 export default class InvoiceItem extends BusinessObject {

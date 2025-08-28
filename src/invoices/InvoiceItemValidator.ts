@@ -130,7 +130,7 @@ export default class InvoiceItemValidator {
     private async checkEditedValueAgainstRemainingValue() {
         const [otherItemsValueObject, thisItemSaved] = await Promise.all([
             this.getItemsValue(),
-            InvoiceItemsController.getInvoiceItemsList([
+            InvoiceItemsController.find([
                 { invoiceItemId: this.invoiceItem.id },
             ]),
         ]);
