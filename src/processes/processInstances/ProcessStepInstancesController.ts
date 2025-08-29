@@ -1,97 +1,28 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
 import ProcessStepInstance from './ProcessStepInstance';
+import BaseController from '../../controllers/BaseController';
+import ProcessStepInstanceRepository from './ProcessStepInstanceRepository';
 
-export default class ProcessStepInstancesController {
-    static async getProcessStepInstancesList(initParamObject: any) {
-        const projectCondition =
-            initParamObject && initParamObject.projectId
-                ? 'Projects.OurId="' + initParamObject.projectId + '"'
-                : '1';
-        const contractCondition =
-            initParamObject && initParamObject.contractId
-                ? 'Contracts.Id=' + initParamObject.contractId
-                : '1';
-        const milestoneCondition =
-            initParamObject && initParamObject.milestoneId
-                ? 'Milestones.Id=' + initParamObject.milestoneId
-                : '1';
+export default class ProcessStepInstancesController extends BaseController<
+    ProcessStepInstance,
+    ProcessStepInstanceRepository
+>{
+    private static _instance: ProcessStepInstancesController;
 
-        const sql =
-            'SELECT  ProcessesStepsInstances.Id, \n \t' +
-            'ProcessesStepsInstances.ProcessInstanceId, \n \t' +
-            'ProcessInstances.CaseId, \n \t' +
-            'ProcessesStepsInstances.Status, \n \t' +
-            'ProcessesStepsInstances.Deadline, \n \t' +
-            'ProcessesStepsInstances.OurLetterId, \n \t' +
-            'ProcessesStepsInstances.LastUpdated, \n \t' +
-            'ProcessesStepsInstances.EditorId \n \t,' +
-            'ProcessesSteps.Id AS ProcessStepId, \n \t' +
-            'ProcessesSteps.Name AS ProcessStepName, \n \t' +
-            'ProcessesSteps.Description AS ProcessStepDescription, \n \t' +
-            'Letters.GdDocumentId AS OurLetterGdDocumentId, \n \t' +
-            'Letters.GdFolderId AS OurLetterGdFolderId, \n \t' +
-            'DocumentTemplates.Name AS DocumentTemplateName, \n \t' +
-            'DocumentTemplates.GdId AS DocumentTemplateGdId \n' +
-            'FROM ProcessesStepsInstances \n' +
-            'JOIN ProcessInstances ON ProcessesStepsInstances.ProcessInstanceId = ProcessInstances.Id \n' +
-            'JOIN ProcessesSteps ON ProcessesStepsInstances.ProcessStepId = ProcessesSteps.Id \n' +
-            'LEFT JOIN DocumentTemplatesContents ON DocumentTemplatesContents.Id = ProcessesSteps.DocumentTemplateContentsId \n' +
-            'LEFT JOIN DocumentTemplates ON DocumentTemplates.Id=DocumentTemplatesContents.TemplateId \n' +
-            'LEFT JOIN Letters ON Letters.Id=ProcessesStepsInstances.OurLetterId \n' +
-            'JOIN Processes ON ProcessInstances.ProcessId = Processes.Id \n' +
-            'JOIN Cases ON Cases.Id = ProcessInstances.CaseId \n' +
-            'JOIN Milestones ON Milestones.Id = Cases.MilestoneId \n' +
-            'JOIN Contracts ON Contracts.Id = Milestones.ContractId \n' +
-            'JOIN Projects ON Projects.OurId = Contracts.ProjectOurId \n' +
-            'WHERE ' +
-            projectCondition +
-            ' AND ' +
-            contractCondition +
-            ' AND ' +
-            milestoneCondition;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processProcessStepInstancesResult(result);
+    private constructor() {
+        super(new ProcessStepInstanceRepository());
     }
 
-    static processProcessStepInstancesResult(
-        result: any[]
-    ): [ProcessStepInstance?] {
-        let newResult: [ProcessStepInstance?] = [];
-
-        for (const row of result) {
-            var item = new ProcessStepInstance({
-                id: row.Id,
-                processInstanceId: row.ProcessInstanceId,
-                processStepId: row.ProcessStepId,
-                status: row.Status,
-                deadline: row.Deadline,
-                _ourLetter: {
-                    id: row.OurLetterId,
-                    gdDocumentId: row.OurLetterGdDocumentId,
-                    gdFolderId: row.OurLetterGdFolderId,
-                },
-                _lastUpdated: row.LastUpdated,
-                _processStep: {
-                    id: row.ProcessStepId,
-                    name: row.ProcessStepName,
-                    description: row.ProcessStepDescription,
-                    _documentTemplate: {
-                        name: row.DocumentTemplateName,
-                        gdId: row.DocumentTemplateGdId,
-                    },
-                },
-                _case: {
-                    id: row.CaseId,
-                },
-                _editor: {
-                    id: row.EditorId,
-                },
-            });
-
-            newResult.push(item);
+    public static getInstance(): ProcessStepInstancesController {
+        if (!this._instance) {
+            this._instance = new ProcessStepInstancesController();
         }
-        return newResult;
+        return this._instance;
+    }
+
+    static async find(
+        initParamObject: any
+    ): Promise<ProcessStepInstance[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(initParamObject);
     }
 }

@@ -14,6 +14,7 @@ import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesControll
 import CaseType from './caseTypes/CaseType';
 import { CaseData, MilestoneData } from '../../../types/types';
 import TasksController from './tasks/TasksController';
+import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
 
 export default class Case extends BusinessObject implements CaseData {
     id?: number;
@@ -168,12 +169,13 @@ export default class Case extends BusinessObject implements CaseData {
 
             if (!processInstanceTask) continue;
 
-            const processInstance = new ProcessInstance({
+            const processInstance = await ProcessInstancesController.addNewProcessStepsInstances({
                 _process: process,
                 _case: this,
                 _task: processInstanceTask,
-            });
-            await processInstance.addInDb(externalConn, isPartOfTransaction);
+            },
+            externalConn,
+            isPartOfTransaction);
             result.push(processInstance);
         }
         return result;

@@ -3,9 +3,7 @@ import { app } from '../../index';
 
 app.get('/processInstances', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessInstancesController.getProcessInstancesList(
-            req.query
-        );
+        const result = await ProcessInstancesController.find(req.query);
         res.send(result);
     } catch (error) {
         next(error);
@@ -14,9 +12,7 @@ app.get('/processInstances', async (req: any, res: any, next) => {
 
 app.get('/processInstance/:id', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessInstancesController.getProcessInstancesList(
-            req.params
-        );
+        const result = await ProcessInstancesController.find(req.params);
         res.send(result);
     } catch (error) {
         next(error);

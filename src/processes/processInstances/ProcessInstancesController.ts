@@ -1,57 +1,70 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from "../../tools/ToolsDb";
 import ProcessInstance from "./ProcessInstance";
+import ProcessInstanceRepository from './ProcessInstanceRepository';
+import BaseController from '../../controllers/BaseController';
+import mysql from 'mysql2/promise';
+import ProcessStepsController from '../ProcessStepsController';
+import ProcessStepInstance from './ProcessStepInstance';
 
-export default class ProcessInstancesController {
-    static async getProcessInstancesList(initParamObject: any) {
-        const projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
-        const milestoneConditon = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id="' + initParamObject.milestoneId + '"' : '1';
-        const sql = 'SELECT  ProcessInstances.Id, \n \t' +
-            'ProcessInstances.CaseId, \n \t' +
-            'ProcessInstances.TaskId, \n \t' +
-            'ProcessInstances.EditorId, \n \t' +
-            'ProcessInstances.LastUpdated, \n \t' +
-            'Processes.Id AS ProcessId, \n \t' +
-            'Processes.Name AS ProcessName, \n \t' +
-            'Processes.Description  AS ProcessDescription \n' +
-            'FROM ProcessInstances \n' +
-            'JOIN Processes ON ProcessInstances.ProcessId = Processes.Id \n' +
-            'JOIN Cases ON Cases.Id = ProcessInstances.CaseId \n' +
-            'JOIN Milestones ON Milestones.Id = Cases.MilestoneId \n' +
-            'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
-            'WHERE ' + milestoneConditon + ' AND ' + contractConditon + ' AND ' + projectConditon;
+export default class ProcessInstancesController extends BaseController<
+    ProcessInstance,
+    ProcessInstanceRepository
+>{
+    private static instance: ProcessInstancesController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processProcessInstancesResult(result);
-
-
+    constructor() {
+        super(new ProcessInstanceRepository());
     }
 
-    static processProcessInstancesResult(result: any[]): [ProcessInstance?] {
-        let newResult: [ProcessInstance?] = [];
-
-        for (const row of result) {
-            var item = new ProcessInstance({
-                id: row.Id,
-                _case: {
-                    id: row.CaseId
-                },
-                _task: {
-                    id: row.TaskId
-                },
-                _editor: {
-                    id: row.EditorId
-                },
-                _lastUpdated: row.LastUpdated,
-                _process: {
-                    id: row.ProcessId,
-                    name: ToolsDb.stringToSql(row.ProcessName),
-                    description: row.ProcessDescription,
-                }
-            });
-            newResult.push(item);
+    private static getInstance(): ProcessInstancesController {
+        if (!this.instance) {
+            this.instance = new ProcessInstancesController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    static async find(
+        initParamObject: any = {}
+    ): Promise<ProcessInstance[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(initParamObject);
+    }
+
+    /** Jest odpalana przy każdym utworzeniu Sprawy posiadającej ProcessInstance w funkcji ProcessInstance.addInDb();
+     */
+    static async addNewProcessStepsInstances(
+        instanceData: any,
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction: boolean = false
+    ): Promise<ProcessInstance> {
+        const instance = this.getInstance();
+        const processInstance = new ProcessInstance(instanceData);
+
+        await instance.create(processInstance,externalConn,isPartOfTransaction);
+
+        if (!externalConn && isPartOfTransaction)
+            throw new Error(
+                'Transaction is not possible without external connection'
+            );
+        const processSteps = await ProcessStepsController.find({
+            processId: processInstance.processId,
+        });
+        let stepInstance
+        for (const processStep of processSteps) {
+            stepInstance = new ProcessStepInstance({
+                processInstanceId: processInstance.id,
+                processStepId: processStep.id,
+                _processStep: {
+                    id: processStep.id,
+                    name: processStep.name,
+                    description: processStep.description,
+                },
+                _case: processInstance._case,
+                editorId: processInstance.editorId,
+            });
+
+            await stepInstance.addInDb(externalConn, isPartOfTransaction);
+            processInstance._stepsInstances.push(stepInstance);
+        }
+        return processInstance;
     }
 }

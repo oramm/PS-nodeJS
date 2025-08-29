@@ -2,7 +2,7 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../../../tools/ToolsDb';
 import Contract from '../../Contract';
 import Case from './Case';
-import ProcesesController from '../../../processes/ProcesesController';
+import ProcessesController from '../../../processes/ProcesesController';
 import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
 import Risk from './risks/Risk';
 import Milestone from '../Milestone';
@@ -181,8 +181,8 @@ export default class CasesController {
         let newResult: Case[] = [];
 
         let [processes, processesInstances] = await Promise.all([
-            ProcesesController.find(initParamObject),
-            ProcessInstancesController.getProcessInstancesList(initParamObject),
+            ProcessesController.find(initParamObject),
+            ProcessInstancesController.find(initParamObject),
         ]);
         for (const row of result) {
             const contractInitParams = {
