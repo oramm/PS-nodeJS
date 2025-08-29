@@ -1,67 +1,62 @@
-import mysql from 'mysql2/promise';
-import DocumentTemplate from "../documentTemplates/DocumentTemplate";
-import Tools from "../tools/Tools";
-import ToolsDb from '../tools/ToolsDb'
 import ProcessStep from "./ProcessStep";
+import BaseController from '../controllers/BaseController';
+import ProcessStepRepository from './ProcessStepRepository';
+import PersonsController from '../persons/PersonsController';
+import { UserData } from '../types/sessionTypes';
 
-export default class ProcessStepsController {
-    static async getProcessStepsList(initParamObject: any) {
-        const processcondition = (initParamObject && initParamObject.processId) ? 'ProcessesSteps.ProcessId=' + initParamObject.processId : '1'
+export default class ProcessStepsController extends BaseController<
+    ProcessStep,
+    ProcessStepRepository
+>{
+    private static instance: ProcessStepsController;
 
-        const sql = `SELECT  ProcessesSteps.Id,
-            ProcessesSteps.Name,
-            ProcessesSteps.Description,
-            ProcessesSteps.LastUpdated,
-            Processes.Id AS ProcessId,
-            Processes.Name AS ProcessName,
-            Processes.CaseTypeId AS ProcessCaseTypeId,
-            DocumentTemplates.Id AS DocumentTemplateId,
-            DocumentTemplates.Name AS DocumentTemplateName,
-            DocumentTemplates.Description AS DocumentTemplateDescription,
-            DocumentTemplates.GdId AS DocumentTemplateGdId,
-            DocumentTemplatesContents.Id AS ContentsId,
-            DocumentTemplatesContents.GdId AS ContentsGdId,
-            DocumentTemplatesContents.Alias AS ContentsAlias,
-            DocumentTemplatesContents.CaseTypeId AS ContentsCaseTypeId
-            FROM ProcessesSteps
-            JOIN Processes ON Processes.Id=ProcessesSteps.ProcessId
-            LEFT JOIN DocumentTemplatesContents ON DocumentTemplatesContents.Id = ProcessesSteps.DocumentTemplateContentsId
-            LEFT JOIN DocumentTemplates ON DocumentTemplates.Id=DocumentTemplatesContents.TemplateId
-            WHERE ${processcondition}`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processProcessStepsResult(result);
+    constructor() {
+        super(new ProcessStepRepository());
     }
 
-    static processProcessStepsResult(result: any[]): ProcessStep[] {
-        let newResult: ProcessStep[] = [];
-
-        for (const row of result) {
-            var item = new ProcessStep({
-                id: row.Id,
-                name: row.Name,
-                description: row.Description,
-                _documentTemplate: new DocumentTemplate({
-                    id: row.DocumentTemplateId,
-                    name: row.DocumentTemplateName,
-                    description: row.DocumentTemplateDescription,
-                    gdId: row.DocumentTemplateGdId,
-                    _contents: {
-                        id: row.ContentsId,
-                        gdId: row.ContentsGdId,
-                        alias: row.ContentsAlias,
-                        caseTypeId: row.ContentsCaseTypeId
-                    }
-                }),
-                _parent: {
-                    id: row.ProcessId,
-                    name: row.ProcessName,
-                    caseTypeId: row.ProcessCaseTypeId,
-                },
-                _lastUpdated: row.LastUpdated
-            });
-            newResult.push(item);
+    private static getInstance(): ProcessStepsController {
+        if (!this.instance) {
+            this.instance = new ProcessStepsController();
         }
-        return newResult;
+        return this.instance;
+    }
+    
+    static async find(
+        initParamObject: any
+    ): Promise<ProcessStep[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(initParamObject);
+    }
+
+    static async addNewProcessStep(processStepData: any, userData: UserData): Promise<ProcessStep> {
+        const instance = this.getInstance();
+        const editor = await PersonsController.getPersonFromSessionUserData(userData);
+        const fullProcessData = { ...processStepData, _editor: editor };
+
+        const processStep = new ProcessStep(fullProcessData);
+        await instance.create(processStep);
+        
+        console.log(`Process step "${processStep.name}" added to db`);
+        return processStep;
+    }
+    
+    static async updateProcessStep(processStepData: any, fieldsToUpdate: string[], userData: UserData): Promise<ProcessStep> {
+        const instance = this.getInstance();
+        const editor = await PersonsController.getPersonFromSessionUserData(userData);
+        const fullProcessData = { ...processStepData, _editor: editor };
+
+        const processStep = new ProcessStep(fullProcessData);
+        await instance.edit(processStep, undefined, undefined, fieldsToUpdate);
+        
+        console.log(`Process step with id ${processStep.id} updated in db`);
+        return processStep;
+    }
+
+    static async deleteProcessStep(processStepData: any): Promise<void> {
+        const instance = this.getInstance();
+        const processStep = new ProcessStep(processStepData); 
+        await instance.delete(processStep);
+        
+        console.log(`Process step with id ${processStep.id} deleted from db`);
     }
 }

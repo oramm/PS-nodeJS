@@ -1,10 +1,9 @@
 import ProcessesController from './ProcesesController';
 import { app } from '../index';
-import Process from './Process';
 
 app.get('/processes', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessesController.getProcessesList(req.query);
+        const result = await ProcessesController.find(req.query);
         res.send(result);
     } catch (error) {
         next(error);
@@ -13,7 +12,7 @@ app.get('/processes', async (req: any, res: any, next) => {
 
 app.get('/process/:id', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessesController.getProcessesList(req.params);
+        const result = await ProcessesController.find(req.params);
         res.send(result);
     } catch (error) {
         next(error);
@@ -22,9 +21,10 @@ app.get('/process/:id', async (req: any, res: any, next) => {
 
 app.post('/process', async (req: any, res: any, next) => {
     try {
-        let item = new Process(req.body);
-        await item.setEditorId();
-        await item.addInDb();
+        if (!req.session?.userData) {
+            throw new Error('Użytkownik niezalogowany');
+        }
+        const item = await ProcessesController.addNewProcess(req.body, req.session.userData);
         res.send(item);
     } catch (error) {
         next(error);
@@ -33,9 +33,11 @@ app.post('/process', async (req: any, res: any, next) => {
 
 app.put('/process/:id', async (req: any, res: any, next) => {
     try {
-        let item = new Process(req.body);
-        await item.setEditorId();
-        await item.editInDb();
+        if (!req.session?.userData) {
+            throw new Error('Użytkownik niezalogowany');
+        }
+        const fieldsToUpdate = req.parsedBody?._fieldsToUpdate;
+        const item = await ProcessesController.updateProcess(req.parsedBody || req.body, fieldsToUpdate, req.session.userData);
         res.send(item);
     } catch (error) {
         next(error);
@@ -44,9 +46,8 @@ app.put('/process/:id', async (req: any, res: any, next) => {
 
 app.delete('/process/:id', async (req: any, res: any, next) => {
     try {
-        let item = new Process(req.body);
-        await item.deleteFromDb();
-        res.send(item);
+        const result = await ProcessesController.deleteProcess(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }

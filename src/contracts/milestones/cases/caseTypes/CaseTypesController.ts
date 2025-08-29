@@ -37,7 +37,7 @@ export default class CaseTypesController {
 
     static async processCaseTypesResult(result: any[]) {
         let newResult: [CaseType?] = [];
-        const processes = await ProcessesController.getProcessesList({});
+        const processes = await ProcessesController.find({});
         for (const row of result) {
             const item = new CaseType({
                 id: row.Id,

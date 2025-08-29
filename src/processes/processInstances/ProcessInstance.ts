@@ -43,7 +43,7 @@ export default class ProcessInstance extends BusinessObject {
             throw new Error(
                 'Transaction is not possible without external connection'
             );
-        const processSteps = await ProcessStepsController.getProcessStepsList({
+        const processSteps = await ProcessStepsController.find({
             processId: this.processId,
         });
         let item;

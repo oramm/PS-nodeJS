@@ -1,5 +1,4 @@
 import BusinessObject from '../BussinesObject';
-import ToolsDb from '../tools/ToolsDb';
 
 export default class Process extends BusinessObject {
     id?: number;

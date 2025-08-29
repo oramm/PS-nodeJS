@@ -181,7 +181,7 @@ export default class CasesController {
         let newResult: Case[] = [];
 
         let [processes, processesInstances] = await Promise.all([
-            ProcesesController.getProcessesList(initParamObject),
+            ProcesesController.find(initParamObject),
             ProcessInstancesController.getProcessInstancesList(initParamObject),
         ]);
         for (const row of result) {

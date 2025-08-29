@@ -1,58 +1,62 @@
-import mysql from 'mysql2/promise';
-import Tools from "../tools/Tools";
-import ToolsDb from '../tools/ToolsDb'
 import Process from "./Process";
+import BaseController from '../controllers/BaseController';
+import ProcessRepository from './ProcessRepository';
+import { UserData } from "../types/sessionTypes";
+import PersonsController from "../persons/PersonsController";
 
-export default class ProcessesController {
-    static async getProcessesList(initParamObject: any) {
-        const statusConditon = (initParamObject && initParamObject.status) ? 'Processes.Status="' + initParamObject.status + '"' : '1';
+export default class ProcessesController extends BaseController<
+    Process,
+    ProcessRepository
+>{
+    private static instance: ProcessesController;
 
-        const sql = 'SELECT  Processes.Id, \n \t' +
-            'Processes.Name, \n \t' +
-            'Processes.Description, \n \t' +
-            'Processes.Status, \n \t' +
-            'Processes.LastUpdated, \n \t' +
-            'Processes.EditorId, \n \t' +
-            'Processes.CaseTypeId, \n \t' +
-            'CaseTypes.Name As CaseTypeName, \n \t' +
-            'CaseTypes.FolderNumber, \n \t' +
-            'TaskTemplatesForProcesses.Id AS TaskTemplateId, \n \t' +
-            'TaskTemplatesForProcesses.Name AS TaskTemplateName, \n \t' +
-            'TaskTemplatesForProcesses.Description AS TaskTemplateDescription \n' +
-            'FROM Processes \n' +
-            'JOIN CaseTypes ON CaseTypes.Id=Processes.CaseTypeId \n' +
-            'LEFT JOIN TaskTemplatesForProcesses ON TaskTemplatesForProcesses.ProcessId = Processes.Id \n' +
-            'WHERE ' + statusConditon;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processProcessesResult(result);
+    constructor() {
+        super(new ProcessRepository());
     }
 
-    static processProcessesResult(result: any[]): [Process?] {
-        let newResult: [Process?] = [];
-
-        for (const row of result) {
-            var item = new Process({
-                id: row.Id,
-                name: row.Name,
-                description: row.Description,
-                status: row.Status,
-                _caseType: {
-                    id: row.CaseTypeId,
-                    name: row.CaseTypeName
-                },
-                _lastUpdated: row.LastUpdated,
-                _editor: {
-                    id: row.EditorId
-                },
-                _taskTemplate: {
-                    id: row.TaskTemplateId,
-                    name: row.TaskTemplateName,
-                    description: row.TaskTemplateDescription
-                }
-            });
-            newResult.push(item);
+    private static getInstance(): ProcessesController {
+        if (!this.instance) {
+            this.instance = new ProcessesController();
         }
-        return newResult;
+        return this.instance;
+    }
+    
+    static async find(
+        initParamObject: any
+    ): Promise<Process[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(initParamObject);
+    }
+
+    static async addNewProcess(processData: any, userData: UserData): Promise<Process> {
+        const instance = this.getInstance();
+        const editor = await PersonsController.getPersonFromSessionUserData(userData);
+        const fullProcessData = { ...processData, _editor: editor };
+
+        const process = new Process(fullProcessData);
+        await instance.create(process);
+        
+        console.log(`Process "${process.name}" added to db`);
+        return process;
+    }
+
+    static async updateProcess(processData: any, fieldsToUpdate: string[], userData: UserData): Promise<Process> {
+        const instance = this.getInstance();
+        const editor = await PersonsController.getPersonFromSessionUserData(userData);
+        const fullProcessData = { ...processData, _editor: editor };
+
+        const process = new Process(fullProcessData);
+        await instance.edit(process, undefined, undefined, fieldsToUpdate);
+        
+        console.log(`Process with id ${process.id} updated in db`);
+        return process;
+    }
+
+    static async deleteProcess(processData: any): Promise<void> {
+        const instance = this.getInstance();
+        const process = new Process(processData); 
+        await instance.delete(process);
+        
+        console.log(`Process with id ${process.id} deleted from db`);
     }
 }

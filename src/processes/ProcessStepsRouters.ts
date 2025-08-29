@@ -1,10 +1,9 @@
 import ProcessStepsController from './ProcessStepsController';
 import { app } from '../index';
-import ProcessStep from './ProcessStep';
 
 app.get('/processSteps', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessStepsController.getProcessStepsList(
+        const result = await ProcessStepsController.find(
             req.query
         );
         res.send(result);
@@ -16,7 +15,7 @@ app.get('/processSteps', async (req: any, res: any, next) => {
 
 app.get('/processStep/:id', async (req: any, res: any, next) => {
     try {
-        const result = await ProcessStepsController.getProcessStepsList(
+        const result = await ProcessStepsController.find(
             req.params
         );
         res.send(result);
@@ -27,9 +26,10 @@ app.get('/processStep/:id', async (req: any, res: any, next) => {
 
 app.post('/processStep', async (req: any, res: any, next) => {
     try {
-        let item = new ProcessStep(req.body);
-        await item.setEditorId();
-        await item.addInDb();
+        if (!req.session?.userData) {
+            throw new Error('Użytkownik niezalogowany');
+        }
+        const item = await ProcessStepsController.addNewProcessStep(req.body, req.session.userData);
         res.send(item);
     } catch (error) {
         next(error);
@@ -38,11 +38,11 @@ app.post('/processStep', async (req: any, res: any, next) => {
 
 app.put('/processStep/:id', async (req: any, res: any, next) => {
     try {
-        let item = new ProcessStep(req.body);
-
-        console.log(item._documentTemplate);
-        await item.setEditorId();
-        await item.editInDb();
+        if (!req.session?.userData) {
+            throw new Error('Użytkownik niezalogowany');
+        }
+        const fieldsToUpdate = req.parsedBody?._fieldsToUpdate;
+        const item = await ProcessStepsController.updateProcessStep(req.parsedBody || req.body, fieldsToUpdate, req.session.userData); 
         res.send(item);
     } catch (error) {
         next(error);
@@ -51,9 +51,8 @@ app.put('/processStep/:id', async (req: any, res: any, next) => {
 
 app.delete('/processStep/:id', async (req: any, res: any, next) => {
     try {
-        let item = new ProcessStep(req.body);
-        await item.deleteFromDb();
-        res.send(item);
+        const result = await ProcessStepsController.deleteProcessStep(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }
