@@ -22,6 +22,7 @@
         "@types/mailparser": "^3.4.5",
         "@types/multer": "^1.4.7",
         "@types/node": "^22.4.0",
+        "@types/node-cron": "^3.0.11",
         "madge": "^8.0.0",
         "ts-node": "^10.8.1",
         "typescript": "^5.0.2"
@@ -48,6 +49,7 @@
         "mongodb": "^5.1.0",
         "multer": "^1.4.5-lts.1",
         "mysql2": "^3.2.0",
+        "node-cron": "^4.2.1",
         "nodemailer": "^6.9.14",
         "nodemon": "^3.0.2",
         "open": "^7.4.2",

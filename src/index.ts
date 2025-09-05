@@ -12,6 +12,10 @@ import multer from 'multer';
 import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
 import ToolsMail from './tools/ToolsMail';
+import cron from 'node-cron';
+import ScrumBackup from './ScrumSheet/ScrumBackup';
+import ToolsGapi from './setup/Sessions/ToolsGapi';
+
 declare global {
     namespace Express {
         interface Request {
@@ -200,4 +204,19 @@ app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
     ToolsDb.initialize();
     console.log('Db time zone set to +00:00');
+});
+
+cron.schedule('0 5 * * 1', async () => {
+    console.log('Uruchamianie zaplanowanego zadania kopii zapasowej...');
+    try {
+        await ToolsGapi.gapiReguestHandler(
+            null,
+            null as any,
+            ScrumBackup.backupScrumSheet,
+            [],
+            ScrumBackup
+        );
+    } catch (error) {
+        console.error('Błąd podczas wykonywania zaplanowanego zadania:', error);
+    }
 });
