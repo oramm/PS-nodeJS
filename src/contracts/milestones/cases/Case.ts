@@ -169,13 +169,12 @@ export default class Case extends BusinessObject implements CaseData {
 
             if (!processInstanceTask) continue;
 
-            const processInstance = await ProcessInstancesController.addNewProcessStepsInstances({
+            const processInstance = new ProcessInstance({
                 _process: process,
                 _case: this,
                 _task: processInstanceTask,
-            },
-            externalConn,
-            isPartOfTransaction);
+            });
+            await processInstance.addInDb(externalConn, isPartOfTransaction);
             result.push(processInstance);
         }
         return result;

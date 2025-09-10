@@ -25,7 +25,7 @@ export default class ContractRole
         this.name = initParamObject.name;
         this.description = initParamObject.description;
         this.groupName = initParamObject.groupName;
-        this.contractId = initParamObject.contractId ?? null;
+        this.contractId = initParamObject._contract?.id ?? initParamObject.contractId ?? null;
         this._contract = initParamObject._contract;
         this._person = initParamObject._person;
         this.personId =

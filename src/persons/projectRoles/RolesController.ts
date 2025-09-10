@@ -1,276 +1,131 @@
-import ContractRange from '../../Admin/ContractRanges/ContractRange';
 import ToolsDb from '../../tools/ToolsDb';
 import {
-    ContractTypeData,
-    OtherContractData,
-    OurContractData,
-    ProjectData,
     ProjectRoleData,
-    ContractRoleData,
-    PersonData,
-    ContractRangePerContractData,
+    ContractRoleData
 } from '../../types/types';
-import Person from '../Person';
 import ProjectRole from './ProjectRole';
-import mysql from 'mysql2/promise';
 import ContractRole from './ContractRole';
+import RoleRepository, { RolesSearchParams } from './RoleRepository';
+import BaseController from '../../controllers/BaseController';
+import ContractsController from '../../contracts/ContractsController';
 
-export type RolesSearchParams = {
-    searchText?: string;
-    projectOurId?: string;
-    _project?: ProjectData;
-    _contract?: OurContractData | OtherContractData;
-    contractId?: number;
-    personId?: number;
-    startDateFrom?: string;
-    startDateTo?: string;
-    endDateFrom?: string;
-    endDateTo?: string;
-    _contractType?: ContractTypeData;
-    statuses?: string[];
-    _person?: PersonData;
-    _contractRangesPerContract?: ContractRangePerContractData[];
-    groupName?: string;
-};
+export type {RolesSearchParams};
 
-export default class RolesController {
-    static async getRolesList(
+export default class RolesController extends BaseController<
+    ContractRole,
+    RoleRepository
+> {
+    private static instance: RolesController;
+
+    constructor() {
+        super(new RoleRepository());
+    }
+
+    private static getInstance(): RolesController {
+        if (!this.instance) {
+            this.instance = new RolesController();
+        }
+        return this.instance;
+    }
+
+    static async find(
         orConditions: RolesSearchParams[] = []
-    ): Promise<(ProjectRoleData | ContractRoleData)[]> {
-        const sql = `
-            SELECT 
-                Roles.Id, 
-                Roles.Name, 
-                Roles.Description, 
-                Roles.GroupName, 
-                Persons.Id AS PersonId,
-                Persons.Name AS PersonName, 
-                Persons.Surname AS PersonSurName, 
-                Persons.Email AS PersonEmail, 
-                Persons.Cellphone AS PersonCellphone, 
-                Persons.Phone AS PersonPhone, 
-                Entities.Name AS EntityName, 
-                Contracts.Id AS ContractId, 
-                Contracts.Number AS ContractNumber, 
-                Contracts.Name AS ContractName,
-                Contracts.Alias AS ContractAlias,
-                Contracts.StartDate AS ContractStartDate,
-                Contracts.EndDate AS ContractEndDate,
-                OurContractsData.OurId AS ContractOurId,
-                ContractTypes.Id AS ContractTypeId,
-                ContractTypes.Name AS ContractTypeName,
-                Projects.OurId AS ProjectOurId,
-                Projects.Alias AS ProjectAlias,
-                Projects.Name AS ProjectName,
-                SystemRoles.Name AS SystemRoleName,
-                GROUP_CONCAT(ContractRanges.Name SEPARATOR ', ') AS RangeNames
-            FROM Roles 
-            JOIN Persons ON Persons.Id = Roles.PersonId 
-            JOIN Entities ON Entities.Id = Persons.EntityId 
-            JOIN SystemRoles ON SystemRoles.Id = Persons.SystemRoleId 
-            LEFT JOIN Contracts ON Contracts.Id = Roles.ContractId
-            LEFT JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
-            LEFT JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id
-            LEFT JOIN Projects ON Projects.OurId = Roles.ProjectOurId
-            LEFT JOIN ContractRangesContracts ON Contracts.Id = ContractRangesContracts.ContractId
-            LEFT JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
-            WHERE ${ToolsDb.makeOrGroupsConditions(
-                orConditions,
-                this.makeAndConditions.bind(this)
-            )}
-            GROUP BY Roles.Id
-            ORDER BY Roles.Name ASC`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processRolesResult(result);
+    ): Promise<(ProjectRole | ContractRole)[]> {
+        const instance = this.getInstance();
+        return instance.repository.find(orConditions);
     }
 
-    static makeAndConditions(searchParams: RolesSearchParams) {
-        const conditions: string[] = [];
-        const projectOurId =
-            searchParams._project?.ourId || searchParams.projectOurId;
-        const contractId =
-            searchParams._contract?.id || searchParams.contractId;
+    static async addNewRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+        this.validateRole(roleData);
+        const instance = this.getInstance();
+        const item = this.createProperRole(roleData);
 
-        if (projectOurId) {
-            conditions.push(
-                `Roles.ProjectOurId = ${mysql.escape(projectOurId)}`
-            );
-        }
-        if (contractId) {
-            conditions.push(`
-                    Roles.ContractId = ${mysql.escape(contractId)}
-                    OR Roles.ProjectOurId = (
-                        SELECT Projects.OurId 
-                        FROM Contracts 
-                        JOIN Projects ON Projects.OurId = Contracts.ProjectOurId 
-                        WHERE Contracts.Id = ${mysql.escape(contractId)}
-                    )`);
-        }
-
-        if (searchParams.personId) {
-            conditions.push(
-                `Roles.PersonId = ${mysql.escape(searchParams.personId)}`
-            );
-        }
-        if (searchParams.groupName) {
-            conditions.push(
-                `Roles.GroupName = ${mysql.escape(searchParams.groupName)}`
-            );
-        }
-
-        if (searchParams.startDateFrom) {
-            conditions.push(
-                mysql.format(`Contracts.StartDate >= ?`, [
-                    searchParams.startDateFrom,
-                ])
-            );
-        }
-        if (searchParams.startDateTo) {
-            conditions.push(
-                mysql.format(`Contracts.StartDate <= ?`, [
-                    searchParams.startDateTo,
-                ])
-            );
-        }
-        if (searchParams.endDateFrom) {
-            conditions.push(
-                mysql.format(`Contracts.EndDate >= ?`, [
-                    searchParams.endDateFrom,
-                ])
-            );
-        }
-        if (searchParams.endDateTo) {
-            conditions.push(
-                mysql.format(`Contracts.EndDate <= ?`, [searchParams.endDateTo])
-            );
-        }
-
-        if (searchParams._contractType?.id) {
-            conditions.push(
-                mysql.format(`Contracts.TypeId = ?`, [
-                    searchParams._contractType.id,
-                ])
-            );
-        }
-
-        if (searchParams.statuses?.length) {
-            const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
-                searchParams.statuses,
-                'Contracts',
-                'Status'
-            );
-            conditions.push(statusCondition);
-        }
-        if (searchParams._contractRangesPerContract?.length) {
-            const contractRangesCondition =
-                ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRangesPerContract?.map(
-                        (range) => range._contractRange.id
-                    ),
-                    'ContractRangesContracts',
-                    'ContractRangeId'
+        if (item instanceof ProjectRole) {
+            if (!item.projectOurId) 
+                throw new Error('ProjectRole must have projectOurId to be added');
+            const contracts = await ContractsController.getContractsList([  //zmienić na .find()
+                { projectOurId: item.projectOurId }
+            ]);    
+            
+            await ToolsDb.transaction(async (conn) => {
+                const promises: Promise<ProjectRoleData>[] = [];
+                for (const contract of contracts) {
+                    const projectRoleInstanceForContract = new ProjectRole({ 
+                        ...item, 
+                        contractId: contract.id 
+                    });
+                    promises.push(
+                        instance.create(projectRoleInstanceForContract, conn, true)
+                    );
+                }
+                await Promise.all(promises);
+                console.log(
+                    `Roles added for ${contracts.length} contracts in project `
                 );
-            conditions.push(contractRangesCondition);
+            });
+        } else {
+            await instance.create(item);
         }
+    return item;
+}
 
-        if (searchParams._person?.id) {
-            conditions.push(
-                `Roles.PersonId = ${mysql.escape(searchParams._person.id)}`
-            );
+    static async updateRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+        this.validateRole(roleData);
+        const instance = this.getInstance();
+        const item = this.createProperRole(roleData);
+
+        if (item instanceof ProjectRole) {
+            if (!item.projectOurId) 
+                throw new Error('ProjectRole must have projectOurId');
+            const rolesToUpdate = (await this.find([
+                { projectOurId: item.projectOurId, _person: item._person },
+            ])) as ProjectRoleData[];
+            
+            await ToolsDb.transaction(async (conn) => {
+                const promises: Promise<ProjectRoleData>[] = [];
+
+                for (const role of rolesToUpdate) {
+                    const updatedRole = new ProjectRole({ 
+                        ...item, 
+                        id: role.id, 
+                        contractId: role.contractId 
+                    });
+                    promises.push(instance.edit(updatedRole, conn, true));
+                }
+                const result = await Promise.all(promises);
+                return result[0];
+            });
+        } else {
+            await instance.edit(item);
         }
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
-        }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
+        return item;
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Roles.Name LIKE ?
-                    OR Persons.Name LIKE ?
-                    OR Persons.Surname LIKE ?
-                    OR Projects.Name LIKE ?
-                    OR Contracts.Name LIKE ?)`,
-                Array(5).fill(`%${word}%`)
-            )
-        );
-        return conditions.join(' AND ');
-    }
+    static async deleteRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+        this.validateRole(roleData);
+        const instance = this.getInstance();
+        const item = this.createProperRole(roleData);
 
-    static processRolesResult(
-        result: any[]
-    ): (ContractRoleData | ProjectRoleData)[] {
-        const newResult: (ContractRoleData | ProjectRoleData)[] = [];
+        if (item instanceof ProjectRole) {
+            if (!item.projectOurId) 
+                throw new Error('ProjectRole must have projectOurId');
+            const rolesToDelete = await this.find([
+                { projectOurId: item.projectOurId, _person: item._person }
+            ]) as ProjectRoleData[];
 
-        for (const row of result) {
-            const roleItem = row.ProjectOurId
-                ? new ProjectRole(this.makeProjectRoleInitParams(row))
-                : new ContractRole(this.makeContractRoleInitParams(row));
-            newResult.push(roleItem);
+            await ToolsDb.transaction(async (conn) => {
+                const promises: Promise<ProjectRoleData>[] = [];
+
+                for (const role of rolesToDelete) {
+                    promises.push(instance.delete(new ProjectRole(role), conn, true));
+                }
+                const result = await Promise.all(promises);
+                return result[0];
+            });
+        } else {
+            await instance.delete(item);
         }
-        return newResult;
-    }
-
-    private static makeContractRoleInitParams(row: any): ContractRoleData {
-        return {
-            id: row.Id,
-            name: row.Name,
-            description: row.Description,
-            groupName: row.GroupName,
-            personId: row.PersonId,
-            _person: new Person({
-                id: row.PersonId,
-                name: row.PersonName?.trim(),
-                surname: row.PersonSurName?.trim(),
-                email: row.PersonEmail?.trim(),
-                cellphone: row.PersonCellphone,
-                phone: row.PersonPhone,
-                _entity: {
-                    name:
-                        row.SystemRoleName === 'ENVI_COOPERATOR'
-                            ? 'ENVI'
-                            : row.EntityName?.trim(),
-                },
-            }),
-            _contract: {
-                id: row.ContractId,
-                ourId: row.ContractOurId,
-                number: row.ContractNumber,
-                name: row.ContractName,
-                alias: row.ContractAlias,
-                startDate: row.ContractStartDate,
-                endDate: row.ContractEndDate,
-                _contractRangesNames:
-                    (<string | undefined>row.RangeNames)
-                        ?.split(',')
-                        .map((name) => name.trim()) || [],
-                _type: {
-                    id: row.ContractTypeId,
-                    name: row.ContractTypeName,
-                },
-            } as OurContractData | OtherContractData,
-        };
-    }
-
-    private static makeProjectRoleInitParams(row: any): ProjectRoleData {
-        const roleData: ContractRoleData = this.makeContractRoleInitParams(row);
-        return {
-            ...roleData,
-            _project: {
-                ourId: row.ProjectOurId as string,
-                alias: row.ProjectAlias,
-                name: row.ProjectName,
-            } as ProjectData,
-        };
+        return { id: item.id };
     }
 
     static validateRole(role: ContractRoleData | ProjectRoleData) {

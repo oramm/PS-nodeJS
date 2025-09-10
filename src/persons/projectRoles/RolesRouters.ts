@@ -1,12 +1,11 @@
 import RolesController from './RolesController';
 import { app } from '../../index';
-import ContractRole from './ContractRole';
 import { Request, Response } from 'express';
 
 app.post('/roles', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await RolesController.getRolesList(orConditions);
+        const result = await RolesController.find(orConditions);
         res.send(result);
     } catch (err) {
         if (err instanceof Error) {
@@ -18,9 +17,7 @@ app.post('/roles', async (req: Request, res: Response, next) => {
 
 app.post('/role', async (req: Request, res: Response, next) => {
     try {
-        RolesController.validateRole(req.parsedBody);
-        const item = RolesController.createProperRole(req.parsedBody);
-        await item.addInDb();
+        const item = await RolesController.addNewRole(req.parsedBody);
         res.send(item);
     } catch (error) {
         next(error);
@@ -29,9 +26,7 @@ app.post('/role', async (req: Request, res: Response, next) => {
 
 app.put('/role/:id', async (req: Request, res: Response, next) => {
     try {
-        RolesController.validateRole(req.parsedBody);
-        const item = RolesController.createProperRole(req.parsedBody);
-        await item.editInDb();
+        const item = await RolesController.updateRole(req.parsedBody);
         res.send(item);
     } catch (error) {
         next(error);
@@ -40,9 +35,7 @@ app.put('/role/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/role/:id', async (req: Request, res: Response, next) => {
     try {
-        RolesController.validateRole(req.parsedBody);
-        const item = RolesController.createProperRole(req.parsedBody);
-        await item.deleteFromDb();
+        const item = await RolesController.deleteRole(req.parsedBody);
         res.send(item);
     } catch (error) {
         next(error);
