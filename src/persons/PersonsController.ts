@@ -112,4 +112,26 @@ export default class PersonsController extends BaseController<
         const instance = this.getInstance();
         return instance.repository.getSystemRole(params);
     }
+
+    static async addNewSystemUser(userData: {
+        name: string;
+        surname: string;
+        position?: string;
+        email?: string;
+        cellphone?: string;
+        phone?: string;
+        comment?: string;
+        systemRoleId: number; 
+        systemEmail: string;  
+        entityId: number;     
+    }): Promise<Person> {
+        const instance = this.getInstance();
+        const user = new Person(userData);
+        if (!user.systemRoleId || !user.systemEmail || !user._entity?.id) {
+            throw new Error('User must have systemRoleId, systemEmail, and be associated with an entity.');
+        }
+        await instance.create(user);
+        console.log(`User ${user.name} ${user.surname} added in db`);
+        return user;
+    }
 }

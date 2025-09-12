@@ -73,3 +73,12 @@ app.delete('/person/:id', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+app.post('/systemUser', async (req: Request, res: Response, next) => {
+    try {
+        const newUser = await PersonsController.addNewSystemUser(req.body);
+        res.send(newUser);
+    } catch (error) {
+        next(error);
+    }
+});

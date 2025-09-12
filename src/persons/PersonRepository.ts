@@ -24,7 +24,6 @@ export default class PersonRepository extends BaseRepository<Person> {
     protected mapRowToEntity(row: any): Person {
         return new Person({
             id: row.Id,
-            entityId: row.EntityId,
             name: row.Name,
             surname: row.Surname,
             position: row.Position,
@@ -32,6 +31,8 @@ export default class PersonRepository extends BaseRepository<Person> {
             cellphone: row.Cellphone,
             phone: row.Phone,
             comment: row.Comment,
+            systemEmail: row.SystemEmail,
+            systemRoleName: row.SystemRoleName,
             systemRoleId: row.SystemRoleId,
             _entity: { id: row.EntityId, name: row.EntityName },
         });
@@ -55,7 +56,9 @@ export default class PersonRepository extends BaseRepository<Person> {
                             Persons.Cellphone, 
                             Persons.Phone, 
                             Persons.Comment, 
+                            Persons.SystemEmail,
                             SystemRoles.Name AS SystemRoleName,
+                            SystemRoles.Id AS SystemRoleId,
                             Entities.Name AS EntityName
                     FROM Persons
                     JOIN Entities ON Persons.EntityId=Entities.Id

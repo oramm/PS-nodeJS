@@ -281,6 +281,4 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
             } as ProjectData,
         };
     }
-
 }
-
