@@ -20,7 +20,7 @@ export default class CityRepository extends BaseRepository<City> {
     /**
      * Mapuje surowe dane z bazy na instancję City
      */
-    protected mapRowToEntity(row: any): City {
+    protected mapRowToModel(row: any): City {
         return new City({
             id: row.Id,
             name: row.Name,
@@ -48,7 +48,7 @@ export default class CityRepository extends BaseRepository<City> {
                      ORDER BY Cities.Name ASC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     /**

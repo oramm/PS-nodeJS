@@ -18,7 +18,7 @@ app.post('/contracts', async (req: Request, res: Response, next) => {
         let isArchived = false;
         if (typeof orConditions.isArchived === 'string')
             isArchived = orConditions.isArchived === 'true';
-        const result = await ContractsController.getContractsList(orConditions);
+        const result = await ContractsController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);
@@ -175,19 +175,6 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         ]);
 
         res.send(contractInstance);
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.put('/sortProjects', async (req: Request, res: Response, next) => {
-    try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            ScrumSheet.CurrentSprint.sortProjects
-        );
-        res.send('sorted');
     } catch (error) {
         next(error);
     }

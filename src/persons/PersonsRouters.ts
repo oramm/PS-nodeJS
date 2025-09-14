@@ -1,7 +1,6 @@
 import PersonsController from './PersonsController';
 import { app } from '../index';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
 import { Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 
@@ -27,7 +26,10 @@ app.post('/person', async (req: Request, res: Response, next) => {
 app.put('/person/:id', async (req: Request, res: Response, next) => {
     try {
         const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const item = await PersonsController.updatePerson(req.parsedBody, fieldsToUpdate);
+        const item = await PersonsController.updatePerson(
+            req.parsedBody,
+            fieldsToUpdate
+        );
         res.send(item);
     } catch (error) {
         next(error);
@@ -45,21 +47,6 @@ app.put('/user/:id', async (req: Request, res: Response, next) => {
                 res.send(item);
             }
         );
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.get('/personsRefresh', async (req: Request, res: Response, next) => {
-    try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            ScrumSheet.personsRefresh,
-            undefined,
-            ScrumSheet
-        );
-        res.send('scrum refreshed');
     } catch (error) {
         next(error);
     }

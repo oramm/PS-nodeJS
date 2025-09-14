@@ -1,38 +1,48 @@
-import BaseRepository from "../../repositories/BaseRepository";
-import ToolsDb from "../../tools/ToolsDb";
-import ProcessInstance from "./ProcessInstance";
+import BaseRepository from '../../repositories/BaseRepository';
+import ToolsDb from '../../tools/ToolsDb';
+import ProcessInstance from './ProcessInstance';
 
 export default class ProcessInstanceRepository extends BaseRepository<ProcessInstance> {
     constructor() {
         super('ProcessInstances');
     }
 
-    protected mapRowToEntity(row: any): ProcessInstance {
+    protected mapRowToModel(row: any): ProcessInstance {
         return new ProcessInstance({
             id: row.Id,
             _case: {
-                id: row.CaseId
+                id: row.CaseId,
             },
             _task: {
-                id: row.TaskId
+                id: row.TaskId,
             },
             _editor: {
-                id: row.EditorId
+                id: row.EditorId,
             },
             _lastUpdated: row.LastUpdated,
             _process: {
                 id: row.ProcessId,
                 name: ToolsDb.stringToSql(row.ProcessName),
                 description: row.ProcessDescription,
-            }
+            },
         });
     }
 
     async find(initParamObject: any): Promise<ProcessInstance[]> {
-        const projectConditon = (initParamObject && initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractConditon = (initParamObject && initParamObject.contractId) ? 'Contracts.Id="' + initParamObject.contractId + '"' : '1';
-        const milestoneConditon = (initParamObject && initParamObject.milestoneId) ? 'Milestones.Id="' + initParamObject.milestoneId + '"' : '1';
-        const sql = 'SELECT  ProcessInstances.Id, \n \t' +
+        const projectConditon =
+            initParamObject && initParamObject.projectId
+                ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"'
+                : '1';
+        const contractConditon =
+            initParamObject && initParamObject.contractId
+                ? 'Contracts.Id="' + initParamObject.contractId + '"'
+                : '1';
+        const milestoneConditon =
+            initParamObject && initParamObject.milestoneId
+                ? 'Milestones.Id="' + initParamObject.milestoneId + '"'
+                : '1';
+        const sql =
+            'SELECT  ProcessInstances.Id, \n \t' +
             'ProcessInstances.CaseId, \n \t' +
             'ProcessInstances.TaskId, \n \t' +
             'ProcessInstances.EditorId, \n \t' +
@@ -45,9 +55,14 @@ export default class ProcessInstanceRepository extends BaseRepository<ProcessIns
             'JOIN Cases ON Cases.Id = ProcessInstances.CaseId \n' +
             'JOIN Milestones ON Milestones.Id = Cases.MilestoneId \n' +
             'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
-            'WHERE ' + milestoneConditon + ' AND ' + contractConditon + ' AND ' + projectConditon;
+            'WHERE ' +
+            milestoneConditon +
+            ' AND ' +
+            contractConditon +
+            ' AND ' +
+            projectConditon;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 }

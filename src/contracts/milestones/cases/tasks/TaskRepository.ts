@@ -32,7 +32,7 @@ export default class TaskRepository extends BaseRepository<Task> {
         super('Tasks');
     }
 
-    protected mapRowToEntity(row: any): Task {
+    protected mapRowToModel(row: any): Task {
         return new Task({
             id: row.Id,
             name: row.Name,
@@ -67,7 +67,7 @@ export default class TaskRepository extends BaseRepository<Task> {
                 milestoneParentType === 'CONTRACT'
                     ? 'Milestones.ContractId IS NOT NULL'
                     : 'Milestones.OfferId IS NOT NULL';
-    
+
             const sql = `SELECT  
                     Tasks.Id,
                     Tasks.Name AS TaskName,
@@ -138,9 +138,9 @@ export default class TaskRepository extends BaseRepository<Task> {
                 WHERE ${conditions}
                 AND ${milestoneParentTypeCondition}
                 ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
-    
+
             const rows = await this.executeQuery(sql);
-            return rows.map((row) => this.mapRowToEntity(row));
+            return rows.map((row) => this.mapRowToModel(row));
         }
     }
 
@@ -161,41 +161,63 @@ export default class TaskRepository extends BaseRepository<Task> {
         const conditions: string[] = [];
 
         if (searchParams._project?.ourId) {
-            conditions.push(mysql.format(`Contracts.ProjectOurId = ?`, [searchParams._project.ourId]));
+            conditions.push(
+                mysql.format(`Contracts.ProjectOurId = ?`, [
+                    searchParams._project.ourId,
+                ])
+            );
         }
 
         if (searchParams._case?.id) {
-            conditions.push(mysql.format(`Cases.Id = ?`, [searchParams._case.id]));
+            conditions.push(
+                mysql.format(`Cases.Id = ?`, [searchParams._case.id])
+            );
         }
 
-        const contractId = searchParams.contractId || searchParams._contract?.id;
+        const contractId =
+            searchParams.contractId || searchParams._contract?.id;
         if (contractId) {
             conditions.push(mysql.format('Contracts.Id = ?', [contractId]));
         }
 
-        const milestoneId = searchParams._milestone?.id || searchParams.milestoneId;
+        const milestoneId =
+            searchParams._milestone?.id || searchParams.milestoneId;
         if (milestoneId) {
             conditions.push(mysql.format('Milestones.Id = ?', [milestoneId]));
         }
 
         if (searchParams.contractStatusCondition) {
-            conditions.push(mysql.format('Contracts.Status REGEXP ?', [searchParams.contractStatusCondition]));
+            conditions.push(
+                mysql.format('Contracts.Status REGEXP ?', [
+                    searchParams.contractStatusCondition,
+                ])
+            );
         }
 
         if (searchParams._owner?.email) {
-            conditions.push(mysql.format('Owners.Email REGEXP ?', [searchParams._owner.email]));
+            conditions.push(
+                mysql.format('Owners.Email REGEXP ?', [
+                    searchParams._owner.email,
+                ])
+            );
         }
 
         if (searchParams.deadlineFrom) {
-            conditions.push(mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom]));
+            conditions.push(
+                mysql.format(`Tasks.Deadline >= ?`, [searchParams.deadlineFrom])
+            );
         }
 
         if (searchParams.deadlineTo) {
-            conditions.push(mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo]));
+            conditions.push(
+                mysql.format(`Tasks.Deadline <= ?`, [searchParams.deadlineTo])
+            );
         }
 
         if (searchParams.status) {
-            conditions.push(mysql.format(`Tasks.Status = ?`, [searchParams.status]));
+            conditions.push(
+                mysql.format(`Tasks.Status = ?`, [searchParams.status])
+            );
         }
 
         const searchTextCondition = this.makeSearchTextCondition(

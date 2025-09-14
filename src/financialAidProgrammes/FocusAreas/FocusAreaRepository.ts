@@ -1,43 +1,43 @@
-import BaseRepository from "../../repositories/BaseRepository";
-import FocusArea from "./FocusArea";
-import mysql from "mysql2/promise";
-import ToolsDb from "../../tools/ToolsDb";
-import ToolsGd from "../../tools/ToolsGd";
+import BaseRepository from '../../repositories/BaseRepository';
+import FocusArea from './FocusArea';
+import mysql from 'mysql2/promise';
+import ToolsDb from '../../tools/ToolsDb';
+import ToolsGd from '../../tools/ToolsGd';
 import { FinancialAidProgrammeData } from '../../types/types';
 
 export interface FocusAreasSearchParams {
     id?: number;
     searchText?: string;
     _financialAidProgramme?: FinancialAidProgrammeData;
-};
+}
 
 export default class FocusAreaRepository extends BaseRepository<FocusArea> {
     constructor() {
         super('FocusAreas');
     }
 
-    protected mapRowToEntity(row: any): FocusArea {
+    protected mapRowToModel(row: any): FocusArea {
         return new FocusArea({
-                id: row.Id,
-                name: row.Name,
-                alias: row.Alias,
-                description: ToolsDb.sqlToString(row.Description),
-                financialAidProgrammeId: row.FinancialAidProgrammeId,
-                _financialAidProgramme: {
-                    id: row.FinancialAidProgrammeId,
-                    name: row.ProgrammeName,
-                    alias: row.ProgrammeAlias,
-                    description: ToolsDb.sqlToString(row.ProgrammeDescription),
-                    url: row.ProgrammeUrl,
-                    gdFolderId: row.ProgrammeGdFolderId,
-                },
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-            });
-        };
+            id: row.Id,
+            name: row.Name,
+            alias: row.Alias,
+            description: ToolsDb.sqlToString(row.Description),
+            financialAidProgrammeId: row.FinancialAidProgrammeId,
+            _financialAidProgramme: {
+                id: row.FinancialAidProgrammeId,
+                name: row.ProgrammeName,
+                alias: row.ProgrammeAlias,
+                description: ToolsDb.sqlToString(row.ProgrammeDescription),
+                url: row.ProgrammeUrl,
+                gdFolderId: row.ProgrammeGdFolderId,
+            },
+            gdFolderId: row.GdFolderId,
+            _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
+        });
+    }
 
     async find(orConditions: FocusAreasSearchParams[] = []) {
-        const conditions = 
+        const conditions =
             orConditions.length > 0
                 ? ToolsDb.makeOrGroupsConditions(
                       orConditions,
@@ -62,7 +62,7 @@ export default class FocusAreaRepository extends BaseRepository<FocusArea> {
         ORDER BY FocusAreas.Name ASC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeSearchTextCondition(searchText: string | undefined): string {
@@ -71,7 +71,7 @@ export default class FocusAreaRepository extends BaseRepository<FocusArea> {
         const words = searchText.toString().split(' ');
         const conditions = words.map(
             (word) =>
-            `(FocusAreas.Name LIKE ${mysql.escape(`%${word}%`)}
+                `(FocusAreas.Name LIKE ${mysql.escape(`%${word}%`)}
                 OR FocusAreas.Description LIKE ${mysql.escape(`%${word}%`)})`
         );
         return conditions.join(' AND ');
@@ -81,7 +81,11 @@ export default class FocusAreaRepository extends BaseRepository<FocusArea> {
         const conditions: string[] = [];
 
         if (searchParams._financialAidProgramme) {
-            conditions.push(mysql.format(`FinancialAidProgrammes.Id = ?`, [searchParams._financialAidProgramme.id]));
+            conditions.push(
+                mysql.format(`FinancialAidProgrammes.Id = ?`, [
+                    searchParams._financialAidProgramme.id,
+                ])
+            );
         }
 
         const searchTextCondition = this.makeSearchTextCondition(
@@ -92,4 +96,4 @@ export default class FocusAreaRepository extends BaseRepository<FocusArea> {
         }
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
-    }
+}

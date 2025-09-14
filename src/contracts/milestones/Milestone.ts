@@ -246,11 +246,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     async getParentContractFromDb() {
         if (!this._contract?.id)
             throw new Error('parent Contract does not have Id');
-        return (
-            await ContractsController.getContractsList([
-                { id: this._contract.id },
-            ])
-        )[0];
+        return (await ContractsController.find([{ id: this._contract.id }]))[0];
     }
 
     setFolderName() {

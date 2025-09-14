@@ -87,7 +87,7 @@ export default abstract class BaseRepository<T> {
      * Abstrakcyjna metoda do mapowania surowych danych z bazy na instancje modelu.
      * Każde repozytorium musi zaimplementować własną logikę mapowania.
      */
-    protected abstract mapRowToEntity(row: any): T;
+    protected abstract mapRowToModel(row: any): T;
 
     /**
      * Abstrakcyjna metoda do wyszukiwania rekordów.

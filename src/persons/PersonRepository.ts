@@ -21,7 +21,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         super('Persons');
     }
 
-    protected mapRowToEntity(row: any): Person {
+    protected mapRowToModel(row: any): Person {
         return new Person({
             id: row.Id,
             name: row.Name,
@@ -67,15 +67,12 @@ export default class PersonRepository extends BaseRepository<Person> {
                     WHERE ${conditions}
                     GROUP BY Persons.Id
                     ORDER BY Persons.Surname, Persons.Name ASC`;
-        
+
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
-    async getSystemRole(params: { 
-        id?: number; 
-        systemEmail?: string 
-    }) {
+    async getSystemRole(params: { id?: number; systemEmail?: string }) {
         if (!params.id && !params.systemEmail)
             throw new Error('Person should have an ID or systemEmail');
         const personIdCondition = params.id
@@ -118,24 +115,39 @@ export default class PersonRepository extends BaseRepository<Person> {
             throw err;
         }
     }
-   
+
     private makeAndConditions(searchParams: PersonsSearchParams): string {
         const conditions: string[] = [];
 
         if (searchParams.projectId) {
-            conditions.push(mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId]));
+            conditions.push(
+                mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId])
+            );
         }
 
         if (searchParams.contractId) {
-            conditions.push(mysql.format(`(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`, [searchParams.contractId]));
+            conditions.push(
+                mysql.format(
+                    `(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`,
+                    [searchParams.contractId]
+                )
+            );
         }
 
         if (searchParams.systemRoleName) {
-            conditions.push(mysql.format(`SystemRoles.Name REGEXP ?`, [searchParams.systemRoleName]));
+            conditions.push(
+                mysql.format(`SystemRoles.Name REGEXP ?`, [
+                    searchParams.systemRoleName,
+                ])
+            );
         }
 
         if (searchParams.systemEmail) {
-            conditions.push(mysql.format(`Persons.systemEmail=?`, [searchParams.systemEmail]));
+            conditions.push(
+                mysql.format(`Persons.systemEmail=?`, [
+                    searchParams.systemEmail,
+                ])
+            );
         }
 
         if (searchParams.id) {

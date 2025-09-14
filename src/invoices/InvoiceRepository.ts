@@ -1,11 +1,11 @@
-import BaseRepository from "../repositories/BaseRepository";
-import Invoice from "./Invoice";
-import Contract from "../contracts/Contract";
-import Project from "../projects/Project";
-import Person from "../persons/Person";
-import ToolsDb from "../tools/ToolsDb";
-import ContractOur from "../contracts/ContractOur";
-import mysql from "mysql2/promise";
+import BaseRepository from '../repositories/BaseRepository';
+import Invoice from './Invoice';
+import Contract from '../contracts/Contract';
+import Project from '../projects/Project';
+import Person from '../persons/Person';
+import ToolsDb from '../tools/ToolsDb';
+import ContractOur from '../contracts/ContractOur';
+import mysql from 'mysql2/promise';
 
 export interface InvoicesSearchParams {
     id?: number;
@@ -17,14 +17,14 @@ export interface InvoicesSearchParams {
     issueDateFrom?: string;
     issueDateTo?: string;
     statuses?: string[];
-};
+}
 
 export default class InvoiceRepository extends BaseRepository<Invoice> {
     constructor() {
         super('Invoices');
     }
 
-    protected mapRowToEntity(row: any): Invoice {
+    protected mapRowToModel(row: any): Invoice {
         const contractInitParams = {
             id: row.ContractId,
             ourId: row.ContractOurId,
@@ -90,11 +90,11 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
-                    orConditions,
-                    this.makeAndConditions.bind(this)
-                )
+                      orConditions,
+                      this.makeAndConditions.bind(this)
+                  )
                 : '1';
-        
+
         const sql = `SELECT Invoices.Id,
             Invoices.Number,
             Invoices.Description,
@@ -150,7 +150,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         ORDER BY Invoices.IssueDate ASC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeSearchTextCondition(searchText: string | undefined) {
@@ -160,10 +160,14 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         const conditions = words.map(
             (word) =>
                 `(Invoices.Number LIKE ${mysql.escape(`%${word}%`)}
-                          OR Invoices.Description LIKE ${mysql.escape(`%${word}%`)}
+                          OR Invoices.Description LIKE ${mysql.escape(
+                              `%${word}%`
+                          )}
                           OR Invoices.Status LIKE ${mysql.escape(`%${word}%`)}
                           OR Entities.Name LIKE ${mysql.escape(`%${word}%`)}
-                          OR OurContractsData.OurId LIKE ${mysql.escape(`%${word}%`)}
+                          OR OurContractsData.OurId LIKE ${mysql.escape(
+                              `%${word}%`
+                          )}
                           OR Contracts.Number LIKE ${mysql.escape(`%${word}%`)}
                           OR Contracts.Name LIKE ${mysql.escape(`%${word}%`)}
                           OR Contracts.Alias LIKE ${mysql.escape(`%${word}%`)}
@@ -171,8 +175,10 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                               SELECT 1 
                               FROM InvoiceItems
                               WHERE InvoiceItems.ParentId = Invoices.Id
-                                  AND InvoiceItems.Description LIKE ${mysql.escape(`%${word}%`)}
-                          ))`,
+                                  AND InvoiceItems.Description LIKE ${mysql.escape(
+                                      `%${word}%`
+                                  )}
+                          ))`
         );
 
         return conditions.join(' AND ');
@@ -233,5 +239,3 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 }
-
-        

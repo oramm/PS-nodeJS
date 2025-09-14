@@ -7,6 +7,136 @@ import ScrumSheet from './ScrumSheet';
 import CurrentSprintValidator from './CurrentSprintValidator';
 
 export default class CurrentSprint {
+    /**
+     * Ustawia nagłówki w arkuszu bieżącego sprintu zgodnie z ustawieniami w Setup
+     * @todo wymaga jeszcze przeglądu i ew. poprawek
+     * @status incomplete
+     * @priority medium
+     * @incomplete Funkcja nie jest w pełni zaimplementowana
+     */
+    static async setHeaders(auth: OAuth2Client): Promise<void> {
+        // Przygotowanie wartości dla pierwszego i drugiego wiersza
+        const firstRowValues: string[] = [];
+        const secondRowValues: string[] = [];
+
+        // Wypełnienie pierwszego wiersza
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.projectIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.contractOurIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.contractDbIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.milestoneNameColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.caseTypeColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.milestoneIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.caseTypeIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.caseIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskIdColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.rowStatusColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.contractNumberColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.caseNameColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskNameColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskDeadlineColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskEstimatedTimeColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskStatusColName;
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.taskOwnerIdColName;
+
+        // Struktura zgodna z rzeczywistym arkuszem CSV
+
+        // Kolumna S (19): "Czas rzeczywisty"
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.actualTimeColName;
+
+        // Kolumny T-X (20-24): puste w pierwszym wierszu (dni tygodnia są w drugim wierszu)
+        for (let i = 0; i < 5; i++) {
+            firstRowValues[firstRowValues.length] = '';
+        }
+
+        // Kolumna Y (25): "Różnica"
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.differenceColName;
+
+        // Kolumna Z (26): "#TimesSummary"
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.timesSummaryColName;
+
+        // Kolumny AA-AK (27-37): pomijamy - zostaną ustawione przez makeTimesSummary
+        for (let i = 0; i < 11; i++) {
+            firstRowValues[firstRowValues.length] = '';
+        }
+
+        // Kolumna AL (38): "#Times"
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.timesColName;
+
+        // Kolumny AM-AQ (39-42): puste
+        for (let i = 0; i < 4; i++) {
+            firstRowValues[firstRowValues.length] = '';
+        }
+
+        // Kolumna AR (43): "tryb"
+        firstRowValues[firstRowValues.length] =
+            Setup.ScrumSheet.CurrentSprint.modeColName;
+
+        // Kolumna AS (44): "Wykonanie" - pomijamy, to lista wyboru
+
+        // Wypełnienie drugiego wiersza zgodnie z CSV
+        // Kolumny A-R (0-17): puste
+        for (let i = 0; i < 18; i++) {
+            secondRowValues[i] = '';
+        }
+
+        // Kolumny S-Z (18-25): dni tygodnia i podsumowania
+        secondRowValues[18] = Setup.ScrumSheet.CurrentSprint.monColName; // S: PON.
+        secondRowValues[19] = Setup.ScrumSheet.CurrentSprint.tueColName; // T: WTO.
+        secondRowValues[20] = Setup.ScrumSheet.CurrentSprint.wedColName; // U: SR.
+        secondRowValues[21] = Setup.ScrumSheet.CurrentSprint.thuColName; // V: CZW.
+        secondRowValues[22] = Setup.ScrumSheet.CurrentSprint.friColName; // W: PT.
+        secondRowValues[23] = Setup.ScrumSheet.CurrentSprint.sprintSumColName; // X: Razem
+        secondRowValues[24] = Setup.ScrumSheet.CurrentSprint.sprintDiffColName; // Y: Różnica
+        secondRowValues[25] = Setup.ScrumSheet.CurrentSprint.remainingColName; // Z: POZOSTAŁO
+
+        // Aktualizujemy nagłówki w pierwszym wierszu (A1:AR1)
+        await ToolsSheets.updateValues(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            rangeA1: Setup.ScrumSheet.CurrentSprint.name + '!A1:AR1',
+            values: [firstRowValues],
+        });
+
+        // Aktualizujemy drugi wiersz - kolumny S-Z (dni tygodnia i podsumowania)
+        await ToolsSheets.updateValues(auth, {
+            spreadsheetId: Setup.ScrumSheet.GdId,
+            rangeA1: Setup.ScrumSheet.CurrentSprint.name + '!S2:Z2',
+            values: [
+                [
+                    Setup.ScrumSheet.CurrentSprint.monColName, // S: PON.
+                    Setup.ScrumSheet.CurrentSprint.tueColName, // T: WTO.
+                    Setup.ScrumSheet.CurrentSprint.wedColName, // U: SR.
+                    Setup.ScrumSheet.CurrentSprint.thuColName, // V: CZW.
+                    Setup.ScrumSheet.CurrentSprint.friColName, // W: PT.
+                    Setup.ScrumSheet.CurrentSprint.sprintSumColName, // X: Razem
+                    Setup.ScrumSheet.CurrentSprint.sprintDiffColName, // Y: Różnica
+                    Setup.ScrumSheet.CurrentSprint.remainingColName, // Z: POZOSTAŁO
+                ],
+            ],
+        });
+    }
     /** Usuwa usuwa wiersze posiadające tą samą wartość w danej kolumnie currentSprint*/
     static async deleteRowsByColValue(
         auth: OAuth2Client,
@@ -532,17 +662,17 @@ export default class CurrentSprint {
     ) {
         const desciptions = [
             [
-                'POZOSTAŁO',
-                'Cz. dost. og.',
-                'Przypisano',
-                'PON.',
-                'WT.',
-                'ŚR.',
-                'CZW.',
-                'PT.',
-                'spotk',
-                'Razem',
-                'CZ. PRACY',
+                Setup.ScrumSheet.CurrentSprint.remainingColName,
+                Setup.ScrumSheet.CurrentSprint.availableTimeColName,
+                Setup.ScrumSheet.CurrentSprint.assignedColName,
+                Setup.ScrumSheet.CurrentSprint.monColName,
+                Setup.ScrumSheet.CurrentSprint.tueColName,
+                Setup.ScrumSheet.CurrentSprint.wedColName,
+                Setup.ScrumSheet.CurrentSprint.thuColName,
+                Setup.ScrumSheet.CurrentSprint.friColName,
+                Setup.ScrumSheet.CurrentSprint.meetingsColName,
+                Setup.ScrumSheet.CurrentSprint.totalColName,
+                Setup.ScrumSheet.CurrentSprint.workTimeColName,
             ],
         ];
         ToolsSheets.updateValues(auth, {

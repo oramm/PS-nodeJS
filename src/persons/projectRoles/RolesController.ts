@@ -1,15 +1,12 @@
 import ToolsDb from '../../tools/ToolsDb';
-import {
-    ProjectRoleData,
-    ContractRoleData
-} from '../../types/types';
+import { ProjectRoleData, ContractRoleData } from '../../types/types';
 import ProjectRole from './ProjectRole';
 import ContractRole from './ContractRole';
 import RoleRepository, { RolesSearchParams } from './RoleRepository';
 import BaseController from '../../controllers/BaseController';
 import ContractsController from '../../contracts/ContractsController';
 
-export type {RolesSearchParams};
+export type { RolesSearchParams };
 
 export default class RolesController extends BaseController<
     ContractRole,
@@ -35,27 +32,36 @@ export default class RolesController extends BaseController<
         return instance.repository.find(orConditions);
     }
 
-    static async addNewRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+    static async addNewRole(
+        roleData: ContractRoleData | ProjectRoleData
+    ): Promise<any> {
         this.validateRole(roleData);
         const instance = this.getInstance();
         const item = this.createProperRole(roleData);
 
         if (item instanceof ProjectRole) {
-            if (!item.projectOurId) 
-                throw new Error('ProjectRole must have projectOurId to be added');
-            const contracts = await ContractsController.getContractsList([  //zmienić na .find()
-                { projectOurId: item.projectOurId }
-            ]);    
-            
+            if (!item.projectOurId)
+                throw new Error(
+                    'ProjectRole must have projectOurId to be added'
+                );
+            const contracts = await ContractsController.find([
+                //zmienić na .find()
+                { projectOurId: item.projectOurId },
+            ]);
+
             await ToolsDb.transaction(async (conn) => {
                 const promises: Promise<ProjectRoleData>[] = [];
                 for (const contract of contracts) {
-                    const projectRoleInstanceForContract = new ProjectRole({ 
-                        ...item, 
-                        contractId: contract.id 
+                    const projectRoleInstanceForContract = new ProjectRole({
+                        ...item,
+                        contractId: contract.id,
                     });
                     promises.push(
-                        instance.create(projectRoleInstanceForContract, conn, true)
+                        instance.create(
+                            projectRoleInstanceForContract,
+                            conn,
+                            true
+                        )
                     );
                 }
                 await Promise.all(promises);
@@ -66,29 +72,31 @@ export default class RolesController extends BaseController<
         } else {
             await instance.create(item);
         }
-    return item;
-}
+        return item;
+    }
 
-    static async updateRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+    static async updateRole(
+        roleData: ContractRoleData | ProjectRoleData
+    ): Promise<any> {
         this.validateRole(roleData);
         const instance = this.getInstance();
         const item = this.createProperRole(roleData);
 
         if (item instanceof ProjectRole) {
-            if (!item.projectOurId) 
+            if (!item.projectOurId)
                 throw new Error('ProjectRole must have projectOurId');
             const rolesToUpdate = (await this.find([
                 { projectOurId: item.projectOurId, _person: item._person },
             ])) as ProjectRoleData[];
-            
+
             await ToolsDb.transaction(async (conn) => {
                 const promises: Promise<ProjectRoleData>[] = [];
 
                 for (const role of rolesToUpdate) {
-                    const updatedRole = new ProjectRole({ 
-                        ...item, 
-                        id: role.id, 
-                        contractId: role.contractId 
+                    const updatedRole = new ProjectRole({
+                        ...item,
+                        id: role.id,
+                        contractId: role.contractId,
                     });
                     promises.push(instance.edit(updatedRole, conn, true));
                 }
@@ -101,23 +109,27 @@ export default class RolesController extends BaseController<
         return item;
     }
 
-    static async deleteRole(roleData: ContractRoleData | ProjectRoleData): Promise<any> {
+    static async deleteRole(
+        roleData: ContractRoleData | ProjectRoleData
+    ): Promise<any> {
         this.validateRole(roleData);
         const instance = this.getInstance();
         const item = this.createProperRole(roleData);
 
         if (item instanceof ProjectRole) {
-            if (!item.projectOurId) 
+            if (!item.projectOurId)
                 throw new Error('ProjectRole must have projectOurId');
-            const rolesToDelete = await this.find([
-                { projectOurId: item.projectOurId, _person: item._person }
-            ]) as ProjectRoleData[];
+            const rolesToDelete = (await this.find([
+                { projectOurId: item.projectOurId, _person: item._person },
+            ])) as ProjectRoleData[];
 
             await ToolsDb.transaction(async (conn) => {
                 const promises: Promise<ProjectRoleData>[] = [];
 
                 for (const role of rolesToDelete) {
-                    promises.push(instance.delete(new ProjectRole(role), conn, true));
+                    promises.push(
+                        instance.delete(new ProjectRole(role), conn, true)
+                    );
                 }
                 const result = await Promise.all(promises);
                 return result[0];

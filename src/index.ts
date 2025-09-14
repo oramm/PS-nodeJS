@@ -29,7 +29,7 @@ const port = process.env.PORT || 3000;
 const storage = multer.memoryStorage();
 export const upload = multer({ storage: storage }); // Użyj multer.memoryStorage()
 
-const uri = process.env.MONGODB_URI || keys.mongoDb.uri;
+const uri = process.env.MONGO_URI || keys.mongoDb.uri;
 const client = new MongoClient(uri);
 
 export const app = express();
@@ -49,9 +49,9 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-app.use((req, res, next) => {
+app.use((req: any, res: any, next: any) => {
     if (req.is('multipart/form-data')) {
-        upload.any()(req, res, next);
+        (upload.any() as any)(req, res, next);
         console.log('Multipart form data - upload.any()');
     } else next();
 });
@@ -140,7 +140,7 @@ app.use(
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             maxAge: 24 * 60 * 60 * 1000,
         },
-    })
+    }) as any
 );
 
 app.use((req, res, next) => {
@@ -182,6 +182,9 @@ require('./financialAidProgrammes/Needs/NeedsRouters');
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
+
+// ScrumSheet maintenance routes
+require('./ScrumSheet/ScrumSheetRouters');
 require('./offers/OffersRouters');
 require('./offers/OfferBond/OfferBondsRouters');
 require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');

@@ -1,8 +1,8 @@
-import BaseRepository from "../../repositories/BaseRepository";
-import mysql from "mysql2/promise";
-import { FocusAreaData, NeedData } from "../../types/types";
-import ToolsDb from "../../tools/ToolsDb";
-import NeedsFocusArea from "./NeedFocusArea";
+import BaseRepository from '../../repositories/BaseRepository';
+import mysql from 'mysql2/promise';
+import { FocusAreaData, NeedData } from '../../types/types';
+import ToolsDb from '../../tools/ToolsDb';
+import NeedsFocusArea from './NeedFocusArea';
 
 export interface NeedsFocusAreasSearchParams {
     needId?: number;
@@ -10,14 +10,14 @@ export interface NeedsFocusAreasSearchParams {
     _focusArea?: FocusAreaData;
     focusAreaId?: number;
     searchText?: string;
-};
+}
 
 export default class NeedFocusAreaRepository extends BaseRepository<NeedsFocusArea> {
     constructor() {
         super('NeedsFocusAreas');
     }
 
-    protected mapRowToEntity(row: any): NeedsFocusArea {
+    protected mapRowToModel(row: any): NeedsFocusArea {
         return new NeedsFocusArea({
             needId: row.NeedId,
             focusAreaId: row.FocusAreaId,
@@ -46,18 +46,18 @@ export default class NeedFocusAreaRepository extends BaseRepository<NeedsFocusAr
                     gdFolderId: row.ProgrammeGdFolderId,
                 },
                 gdFolderId: row.FocusAreaGdFolderId,
-            }
+            },
         });
     }
 
-async find(orConditions: NeedsFocusAreasSearchParams[] = []) {
-    const conditions =
-        orConditions.length > 0
-            ? this.makeOrGroupsConditions(
-                orConditions,
-                this.makeAndConditions.bind(this)
-            )
-            : '1';
+    async find(orConditions: NeedsFocusAreasSearchParams[] = []) {
+        const conditions =
+            orConditions.length > 0
+                ? this.makeOrGroupsConditions(
+                      orConditions,
+                      this.makeAndConditions.bind(this)
+                  )
+                : '1';
 
         const sql = `SELECT Needs_FocusAreas.NeedId,
             Needs_FocusAreas.FocusAreaId,
@@ -86,7 +86,7 @@ async find(orConditions: NeedsFocusAreasSearchParams[] = []) {
         ORDER BY Needs.Name ASC, FocusAreas.Name ASC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeSearchTextCondition(searchText: string | undefined) {

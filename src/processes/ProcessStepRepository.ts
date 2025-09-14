@@ -1,13 +1,13 @@
-import DocumentTemplate from "../documentTemplates/DocumentTemplate";
-import BaseRepository from "../repositories/BaseRepository";
-import ProcessStep from "./ProcessStep";
+import DocumentTemplate from '../documentTemplates/DocumentTemplate';
+import BaseRepository from '../repositories/BaseRepository';
+import ProcessStep from './ProcessStep';
 
-export default class ProcessStepRepository extends BaseRepository<ProcessStep>{
-    constructor(){
+export default class ProcessStepRepository extends BaseRepository<ProcessStep> {
+    constructor() {
         super('ProcessesSteps');
     }
 
-    protected mapRowToEntity(row: any): ProcessStep {
+    protected mapRowToModel(row: any): ProcessStep {
         return new ProcessStep({
             id: row.Id,
             name: row.Name,
@@ -21,20 +21,23 @@ export default class ProcessStepRepository extends BaseRepository<ProcessStep>{
                     id: row.ContentsId,
                     gdId: row.ContentsGdId,
                     alias: row.ContentsAlias,
-                    caseTypeId: row.ContentsCaseTypeId
-                }
+                    caseTypeId: row.ContentsCaseTypeId,
+                },
             }),
             _parent: {
                 id: row.ProcessId,
                 name: row.ProcessName,
                 caseTypeId: row.ProcessCaseTypeId,
             },
-            _lastUpdated: row.LastUpdated
+            _lastUpdated: row.LastUpdated,
         });
     }
 
     async find(initParamObject: any): Promise<ProcessStep[]> {
-        const processcondition = (initParamObject && initParamObject.processId) ? 'ProcessesSteps.ProcessId=' + initParamObject.processId : '1'
+        const processcondition =
+            initParamObject && initParamObject.processId
+                ? 'ProcessesSteps.ProcessId=' + initParamObject.processId
+                : '1';
 
         const sql = `SELECT  ProcessesSteps.Id,
             ProcessesSteps.Name,
@@ -58,6 +61,6 @@ export default class ProcessStepRepository extends BaseRepository<ProcessStep>{
             WHERE ${processcondition}`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 }
