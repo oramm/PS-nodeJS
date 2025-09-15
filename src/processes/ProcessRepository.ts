@@ -1,12 +1,12 @@
-import BaseRepository from "../repositories/BaseRepository";
-import Process from "./Process";
+import BaseRepository from '../repositories/BaseRepository';
+import Process from './Process';
 
-export default class ProcessRepository extends BaseRepository<Process>{
-    constructor(){
+export default class ProcessRepository extends BaseRepository<Process> {
+    constructor() {
         super('Processes');
     }
 
-    protected mapRowToEntity(row: any): Process{
+    protected mapRowToModel(row: any): Process {
         return new Process({
             id: row.Id,
             name: row.Name,
@@ -14,23 +14,27 @@ export default class ProcessRepository extends BaseRepository<Process>{
             status: row.Status,
             _caseType: {
                 id: row.CaseTypeId,
-                name: row.CaseTypeName
+                name: row.CaseTypeName,
             },
             _lastUpdated: row.LastUpdated,
             _editor: {
-                id: row.EditorId
+                id: row.EditorId,
             },
             _taskTemplate: {
                 id: row.TaskTemplateId,
                 name: row.TaskTemplateName,
-                description: row.TaskTemplateDescription
-            }
+                description: row.TaskTemplateDescription,
+            },
         });
     }
     async find(initParamObject: any): Promise<Process[]> {
-        const statusCondition = (initParamObject && initParamObject.status) ? 'Processes.Status="' + initParamObject.status + '"' : '1';
+        const statusCondition =
+            initParamObject && initParamObject.status
+                ? 'Processes.Status="' + initParamObject.status + '"'
+                : '1';
 
-        const sql = 'SELECT  Processes.Id, \n \t' +
+        const sql =
+            'SELECT  Processes.Id, \n \t' +
             'Processes.Name, \n \t' +
             'Processes.Description, \n \t' +
             'Processes.Status, \n \t' +
@@ -45,9 +49,10 @@ export default class ProcessRepository extends BaseRepository<Process>{
             'FROM Processes \n' +
             'JOIN CaseTypes ON CaseTypes.Id=Processes.CaseTypeId \n' +
             'LEFT JOIN TaskTemplatesForProcesses ON TaskTemplatesForProcesses.ProcessId = Processes.Id \n' +
-            'WHERE ' + statusCondition;
+            'WHERE ' +
+            statusCondition;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 }

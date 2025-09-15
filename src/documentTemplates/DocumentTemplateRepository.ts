@@ -12,7 +12,7 @@ export default class DocumentTemplateRepository extends BaseRepository<DocumentT
         super('DocumentTemplates');
     }
 
-    protected mapRowToEntity(row: any): DocumentTemplate {
+    protected mapRowToModel(row: any): DocumentTemplate {
         return new DocumentTemplate({
             id: row.Id,
             name: row.Name,
@@ -27,7 +27,9 @@ export default class DocumentTemplateRepository extends BaseRepository<DocumentT
         });
     }
 
-    async find(orConditions: DocumentTemplatesSearchParams[] = []): Promise<DocumentTemplate[]> {
+    async find(
+        orConditions: DocumentTemplatesSearchParams[] = []
+    ): Promise<DocumentTemplate[]> {
         const sql = `SELECT  DocumentTemplates.Id,
                 DocumentTemplates.Name,
                 DocumentTemplates.Description,
@@ -38,8 +40,8 @@ export default class DocumentTemplateRepository extends BaseRepository<DocumentT
                 DocumentTemplatesContents.CaseTypeId AS ContentsCaseTypeId
             FROM DocumentTemplates
             JOIN DocumentTemplatesContents ON DocumentTemplates.Id = DocumentTemplatesContents.TemplateId`;
-    
+
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 }

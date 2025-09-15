@@ -26,39 +26,38 @@ export default class ApplicationCallRepository extends BaseRepository<Applicatio
         super('ApplicationCalls');
     }
 
-    protected mapRowToEntity(row: any): ApplicationCall {
+    protected mapRowToModel(row: any): ApplicationCall {
         return new ApplicationCall({
-                id: row.Id,
-                _focusArea: <FocusAreaData>{
-                    id: row.FocusAreaId,
-                    name: row.FocusAreaName,
-                    alias: row.FocusAreaAlias,
-                    description: ToolsDb.sqlToString(row.FocusAreaDescription),
-                    _financialAidProgramme: {
-                        id: row.FinancialAidProgrammeId,
-                        name: row.ProgrammeName,
-                        description: ToolsDb.sqlToString(
-                            row.ProgrammeDescription
-                        ),
-                        url: row.ProgrammeUrl,
-                        alias: row.ProgrammeAlias,
-                        gdFolderId: row.ProgrammeGdFolderId,
-                    },
-                    gdFolderId: row.FocusAreaGdFolderId,
+            id: row.Id,
+            _focusArea: <FocusAreaData>{
+                id: row.FocusAreaId,
+                name: row.FocusAreaName,
+                alias: row.FocusAreaAlias,
+                description: ToolsDb.sqlToString(row.FocusAreaDescription),
+                _financialAidProgramme: {
+                    id: row.FinancialAidProgrammeId,
+                    name: row.ProgrammeName,
+                    description: ToolsDb.sqlToString(row.ProgrammeDescription),
+                    url: row.ProgrammeUrl,
+                    alias: row.ProgrammeAlias,
+                    gdFolderId: row.ProgrammeGdFolderId,
                 },
-                description: ToolsDb.sqlToString(row.Description),
-                url: row.Url,
-                startDate: row.StartDate,
-                endDate: row.EndDate,
-                status: row.Status,
-                gdFolderId: row.GdFolderId,
-                _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
-        });    
+                gdFolderId: row.FocusAreaGdFolderId,
+            },
+            description: ToolsDb.sqlToString(row.Description),
+            url: row.Url,
+            startDate: row.StartDate,
+            endDate: row.EndDate,
+            status: row.Status,
+            gdFolderId: row.GdFolderId,
+            _gdFolderUrl: ToolsGd.createGdFolderUrl(row.GdFolderId),
+        });
     }
 
     async find(
-        orConditions: ApplicationCallSearchParams[] = []): Promise<ApplicationCall[]> {
-            const conditions =
+        orConditions: ApplicationCallSearchParams[] = []
+    ): Promise<ApplicationCall[]> {
+        const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
@@ -89,7 +88,7 @@ export default class ApplicationCallRepository extends BaseRepository<Applicatio
           WHERE ${conditions}
           ORDER BY ApplicationCalls.StartDate DESC, ApplicationCalls.EndDate DESC`;
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeSearchTextCondition(searchText: string | undefined) {
@@ -194,4 +193,5 @@ export default class ApplicationCallRepository extends BaseRepository<Applicatio
         }
 
         return conditions.length ? conditions.join(' AND ') : '1';
-    }}
+    }
+}

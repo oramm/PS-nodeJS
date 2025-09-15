@@ -178,22 +178,25 @@ export default class ToolsMail {
                 source: true,
                 flags: true,
             });
-            console.log('Pobrano szczegóły maila: flagi', message.flags);
-            return {
-                id: uid,
-                uid: uid,
-                subject: message.envelope.subject || '(bez tematu)',
-                from: message.envelope.from
-                    ? message.envelope.from[0].address || '(bez nadawcy)'
-                    : '(bez nadawcy)',
-                to: message.envelope.to
-                    ? message.envelope.to.map((to) => to.address).join(', ') ||
-                      '(bez odbiorcy)'
-                    : '(bez odbiorcy)',
-                date: this.parseDate(message.envelope.date),
-                flags: message.flags,
-                body: await this.decodeMailBody(message),
-            } as MailData;
+            if (message && typeof message !== 'boolean') {
+                console.log('Pobrano szczegóły maila: flagi', message.flags);
+                return {
+                    id: uid,
+                    uid: uid,
+                    subject: message.envelope?.subject || '(bez tematu)',
+                    from: message.envelope?.from
+                        ? message.envelope.from[0]?.address || '(bez nadawcy)'
+                        : '(bez nadawcy)',
+                    to: message.envelope?.to
+                        ? message.envelope.to
+                              .map((to: any) => to.address)
+                              .join(', ') || '(bez odbiorcy)'
+                        : '(bez odbiorcy)',
+                    date: this.parseDate(message.envelope?.date || new Date()),
+                    flags: message.flags,
+                    body: await this.decodeMailBody(message),
+                } as MailData;
+            }
         } catch (error) {
             console.error('Błąd podczas pobierania szczegółów maila:', error);
         } finally {
@@ -238,20 +241,26 @@ export default class ToolsMail {
                     source: false,
                     flags: false,
                 });
-                if (message && message.envelope) {
+                if (
+                    message &&
+                    typeof message !== 'boolean' &&
+                    message.envelope
+                ) {
                     emails.push({
                         uid,
-                        subject: message.envelope.subject || '(bez tematu)',
-                        from: message.envelope.from
-                            ? message.envelope.from[0].address ||
+                        subject: message.envelope?.subject || '(bez tematu)',
+                        from: message.envelope?.from
+                            ? message.envelope.from[0]?.address ||
                               '(bez nadawcy)'
                             : '(bez nadawcy)',
-                        to: message.envelope.to
+                        to: message.envelope?.to
                             ? message.envelope.to
-                                  .map((to) => to.address)
+                                  .map((to: any) => to.address)
                                   .join(', ') || '(bez odbiorcy)'
                             : '(bez odbiorcy)',
-                        date: this.parseDate(message.envelope.date),
+                        date: this.parseDate(
+                            message.envelope?.date || new Date()
+                        ),
                     });
                 }
             }
@@ -328,6 +337,9 @@ export default class ToolsMail {
     }
 
     private static async decodeMailBody(message: FetchMessageObject) {
+        if (!message.source) {
+            return 'Brak treści wiadomości';
+        }
         const rawEmail = message.source.toString('utf-8');
 
         try {

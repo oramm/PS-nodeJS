@@ -20,62 +20,62 @@ export default class CurrentSprintValidator {
         if (values[0].length === 0) throw new Error('Brak kolumn w arkuszu');
         if (!values) throw new Error('Brak wartości w arkuszu');
 
-        const firsRowValues = values[0];
+        const firstRowValues = values[0];
         const secondRowValues = values[1];
 
-        const projectIdColIndex = firsRowValues.indexOf(
+        const projectIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.projectIdColName
         );
-        const contractOurIdColIndex = firsRowValues.indexOf(
+        const contractOurIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.contractOurIdColName
         );
-        const contractDbIdColIndex = firsRowValues.indexOf(
+        const contractDbIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.contractDbIdColName
         );
-        const milestoneTypeNameColIndex = firsRowValues.indexOf(
+        const milestoneTypeNameColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.milestoneNameColName
         );
-        const caseTypeNameColIndex = firsRowValues.indexOf(
+        const caseTypeNameColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.caseTypeColName
         );
-        const taskOwnerNameColIndex = firsRowValues.indexOf(
+        const taskOwnerNameColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskOwnerNameColName
         );
 
-        const milestoneIdColIndex = firsRowValues.indexOf(
+        const milestoneIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.milestoneIdColName
         );
-        const caseTypeIdColIndex = firsRowValues.indexOf(
+        const caseTypeIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.caseTypeIdColName
         );
-        const caseIdColIndex = firsRowValues.indexOf(
+        const caseIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.caseIdColName
         );
-        const taskIdColIndex = firsRowValues.indexOf(
+        const taskIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskIdColName
         );
-        const rowStatusColIndex = firsRowValues.indexOf(
+        const rowStatusColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.rowStatusColName
         );
-        const contractNumberColIndex = firsRowValues.indexOf(
+        const contractNumberColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.contractNumberColName
         );
-        const caseNameColIndex = firsRowValues.indexOf(
+        const caseNameColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.caseNameColName
         );
-        const taskNameColIndex = firsRowValues.indexOf(
+        const taskNameColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskNameColName
         );
-        const taskDeadlineColIndex = firsRowValues.indexOf(
+        const taskDeadlineColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskDeadlineColName
         );
-        const taskEstimatedTimeColIndex = firsRowValues.indexOf(
+        const taskEstimatedTimeColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskEstimatedTimeColName
         );
-        const taskStatusColIndex = firsRowValues.indexOf(
+        const taskStatusColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskStatusColName
         );
-        const taskOwnerIdColIndex = firsRowValues.indexOf(
+        const taskOwnerIdColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.taskOwnerIdColName
         );
         const monColIndex = secondRowValues.indexOf(
@@ -99,13 +99,13 @@ export default class CurrentSprintValidator {
         const sprintDiffColIndex = secondRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.sprintDiffColName
         );
-        const modeColIndex = firsRowValues.indexOf(
+        const modeColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.modeColName
         );
-        const timesSummaryColIndex = firsRowValues.indexOf(
+        const timesSummaryColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.timesSummaryColName
         );
-        const timesColIndex = firsRowValues.indexOf(
+        const timesColIndex = firstRowValues.indexOf(
             Setup.ScrumSheet.CurrentSprint.timesColName
         );
 

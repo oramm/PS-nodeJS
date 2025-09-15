@@ -31,15 +31,15 @@ export interface RolesSearchParams {
     _person?: PersonData;
     _contractRangesPerContract?: ContractRangePerContractData[];
     groupName?: string;
-};
+}
 
 export default class RoleRepository extends BaseRepository<ContractRole> {
     constructor() {
         super('Roles');
     }
 
-    protected mapRowToEntity(row: any): ContractRole {
-       return new ContractRole({
+    protected mapRowToModel(row: any): ContractRole {
+        return new ContractRole({
             id: row.Id,
             name: row.Name,
             description: row.Description,
@@ -49,7 +49,9 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
         });
     }
 
-    async find(orConditions: RolesSearchParams[] = []): Promise<(ProjectRole | ContractRole)[]> {
+    async find(
+        orConditions: RolesSearchParams[] = []
+    ): Promise<(ProjectRole | ContractRole)[]> {
         const conditions =
             orConditions.length > 0
                 ? ToolsDb.makeOrGroupsConditions(
@@ -57,7 +59,7 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
                       this.makeAndConditions.bind(this)
                   )
                 : '1';
-        
+
         const sql = `SELECT 
                 Roles.Id, 
                 Roles.Name, 
@@ -109,7 +111,7 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
         }
         return result;
     }
-    
+
     private makeAndConditions(searchParams: RolesSearchParams) {
         const conditions: string[] = [];
         const projectOurId =
@@ -224,7 +226,7 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
                     OR Persons.Name LIKE ${mysql.escape(word)}
                     OR Persons.Surname LIKE ${mysql.escape(word)}
                     OR Projects.Name LIKE ${mysql.escape(word)}
-                    OR Contracts.Name LIKE ${mysql.escape(word)})`,
+                    OR Contracts.Name LIKE ${mysql.escape(word)})`
         );
         return conditions.join(' AND ');
     }

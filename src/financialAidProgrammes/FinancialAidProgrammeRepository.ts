@@ -8,14 +8,14 @@ import { FinancialAidProgrammeData } from '../types/types';
 export interface FinancialAidProgrammesSearchParams {
     id?: number;
     searchText?: string;
-};
+}
 
 export default class FinancialAidProgrammeRepository extends BaseRepository<FinancialAidProgramme> {
     constructor() {
         super('FinancialAidProgrammes');
     }
 
-    protected mapRowToEntity(row: any): FinancialAidProgramme {
+    protected mapRowToModel(row: any): FinancialAidProgramme {
         return new FinancialAidProgramme({
             id: row.Id,
             name: row.Name,
@@ -31,9 +31,9 @@ export default class FinancialAidProgrammeRepository extends BaseRepository<Fina
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
-                    orConditions,
-                    this.makeAndConditions.bind(this)
-                )
+                      orConditions,
+                      this.makeAndConditions.bind(this)
+                  )
                 : '1';
 
         const sql = `SELECT FinancialAidProgrammes.Id,
@@ -46,9 +46,9 @@ export default class FinancialAidProgrammeRepository extends BaseRepository<Fina
             WHERE ${conditions}
             ORDER BY FinancialAidProgrammes.Name ASC`;
 
-            const rows = await this.executeQuery(sql);
-            return rows.map((row) => this.mapRowToEntity(row));
-        }
+        const rows = await this.executeQuery(sql);
+        return rows.map((row) => this.mapRowToModel(row));
+    }
 
     private makeSearchTextCondition(searchText: string | undefined) {
         if (!searchText) return '1';
@@ -57,15 +57,21 @@ export default class FinancialAidProgrammeRepository extends BaseRepository<Fina
         const conditions = words.map(
             (word) =>
                 `(FinancialAidProgrammes.Name LIKE ${mysql.escape(`%${word}%`)}
-                    OR FinancialAidProgrammes.Description LIKE ${mysql.escape(`%${word}%`)}
-                    OR FinancialAidProgrammes.Alias LIKE ${mysql.escape(`%${word}%`)}
+                    OR FinancialAidProgrammes.Description LIKE ${mysql.escape(
+                        `%${word}%`
+                    )}
+                    OR FinancialAidProgrammes.Alias LIKE ${mysql.escape(
+                        `%${word}%`
+                    )}
                     )`
-            );
+        );
 
         return conditions.join(' AND ');
     }
 
-    private makeAndConditions(searchParams: FinancialAidProgrammesSearchParams) {
+    private makeAndConditions(
+        searchParams: FinancialAidProgrammesSearchParams
+    ) {
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );

@@ -1,5 +1,5 @@
 {
-    "name": "PS-nodeJS",
+    "name": "ps-node-js",
     "version": "1.0.0",
     "description": "",
     "main": "index.js",
@@ -32,7 +32,6 @@
         "@types/cors": "^2.8.12",
         "@types/express-session": "^1.17.7",
         "@types/js-base64": "^3.0.0",
-        "@types/mysql2": "types/mysql2#",
         "@types/nodemailer": "^6.4.15",
         "@types/open": "^6.2.1",
         "body-parser": "^1.19.0",
@@ -52,11 +51,14 @@
         "node-cron": "^4.2.1",
         "nodemailer": "^6.9.14",
         "nodemon": "^3.0.2",
-        "open": "^7.4.2",
-        "types": "^0.1.1"
+        "open": "^7.4.2"
     },
     "engines": {
         "node": ">=22.17.0 <23.0.0"
+    },
+    "resolutions": {
+        "@types/express-serve-static-core": "4.17.41",
+        "**/@types/express-serve-static-core": "4.17.41"
     },
     "prettier": {
         "tabWidth": 4,

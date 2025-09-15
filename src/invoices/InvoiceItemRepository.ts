@@ -9,14 +9,14 @@ export interface InvoiceItemsSearchParams {
     startDate?: string;
     endDate?: string;
     contractId?: number;
-};
+}
 
 export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
     constructor() {
         super('InvoiceItems');
     }
 
-    protected mapRowToEntity(row: any): InvoiceItem {
+    protected mapRowToModel(row: any): InvoiceItem {
         return new InvoiceItem({
             id: row.Id,
             _parent: {
@@ -64,9 +64,9 @@ export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
-                    orConditions,
-                    this.makeAndConditions.bind(this)
-                )
+                      orConditions,
+                      this.makeAndConditions.bind(this)
+                  )
                 : '1';
 
         const sql = `SELECT InvoiceItems.Id,
@@ -110,7 +110,7 @@ export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
                         ORDER BY InvoiceItems.Id DESC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeAndConditions(searchParams: InvoiceItemsSearchParams) {

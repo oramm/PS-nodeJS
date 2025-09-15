@@ -15,17 +15,18 @@ export default class ContractRangeRepository extends BaseRepository<ContractRang
         super('ContractRanges');
     }
 
-    protected mapRowToEntity(row: any): ContractRange {
+    protected mapRowToModel(row: any): ContractRange {
         return new ContractRange({
             id: row.Id,
             name: ToolsDb.sqlToString(row.Name),
             description: ToolsDb.sqlToString(row.Description),
         });
-    }    
+    }
 
     async find(
-        orConditions: ContractRangeSearchParams[] = []): Promise<ContractRange[]> {       
-            const conditions =
+        orConditions: ContractRangeSearchParams[] = []
+    ): Promise<ContractRange[]> {
+        const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
@@ -39,9 +40,7 @@ export default class ContractRangeRepository extends BaseRepository<ContractRang
           WHERE ${conditions}
           ORDER BY ContractRanges.Name ASC`;
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToEntity(row));
-
-        
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     private makeSearchTextCondition(searchText: string | undefined) {
@@ -50,10 +49,11 @@ export default class ContractRangeRepository extends BaseRepository<ContractRang
         const conditions = words.map(
             (word) =>
                 `(ContractRanges.Name LIKE ${mysql.escape(`%${word}%`)}
-                OR ContractRanges.Description LIKE ${mysql.escape(`%${word}%`)})`,
-            );
+                OR ContractRanges.Description LIKE ${mysql.escape(
+                    `%${word}%`
+                )})`
+        );
         return conditions.join(' AND ');
-         
     }
 
     private makeAndConditions(searchParams: ContractRangeSearchParams) {
@@ -86,5 +86,4 @@ export default class ContractRangeRepository extends BaseRepository<ContractRang
 
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
-
 }

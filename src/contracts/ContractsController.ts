@@ -15,6 +15,9 @@ import {
 } from '../types/types';
 import Person from '../persons/Person';
 import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
+import ContractRepository from './ContractRepository';
+import BaseController from '../controllers/BaseController';
+import { deprecate } from 'util';
 
 export type ContractSearchParams = {
     id?: number;
@@ -42,8 +45,32 @@ export type ContractSearchParams = {
     _contractRangesPerContract?: ContractRangePerContractData[];
 };
 
-export default class ContractsController {
-    static async getContractsList(orConditions: ContractSearchParams[] = []) {
+export default class ContractsController extends BaseController<
+    ContractOur | ContractOther,
+    ContractRepository
+> {
+    private static instance: ContractsController;
+    constructor() {
+        super(new ContractRepository());
+    }
+
+    // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+    private static getInstance(): ContractsController {
+        if (!this.instance) {
+            this.instance = new ContractsController();
+        }
+        return this.instance;
+    }
+
+    static async find(orConditions: ContractSearchParams[] = []) {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
+    }
+
+    /**
+     * @deprecated Use ContractsController.find() instead. This method will be removed in a future version.
+     */
+    static async getContractsList1(orConditions: ContractSearchParams[] = []) {
         const sql = `SELECT mainContracts.Id, 
             mainContracts.Alias, 
             mainContracts.Number, 

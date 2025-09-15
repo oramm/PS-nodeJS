@@ -58,6 +58,8 @@ export default class Setup {
             id: 223354508,
             firstDataRow: 4,
             name: 'aktualny sprint',
+
+            // Kolumny pierwszego wiersza - podstawowe dane
             projectIdColName: 'Id projektu',
             contractDbIdColName: 'dbId kontraktu',
             contractOurIdColName: 'ourId kontraktu',
@@ -68,7 +70,6 @@ export default class Setup {
             rowStatusColName: '#ImportStatus',
             contractNumberColName: 'Nr kontraktu na roboty/ dostawy',
             milestoneNameColName: 'Typ i nazwa kamienia milowego',
-
             caseTypeColName: 'Typ sprawy I numer sprawy',
             caseNameColName: 'Nazwa sprawy',
             taskNameColName: 'Nazwa zadania',
@@ -77,6 +78,15 @@ export default class Setup {
             taskStatusColName: 'Status',
             taskOwnerIdColName: 'Id właściciela',
             taskOwnerNameColName: 'Kto',
+
+            // Kolumny pierwszego wiersza - czasy i podsumowania
+            actualTimeColName: 'Czas rzeczywisty',
+            differenceColName: 'Różnica',
+            timesSummaryColName: '#TimesSummary',
+            timesColName: '#Times',
+            modeColName: 'tryb',
+            executionColName: 'Wykonanie', // dla dokumentacji, choć nie używane w setHeaders
+
             /**drugi wiersz */
             monColName: 'PON.',
             /**drugi wiersz */
@@ -91,11 +101,15 @@ export default class Setup {
             sprintSumColName: 'Razem',
             /**drugi wiersz */
             sprintDiffColName: 'Różnica',
-            modeColName: 'tryb',
+            /**drugi wiersz */
+            remainingColName: 'POZOSTAŁO',
 
-            timesSummaryColName: '#TimesSummary',
-            /**Formuły z czasami dla osób*/
-            timesColName: '#Times',
+            /**trzeci wiersz i dalej - opisy podsumowań*/
+            availableTimeColName: 'Cz. dost. og.',
+            assignedColName: 'Przypisano',
+            meetingsColName: 'spotk',
+            totalColName: 'Razem',
+            workTimeColName: 'CZ. PRACY',
         },
         Data: {
             id: 2143933154,
