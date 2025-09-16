@@ -16,8 +16,11 @@ import Person from '../persons/Person';
 import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
 import ContractRepository from './ContractRepository';
 import BaseController from '../controllers/BaseController';
+<<<<<<< Updated upstream
 import ContractRepository from './ContractRepository';
 import BaseController from '../controllers/BaseController';
+=======
+>>>>>>> Stashed changes
 import { deprecate } from 'util';
 
 export type ContractSearchParams = {
