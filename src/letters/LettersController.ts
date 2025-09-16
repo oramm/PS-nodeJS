@@ -63,7 +63,10 @@ export default class LettersController {
                 Letters.Status,
                 Letters.LetterFilesCount,
                 Letters.LastUpdated,
-    
+                Letters.RelatedLetterNumber,
+                Letters.ResponseDueDate,
+                Letters.ResponseIKNumber,
+
                 -- Pobieranie danych powiązanego projektu
                 Projects.Id AS ProjectId,
                 Projects.OurId AS ProjectOurId,
@@ -305,6 +308,9 @@ export default class LettersController {
             letterFilesCount: row.LetterFilesCount,
             status: row.Status,
             _lastUpdated: row.LastUpdated,
+            relatedLetterNumber: row.RelatedLetterNumber,
+            responseDueDate: row.ResponseDueDate,
+            responseIKNumber: row.ResponseIKNumber,
 
             _cases: _casesAssociationsPerLetter.map((item) => item._case),
             _entitiesMain: _letterEntitiesMainPerLetter.map(

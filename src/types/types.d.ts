@@ -216,6 +216,9 @@ export interface LetterData extends GenericDocumentData {
     _cases: CaseData[];
     _lastEvent?: OfferEventData | null;
     status: string;
+    relatedLetterNumber?: string | null;
+    responseDueDate?: string | null;
+    responseIKNumber?: string | null;
 }
 
 export interface OurLetterData extends LetterData {

@@ -44,6 +44,9 @@ export default abstract class Letter
     _canUserChangeFileOrFolder?: boolean;
     _documentEditUrl?: string;
     _lastEvent?: LetterEvent | null;
+    relatedLetterNumber?: string | null;
+    responseDueDate?: string | null;
+    responseIKNumber?: string | null;
 
     constructor(initParamObject: LetterData) {
         super({ ...initParamObject, _dbTableName: 'Letters' });
@@ -92,6 +95,9 @@ export default abstract class Letter
         this._fileOrFolderChanged;
         this.status = initParamObject.status;
         this.initLastEvent(initParamObject._lastEvent); //przy nowej ofercie lastEvent jeszcze nie istnieje
+        this.relatedLetterNumber = initParamObject.relatedLetterNumber;
+        this.responseDueDate = initParamObject.responseDueDate;
+        this.responseIKNumber = initParamObject.responseIKNumber;
     }
 
     private initLastEvent(lastEventData: LetterEventData | undefined | null) {
