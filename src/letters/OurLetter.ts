@@ -61,6 +61,35 @@ export default abstract class OurLetter
                 this.number.toString(),
                 this.creationDate
             );
+
+            const postDbPromises: Promise<any>[] = [
+                this.makeLetterGdFileController(this._template).updateTextRunsInNamedRanges(auth),
+                ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: folderName }),
+                ToolsGd.updateFile(auth, { id: this.gdDocumentId, name: folderName }),
+            ];
+            
+            if (files.length > 0) {
+                postDbPromises.push(this.appendAttachmentsHandler(auth, files));
+            }
+
+            if (this.gdDocumentId && this._cases.length > 0) {
+                console.log(`Creating shortcuts in ${this._cases.length} case folder(s)...`);
+                this._cases.forEach(caseItem => {
+                    if (caseItem.gdFolderId) {
+                        postDbPromises.push(
+                            ToolsGd.createShortcut(auth, {
+                                targetId: this.gdDocumentId!,
+                                parentId: caseItem.gdFolderId,
+                                name: `${this.number} ${this.description}`
+                            })
+                        );
+                    }
+                });
+            }
+            
+            await Promise.all(postDbPromises);
+            console.log('Finished all post-DB operations including shortcuts.');
+
             await Promise.all([
                 ourLetterGdFile.updateTextRunsInNamedRanges(auth),
                 ToolsGd.updateFolder(auth, {

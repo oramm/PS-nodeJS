@@ -37,6 +37,23 @@ export default abstract class IncomingLetter
                 this.setDataToSingleFileState(letterGdFile.id);
             }
             await this.addInDb();
+
+            if (this.gdDocumentId && this._cases.length > 0) {
+                console.log(`Creating shortcuts for incoming letter in ${this._cases.length} case folder(s)...`);
+                const shortcutPromises = this._cases.map(caseItem => {
+                    if (caseItem.gdFolderId) {
+                        return ToolsGd.createShortcut(auth, {
+                            targetId: this.gdDocumentId!,
+                            parentId: caseItem.gdFolderId,
+                            name: `${this.number} ${this.description}`
+                        });
+                    }
+                    return Promise.resolve();
+                });
+                await Promise.all(shortcutPromises);
+                console.log('Finished creating shortcuts for incoming letter.');
+            }
+
             await this.createNewLetterEvent(userData);
         } catch (err) {
             this.deleteFromDb();
