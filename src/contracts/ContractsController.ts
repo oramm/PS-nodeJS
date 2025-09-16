@@ -10,14 +10,12 @@ import Tools from '../tools/Tools';
 import {
     CityData,
     ContractRangePerContractData,
-    ContractRangeData,
     ContractTypeData,
 } from '../types/types';
 import Person from '../persons/Person';
 import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
 import ContractRepository from './ContractRepository';
 import BaseController from '../controllers/BaseController';
-import { deprecate } from 'util';
 
 export type ContractSearchParams = {
     id?: number;
