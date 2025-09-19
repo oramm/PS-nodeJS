@@ -217,7 +217,7 @@ export interface LetterData extends GenericDocumentData {
     _lastEvent?: OfferEventData | null;
     status: string;
     relatedLetterNumber?: string | null;
-    responseDueDate?: string | null;
+    responseDueDate?: string;
     responseIKNumber?: string | null;
 }
 

@@ -38,6 +38,7 @@ type LetterSearchParams = {
     milestoneId?: string;
     creationDateFrom?: string;
     creationDateTo?: string;
+    statuses?: string[];
 };
 
 export default class LettersController {
@@ -213,6 +214,11 @@ export default class LettersController {
                   searchParams.creationDateTo,
               ])
             : '1';
+        
+        const statusesCondition = 
+            (searchParams.statuses && searchParams.statuses.length > 0)
+                ? mysql.format(`Letters.Status IN (?)`, [searchParams.statuses])
+                : '1';
 
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText?.toString()
@@ -224,6 +230,7 @@ export default class LettersController {
             AND ${caseCondition}
             AND ${creationDateFromCondition}
             AND ${creationDateToCondition}
+            AND ${statusesCondition}
             AND ${searchTextCondition} 
             AND ${offerCondition}`;
         return conditions;

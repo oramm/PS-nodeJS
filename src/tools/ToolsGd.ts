@@ -356,6 +356,45 @@ export default class ToolsGd {
         }
     }
 
+    /**
+     * Tworzy skrót (shortcut) do pliku na Dysku Google.
+     * @param auth Klient OAuth2.
+     * @param options Opcje skrótu.
+     * @param options.targetId ID pliku docelowego, do którego ma prowadzić skrót.
+     * @param options.parentId ID folderu, w którym ma zostać umieszczony skrót.
+     * @param options.name Nazwa, jaką ma mieć plik skrótu.
+     * @returns Metadane utworzonego skrótu.
+     */
+    static async createShortcut(
+        auth: OAuth2Client,
+        options: { targetId: string; parentId: string; name: string }
+    ) {
+        try {
+            const drive = google.drive({ version: 'v3', auth });
+            
+            const shortcutMetadata = {
+                name: options.name,
+                mimeType: 'application/vnd.google-apps.shortcut',
+                parents: [options.parentId],
+                shortcutDetails: {
+                    targetId: options.targetId,
+                },
+            };
+    
+            const response = await drive.files.create({
+                requestBody: shortcutMetadata,
+                fields: 'id, name',
+            });
+    
+            console.log(`Utworzono skrót: "${response.data.name}" (ID: ${response.data.id}) wskazujący na plik ${options.targetId}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Nie udało się utworzyć skrótu dla pliku ${options.targetId}`, error);
+            throw error;
+        }
+    }
+
+
     /** przenosi do kosza albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
     static async trashFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
         const drive = google.drive({ version: 'v3', auth });
