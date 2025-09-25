@@ -96,7 +96,7 @@ export default class ToolsGapi {
     }
 
     static async determineSystemRole(email: string) {
-        return PersonsController.getSystemRole({systemEmail: email});
+        return PersonsController.getSystemRole({ systemEmail: email });
     }
 
     static async getNewCredentials(refreshToken: string) {
@@ -125,6 +125,7 @@ export default class ToolsGapi {
             throw error;
         }
     }
+
     /** WYkonuje operacje na podstawie mojego Refresh tokena. */
     static async gapiReguestHandler(
         /**@deprecated  */
@@ -138,23 +139,35 @@ export default class ToolsGapi {
         console.log('--------------- authenticate ----------------');
         const refreshToken = process.env.REFRESH_TOKEN;
         if (!refreshToken) throw new Error("Can't get refresh token");
-        const credentials = { refresh_token: refreshToken };
 
-        oAuthClient.setCredentials(credentials);
+        try {
+            const credentials = { refresh_token: refreshToken };
+            oAuthClient.setCredentials(credentials);
 
-        const args: any[] = [oAuthClient];
-        if (
-            typeof argObject === 'object' &&
-            argObject !== null &&
-            argObject !== undefined
-        )
-            args.push(...argObject);
-        else args.push(argObject);
+            const args: any[] = [oAuthClient];
+            if (
+                typeof argObject === 'object' &&
+                argObject !== null &&
+                argObject !== undefined
+            )
+                args.push(...argObject);
+            else args.push(argObject);
 
-        const result = thisObject
-            ? await gapiFunction.apply(thisObject, args)
-            : await gapiFunction(...args);
-        return result;
+            const result = thisObject
+                ? await gapiFunction.apply(thisObject, args)
+                : await gapiFunction(...args);
+            return result;
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message?.includes('invalid_request')
+            ) {
+                throw new Error(
+                    'Google OAuth token is invalid or expired. Please regenerate the refresh token.'
+                );
+            }
+            throw error;
+        }
     }
 
     private static async editUserDataInDb(data: {
