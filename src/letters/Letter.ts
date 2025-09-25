@@ -45,7 +45,7 @@ export default abstract class Letter
     _documentEditUrl?: string;
     _lastEvent?: LetterEvent | null;
     relatedLetterNumber?: string | null;
-    responseDueDate?: string | null;
+    responseDueDate?: string;
     responseIKNumber?: string | null;
 
     constructor(initParamObject: LetterData) {
@@ -64,9 +64,7 @@ export default abstract class Letter
         this.description = initParamObject.description;
         this.number = initParamObject.number;
         this.creationDate = ToolsDate.dateJsToSql(initParamObject.creationDate);
-        this.registrationDate = ToolsDate.dateJsToSql(
-            initParamObject.registrationDate
-        );
+        this.registrationDate = ToolsDate.dateJsToSql(initParamObject.registrationDate);
         if (initParamObject.gdDocumentId) {
             this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
                 initParamObject.gdDocumentId
@@ -96,7 +94,8 @@ export default abstract class Letter
         this.status = initParamObject.status;
         this.initLastEvent(initParamObject._lastEvent); //przy nowej ofercie lastEvent jeszcze nie istnieje
         this.relatedLetterNumber = initParamObject.relatedLetterNumber;
-        this.responseDueDate = initParamObject.responseDueDate;
+        if(initParamObject.responseDueDate)
+            this.responseDueDate = initParamObject.responseDueDate;
         this.responseIKNumber = initParamObject.responseIKNumber;
     }
 
