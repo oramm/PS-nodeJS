@@ -73,18 +73,21 @@ export default abstract class OurLetter
             }
 
             if (this.gdDocumentId && this._cases.length > 0) {
-                console.log(`Creating shortcuts in ${this._cases.length} case folder(s)...`);
-                this._cases.forEach(caseItem => {
+                const shortcutCreationPromises = this._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
-                        postDbPromises.push(
-                            ToolsGd.createShortcut(auth, {
-                                targetId: this.gdDocumentId!,
-                                parentId: caseItem.gdFolderId,
-                                name: `${this.number} ${this.description}`
-                            })
-                        );
+                        const lettersSubfolder = await ToolsGd.setFolder(auth, {
+                            parentId: caseItem.gdFolderId,
+                            name: "Pisma"
+                        });
+
+                        await ToolsGd.createShortcut(auth, {
+                            targetId: this.gdDocumentId!,
+                            parentId: lettersSubfolder.id!,
+                            name: `${this.number} ${this.description}`
+                        });
                     }
                 });
+                await Promise.all(shortcutCreationPromises);
             }
             
             await Promise.all(postDbPromises);

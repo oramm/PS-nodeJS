@@ -39,19 +39,21 @@ export default abstract class IncomingLetter
             await this.addInDb();
 
             if (this.gdDocumentId && this._cases.length > 0) {
-                console.log(`Creating shortcuts for incoming letter in ${this._cases.length} case folder(s)...`);
-                const shortcutPromises = this._cases.map(caseItem => {
+                const shortcutPromises = this._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
-                        return ToolsGd.createShortcut(auth, {
-                            targetId: this.gdDocumentId!,
+                        const lettersSubfolder = await ToolsGd.setFolder(auth, {
                             parentId: caseItem.gdFolderId,
+                            name: "Pisma"
+                        });
+
+                        await ToolsGd.createShortcut(auth, {
+                            targetId: this.gdDocumentId!,
+                            parentId: lettersSubfolder.id!,
                             name: `${this.number} ${this.description}`
                         });
                     }
-                    return Promise.resolve();
                 });
                 await Promise.all(shortcutPromises);
-                console.log('Finished creating shortcuts for incoming letter.');
             }
 
             await this.createNewLetterEvent(userData);
