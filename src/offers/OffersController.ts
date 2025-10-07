@@ -278,14 +278,14 @@ export default class OffersController {
     }
 
     static async makeNewCityObject(name: string) {
-        const _city = new City({ name });
-        await CitiesController.addNewCity(_city);
+        const cityData = { name: name };
+        const newCity = await CitiesController.addNewCity(cityData);
         console.log(
             'City added inDB with generated code:',
-            _city.name,
-            _city.code
+            newCity.name,
+            newCity.code
         );
-        return _city;
+        return newCity;
     }
 
     private static makeOfferBond(initData: OfferBondData, isOurOffer: boolean) {
