@@ -413,7 +413,10 @@ export default class ToolsMail {
     }
 
     static async sendServerErrorReport(error: unknown, req?: Request) {
-        const to = process.env.PS_ADMIN_MAIL!;
+        const recipients = [
+            process.env.PS_ADMIN_MAIL!,
+            'michal.kotala@envi.com.pl'
+        ];        
         const now = new Date().toISOString();
         const errorText =
             typeof error === 'string'
@@ -465,12 +468,12 @@ export default class ToolsMail {
 
         try {
             await this.sendMail({
-                to,
+                to: recipients,
                 subject,
                 html,
                 footer: this.makeENVIFooter(),
             });
-            console.log('Raport błędu serwera został wysłany na adres:', to);
+            console.log('Raport błędu serwera został wysłany na adresy:', recipients.join(', '));
         } catch (mailError) {
             console.error(
                 'Nie udało się wysłać raportu błędu przez e-mail:',
@@ -479,8 +482,10 @@ export default class ToolsMail {
         }
     }
     static async sendClientErrorReport(req: Request) {
-        const to = process.env.PS_ADMIN_MAIL!;
-        const now = new Date().toISOString();
+        const recipients = [
+            process.env.PS_ADMIN_MAIL!,
+            'michal.kotala@envi.com.pl' 
+        ];        const now = new Date().toISOString();
         const error = req.body.error;
         const errorText =
             typeof error === 'string'
@@ -525,12 +530,12 @@ export default class ToolsMail {
 
         try {
             await this.sendMail({
-                to,
+                to: recipients,
                 subject,
                 html,
                 footer: this.makeENVIFooter(),
             });
-            console.log('Raport błędu klienta został wysłany na adres:', to);
+            console.log('Raport błędu klienta został wysłany na adresy:', recipients.join(', '));
         } catch (mailError) {
             console.error(
                 'Nie udało się wysłać raportu błędu klienta przez e-mail:',
