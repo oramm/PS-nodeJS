@@ -182,6 +182,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             mysql.format(
                 `(Persons.Name LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Surname LIKE ${mysql.escape(`%${word}%`)}
+                OR Persons.Email LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Comment LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Position LIKE ${mysql.escape(`%${word}%`)})`
             )
