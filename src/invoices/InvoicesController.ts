@@ -98,7 +98,7 @@ export default class InvoicesController extends BaseController<
 
         item.setGdIdAndUrl(fileData.id);
 
-        const fieldsToUpdate = ['status', 'gdId'];
+        const fieldsToUpdate = ['status', 'gdId', 'number', 'sentDate', 'paymentDeadline'];
         await instance.edit(item, undefined, undefined, fieldsToUpdate);
         
         console.log(`Invoice ${item.number} issued and file uploaded`);
@@ -111,8 +111,10 @@ export default class InvoicesController extends BaseController<
     ): Promise<Invoice> {        
         const instance = this.getInstance();
         const invoice = new Invoice({ ...invoiceData, status: newStatus });
-        await instance.edit(invoice, undefined, undefined, ['status']);
-        console.log(`Invoice ${invoice.id} status updated to "${newStatus}" in db`);
+        invoice.status = newStatus;
+        invoice.initByStatus(newStatus, invoice);
+        const fieldsToUpdate = ['status', 'number', 'sentDate', 'paymentDeadline', 'gdId'];
+        await instance.edit(invoice, undefined, undefined, fieldsToUpdate);
         return invoice;
     }
 

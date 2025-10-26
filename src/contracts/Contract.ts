@@ -128,10 +128,20 @@ export default abstract class Contract
             ? initParamObject._employers
             : [];
 
-        this._contractRangesPerContract =
-            initParamObject._contractRangesPerContract
-                ? initParamObject._contractRangesPerContract
-                : [];
+        this._contractRangesPerContract = [];
+        if (initParamObject._contractRanges && Array.isArray(initParamObject._contractRanges)) {
+            this._contractRangesPerContract = initParamObject._contractRanges.map(
+            (item: any) => {
+            if (item && typeof item === 'object' && item.hasOwnProperty('_contractRange')) {
+                return item;
+            }
+            return { _contractRange: item };
+        }
+    );
+}
+        else if (initParamObject._contractRangesPerContract) {
+            this._contractRangesPerContract = initParamObject._contractRangesPerContract;
+        }
         this._contractRangesNames = initParamObject._contractRangesNames;
         this._project = initParamObject._project;
         this.projectOurId = this._project?.ourId;

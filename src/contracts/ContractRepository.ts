@@ -5,6 +5,7 @@ import ContractType from './contractTypes/ContractType';
 import Person from '../persons/Person';
 import {
     CityData,
+    ContractRangeData,
     ContractRangePerContractData,
     ContractTypeData,
 } from '../types/types';
@@ -222,11 +223,11 @@ export default class ContractRepository extends BaseRepository<
             );
             conditions.push(statusCondition);
         }
-        if (searchParams._contractRangesPerContract?.length) {
+        if (searchParams._contractRanges?.length) {
             const contractRangesCondition =
                 ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRangesPerContract?.map(
-                        (range) => range._contractRange.id
+                    searchParams._contractRanges.map(
+                        (range) => range.id
                     ),
                     'ContractRangesContracts',
                     'ContractRangeId'
@@ -599,6 +600,7 @@ export type ContractSearchParams = {
     _admin?: Person;
     _manager?: Person;
     _contractRangesPerContract?: ContractRangePerContractData[];
+    _contractRanges?: ContractRangeData[];
 };
 
 type ContractRow = {
