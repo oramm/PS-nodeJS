@@ -6,13 +6,12 @@ import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
-import Letter from './Letter';
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
-        const result = await LettersController.getLettersList(
+        const result = await LettersController.find(
             orConditions,
             'CONTRACT',
             req.session.userData
@@ -27,7 +26,7 @@ app.post('/offersLetters', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const orConditions = req.parsedBody.orConditions;
-        const result = await LettersController.getLettersList(
+        const result = await LettersController.find(
             orConditions,
             'OFFER',
             req.session.userData

@@ -1,5 +1,3 @@
-import mysql from 'mysql2/promise';
-import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import LetterCaseAssociationsController, {
     LetterCaseSearchParams,
@@ -8,10 +6,7 @@ import LetterEntityAssociationsController from './associations/LetterEntityAssoc
 import Letter from './Letter';
 import OurOldTypeLetter from './OurOldTypeLetter';
 import {
-    CaseData,
-    ContractData,
     LetterData,
-    OfferData,
     OurLetterContractData,
     OurLetterOfferData,
     OurOfferData,
@@ -24,218 +19,52 @@ import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
 import OurLetterOffer from './OurLetterOffer';
 import LetterEvent from './letterEvent/LetterEvent';
-import { SystemRoleName, UserData } from '../types/sessionTypes';
-
-type LetterSearchParams = {
-    projectId?: string;
-    _project?: ProjectData;
-    _contract?: ContractData;
-    _offer?: OfferData;
-    _case?: CaseData;
-    searchText?: string;
-    contractId?: number;
-    offerId?: number;
-    milestoneId?: string;
-    creationDateFrom?: string;
-    creationDateTo?: string;
-    statuses?: string[];
-};
+import { UserData } from '../types/sessionTypes';
+import LetterRepository, { LetterSearchParams } from './LetterRepository';
 
 export default class LettersController {
-    static async getLettersList(
+    private static instance: LettersController;
+    private repository: LetterRepository;
+
+    constructor() {
+        this.repository = new LetterRepository();
+    }
+
+    // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+    private static getInstance(): LettersController {
+        if (!this.instance) {
+            this.instance = new LettersController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Pobiera listę listów na podstawie warunków wyszukiwania
+     * @param orConditions - warunki wyszukiwania połączone operatorem OR
+     * @param milestoneParentType - typ rodzica kamienia milowego (CONTRACT lub OFFER)
+     * @param userData - dane użytkownika
+     * @returns lista listów (instancje odpowiednich klas Letter)
+     */
+    static async find(
         orConditions: LetterSearchParams[],
         milestoneParentType: 'CONTRACT' | 'OFFER',
         userData: UserData
-    ) {
-        const milestoneParentTypeCondition =
-            milestoneParentType === 'CONTRACT'
-                ? 'Milestones.ContractId IS NOT NULL'
-                : 'Milestones.OfferId IS NOT NULL';
-
-        const sql = `SELECT 
-                Letters.Id,
-                Letters.IsOur,
-                Letters.Number,
-                Letters.Description,
-                Letters.CreationDate,
-                Letters.RegistrationDate,
-                Letters.GdDocumentId,
-                Letters.GdFolderId,
-                Letters.Status,
-                Letters.LetterFilesCount,
-                Letters.LastUpdated,
-                Letters.RelatedLetterNumber,
-                Letters.ResponseDueDate,
-                Letters.ResponseIKNumber,
-
-                -- Pobieranie danych powiązanego projektu
-                Projects.Id AS ProjectId,
-                Projects.OurId AS ProjectOurId,
-                Projects.GdFolderId AS ProjectGdFolderId,
-                Projects.LettersGdFolderId,
-    
-                -- Pobieranie danych powiązanej oferty
-                Offers.Id AS OfferId,
-                Offers.Alias AS OfferAlias,
-                Offers.Description AS OfferDescription,
-                Offers.CityId AS OfferCityId,
-    
-                -- Pobieranie edytora listu
-                LastEventEditor.Id AS LastEventEditorId,
-                LastEventEditor.Name AS LastEventEditorName,
-                LastEventEditor.Surname AS LastEventEditorSurname,
-                LastEventEditor.Email AS LastEventEditorEmail,
-    
-                -- Pobieranie ostatniego zdarzenia dla listu
-                LastLetterEvent.Id AS LastEventId,
-                LastLetterEvent.EventType AS LastEventType,
-                LastLetterEvent.Comment AS LastEventComment,
-                LastLetterEvent.AdditionalMessage AS LastEventAdditionalMessage,
-                LastLetterEvent.VersionNumber AS LastEventVersionNumber,
-                LastLetterEvent.LastUpdated AS LastEventDate,
-                LastLetterEvent.GdFilesJSON AS LastEventGdFilesJSON,
-                LastLetterEvent.RecipientsJSON AS LastEventRecipientsJSON,
-    
-                -- Pobieranie powiązanych encji i spraw
-                GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
-                GROUP_CONCAT(Cases.Name SEPARATOR ', ') AS CaseNames,
-                GROUP_CONCAT(CaseTypes.Name SEPARATOR ', ') AS CaseTypesNames
-    
-            FROM Letters
-            JOIN Letters_Cases ON Letters_Cases.LetterId = Letters.Id
-            JOIN Cases ON Letters_Cases.CaseId = Cases.Id
-            JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
-            JOIN Milestones ON Milestones.Id = Cases.MilestoneId
-            LEFT JOIN Contracts ON Contracts.Id = Milestones.ContractId
-            LEFT JOIN Offers ON Offers.Id = Letters.OfferId
-            LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
-            JOIN Letters_Entities ON Letters_Entities.LetterId = Letters.Id
-            JOIN Entities ON Letters_Entities.EntityId = Entities.Id
-    
-            -- Podzapytanie wybierające najnowsze zdarzenie dla każdego listu
-            LEFT JOIN (
-                SELECT LetterId, MAX(Id) AS MaxEventId
-                FROM LetterEvents
-                GROUP BY LetterId
-            ) AS LatestLetterEvents ON LatestLetterEvents.LetterId = Letters.Id
-    
-            -- Połączenie z tabelą LetterEvents na podstawie najnowszego zdarzenia
-            LEFT JOIN LetterEvents AS LastLetterEvent ON LastLetterEvent.Id = LatestLetterEvents.MaxEventId
-    
-            -- Połączenie z tabelą Persons, aby pobrać dane osoby, która utworzyła zdarzenie
-            LEFT JOIN Persons AS LastEventEditor ON LastEventEditor.Id = LastLetterEvent.EditorId
-            ${this.makeUserJoinCondition(
-                userData
-            )} -- Dodawanie warunku dla EXTERNAL-USER
-            WHERE ${ToolsDb.makeOrGroupsConditions(
-                orConditions,
-                this.makeAndConditions.bind(this)
-            )}
-            AND ${milestoneParentTypeCondition}
-            GROUP BY Letters.Id
-            ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processLettersResult(result, orConditions[0]);
-    }
-
-    private static makeUserJoinCondition(userData: UserData) {
-        if (userData.systemRoleName !== SystemRoleName.EXTERNAL_USER) return '';
-        return `JOIN Persons_Contracts ON Persons_Contracts.ContractId = Contracts.Id
-                AND Persons_Contracts.PersonId = ${userData.enviId}`;
-    }
-
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Letters.Description LIKE ?
-                    OR Letters.Number LIKE ?
-                    OR Cases.Name LIKE ?
-                    OR CaseTypes.Name LIKE ?
-                    OR Letters.Number LIKE ?
-                    OR Offers.Alias LIKE ?
-                    OR Offers.Description LIKE ?
-                    OR Entities.Name LIKE ?)`,
-                [
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                ]
-            )
+    ): Promise<Letter[]> {
+        const instance = this.getInstance();
+        // Pobierz surowe dane z bazy przez Repository
+        const rawResult = await instance.repository.find(
+            orConditions,
+            milestoneParentType,
+            userData
         );
 
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+        // Przetworz wyniki i zwróć instancje odpowiednich klas Letter
+        return this.processLettersResult(rawResult, orConditions[0]);
     }
 
-    static makeAndConditions(searchParams: LetterSearchParams) {
-        const projectOurId =
-            searchParams._project?.ourId || searchParams.projectId;
-        const contractId =
-            searchParams._contract?.id || searchParams.contractId;
-        const offerId = searchParams._offer?.id || searchParams.offerId;
-        const caseId = searchParams._case?.id;
-
-        const projectCondition = projectOurId
-            ? mysql.format(`Projects.OurId = ? `, [projectOurId])
-            : '1';
-
-        const contractCondition = contractId
-            ? mysql.format(`Contracts.Id = ? `, [contractId])
-            : '1';
-
-        const offerCondition = offerId
-            ? mysql.format(`Offers.Id = ? `, [offerId])
-            : '1';
-
-        const milestoneCondition = searchParams.milestoneId
-            ? mysql.format(`Milestones.Id = ? `, [searchParams.milestoneId])
-            : '1';
-
-        const caseCondition = caseId
-            ? mysql.format(`Cases.Id = ? `, [caseId])
-            : '1';
-
-        const creationDateFromCondition = searchParams.creationDateFrom
-            ? mysql.format(`Letters.CreationDate >= ? `, [
-                  ToolsDate.dateDMYtoYMD(searchParams.creationDateFrom),
-              ])
-            : '1';
-
-        const creationDateToCondition = searchParams.creationDateTo
-            ? mysql.format(`Letters.CreationDate <= ? `, [
-                  searchParams.creationDateTo,
-              ])
-            : '1';
-        
-        const statusesCondition = 
-            (searchParams.statuses && searchParams.statuses.length > 0)
-                ? mysql.format(`Letters.Status IN (?)`, [searchParams.statuses])
-                : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText?.toString()
-        );
-
-        const conditions = `${projectCondition} 
-            AND ${contractCondition} 
-            AND ${milestoneCondition}
-            AND ${caseCondition}
-            AND ${creationDateFromCondition}
-            AND ${creationDateToCondition}
-            AND ${statusesCondition}
-            AND ${searchTextCondition} 
-            AND ${offerCondition}`;
-        return conditions;
-    }
-
+    /**
+     * Przetwarza surowe dane z bazy i tworzy instancje odpowiednich klas Letter
+     */
     static async processLettersResult(
         rawResult: any[],
         initParamObject: LetterCaseSearchParams
@@ -462,28 +291,10 @@ export default class LettersController {
     }
     /**
      * Dodaje wpisy APPROVED do listów, które nie mają jeszcze takiego wpisu
+     * (delegacja do Repository)
      */
-    static async autoApprove() {
-        const sql = `
-            INSERT INTO LetterEvents (LetterId, EditorId, EventType, Comment, AdditionalMessage, VersionNumber, LastUpdated)
-            SELECT 
-                le.LetterId,
-                125 AS EditorId, -- Stały EditorId = 125
-                'APPROVED' AS EventType,
-                'Pismo zatwierdzone' AS Comment,
-                NULL AS AdditionalMessage,
-                2 AS VersionNumber, -- Możesz dostosować numer wersji
-                TIMESTAMPADD(HOUR, FLOOR(2 + RAND() * 5), le.LastUpdated) AS LastUpdated -- Dodajemy losowe 2-6 godzin
-            FROM LetterEvents le
-            JOIN Letters l ON le.LetterId = l.Id AND l.IsOur = TRUE -- Warunek: tylko nasze listy
-            LEFT JOIN LetterEvents le2 
-                ON le.LetterId = le2.LetterId 
-                AND le2.EventType = 'APPROVED'
-            WHERE le.EventType = 'CREATED' 
-            AND le2.Id IS NULL; -- Sprawdzamy, czy 'APPROVED' jeszcze nie istnieje
-        `;
-
-        const result = await ToolsDb.executeSQL(sql);
-        console.log(`AutoApprove:: dodano ${result.affectedRows} wpisów`);
+    static async autoApprove(): Promise<void> {
+        const instance = this.getInstance();
+        return instance.repository.autoApprove();
     }
 }
