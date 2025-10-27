@@ -36,6 +36,8 @@ export default abstract class IncomingLetter
                     throw new EnviErrors.NoGdIdError(`: incomingLetter`);
                 this.setDataToSingleFileState(letterGdFile.id);
             }
+
+            // TYMCZASOWO: Przywracamy this.addInDb() do czasu przeniesienia całej metody do Controllera
             await this.addInDb();
 
             if (this.gdDocumentId && this._cases.length > 0) {
@@ -43,13 +45,13 @@ export default abstract class IncomingLetter
                     if (caseItem.gdFolderId) {
                         const lettersSubfolder = await ToolsGd.setFolder(auth, {
                             parentId: caseItem.gdFolderId,
-                            name: "Pisma"
+                            name: 'Pisma',
                         });
 
                         await ToolsGd.createShortcut(auth, {
                             targetId: this.gdDocumentId!,
                             parentId: lettersSubfolder.id!,
-                            name: `${this.number} ${this.description}`
+                            name: `${this.number} ${this.description}`,
                         });
                     }
                 });
@@ -67,13 +69,11 @@ export default abstract class IncomingLetter
         }
     }
 
-    /** Używać tylko gdy mamy pojedynczego bloba  należy pamiętać o użyciu potem
+    /** Używać tylko gdy mamy pojedynczego bloba - należy pamiętać o użyciu potem
      *  setToSingleFileState(gdDocumentId: string)
+     * PUBLIC: wywoływana z LettersController.addNewIncomingLetter()
      */
-    protected async createLetterFile(
-        auth: OAuth2Client,
-        file: Express.Multer.File
-    ) {
+    async createLetterFile(auth: OAuth2Client, file: Express.Multer.File) {
         const parentGdFolderId = this.makeParentFolderGdId();
         const letterFile = await ToolsGd.uploadFileMulter(
             auth,
@@ -115,10 +115,11 @@ export default abstract class IncomingLetter
     }
 
     /**
-     * - Wykonuje operacje na Gd związane z utworzeniem załączników
-     * - jeśli trzeba to tworzy letterFolder
+     * Wykonuje operacje na Gd związane z utworzeniem załączników
+     * Jeśli trzeba to tworzy letterFolder
+     * PUBLIC: wywoływana z LettersController.addNewIncomingLetter()
      */
-    private async initAttachmentsHandler(
+    async initAttachmentsHandler(
         auth: OAuth2Client,
         files: Express.Multer.File[]
     ): Promise<void> {
@@ -227,7 +228,11 @@ export default abstract class IncomingLetter
         );
     }
 
-    private setDataToSingleFileState(gdDocumentId: string) {
+    /**
+     * Ustawia dane pisma dla pojedynczego pliku (bez folderu)
+     * PUBLIC: wywoływana z LettersController.addNewIncomingLetter()
+     */
+    setDataToSingleFileState(gdDocumentId: string) {
         this.gdDocumentId = gdDocumentId;
         this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(gdDocumentId);
         this._gdFolderUrl = '';

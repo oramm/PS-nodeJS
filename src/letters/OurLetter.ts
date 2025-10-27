@@ -6,9 +6,6 @@ import EnviErrors from '../tools/Errors';
 import { DocumentTemplateData, OurLetterData } from '../types/types';
 import OurLetterGdController from './gdControlers/OurLetterGdController';
 import { UserData } from '../types/sessionTypes';
-import PersonsController from '../persons/PersonsController';
-import Setup from '../setup/Setup';
-import LetterEvent from './letterEvent/LetterEvent';
 
 export default abstract class OurLetter
     extends Letter
@@ -46,7 +43,9 @@ export default abstract class OurLetter
                 this.gdDocumentId
             );
 
+            // TYMCZASOWO: Przywracamy this.addInDb() do czasu przeniesienia całej metody do Controllera
             await this.addInDb();
+
             const ourLetterGdFile = this.makeLetterGdFileController(
                 this._template
             );
@@ -63,33 +62,46 @@ export default abstract class OurLetter
             );
 
             const postDbPromises: Promise<any>[] = [
-                this.makeLetterGdFileController(this._template).updateTextRunsInNamedRanges(auth),
-                ToolsGd.updateFolder(auth, { id: this.gdFolderId, name: folderName }),
-                ToolsGd.updateFile(auth, { id: this.gdDocumentId, name: folderName }),
+                this.makeLetterGdFileController(
+                    this._template
+                ).updateTextRunsInNamedRanges(auth),
+                ToolsGd.updateFolder(auth, {
+                    id: this.gdFolderId,
+                    name: folderName,
+                }),
+                ToolsGd.updateFile(auth, {
+                    id: this.gdDocumentId,
+                    name: folderName,
+                }),
             ];
-            
+
             if (files.length > 0) {
                 postDbPromises.push(this.appendAttachmentsHandler(auth, files));
             }
 
             if (this.gdDocumentId && this._cases.length > 0) {
-                const shortcutCreationPromises = this._cases.map(async (caseItem) => {
-                    if (caseItem.gdFolderId) {
-                        const lettersSubfolder = await ToolsGd.setFolder(auth, {
-                            parentId: caseItem.gdFolderId,
-                            name: "Pisma"
-                        });
+                const shortcutCreationPromises = this._cases.map(
+                    async (caseItem) => {
+                        if (caseItem.gdFolderId) {
+                            const lettersSubfolder = await ToolsGd.setFolder(
+                                auth,
+                                {
+                                    parentId: caseItem.gdFolderId,
+                                    name: 'Pisma',
+                                }
+                            );
 
-                        await ToolsGd.createShortcut(auth, {
-                            targetId: this.gdDocumentId!,
-                            parentId: lettersSubfolder.id!,
-                            name: `${this.number} ${this.description}`
-                        });
+                            await ToolsGd.createShortcut(auth, {
+                                targetId: this.gdDocumentId!,
+                                parentId: lettersSubfolder.id!,
+                                name: `${this.number} ${this.description}`,
+                            });
+                        }
                     }
-                });
+                );
                 await Promise.all(shortcutCreationPromises);
             }
-            
+
             await Promise.all(postDbPromises);
             console.log('Finished all post-DB operations including shortcuts.');
 
@@ -123,8 +135,10 @@ export default abstract class OurLetter
         this.number = this.id;
     }
 
-    /** Tworzy plik z dokumentem i ustawia this.gdDocumentId */
-    protected async createLetterFile(auth: OAuth2Client) {
+    /** Tworzy plik z dokumentem i ustawia this.gdDocumentId
+     * PUBLIC: wywoływana z LettersController.addNewOurLetter()
+     */
+    async createLetterFile(auth: OAuth2Client) {
         const ourLetterGdFile = this.makeLetterGdFileController(this._template);
         const document = await ourLetterGdFile.create(auth);
         if (!document.documentId) throw new EnviErrors.NoGdIdError();
@@ -180,18 +194,6 @@ export default abstract class OurLetter
         await Promise.all(promises).catch((error) => {
             throw error;
         });
-    }
-
-    async approveLetter(auth: OAuth2Client, userData: UserData) {
-        const _editor = await PersonsController.getPersonFromSessionUserData(
-            userData
-        );
-        this._lastEvent = new LetterEvent({
-            letterId: this.id,
-            eventType: Setup.LetterEventType.APPROVED,
-            _editor,
-        });
-        await this._lastEvent.addNewController();
     }
 
     async exportToPDF(auth: OAuth2Client) {

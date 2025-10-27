@@ -4,8 +4,22 @@ import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
 import { SystemRoleName } from '../types/sessionTypes';
 import { CaseData, ContractData, OfferData, ProjectData } from '../types/types';
+import BaseRepository from '../repositories/BaseRepository';
+import Letter from './Letter';
+import OurLetterContract from './OurLetterContract';
+import OurLetterOffer from './OurLetterOffer';
+import IncomingLetterContract from './IncomingLetterContract';
+import IncomingLetterOffer from './IncomingLetterOffer';
+import OurOldTypeLetter from './OurOldTypeLetter';
+import LetterEvent from './letterEvent/LetterEvent';
+import LetterCaseAssociationsController, {
+    LetterCaseSearchParams,
+} from './associations/LetterCaseAssociationsController';
+import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
+import LetterCase from './associations/LetterCase';
+import LetterEntity from './associations/LetterEntity';
 
-type LetterSearchParams = {
+export type LetterSearchParams = {
     projectId?: string;
     _project?: ProjectData;
     _contract?: ContractData;
@@ -20,19 +34,24 @@ type LetterSearchParams = {
     statuses?: string[];
 };
 
-export default class LetterRepository {
+export type LetterFindParams = {
+    orConditions: LetterSearchParams[];
+    milestoneParentType: 'CONTRACT' | 'OFFER';
+    userData: UserData;
+};
+
+export default class LetterRepository extends BaseRepository<Letter> {
+    constructor() {
+        super('Letters');
+    }
+
     /**
      * Pobiera listę listów z bazy danych na podstawie warunków wyszukiwania
-     * @param orConditions - warunki wyszukiwania połączone operatorem OR
-     * @param milestoneParentType - typ rodzica kamienia milowego (CONTRACT lub OFFER)
-     * @param userData - dane użytkownika (dla filtrowania EXTERNAL_USER)
-     * @returns surowe dane z bazy danych
+     * @param params - obiekt z parametrami wyszukiwania
+     * @returns tablica instancji Letter (konkretne podklasy: OurLetterContract, IncomingLetterOffer, etc.)
      */
-    async find(
-        orConditions: LetterSearchParams[],
-        milestoneParentType: 'CONTRACT' | 'OFFER',
-        userData: UserData
-    ): Promise<any[]> {
+    async find(params: LetterFindParams): Promise<Letter[]> {
+        const { orConditions, milestoneParentType, userData } = params;
         const milestoneParentTypeCondition =
             milestoneParentType === 'CONTRACT'
                 ? 'Milestones.ContractId IS NOT NULL'
@@ -121,8 +140,273 @@ export default class LetterRepository {
             GROUP BY Letters.Id
             ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return result;
+        const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+
+        // Pobierz asocjacje dla wszystkich letterów
+        const [_casesAssociationsPerProject, _letterEntitiesPerProject] =
+            await Promise.all([
+                LetterCaseAssociationsController.getLetterCaseAssociationsList(
+                    orConditions[0] as LetterCaseSearchParams
+                ),
+                LetterEntityAssociationsController.getLetterEntityAssociationsList(
+                    orConditions[0] as LetterCaseSearchParams
+                ),
+            ]);
+
+        // Mapuj każdy wiersz na odpowiednią instancję Letter
+        return rows.map((row) =>
+            this.mapRowToModelWithContext(
+                row,
+                _casesAssociationsPerProject,
+                _letterEntitiesPerProject
+            )
+        );
+    }
+
+    /**
+     * Implementacja abstrakcyjnej metody z BaseRepository (nie używana bezpośrednio)
+     */
+    protected mapRowToModel(row: any): Letter {
+        // Ta metoda nie jest używana w LetterRepository, bo potrzebujemy dodatkowego kontekstu
+        // Używamy zamiast tego mapRowToModelWithContext
+        throw new Error('Use mapRowToModelWithContext instead');
+    }
+
+    /**
+     * Mapuje surowe dane z bazy na odpowiednią instancję Letter
+     */
+    protected mapRowToModelWithContext(
+        row: any,
+        _casesAssociationsPerProject: any[],
+        _letterEntitiesPerProject: any[]
+    ): Letter {
+        const _casesAssociationsPerLetter = _casesAssociationsPerProject.filter(
+            (item) => item.letterId == row.Id
+        );
+        const _letterEntitiesMainPerLetter = _letterEntitiesPerProject.filter(
+            (item) => item.letterId == row.Id && item.letterRole == 'MAIN'
+        );
+        const _letterEntitiesCcPerLetter = _letterEntitiesPerProject.filter(
+            (item) => item.letterId == row.Id && item.letterRole == 'CC'
+        );
+
+        // Określ typ Letter na podstawie danych z bazy
+        const LetterType = this.getLetterType(row);
+
+        // Przygotuj parametry inicjalizacyjne
+        const initParams = this.makeInitParams(
+            row,
+            _casesAssociationsPerLetter,
+            _letterEntitiesMainPerLetter,
+            _letterEntitiesCcPerLetter
+        );
+
+        // Zwróć nową instancję odpowiedniego typu
+        return new LetterType(initParams);
+    }
+
+    /**
+     * Określa właściwą klasę Letter na podstawie danych z bazy
+     * WAŻNE: Ta sama logika co w LettersController.getLetterType()
+     */
+    private getLetterType(row: any): new (params: any) => Letter {
+        // Our Letter Contract (nowy typ - Id == Number)
+        if (row.IsOur && row.Id == row.Number && row.ProjectId) {
+            return OurLetterContract;
+        }
+        // Our Letter Contract (stary typ - Id != Number)
+        if (row.IsOur && row.Id != row.Number) {
+            return OurOldTypeLetter;
+        }
+        // Our Letter Offer
+        if (row.IsOur && row.OfferId) {
+            return OurLetterOffer;
+        }
+        // Incoming Letter Contract
+        if (!row.IsOur && row.ProjectId) {
+            return IncomingLetterContract;
+        }
+        // Incoming Letter Offer
+        if (!row.IsOur && row.OfferId) {
+            return IncomingLetterOffer;
+        }
+
+        // Błąd - nieprawidłowe dane (brak ProjectId i OfferId)
+        throw new Error(
+            `Cannot determine Letter type for Letter ID: ${row.Id}. ` +
+                `IsOur: ${row.IsOur}, ProjectId: ${row.ProjectId}, OfferId: ${row.OfferId}`
+        );
+    }
+
+    /**
+     * Przygotowuje parametry inicjalizacyjne dla Letter (routing do odpowiedniej metody)
+     */
+    private makeInitParams(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ): any {
+        const LetterType = this.getLetterType(row);
+
+        switch (LetterType) {
+            case OurLetterContract:
+            case IncomingLetterContract:
+                return this.createLetterContractInitParam(
+                    row,
+                    _casesAssociationsPerLetter,
+                    _letterEntitiesMainPerLetter,
+                    _letterEntitiesCcPerLetter
+                );
+            case OurLetterOffer:
+            case IncomingLetterOffer:
+                return this.createLetterOfferInitParam(
+                    row,
+                    _casesAssociationsPerLetter,
+                    _letterEntitiesMainPerLetter,
+                    _letterEntitiesCcPerLetter
+                );
+            case OurOldTypeLetter:
+                return this.createOurOldTypeLetterContractInitParam(
+                    row,
+                    _casesAssociationsPerLetter,
+                    _letterEntitiesMainPerLetter,
+                    _letterEntitiesCcPerLetter
+                );
+            default:
+                throw new Error(
+                    'No params creator found for type: ' + LetterType.name
+                );
+        }
+    }
+
+    /**
+     * Tworzy bazowe parametry dla Letter (wspólne dla wszystkich typów)
+     */
+    private createLetterInitParam(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ): any {
+        return {
+            id: row.Id,
+            number: row.Number,
+            isOur: row.IsOur,
+            description: ToolsDb.sqlToString(row.Description),
+            creationDate: row.CreationDate,
+            registrationDate: row.RegistrationDate,
+            gdDocumentId: row.GdDocumentId,
+            gdFolderId: row.GdFolderId,
+            letterFilesCount: row.LetterFilesCount,
+            status: row.Status,
+            _lastUpdated: row.LastUpdated,
+            relatedLetterNumber: row.RelatedLetterNumber,
+            responseDueDate: row.ResponseDueDate,
+            responseIKNumber: row.ResponseIKNumber,
+
+            _cases: _casesAssociationsPerLetter.map((item) => item._case),
+            _entitiesMain: _letterEntitiesMainPerLetter.map(
+                (item) => item._entity
+            ),
+            _entitiesCc: _letterEntitiesCcPerLetter.map((item) => item._entity),
+            _editor: {
+                id: row.LastEventEditorId,
+                name: row.LastEventEditorName,
+                surname: row.LastEventEditorSurname,
+            },
+            _lastEvent: new LetterEvent({
+                id: row.LastEventId,
+                letterId: row.Id,
+                eventType: row.LastEventType,
+                _lastUpdated: row.LastEventDate,
+                comment: ToolsDb.sqlToString(row.LastEventComment),
+                additionalMessage: ToolsDb.sqlToString(
+                    row.LastEventAdditionalMessage
+                ),
+                versionNumber: row.LastEventVersionNumber,
+                _editor: {
+                    id: row.LastEventEditorId,
+                    name: ToolsDb.sqlToString(row.LastEventEditorName),
+                    surname: ToolsDb.sqlToString(row.LastEventEditorSurname),
+                    email: ToolsDb.sqlToString(row.LastEventEditorEmail),
+                },
+                gdFilesJSON: row.LastEventGdFilesJSON,
+                recipientsJSON: row.LastEventRecipientsJSON,
+            }),
+        };
+    }
+
+    /**
+     * Tworzy parametry dla Letter powiązanego z Contract
+     */
+    private createLetterContractInitParam(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ): any {
+        const letterParams = this.createLetterInitParam(
+            row,
+            _casesAssociationsPerLetter,
+            _letterEntitiesMainPerLetter,
+            _letterEntitiesCcPerLetter
+        );
+
+        return {
+            ...letterParams,
+            _project: {
+                id: row.ProjectId,
+                ourId: row.ProjectOurId,
+                gdFolderId: row.ProjectGdFolderId,
+                lettersGdFolderId: row.LettersGdFolderId,
+            },
+        };
+    }
+
+    /**
+     * Tworzy parametry dla Letter powiązanego z Offer
+     */
+    private createLetterOfferInitParam(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ): any {
+        const letterParams = this.createLetterInitParam(
+            row,
+            _casesAssociationsPerLetter,
+            _letterEntitiesMainPerLetter,
+            _letterEntitiesCcPerLetter
+        );
+
+        return {
+            ...letterParams,
+            _offer: {
+                id: row.OfferId,
+                alias: row.OfferAlias,
+                description: row.OfferDescription,
+            },
+        };
+    }
+
+    /**
+     * Tworzy parametry dla starego typu Letter (OurOldTypeLetter)
+     */
+    private createOurOldTypeLetterContractInitParam(
+        row: any,
+        _casesAssociationsPerLetter: LetterCase[],
+        _letterEntitiesMainPerLetter: LetterEntity[],
+        _letterEntitiesCcPerLetter: LetterEntity[]
+    ): any {
+        const params = this.createLetterContractInitParam(
+            row,
+            _casesAssociationsPerLetter,
+            _letterEntitiesMainPerLetter,
+            _letterEntitiesCcPerLetter
+        );
+
+        return { ...params, isOur: true };
     }
 
     /**
@@ -256,5 +540,3 @@ export default class LetterRepository {
         console.log(`AutoApprove:: dodano ${result.affectedRows} wpisów`);
     }
 }
-
-export type { LetterSearchParams };

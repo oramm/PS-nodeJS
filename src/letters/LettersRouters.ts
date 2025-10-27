@@ -202,9 +202,9 @@ app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.approveLetter,
-            [req.session.userData],
-            item
+            LettersController.approveLetter,
+            [item, req.session.userData],
+            LettersController
         );
         res.send(item);
     } catch (error) {

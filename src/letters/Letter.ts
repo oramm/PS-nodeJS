@@ -16,6 +16,7 @@ import {
 } from '../types/types';
 import { UserData } from '../types/sessionTypes';
 import LetterEvent from './letterEvent/LetterEvent';
+import LetterEventsController from './letterEvent/LetterEventsController';
 import PersonsController from '../persons/PersonsController';
 import Setup from '../setup/Setup';
 
@@ -64,7 +65,9 @@ export default abstract class Letter
         this.description = initParamObject.description;
         this.number = initParamObject.number;
         this.creationDate = ToolsDate.dateJsToSql(initParamObject.creationDate);
-        this.registrationDate = ToolsDate.dateJsToSql(initParamObject.registrationDate);
+        this.registrationDate = ToolsDate.dateJsToSql(
+            initParamObject.registrationDate
+        );
         if (initParamObject.gdDocumentId) {
             this._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
                 initParamObject.gdDocumentId
@@ -94,7 +97,7 @@ export default abstract class Letter
         this.status = initParamObject.status;
         this.initLastEvent(initParamObject._lastEvent); //przy nowej ofercie lastEvent jeszcze nie istnieje
         this.relatedLetterNumber = initParamObject.relatedLetterNumber;
-        if(initParamObject.responseDueDate)
+        if (initParamObject.responseDueDate)
             this.responseDueDate = initParamObject.responseDueDate;
         this.responseIKNumber = initParamObject.responseIKNumber;
     }
@@ -107,7 +110,11 @@ export default abstract class Letter
         } else this._lastEvent = null;
     }
 
-    protected async createNewLetterEvent(userData: UserData) {
+    /**
+     * Tworzy nowy LetterEvent typu CREATED
+     * PUBLIC: wywoływana z LettersController.addNewOurLetter() i addNewIncomingLetter()
+     */
+    async createNewLetterEvent(userData: UserData) {
         const _editor = await PersonsController.getPersonFromSessionUserData(
             userData
         );
@@ -118,7 +125,7 @@ export default abstract class Letter
 
             _editor,
         });
-        await this._lastEvent.addNewController();
+        await LetterEventsController.addNew(this._lastEvent);
     }
 
     async addInDb() {
