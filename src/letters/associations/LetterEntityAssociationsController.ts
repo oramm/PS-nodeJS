@@ -1,72 +1,68 @@
-import Entity from '../../entities/Entity';
-import ToolsDb from '../../tools/ToolsDb';
-import { LetterData } from '../../types/types';
+import BaseController from '../../controllers/BaseController';
 import LetterEntity from './LetterEntity';
+import LetterEntityRepository, {
+    LetterEntitySearchParams as RepoSearchParams,
+} from './LetterEntityRepository';
 
-export default class LetterEntityAssociationsController {
-    static async getLetterEntityAssociationsList(initParamObject: any) {
-        const projectConditon =
-            initParamObject && initParamObject.projectId
-                ? 'Projects.OurId="' + initParamObject.projectId + '"'
-                : '1';
-        const contractConditon =
-            initParamObject && initParamObject.contractctId
-                ? 'Contracts.Id="' + initParamObject.contractctId + '"'
-                : '1';
-        const milestoneConditon =
-            initParamObject && initParamObject.milestonetId
-                ? 'Milestones.Id="' + initParamObject.milestoneId + '"'
-                : '1';
+export type LetterEntitySearchParams = {
+    projectId?: string;
+    contractId?: number;
+    milestoneId?: number;
+};
 
-        const sql = `SELECT  Letters_Entities.LetterId,
-                Letters_Entities.EntityId,
-                Letters_Entities.LetterRole,
-                Entities.Name AS EntityName,
-                Entities.Address AS EntityAddress,
-                Entities.TaxNumber AS EntityTaxNumber,
-                Entities.Www AS EntityWww,
-                Entities.Email AS EntityEmail,
-                Entities.Phone AS EntityPhone
-            FROM Letters_Entities
-            JOIN Letters ON Letters_Entities.LetterId = Letters.Id
-            LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
-            LEFT JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId
-            LEFT JOIN Milestones ON Milestones.ContractId = Contracts.Id
-            LEFT JOIN Offers ON Offers.Id = Letters.OfferId
-            JOIN Entities ON Letters_Entities.EntityId=Entities.Id
-            WHERE ${projectConditon} 
-              AND ${contractConditon} 
-              AND ${milestoneConditon}
-            GROUP BY LetterId, EntityId
-            ORDER BY Letters_Entities.LetterRole, EntityName`;
+/**
+ * Kontroler do zarządzania asocjacjami Letter-Entity
+ */
+export default class LetterEntityAssociationsController extends BaseController<
+    LetterEntity,
+    LetterEntityRepository
+> {
+    private static instance: LetterEntityAssociationsController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processLetterEntityAssociationsResult(result);
+    private constructor() {
+        super(new LetterEntityRepository());
     }
 
+    /**
+     * Singleton pattern - pobiera instancję kontrolera
+     */
+    static getInstance(): LetterEntityAssociationsController {
+        if (!LetterEntityAssociationsController.instance) {
+            LetterEntityAssociationsController.instance =
+                new LetterEntityAssociationsController();
+        }
+        return LetterEntityAssociationsController.instance;
+    }
+
+    /**
+     * Pobiera listę asocjacji Letter-Entity według parametrów wyszukiwania
+     * @param initParamObject - Parametry wyszukiwania (projectId, contractId, milestoneId)
+     */
+    static async getLetterEntityAssociationsList(
+        initParamObject?: LetterEntitySearchParams
+    ): Promise<LetterEntity[]> {
+        const instance = this.getInstance();
+
+        // Konwertuj parametry wyszukiwania do formatu akceptowanego przez repository
+        const repoSearchParams: RepoSearchParams = {
+            projectId: initParamObject?.projectId,
+            contractId: initParamObject?.contractId,
+            milestoneId: initParamObject?.milestoneId,
+        };
+
+        return await instance.repository.find(repoSearchParams);
+    }
+
+    /**
+     * @deprecated Użyj repository.find() zamiast tego
+     */
     static processLetterEntityAssociationsResult(
         result: any[]
     ): LetterEntity[] {
-        let newResult: LetterEntity[] = [];
-
-        for (const row of result) {
-            const item = new LetterEntity({
-                letterRole: row.LetterRole,
-                _letter: <LetterData>{
-                    id: row.LetterId,
-                },
-                _entity: new Entity({
-                    id: row.EntityId,
-                    name: ToolsDb.sqlToString(row.EntityName),
-                    address: ToolsDb.sqlToString(row.EntityAddress),
-                    taxNumber: row.EntityTaxNumber,
-                    www: row.EntityWww,
-                    email: row.EntityEmail,
-                    phone: row.EntityPhone,
-                }),
-            });
-            newResult.push(item);
-        }
-        return newResult;
+        console.warn(
+            'processLetterEntityAssociationsResult is deprecated. Use repository.find() instead.'
+        );
+        const instance = this.getInstance();
+        return result.map((row) => instance.repository['mapRowToModel'](row));
     }
 }
