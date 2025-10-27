@@ -7,8 +7,6 @@ import {
 } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsMail from '../../tools/ToolsMail';
-import Setup from '../../setup/Setup';
-import { PoolConnection } from 'mysql2/promise';
 
 /**
  * Przy odczytywaniu z bazy danych, jeśli w bazie danych jest zapisany JSON, to trzeba go przekonwertować na obiekt
@@ -53,45 +51,43 @@ export default class LetterEvent
             (this.recipientsJSON ? JSON.parse(this.recipientsJSON) : undefined);
     }
 
-    /** przed zapisem do bazy danych trzeba konwertuje obiekty na JSON */
-    async addInDb(
-        externalConn?: PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        this.gdFilesJSON = JSON.stringify(this._gdFilesBasicData);
-        this.recipientsJSON = JSON.stringify(this._recipients);
-        await super.addInDb(externalConn, isPartOfTransaction);
+    /**
+     * Waliduje dane potrzebne do wysłania email
+     * HELPER: Metoda biznesowa bez operacji I/O
+     * @throws Error jeśli brak recipients lub gdFiles
+     */
+    validateEmailData(): void {
+        if (!this._recipients?.length)
+            throw new Error('Nie podano odbiorców maila z ofertą');
+        if (!this._gdFilesBasicData?.length)
+            throw new Error('Brak plików do wysłania');
     }
 
-    sendMailWithLetter(
-        auth: OAuth2Client,
-        letter: OurLetterContractData,
-        cc?: string[]
-    ) {
-        const _recipients = this._recipients;
-        const gdFilesBasicData = this._gdFilesBasicData;
-        if (!_recipients?.length)
-            throw new Error('Nie podano odiorców maila z ofertą');
-        if (!gdFilesBasicData?.length)
-            throw new Error('Brak plików do wysłania');
-
+    /**
+     * Buduje treść email na podstawie danych letter
+     * HELPER: Metoda biznesowa bez operacji I/O
+     * @param letter - dane pisma
+     * @returns obiekt z subject i html
+     */
+    buildEmailContent(letter: OurLetterContractData): {
+        subject: string;
+        html: string;
+    } {
         const subject = `Pismo nr ${letter.number} - ${letter.description}`;
+
         let body = `<p>
                     Szanowni Państwo, <br>
-                    W załączniku przesyłamy pismo dotyczącę: ${letter.description}.
+                    W załączniku przesyłamy pismo dotyczące: ${letter.description}.
                 </p>`;
-        if (this.additionalMessage) body += `<p>${this.additionalMessage}</p>`;
+
+        if (this.additionalMessage) {
+            body += `<p>${this.additionalMessage}</p>`;
+        }
+
         body += `<p>
                 Proszę o potwierdzenie otrzymania pisma na adres: <a href="mailto:biuro@envi.com.pl">biuro@envi.com.pl</a>
                 </p>`;
 
-        const html = `${body}`;
-        ToolsMail.sendEmailWithGdAttachments(auth, gdFilesBasicData, {
-            to: ToolsMail.getMailListFromPersons(_recipients),
-            cc: [...(cc || []), 'biuro@envi.com.pl'],
-            subject,
-            html,
-            footer: ToolsMail.makeENVIFooter(),
-        });
+        return { subject, html: body };
     }
 }

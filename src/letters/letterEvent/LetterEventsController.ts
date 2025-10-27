@@ -1,10 +1,12 @@
 import ToolsDb from '../../tools/ToolsDb';
 import LetterEvent from './LetterEvent';
-import { LetterEventData } from '../../types/types';
+import { LetterEventData, OurLetterContractData } from '../../types/types';
 import LetterEventRepository, {
     LetterEventSearchParams,
 } from './LetterEventRepository';
 import Setup from '../../setup/Setup';
+import { OAuth2Client } from 'google-auth-library';
+import ToolsMail from '../../tools/ToolsMail';
 
 export default class LetterEventsController {
     private static instance: LetterEventsController;
@@ -31,15 +33,18 @@ export default class LetterEventsController {
         orConditions: LetterEventSearchParams[] = []
     ): Promise<LetterEvent[]> {
         const instance = this.getInstance();
-        const rawResult = await instance.repository.find(orConditions);
-        return this.processLetterEventsResult(rawResult);
+        // Repository już zwraca zmapowane instancje LetterEvent
+        return await instance.repository.find(orConditions);
     }
 
     /**
      * Dodaje nowe zdarzenie listu
+     * ORKIESTRACJA: Oblicza versionNumber, wywołuje repository.addInDb()
      * Logika przeniesiona z LetterEvent.addNewController()
      */
     static async addNew(letterEvent: LetterEvent): Promise<void> {
+        const instance = this.getInstance();
+
         try {
             // Pobierz poprzednie wydarzenia tego typu
             const previousEvents = await this.find([
@@ -56,7 +61,8 @@ export default class LetterEventsController {
                 ).length + 1;
 
             console.group('Creating new LetterEvent');
-            await letterEvent.addInDb();
+            // Użyj Repository zamiast letterEvent.addInDb()
+            await instance.repository.addInDb(letterEvent);
             console.log('LetterEvent added to db');
             console.groupEnd();
         } catch (err) {
@@ -71,7 +77,8 @@ export default class LetterEventsController {
     static async edit(letterEvent: LetterEvent): Promise<void> {
         try {
             console.group('Editing LetterEvent');
-            await letterEvent.editInDb();
+            const instance = this.getInstance();
+            await instance.repository.editInDb(letterEvent);
             console.log('LetterEvent edited in db');
             console.groupEnd();
         } catch (err) {
@@ -85,36 +92,45 @@ export default class LetterEventsController {
      */
     static async delete(letterEvent: LetterEvent): Promise<void> {
         if (!letterEvent.id) throw new Error('No letterEvent id');
-        await letterEvent.deleteFromDb();
+        const instance = this.getInstance();
+
+        await instance.repository.deleteFromDb(letterEvent);
     }
 
     /**
-     * Przetwarza surowe dane z bazy i tworzy instancje LetterEvent
+     * Wysyła email z pismem
+     * ORKIESTRACJA: Koordynuje walidację (Model), budowanie contentu (Model) i wysyłanie (I/O)
+     *
+     * @param letterEvent - zdarzenie listu z danymi do wysłania
+     * @param auth - OAuth2Client do wysyłania email
+     * @param letter - dane pisma do załączenia
+     * @param cc - opcjonalni odbiorcy kopii
      */
-    private static processLetterEventsResult(result: any[]): LetterEvent[] {
-        let newResult: LetterEvent[] = [];
+    static async sendMailWithLetter(
+        letterEvent: LetterEvent,
+        auth: OAuth2Client,
+        letter: OurLetterContractData,
+        cc?: string[]
+    ): Promise<void> {
+        // 1. Walidacja danych (Model - logika biznesowa)
+        letterEvent.validateEmailData();
 
-        for (const row of result) {
-            const item = new LetterEvent({
-                id: row.Id,
-                letterId: row.LetterId,
-                editorId: row.EditorId,
-                eventType: row.EventType,
-                _lastUpdated: row.LastUpdated,
-                comment: ToolsDb.sqlToString(row.Comment),
-                additionalMessage: ToolsDb.sqlToString(row.AdditionalMessage),
-                versionNumber: row.VersionNumber,
-                gdFilesJSON: row.GdFilesJSON,
-                recipientsJSON: row.RecipientsJSON,
-                _editor: {
-                    name: row.PersonName,
-                    surname: row.PersonSurname,
-                    email: row.PersonEmail,
-                },
-            });
+        // 2. Budowanie contentu email (Model - logika biznesowa)
+        const { subject, html } = letterEvent.buildEmailContent(letter);
 
-            newResult.push(item);
-        }
-        return newResult;
+        // 3. Wysyłanie email (Controller - operacja I/O)
+        ToolsMail.sendEmailWithGdAttachments(
+            auth,
+            letterEvent._gdFilesBasicData!,
+            {
+                to: ToolsMail.getMailListFromPersons(letterEvent._recipients!),
+                cc: [...(cc || []), 'biuro@envi.com.pl'],
+                subject,
+                html,
+                footer: ToolsMail.makeENVIFooter(),
+            }
+        );
+
+        console.log(`Email sent for letter ${letter.number}`);
     }
 }

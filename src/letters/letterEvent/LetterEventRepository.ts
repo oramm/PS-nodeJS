@@ -1,6 +1,9 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 import { LetterEventData } from '../../types/types';
+import LetterEvent from './LetterEvent';
+import { PoolConnection } from 'mysql2/promise';
+import BaseRepository from '../../repositories/BaseRepository';
 
 type LetterEventSearchParams = {
     id?: number;
@@ -10,13 +13,43 @@ type LetterEventSearchParams = {
     searchText?: string;
 };
 
-export default class LetterEventRepository {
+export default class LetterEventRepository extends BaseRepository<LetterEvent> {
+    constructor() {
+        super('LetterEvents');
+    }
+
+    /**
+     * Mapuje surowy wiersz z bazy danych na instancję LetterEvent
+     * Implementacja wymaganej metody abstrakcyjnej z BaseRepository
+     */
+    protected mapRowToModel(row: any): LetterEvent {
+        return new LetterEvent({
+            id: row.Id,
+            letterId: row.LetterId,
+            editorId: row.EditorId,
+            eventType: row.EventType,
+            _lastUpdated: row.LastUpdated,
+            comment: ToolsDb.sqlToString(row.Comment),
+            additionalMessage: ToolsDb.sqlToString(row.AdditionalMessage),
+            versionNumber: row.VersionNumber,
+            gdFilesJSON: row.GdFilesJSON,
+            recipientsJSON: row.RecipientsJSON,
+            _editor: {
+                name: row.PersonName,
+                surname: row.PersonSurname,
+                email: row.PersonEmail,
+            },
+        });
+    }
+
     /**
      * Pobiera listę zdarzeń listów z bazy danych
      * @param orConditions - warunki wyszukiwania połączone operatorem OR
-     * @returns surowe dane z bazy danych
+     * @returns lista instancji LetterEvent
      */
-    async find(orConditions: LetterEventSearchParams[] = []): Promise<any[]> {
+    async find(
+        orConditions: LetterEventSearchParams[] = []
+    ): Promise<LetterEvent[]> {
         const sql = `SELECT LetterEvents.Id,
             LetterEvents.LetterId,
             LetterEvents.EditorId,
@@ -40,8 +73,12 @@ export default class LetterEventRepository {
         )}
         ORDER BY LetterEvents.Id ASC`;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return result;
+        const rawResult: any[] = <any[]>(
+            await ToolsDb.getQueryCallbackAsync(sql)
+        );
+
+        // Mapuj surowe dane na instancje LetterEvent
+        return rawResult.map((row) => this.mapRowToModel(row));
     }
 
     /**
@@ -99,6 +136,33 @@ export default class LetterEventRepository {
 
         const searchTextCondition = conditions.join(' AND ');
         return searchTextCondition;
+    }
+
+    /**
+     * Dodaje LetterEvent do bazy danych
+     * ORKIESTRACJA: Serializuje JSON przed zapisem
+     * Logika przeniesiona z LetterEvent.addInDb()
+     *
+     * @param letterEvent - instancja LetterEvent do dodania
+     * @param externalConn - opcjonalne połączenie (dla transakcji)
+     * @param isPartOfTransaction - czy operacja jest częścią transakcji
+     */
+    async addInDb(
+        letterEvent: LetterEvent,
+        externalConn?: PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        // Serializacja obiektów do JSON przed zapisem do bazy
+        letterEvent.gdFilesJSON = JSON.stringify(letterEvent._gdFilesBasicData);
+        letterEvent.recipientsJSON = JSON.stringify(letterEvent._recipients);
+
+        // Zapis do bazy danych
+        await ToolsDb.addInDb(
+            'LetterEvents',
+            letterEvent,
+            externalConn,
+            isPartOfTransaction
+        );
     }
 }
 
