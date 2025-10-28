@@ -144,10 +144,20 @@ export default class LettersController extends BaseController<
 
     /**
      * Dodaje nowy list do bazy danych wraz z asocjacjami
-     * ORKIESTRACJA: Zarządza transakcją i wywołuje odpowiednie metody
      *
-     * @param letter - instancja Letter do dodania
-     * @returns letter z ustawionym ID
+     * ORKIESTRACJA: Zarządza transakcją i wywołuje odpowiednie metody
+     * REFAKTORING: Funkcjonalność przeniesiona z Letter.addInDb()
+     *
+     * Proces:
+     * 1. Dodaje główny rekord Letter do bazy (przez Repository)
+     * 2. Dla OurLetter: ustawia number = id
+     * 3. Dodaje asocjacje Letter-Entity (MAIN i CC)
+     * 4. Dodaje asocjacje Letter-Case
+     *
+     * Wszystko w ramach jednej transakcji - jeśli coś się nie powiedzie, rollback.
+     *
+     * @param letter - instancja Letter do dodania (OurLetter lub IncomingLetter)
+     * @returns letter z ustawionym ID i asocjacjami
      */
     static async addNew(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
@@ -173,7 +183,12 @@ export default class LettersController extends BaseController<
 
     /**
      * Dodaje asocjacje Letter-Entity (MAIN i CC)
-     * Prywatna metoda pomocnicza dla addNew()
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.addEntitiesAssociationsInDb()
+     * Prywatna metoda pomocnicza dla addNew() - wykonywana w ramach transakcji
+     *
+     * @param letter - Letter z wypełnionymi _entitiesMain i _entitiesCc
+     * @param conn - połączenie do bazy (część transakcji)
      */
     private static async addEntitiesAssociations(
         letter: Letter,
@@ -211,7 +226,12 @@ export default class LettersController extends BaseController<
 
     /**
      * Dodaje asocjacje Letter-Case
-     * Prywatna metoda pomocnicza dla addNew()
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.addCaseAssociationsInDb()
+     * Prywatna metoda pomocnicza dla addNew() - wykonywana w ramach transakcji
+     *
+     * @param letter - Letter z wypełnionymi _cases
+     * @param conn - połączenie do bazy (część transakcji)
      */
     private static async addCaseAssociations(
         letter: Letter,
@@ -333,8 +353,8 @@ export default class LettersController extends BaseController<
             // 7. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
-            // Rollback w przypadku błędu
-            if (letter.id) letter.deleteFromDb();
+            // Rollback w przypadku błędu - używamy LettersController.delete
+            if (letter.id) await this.delete(letter);
             letter._letterGdController.deleteFromGd(
                 auth,
                 null,
@@ -399,13 +419,194 @@ export default class LettersController extends BaseController<
             // 4. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
-            // Rollback w przypadku błędu
-            letter.deleteFromDb();
+            // Rollback w przypadku błędu - używamy LettersController.delete
+            if (letter.id) await this.delete(letter);
             letter._letterGdController.deleteFromGd(
                 auth,
                 letter.gdFolderId || letter.gdDocumentId
             );
             throw err;
         }
+    }
+
+    /**
+     * Edytuje Letter w bazie danych wraz z aktualizacją asocjacji
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.editInDb()
+     * ORKIESTRACJA: Zarządza transakcją i selektywną aktualizacją asocjacji
+     *
+     * @param letter - Letter do edycji (z zaktualizowanymi danymi)
+     * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji
+     * @returns Promise<void>
+     */
+    static async edit(
+        letter: Letter,
+        fieldsToUpdate?: string[]
+    ): Promise<void> {
+        const instance = this.getInstance();
+        console.log('Letter edit in Db Start');
+
+        await ToolsDb.transaction(async (conn) => {
+            const shouldUpdateCases =
+                !fieldsToUpdate || fieldsToUpdate.includes('_cases');
+            const shouldUpdateEntities =
+                !fieldsToUpdate ||
+                fieldsToUpdate.includes('_entitiesMain') ||
+                fieldsToUpdate.includes('_entitiesCc');
+
+            const dbOperations: Promise<any>[] = [
+                instance.repository
+                    .editInDb(letter, conn, true, fieldsToUpdate)
+                    .then(() => {
+                        console.log('letterData edited');
+                    }),
+            ];
+
+            if (shouldUpdateCases) {
+                dbOperations.push(this.editCaseAssociations(letter, conn));
+            }
+            if (shouldUpdateEntities) {
+                dbOperations.push(this.editEntitiesAssociations(letter, conn));
+            }
+
+            await Promise.all(dbOperations);
+            console.log('associations renewed');
+        });
+    }
+
+    /**
+     * Edytuje asocjacje Letter-Entity
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.editEntitiesAssociationsInDb()
+     * Kasuje stare asocjacje i tworzy nowe
+     *
+     * @param letter - Letter z zaktualizowanymi _entitiesMain i _entitiesCc
+     * @param conn - połączenie do bazy (część transakcji)
+     */
+    private static async editEntitiesAssociations(
+        letter: Letter,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        await this.deleteEntitiesAssociations(letter);
+        await this.addEntitiesAssociations(letter, conn);
+    }
+
+    /**
+     * Edytuje asocjacje Letter-Case
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.editCasesAssociationsInDb()
+     * Kasuje stare asocjacje i tworzy nowe
+     *
+     * @param letter - Letter z zaktualizowanymi _cases
+     * @param conn - połączenie do bazy (część transakcji)
+     */
+    private static async editCaseAssociations(
+        letter: Letter,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        await this.deleteCaseAssociations(letter);
+        await this.addCaseAssociations(letter, conn);
+    }
+
+    /**
+     * Usuwa wszystkie asocjacje Letter-Entity dla danego Letter
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.deleteEntitiesAssociationsFromDb()
+     *
+     * @param letter - Letter którego asocjacje mają być usunięte
+     */
+    private static async deleteEntitiesAssociations(
+        letter: Letter
+    ): Promise<void> {
+        const sql = `DELETE FROM Letters_Entities WHERE LetterId = ?`;
+        await ToolsDb.executePreparedStmt(sql, [letter.id], letter);
+    }
+
+    /**
+     * Usuwa wszystkie asocjacje Letter-Case dla danego Letter
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.deleteCasesAssociationsFromDb()
+     *
+     * @param letter - Letter którego asocjacje mają być usunięte
+     */
+    private static async deleteCaseAssociations(letter: Letter): Promise<void> {
+        const sql = `DELETE FROM Letters_Cases WHERE LetterId = ?`;
+        await ToolsDb.executePreparedStmt(sql, [letter.id], letter);
+    }
+
+    /**
+     * Edytuje Letter (DB + GD)
+     *
+     * REFAKTORING: Logika przeniesiona z Letter.editController()
+     * ORKIESTRACJA: Decyduje czy aktualizować tylko DB czy też GD
+     *
+     * @param letter - Letter do edycji
+     * @param auth - OAuth2Client dla operacji Google Drive
+     * @param files - nowe pliki/załączniki
+     * @param userData - dane użytkownika
+     * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji
+     */
+    static async editLetter(
+        letter: Letter,
+        auth: OAuth2Client,
+        files: Express.Multer.File[],
+        userData: UserData,
+        fieldsToUpdate?: string[]
+    ): Promise<void> {
+        const onlyDbFields = [
+            'status',
+            'description',
+            'number',
+            'name',
+            'editorId',
+        ];
+        const isOnlyDbFields =
+            fieldsToUpdate &&
+            fieldsToUpdate?.length > 0 &&
+            fieldsToUpdate.every((field) => onlyDbFields.includes(field));
+
+        console.group('Letter edit');
+
+        // 1. Edytuj w bazie danych
+        await this.edit(letter, fieldsToUpdate);
+        console.log('Letter edited in DB');
+
+        // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD
+        if (!isOnlyDbFields) {
+            await letter.editLetterGdElements(auth, files);
+            console.log('Letter folder and file in GD edited');
+        }
+
+        console.groupEnd();
+    }
+
+    /**
+     * Usuwa Letter z bazy danych
+     *
+     * REFAKTORING: Używa Repository.deleteFromDb() zamiast letter.deleteFromDb()
+     * UWAGA: Asocjacje (Letter-Entity, Letter-Case) są usuwane automatycznie przez CASCADE w bazie
+     *
+     * @param letter - Letter do usunięcia
+     */
+    static async delete(letter: Letter): Promise<void> {
+        if (!letter.id) throw new Error('No letter id');
+        const instance = this.getInstance();
+        await instance.repository.deleteFromDb(letter);
+    }
+
+    /**
+     * Eksportuje OurLetter do PDF
+     *
+     * REFAKTORING: Logika przeniesiona z bezpośredniego wywołania w Routerze
+     * ORKIESTRACJA: Deleguje do OurLetter.exportToPDF()
+     *
+     * @param letter - OurLetter do wyeksportowania
+     * @param auth - OAuth2Client dla operacji Google Drive
+     */
+    static async exportToPDF(
+        letter: OurLetter,
+        auth: OAuth2Client
+    ): Promise<void> {
+        await letter.exportToPDF(auth);
     }
 }

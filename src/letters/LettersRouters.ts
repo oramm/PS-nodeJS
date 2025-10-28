@@ -6,6 +6,7 @@ import TestDocTools, { documentId } from '../documentTemplates/test';
 import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
+import IncomingLetter from './IncomingLetter';
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -107,17 +108,28 @@ app.post('/letterReact', async (req: Request, res: Response, next) => {
     try {
         console.log('req.files', req.files);
         const item = LettersController.createProperLetter(req.parsedBody);
-        try {
+
+        // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
+        if (item instanceof OurLetter) {
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.addNewController,
-                [req.files, req.session.userData],
-                item
+                LettersController.addNewOurLetter,
+                [item, req.files, req.session.userData],
+                LettersController
             );
-        } catch (err) {
-            throw err;
+        } else if (item instanceof IncomingLetter) {
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                LettersController.addNewIncomingLetter,
+                [item, req.files, req.session.userData],
+                LettersController
+            );
+        } else {
+            throw new Error('Unknown letter type');
         }
+
         res.send(item);
     } catch (error) {
         next(error);
@@ -134,12 +146,13 @@ app.put('/letter/:id', async (req: Request, res: Response, next) => {
 
         const item = LettersController.createProperLetter(initParamsFromClient);
 
+        // Użyj LettersController.editLetter zamiast item.editController
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.editController,
-            [req.files, req.session.userData, _fieldsToUpdate],
-            item
+            LettersController.editLetter,
+            [item, req.files, req.session.userData, _fieldsToUpdate],
+            LettersController
         );
         res.send(item);
     } catch (error) {
@@ -184,9 +197,9 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.exportToPDF,
-            [req.session.userData],
-            item
+            LettersController.exportToPDF,
+            [item],
+            LettersController
         );
         res.send(item);
     } catch (error) {
@@ -225,6 +238,8 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
 app.delete('/letter/:id', async (req: Request, res: Response, next) => {
     try {
         const item = LettersController.createProperLetter(req.body);
+
+        // 1. Usuń z Google Drive
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
@@ -232,7 +247,10 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
             [item.gdDocumentId, item.gdFolderId],
             undefined
         );
-        await item.deleteFromDb();
+
+        // 2. Usuń z bazy danych (używamy LettersController.delete zamiast item.deleteFromDb)
+        await LettersController.delete(item);
+
         res.send(item);
     } catch (error) {
         next(error);

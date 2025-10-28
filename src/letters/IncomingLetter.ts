@@ -18,57 +18,6 @@ export default abstract class IncomingLetter
         this.number = initParamObject.number;
     }
 
-    async addNewController(
-        auth: OAuth2Client,
-        files: Express.Multer.File[] = [],
-        userData: UserData
-    ) {
-        try {
-            this.letterFilesCount = files.length;
-            if (files.length > 1) {
-                await this.initAttachmentsHandler(auth, files);
-            } else {
-                const letterGdFile = await this.createLetterFile(
-                    auth,
-                    files[0]
-                );
-                if (!letterGdFile.id)
-                    throw new EnviErrors.NoGdIdError(`: incomingLetter`);
-                this.setDataToSingleFileState(letterGdFile.id);
-            }
-
-            // TYMCZASOWO: Przywracamy this.addInDb() do czasu przeniesienia całej metody do Controllera
-            await this.addInDb();
-
-            if (this.gdDocumentId && this._cases.length > 0) {
-                const shortcutPromises = this._cases.map(async (caseItem) => {
-                    if (caseItem.gdFolderId) {
-                        const lettersSubfolder = await ToolsGd.setFolder(auth, {
-                            parentId: caseItem.gdFolderId,
-                            name: 'Pisma',
-                        });
-
-                        await ToolsGd.createShortcut(auth, {
-                            targetId: this.gdDocumentId!,
-                            parentId: lettersSubfolder.id!,
-                            name: `${this.number} ${this.description}`,
-                        });
-                    }
-                });
-                await Promise.all(shortcutPromises);
-            }
-
-            await this.createNewLetterEvent(userData);
-        } catch (err) {
-            this.deleteFromDb();
-            this._letterGdController.deleteFromGd(
-                auth,
-                this.gdFolderId || this.gdDocumentId
-            );
-            throw err;
-        }
-    }
-
     /** Używać tylko gdy mamy pojedynczego bloba - należy pamiętać o użyciu potem
      *  setToSingleFileState(gdDocumentId: string)
      * PUBLIC: wywoływana z LettersController.addNewIncomingLetter()
