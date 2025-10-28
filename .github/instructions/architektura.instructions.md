@@ -1,131 +1,157 @@
 ---
 applyTo: '**/*.ts'
+description: 'Clean Architecture guidelines - PRIORITY: CRITICAL | ENFORCE: STRICT | Version: 2.0'
 ---
 
-# Instructions for Architektura
+# Wytyczne Architektoniczne - Clean Architecture
 
-Oczywiście. Oto propozycja dokumentu z wytycznymi architektonicznymi, który podsumowuje naszą dyskusję. Można go przekazać bezpośrednio architektowi lub zespołowi programistów jako fundament do pracy.
+> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md)
 
----
+## 🎯 Filozofia
 
-### **Wytyczne Architektoniczne Systemu**
+**Separation of Concerns** - każda warstwa ma jedno, dobrze zdefiniowane zadanie.
+System oparty na **Clean Architecture** z jednokierunkowym przepływem zależności.
 
-#### **1. Wprowadzenie i Filozofia**
+## 🚨 ZASADY OBOWIĄZKOWE (MUST)
 
-Niniejszy dokument określa architekturę oraz kluczowe wzorce projektowe stosowane w naszym systemie. Celem jest zapewnienie wysokiej jakości kodu, jego spójności, testowalności i łatwości w utrzymaniu.
+AI: Te reguły są **nie negocjowalne** - zawsze enforce przy generowaniu/review kodu:
 
-Podstawą naszej architektury jest zasada **Separacji Odpowiedzialności (Separation of Concerns)**, realizowana poprzez ścisły podział na warstwy. Każda warstwa ma jedno, dobrze zdefiniowane zadanie.
+1. ❌ Model **NIE MOŻE** importować Controller ani Repository
+2. ❌ Model **NIE MOŻE** wykonywać operacji I/O do **bazy danych**
+3. ❌ Repository **NIE MOŻE** zawierać logiki biznesowej
+4. ❌ Router **NIE MOŻE** tworzyć instancji Model ani wywoływać Repository
+5. ✅ Przepływ **MUSI BYĆ**: Router → Controller → Repository → Model
+6. ✅ Controller **MUSI** zarządzać transakcjami (nie Repository)
 
-#### **2. Podstawowe Wzorce i Dobre Praktyki**
+## 📐 Przepływ Danych (OBOWIĄZKOWY)
 
--   **Architektura Warstwowa:** System jest oparty na wielowarstwowym modelu, inspirowanym wzorcami takimi jak MVC (Model-View-Controller) i Clean Architecture. Zapewnia to jednokierunkowy przepływ zależności.
--   **Zasada Jednej Odpowiedzialności (Single Responsibility Principle - SRP):** Każda klasa i każda warstwa ma tylko jeden powód do zmiany.
--   **DRY (Don't Repeat Yourself):** Unikamy powielania kodu poprzez stosowanie dziedziczenia, kompozycji i metod pomocniczych we właściwych warstwach.
--   **Wstrzykiwanie Zależności (Dependency Injection - DI):** Choć nie jest to obecnie w pełni zaimplementowane, dążymy do tego, aby zależności (jak repozytoria) były "wstrzykiwane" do klas, które ich używają, zamiast być tworzone wewnątrz nich. Ułatwia to testowanie i wymianę komponentów.
--   **Testowalność:** Warstwy izolowane, dane przekazywane przez parametry (nie pobierane wewnątrz), unikanie cykli zależności (np. model nie importuje kontrolera).
+```
+Router → Controller → Repository → Model
+         (Service)                 (Domain)
+```
 
-#### **3. Jednokierunkowy Przepływ Danych**
+**Zasada:** Żadna warstwa NIE może komunikować się z warstwą "wyżej".
 
-Wszystkie operacje w systemie muszą przestrzegać poniższego schematu przepływu danych. Żadna warstwa nie może komunikować się z warstwą "wyżej" (np. Repozytorium nie może wywołać Kontrolera).
+## 🏛️ Warstwy Architektoniczne
 
-`Router → Controller (Service) → Repository → Model`
+### **Router (HTTP Layer)**
 
-1.  **Router** odbiera żądanie HTTP.
-2.  **Controller** orkiestruje operację, wywołując metody na Repozytorium i Modelu.
-3.  **Repository** komunikuje się z bazą danych.
-4.  **Model** jest tworzony lub aktualizowany na podstawie danych.
+**Rola:** Najcieńsza warstwa - tłumaczy HTTP na wywołania aplikacji.
 
----
+✅ **Powinien:**
 
-### **4. Opis Warstw Architektonicznych**
+-   Definiować endpointy (`app.post('/items', ...)`)
+-   Wywołać **jedną** metodę Controllera
+-   Zwrócić odpowiedź HTTP (`res.send()`, `next(error)`)
 
-#### **4.1. Router (Warstwa HTTP)**
+❌ **NIE powinien:**
 
--   **Rola:** Tłumacz protokołu HTTP na wywołania aplikacji. Jest to najcieńsza możliwa warstwa.
-
--   **✅ Co Powinien Robić:**
-
-    -   Definiować endpointy (np. `app.post('/cities', ...)`).
-    -   Przetwarzać surowe obiekty `request` i `response`.
-    -   Wyciągać dane z `req.params`, `req.body`, `req.query`.
-    -   Wywołać **jedną, odpowiednią metodę** w Kontrolerze.
-    -   Obsłużyć finalny wynik z Kontrolera, wysyłając odpowiedź (np. `res.send(result)`) lub błąd (`next(error)`).
-
--   **❌ Czego Nie Powinien Robić:**
-    -   Zawierać jakiejkolwiek logiki biznesowej lub aplikacyjnej.
-    -   Bezpośrednio tworzyć instancji Modeli (`new City(...)`).
-    -   Bezpośrednio wywoływać metod Repozytorium.
-    -   Budować zapytań do bazy danych.
-
-#### **4.2. Controller / Service (Warstwa Aplikacji)**
-
--   **Rola:** Mózg operacji. Koordynuje pracę innych warstw, aby zrealizować konkretny scenariusz użycia (use case).
-
--   **✅ Co Powinien Robić:**
-
-    -   Implementować logikę aplikacyjną (workflow), np. "dodaj nowe miasto".
-    -   Otrzymywać dane od Routera.
-    -   Wywoływać metody na odpowiednich Repozytoriach, aby pobrać lub zapisać dane.
-    -   Tworzyć instancje Modeli (`new City(data)`).
-    -   Wywoływać metody na instancjach Modeli w celu wykonania logiki biznesowej (`city.generateUniqueCode()`).
-    -   Koordynować operacje na wielu repozytoriach (np. w ramach transakcji).
-    -   Zwracać przetworzone dane lub potwierdzenie operacji do Routera.
-
--   **❌ Czego Nie Powinien Robić:**
-    -   Bezpośrednio komunikować się z bazą danych (pisać zapytań SQL).
-    -   Bezpośrednio operować na obiektach `request` i `response`.
-    -   Zawierać logiki, która jest ściśle związana z modelem biznesowym (powinna być w Modelu) lub dostępem do danych (powinna być w Repozytorium).
-
-#### **4.3. Repository (Warstwa Dostępu do Danych)**
-
--   **Rola:** Abstrakcja i jedyny punkt kontaktu z konkretnym źródłem danych (np. bazą SQL).
-
--   **✅ Co Powinien Robić:**
-
-    -   Implementować wszystkie operacje CRUD (Create, Read, Update, Delete).
-    -   Budować i wykonywać zapytania do bazy danych (np. SQL).
-    -   Korzystać z narzędzi dostępu do danych (np. `ToolsDb`).
-    -   Mapować surowe wyniki z bazy danych na instancje Modeli.
-    -   Implementować logikę wyszukiwania, filtrowania i sortowania na poziomie bazy danych.
-    -   Obsługiwać polimorfizm zapisu/odczytu (np. inaczej zapisywać `City`, a inaczej `CapitalCity`).
-
--   **❌ Czego Nie Powinien Robić:**
-    -   Zawierać logiki biznesowej lub aplikacyjnej.
-    -   Wiedzieć o istnieniu Kontrolerów czy Routerów.
-    -   Koordynować pracy innych repozytoriów – to zadanie dla Kontrolera.
-
-#### **4.4. Model (Warstwa Biznesowa / Domenowa)**
-
--   **Rola:** Serce aplikacji. Definiuje obiekty biznesowe, ich właściwości, stan i zachowanie.
-
--   **✅ Co Powinien Robić:**
-
-    -   Definiować właściwości obiektu (np. `name`, `code`).
-    -   Zawierać logikę walidacji stanu wewnętrznego (np. `validateName()`).
-    -   Implementować metody biznesowe, które operują wyłącznie na danych tego obiektu (`generateCodeFromName()`).
-    -   Otrzymywać dane z zewnątrz jako parametry metod (`generateUniqueCode(existingCodes)`).
-
--   **❌ Czego Nie Powinien Robić:**
-    -   Wiedzieć o istnieniu jakiejkolwiek innej warstwy (importować Kontrolerów, Repozytoriów).
-    -   Wykonywać jakichkolwiek operacji wejścia/wyjścia (I/O) – komunikacji z bazą danych, systemem plików czy siecią.
-    -   Zawierać logiki związanej z protokołem HTTP.
+-   Zawierać logiki biznesowej
+-   Tworzyć instancji Model (`new Item()`)
+-   Wywoływać Repository bezpośrednio
 
 ---
 
-### **5. Dziedziczenie i Polimorfizm**
+### **Controller (Application Layer)**
 
-Wykorzystujemy dziedziczenie w celu przestrzegania zasady DRY i modelowania relacji biznesowych.
+**Rola:** Orkiestruje operacje - koordynuje Repository i Model.
 
--   **W Warstwie Modeli:** Jest to naturalne. Podklasy (np. `CapitalCity`) dziedziczą po klasach bazowych (np. `City`), rozszerzając je o nowe właściwości i metody biznesowe.
+✅ **Powinien:**
 
--   **W Warstwie Repozytoriów:** Dziedziczenie jest również zalecane w celu unifikacji operacji CRUD.
-    -   Można stworzyć generyczną klasę `BaseRepository<T>`, która implementuje standardowe metody (`findById`, `deleteById` itp.).
-    -   Konkretne repozytoria (np. `CityRepository`) mogą dziedziczyć po `BaseRepository`, unikając powielania kodu.
-    -   Polimorfizm jest realizowany wewnątrz metod repozytorium (np. `save(item)`), które sprawdzają typ obiektu (`item instanceof CapitalCity`) i na tej podstawie wykonują odpowiednią logikę zapisu.
+-   Implementować use case (np. "dodaj nowe miasto")
+-   Zarządzać transakcjami bazodanowymi
+-   Wywoływać Repository do operacji CRUD
+-   Wywoływać metody biznesowe na Model
+-   Tworzyć instancje Model
 
-### Dodatkowe Wytyczne dla Architekta i Programistów
+❌ **NIE powinien:**
 
--   Skalowalność: Warstwy są luźno sprzężone – możesz zmienić bazę (w repo) bez wpływu na model. Dla dużych systemów dodaj Service layer (między controller a repo) dla złożonych use case'ów.
--   Testy: Jednostkowe dla modelu (izolowane), integracyjne dla repo (z mock bazą), e2e dla routera.
--   Implementacja: Używaj TypeScript dla typów, wstrzykiwania (np. dependency injection w kontrolerze).
--   Monitoruj cykle zależności (np. narzędziami jak madge).
+-   Pisać zapytań SQL
+-   Operować na `request`/`response`
+-   Zawierać logiki biznesowej (→ Model)
+
+**Wzorzec:** Dziedziczy po `BaseController<T, R>` (Singleton + DI)
+
+---
+
+### **Repository (Data Access Layer)**
+
+**Rola:** Jedyny punkt kontaktu z bazą danych.
+
+✅ **Powinien:**
+
+-   Implementować CRUD (Create, Read, Update, Delete)
+-   Budować i wykonywać zapytania SQL
+-   Mapować dane DB → Model (`mapRowToModel()`)
+-   Obsługiwać polimorfizm zapisu/odczytu
+
+❌ **NIE powinien:**
+
+-   Zawierać logiki biznesowej
+-   Wiedzieć o Controller czy Router
+-   Koordynować innych Repository
+
+**Wzorzec:** Dziedziczy po `BaseRepository<T>` (unikanie duplikacji CRUD)
+
+---
+
+### **Model (Domain Layer)**
+
+**Rola:** Serce aplikacji - obiekty biznesowe i ich zachowanie.
+
+✅ **Powinien:**
+
+-   Definiować właściwości obiektu
+-   Zawierać logikę biznesową i walidację
+-   Otrzymywać dane przez parametry metod
+
+❌ **NIE powinien:**
+
+-   Importować Controller czy Repository
+-   Wykonywać operacji I/O do **bazy danych**
+-   Zawierać logiki HTTP
+
+**Wyjątek I/O:** Model **MOŻE** mieć operacje na systemach zewnętrznych (Google Drive, Email),
+jeśli Controller orkiestruje wywołanie. Zobacz [szczegóły](./architektura-szczegoly.md#model-io).
+
+## 🔧 Wzorce Implementacyjne
+
+### BaseRepository<T>
+
+```typescript
+abstract class BaseRepository<T> {
+    async addInDb(item: T, conn?, isTransaction?): Promise<void>;
+    async editInDb(item: T, conn?, isTransaction?, fields?): Promise<void>;
+    async deleteFromDb(item: T): Promise<void>;
+    abstract mapRowToModel(row: any): T;
+    abstract find(conditions?): Promise<T[]>;
+}
+```
+
+### BaseController<T, R>
+
+```typescript
+abstract class BaseController<T, R extends BaseRepository<T>> {
+    protected repository: R;
+    static getInstance(): this; // Singleton
+}
+```
+
+## 📋 Zasady Refaktoringu
+
+1. **Oznacz @deprecated** - nie usuwaj od razu
+2. **Stwórz nową implementację** w odpowiedniej warstwie
+3. **Migruj stopniowo** - Router → inne komponenty
+4. **Usuń deprecated** po weryfikacji (grep/search)
+
+## ✅ Checklist Przed Commitem
+
+-   [ ] Przepływ: Router → Controller → Repository → Model
+-   [ ] Model NIE importuje Controller/Repository
+-   [ ] Repository NIE zawiera logiki biznesowej
+-   [ ] Controller zarządza transakcjami
+-   [ ] Brak cykli zależności (sprawdź: `madge`)
+
+---
+
+📚 **Więcej:** [Szczegółowy przewodnik z przykładami](./architektura-szczegoly.md)
