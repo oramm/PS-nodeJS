@@ -1,116 +1,146 @@
-import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 import OfferEvent from './OfferEvent';
-import { OfferEventData } from '../../types/types';
+import Setup from '../../setup/Setup';
+import { OAuth2Client } from 'google-auth-library';
+import Offer from '../Offer';
+import BaseController from '../../controllers/BaseController';
+import OfferEventRepository, {
+    OfferEventSearchParams,
+} from './OfferEventRepository';
 
-type OfferEventSearchParams = {
-    id?: number;
-    offerId?: number;
-    editorId?: number;
-    eventType?: string;
-    searchText?: string;
-};
+/**
+ * Controller dla OfferEvent - warstwa aplikacji/serwisów
+ *
+ * Zgodnie z Clean Architecture:
+ * - Dziedziczy po BaseController<OfferEvent, OfferEventRepository>
+ * - Orkiestruje operacje (Repository + Model)
+ * - Zarządza transakcjami
+ * - NIE zawiera SQL ani logiki biznesowej
+ */
+export default class OfferEventsController extends BaseController<
+    OfferEvent,
+    OfferEventRepository
+> {
+    private static instance: OfferEventsController;
 
-export default class OfferEventsController {
+    constructor() {
+        super(new OfferEventRepository());
+    }
+
+    /**
+     * Singleton pattern - zwraca instancję controllera
+     */
+    private static getInstance(): OfferEventsController {
+        if (!this.instance) {
+            this.instance = new OfferEventsController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Wyszukuje wydarzenia ofert w bazie danych
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @returns Promise<OfferEvent[]> - Lista znalezionych wydarzeń
+     */
     static async getOfferEventsList(
         orConditions: OfferEventSearchParams[] = []
-    ) {
-        const sql = `SELECT OfferEvents.Id,
-            OfferEvents.OfferId,
-            OfferEvents.EditorId,
-            OfferEvents.EventType,
-            OfferEvents.LastUpdated,
-            OfferEvents.Comment,
-            OfferEvents.AdditionalMessage,
-            OfferEvents.VersionNumber,
-            Offers.Id as OfferId,
-            Persons.Name as PersonName,
-            Persons.Surname as PersonSurname,
-            Persons.Email as PersonEmail
-        FROM OfferEvents
-        JOIN Offers ON OfferEvents.OfferId = Offers.Id
-        JOIN Persons ON OfferEvents.EditorId = Persons.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY OfferEvents.Id ASC`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processOfferEventsResult(result);
+    ): Promise<OfferEvent[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
     }
 
-    static makeAndConditions(searchParams: OfferEventSearchParams) {
-        const conditions: string[] = [];
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
-        }
+    /**
+     * Dodaje nowe wydarzenie oferty do bazy danych
+     *
+     * REFAKTORING: Logika przeniesiona z OfferEvent.addNewController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerEvent - Wydarzenie oferty do dodania
+     * @returns Promise<OfferEvent> - Dodane wydarzenie z wygenerowanym versionNumber
+     */
+    static async addNew(offerEvent: OfferEvent): Promise<OfferEvent> {
+        const instance = this.getInstance();
 
-        if (searchParams.offerId) {
-            conditions.push(
-                mysql.format(`OfferEvents.OfferId = ?`, [searchParams.offerId])
-            );
-        }
+        try {
+            // Oblicz numer wersji dla typu SENT
+            if (offerEvent.eventType === Setup.OfferEventType.SENT) {
+                const previousEvents = await instance.repository.find([
+                    {
+                        offerId: offerEvent.offerId,
+                        eventType: Setup.OfferEventType.SENT,
+                    },
+                ]);
+                offerEvent.versionNumber =
+                    previousEvents.filter(
+                        (event) => event.eventType === Setup.OfferEventType.SENT
+                    ).length + 1;
+            }
 
-        if (searchParams.editorId) {
-            conditions.push(
-                mysql.format(`OfferEvents.EditorId = ?`, [
-                    searchParams.editorId,
-                ])
-            );
-        }
+            console.group('Creating new OfferEvent');
+            await instance.repository.addInDb(offerEvent);
+            console.log('OfferEvent added to db');
+            console.groupEnd();
 
-        if (searchParams.eventType) {
-            conditions.push(
-                mysql.format(`OfferEvents.EventType = ?`, [
-                    searchParams.eventType,
-                ])
-            );
+            return offerEvent;
+        } catch (err) {
+            await this.delete(offerEvent);
+            throw err;
         }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(OfferEvents.Comment LIKE ? OR OfferEvents.AdditionalMessage LIKE ?)`,
-                [`%${word}%`, `%${word}%`]
-            )
-        );
+    /**
+     * Edytuje istniejące wydarzenie oferty
+     *
+     * REFAKTORING: Logika przeniesiona z OfferEvent.editController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerEvent - Wydarzenie oferty do edycji
+     */
+    static async edit(offerEvent: OfferEvent): Promise<void> {
+        const instance = this.getInstance();
 
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+        try {
+            console.group('Editing OfferEvent');
+            await instance.repository.editInDb(offerEvent);
+            console.log('OfferEvent edited in db');
+            console.groupEnd();
+        } catch (err) {
+            console.log('OfferEvent edit error');
+            throw err;
+        }
     }
 
-    static processOfferEventsResult(result: any[]) {
-        let newResult: OfferEventData[] = [];
+    /**
+     * Usuwa wydarzenie oferty z bazy danych
+     *
+     * REFAKTORING: Logika przeniesiona z OfferEvent.deleteController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerEvent - Wydarzenie oferty do usunięcia
+     */
+    static async delete(offerEvent: OfferEvent): Promise<void> {
+        const instance = this.getInstance();
+        await instance.repository.delete(offerEvent);
+    }
 
-        for (const row of result) {
-            const item = new OfferEvent({
-                id: row.Id,
-                offerId: row.OfferId,
-                editorId: row.EditorId,
-                eventType: row.EventType,
-                _lastUpdated: row.LastUpdated,
-                comment: ToolsDb.sqlToString(row.Comment),
-                additionalMessage: ToolsDb.sqlToString(row.AdditionalMessage),
-                versionNumber: row.VersionNumber,
-                _editor: {
-                    name: row.PersonName,
-                    surname: row.PersonSurname,
-                    email: row.PersonEmail,
-                },
-            });
-
-            newResult.push(item);
-        }
-        return newResult;
+    /**
+     * Wysyła email z ofertą do określonych odbiorców
+     *
+     * REFAKTORING: Orkiestracja wywołania OfferEvent.sendMailWithOffer()
+     * Controller decyduje KIEDY wysłać, Model enkapsuluje szczegóły wysyłki.
+     *
+     * @param auth - OAuth2Client dla Google API
+     * @param offerEvent - Wydarzenie zawierające dane o wysyłce
+     * @param offer - Oferta do wysłania
+     * @param cc - Opcjonalne adresy CC
+     */
+    static async sendMailWithOffer(
+        auth: OAuth2Client,
+        offerEvent: OfferEvent,
+        offer: Offer,
+        cc?: string[]
+    ): Promise<void> {
+        await offerEvent.sendMailWithOffer(auth, offer, cc);
     }
 }

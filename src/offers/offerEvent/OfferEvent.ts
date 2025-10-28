@@ -2,16 +2,12 @@ import { drive_v3 } from 'googleapis';
 import BusinessObject from '../../BussinesObject';
 import { OfferEventData, PersonData } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
-import OurOffer from '../OurOffer';
+import Offer from '../Offer';
 import ToolsMail from '../../tools/ToolsMail';
-import ToolsDb from '../../tools/ToolsDb';
-import OfferEventsController from './OfferEventsController';
-import Setup from '../../setup/Setup';
-import { PoolConnection } from 'mysql2/promise';
 
 /**
  * Przy odczytywaniu z bazy danych, jeśli w bazie danych jest zapisany JSON, to trzeba go przekonwertować na obiekt
- * Przy zapiswaniu do bazy danych, jeśli zapisywany obiekt ma pole, które jest obiektem, to trzeba je przekonwertować na JSON
+ * Przy zapiswaniu do bazy danych, Repository przygotowuje dane (JSON stringify) przed zapisem
  */
 export default class OfferEvent
     extends BusinessObject
@@ -52,58 +48,20 @@ export default class OfferEvent
             (this.recipientsJSON ? JSON.parse(this.recipientsJSON) : undefined);
     }
 
-    async addNewController() {
-        try {
-            const conn = await ToolsDb.getPoolConnectionWithTimeout();
-            const previousEvents = OfferEventsController.getOfferEventsList([
-                { offerId: this.offerId, eventType: Setup.OfferEventType.SENT },
-            ]);
-            this.versionNumber =
-                (await previousEvents).filter(
-                    (event) => event.eventType === Setup.OfferEventType.SENT
-                ).length + 1;
-            console.group('Creating new OfferEvent');
-            await this.addInDb();
-            console.log('OfferEvent added to db');
-            console.groupEnd();
-        } catch (err) {
-            this.deleteController();
-            throw err;
-        }
-    }
-
-    /** przed zapisem do bazy danych trzeba konwertuje obiekty na JSON */
-    async addInDb(
-        externalConn?: PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        this.gdFilesJSON = JSON.stringify(this._gdFilesBasicData);
-        this.recipientsJSON = JSON.stringify(this._recipients);
-        await super.addInDb(externalConn, isPartOfTransaction);
-    }
-
-    async editController() {
-        try {
-            console.group('Editing OfferEvent');
-            await this.editInDb();
-            console.log('OfferEvent edited in db');
-            console.groupEnd();
-        } catch (err) {
-            console.log('OfferEvent edit error');
-            throw err;
-        }
-    }
-
-    async deleteController() {
-        if (!this.id) throw new Error('No offerEvent id');
-        await this.deleteFromDb();
-    }
-
-    async sendMailWithOffer(
-        auth: OAuth2Client,
-        offer: OurOffer,
-        cc?: string[]
-    ) {
+    /**
+     * Wysyła email z ofertą do odbiorców
+     *
+     * PUBLIC: Wywoływana przez OfferEventsController.sendMailWithOffer()
+     *
+     * REFAKTORING: Zmieniono typ z OurOffer na Offer (typ bazowy)
+     * - Używamy tylko wspólnych właściwości (_type, _city, alias, description)
+     * - Nie ma potrzeby importowania klasy pochodnej
+     *
+     * @param auth - OAuth2Client dla Google API
+     * @param offer - Oferta (może być OurOffer lub ExternalOffer)
+     * @param cc - Opcjonalne adresy CC
+     */
+    async sendMailWithOffer(auth: OAuth2Client, offer: Offer, cc?: string[]) {
         const _recipients = this._recipients;
         const gdFilesBasicData = this._gdFilesBasicData;
         if (!_recipients?.length)

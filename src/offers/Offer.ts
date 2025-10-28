@@ -20,6 +20,7 @@ import MilestonesController from '../contracts/milestones/MilestonesController';
 import CasesController from '../contracts/milestones/cases/CasesController';
 import EnviErrors from '../tools/Errors';
 import OfferEvent from './offerEvent/OfferEvent';
+import OfferEventsController from './offerEvent/OfferEventsController';
 import PersonsController from '../persons/PersonsController';
 import { UserData } from '../types/sessionTypes';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
@@ -140,7 +141,7 @@ export default abstract class Offer
                 _editor,
             });
             TaskStore.update(taskId, 'Zapisuję nowe wydarzenie dla oferty', 95);
-            await this._lastEvent.addNewController();
+            await OfferEventsController.addNew(this._lastEvent);
             console.groupEnd();
         } catch (err) {
             this.deleteController(auth);
@@ -222,17 +223,17 @@ export default abstract class Offer
 
     async addEventController() {
         if (!this._lastEvent) throw new Error('No last event');
-        await this._lastEvent.addNewController();
+        await OfferEventsController.addNew(this._lastEvent);
     }
 
     async editEventController() {
         if (!this._lastEvent) throw new Error('No last event');
-        await this._lastEvent.editController();
+        await OfferEventsController.edit(this._lastEvent);
     }
 
     async deleteEventController() {
         if (!this._lastEvent) throw new Error('No last event');
-        await this._lastEvent.deleteController();
+        await OfferEventsController.delete(this._lastEvent);
         this._lastEvent = null;
     }
 

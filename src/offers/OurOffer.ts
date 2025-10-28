@@ -11,6 +11,7 @@ import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import OfferEvent from './offerEvent/OfferEvent';
+import OfferEventsController from './offerEvent/OfferEventsController';
 import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
@@ -94,8 +95,10 @@ export default class OurOffer extends Offer implements OurOfferData {
             _editor, //editorId: ustawia się w BussinesObject,
             offerId: this.id,
         });
-        await newEvent.addNewController();
-        newEvent.sendMailWithOffer(auth, this, [userData.systemEmail]);
+        await OfferEventsController.addNew(newEvent);
+        await OfferEventsController.sendMailWithOffer(auth, newEvent, this, [
+            userData.systemEmail,
+        ]);
         this._lastEvent = newEvent;
         this.status = Setup.OfferStatus.DONE;
         await this.editController(auth, undefined, ['status']);
