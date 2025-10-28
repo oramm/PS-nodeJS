@@ -120,6 +120,7 @@ export default class OfferEventsController extends BaseController<
      * @param offerEvent - Wydarzenie oferty do usunięcia
      */
     static async delete(offerEvent: OfferEvent): Promise<void> {
+        if (!offerEvent.id) throw new Error('No offerEvent id');
         const instance = this.getInstance();
         await instance.repository.delete(offerEvent);
     }

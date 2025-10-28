@@ -3,6 +3,7 @@ import Offer from './Offer';
 import { OAuth2Client } from 'google-auth-library';
 import ExternalOfferGdController from './gdControllers/ExternalOfferGdController';
 import OfferBond from './OfferBond/OfferBond';
+import OfferBondsController from './OfferBond/OfferBondsController';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import { UserData } from '../types/sessionTypes';
@@ -51,23 +52,23 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
         await super.editController(auth, taskId, _fieldsToUpdate);
         if (this._offerBond) {
             this._offerBond.status = Setup.OfferBondStatus.DONE;
+            await OfferBondsController.edit(this._offerBond, this);
         }
-        this._offerBond && (await this._offerBond.editController(this));
     }
 
     async addNewOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
-        await this._offerBond.addNewController(this);
+        await OfferBondsController.addNew(this._offerBond, this);
     }
 
     async editOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
-        await this._offerBond.editController(this);
+        await OfferBondsController.edit(this._offerBond, this);
     }
 
     async deleteOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
-        await this._offerBond.deleteController();
+        await OfferBondsController.delete(this._offerBond);
         console.log('OfferBond deleted', this._offerBond);
         this._offerBond = null;
     }

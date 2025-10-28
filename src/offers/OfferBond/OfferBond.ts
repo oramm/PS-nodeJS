@@ -44,53 +44,15 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
             ? ToolsDate.dateJsToSql(initParamObject.expiryDate)
             : null;
     }
-    async addNewController(offer?: ExternalOfferData | OurOfferData) {
-        try {
-            console.group('Creating new OfferBond');
-            await this.addInDb();
-            if (
-                offer?.status === Setup.OfferStatus.TO_DO &&
-                this.status === Setup.OfferBondStatus.TO_PAY
-            )
-                this.sendMailOnToDo(offer);
-            console.log('OfferBond added to db');
-            console.groupEnd();
-        } catch (err) {
-            this.deleteController();
-            throw err;
-        }
-    }
 
-    async editController(offer: ExternalOfferData) {
-        try {
-            console.group('Editing OfferBond');
-            await this.editInDb();
-            console.log('OfferBond edited in db');
-            this.sendMailOnStatusChange(offer);
-            console.groupEnd();
-        } catch (err) {
-            console.log('OfferBond edit error');
-            throw err;
-        }
-    }
-
-    async deleteController() {
-        if (!this.id) throw new Error('No offerBond id');
-        await this.deleteFromDb();
-    }
-
-    sendMailOnStatusChange(offer: ExternalOfferData) {
-        switch (this.status) {
-            case Setup.OfferBondStatus.TO_PAY:
-                this.sendMailOnToDo(offer);
-                break;
-            case Setup.OfferBondStatus.PAID:
-                this.sendMailOnPaid(offer);
-                break;
-        }
-    }
-
-    protected sendMailOnToDo(offer: ExternalOfferData) {
+    /**
+     * Wysyła email gdy wadium ma status TO_PAY
+     *
+     * PUBLIC: Wywoływana przez OfferBondsController
+     *
+     * @param offer - Dane oferty
+     */
+    public sendMailOnToDo(offer: ExternalOfferData) {
         const header = `<h2>Zapłać wadium za ofertę: ${offer._type.name} ${offer._city.name} | ${offer.alias}</h2>`;
         const style = 'style="line-height: 1.2; margin: 20px; padding: 20px;"';
         const mainDivStyle =
@@ -138,7 +100,14 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
         });
     }
 
-    protected sendMailOnPaid(offer: ExternalOfferData) {
+    /**
+     * Wysyła email gdy wadium zostało opłacone (status PAID)
+     *
+     * PUBLIC: Wywoływana przez OfferBondsController
+     *
+     * @param offer - Dane oferty
+     */
+    public sendMailOnPaid(offer: ExternalOfferData) {
         let header =
             this.form === Setup.OfferBondForm.CASH
                 ? `<h2>Zapłacono wadium za ofertę:`

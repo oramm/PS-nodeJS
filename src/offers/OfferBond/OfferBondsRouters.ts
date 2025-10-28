@@ -23,7 +23,7 @@ app.post('/offerBonds', async (req: Request, res: Response, next) => {
 app.post('/offerBond', async (req: Request, res: Response, next) => {
     try {
         const offerBond = new OfferBond(req.body);
-        await offerBond.addNewController();
+        await OfferBondsController.addNew(offerBond);
         res.send(offerBond);
     } catch (error) {
         console.error(error);
@@ -37,7 +37,7 @@ app.post('/offerBond', async (req: Request, res: Response, next) => {
 app.delete('/offerBond/:id', async (req: Request, res: Response, next) => {
     try {
         let offerBond = new OfferBond(req.body);
-        await offerBond.deleteController();
+        await OfferBondsController.delete(offerBond);
         res.send(offerBond);
     } catch (error) {
         console.error(error);

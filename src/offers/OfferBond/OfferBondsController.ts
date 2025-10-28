@@ -1,99 +1,155 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import { OfferBondData, OfferData } from '../../types/types';
 import OfferBond from './OfferBond';
+import Setup from '../../setup/Setup';
+import { ExternalOfferData, OurOfferData } from '../../types/types';
+import BaseController from '../../controllers/BaseController';
+import OfferBondRepository, {
+    OfferBondSearchParams,
+} from './OfferBondRepository';
 
-type OfferBondSearchParams = {
-    id?: number;
-    offerId?: number;
-    _offer?: OfferData; // Assuming OfferData represents the data structure of an offer
-    status?: string;
-    searchText?: string;
-};
+/**
+ * Controller dla OfferBond - warstwa aplikacji/serwisów
+ *
+ * Zgodnie z Clean Architecture:
+ * - Dziedziczy po BaseController<OfferBond, OfferBondRepository>
+ * - Orkiestruje operacje (Repository + Model)
+ * - Zarządza transakcjami
+ * - NIE zawiera SQL ani logiki biznesowej
+ */
+export default class OfferBondsController extends BaseController<
+    OfferBond,
+    OfferBondRepository
+> {
+    private static instance: OfferBondsController;
 
-export default class OfferBondsController {
-    static async getOfferBondsList(orConditions: OfferBondSearchParams[] = []) {
-        const sql = `SELECT OfferBonds.Id,
-            OfferBonds.Value,
-            OfferBonds.Form,
-            OfferBonds.PaymentData,
-            OfferBonds.Comment,
-            OfferBonds.Status,
-            OfferBonds.ExpiryDate,
-            Offers.Id as OfferId,
-            Offers.Alias as OfferAlias
-        FROM OfferBonds
-        JOIN Offers ON OfferBonds.OfferId = Offers.Id
-        JOIN Cities ON Offers.CityId = Cities.Id
-        JOIN ContractTypes AS OfferType ON Offers.TypeId = OfferTypes.Id
-        JOIN Persons AS Editor ON Offers.EditorId = Editor.Id
-        LEFT JOIN FinancialAidProgrammes ON Offers.FinancialAidProgrammeId = FinancialAidProgrammes.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY OfferBonds.Id ASC`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return await this.processOfferBondsResult(result);
+    constructor() {
+        super(new OfferBondRepository());
     }
 
-    static makeAndConditions(searchParams: OfferBondSearchParams) {
-        const conditions: string[] = [];
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
+    /**
+     * Singleton pattern - zwraca instancję controllera
+     */
+    private static getInstance(): OfferBondsController {
+        if (!this.instance) {
+            this.instance = new OfferBondsController();
         }
-
-        if (searchParams.offerId) {
-            conditions.push(
-                mysql.format(`OfferBonds.OfferId = ?`, [searchParams.offerId])
-            );
-        }
-
-        if (searchParams.status) {
-            conditions.push(
-                mysql.format(`OfferBonds.Status = ?`, [searchParams.status])
-            );
-        }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
+        return this.instance;
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(`(OfferBonds.Comment LIKE ? OR Offers.Name LIKE ?)`, [
-                `%${word}%`,
-                `%${word}%`,
-            ])
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    /**
+     * Wyszukuje wadiów w bazie danych
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @returns Promise<OfferBond[]> - Lista znalezionych wadiów
+     */
+    static async getOfferBondsList(
+        orConditions: OfferBondSearchParams[] = []
+    ): Promise<OfferBond[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
     }
 
-    static processOfferBondsResult(result: any[]): OfferBond[] {
-        let newResult: OfferBond[] = [];
+    /**
+     * Dodaje nowe wadium do bazy danych
+     *
+     * REFAKTORING: Logika przeniesiona z OfferBond.addNewController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerBond - Wadium do dodania
+     * @param offer - Opcjonalna oferta (dla wysyłki maila)
+     * @returns Promise<OfferBond> - Dodane wadium
+     */
+    static async addNew(
+        offerBond: OfferBond,
+        offer?: ExternalOfferData | OurOfferData
+    ): Promise<OfferBond> {
+        const instance = this.getInstance();
 
-        for (const row of result) {
-            const item = new OfferBond({
-                id: row.Id,
-                value: row.Value,
-                form: row.Form,
-                paymentData: row.PaymentData,
-                comment: ToolsDb.sqlToString(row.Comment),
-                status: row.Status,
-                expiryDate: row.ExpiryDate,
-                offerId: row.OfferId,
-            });
+        try {
+            console.group('Creating new OfferBond');
+            await instance.repository.addInDb(offerBond);
 
-            newResult.push(item);
+            // Wysyłka maila jeśli oferta TO_DO i wadium TO_PAY
+            if (
+                offer?.status === Setup.OfferStatus.TO_DO &&
+                offerBond.status === Setup.OfferBondStatus.TO_PAY
+            ) {
+                offerBond.sendMailOnToDo(offer as ExternalOfferData);
+            }
+
+            console.log('OfferBond added to db');
+            console.groupEnd();
+
+            return offerBond;
+        } catch (err) {
+            await this.delete(offerBond);
+            throw err;
         }
-        return newResult;
+    }
+
+    /**
+     * Edytuje istniejące wadium
+     *
+     * REFAKTORING: Logika przeniesiona z OfferBond.editController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerBond - Wadium do edycji
+     * @param offer - Oferta (dla wysyłki maila przy zmianie statusu)
+     */
+    static async edit(
+        offerBond: OfferBond,
+        offer: ExternalOfferData
+    ): Promise<void> {
+        const instance = this.getInstance();
+
+        try {
+            console.group('Editing OfferBond');
+            await instance.repository.editInDb(offerBond);
+            console.log('OfferBond edited in db');
+
+            // Wysyłka maila przy zmianie statusu
+            this.sendMailOnStatusChange(offerBond, offer);
+
+            console.groupEnd();
+        } catch (err) {
+            console.log('OfferBond edit error');
+            throw err;
+        }
+    }
+
+    /**
+     * Usuwa wadium z bazy danych
+     *
+     * REFAKTORING: Logika przeniesiona z OfferBond.deleteController()
+     * Controller używa Repository zamiast wywoływać metody bezpośrednio na Model.
+     *
+     * @param offerBond - Wadium do usunięcia
+     */
+    static async delete(offerBond: OfferBond): Promise<void> {
+        if (!offerBond.id) throw new Error('No offerBond id');
+        const instance = this.getInstance();
+        await instance.repository.delete(offerBond);
+    }
+
+    /**
+     * Wysyła email przy zmianie statusu wadium
+     *
+     * REFAKTORING: Orkiestracja wywołania metod z OfferBond
+     * Controller decyduje KIEDY wysłać, Model enkapsuluje szczegóły wysyłki.
+     *
+     * @param offerBond - Wadium
+     * @param offer - Oferta
+     */
+    static sendMailOnStatusChange(
+        offerBond: OfferBond,
+        offer: ExternalOfferData
+    ): void {
+        switch (offerBond.status) {
+            case Setup.OfferBondStatus.TO_PAY:
+                offerBond.sendMailOnToDo(offer);
+                break;
+            case Setup.OfferBondStatus.PAID:
+                offerBond.sendMailOnPaid(offer);
+                break;
+        }
     }
 }
