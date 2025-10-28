@@ -68,37 +68,93 @@ export default class LettersController extends BaseController<
             | IncomingLetterContract
             | IncomingLetterOffer;
 
+        // DEBUG: logujemy wejściowe dane
+        console.log('[LetterFactory] createProperLetter input:', JSON.stringify(initParam, null, 2));
+
+        // helper: ensure letter has a _letterGdController to avoid runtime checks later
+        const ensureGdController = (it: any) => {
+            if (!it) return;
+            if (it._letterGdController) return;
+
+            // assign a lightweight fallback controller that throws descriptive errors
+            it._letterGdController = {
+                makeParentFolderGdId: (_: any) => {
+                    throw new Error('Fallback: no GD parent folder id available for this letter');
+                },
+                createLetterFolder: async (_auth: any, _letterData: any) => {
+                    throw new Error('Fallback: _letterGdController not initialized for this letter');
+                },
+                deleteFromGd: async (_auth: any, _docId?: any, _folderId?: any) => {
+                    // noop fallback: nothing to delete
+                    return;
+                },
+                makeFolderName: (number: string, creationDate: string) => `${number} ${creationDate}`,
+                appendAttachments: async (_auth: any, _files: any[], _folderId?: any) => {
+                    throw new Error('Fallback: appendAttachments not available - no GD controller');
+                },
+            } as any;
+
+            console.warn('[LetterFactory] Assigned fallback _letterGdController for letter', {
+                id: it.id,
+                number: it.number,
+                type: it.constructor?.name,
+            });
+        };
+
         // Our Letter Contract (nowy typ)
         if (
             initParam.isOur &&
             initParam.id == initParam.number &&
             initParam._project?.id
         ) {
+            console.log('[LetterFactory] Tworzenie OurLetterContract');
             item = new OurLetterContract(initParam);
-            if (initParam._contract)
+            if (initParam._contract) {
+                console.log('[LetterFactory] Ustawiam kontrakt w OurLetterContract');
                 item.setContractFromClientData(initParam._contract);
+            }
+            ensureGdController(item);
             return item;
         }
 
         // Our Letter Contract (stary typ - OurOldTypeLetter)
-        if (initParam.isOur && initParam.id !== initParam.number)
-            return new OurOldTypeLetter(initParam);
+        if (initParam.isOur && initParam.id !== initParam.number) {
+            console.log('[LetterFactory] Tworzenie OurOldTypeLetter');
+            item = new OurOldTypeLetter(initParam);
+            ensureGdController(item);
+            return item;
+        }
 
         // Our Letter Offer
-        if (initParam.isOur && initParam._offer?.id)
-            return new OurLetterOffer(initParam);
+        if (initParam.isOur && initParam._offer?.id) {
+            console.log('[LetterFactory] Tworzenie OurLetterOffer');
+            item = new OurLetterOffer(initParam);
+            ensureGdController(item);
+            return item;
+        }
 
         // Incoming Letter Contract
         if (!initParam.isOur && initParam._project) {
+            console.log('[LetterFactory] Tworzenie IncomingLetterContract');
             item = new IncomingLetterContract(initParam);
-            if (initParam._contract)
+            if (initParam._contract) {
+                console.log('[LetterFactory] Ustawiam kontrakt w IncomingLetterContract');
                 item.setContractFromClientData(initParam._contract);
+            }
+            ensureGdController(item);
             return item;
         }
 
         // Incoming Letter Offer
-        if (!initParam.isOur && initParam._offer?.id)
-            return new IncomingLetterOffer(initParam);
+        if (!initParam.isOur && initParam._offer?.id) {
+            console.log('[LetterFactory] Tworzenie IncomingLetterOffer');
+            item = new IncomingLetterOffer(initParam);
+            ensureGdController(item);
+            return item;
+        }
+
+        // DEBUG: logujemy przypadek nieobsłużony
+        console.warn('[LetterFactory] Nieobsłużony przypadek! Dane:', JSON.stringify(initParam, null, 2));
 
         // Błąd - nieprawidłowe dane
         throw new Error(
@@ -270,11 +326,26 @@ export default class LettersController extends BaseController<
         userData: UserData
     ): Promise<void> {
         try {
-            // 1. Utwórz folder GD dla pisma
-            const gdFolder =
-                await letter._letterGdController.createLetterFolder(auth, {
-                    ...letter,
-                });
+            // 1. Utwórz folder GD dla pisma - walidacje
+            if (!letter._letterGdController || typeof letter._letterGdController.createLetterFolder !== 'function') {
+                throw new Error('Brak lub niepoprawny kontroler GD dla pisma (pole _letterGdController).');
+            }
+
+            // sprawdź, czy funkcja makeParentFolderGdId zwróci parent folder id (może wyrzucić błąd jeśli brakuje danych)
+            let parentFolderId: string | undefined;
+            try {
+                parentFolderId = letter._letterGdController.makeParentFolderGdId(<any>letter);
+            } catch (err) {
+                throw new Error('Nie można uzyskać folderu nadrzędnego dla pisma: ' + (err as Error).message);
+            }
+
+            if (!parentFolderId) {
+                throw new Error('Brak folderu nadrzędnego dla pisma (parentFolderId jest puste).');
+            }
+
+            const gdFolder = await letter._letterGdController.createLetterFolder(auth, {
+                ...letter,
+            });
             letter.gdFolderId = <string>gdFolder.id;
             letter._gdFolderUrl = ToolsGd.createGdFolderUrl(letter.gdFolderId);
 
@@ -355,11 +426,13 @@ export default class LettersController extends BaseController<
         } catch (err) {
             // Rollback w przypadku błędu - używamy LettersController.delete
             if (letter.id) await this.delete(letter);
-            letter._letterGdController.deleteFromGd(
-                auth,
-                null,
-                letter.gdFolderId
-            );
+            if (letter._letterGdController) {
+                await letter._letterGdController.deleteFromGd(
+                    auth,
+                    null,
+                    letter.gdFolderId
+                );
+            }
             throw err;
         }
     }

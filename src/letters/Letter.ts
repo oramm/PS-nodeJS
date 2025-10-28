@@ -19,6 +19,7 @@ import LetterEvent from './letterEvent/LetterEvent';
 import LetterEventsController from './letterEvent/LetterEventsController';
 import PersonsController from '../persons/PersonsController';
 import Setup from '../setup/Setup';
+import LetterGdController from './gdControlers/LetterGdController';
 
 export default abstract class Letter
     extends BusinessObject
@@ -48,6 +49,7 @@ export default abstract class Letter
     relatedLetterNumber?: string | null;
     responseDueDate?: string;
     responseIKNumber?: string | null;
+    _letterGdController?: LetterGdController;
 
     constructor(initParamObject: LetterData) {
         super({ ...initParamObject, _dbTableName: 'Letters' });
