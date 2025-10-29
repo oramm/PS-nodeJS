@@ -144,35 +144,14 @@ export default class ToolsGapi {
             const credentials = { refresh_token: refreshToken };
             oAuthClient.setCredentials(credentials);
 
-            let args: any[] = [];
-
-            // If caller passed an array of args, detect if the first arg looks like a Letter
-            // (has typical Letter properties like _cases or creationDate). In that case
-            // controllers expect (letter, auth, ...), so we push letter first and auth second.
-            if (Array.isArray(argObject)) {
-                const providedArgs = argObject as any[];
-                const first = providedArgs[0];
-                const looksLikeLetter =
-                    first &&
-                    (first._cases !== undefined || first.creationDate !== undefined || first._entitiesMain !== undefined);
-
-                if (looksLikeLetter) {
-                        args = [first, oAuthClient, ...providedArgs.slice(1)];
-                } else {
-                    // default behaviour: auth first
-                    args = [oAuthClient, ...providedArgs];
-                }
-            } else {
-                args = [oAuthClient];
-                if (
-                    typeof argObject === 'object' &&
-                    argObject !== null &&
-                    argObject !== undefined
-                )
-                    args.push(argObject);
-                else args.push(argObject);
-            }
-
+            const args: any[] = [oAuthClient];
+            if (
+                typeof argObject === 'object' &&
+                argObject !== null &&
+                argObject !== undefined
+            )
+                args.push(...argObject);
+            else args.push(argObject);
 
             const result = thisObject
                 ? await gapiFunction.apply(thisObject, args)

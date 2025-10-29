@@ -16,22 +16,12 @@ export default abstract class LetterGdController {
             letterNumber,
             <string>letterData.creationDate
         );
-        let parentId: string;
-        try {
-            parentId = this.makeParentFolderGdId(letterData);
-        } catch (err) {
-            throw new Error('Nie można utworzyć folderu pisma: brak folderu nadrzędnego. ' + (err as Error).message);
-        }
-        if (!parentId) {
-            throw new Error('Nie można utworzyć folderu pisma: parent folder id jest puste.');
-        }
-
         const letterFolder = await ToolsGd.createFolder(auth, {
             name: folderName,
-            parents: [parentId],
+            parents: [this.makeParentFolderGdId(letterData)],
         });
 
-        await ToolsGd.createPermissions(auth, { fileId: <string>letterFolder.id });
+        ToolsGd.createPermissions(auth, { fileId: <string>letterFolder.id });
         return letterFolder;
     }
 
