@@ -46,7 +46,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
     }
 
     /**
-     * Pobiera listę listów z bazy danych na podstawie warunków wyszukiwania
+     * Pobiera listę pism z bazy danych na podstawie warunków wyszukiwania
      * @param params - obiekt z parametrami wyszukiwania
      * @returns tablica instancji Letter (konkretne podklasy: OurLetterContract, IncomingLetterOffer, etc.)
      */

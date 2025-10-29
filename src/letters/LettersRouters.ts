@@ -7,6 +7,7 @@ import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
+import LetterValidator from './LetterValidator';
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -141,10 +142,21 @@ app.put('/letter/:id', async (req: Request, res: Response, next) => {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const initParamsFromClient = req.parsedBody;
 
-        if (!req.files) req.files = [];
-        console.log('req.files', req.files);
+        console.log(
+            '📥 PUT /letter/:id - Raw data from client:',
+            initParamsFromClient
+        );
 
+        if (!req.files) req.files = [];
+
+        // Utworzenie obiektu Letter (z walidacją przez LetterValidator)
+        // Jeśli dane są niepełne, LetterValidator rzuci szczegółowy błąd
         const item = LettersController.createProperLetter(initParamsFromClient);
+
+        console.log('✅ Letter created successfully:', {
+            type: item.constructor.name,
+            id: item.id,
+        });
 
         // Użyj LettersController.editLetter zamiast item.editController
         await ToolsGapi.gapiReguestHandler(
@@ -240,13 +252,16 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
         const item = LettersController.createProperLetter(req.body);
 
         // 1. Usuń z Google Drive
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item._letterGdController.deleteFromGd,
-            [item.gdDocumentId, item.gdFolderId],
-            undefined
-        );
+        // _letterGdController istnieje tylko w OurLetter i IncomingLetter, nie w Letter
+        if (item instanceof OurLetter || item instanceof IncomingLetter) {
+            await ToolsGapi.gapiReguestHandler(
+                req,
+                res,
+                item._letterGdController.deleteFromGd,
+                [item.gdDocumentId, item.gdFolderId],
+                undefined
+            );
+        }
 
         // 2. Usuń z bazy danych (używamy LettersController.delete zamiast item.deleteFromDb)
         await LettersController.delete(item);

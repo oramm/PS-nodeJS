@@ -1,10 +1,6 @@
 import BusinessObject from '../BussinesObject';
 import ToolsDate from '../tools/ToolsDate';
-import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
-import mysql from 'mysql2/promise';
-import LetterEntity from './associations/LetterEntity';
-import LetterCase from './associations/LetterCase';
 import { OAuth2Client } from 'google-auth-library';
 import {
     CaseData,

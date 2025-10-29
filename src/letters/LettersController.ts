@@ -19,6 +19,8 @@ import LetterEntity from './associations/LetterEntity';
 import LetterCase from './associations/LetterCase';
 import ToolsGd from '../tools/ToolsGd';
 import IncomingLetter from './IncomingLetter';
+import LetterValidator from './LetterValidator';
+import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 
 export default class LettersController extends BaseController<
     Letter,
@@ -59,8 +61,31 @@ export default class LettersController extends BaseController<
         });
     }
 
-    /** tworzy obiekt odpowiedniej podklasy Letter na podstawie atrybutów */
-    static createProperLetter(initParam: any) {
+    /**
+     * Tworzy obiekt odpowiedniej podklasy Letter na podstawie atrybutów
+     *
+     * REFAKTORING: Dodano walidację przez LetterValidator przed utworzeniem instancji
+     *
+     * @param initParam - dane z klienta
+     * @returns instancja odpowiedniego typu Letter
+     * @throws Error jeśli dane są niepełne lub niespójne
+     */
+    static createProperLetter(initParam: any): Letter {
+        // 1. WALIDACJA TYPU - przez LetterValidator
+        const validation = LetterValidator.validateLetterTypeData(initParam);
+        console.log('🔍 Validation result:', validation);
+
+        if (!validation.isValid) {
+            const errorMessage = LetterValidator.formatValidationError(
+                initParam,
+                validation
+            );
+            throw new Error(errorMessage);
+        }
+
+        // 2. TWORZENIE INSTANCJI (z log diagnostycznym)
+        console.log(`✅ Creating ${validation.expectedType}`);
+
         let item:
             | OurLetterContract
             | OurOldTypeLetter
@@ -81,12 +106,15 @@ export default class LettersController extends BaseController<
         }
 
         // Our Letter Contract (stary typ - OurOldTypeLetter)
-        if (initParam.isOur && initParam.id !== initParam.number)
+        if (initParam.isOur && initParam.id !== initParam.number) {
             return new OurOldTypeLetter(initParam);
+        }
 
         // Our Letter Offer
-        if (initParam.isOur && initParam._offer?.id)
-            return new OurLetterOffer(initParam);
+        if (initParam.isOur && initParam._offer?.id) {
+            item = new OurLetterOffer(initParam);
+            return item;
+        }
 
         // Incoming Letter Contract
         if (!initParam.isOur && initParam._project) {
@@ -97,17 +125,15 @@ export default class LettersController extends BaseController<
         }
 
         // Incoming Letter Offer
-        if (!initParam.isOur && initParam._offer?.id)
-            return new IncomingLetterOffer(initParam);
+        if (!initParam.isOur && initParam._offer?.id) {
+            item = new IncomingLetterOffer(initParam);
+            return item;
+        }
 
-        // Błąd - nieprawidłowe dane
+        // Ten kod nigdy nie powinien być osiągnięty (walidacja wyżej to wyłapie)
         throw new Error(
-            `Cannot create Letter instance. Invalid data: ` +
-                `isOur: ${initParam.isOur}, ` +
-                `id: ${initParam.id}, ` +
-                `number: ${initParam.number}, ` +
-                `_project: ${initParam._project?.id}, ` +
-                `_offer: ${initParam._offer?.id}`
+            `INTERNAL ERROR: Validation passed but no matching type found. ` +
+                `This should never happen! Expected type: ${validation.expectedType}`
         );
     }
 
@@ -167,6 +193,9 @@ export default class LettersController extends BaseController<
             await instance.repository.addInDb(letter, conn, true);
 
             // 2. Dla OurLetter: ustaw number = id
+            // WAŻNE: Nowy OurLetter przychodzi bez number (undefined) - ustawiamy go tutaj po zapisie
+            //        Edycja OurLetter: Validator sprawdził że number już istnieje
+            // Ten krok zapewnia że number === id dla wszystkich OurLetterContract
             if (letter instanceof OurLetter) {
                 letter.number = letter.id;
             }
@@ -219,8 +248,10 @@ export default class LettersController extends BaseController<
         });
 
         // Zapis do bazy w ramach transakcji
+        const entityAssociationController =
+            LetterEntityAssociationsController.getInstance();
         for (const association of entityAssociations) {
-            await association.addInDb(conn, true);
+            await entityAssociationController.create(association, conn, true);
         }
     }
 
@@ -292,12 +323,12 @@ export default class LettersController extends BaseController<
             const ourLetterGdFile = letter.makeLetterGdFileController(
                 letter._template
             );
-            if (!letter.number)
-                throw new Error(`Letter number not set for: ${letter.id}`);
-            if (!letter.creationDate)
+            // Validator gwarantuje że number istnieje, addNew() ustawia number = id
+            if (!letter.number || !letter.creationDate) {
                 throw new Error(
-                    `Letter creationDate is not set for: ${letter.id}`
+                    `Letter number or creationDate not set for: ${letter.id}`
                 );
+            }
 
             const folderName = letter._letterGdController.makeFolderName(
                 letter.number.toString(),

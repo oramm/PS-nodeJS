@@ -5,7 +5,6 @@ import OurLetterGdFile from './OurLetterGdFIle';
 import EnviErrors from '../tools/Errors';
 import { DocumentTemplateData, OurLetterData } from '../types/types';
 import OurLetterGdController from './gdControlers/OurLetterGdController';
-import { UserData } from '../types/sessionTypes';
 
 export default abstract class OurLetter
     extends Letter
