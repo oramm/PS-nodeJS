@@ -144,8 +144,8 @@ export default class LettersController extends BaseController<
      * @param userData - dane użytkownika zatwierdzającego
      */
     static async approveLetter(
-        letter: OurLetter,
         auth: OAuth2Client,
+        letter: OurLetter,
         userData: UserData
     ): Promise<void> {
         const _editor = await PersonsController.getPersonFromSessionUserData(
@@ -295,8 +295,8 @@ export default class LettersController extends BaseController<
      * @param userData - dane użytkownika
      */
     static async addNewOurLetter(
-        letter: OurLetter,
         auth: OAuth2Client,
+        letter: OurLetter,
         files: Express.Multer.File[] = [],
         userData: UserData
     ): Promise<void> {
@@ -405,8 +405,8 @@ export default class LettersController extends BaseController<
      * @param userData - dane użytkownika
      */
     static async addNewIncomingLetter(
-        letter: IncomingLetter,
         auth: OAuth2Client,
+        letter: IncomingLetter,
         files: Express.Multer.File[] = [],
         userData: UserData
     ): Promise<void> {
@@ -578,8 +578,8 @@ export default class LettersController extends BaseController<
      * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji
      */
     static async editLetter(
-        letter: Letter,
         auth: OAuth2Client,
+        letter: Letter,
         files: Express.Multer.File[],
         userData: UserData,
         fieldsToUpdate?: string[]
@@ -635,8 +635,8 @@ export default class LettersController extends BaseController<
      * @param auth - OAuth2Client dla operacji Google Drive
      */
     static async exportToPDF(
-        letter: OurLetter,
-        auth: OAuth2Client
+        auth: OAuth2Client,
+        letter: OurLetter
     ): Promise<void> {
         await letter.exportToPDF(auth);
     }

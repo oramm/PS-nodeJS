@@ -2,7 +2,7 @@ import ToolsGapi from '../../../../setup/Sessions/ToolsGapi';
 import TasksController from './TasksController';
 import { app } from '../../../../index';
 import { Request, Response } from 'express';
-import {OAuth2Client} from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 
 app.post('/tasks', async (req: Request, res: Response, next) => {
     try {
@@ -19,8 +19,8 @@ app.post('/task', async (req: Request, res: Response, next) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            (auth: OAuth2Client) => {
-                const item = TasksController.addNewTask(req.body, auth);
+            async (auth: OAuth2Client) => {
+                const item = await TasksController.addNewTask(req.body, auth);
                 res.send(item);
             }
         );
@@ -36,7 +36,11 @@ app.put('/task/:id', async (req: Request, res: Response, next) => {
             res,
             async (auth: OAuth2Client) => {
                 const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-                const item = await TasksController.updateTask(req.parsedBody, fieldsToUpdate, auth);
+                const item = await TasksController.updateTask(
+                    req.parsedBody,
+                    fieldsToUpdate,
+                    auth
+                );
                 res.send(item);
             }
         );

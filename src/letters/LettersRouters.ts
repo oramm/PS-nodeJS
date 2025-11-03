@@ -50,7 +50,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.init,
-                        null,
+                        undefined,
                         null
                     );
                     break;
@@ -59,7 +59,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.resetTags,
-                        null,
+                        undefined,
                         null
                     );
                     break;
@@ -68,7 +68,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.update,
-                        null,
+                        undefined,
                         null
                     );
                     break;

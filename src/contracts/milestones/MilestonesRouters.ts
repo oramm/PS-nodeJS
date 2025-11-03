@@ -130,12 +130,13 @@ app.put(
 app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new MilestoneDate(req.parsedBody);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.editController,
-            [req.session.userData, req.parsedBody._fieldsToUpdate],
-            item
+        if (!req.session.userData) {
+            throw new Error('User data not available in session');
+        }
+
+        await item.editController(
+            req.session.userData,
+            req.parsedBody._fieldsToUpdate
         );
         res.send(item);
     } catch (error) {
@@ -173,13 +174,10 @@ app.delete('/milestone/:id', async (req: Request, res: Response, next) => {
 app.delete('/milestoneDate/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new MilestoneDate(req.parsedBody);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.deleteController,
-            [req.session.userData],
-            item
-        );
+        if (!req.session.userData) {
+            throw new Error('User data not available in session');
+        }
+        await item.deleteController(req.session.userData);
 
         res.send(item);
     } catch (error) {

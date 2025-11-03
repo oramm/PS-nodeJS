@@ -10,6 +10,14 @@ export const oAuthClient: OAuth2Client = new OAuth2Client(
     keys.installed.redirect_uris[0]
 );
 
+/**
+ * Typ funkcji, która przyjmuje OAuth2Client jako pierwszy argument
+ */
+type GapiFunction<TArgs extends any[] = any[], TResult = any> = (
+    auth: OAuth2Client,
+    ...args: TArgs
+) => Promise<TResult>;
+
 export default class ToolsGapi {
     static scopes = [
         'https://www.googleapis.com/auth/tasks',
@@ -126,17 +134,55 @@ export default class ToolsGapi {
         }
     }
 
-    /** WYkonuje operacje na podstawie mojego Refresh tokena. */
-    static async gapiReguestHandler(
+    /**
+     * Wykonuje operacje na podstawie mojego Refresh tokena.
+     *
+     * @param gapiFunction - Funkcja Google API, która jako **pierwszy argument** przyjmuje OAuth2Client
+     * @param argObject - Dodatkowe argumenty dla gapiFunction:
+     *   - Jeśli array `[arg1, arg2]` → rozpakuje jako osobne argumenty
+     *   - Jeśli pojedyncza wartość `{a: 1}` lub `'string'` → przekaże jako drugi argument
+     *   - Jeśli undefined/null → wywołanie bez dodatkowych argumentów
+     * @param thisObject - Kontekst (this) dla wywołania gapiFunction
+     *
+     * @throws {Error} Jeśli gapiFunction nie jest funkcją
+     * @throws {Error} Jeśli refresh token nie istnieje
+     * @throws {Error} Jeśli token Google OAuth jest nieprawidłowy
+     *
+     * @example
+     * ```typescript
+     * // ✅ Funkcja z wieloma argumentami
+     * async function create(auth: OAuth2Client, title: string, folderId: string) { ... }
+     * await ToolsGapi.gapiReguestHandler(req, res, create, ['My Title', 'folder123']);
+     *
+     * // ✅ Funkcja z pojedynczym obiektem
+     * async function update(auth: OAuth2Client, options: {title: string, color: string}) { ... }
+     * await ToolsGapi.gapiReguestHandler(req, res, update, {title: 'New', color: 'red'});
+     *
+     * // ✅ Funkcja bez dodatkowych argumentów
+     * async function listFiles(auth: OAuth2Client) { ... }
+     * await ToolsGapi.gapiReguestHandler(req, res, listFiles);
+     *
+     * // ❌ ŹLE - funkcja bez OAuth2Client
+     * async function badFunction(documentId: string) { ... }
+     * await ToolsGapi.gapiReguestHandler(req, res, badFunction, ['doc']); // TypeScript error!
+     * ```
+     */
+    static async gapiReguestHandler<TArgs extends any[], TResult>(
         /**@deprecated  */
         req: any,
         /**@deprecated */
         res: Response,
-        gapiFunction: Function,
-        argObject?: any,
+        gapiFunction: GapiFunction<TArgs, TResult>,
+        argObject?: any[] | any | undefined,
         thisObject?: any
-    ) {
+    ): Promise<TResult> {
         console.log('--------------- authenticate ----------------');
+
+        // Walidacja runtime
+        if (typeof gapiFunction !== 'function') {
+            throw new Error('gapiFunction must be a function');
+        }
+
         const refreshToken = process.env.REFRESH_TOKEN;
         if (!refreshToken) throw new Error("Can't get refresh token");
 
@@ -144,18 +190,28 @@ export default class ToolsGapi {
             const credentials = { refresh_token: refreshToken };
             oAuthClient.setCredentials(credentials);
 
-            const args: any[] = [oAuthClient];
-            if (
-                typeof argObject === 'object' &&
-                argObject !== null &&
-                argObject !== undefined
-            )
-                args.push(...argObject);
-            else args.push(argObject);
+            // Buduj argumenty:
+            // - Jeśli argObject jest array → spread elementów
+            // - Jeśli argObject jest pojedynczą wartością → dodaj jako jeden argument
+            // - Jeśli argObject jest undefined/null → brak dodatkowych argumentów
+            let functionArgs: any[];
+            if (argObject === undefined || argObject === null) {
+                functionArgs = [oAuthClient];
+            } else if (Array.isArray(argObject)) {
+                functionArgs = [oAuthClient, ...argObject];
+            } else {
+                functionArgs = [oAuthClient, argObject];
+            }
 
             const result = thisObject
-                ? await gapiFunction.apply(thisObject, args)
-                : await gapiFunction(...args);
+                ? await gapiFunction.apply(
+                      thisObject,
+                      functionArgs as [OAuth2Client, ...TArgs]
+                  )
+                : await gapiFunction(
+                      ...(functionArgs as [OAuth2Client, ...TArgs])
+                  );
+
             return result;
         } catch (error) {
             if (
