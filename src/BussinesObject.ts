@@ -1,7 +1,6 @@
 import ToolsDb from './tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import { PersonData } from './types/types';
-import PersonsController from './persons/PersonsController';
 
 export default class BusinessObject {
     id?: number | string;
@@ -17,17 +16,6 @@ export default class BusinessObject {
         this._dbTableName = initParamObject._dbTableName;
         this._editor = initParamObject._editor;
         this.editorId = this._editor?.id;
-    }
-
-    /** Zamiast tego używać metody PersonsController.getPersonFromSessionUserData()
-     * @deprecated */
-    async setEditorId() {
-        if (!this._editor) return; // throw new Error('Brakuje obiektu _editor!');
-        const editorRole = await PersonsController.getSystemRole({ id: this._editor.id });
-        if (!editorRole)
-            throw new Error(`W systemie nie ma użytkownika ${this._editor.name} ${this._editor.surname}`);
-        this.editorId = editorRole.personId;
-        this._editor.id = this.editorId;
     }
 
     /** @deprecated */

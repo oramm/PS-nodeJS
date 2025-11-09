@@ -1,6 +1,7 @@
 import ContractTypesController from './ContractTypesController';
 import { app } from '../../index';
 import ContractType from './ContractType';
+import PersonsController from '../../persons/PersonsController';
 
 app.post('/contractTypes', async (req: any, res: any, next) => {
     try {
@@ -17,8 +18,13 @@ app.post('/contractTypes', async (req: any, res: any, next) => {
 
 app.post('/contractType', async (req: any, res: any, next) => {
     try {
-        let item = new ContractType(req.body);
-        await item.setEditorId();
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            req.session.userData
+        );
+        let item = new ContractType({ ...req.parsedBody, _editor });
         await item.addInDb();
         res.send(item);
     } catch (error) {
@@ -28,8 +34,13 @@ app.post('/contractType', async (req: any, res: any, next) => {
 
 app.put('/contractType/:id', async (req: any, res: any, next) => {
     try {
-        let item = new ContractType(req.body);
-        await item.setEditorId();
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            req.session.userData
+        );
+        let item = new ContractType({ ...req.parsedBody, _editor });
         await item.editInDb();
         res.send(item);
     } catch (error) {

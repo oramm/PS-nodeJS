@@ -1,6 +1,7 @@
 import TaskTemplatesController from './TaskTemplatesController';
 import { app } from '../../../../../index';
 import TaskTemplate from './TaskTemplate';
+import PersonsController from '../../../../../persons/PersonsController';
 
 app.get('/taskTemplates', async (req: any, res: any, next) => {
     try {
@@ -26,8 +27,13 @@ app.get('/taskTemplate/:id', async (req: any, res: any, next) => {
 
 app.post('/taskTemplate', async (req: any, res: any, next) => {
     try {
-        let item = new TaskTemplate(req.body);
-        await item.setEditorId();
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            req.session.userData
+        );
+        let item = new TaskTemplate({ ...req.parsedBody, _editor });
         await item.addInDb();
         res.send(item);
     } catch (error) {
@@ -37,8 +43,13 @@ app.post('/taskTemplate', async (req: any, res: any, next) => {
 
 app.put('/taskTemplate/:id', async (req: any, res: any, next) => {
     try {
-        let item = new TaskTemplate(req.body);
-        await item.setEditorId();
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
+        const _editor = await PersonsController.getPersonFromSessionUserData(
+            req.session.userData
+        );
+        let item = new TaskTemplate({ ...req.parsedBody, _editor });
         await item.editInDb();
         res.send(item);
     } catch (error) {
