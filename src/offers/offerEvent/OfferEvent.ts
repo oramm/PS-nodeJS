@@ -1,8 +1,7 @@
 import { drive_v3 } from 'googleapis';
 import BusinessObject from '../../BussinesObject';
-import { OfferEventData, PersonData } from '../../types/types';
+import { OfferData, OfferEventData, PersonData } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
-import Offer from '../Offer';
 import ToolsMail from '../../tools/ToolsMail';
 
 /**
@@ -50,7 +49,7 @@ export default class OfferEvent
 
     /**
      * Wysyła email z ofertą do odbiorców
-     *
+    /**
      * PUBLIC: Wywoływana przez OfferEventsController.sendMailWithOffer()
      *
      * REFAKTORING: Zmieniono typ z OurOffer na Offer (typ bazowy)
@@ -61,7 +60,11 @@ export default class OfferEvent
      * @param offer - Oferta (może być OurOffer lub ExternalOffer)
      * @param cc - Opcjonalne adresy CC
      */
-    async sendMailWithOffer(auth: OAuth2Client, offer: Offer, cc?: string[]) {
+    async sendMailWithOffer(
+        auth: OAuth2Client,
+        offer: OfferData,
+        cc?: string[]
+    ) {
         const _recipients = this._recipients;
         const gdFilesBasicData = this._gdFilesBasicData;
         if (!_recipients?.length)

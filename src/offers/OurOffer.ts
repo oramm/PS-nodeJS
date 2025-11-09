@@ -11,12 +11,8 @@ import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import OfferEvent from './offerEvent/OfferEvent';
-import OfferEventsController from './offerEvent/OfferEventsController';
-import { UserData } from '../types/sessionTypes';
-import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
-import OffersController from './OffersController';
 
 export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
@@ -37,28 +33,6 @@ export default class OurOffer extends Offer implements OurOfferData {
             );
             this.gdDocumentId = initParamObject.gdDocumentId;
         }
-    }
-
-    protected async bindInvitationMail(userData: UserData) {
-        if (this._invitationMail === undefined) return;
-        const invitationMail = new OfferInvitationMail({
-            ...this._invitationMail,
-            _ourOfferId: this.id,
-            status: Setup.OfferInvitationMailStatus.DONE,
-        });
-        await invitationMail.editController(userData);
-    }
-
-    /** Kasuje invitationMailId ustawia status maila na NEW */
-    protected async unbindInvitationMail(userData: UserData) {
-        if (!this._invitationMail || !this._invitationMail.id) return;
-        const invitationMail = new OfferInvitationMail({
-            ...this._invitationMail,
-            status: Setup.OfferInvitationMailStatus.NEW,
-        });
-        await invitationMail.editController(userData);
-        this.invitationMailId = null;
-        this._invitationMail = undefined;
     }
 
     /**
@@ -84,35 +58,6 @@ export default class OurOffer extends Offer implements OurOfferData {
     markAsSent(event: OfferEvent): void {
         this._lastEvent = event;
         this.status = Setup.OfferStatus.DONE;
-    }
-
-    /**
-     * @deprecated Use OffersController.sendOurOffer() instead
-     * Model should not contain orchestration logic
-     * KEPT FOR REFERENCE - TO BE REMOVED after Router migration
-     */
-    async sendOfferController(
-        auth: OAuth2Client,
-        userData: UserData,
-        newEventData: OfferEventData
-    ) {
-        const _editor = await PersonsController.getPersonFromSessionUserData(
-            userData
-        );
-
-        const newEvent = new OfferEvent({
-            ...newEventData,
-            eventType: Setup.OfferEventType.SENT,
-            _editor, //editorId: ustawia się w BussinesObject,
-            offerId: this.id,
-        });
-        await OfferEventsController.addNew(newEvent);
-        await OfferEventsController.sendMailWithOffer(auth, newEvent, this, [
-            userData.systemEmail,
-        ]);
-        this._lastEvent = newEvent;
-        this.status = Setup.OfferStatus.DONE;
-        await OffersController.edit(auth, this, undefined, ['status']);
     }
 
     async createGdElements(auth: OAuth2Client) {
