@@ -272,6 +272,38 @@ abstract class BaseController<T, R extends BaseRepository<T>> {
 }
 ```
 
+### ToolsGapi.gapiReguestHandler()
+
+**Kiedy używać:** Do operacji wymagających autoryzacji Google API (Drive, Docs, Gmail).
+
+```typescript
+// ✅ POPRAWNIE - funkcja async z OAuth2Client jako pierwszy parametr
+await ToolsGapi.gapiReguestHandler(req, res, async (auth: OAuth2Client) => {
+    await model.someGoogleApiMethod(auth);
+});
+
+// ✅ POPRAWNIE - z dodatkowymi argumentami
+await ToolsGapi.gapiReguestHandler(
+    req,
+    res,
+    model.exportToPDF,
+    [documentId, options],
+    model
+);
+
+// ❌ ŹLE - funkcja bez 'async'
+await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
+    // ❌ Brak async
+    model.someMethod(auth);
+});
+```
+
+**Zasady:**
+
+-   Funkcja **MUSI** przyjmować `OAuth2Client` jako pierwszy parametr
+-   Funkcja **MUSI** być `async` lub zwracać `Promise`
+-   Używaj tylko w **Router** (nie w Controller/Repository/Model)
+
 ## 📋 Zasady Refaktoringu
 
 1. **Oznacz @deprecated** - nie usuwaj od razu

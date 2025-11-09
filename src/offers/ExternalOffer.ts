@@ -24,38 +24,6 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
         } else this._offerBond = null;
     }
 
-    async addNewController(
-        auth: OAuth2Client,
-        userData: UserData,
-        taskId: string
-    ) {
-        await super.addNewController(auth, userData, taskId);
-        const offerGdController = new ExternalOfferGdController();
-        const { offerContentFolder, specsFolder } =
-            await offerGdController.createExternalOfferFolders(auth, {
-                ...this,
-            });
-        //musi być po utworzeniu cases w bazie danych
-        await offerGdController.moveFoldersToMakeOfferFolder(
-            auth,
-            { ...this },
-            offerContentFolder,
-            specsFolder
-        );
-    }
-
-    async editController(
-        auth: OAuth2Client,
-        taskId: string,
-        _fieldsToUpdate?: string[]
-    ) {
-        await super.editController(auth, taskId, _fieldsToUpdate);
-        if (this._offerBond) {
-            this._offerBond.status = Setup.OfferBondStatus.DONE;
-            await OfferBondsController.edit(this._offerBond, this);
-        }
-    }
-
     async addNewOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
         await OfferBondsController.addNew(this._offerBond, this);

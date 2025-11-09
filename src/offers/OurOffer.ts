@@ -16,6 +16,7 @@ import { UserData } from '../types/sessionTypes';
 import PersonsController from '../persons/PersonsController';
 import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
+import OffersController from './OffersController';
 
 export default class OurOffer extends Offer implements OurOfferData {
     gdDocumentId?: string;
@@ -36,19 +37,6 @@ export default class OurOffer extends Offer implements OurOfferData {
             );
             this.gdDocumentId = initParamObject.gdDocumentId;
         }
-    }
-
-    async addNewController(
-        auth: OAuth2Client,
-        userData: UserData,
-        taskId: string
-    ) {
-        await super.addNewController(auth, userData, taskId);
-        await this.bindInvitationMail(userData);
-        const ourOfferGdFile = new OurOfferGdFile({
-            enviDocumentData: { ...this },
-        });
-        await ourOfferGdFile.moveToMakeOfferFolder(auth);
     }
 
     protected async bindInvitationMail(userData: UserData) {
@@ -73,13 +61,36 @@ export default class OurOffer extends Offer implements OurOfferData {
         this._invitationMail = undefined;
     }
 
-    async deleteController(auth: OAuth2Client, userData: UserData) {
-        await ToolsDb.transaction(async () => {
-            this.unbindInvitationMail(userData);
-            super.deleteController(auth);
+    /**
+     * Create SENT event for this offer
+     * BUSINESS LOGIC: Creates OfferEvent with SENT type
+     */
+    createSentEvent(
+        newEventData: OfferEventData,
+        editor: PersonData
+    ): OfferEvent {
+        return new OfferEvent({
+            ...newEventData,
+            eventType: Setup.OfferEventType.SENT,
+            _editor: editor,
+            offerId: this.id,
         });
     }
 
+    /**
+     * Mark offer as sent
+     * BUSINESS LOGIC: Updates offer status and lastEvent
+     */
+    markAsSent(event: OfferEvent): void {
+        this._lastEvent = event;
+        this.status = Setup.OfferStatus.DONE;
+    }
+
+    /**
+     * @deprecated Use OffersController.sendOurOffer() instead
+     * Model should not contain orchestration logic
+     * KEPT FOR REFERENCE - TO BE REMOVED after Router migration
+     */
     async sendOfferController(
         auth: OAuth2Client,
         userData: UserData,
@@ -101,7 +112,7 @@ export default class OurOffer extends Offer implements OurOfferData {
         ]);
         this._lastEvent = newEvent;
         this.status = Setup.OfferStatus.DONE;
-        await this.editController(auth, undefined, ['status']);
+        await OffersController.edit(auth, this, undefined, ['status']);
     }
 
     async createGdElements(auth: OAuth2Client) {

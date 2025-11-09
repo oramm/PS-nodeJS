@@ -2,3 +2,10 @@ node_modules/
 build/
 .env
 Tests/
+
+# Test coverage (generowane lokalnie - NIE commitować!)
+coverage/
+*.lcov
+
+# Jest cache
+.jest/

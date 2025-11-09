@@ -7,7 +7,6 @@ import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
-import LetterValidator from './LetterValidator';
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -50,7 +49,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.init,
-                        undefined,
+                        null,
                         null
                     );
                     break;
@@ -59,7 +58,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.resetTags,
-                        undefined,
+                        null,
                         null
                     );
                     break;
@@ -68,7 +67,7 @@ app.post(
                         req,
                         res,
                         TestDocTools.update,
-                        undefined,
+                        null,
                         null
                     );
                     break;
@@ -142,21 +141,10 @@ app.put('/letter/:id', async (req: Request, res: Response, next) => {
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const initParamsFromClient = req.parsedBody;
 
-        console.log(
-            '📥 PUT /letter/:id - Raw data from client:',
-            initParamsFromClient
-        );
-
         if (!req.files) req.files = [];
+        console.log('req.files', req.files);
 
-        // Utworzenie obiektu Letter (z walidacją przez LetterValidator)
-        // Jeśli dane są niepełne, LetterValidator rzuci szczegółowy błąd
         const item = LettersController.createProperLetter(initParamsFromClient);
-
-        console.log('✅ Letter created successfully:', {
-            type: item.constructor.name,
-            id: item.id,
-        });
 
         // Użyj LettersController.editLetter zamiast item.editController
         await ToolsGapi.gapiReguestHandler(

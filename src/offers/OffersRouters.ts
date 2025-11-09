@@ -38,9 +38,9 @@ app.post('/offer', async (req: Request, res: Response, next) => {
                 await ToolsGapi.gapiReguestHandler(
                     req,
                     res,
-                    item.addNewController,
-                    [req.session.userData, taskId],
-                    item
+                    OffersController.addNew,
+                    [item, req.session.userData, taskId],
+                    OffersController
                 );
                 TaskStore.complete(
                     taskId,
@@ -75,9 +75,9 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
                 await ToolsGapi.gapiReguestHandler(
                     req,
                     res,
-                    item.editController,
-                    [taskId, req.parsedBody._fieldsToUpdate],
-                    item
+                    OffersController.edit,
+                    [item, taskId, req.parsedBody._fieldsToUpdate],
+                    OffersController
                 );
                 TaskStore.complete(taskId, item, 'Oferta zmnieniona pomyślnie');
             } catch (err) {
@@ -101,9 +101,9 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
             await ToolsGapi.gapiReguestHandler(
                 req,
                 res,
-                item.sendOfferController,
-                [req.session.userData, req.parsedBody._newEvent],
-                item
+                OffersController.sendOurOffer,
+                [item, req.session.userData, req.parsedBody._newEvent],
+                OffersController
             );
         res.send(item);
     } catch (error) {
@@ -185,9 +185,9 @@ app.delete('/offer/:id', async (req: Request, res: Response, next) => {
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.deleteController,
-            undefined,
-            item
+            OffersController.delete,
+            [item, req.session.userData],
+            OffersController
         );
         res.send(item);
     } catch (error) {

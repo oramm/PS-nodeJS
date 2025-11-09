@@ -1,13 +1,33 @@
 ---
 applyTo: '**/*.test.ts, **/*.spec.ts'
-description: 'Testing Guidelines - Clean Architecture | Status: PLANNED | Version: 0.1 (Draft)'
+description: 'Testing Guidelines - Clean Architecture | Status: ACTIVE | Version: 1.0'
 ---
 
 # Wytyczne Testowania - Clean Architecture
 
-> 📅 **Status:** PLANOWANE - Do uzupełnienia po napisaniu pierwszych testów
+> 📅 **Status:** AKTYWNE - Framework wdrożony (Jest + ts-jest)
 >
 > 🏛️ **Architektura:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md)
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# Uruchom wszystkie testy
+yarn test
+
+# Tryb watch (automatyczne uruchamianie)
+yarn test:watch
+
+# Raport pokrycia kodu
+yarn test:coverage
+
+# Tylko testy konkretnego modułu
+yarn test src/offers
+```
+
+**Dokumentacja:** `TESTING-QUICKSTART.md`, `TESTING.md`, `TESTING-SUMMARY.md`
 
 ---
 
@@ -27,141 +47,317 @@ Router (E2E Tests)
 
 ---
 
-## 📋 Ogólne Zasady (TODO - do uzupełnienia)
+## 📋 Zasady Testowania Warstw
 
-### **Model - Testy Jednostkowe**
+### **Model - Testy Jednostkowe (Unit Tests)**
 
 ✅ **Testuj:**
 
--   Logikę biznesową (walidacja, kalkulacje)
--   Metody generujące dane (`generateNumber()`, `calculateTotal()`)
--   Edge cases (puste wartości, null, wartości graniczne)
+-   Logikę biznesową (walidacja, kalkulacje, transformacje)
+-   Metody fabrykujące (`createSentEvent()`, `markAsSent()`)
+-   Edge cases (null, undefined, wartości graniczne)
 
 ❌ **NIE testuj:**
 
--   Operacji I/O (GD, Email) - mockuj je
--   Getterów/setterów bez logiki
+-   Operacji I/O (GD, Email, DB) - mockuj je
+-   Prostych getterów/setterów
+-   Konstruktorów bez logiki
+
+**Przykład:** `src/offers/__tests__/OurOffer.test.ts`
+
+```typescript
+// Mockuj zależności PRZED importami
+jest.mock('../../BussinesObject');
+jest.mock('../OfferRepository');
+
+describe('OurOffer - Business Logic', () => {
+    it('should create OfferEvent with SENT type', () => {
+        const offer = new OurOffer({ ...testData });
+        const event = offer.createSentEvent(eventData, editor);
+
+        expect(event.eventType).toBe(Setup.OfferEventType.SENT);
+        expect(event.offerId).toBe(offer.id);
+    });
+});
+```
 
 ### **Repository - Testy Integracyjne**
 
 ✅ **Testuj:**
 
--   CRUD operations (`addInDb()`, `find()`, `editInDb()`)
--   Mapowanie DB → Model (`mapRowToModel()`)
--   Złożone zapytania SQL
+-   CRUD operations z prawdziwą bazą testową
+-   Mapowanie `mapRowToModel()` (DB → Model)
+-   Złożone zapytania SQL (JOIN, WHERE)
 
 ❌ **NIE testuj:**
 
 -   Logiki biznesowej (→ Model)
 
-**TODO:** Zdecydować:
+**Status:** Testy integracyjne Repository są SKIPPED (oznaczone `it.skip()`) - wymagają konfiguracji testowej bazy danych.
 
--   Testowa baza danych vs mockowanie `ToolsDb`
--   Strategia rollback transakcji
+**Przykład:** `src/offers/__tests__/OffersController.integration.test.ts`
 
-### **Controller - Testy Integracyjne**
+### **Controller - Testy Jednostkowe Orkiestracji**
 
 ✅ **Testuj:**
 
--   Orkiestrację operacji
+-   Orkiestrację (prawidłowa kolejność wywołań)
+-   Dispatcher pattern (routing po typie: `instanceof`)
+-   Propagację błędów
 -   Zarządzanie transakcjami
--   Wywołania Repository + Model
 
-**TODO:** Przykłady mockowania:
+❌ **NIE testuj:**
+
+-   Szczegółów SQL (→ Repository)
+-   Logiki biznesowej (→ Model)
+
+**Mockowanie Repository:**
 
 ```typescript
-// Przykład (do uzupełnienia po pierwszych testach)
+// Stwórz manual mock: src/offers/__mocks__/OfferRepository.ts
 const mockRepository = {
+    getFromDbList: jest.fn(),
     addInDb: jest.fn(),
-    find: jest.fn(),
+    editInDb: jest.fn(),
+    deleteFromDb: jest.fn(),
 };
+
+export default {
+    getInstance: jest.fn(() => mockRepository),
+};
+```
+
+**Przykład testu:**
+
+```typescript
+jest.mock('../OfferRepository');
+jest.mock('../../persons/PersonsController');
+
+describe('OffersController', () => {
+    it('should orchestrate sendOurOffer with correct flow', async () => {
+        // Arrange
+        const mockGetPerson = jest.fn().mockResolvedValue(mockEditor);
+        PersonsController.getPersonFromSessionUserData = mockGetPerson;
+
+        // Act
+        await OffersController.sendOurOffer(auth, offer, userData, eventData);
+
+        // Assert - sprawdź kolejność wywołań
+        expect(mockGetPerson).toHaveBeenCalledBefore(
+            OfferEventsController.addNew
+        );
+        expect(OfferEventsController.sendMail).toHaveBeenCalledAfter(
+            OfferEventsController.addNew
+        );
+    });
+});
 ```
 
 ### **Router - Testy E2E**
 
-✅ **Testuj:**
-
--   Endpointy HTTP
--   Statusy odpowiedzi
--   Walidacja request/response
-
-**TODO:** Framework (Supertest? innych?)
+**Status:** TODO - nie zaimplementowane (niski priorytet, logika jest w Controller)
 
 ---
 
-## 🔧 Wzorce do Udokumentowania (TODO)
+## 🔧 Rozwiązane Problemy (Lessons Learned)
 
-### **1. Mockowanie Repository w Controller**
+### **1. Circular Dependencies w Testach**
+
+**Problem:** `BusinessObject` → `PersonsController` → `Person` → `BusinessObject`
+
+**Rozwiązanie:** Manual mock w `src/__mocks__/BussinesObject.ts`
 
 ```typescript
-// TODO: Przykład po napisaniu pierwszego testu
+// src/__mocks__/BussinesObject.ts
+export default class BusinessObject {
+    id?: number | string;
+    _dbTableName: string;
+    _editor?: any;
+    editorId?: number;
+
+    constructor(initParamObject: any) {
+        this.id = initParamObject.id;
+        this._dbTableName = initParamObject._dbTableName;
+        this._editor = initParamObject._editor;
+        this.editorId = this._editor?.id;
+    }
+}
 ```
 
-### **2. Testowanie Polimorfizmu (OurLetter vs IncomingLetter)**
+Użycie w testach:
 
 ```typescript
-// TODO: Jak testować różne typy Letter?
+jest.mock('../../BussinesObject'); // Automatycznie użyje __mocks__/BussinesObject.ts
 ```
 
-### **3. Transakcje w Testach**
+### **2. Static Repository Initialization**
+
+**Problem:** `OffersController` ma `private static repository = OfferRepository.getInstance()` - wywołanie przy ładowaniu modułu.
+
+**Rozwiązanie:** Manual mock w `src/offers/__mocks__/OfferRepository.ts` z `getInstance()`.
+
+### **3. Strict TypeScript w Test Data**
+
+**Problem:** Testy wymagają pełnych obiektów zgodnych z interfejsami.
+
+**Rozwiązanie:**
 
 ```typescript
-// TODO: Strategia rollback po każdym teście
+// ✅ Poprawnie - pełny obiekt wymaganych pól
+const offer = new OurOffer({
+    alias: 'TEST-001',
+    _type: { id: 1 },
+    _city: { id: 1 },
+    employerName: 'Test Employer'
+} as any);
+
+// ✅ Dla partial data - użyj type assertion
+const eventData = {...} as unknown as OfferEventData;
 ```
 
-### **4. Mockowanie External APIs (Google Drive, Gmail)**
+### **4. Testowanie Dispatcher Pattern**
+
+**Wzorzec:** Controller sprawdza `instanceof` i deleguje do metod prywatnych.
 
 ```typescript
-// TODO: Mockowanie ToolsGd, ToolsEmail
+describe('delete (dispatcher)', () => {
+    it('should call deleteOurOffer for OurOffer instance', async () => {
+        const ourOffer = new OurOffer({...});
+        jest.spyOn(OffersController as any, 'deleteOurOffer').mockResolvedValue(undefined);
+
+        await OffersController.delete(auth, ourOffer, userData);
+
+        expect(OffersController['deleteOurOffer']).toHaveBeenCalledWith(auth, ourOffer, userData);
+    });
+});
 ```
 
 ---
 
-## 📊 Struktura Katalogów (Propozycja)
+## 📊 Struktura Katalogów
 
 ```
 src/
-├── letters/
-│   ├── Letter.ts
-│   ├── Letter.test.ts              ← Testy jednostkowe Model
-│   ├── LetterRepository.ts
-│   ├── LetterRepository.test.ts    ← Testy integracyjne Repo
-│   ├── LettersController.ts
-│   ├── LettersController.test.ts   ← Testy integracyjne Controller
-│   └── LettersRouters.test.ts      ← Testy E2E Router
+├── __mocks__/                          # Global mocks
+│   └── BussinesObject.ts               # Mock dla circular dependencies
+├── __tests__/
+│   └── setup.ts                        # Global setup (console mocking)
+├── offers/
+│   ├── __mocks__/                      # Module-specific mocks
+│   │   └── OfferRepository.ts
+│   ├── __tests__/
+│   │   ├── OurOffer.test.ts           # Unit: business logic
+│   │   ├── OffersController.test.ts   # Unit: orchestration
+│   │   └── OffersController.integration.test.ts  # Integration (skipped)
+│   ├── Offer.ts
+│   ├── OurOffer.ts
+│   ├── OffersController.ts
+│   └── OfferRepository.ts
+└── persons/
+    └── __mocks__/
+        └── PersonsController.ts
 ```
 
----
+**Konwencje:**
 
-## ✅ Checklist Przed Rozpoczęciem Testowania
-
--   [ ] Zdecyduj o frameworku (Jest? Mocha? Vitest?)
--   [ ] Skonfiguruj testową bazę danych (lub mockowanie)
--   [ ] Napisz 2-3 przykładowe testy (Model, Repository, Controller)
--   [ ] Udokumentuj wzorce, które zadziałały
--   [ ] Zaktualizuj ten plik z rzeczywistymi przykładami
+-   `__tests__/` - testy jednostkowe/integracyjne
+-   `__mocks__/` - manual mocks dla Jest
+-   `*.test.ts` - testy jednostkowe
+-   `*.integration.test.ts` - testy integracyjne (z DB)
+-   `*.e2e.test.ts` - testy end-to-end (opcjonalne)
 
 ---
 
-## 🔗 Dodatkowe Zasoby (TODO)
+## ⚙️ Konfiguracja (Jest + ts-jest)
 
--   [ ] Link do dokumentacji frameworka testowego
--   [ ] Przykłady testów z podobnych projektów
--   [ ] Strategia CI/CD dla testów
+**Pliki:**
+
+-   `jest.config.js` - konfiguracja Jest
+-   `tsconfig.test.json` - TypeScript config dla testów
+-   `src/__tests__/setup.ts` - global setup
+
+**Dependencies:**
+
+```json
+{
+    "jest": "^30.2.0",
+    "@types/jest": "^30.0.0",
+    "ts-jest": "^29.4.5",
+    "@jest/globals": "^30.2.0"
+}
+```
+
+**Instalacja:** `yarn add --dev jest @types/jest ts-jest @jest/globals`
 
 ---
 
-**Wersja:** 0.1 (Draft)  
-**Status:** PLANOWANE - czeka na implementację pierwszych testów  
-**Ostatnia aktualizacja:** 2024-10-28  
-**Autor:** oramm
+## ✅ Poziomy Pewności Testów
+
+### ⭐⭐⭐ **Wysoka Pewność (Testy Jednostkowe)**
+
+✅ Architektura zgodna z Clean Architecture  
+✅ Logika biznesowa działa poprawnie  
+✅ Orkiestracja w Controller jest poprawna  
+✅ Dispatcher routing działa
+
+### ⭐⭐ **Średnia Pewność (Brak Testów Integracyjnych)**
+
+⚠️ Zapytania SQL w Repository nie są przetestowane z prawdziwą bazą  
+⚠️ Pełny flow (Router → Controller → Repo → DB) nie jest przetestowany
+
+### ⭐ **Niska Pewność (Brak E2E)**
+
+❌ Interakcje z Google Drive API nie są przetestowane  
+❌ Endpointy HTTP nie są przetestowane
+
+**Wniosek:** Obecne testy dają wysoką pewność dla refaktoringu i logiki biznesowej, ale wymagają uzupełnienia o testy integracyjne dla 100% gwarancji.
 
 ---
 
-## 💡 Jak Uzupełnić Ten Dokument
+## 🎓 Dobre Praktyki
 
-1. ✅ Napisz 2-3 testy (Model, Repository, Controller)
-2. ✅ Znajdź wzorce, które działają w Twoim projekcie
-3. ✅ Zastąp TODO rzeczywistymi przykładami kodu
-4. ✅ Dodaj sekcje o problemach, które napotkałeś
-5. ✅ Zmień status z "PLANOWANE" na "ACTIVE"
+1. **Mock wszystkie zewnętrzne zależności** w testach jednostkowych (DB, GD, Email, inne Controllery)
+2. **Testuj zachowanie, nie implementację** - sprawdzaj wyniki, nie wywołania wewnętrzne
+3. **Jeden test = jedna rzecz** - testy powinny być proste i czytelne
+4. **Używaj `describe()` do grupowania** - logiczna struktura testów
+5. **Testy muszą być szybkie** (<20s dla wszystkich) - mockuj ciężkie operacje
+6. **Każdy test jest niezależny** - nie polegaj na kolejności wykonania
+7. **Manual mocks dla circular dependencies** - użyj `__mocks__/` dla problematycznych modułów
+
+---
+
+## 📚 Dodatkowe Zasoby
+
+-   **Podstawy:** `TESTING-QUICKSTART.md` (5-minutowy start)
+-   **Szczegóły:** `TESTING.md` (kompletny przewodnik)
+-   **Metryki:** `TESTING-SUMMARY.md` (podsumowanie wdrożenia)
+-   **Przykłady:** `src/offers/__tests__/` (referencyjne testy)
+
+---
+
+**Wersja:** 1.0  
+**Status:** AKTYWNE - Framework wdrożony i przetestowany  
+**Ostatnia aktualizacja:** 2025-11-09  
+**Autor:** oramm + GitHub Copilot
+
+---
+
+## � Co Dalej (Roadmap)
+
+### Priorytet 1 (Krótkoterminowy)
+
+-   [ ] Dodać testy dla `addNew()` i `edit()` w OffersController
+-   [ ] Zwiększyć pokrycie do 80%+ dla warstwy Controller
+-   [ ] Dodać testy dla ExternalOffer business logic
+
+### Priorytet 2 (Średnioterminowy)
+
+-   [ ] Skonfigurować testową bazę danych
+-   [ ] Uruchomić testy integracyjne (odskipować `.skip()`)
+-   [ ] Dodać testy Repository z prawdziwym DB
+
+### Priorytet 3 (Długoterminowy)
+
+-   [ ] E2E testy dla krytycznych endpointów
+-   [ ] CI/CD pipeline z automatycznym uruchamianiem testów
+-   [ ] Mutation testing dla weryfikacji jakości testów
