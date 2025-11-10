@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import Contract from './Contract';
 import ContractOur from './ContractOur';
 import Setup from '../setup/Setup';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import ToolsSheets from '../tools/ToolsSheets';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
@@ -145,7 +145,7 @@ export default class ContractOther
                 )
             ) + 1;
         if (firstRowNumber) {
-            await ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+            await CurrentSprint.editRowsByColValue(auth, {
                 searchColName:
                     Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
                 valueToFind: <number>this.id,
@@ -171,25 +171,20 @@ export default class ContractOther
                     )
                 ) + 1;
 
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
+            await CurrentSprint.setSumInContractRow(
                 auth,
                 <string>this.ourIdRelated
             );
-            await ScrumSheet.CurrentSprint.sortContract(
-                auth,
-                <string>this.ourIdRelated
-            );
+            await CurrentSprint.sortContract(auth, <string>this.ourIdRelated);
             if (firstRowNumber < 13) {
-                await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-                await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(
-                    auth
-                );
+                await CurrentSprint.makeTimesSummary(auth);
+                await CurrentSprint.makePersonTimePerTaskFormulas(auth);
             }
         }
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
             valueToFind: <number>this.id,
         });
@@ -199,17 +194,11 @@ export default class ContractOther
         if (this.ourIdRelated) {
             super.createDefaultMilestones(auth, taskId);
             TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
-                auth,
-                this.ourIdRelated
-            );
-            await ScrumSheet.CurrentSprint.sortContract(
-                auth,
-                this.ourIdRelated
-            );
+            await CurrentSprint.setSumInContractRow(auth, this.ourIdRelated);
+            await CurrentSprint.sortContract(auth, this.ourIdRelated);
 
-            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+            await CurrentSprint.makeTimesSummary(auth);
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
         } else throw new Error('Kontrakt nie został przypisany do umowy ENVI');
     }
 

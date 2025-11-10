@@ -47,6 +47,9 @@ app.put('/user/:id', async (req: Request, res: Response, next) => {
                 const item = await PersonsController.updateUser(req.body, auth);
 
                 // Orchestracja: aktualizacja ScrumSheet po zapisie użytkownika ENVI
+                // Orchestracja: Router koordynuje operacje w dwóch niezależnych podsystemach
+                // (Persons + ScrumSheet). W idealnej Clean Architecture byłby to Application Service,
+                // ale dla tego jednego use case router Express.js jest wystarczający.
                 await Promise.all([
                     ScrumSheet.Planning.refreshTimeAvailable(auth),
                     ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(

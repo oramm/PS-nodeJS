@@ -5,14 +5,11 @@ import Task from './Task';
 import Milestone from '../../Milestone';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
-import {
-    OtherContractData,
-    OurContractData,
-} from '../../../../types/types';
-import TaskRepository,{TasksSearchParams,} from './TaskRepository';
+import { OtherContractData, OurContractData } from '../../../../types/types';
+import TaskRepository, { TasksSearchParams } from './TaskRepository';
 import Process from '../../../../processes/Process';
 import TasksTemplateForProcesssController from './taskTemplates/TasksTemplatesForProcessesController';
-import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../../../../ScrumSheet/CurrentSprint';
 import BaseController from '../../../../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../../../../tools/ToolsSheets';
@@ -22,14 +19,14 @@ import { MilestoneData } from '../../../../types/types';
 import PersonsController from '../../../../persons/PersonsController';
 import { TaskData } from '../../../../types/types';
 
-export type {TasksSearchParams};
+export type { TasksSearchParams };
 
 type TaskPayload = TaskData & { _case?: any };
 
 export default class TasksController extends BaseController<
-    Task, 
+    Task,
     TaskRepository
-> {    
+> {
     private static instance: TasksController;
 
     constructor() {
@@ -43,60 +40,67 @@ export default class TasksController extends BaseController<
         return this.instance;
     }
 
-static async addNewTask(
-    taskPayload: TaskPayload, 
-    auth?: OAuth2Client
-) : Promise<Task> {
+    static async addNewTask(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<Task> {
         const instance = this.getInstance();
         const { _case, ...rest } = taskPayload;
         const task = new Task({ ...rest, _parent: _case });
         await instance.create(task);
-        
-        if(auth) {
+
+        if (auth) {
             await this.addInScrum(task, auth);
         }
         console.log(`Task ${task.name} added`);
         return task;
     }
 
-    static async find(
-        searchParams: TasksSearchParams[] = []
-    ): Promise<Task[]> {
+    static async find(searchParams: TasksSearchParams[] = []): Promise<Task[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
     }
 
     static async updateTask(
-        taskPayload: TaskPayload, 
-        fieldsToUpdate: string[], 
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[],
         auth?: OAuth2Client
     ): Promise<Task> {
         const instance = this.getInstance();
         const { _case, ...rest } = taskPayload;
         const task = new Task({ ...rest, _parent: _case });
 
-        const dbPromise = instance.edit(task, undefined, undefined, fieldsToUpdate);
-        const scrumPromise = auth ? this.editInScrum(task, auth) : Promise.resolve();
+        const dbPromise = instance.edit(
+            task,
+            undefined,
+            undefined,
+            fieldsToUpdate
+        );
+        const scrumPromise = auth
+            ? this.editInScrum(task, auth)
+            : Promise.resolve();
         await Promise.all([dbPromise, scrumPromise]);
 
         console.log(`Task ${task.name} updated`);
         return task;
     }
-    
+
     static async deleteTask(
-        taskPayload: TaskPayload, 
+        taskPayload: TaskPayload,
         auth?: OAuth2Client
-    ): Promise<{id: number | undefined}> {
+    ): Promise<{ id: number | undefined }> {
         const instance = this.getInstance();
         const { _case, ...rest } = taskPayload;
         const task = new Task({ ...rest, _parent: _case });
 
         const dbPromise = instance.delete(task);
-        const scrumPromise = auth ? this.deleteFromScrum(task, auth) : Promise.resolve();
+        const scrumPromise = auth
+            ? this.deleteFromScrum(task, auth)
+            : Promise.resolve();
         await Promise.all([dbPromise, scrumPromise]);
 
         console.log(`Task with id ${task.id} deleted`);
-        return {id: task.id};
+        return { id: task.id };
     }
 
     static processTasksResult(result: any[]): Task[] {
@@ -197,9 +201,9 @@ static async addNewTask(
         return newResult;
     }
 
-/* Służy do dodwania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
-        *
-        */
+    /* Służy do dodwania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
+     *
+     */
     static async addInDbFromTemplateForProcess(
         process: Process,
         parentCase: Case,
@@ -293,7 +297,7 @@ static async addNewTask(
             throw err;
         }
     }
-    
+
     static async addInScrum(
         task: Task,
         auth: OAuth2Client,
@@ -311,7 +315,9 @@ static async addNewTask(
                 return;
             }
             if (!task.caseId) {
-                throw new Error('Task must have a caseId to be added to Scrum.');
+                throw new Error(
+                    'Task must have a caseId to be added to Scrum.'
+                );
             }
             const parents = await this.getParents(task.caseId, conn);
             let currentSprintValues = <any[][]>(
@@ -449,24 +455,15 @@ static async addNewTask(
                 values: parentsData,
             });
 
-            await ScrumSheet.CurrentSprint.setSprintSumsInRows(
-                auth,
-                lastContractRow + 1
-            );
+            await CurrentSprint.setSprintSumsInRows(auth, lastContractRow + 1);
 
             if (!isPartOfBatch) {
                 //odtwórz #Times (ostatnie kolumny arkusza)
-                await ScrumSheet.CurrentSprint.setSumInContractRow(
-                    auth,
-                    ourContractOurId
-                );
-                await ScrumSheet.CurrentSprint.sortContract(
-                    auth,
-                    ourContractOurId
-                );
+                await CurrentSprint.setSumInContractRow(auth, ourContractOurId);
+                await CurrentSprint.sortContract(auth, ourContractOurId);
                 console.log('tasks rows in contract sorted');
                 if (lastContractRow < 13) {
-                    await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    await CurrentSprint.makeTimesSummary(auth);
                     console.log('times Summary table is rebuilt');
                 }
             }
@@ -480,7 +477,7 @@ static async addNewTask(
             }
         }
     }
-    
+
     /**
      * sprawdza czy zadanie powinno znaleźć się w arkuszu SCRUM
      * @param externalConn
@@ -498,7 +495,9 @@ static async addNewTask(
         console.log('Task shouldBeInScrum conn', conn.threadId);
         try {
             if (task._owner && task._owner.id) {
-                const systemRole = await PersonsController.getSystemRole({ id: task._owner.id });
+                const systemRole = await PersonsController.getSystemRole({
+                    id: task._owner.id,
+                });
                 if (!systemRole)
                     throw new Error('Użytkownik nie zarejestrowany w systemie');
                 test =
@@ -508,9 +507,11 @@ static async addNewTask(
             } else test = task.status !== 'Backlog';
 
             if (!test) return test;
-            
+
             if (!task.caseId) {
-                throw new Error('Task must have a caseId to be checked in Scrum.');
+                throw new Error(
+                    'Task must have a caseId to be checked in Scrum.'
+                );
             }
             const parents = await this.getParents(task.caseId, conn);
             const result = await ToolsSheets.getValues(auth, {
@@ -600,7 +601,7 @@ static async addNewTask(
     }
 
     static async deleteFromScrum(task: Task, auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
             valueToFind: <number>task.id,
         });

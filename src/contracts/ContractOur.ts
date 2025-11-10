@@ -6,7 +6,7 @@ import ToolsDb from '../tools/ToolsDb';
 import { auth, OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../tools/ToolsSheets';
 import Setup from '../setup/Setup';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import City from '../Admin/Cities/City';
 import { OurContractData } from '../types/types';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
@@ -174,10 +174,14 @@ export default class ContractOur extends Contract implements OurContractData {
         if (this.status === 'Archiwalny' || this._type.name.match(/AQM/i))
             return false;
 
-        const adminSystemRole = await PersonsController.getSystemRole({ id: this._admin?.id });
+        const adminSystemRole = await PersonsController.getSystemRole({
+            id: this._admin?.id,
+        });
         if (adminSystemRole?.id && adminSystemRole?.id <= 3) return true;
 
-        const managerSystemRole = await PersonsController.getSystemRole({ id: this._manager?.id });
+        const managerSystemRole = await PersonsController.getSystemRole({
+            id: this._manager?.id,
+        });
         if (managerSystemRole?.id && managerSystemRole?.id <= 3) return true;
 
         return false;
@@ -256,7 +260,7 @@ export default class ContractOur extends Contract implements OurContractData {
                 ],
             ],
         });
-        await ScrumSheet.CurrentSprint.sortProjects(auth);
+        await CurrentSprint.sortProjects(auth);
     }
     /**zmienia dane w nagłówku kontraktu i odnosniki */
     async editInScrum(auth: OAuth2Client) {
@@ -285,40 +289,37 @@ export default class ContractOur extends Contract implements OurContractData {
             : '';
         const headerCaption = this.ourId + ' ' + alias + managerName;
 
-        const headerRowNumber =
-            await ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
-                searchColName:
-                    Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
-                valueToFind: this.ourId,
-                firstColumnName:
-                    Setup.ScrumSheet.CurrentSprint.projectIdColName,
-                rowValues: [
-                    this.projectOurId,
-                    0,
-                    this.ourId,
-                    0,
-                    0,
-                    0,
-                    0,
-                    this._manager ? <number>this._manager.id : '',
-                    '{"contractHeader":true}',
-                    `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
-                    '',
-                    '',
-                    '',
-                    'd',
-                    'd',
-                    'd',
-                    'd',
-                    'd',
-                ],
-                firstRowOnly: true,
-            });
+        const headerRowNumber = await CurrentSprint.editRowsByColValue(auth, {
+            searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
+            valueToFind: this.ourId,
+            firstColumnName: Setup.ScrumSheet.CurrentSprint.projectIdColName,
+            rowValues: [
+                this.projectOurId,
+                0,
+                this.ourId,
+                0,
+                0,
+                0,
+                0,
+                this._manager ? <number>this._manager.id : '',
+                '{"contractHeader":true}',
+                `=HYPERLINK("${this._gdFolderUrl}";"${headerCaption}")`,
+                '',
+                '',
+                '',
+                'd',
+                'd',
+                'd',
+                'd',
+                'd',
+            ],
+            firstRowOnly: true,
+        });
 
         if (headerRowNumber) {
-            ScrumSheet.CurrentSprint.setSumInContractRow(auth, this.ourId);
+            CurrentSprint.setSumInContractRow(auth, this.ourId);
 
-            ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+            CurrentSprint.editRowsByColValue(auth, {
                 searchColName:
                     Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
                 valueToFind: <number>this.id,
@@ -335,19 +336,16 @@ export default class ContractOur extends Contract implements OurContractData {
             await this.addInScrum(auth);
             await this.addExistingTasksInScrum(auth);
 
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
-                auth,
-                this.ourId
-            );
-            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId);
+            await CurrentSprint.setSumInContractRow(auth, this.ourId);
+            await CurrentSprint.sortContract(auth, this.ourId);
 
-            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+            await CurrentSprint.makeTimesSummary(auth);
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
         }
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
             valueToFind: this.ourId,
         });
@@ -357,19 +355,18 @@ export default class ContractOur extends Contract implements OurContractData {
         await super.createDefaultMilestones(auth, taskId);
         if (await this.shouldBeInScrum()) {
             TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
-                auth,
-                this.ourId
-            ).catch((err) => {
-                console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
-                throw new Error(
-                    'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
-                        err.message
-                );
-            });
+            await CurrentSprint.setSumInContractRow(auth, this.ourId).catch(
+                (err: any) => {
+                    console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
+                    throw new Error(
+                        'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
+                            err.message
+                    );
+                }
+            );
 
-            await ScrumSheet.CurrentSprint.sortContract(auth, this.ourId).catch(
-                (err) => {
+            await CurrentSprint.sortContract(auth, this.ourId).catch(
+                (err: any) => {
                     console.log('Błąd przy sortowaniu kontraktu', err);
                     throw new Error(
                         'Błąd przy sortowaniu kontraktów w scrumie po dodaniu kamieni \n' +
@@ -378,16 +375,14 @@ export default class ContractOur extends Contract implements OurContractData {
                 }
             );
 
-            await ScrumSheet.CurrentSprint.makeTimesSummary(auth).catch(
-                (err) => {
-                    console.log('Błąd przy tworzeniu sumy czasów', err);
-                    throw new Error(
-                        'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
-                            err.message
-                    );
-                }
-            );
-            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
+            await CurrentSprint.makeTimesSummary(auth).catch((err: any) => {
+                console.log('Błąd przy tworzeniu sumy czasów', err);
+                throw new Error(
+                    'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
+                        err.message
+                );
+            });
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
         }
     }
 

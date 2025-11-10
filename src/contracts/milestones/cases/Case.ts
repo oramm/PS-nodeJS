@@ -9,7 +9,7 @@ import ToolsSheets from '../../../tools/ToolsSheets';
 import Tools from '../../../tools/Tools';
 import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
 import mysql from 'mysql2/promise';
-import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../../../ScrumSheet/CurrentSprint';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 import CaseType from './caseTypes/CaseType';
 import { CaseData, MilestoneData } from '../../../types/types';
@@ -160,12 +160,13 @@ export default class Case extends BusinessObject implements CaseData {
         //typ sprawy może mieć wiele procesów - sprawa automatycznie też
         for (const process of this._type._processes) {
             //dodaj zadanie ramowe z szablonu
-            const processInstanceTask = await TasksController.addInDbFromTemplateForProcess(
-                process,
-                this,
-                externalConn,
-                isPartOfTransaction
-            );
+            const processInstanceTask =
+                await TasksController.addInDbFromTemplateForProcess(
+                    process,
+                    this,
+                    externalConn,
+                    isPartOfTransaction
+                );
 
             if (!processInstanceTask) continue;
 
@@ -474,7 +475,12 @@ export default class Case extends BusinessObject implements CaseData {
         //dodaj sprawę do arkusza currentSprint
         console.groupCollapsed('adding default tasks to scrumboard');
         for (const task of parameters.defaultTasks)
-            await TasksController.addInScrum(task, auth, undefined, parameters.isPartOfBatch);
+            await TasksController.addInScrum(
+                task,
+                auth,
+                undefined,
+                parameters.isPartOfBatch
+            );
         console.log('default tasks added to scrumboard');
         console.groupEnd();
     }
@@ -633,7 +639,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     private async deleteFromCurrentSprintSheet(auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.caseIdColName,
             valueToFind: <number>this.id,
         });
