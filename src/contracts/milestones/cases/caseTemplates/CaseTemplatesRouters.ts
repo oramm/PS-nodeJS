@@ -2,8 +2,9 @@ import CaseTemplatesController from './CaseTemplatesController';
 import { app } from '../../../../index';
 import CaseTemplate from './CaseTemplate';
 import PersonsController from '../../../../persons/PersonsController';
+import { Request, Response } from 'express';
 
-app.get('/caseTemplates', async (req: any, res: any, next) => {
+app.get('/caseTemplates', async (req: Request, res: Response, next) => {
     try {
         const result = await CaseTemplatesController.getCaseTemplatesList(
             req.query
@@ -15,7 +16,7 @@ app.get('/caseTemplates', async (req: any, res: any, next) => {
     }
 });
 
-app.get('/caseTemplate/:id', async (req: any, res: any, next) => {
+app.get('/caseTemplate/:id', async (req: Request, res: Response, next) => {
     try {
         const result = await CaseTemplatesController.getCaseTemplatesList(
             req.params
@@ -26,7 +27,7 @@ app.get('/caseTemplate/:id', async (req: any, res: any, next) => {
     }
 });
 
-app.post('/caseTemplate', async (req: any, res: any, next) => {
+app.post('/caseTemplate', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) {
             throw new Error('Not authenticated');
@@ -42,7 +43,7 @@ app.post('/caseTemplate', async (req: any, res: any, next) => {
     }
 });
 
-app.put('/caseTemplate/:id', async (req: any, res: any, next) => {
+app.put('/caseTemplate/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) {
             throw new Error('Not authenticated');
@@ -58,7 +59,7 @@ app.put('/caseTemplate/:id', async (req: any, res: any, next) => {
     }
 });
 
-app.delete('/caseTemplate/:id', async (req: any, res: any, next) => {
+app.delete('/caseTemplate/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new CaseTemplate(req.body);
         await item.deleteFromDb();

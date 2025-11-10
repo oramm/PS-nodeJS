@@ -1,23 +1,4 @@
-// sessionTypes.ts
-import exp from 'constants';
-import e from 'express';
-import 'express-session';
-import { SystemRoleName } from './sessionTypes';
-
-declare module 'express-session' {
-    interface SessionData {
-        userData: {
-            enviId: number;
-            googleId?: string;
-            microsoftId?: string;
-            systemEmail: string;
-            userName: string;
-            picture: string;
-            systemRoleName: SystemRoleName;
-            systemRoleId: number;
-        };
-    }
-}
+// types.d.ts - Domain types and interfaces
 
 export interface RepositoryDataItem {
     id?: number;
