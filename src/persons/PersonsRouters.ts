@@ -3,6 +3,7 @@ import { app } from '../index';
 import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import { Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
+import ScrumSheet from '../ScrumSheet/ScrumSheet';
 
 app.post('/persons', async (req: Request, res: Response, next) => {
     try {
@@ -44,6 +45,15 @@ app.put('/user/:id', async (req: Request, res: Response, next) => {
             res,
             async (auth: OAuth2Client) => {
                 const item = await PersonsController.updateUser(req.body, auth);
+
+                // Orchestracja: aktualizacja ScrumSheet po zapisie użytkownika ENVI
+                await Promise.all([
+                    ScrumSheet.Planning.refreshTimeAvailable(auth),
+                    ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(
+                        auth
+                    ),
+                ]);
+
                 res.send(item);
             }
         );

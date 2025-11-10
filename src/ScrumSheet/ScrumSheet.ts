@@ -9,6 +9,7 @@ export default class ScrumSheet {
     static Planning = Planning;
     static CurrentSprint = CurrentSprint;
     static Data = Data;
+
     static async scrumGetPersons(
         systemRoleNames: string[] = ['ENVI_EMPLOYEE']
     ) {

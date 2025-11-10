@@ -1,16 +1,13 @@
 import Person from './Person';
 import { UserData } from '../types/sessionTypes';
-import PersonRepository, {
-    PersonsSearchParams,
-} from './PersonRepository';
+import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
 
 export type { PersonsSearchParams };
 
 export default class PersonsController extends BaseController<
-    Person, 
+    Person,
     PersonRepository
 > {
     private static instance: PersonsController;
@@ -33,7 +30,7 @@ export default class PersonsController extends BaseController<
         return instance.repository.find(searchParams);
     }
 
-    static async addNewPerson(personData:{
+    static async addNewPerson(personData: {
         name: string;
         surname: string;
         position?: string;
@@ -43,11 +40,12 @@ export default class PersonsController extends BaseController<
         comment?: string;
         systemRoleId?: number;
         entityId?: number;
-    }) : Promise<Person> {
+    }): Promise<Person> {
         const instance = this.getInstance();
         const person = new Person(personData);
-        if (!person._entity?.id) throw new Error('Person must be associated with an entity.');
-        
+        if (!person._entity?.id)
+            throw new Error('Person must be associated with an entity.');
+
         delete person.systemRoleId;
         delete person.systemEmail;
 
@@ -56,7 +54,10 @@ export default class PersonsController extends BaseController<
         return person;
     }
 
-    static async updatePerson(personData: any, fieldsToUpdate: string[]): Promise<Person> {
+    static async updatePerson(
+        personData: any,
+        fieldsToUpdate: string[]
+    ): Promise<Person> {
         const instance = this.getInstance();
         const person = new Person(personData);
         await instance.edit(person, undefined, undefined, fieldsToUpdate);
@@ -64,7 +65,9 @@ export default class PersonsController extends BaseController<
         return person;
     }
 
-    static async deletePerson(personData: any): Promise<{id: number | undefined}> {
+    static async deletePerson(
+        personData: any
+    ): Promise<{ id: number | undefined }> {
         const instance = this.getInstance();
         const person = new Person(personData);
         await instance.delete(person);
@@ -72,27 +75,34 @@ export default class PersonsController extends BaseController<
         return { id: person.id };
     }
 
-    static async updateUser(userData: any, auth: OAuth2Client): Promise<Person> {
+    static async updateUser(
+        userData: any,
+        auth: OAuth2Client
+    ): Promise<Person> {
         const instance = this.getInstance();
         const user = new Person(userData);
 
-        const fieldsToUpdate = ['name', 'surname', 'position', 'email', 'cellphone', 'phone', 'comment', 'systemRoleId', 'systemEmail'];
+        const fieldsToUpdate = [
+            'name',
+            'surname',
+            'position',
+            'email',
+            'cellphone',
+            'phone',
+            'comment',
+            'systemRoleId',
+            'systemEmail',
+        ];
         await instance.edit(user, undefined, undefined, fieldsToUpdate);
 
-        //jeśli użytkownik ENVI to trzeba zaktualizować scrumboard
-        await Promise.all([
-            ScrumSheet.Planning.refreshTimeAvailable(auth),
-            ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth)
-        ]);
-        
-        console.log(`User ${user.name} ${user.surname} updated in db and Scrum`);
+        console.log(`User ${user.name} ${user.surname} updated in db`);
         return user;
     }
 
-    static async getPersonFromSessionUserData(userData: UserData): Promise<Person> {
-        const person = (
-            await this.find([{ id: userData.enviId }])
-        )[0];
+    static async getPersonFromSessionUserData(
+        userData: UserData
+    ): Promise<Person> {
+        const person = (await this.find([{ id: userData.enviId }]))[0];
         if (!person) throw new Error('No person found');
         return person;
     }
@@ -104,11 +114,8 @@ export default class PersonsController extends BaseController<
             ])
         )[0];
     }
-    
-    static async getSystemRole(params: {
-        id?: number;
-        systemEmail?: string;
-    }){
+
+    static async getSystemRole(params: { id?: number; systemEmail?: string }) {
         const instance = this.getInstance();
         return instance.repository.getSystemRole(params);
     }
@@ -121,14 +128,16 @@ export default class PersonsController extends BaseController<
         cellphone?: string;
         phone?: string;
         comment?: string;
-        systemRoleId: number; 
-        systemEmail: string;  
-        entityId: number;     
+        systemRoleId: number;
+        systemEmail: string;
+        entityId: number;
     }): Promise<Person> {
         const instance = this.getInstance();
         const user = new Person(userData);
         if (!user.systemRoleId || !user.systemEmail || !user._entity?.id) {
-            throw new Error('User must have systemRoleId, systemEmail, and be associated with an entity.');
+            throw new Error(
+                'User must have systemRoleId, systemEmail, and be associated with an entity.'
+            );
         }
         await instance.create(user);
         console.log(`User ${user.name} ${user.surname} added in db`);

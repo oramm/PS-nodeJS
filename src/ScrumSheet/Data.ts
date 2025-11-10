@@ -2,7 +2,7 @@ import ToolsSheets from '../tools/ToolsSheets';
 import { OAuth2Client } from 'google-auth-library';
 import Setup from '../setup/Setup';
 import Person from '../persons/Person';
-import ScrumSheet from './ScrumSheet';
+import PersonsController from '../persons/PersonsController';
 import CasesController from '../contracts/milestones/cases/CasesController';
 
 export default class Data {
@@ -17,11 +17,13 @@ export default class Data {
             })
         ).values;
 
-        if (!persons)
-            persons = await ScrumSheet.scrumGetPersons([
-                'ENVI_EMPLOYEE',
-                'ENVI_MANAGER',
-            ]);
+        if (!persons) {
+            const orConditions = [
+                { systemRoleName: 'ENVI_EMPLOYEE' },
+                { systemRoleName: 'ENVI_MANAGER' },
+            ];
+            persons = (await PersonsController.find(orConditions)) || [];
+        }
 
         const personIdColIndex = dataValues[0].indexOf(
             Setup.ScrumSheet.Data.personIdColName
