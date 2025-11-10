@@ -1,10 +1,10 @@
 import BusinessObject from '../BussinesObject';
 import Entity from '../entities/Entity';
-import Contract from './Contract';
+import { ContractData } from '../types/types';
 
 export default class ContractEntity extends BusinessObject {
     contractId: number;
-    _contract: Contract;
+    _contract: ContractData;
     entityId: number;
     _entity: Entity;
     contractRole: string;

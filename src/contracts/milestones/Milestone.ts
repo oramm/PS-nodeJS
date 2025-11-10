@@ -8,7 +8,7 @@ import { drive_v3, google } from 'googleapis';
 import Setup from '../../setup/Setup';
 import ToolsSheets from '../../tools/ToolsSheets';
 import Tools from '../../tools/Tools';
-import ScrumSheet from '../../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../../ScrumSheet/CurrentSprint';
 import Case from './cases/Case';
 import CaseTemplate from './cases/caseTemplates/CaseTemplate';
 import mysql from 'mysql2/promise';
@@ -504,7 +504,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             });
 
             if (lastRow < 13) {
-                ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                CurrentSprint.makeTimesSummary(auth);
             }
         }
     }

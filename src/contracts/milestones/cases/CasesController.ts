@@ -1,6 +1,5 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../../tools/ToolsDb';
-import Contract from '../../Contract';
 import Case from './Case';
 import ProcessesController from '../../../processes/ProcesesController';
 import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
