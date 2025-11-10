@@ -260,6 +260,9 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
                 alias: row.ContractAlias,
                 startDate: row.ContractStartDate,
                 endDate: row.ContractEndDate,
+                _ourIdOrNumber_Name: `${
+                    row.ContractOurId || row.ContractNumber
+                } ${row.ContractName}`,
                 _contractRangesNames:
                     (<string | undefined>row.RangeNames)
                         ?.split(',')
