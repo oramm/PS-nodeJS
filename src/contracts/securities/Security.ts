@@ -134,8 +134,7 @@ export class Security extends BusinessObject {
             _type: await this.getCaseType(),
             _parent: await this.getMilestone(),
         });
-        await caseItem.createFolder(auth);
-        await caseItem.addInDb();
+        await CasesController.add(auth, caseItem);
         return caseItem;
     }
 
@@ -150,7 +149,7 @@ export class Security extends BusinessObject {
     async deleteController(auth: OAuth2Client) {
         await this.deleteFromDb();
 
-        if (this._case) await this._case.deleteController(auth);
+        if (this._case) await CasesController.delete(auth, this._case);
     }
 }
 

@@ -22,12 +22,14 @@ app.post('/case', async (req: Request, res: Response, next) => {
         const caseItem = new Case({
             ...req.parsedBody,
         });
+
+        // Migracja: Case.addNewController() → CasesController.add()
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            caseItem.addNewController,
-            undefined,
-            caseItem
+            CasesController.add,
+            [caseItem], // Argumenty w tablicy
+            CasesController // Context dla this
         );
 
         res.send(caseItem);
@@ -35,28 +37,20 @@ app.post('/case', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
-
 app.put('/case/:id', async (req: Request, res: Response, next) => {
     try {
-        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
         let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)
             item.setAsUniquePerMilestone();
+
+        // Migracja: Case.editInDb() + editFolder() + editInScrum() → CasesController.edit()
         await ToolsGapi.gapiReguestHandler(
             req,
             res,
-            item.editFolder,
-            undefined,
-            item
-        );
-        await item.editInDb();
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.editInScrum,
-            undefined,
-            item
+            CasesController.edit,
+            [item], // Argumenty w tablicy
+            CasesController // Context dla this
         );
 
         res.send(item);
@@ -69,23 +63,16 @@ app.delete('/case/:id', async (req: Request, res: Response, next) => {
     try {
         let item = new Case(req.body);
         console.log('delete');
-        await item.deleteFromDb();
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFolder,
-                undefined,
-                item
-            ),
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFromScrumSheet,
-                undefined,
-                item
-            ),
-        ]);
+
+        // Migracja: Case.deleteFromDb() + deleteFolder() + deleteFromScrumSheet() → CasesController.delete()
+        await ToolsGapi.gapiReguestHandler(
+            req,
+            res,
+            CasesController.delete,
+            [item], // Argumenty w tablicy
+            CasesController // Context dla this
+        );
+
         res.send(item);
     } catch (error) {
         next(error);

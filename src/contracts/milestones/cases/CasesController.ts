@@ -1,306 +1,361 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../../tools/ToolsDb';
 import Case from './Case';
-import ProcessesController from '../../../processes/ProcesesController';
-import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
-import Risk from './risks/Risk';
-import Milestone from '../Milestone';
-import ContractOur from '../../ContractOur';
-import ContractOther from '../../ContractOther';
-import {
-    ExternalOfferData,
-    OfferData,
-    OtherContractData,
-    OurContractData,
-    OurOfferData,
-} from '../../../types/types';
-
-export type CasesSearchParams = {
-    projectId?: string;
-    contractId?: number;
-    _contract?: OurContractData | OtherContractData;
-    _offer?: OurOfferData | ExternalOfferData;
-    offerId?: number;
-    milestoneId?: number;
-    caseId?: number;
-    typeId?: number;
-    milestoneTypeId?: number;
-    searchText?: string;
-};
+import CaseRepository, { CasesSearchParams } from './CaseRepository';
+import { OAuth2Client } from 'google-auth-library';
+import ToolsDb from '../../../tools/ToolsDb';
+import mysql from 'mysql2/promise';
+import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
+import Task from './tasks/Task';
+import TasksController from './tasks/TasksController';
+import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class CasesController {
-    static async getCasesList(orConditions: CasesSearchParams[] = []) {
-        const milestoneParentTypeCondition =
-            orConditions[0]._contract?.id || orConditions[0].contractId
-                ? 'Milestones.ContractId IS NOT NULL'
-                : 'Milestones.OfferId IS NOT NULL';
+    private static instance: CasesController;
+    private repository: CaseRepository;
 
-        const sql = `SELECT 
-            Cases.Id,
-            CaseTypes.Id AS CaseTypeId,
-            CaseTypes.Name AS CaseTypeName,
-            CaseTypes.IsDefault,
-            CaseTypes.IsUniquePerMilestone,
-            CaseTypes.MilestoneTypeId,
-            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-            Cases.Name,
-            Cases.Number,
-            Cases.Description,
-            Cases.GdFolderId,
-            Cases.LastUpdated,
-            Milestones.Id AS MilestoneId,
-            Milestones.ContractId,
-            Milestones.Name AS MilestoneName,
-            Milestones.GdFolderId AS MilestoneGdFolderId,
-            MilestoneTypes.Id AS MilestoneTypeId,
-            MilestoneTypes.Name AS MilestoneTypeName,
-            MilestoneTypes.IsUniquePerContract,
-            COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
-            OurContractsData.OurId AS ContractOurId,
-            Contracts.Id AS ContractId,
-            Contracts.Alias AS ContractAlias,
-            Contracts.Number AS ContractNumber,
-            Contracts.Name AS ContractName,
-            ContractTypes.Id AS MainContractTypeId, 
-            ContractTypes.Name AS TypeName, 
-            ContractTypes.IsOur AS TypeIsOur, 
-            ContractTypes.Description AS TypeDescription,
-            Offers.Id AS OfferId,
-            Offers.Alias AS OfferAlias,
-            Offers.IsOur AS OfferIsOur,
-            Risks.Id AS RiskId,
-            Risks.Probability AS RiskProbability,
-            Risks.OverallImpact AS RiskOverallImpact
-        FROM Cases
-        LEFT JOIN CaseTypes ON Cases.TypeId=CaseTypes.Id
-        JOIN Milestones ON Milestones.Id=Cases.MilestoneId
-        JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
-        LEFT JOIN Contracts ON Milestones.ContractId=Contracts.Id
-        LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-        LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
-        LEFT JOIN Offers ON Milestones.OfferId=Offers.Id
-        LEFT JOIN Risks ON Risks.CaseId=Cases.Id
-        LEFT JOIN MilestoneTypes_ContractTypes 
-            ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
-            AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
-        LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-            AND ${milestoneParentTypeCondition}
-        ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processCasesResult(result, orConditions[0]);
+    constructor() {
+        this.repository = new CaseRepository();
     }
 
-    static makeAndConditions(searchParams: CasesSearchParams) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [
-                  searchParams.projectId,
-              ])
-            : '1';
-        const contractId =
-            searchParams.contractId || searchParams._contract?.id;
-
-        const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
-            : '1';
-
-        const offerId = searchParams.offerId || searchParams._offer?.id;
-        const offerCondition = offerId
-            ? mysql.format('Offers.Id = ?', [offerId])
-            : '1';
-        const milestoneCondition = searchParams.milestoneId
-            ? mysql.format('Cases.MilestoneId = ?', [searchParams.milestoneId])
-            : '1';
-        const caseCondition = searchParams.caseId
-            ? mysql.format('Cases.Id = ?', [searchParams.caseId])
-            : '1';
-
-        const typeIdCondition = searchParams.typeId
-            ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
-            : '1';
-
-        const milestoneTypeCondition = searchParams.milestoneTypeId
-            ? mysql.format('MilestoneTypes.Id = ?', [
-                  searchParams.milestoneTypeId,
-              ])
-            : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-
-        return `${projectCondition} 
-            AND ${contractCondition} 
-            AND ${offerCondition}
-            AND ${milestoneCondition} 
-            AND ${caseCondition}
-            AND ${searchTextCondition}
-            AND ${typeIdCondition}
-            AND ${milestoneTypeCondition}`;
-    }
-
-    static makeSearchTextCondition(searchText?: string) {
-        if (!searchText) return '1';
-
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Cases.Number LIKE ? 
-                            OR Cases.Name LIKE ?
-                            OR Cases.Description LIKE ?
-                            OR CaseTypes.FolderNumber LIKE ?
-                            OR Milestones.Name LIKE ?
-                            OR CaseTypes.Name LIKE ?)`,
-                [
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                ]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
-    }
-
-    static async processCasesResult(
-        result: any[],
-        initParamObject: {
-            projectId?: string;
-            contractId?: number;
-            milestoneId?: number;
+    // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+    private static getInstance(): CasesController {
+        if (!this.instance) {
+            this.instance = new CasesController();
         }
-    ) {
-        let newResult: Case[] = [];
+        return this.instance;
+    }
 
-        let [processes, processesInstances] = await Promise.all([
-            ProcessesController.find(initParamObject),
-            ProcessInstancesController.find(initParamObject),
-        ]);
-        for (const row of result) {
-            const contractInitParams = {
-                id: row.ContractId,
-                ourId: row.ContractOurId,
-                number: row.ContractNumber,
-                alias: row.ContractAlias,
-                name: ToolsDb.sqlToString(row.ContractName),
-                _type: {
-                    id: row.ContractTypeId,
-                    name: row.ContractTypeName,
-                    description: row.ContractTypeDescription,
-                    isOur: row.ContractTypeIsOur,
-                },
-            };
-            const _contract = this.makeContractObject(row);
-            const _offer = this.makeOfferObject(row);
+    /**
+     * Pobiera listę Cases według podanych warunków
+     *
+     * REFAKTORING: Deleguje do CaseRepository.find()
+     * Controller tylko orkiestruje - Repository obsługuje SQL i mapowanie
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @returns Promise<Case[]> - Lista znalezionych Cases
+     */
+    static async getCasesList(
+        orConditions: CasesSearchParams[] = []
+    ): Promise<Case[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
+    }
 
-            const item = new Case({
-                id: row.Id,
-                _type: {
-                    id: row.CaseTypeId,
-                    name: row.CaseTypeName,
-                    isDefault: row.IsDefault,
-                    isUniquePerMilestone: row.isUniquePerMilestone,
-                    milestoneTypeId: row.MilestoneTypeId,
-                    folderNumber: row.CaseTypeFolderNumber,
-                    _processes: processes.filter(
-                        (item: any) => item._caseType.id == row.CaseTypeId
-                    ),
-                },
-                name: ToolsDb.sqlToString(row.Name),
-                number: row.Number,
-                description: ToolsDb.sqlToString(row.Description),
-                gdFolderId: row.GdFolderId,
-                _parent: new Milestone({
-                    id: row.MilestoneId,
-                    contractId: row.ContractId,
-                    gdFolderId: row.MilestoneGdFolderId,
-                    name: row.MilestoneName,
-                    _type: {
-                        id: row.MilestoneTypeId,
-                        name: row.MilestoneTypeName,
-                        _folderNumber: row.MilestoneTypeFolderNumber,
-                        isUniquePerContract: row.IsUniquePerContract,
-                    },
-                    _contract,
-                    _offer,
-                    _dates: [],
-                }),
-                _risk: new Risk({
-                    id: row.RiskId,
-                    probability: row.RiskProbability,
-                    overallImpact: row.RiskOverallImpact,
-                }),
-                _processesInstances: processesInstances.filter(
-                    (item: any) => item._case.id == row.Id
-                ),
+    /**
+     * Dodaje nowy Case do bazy wraz z powiązanymi danymi
+     *
+     * ZGODNIE Z WYTYCZNYMI:
+     * - Controller orkiestruje operacje (transakcje, Repository, Model)
+     * - Repository obsługuje tylko DB
+     * - Model zawiera logikę domenową (GD, Scrum)
+     *
+     * Przepływ:
+     * 1. Model: createFolder(auth) - logika GD
+     * 2. Controller: transakcja DB
+     *    - Repository: addWithRelated() - operacje DB
+     *    - Przygotowanie ProcessInstances i Tasks
+     * 3. Model: setDisplayNumber() - logika domenowa
+     * 4. Model: editFolder(auth) - korekta nazwy folderu
+     * 5. Model: addInScrum(auth) - dodanie do Scrum
+     *
+     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param caseItem - Case do dodania
+     * @returns Case z uzupełnionymi danymi
+     */
+    static async add(
+        auth: OAuth2Client,
+        caseItem: Case
+    ): Promise<{
+        caseItem: Case;
+        processInstances: ProcessInstance[] | undefined;
+        defaultTasksInDb: Task[];
+    }> {
+        console.group('CasesController.add()');
+        const instance = this.getInstance();
+
+        try {
+            // 1. Utwórz folder w Google Drive (logika domenowa - Model)
+            await caseItem.createFolder(auth);
+            console.log('folder created');
+
+            let processInstances: ProcessInstance[] = [];
+            let defaultTasks: Task[] = [];
+
+            // 2. Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // 2a. Przygotuj ProcessInstances (w ramach transakcji)
+                processInstances =
+                    await CasesController.prepareProcessInstances(
+                        caseItem,
+                        conn
+                    );
+
+                // 2b. Przygotuj domyślne Tasks (w ramach transakcji)
+                defaultTasks = await CasesController.prepareDefaultTasks(
+                    caseItem
+                );
+
+                // 2c. Dodaj Case + powiązane dane do DB
+                await instance.repository.addWithRelated(
+                    caseItem,
+                    processInstances,
+                    defaultTasks,
+                    conn
+                );
             });
-            if (this.checkCriteria(item, initParamObject)) newResult.push(item);
+
+            console.log('added in db');
+
+            // 3. Ustaw display number (logika domenowa - Model)
+            caseItem.setDisplayNumber();
+
+            // 4. Operacje post-DB: GD i Scrum (równolegle)
+            await Promise.all([
+                caseItem
+                    .editFolder(auth)
+                    .then(() => console.log('folder name corrected'))
+                    .catch((err) => console.log(err)),
+                caseItem
+                    .addInScrum(auth, {
+                        defaultTasks: defaultTasks,
+                    })
+                    .then(() => console.log('added in scrum'))
+                    .catch((err) => console.log(err)),
+            ]);
+
+            return {
+                caseItem,
+                processInstances,
+                defaultTasksInDb: defaultTasks,
+            };
+        } catch (err) {
+            // Rollback GD: usuń folder jeśli transakcja DB się nie powiodła
+            await caseItem
+                .deleteFolder(auth)
+                .then(() => console.log('folder deleted'))
+                .catch((err) => console.log(err));
+            throw err;
+        } finally {
+            console.groupEnd();
         }
-        return newResult;
-    }
-    private static checkCriteria(caseItem: Case, criteria: any) {
-        if (criteria.hasProcesses === undefined) return true;
-        let hasProcesses: boolean = criteria.hasProcesses === 'true';
-        return (
-            caseItem._processesInstances &&
-            hasProcesses === caseItem._processesInstances?.length > 0
-        );
     }
 
-    private static makeContractObject(row: any) {
-        if (!row.ContractId) return;
-        const contractInitParam = {
-            id: row.ContractId,
-            ourId: row.ContractOurId,
-            number: row.ContractNumber,
-            alias: row.ContractAlias,
-            name: row.ContractName,
-            _type: {
-                id: row.MainContractTypeId,
-                name: row.TypeName,
-                description: row.TypeDescription,
-                isOur: row.TypeIsOur,
-            },
-        };
+    /**
+     * Przygotowuje ProcessInstances dla Case
+     *
+     * PRYWATNA: Pomocnicza dla add()
+     * Tworzy instancje ProcessInstance na podstawie procesów z CaseType
+     *
+     * @param caseItem - Case dla którego tworzymy ProcessInstances
+     * @param conn - Połączenie DB (część transakcji)
+     * @returns Tablica ProcessInstance
+     */
+    private static async prepareProcessInstances(
+        caseItem: Case,
+        conn: mysql.PoolConnection
+    ): Promise<ProcessInstance[]> {
+        const result: ProcessInstance[] = [];
 
-        return contractInitParam.ourId
-            ? new ContractOur(contractInitParam)
-            : new ContractOther(contractInitParam);
-    }
-
-    private static makeOfferObject(row: any) {
-        if (!row.OfferId) return;
-
-        // Validate city data before creating offer object
-        if (!row.CityId && (!row.CityName || !row.CityName.trim())) {
-            console.warn(
-                `Offer ${row.OfferId} has invalid city data in CasesController`
-            );
+        if (
+            !caseItem._type._processes ||
+            caseItem._type._processes.length <= 0
+        ) {
+            return result;
         }
 
-        const offerInitParam: OfferData = {
-            id: row.OfferId,
-            alias: row.OfferAlias,
-            isOur: row.OfferIsOur,
-            form: row.OfferForm,
-            bidProcedure: row.OfferBidProcedure,
-            employerName: row.OfferEmployerName,
-            gdFolderId: row.GdFolderId,
-            _city: { id: row.CityId, name: row.CityName, code: row.CityCode },
-            _type: {
-                id: row.OfferTypeId,
-                name: row.OfferTypeName,
-                isOur: row.OfferTypeIsOur,
-                description: row.OfferTypeDescription,
-            },
-        };
-        return offerInitParam;
+        // Typ sprawy może mieć wiele procesów - sprawa automatycznie też
+        for (const process of caseItem._type._processes) {
+            // Dodaj zadanie ramowe z szablonu
+            const processInstanceTask =
+                await TasksController.addInDbFromTemplateForProcess(
+                    process,
+                    caseItem,
+                    conn,
+                    true
+                );
+
+            if (!processInstanceTask) continue;
+
+            const processInstance = new ProcessInstance({
+                _process: process,
+                _case: caseItem,
+                _task: processInstanceTask,
+            });
+
+            result.push(processInstance);
+        }
+
+        return result;
+    }
+
+    /**
+     * Przygotowuje domyślne Tasks dla Case
+     *
+     * PRYWATNA: Pomocnicza dla add()
+     * Tworzy Tasks na podstawie TaskTemplates dla danego CaseType
+     *
+     * @param caseItem - Case dla którego tworzymy Tasks
+     * @returns Tablica Task
+     */
+    private static async prepareDefaultTasks(caseItem: Case): Promise<Task[]> {
+        const defaultTasks: Task[] = [];
+
+        // Pobierz szablony zadań dla tego typu sprawy
+        const defaultTaskTemplates =
+            await TaskTemplatesController.getTaskTemplatesList({
+                caseTypeId: caseItem.typeId,
+            });
+
+        for (const template of defaultTaskTemplates) {
+            const task = new Task({
+                name: template.name,
+                description: template.description,
+                status: template.status ? template.status : 'Nie rozpoczęty',
+                _parent: caseItem,
+                _owner: CasesController.makeTaskOwner(caseItem),
+            });
+            defaultTasks.push(task);
+        }
+
+        return defaultTasks;
+    }
+
+    /**
+     * Tworzy właściciela zadania (owner) na podstawie Case
+     *
+     * PRYWATNA: Pomocnicza dla prepareDefaultTasks()
+     * Logika biznesowa: owner = manager kontraktu (jeśli istnieje)
+     *
+     * @param caseItem - Case
+     * @returns Owner lub undefined
+     */
+    private static makeTaskOwner(caseItem: Case): any {
+        if (
+            caseItem._parent?._contract &&
+            '_manager' in caseItem._parent._contract
+        ) {
+            return caseItem._parent._contract._manager;
+        }
+        return undefined;
+    }
+
+    /**
+     * Edytuje Case w bazie wraz z powiązanymi danymi
+     *
+     * ZGODNIE Z WYTYCZNYMI:
+     * - Controller orkiestruje operacje (transakcje, Repository, Model)
+     * - Repository obsługuje tylko DB
+     * - Model zawiera logikę domenową (GD, Scrum)
+     *
+     * Przepływ:
+     * 1. Controller: transakcja DB
+     *    - Repository: editWithRelated() - operacje DB
+     *    - Opcjonalnie: reset ProcessInstances (jeśli zmiana typu)
+     * 2. Model: editFolder(auth) - aktualizacja GD
+     * 3. Model: editInScrum(auth) - aktualizacja Scrum
+     *
+     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param caseItem - Case do edycji
+     * @returns Zaktualizowany Case
+     */
+    static async edit(auth: OAuth2Client, caseItem: Case): Promise<Case> {
+        console.group('CasesController.edit()');
+        const instance = this.getInstance();
+
+        try {
+            // Sprawdź czy trzeba zresetować ProcessInstances
+            const shouldResetProcessInstances =
+                caseItem._processesInstances !== undefined &&
+                caseItem._processesInstances.length > 0;
+
+            let newProcessInstances: ProcessInstance[] = [];
+
+            // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // Przygotuj nowe ProcessInstances (jeśli reset)
+                if (shouldResetProcessInstances) {
+                    newProcessInstances =
+                        await CasesController.prepareProcessInstances(
+                            caseItem,
+                            conn
+                        );
+                }
+
+                // Edytuj Case + opcjonalnie ProcessInstances
+                await instance.repository.editWithRelated(
+                    caseItem,
+                    shouldResetProcessInstances,
+                    newProcessInstances,
+                    conn
+                );
+            });
+
+            console.log('edited in db');
+
+            // Operacje post-DB: GD i Scrum (równolegle)
+            await Promise.all([
+                caseItem
+                    .editFolder(auth)
+                    .then(() => console.log('folder updated'))
+                    .catch((err) => console.log(err)),
+                caseItem
+                    .editInScrum(auth)
+                    .then(() => console.log('updated in scrum'))
+                    .catch((err) => console.log(err)),
+            ]);
+
+            return caseItem;
+        } catch (err) {
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    /**
+     * Usuwa Case z bazy wraz z powiązanymi danymi
+     *
+     * ZGODNIE Z WYTYCZNYMI:
+     * - Controller orkiestruje operacje (transakcje, Repository, Model)
+     * - Repository obsługuje tylko DB
+     * - Model zawiera logikę domenową (GD, Scrum)
+     *
+     * Przepływ:
+     * 1. Controller: transakcja DB
+     *    - Repository: deleteFromDb() - usuwa Case (CASCADE dla ProcessInstances)
+     * 2. Model: deleteFolder(auth) - usuwa folder GD
+     * 3. Model: deleteFromScrumSheet(auth) - usuwa z Scrum
+     *
+     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param caseItem - Case do usunięcia
+     */
+    static async delete(auth: OAuth2Client, caseItem: Case): Promise<void> {
+        console.group('CasesController.delete()');
+        const instance = this.getInstance();
+
+        try {
+            // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // Usuń Case (CASCADE usunie ProcessInstances)
+                await instance.repository.deleteFromDb(caseItem, conn, true);
+            });
+
+            console.log('deleted from db');
+
+            // Operacje post-DB: GD i Scrum (równolegle)
+            await Promise.all([
+                caseItem
+                    .deleteFolder(auth)
+                    .then(() => console.log('folder deleted'))
+                    .catch((err) => console.log(err)),
+                caseItem
+                    .deleteFromScrumSheet(auth)
+                    .then(() => console.log('deleted from scrum'))
+                    .catch((err) => console.log(err)),
+            ]);
+        } catch (err) {
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
     }
 }

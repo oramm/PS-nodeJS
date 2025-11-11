@@ -11,6 +11,7 @@ import Tools from '../../tools/Tools';
 import CurrentSprint from '../../ScrumSheet/CurrentSprint';
 import Case from './cases/Case';
 import CaseTemplate from './cases/caseTemplates/CaseTemplate';
+import CaseRepository from './cases/CaseRepository';
 import mysql from 'mysql2/promise';
 import Task from './cases/tasks/Task';
 import ProcessInstance from '../../processes/processInstances/ProcessInstance';
@@ -361,6 +362,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
 
     private async addDefaultCasesInDb(caseItems: Case[]) {
         const caseData = [];
+        const caseRepository = new CaseRepository();
         let conn: mysql.PoolConnection | undefined;
         try {
             conn = await ToolsDb.getPoolConnectionWithTimeout();
@@ -370,7 +372,14 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             );
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
-                caseData.push(await caseItem.addInDb(conn, true));
+                // Użyj CaseRepository zamiast case.addInDb()
+                const result = await caseRepository.addWithRelated(
+                    caseItem,
+                    [], // processInstances - puste, bo default cases nie mają procesów
+                    [], // defaultTasks - puste, bo default cases nie mają tasków
+                    conn
+                );
+                caseData.push(result);
             }
             await conn.commit();
             console.groupEnd();
