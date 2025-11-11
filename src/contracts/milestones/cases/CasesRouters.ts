@@ -6,7 +6,7 @@ import { Request, Response } from 'express';
 app.post('/cases', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await CasesController.getCasesList(orConditions);
+        const result = await CasesController.find(orConditions);
         res.send(result);
     } catch (err) {
         if (err instanceof Error) {

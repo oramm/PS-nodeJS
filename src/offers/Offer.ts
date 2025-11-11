@@ -163,7 +163,7 @@ export default abstract class Offer
     }
 
     private async ensureDefaultCases(milestone: any, auth: OAuth2Client) {
-        const offerEvaluationCases = await CasesController.getCasesList([
+        const offerEvaluationCases = await CasesController.find([
             {
                 offerId: this.id,
                 milestoneTypeId: Setup.MilestoneTypes.OFFER_EVALUATION,

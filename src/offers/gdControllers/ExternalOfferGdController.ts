@@ -43,7 +43,7 @@ export default class ExternalOfferGdController extends OfferGdController {
     ) {
         if (!offerData.gdFolderId) throw new EnviErrors.NoGdIdError();
         if (!offerData.id) throw new Error('Brak id oferty');
-        const makeOfferCases = await CasesController.getCasesList(
+        const makeOfferCases = await CasesController.find(
             [{ offerId: offerData.id, typeId: 100 }] // 100 - CaseTypes.id dla typu sprawy "Przygotowanie oferty"
         );
 

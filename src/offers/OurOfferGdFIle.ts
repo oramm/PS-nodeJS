@@ -123,7 +123,7 @@ export default class OurOfferGdFile extends DocumentGdFile {
         if (!this.enviDocumentData.gdDocumentId)
             throw new EnviErrors.NoGdIdError();
 
-        const makeOfferCases = await CasesController.getCasesList(
+        const makeOfferCases = await CasesController.find(
             [{ offerId: this.enviDocumentData.id, typeId: 100 }] // 100 - CaseTypes.id dla typu sprawy "Przygotowanie oferty"
         );
 

@@ -99,7 +99,7 @@ export class Security extends BusinessObject {
 
     async getCase(): Promise<Case | undefined> {
         return (
-            await CasesController.getCasesList([
+            await CasesController.find([
                 {
                     contractId: this.contractId,
                     typeId: Setup.CaseTypes.SECURITY_GUARANTEE,

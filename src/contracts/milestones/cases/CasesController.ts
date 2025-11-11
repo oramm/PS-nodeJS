@@ -36,9 +36,7 @@ export default class CasesController extends BaseController<
      * @param orConditions - Warunki wyszukiwania (OR groups)
      * @returns Promise<Case[]> - Lista znalezionych Cases
      */
-    static async getCasesList(
-        orConditions: CasesSearchParams[] = []
-    ): Promise<Case[]> {
+    static async find(orConditions: CasesSearchParams[] = []): Promise<Case[]> {
         const instance = this.getInstance();
         return await instance.repository.find(orConditions);
     }
