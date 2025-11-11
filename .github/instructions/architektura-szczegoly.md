@@ -185,7 +185,7 @@ export default class LettersController extends BaseController<
     }
 
     // Publiczne metody statyczne używają getInstance()
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
@@ -221,7 +221,7 @@ export default class LettersController extends BaseController<
 ```typescript
 // ✅ POPRAWNIE - Controller zarządza transakcją
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             // 1. Dodaj główny rekord
             await this.repository.addInDb(letter, conn, true);
@@ -309,7 +309,7 @@ class OurLetter extends Letter {
 
     /**
      * Tworzy plik dokumentu na Google Drive
-     * PUBLIC: wywoływana przez LettersController.addNewOurLetter()
+     * PUBLIC: wywoływana przez LettersController.add() lub metody pomocnicze
      */
     async createLetterFile(auth: OAuth2Client): Promise<GdDocument> {
         const gdFile = this.makeLetterGdFileController(this._template);
@@ -360,7 +360,7 @@ class Letter {
 
 // ✅ POPRAWNIE - przez Controller → Repository
 class LettersController {
-    static async addNew(letter: Letter): Promise<void> {
+    static async add(letter: Letter): Promise<void> {
         const instance = this.getInstance();
         await instance.repository.addInDb(letter);
     }
@@ -392,9 +392,9 @@ Stopniowa migracja kodu bez łamania istniejącej funkcjonalności.
 ````typescript
 class Letter {
     /**
-     * @deprecated Użyj LettersController.addNew(letter) zamiast tego.
+     * @deprecated Użyj LettersController.add(letter) zamiast tego.
      *
-     * REFAKTORING: Logika przeniesiona do LettersController.addNew()
+     * REFAKTORING: Logika przeniesiona do LettersController.add()
      * Model nie powinien wykonywać operacji I/O do bazy danych.
      *
      * Migracja:
@@ -403,7 +403,7 @@ class Letter {
      * await letter.addInDb();
      *
      * // NOWE:
-     * await LettersController.addNew(letter);
+     * await LettersController.add(letter);
      * ```
      */
     async addInDb(): Promise<void> {
@@ -424,7 +424,7 @@ class LettersController {
      * Dodaje nowy list do bazy danych
      * REFAKTORING: Logika przeniesiona z Letter.addInDb()
      */
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
@@ -447,7 +447,7 @@ router.post('/letters', async (req, res) => {
     // await letter.addInDb();
 
     // NOWE:
-    await LettersController.addNew(letter);
+    await LettersController.add(letter);
 
     res.send(letter);
 });
@@ -475,7 +475,7 @@ Select-String -Path "src/**/*.ts" -Pattern "\.addInDb\(\)"
 
 ## 6. Przykłady Refaktoringu
 
-### Przykład 1: addInDb → LettersController.addNew
+### Przykład 1: addInDb → LettersController.add
 
 **PRZED:**
 
@@ -500,11 +500,11 @@ class Letter {
 ```typescript
 // Router
 const letter = LettersController.createProperLetter(req.body);
-await LettersController.addNew(letter); // ✅ Przez Controller
+await LettersController.add(letter); // ✅ Przez Controller
 
 // Controller
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
             await this.addEntitiesAssociations(letter, conn);
@@ -564,7 +564,7 @@ class OurLetter {
 
 ```typescript
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn) => {
             // 1. Główny rekord
             await instance.repository.addInDb(letter, conn, true);

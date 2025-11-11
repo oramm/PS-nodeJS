@@ -251,6 +251,29 @@ export default class EntityValidator {
 -   `LetterValidator` - walidacja typu Letter (OurLetter, IncomingLetter, etc.)
 -   `InvoiceValidator` - walidacja danych faktury
 
+---
+
+## 📋 Standard Nazewnictwa CRUD
+
+**Obowiązujący standard** dla metod Controller (zgodnie z `refactoring-auth-pattern.md`):
+
+```typescript
+// ✅ CRUD Methods Standard
+static async find(params)    // READ - wyszukiwanie z warunkami
+static async add(item)       // CREATE - dodawanie nowego rekordu
+static async edit(item)      // UPDATE - edycja istniejącego rekordu
+static async delete(item)    // DELETE - usuwanie rekordu
+```
+
+**Deprecated patterns** (do usunięcia w starym kodzie):
+
+-   ❌ `addNew()` → użyj `add()`
+-   ❌ `getList()`, `getMilestoneTypesList()`, `getCasesList()` → użyj `find()`
+
+---
+
+## 🔧 Wzorce Implementacyjne
+
 ### BaseRepository<T>
 
 ```typescript

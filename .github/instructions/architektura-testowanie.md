@@ -346,7 +346,7 @@ src/
 
 ### Priorytet 1 (Krótkoterminowy)
 
--   [ ] Dodać testy dla `addNew()` i `edit()` w OffersController
+-   [ ] Dodać testy dla `add()` i `edit()` w OffersController
 -   [ ] Zwiększyć pokrycie do 80%+ dla warstwy Controller
 -   [ ] Dodać testy dla ExternalOffer business logic
 

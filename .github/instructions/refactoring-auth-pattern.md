@@ -147,7 +147,7 @@ static async add(item: X, auth?: OAuth2Client): Promise<X> {
 private async addItem(auth: OAuth2Client, item: X): Promise<X> { /* logika */ }
 
 // ✅ READ - bez auth (tylko DB)
-static async getList(orConditions: XSearchParams[] = []): Promise<X[]> {
+static async find(orConditions: XSearchParams[] = []): Promise<X[]> {
     const instance = this.getInstance();
     return await instance.repository.find(orConditions);
 }
@@ -588,7 +588,7 @@ export default class XController extends BaseController<X, XRepository> {
     }
 
     // ==================== READ (bez auth) ====================
-    static async getList(orConditions: XSearchParams[] = []): Promise<X[]> {
+    static async find(orConditions: XSearchParams[] = []): Promise<X[]> {
         const instance = this.getInstance();
         return await instance.repository.find(orConditions);
     }

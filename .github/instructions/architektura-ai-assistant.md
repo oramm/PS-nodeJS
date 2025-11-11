@@ -26,7 +26,7 @@ START: Nowa metoda/logika do implementacji
 │
 ├─ ❓ Czy orkiestruje wiele operacji (transakcje, wywołania repo/model)?
 │  └─ ✅ TAK → **CONTROLLER**
-│     └─ Przykład: `static async addNew(item)` z transakcją
+│     └─ Przykład: `static async add(item)` z transakcją
 │
 ├─ ❓ Czy jest logiką biznesową obiektu (walidacja, kalkulacje, generowanie)?
 │  └─ ✅ TAK → **MODEL**
@@ -58,7 +58,7 @@ async (req: Request, res: Response, next?: NextFunction) => {
 router.post('/letters', async (req, res, next) => {
     try {
         const letter = LettersController.createProperLetter(req.body);
-        await LettersController.addNew(letter);
+        await LettersController.add(letter);
         res.send(letter);
     } catch (error) {
         next(error);
@@ -86,7 +86,7 @@ static async methodName(
 
 // ✅ PRZYKŁAD:
 class LettersController extends BaseController<Letter, LetterRepository> {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             // Orkiestracja: Repository + asocjacje
@@ -99,7 +99,7 @@ class LettersController extends BaseController<Letter, LetterRepository> {
 
 // ❌ ANTI-PATTERN - Controller z SQL:
 class LettersController {
-    static async addNew(letter: Letter) {
+    static async add(letter: Letter) {
         const sql = `INSERT INTO Letters ...`;  // ❌ SQL → Repository
         await db.query(sql);
     }
@@ -199,13 +199,13 @@ import LettersController from './LettersController';  // ❌ CYKL!
 
 class Letter {
     async save() {
-        await LettersController.addNew(this);  // ❌ Model → Controller
+        await LettersController.add(this);  // ❌ Model → Controller
     }
 }
 
 // ✅ POPRAWNIE - Controller wywołuje Repository:
 // W LettersController.ts:
-static async addNew(letter: Letter) {
+static async add(letter: Letter) {
     await this.repository.addInDb(letter);
 }
 ```
@@ -221,7 +221,7 @@ class Letter {
 }
 
 // ✅ POPRAWNIE - przez Controller → Repository:
-await LettersController.addNew(letter);
+await LettersController.add(letter);
 ```
 
 #### 3. **Repository zawiera logikę biznesową**
@@ -262,7 +262,7 @@ router.post('/letters', async (req, res) => {
 // ✅ POPRAWNIE - tylko wywołanie Controller:
 router.post('/letters', async (req, res) => {
     const letter = LettersController.createProperLetter(req.body);
-    await LettersController.addNew(letter);
+    await LettersController.add(letter);
     res.send(letter);
 });
 ```
@@ -280,7 +280,7 @@ async addWithAssociations(letter: Letter) {
 
 // ✅ POPRAWNIE - transakcje w Controller:
 class LettersController {
-    static async addNew(letter: Letter) {
+    static async add(letter: Letter) {
         return await ToolsDb.transaction(async (conn) => {
             await this.repository.addInDb(letter, conn, true);
             await this.addEntitiesAssociations(letter, conn);  // Controller orkiestruje
@@ -360,7 +360,7 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
         return this.instance;
     }
 
-    static async addNew(item: Item): Promise<Item> {
+    static async add(item: Item): Promise<Item> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(item, conn, true);
@@ -378,7 +378,7 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
 router.post('/items', async (req, res, next) => {
     try {
         const item = new Item(req.body);
-        await ItemsController.addNew(item);
+        await ItemsController.add(item);
         res.send(item);
     } catch (error) {
         next(error);
