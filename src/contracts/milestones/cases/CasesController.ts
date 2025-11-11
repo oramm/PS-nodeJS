@@ -7,13 +7,16 @@ import ProcessInstance from '../../../processes/processInstances/ProcessInstance
 import Task from './tasks/Task';
 import TasksController from './tasks/TasksController';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
+import BaseController from '../../../controllers/BaseController';
 
-export default class CasesController {
+export default class CasesController extends BaseController<
+    Case,
+    CaseRepository
+> {
     private static instance: CasesController;
-    private repository: CaseRepository;
 
     constructor() {
-        this.repository = new CaseRepository();
+        super(new CaseRepository());
     }
 
     // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
@@ -41,6 +44,32 @@ export default class CasesController {
     }
 
     /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Dodaje nowy Case - wrapper używający withAuth
+     *
+     * @param caseItem - Case do dodania
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     * @returns Obiekt z caseItem, processInstances i defaultTasksInDb
+     */
+    static async add(
+        caseItem: Case,
+        auth?: OAuth2Client
+    ): Promise<{
+        caseItem: Case;
+        processInstances: ProcessInstance[] | undefined;
+        defaultTasksInDb: Task[];
+    }> {
+        return await this.withAuth<{
+            caseItem: Case;
+            processInstances: ProcessInstance[] | undefined;
+            defaultTasksInDb: Task[];
+        }>(async (instance: CasesController, authClient: OAuth2Client) => {
+            return await instance.addCase(authClient, caseItem);
+        }, auth);
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
      * Dodaje nowy Case do bazy wraz z powiązanymi danymi
      *
      * ZGODNIE Z WYTYCZNYMI:
@@ -57,11 +86,11 @@ export default class CasesController {
      * 4. Model: editFolder(auth) - korekta nazwy folderu
      * 5. Model: addInScrum(auth) - dodanie do Scrum
      *
-     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param auth - OAuth2Client dla operacji GD
      * @param caseItem - Case do dodania
      * @returns Case z uzupełnionymi danymi
      */
-    static async add(
+    private async addCase(
         auth: OAuth2Client,
         caseItem: Case
     ): Promise<{
@@ -69,8 +98,7 @@ export default class CasesController {
         processInstances: ProcessInstance[] | undefined;
         defaultTasksInDb: Task[];
     }> {
-        console.group('CasesController.add()');
-        const instance = this.getInstance();
+        console.group('CasesController.addCase()');
 
         try {
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
@@ -95,7 +123,7 @@ export default class CasesController {
                 );
 
                 // 2c. Dodaj Case + powiązane dane do DB
-                await instance.repository.addWithRelated(
+                await this.repository.addWithRelated(
                     caseItem,
                     processInstances,
                     defaultTasks,
@@ -239,6 +267,24 @@ export default class CasesController {
     }
 
     /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Edytuje Case - wrapper używający withAuth
+     *
+     * @param caseItem - Case do edycji
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     * @returns Zaktualizowany Case
+     */
+    static async edit(caseItem: Case, auth?: OAuth2Client): Promise<Case> {
+        return await this.withAuth<Case>(
+            async (instance: CasesController, authClient: OAuth2Client) => {
+                return await instance.editCase(authClient, caseItem);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
      * Edytuje Case w bazie wraz z powiązanymi danymi
      *
      * ZGODNIE Z WYTYCZNYMI:
@@ -253,13 +299,12 @@ export default class CasesController {
      * 2. Model: editFolder(auth) - aktualizacja GD
      * 3. Model: editInScrum(auth) - aktualizacja Scrum
      *
-     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param auth - OAuth2Client dla operacji GD
      * @param caseItem - Case do edycji
      * @returns Zaktualizowany Case
      */
-    static async edit(auth: OAuth2Client, caseItem: Case): Promise<Case> {
-        console.group('CasesController.edit()');
-        const instance = this.getInstance();
+    private async editCase(auth: OAuth2Client, caseItem: Case): Promise<Case> {
+        console.group('CasesController.editCase()');
 
         try {
             // Sprawdź czy trzeba zresetować ProcessInstances
@@ -281,7 +326,7 @@ export default class CasesController {
                 }
 
                 // Edytuj Case + opcjonalnie ProcessInstances
-                await instance.repository.editWithRelated(
+                await this.repository.editWithRelated(
                     caseItem,
                     shouldResetProcessInstances,
                     newProcessInstances,
@@ -312,6 +357,23 @@ export default class CasesController {
     }
 
     /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Usuwa Case - wrapper używający withAuth
+     *
+     * @param caseItem - Case do usunięcia
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     */
+    static async delete(caseItem: Case, auth?: OAuth2Client): Promise<void> {
+        return await this.withAuth<void>(
+            async (instance: CasesController, authClient: OAuth2Client) => {
+                return await instance.deleteCase(authClient, caseItem);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
      * Usuwa Case z bazy wraz z powiązanymi danymi
      *
      * ZGODNIE Z WYTYCZNYMI:
@@ -325,18 +387,20 @@ export default class CasesController {
      * 2. Model: deleteFolder(auth) - usuwa folder GD
      * 3. Model: deleteFromScrumSheet(auth) - usuwa z Scrum
      *
-     * @param auth - OAuth2Client dla operacji GD (PIERWSZY argument zgodnie z wytycznymi)
+     * @param auth - OAuth2Client dla operacji GD
      * @param caseItem - Case do usunięcia
      */
-    static async delete(auth: OAuth2Client, caseItem: Case): Promise<void> {
-        console.group('CasesController.delete()');
-        const instance = this.getInstance();
+    private async deleteCase(
+        auth: OAuth2Client,
+        caseItem: Case
+    ): Promise<void> {
+        console.group('CasesController.deleteCase()');
 
         try {
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // Usuń Case (CASCADE usunie ProcessInstances)
-                await instance.repository.deleteFromDb(caseItem, conn, true);
+                await this.repository.deleteFromDb(caseItem, conn, true);
             });
 
             console.log('deleted from db');

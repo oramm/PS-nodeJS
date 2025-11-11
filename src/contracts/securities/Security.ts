@@ -134,8 +134,9 @@ export class Security extends BusinessObject {
             _type: await this.getCaseType(),
             _parent: await this.getMilestone(),
         });
-        await CasesController.add(auth, caseItem);
-        return caseItem;
+        // ✅ Przekazuje auth - NIE pobiera tokenu ponownie
+        const result = await CasesController.add(caseItem, auth);
+        return result.caseItem;
     }
 
     /**Ustawia wartość atrybutu */
@@ -149,7 +150,8 @@ export class Security extends BusinessObject {
     async deleteController(auth: OAuth2Client) {
         await this.deleteFromDb();
 
-        if (this._case) await CasesController.delete(auth, this._case);
+        // ✅ Przekazuje auth - NIE pobiera tokenu ponownie
+        if (this._case) await CasesController.delete(this._case, auth);
     }
 }
 
