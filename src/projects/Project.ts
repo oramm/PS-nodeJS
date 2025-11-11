@@ -307,6 +307,21 @@ export default class Project extends BusinessObject implements ProjectData {
         );
     }
 
+    /**
+     * @deprecated Użyj ProjectsController.add(project) zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do ProjectsController.add()
+     * Model nie powinien wykonywać operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await project.addInDb();
+     *
+     * // NOWE:
+     * await ProjectsController.add(project);
+     * ```
+     */
     async addInDb() {
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
         try {
@@ -325,6 +340,21 @@ export default class Project extends BusinessObject implements ProjectData {
         }
     }
 
+    /**
+     * @deprecated Użyj ProjectsController.edit(project) zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do ProjectsController.edit()
+     * Model nie powinien wykonywać operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await project.editInDb();
+     *
+     * // NOWE:
+     * await ProjectsController.edit(project);
+     * ```
+     */
     async editInDb() {
         const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
         try {
