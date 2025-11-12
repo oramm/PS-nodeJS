@@ -25,13 +25,16 @@ Migracja modułów używających `ToolsGapi.gapiReguestHandler` do nowego wzorca
 
 1. ✅ **Cases** - ZAKOŃCZONE (wzorzec referencyjny)
 2. ✅ **Tasks** - ZAKOŃCZONE (2025-11-12)
-3. ⏳ **Letters** - DO ZROBIENIA
-4. ⏳ **Offers** - DO ZROBIENIA
-5. ⏳ **Milestones** - DO ZROBIENIA
-6. ⏳ **Contracts** - DO ZROBIENIA
-7. ⏳ **Invoices** - DO ZROBIENIA
-8. ⏳ **Meetings** - DO ZROBIENIA
-9. ⏳ **Projects** - DO ZROBIENIA
+3. ✅ **Projects** - ZAKOŃCZONE (2025-11-12) - już zrefaktoryzowane wcześniej
+4. ⚠️ **Milestones** - CZĘŚCIOWO ZAKOŃCZONE (2025-11-12)
+    - ✅ Controller zrefaktoryzowany (add/edit/delete z withAuth)
+    - ⏳ Router ma 1 endpoint używający ToolsGapi (wymaga refaktoryzacji Contracts)
+5. ✅ **Entities** - ZAKOŃCZONE (2025-11-12) - tylko DB, bez OAuth
+6. ⏳ **Letters** - DO ZROBIENIA
+7. ⏳ **Offers** - DO ZROBIENIA
+8. ⏳ **Contracts** - DO ZROBIENIA
+9. ⏳ **Invoices** - DO ZROBIENIA
+10. ⏳ **Meetings** - DO ZROBIENIA
 
 ---
 
@@ -679,13 +682,13 @@ export default class XController extends BaseController<X, XRepository> {
 
 ## 🔄 Kolejność Refaktoryzacji Modułów (Rekomendowana)
 
-1. **Letters** - podobny do Cases, średnia złożoność
-2. **Offers** - średnia złożoność
-3. **Milestones** - powiązany z Cases
-4. **Contracts** - częściowo zrefaktoryzowany (ContractsController.find już używa getInstance)
-5. **Invoices** - średnia złożoność
-6. **Meetings** - niska złożoność
-7. **Projects** - wysoka złożoność (ostatni)
+1. ~~**Projects**~~ - ✅ ZAKOŃCZONE (już zrefaktoryzowane wcześniej)
+2. **Letters** - podobny do Cases, średnia złożoność
+3. **Offers** - średnia złożoność
+4. **Milestones** - powiązany z Cases
+5. **Contracts** - częściowo zrefaktoryzowany (ContractsController.find już używa getInstance)
+6. **Invoices** - średnia złożoność
+7. **Meetings** - niska złożoność
 
 ---
 
@@ -725,7 +728,10 @@ Sprawdź w konsoli:
 
 ## 📚 Dodatkowe Zasoby
 
--   **Wzorzec referencyjny:** `src/contracts/milestones/cases/CasesController.ts`
+-   **Wzorce referencyjne:**
+    -   `src/contracts/milestones/cases/CasesController.ts` + `CasesRouters.ts`
+    -   `src/projects/ProjectsController.ts` + `ProjectsRouters.ts`
+    -   `src/contracts/milestones/cases/tasks/TasksController.ts` + `TasksRouters.ts`
 -   **BaseController:** `src/controllers/BaseController.ts`
 -   **Wytyczne Clean Architecture:** `.github/instructions/architektura.instructions.md`
 

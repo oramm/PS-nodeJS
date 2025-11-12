@@ -14,7 +14,7 @@ app.post('/entities', async (req: Request, res: Response, next) => {
 
 app.post('/entity', async (req: Request, res: Response, next) => {
     try {
-        let item = await EntitiesController.addNewEntity(req.body);
+        const item = await EntitiesController.add(req.body);
         res.send(item);
     } catch (error) {
         next(error);
@@ -23,8 +23,7 @@ app.post('/entity', async (req: Request, res: Response, next) => {
 
 app.put('/entity/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = await EntitiesController.updateEntity(req.body);
-        console.log(req.body);
+        const item = await EntitiesController.edit(req.body);
         res.send(item);
     } catch (error) {
         next(error);
@@ -35,7 +34,7 @@ app.delete('/entity/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody || !req.parsedBody.id)
             throw new Error(`Próba usunięcia bez Id`);
-        await EntitiesController.deleteEntity(req.parsedBody);
+        await EntitiesController.delete(req.parsedBody);
         res.json({ id: req.parsedBody.id, name: req.parsedBody.name });
     } catch (error) {
         next(error);
