@@ -79,6 +79,21 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this._offer = initParamObject._offer;
     }
 
+    /**
+     * @deprecated Użyj MilestonesController.add(milestone, auth, userData) zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do MilestonesController.add()
+     * Model nie powinien orkiestrować operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await milestone.addNewController(auth, userData);
+     *
+     * // NOWE:
+     * await MilestonesController.add(milestone, auth, userData);
+     * ```
+     */
     async addNewController(auth: OAuth2Client, userData: UserData) {
         if (!this._dates.length)
             throw new Error(
@@ -109,6 +124,21 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         console.groupEnd();
     }
 
+    /**
+     * @deprecated Użyj MilestonesController.edit(milestone, auth, userData, fieldsToUpdate) zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do MilestonesController.edit()
+     * Model nie powinien orkiestrować operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await milestone.editController(auth, userData, fieldsToUpdate);
+     *
+     * // NOWE:
+     * await MilestonesController.edit(milestone, auth, userData, fieldsToUpdate);
+     * ```
+     */
     async editController(
         auth: OAuth2Client,
         userData: UserData,
@@ -136,6 +166,21 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         console.groupEnd();
     }
 
+    /**
+     * @deprecated Użyj MilestonesController.add() zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do MilestonesController.add()
+     * Model nie powinien wykonywać operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await milestone.addInDb();
+     *
+     * // NOWE:
+     * await MilestonesController.add(milestone);
+     * ```
+     */
     async addInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean
@@ -194,6 +239,21 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         ]);
     }
 
+    /**
+     * @deprecated Użyj MilestonesController.edit() zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do MilestonesController.edit()
+     * Model nie powinien wykonywać operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await milestone.editInDb();
+     *
+     * // NOWE:
+     * await MilestonesController.edit(milestone);
+     * ```
+     */
     async editInDb(
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
@@ -214,6 +274,21 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         }, externalConn);
     }
 
+    /**
+     * @deprecated Użyj MilestonesController.delete(milestone, auth) zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do MilestonesController.delete()
+     * Model nie powinien orkiestrować operacji I/O do bazy danych.
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await milestone.deleteController(auth);
+     *
+     * // NOWE:
+     * await MilestonesController.delete(milestone, auth);
+     * ```
+     */
     async deleteController(auth: OAuth2Client) {
         console.group('Deleting Milestone', this.id);
         await this.deleteFromDb();
@@ -230,7 +305,12 @@ export default class Milestone extends BusinessObject implements MilestoneData {
 
     private async setNumber() {
         if (!this._type.isUniquePerContract) {
-            const sql = `SELECT COUNT(*) AS PrevNumber FROM Cases WHERE Cases.TypeId=${this.typeId}`;
+            const sql = mysql.format(
+                `SELECT COUNT(*) AS PrevNumber 
+                 FROM Milestones 
+                 WHERE TypeId = ? AND ContractId = ?`,
+                [this.typeId, this.contractId]
+            );
 
             const result: any[] = <any[]>(
                 await ToolsDb.getQueryCallbackAsync(sql)
@@ -373,13 +453,18 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             await conn.beginTransaction();
             for (const caseItem of caseItems) {
                 // Użyj CaseRepository zamiast case.addInDb()
-                const result = await caseRepository.addWithRelated(
+                const updatedCaseItem = await caseRepository.addWithRelated(
                     caseItem,
                     [], // processInstances - puste, bo default cases nie mają procesów
                     [], // defaultTasks - puste, bo default cases nie mają tasków
                     conn
                 );
-                caseData.push(result);
+                // Zwróć obiekt w formacie oczekiwanym przez addDefaultCasesInScrum
+                caseData.push({
+                    caseItem: updatedCaseItem,
+                    processInstances: [],
+                    defaultTasksInDb: [],
+                });
             }
             await conn.commit();
             console.groupEnd();

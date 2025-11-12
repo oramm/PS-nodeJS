@@ -110,7 +110,7 @@ export class Security extends BusinessObject {
 
     async getMilestone() {
         const milestone = (
-            await MilestonesController.getMilestonesList([
+            await MilestonesController.find([
                 {
                     contractId: this.contractId,
                     typeId: Setup.MilestoneTypes.OURCONTRACT_ADMINISTRATION,

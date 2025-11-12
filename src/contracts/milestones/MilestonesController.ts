@@ -1,222 +1,349 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import ContractOther from '../ContractOther';
-import ContractOur from '../ContractOur';
+import BaseController from '../../controllers/BaseController';
 import Milestone from './Milestone';
-import { OfferData } from '../../types/types';
+import MilestoneRepository, {
+    MilestonesSearchParams,
+    MilestoneParentType,
+} from './MilestoneRepository';
+import { OAuth2Client } from 'google-auth-library';
+import { UserData } from '../../types/sessionTypes';
+import ToolsDb from '../../tools/ToolsDb';
+import mysql from 'mysql2/promise';
 
-export type MilestonesSearchParams = {
-    projectId?: string;
-    contractId?: number;
-    typeId?: number;
-    offerId?: number;
-};
+/**
+ * Controller dla Milestone - warstwa orkiestracji
+ *
+ * Zgodnie z Clean Architecture:
+ * - Dziedziczy po BaseController<Milestone, MilestoneRepository>
+ * - Orkiestruje operacje biznesowe
+ * - Deleguje do Repository dla operacji DB
+ */
+export default class MilestonesController extends BaseController<
+    Milestone,
+    MilestoneRepository
+> {
+    private static instance: MilestonesController;
 
-export type MilestoneParentType = 'CONTRACT' | 'OFFER';
+    constructor() {
+        super(new MilestoneRepository());
+    }
 
-export default class MilestonesController {
+    // Singleton pattern
+    private static getInstance(): MilestonesController {
+        if (!this.instance) {
+            this.instance = new MilestonesController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Pobiera listę Milestones według podanych warunków
+     *
+     * REFAKTORING: Deleguje do MilestoneRepository.find()
+     * Controller tylko orkiestruje - Repository obsługuje SQL i mapowanie
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @param parentType - Typ rodzica: 'CONTRACT' lub 'OFFER'
+     * @returns Promise<Milestone[]> - Lista znalezionych Milestones
+     */
+    static async find(
+        orConditions: MilestonesSearchParams[] = [],
+        parentType: MilestoneParentType = 'CONTRACT'
+    ): Promise<Milestone[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions, parentType);
+    }
+
+    /**
+     * @deprecated Użyj MilestonesController.find() zamiast tego.
+     *
+     * REFAKTORING: Logika przeniesiona do find() + MilestoneRepository
+     *
+     * Migracja:
+     * ```typescript
+     * // STARE:
+     * await MilestonesController.getMilestonesList(orConditions, parentType);
+     *
+     * // NOWE:
+     * await MilestonesController.find(orConditions, parentType);
+     * ```
+     */
     static async getMilestonesList(
         orConditions: MilestonesSearchParams[] = [],
         parentType: MilestoneParentType = 'CONTRACT'
-    ) {
-        this.validateConditions(orConditions, parentType);
-        const typeCondition =
-            parentType === 'CONTRACT'
-                ? 'Milestones.ContractId IS NOT NULL'
-                : 'Milestones.OfferId IS NOT NULL';
-
-        const sql = `SELECT  Milestones.Id,
-            MilestoneTypes.Id AS TypeId,
-            MilestoneTypes.Name AS TypeName,
-            COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS FolderNumber,
-            COALESCE(MilestoneTypes_ContractTypes.IsDefault, TRUE) AS TypeIsDefault,
-            MilestoneTypes.IsUniquePerContract AS TypeIsUniquePerContract,
-            Milestones.Name,
-            Milestones.Description,
-            Milestones.Status,
-            Milestones.GdFolderId,
-            OurContractsData.OurId AS ParentOurId,
-            OurContractsData.ManagerId AS ParentManagerId,
-            OurContractsData.AdminId AS ParentAdminId,
-            Contracts.Id AS ContractId,
-            Contracts.Number AS ParentNumber,
-            Contracts.OurIdRelated AS ParentOurIdRelated,
-            ContractTypes.Id AS ContractTypeId,
-            ContractTypes.Name AS ContractTypeName,
-            ContractTypes.Description AS ContractTypeDescription,
-            ContractTypes.IsOur AS ContractTypeIsOur,
-            Contracts.ProjectOurId,
-            Offers.Id AS OfferId,
-            Offers.Alias AS OfferAlias,
-            Offers.IsOur AS OfferIsOur,
-            Offers.Form AS OfferForm,
-            Offers.BidProcedure AS OfferBidProcedure,
-            Offers.EmployerName AS OfferEmployerName,
-            Offers.EditorId AS OfferEditorId,
-            OfferTypes.Id AS OfferTypeId,
-            OfferTypes.Name AS OfferTypeName,
-            OfferTypes.Description AS OfferTypeDescription,
-            OfferTypes.IsOur AS OfferTypeIsOur,
-            Cities.Id AS CityId,
-            Cities.Name AS CityName,
-            Cities.Code AS CityCode
-        FROM Milestones
-        LEFT JOIN MilestoneDates ON Milestones.Id = MilestoneDates.MilestoneId
-        JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
-        LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
-        LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
-        LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-        LEFT JOIN ContractTypes AS OfferTypes ON OfferTypes.Id = Offers.TypeId
-        LEFT JOIN Cities ON Cities.Id = Offers.CityId
-        LEFT JOIN MilestoneTypes_ContractTypes 
-            ON  MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
-            AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
-        LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
-        LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
-        WHERE 
-        ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}  
-            AND ${typeCondition}
-        ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processMilestonesResult(result);
+    ): Promise<Milestone[]> {
+        return await this.find(orConditions, parentType);
     }
 
-    static makeAndConditions(searchParams: MilestonesSearchParams) {
-        const projectCondition = searchParams.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [
-                  searchParams.projectId,
-              ])
-            : '1';
-        const contractCondition = searchParams.contractId
-            ? mysql.format('Milestones.ContractId = ?', [
-                  searchParams.contractId,
-              ])
-            : '1';
-
-        const offerCondition = searchParams.offerId
-            ? mysql.format('Milestones.OfferId = ?', [searchParams.offerId])
-            : '1';
-        const typeCondition = searchParams.typeId
-            ? mysql.format('Milestones.TypeId = ?', [searchParams.typeId])
-            : '1';
-
-        return `${projectCondition} 
-            AND ${contractCondition}
-            AND ${offerCondition}
-            AND ${typeCondition}`;
-    }
-
-    static validateConditions(
-        orConditions: MilestonesSearchParams[],
-        parentType: 'CONTRACT' | 'OFFER'
-    ) {
-        orConditions.map((condition) => {
-            if (condition.contractId && condition.offerId)
-                throw new Error(
-                    'MilestonesController.getMilestonesList: contractId and offerId cannot be used together'
+    /**
+     * API PUBLICZNE - Dodaje nowy Milestone
+     *
+     * @param milestone - Milestone do dodania
+     * @param auth - OAuth2Client dla operacji GD
+     * @param userData - Dane użytkownika z sesji
+     * @returns Dodany Milestone
+     */
+    static async add(
+        milestone: Milestone,
+        auth?: OAuth2Client,
+        userData?: UserData
+    ): Promise<Milestone> {
+        return await this.withAuth<Milestone>(
+            async (
+                instance: MilestonesController,
+                authClient: OAuth2Client
+            ) => {
+                return await instance.addMilestone(
+                    authClient,
+                    milestone,
+                    userData
                 );
-            if (condition.contractId && parentType === 'OFFER')
-                throw new Error(
-                    'MilestonesController.getMilestonesList: contractId cannot be used with parentType OFFER'
-                );
-            if (condition.offerId && parentType === 'CONTRACT')
-                throw new Error(
-                    'MilestonesController.getMilestonesList: offerId cannot be used with parentType CONTRACT'
-                );
-        });
-    }
-
-    static processMilestonesResult(result: any[]): Milestone[] {
-        const newResult: Milestone[] = [];
-
-        for (const row of result) {
-            const _contract = this.makeContractObject(row);
-            const _offer = this.makeOfferObject(row);
-
-            const item = new Milestone({
-                id: row.Id,
-                _type: {
-                    id: row.TypeId,
-                    name: row.TypeName,
-                    isUniquePerContract: row.TypeIsUniquePerContract,
-                    _isDefault: row.TypeIsDefault,
-                    _folderNumber: row.FolderNumber,
-                },
-                name: ToolsDb.sqlToString(row.Name),
-                description: ToolsDb.sqlToString(row.Description),
-                _dates: [
-                    {
-                        startDate: row.StartDate,
-                        endDate: row.EndDate,
-                        milestoneId: row.Id,
-                        description: row.DateDescription,
-                        lastUpdated: row.DateLastUpdated,
-                    },
-                ],
-                status: row.Status,
-                gdFolderId: row.GdFolderId,
-                //może to być kontrakt na roboty (wtedy ma _ourContract), albo OurContract(wtedy ma OurId)
-                _contract,
-                _offer,
-            });
-            newResult.push(item);
-        }
-        return newResult;
-    }
-
-    private static makeContractObject(row: any) {
-        if (!row.ContractId) return;
-        const contractInitParam = {
-            id: row.ContractId,
-            ourId: row.ParentOurId,
-            number: row.ParentNumber,
-            _ourContract: { ourId: row.ParentOurIdRelated },
-            _manager: { id: row.ParentManagerId },
-            _admin: { id: row.ParentAdminId },
-            projectId: row.ProjectOurId,
-            _type: {
-                id: row.ContractTypeId,
-                name: row.ContractTypeName,
-                description: row.ContractTypeDescription,
-                isOur: row.ContractTypeIsOur,
             },
-        };
-
-        return contractInitParam.ourId
-            ? new ContractOur(contractInitParam)
-            : new ContractOther(contractInitParam);
+            auth
+        );
     }
 
-    private static makeOfferObject(row: any) {
-        if (!row.OfferId) return;
-
-        // Validate city data before creating offer object
-        if (!row.CityId && (!row.CityName || !row.CityName.trim())) {
-            console.warn(
-                `Offer ${row.OfferId} has invalid city data in MilestonesController`
-            );
+    /**
+     * LOGIKA BIZNESOWA - Dodaje Milestone z folderami i default cases
+     *
+     * Przepływ:
+     * 1. Model: createFolders(auth) - tworzy folder GD + podfoldery dla case types
+     * 2. Controller: transakcja DB
+     *    - Repository: addInDb() - dodaje główny rekord
+     *    - Model: addDatesInDb() - dodaje powiązane daty
+     * 3. Model: createDefaultCases(auth) - tworzy domyślne sprawy
+     * 4. Model: editFolder(auth) - aktualizuje folder (nazwa z numerem)
+     * 5. Rollback folderu GD i DB przy błędzie
+     */
+    private async addMilestone(
+        auth: OAuth2Client,
+        milestone: Milestone,
+        userData?: UserData
+    ): Promise<Milestone> {
+        if (!milestone._dates.length) {
+            throw new Error('Milestone dates are not defined');
         }
 
-        const offerInitParam: OfferData = {
-            id: row.OfferId,
-            alias: row.OfferAlias,
-            isOur: row.OfferIsOur,
-            form: row.OfferForm,
-            bidProcedure: row.OfferBidProcedure,
-            employerName: row.OfferEmployerName,
-            gdFolderId: row.GdFolderId,
-            _city: { id: row.CityId, name: row.CityName, code: row.CityCode },
-            _type: {
-                id: row.OfferTypeId,
-                name: row.OfferTypeName,
-                isOur: row.OfferTypeIsOur,
-                description: row.OfferTypeDescription,
+        console.group(
+            'Adding Milestone',
+            milestone._FolderNumber_TypeName_Name
+        );
+
+        try {
+            if (!milestone._contract && !milestone._offer) {
+                throw new Error(
+                    'Contract or offer is not defined for Milestone'
+                );
+            }
+
+            if (!milestone.typeId) {
+                throw new Error('Milestone type is not defined');
+            }
+
+            // 1. Utwórz foldery w Google Drive
+            await milestone.createFolders(auth);
+            console.log('GD folders created');
+
+            try {
+                // 2. Transakcja DB - Milestone + Dates
+                await ToolsDb.transaction(
+                    async (conn: mysql.PoolConnection) => {
+                        // 2a. Dodaj główny rekord Milestone
+                        await this.repository.addInDb(milestone, conn, true);
+
+                        // 2b. Dodaj daty Milestone
+                        await milestone.addDatesInDb(conn, true);
+                    }
+                );
+
+                console.log('Milestone added to DB');
+
+                // 3. Utwórz domyślne sprawy (Cases)
+                await milestone.createDefaultCases(auth, {
+                    isPartOfBatch: false,
+                });
+                console.log('Default cases created');
+
+                // 4. Edytuj folder (zaktualizuj nazwę z numerem)
+                await milestone.editFolder(auth);
+                console.log('Folder name updated');
+
+                return milestone;
+            } catch (dbError) {
+                // Rollback: usuń folder GD i DB jeśli coś się nie powiodło
+                console.error('DB transaction failed, rolling back');
+                await milestone.deleteFolder(auth).catch((error) => {
+                    console.error('Error deleting folder:', error);
+                });
+                await milestone.deleteFromDb().catch((error) => {
+                    console.error('Error deleting from DB:', error);
+                });
+                throw dbError;
+            }
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    /**
+     * API PUBLICZNE - Edytuje Milestone
+     *
+     * @param milestone - Milestone do edycji
+     * @param auth - OAuth2Client dla operacji GD
+     * @param userData - Dane użytkownika z sesji
+     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji
+     * @returns Zaktualizowany Milestone
+     */
+    static async edit(
+        milestone: Milestone,
+        auth?: OAuth2Client,
+        userData?: UserData,
+        fieldsToUpdate?: string[]
+    ): Promise<Milestone> {
+        return await this.withAuth<Milestone>(
+            async (
+                instance: MilestonesController,
+                authClient: OAuth2Client
+            ) => {
+                return await instance.editMilestone(
+                    authClient,
+                    milestone,
+                    userData,
+                    fieldsToUpdate
+                );
             },
-        };
-        return offerInitParam;
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA - Edytuje Milestone
+     *
+     * Przepływ:
+     * 1. Walidacja (typeId, gdFolderId)
+     * 2. Transakcja DB - Milestone + Dates (jeśli potrzebne)
+     * 3. Równolegle (jeśli nie tylko DB fields):
+     *    - editFolder(auth) - aktualizuje folder GD
+     *    - editInScrum(auth) - aktualizuje Scrum
+     */
+    private async editMilestone(
+        auth: OAuth2Client,
+        milestone: Milestone,
+        userData?: UserData,
+        fieldsToUpdate?: string[]
+    ): Promise<Milestone> {
+        console.group(
+            'Editing Milestone',
+            milestone._FolderNumber_TypeName_Name
+        );
+
+        try {
+            if (!milestone.typeId) {
+                throw new Error('Milestone type is not defined');
+            }
+            if (!milestone.gdFolderId) {
+                throw new Error('Milestone folder is not defined');
+            }
+
+            // Sprawdź czy edycja dotyczy tylko pól DB (bez GD/Scrum)
+            const onlyDbFields = ['status', 'description', 'number', 'name'];
+            const isOnlyDbFields =
+                fieldsToUpdate &&
+                fieldsToUpdate.length > 0 &&
+                fieldsToUpdate.every((field) => onlyDbFields.includes(field));
+
+            // 1. Transakcja DB - Milestone + Dates
+            if (fieldsToUpdate && !fieldsToUpdate.includes('_dates')) {
+                // Tylko Milestone bez Dates
+                await this.repository.editInDb(
+                    milestone,
+                    undefined,
+                    false,
+                    fieldsToUpdate
+                );
+            } else {
+                // Milestone + Dates
+                await ToolsDb.transaction(
+                    async (conn: mysql.PoolConnection) => {
+                        await Promise.all([
+                            milestone.editDatesInDb(conn, true),
+                            this.repository.editInDb(
+                                milestone,
+                                conn,
+                                true,
+                                fieldsToUpdate
+                            ),
+                        ]);
+                    }
+                );
+            }
+
+            console.log('Milestone edited in DB');
+
+            // 2. Równolegle: GD + Scrum (jeśli nie tylko DB fields)
+            if (!isOnlyDbFields) {
+                await Promise.all([
+                    milestone.editFolder(auth),
+                    milestone.editInScrum(auth),
+                ]);
+                console.log('Milestone folder edited in GD');
+                console.log('Milestone edited in Scrum');
+            }
+
+            return milestone;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    /**
+     * API PUBLICZNE - Usuwa Milestone
+     *
+     * @param milestone - Milestone do usunięcia
+     * @param auth - OAuth2Client dla operacji GD
+     */
+    static async delete(
+        milestone: Milestone,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: MilestonesController,
+                authClient: OAuth2Client
+            ) => {
+                return await instance.deleteMilestone(authClient, milestone);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA - Usuwa Milestone
+     *
+     * Przepływ:
+     * 1. Controller: deleteFromDb() - usuwa z DB (CASCADE dla MilestoneDates, Cases)
+     * 2. Równolegle:
+     *    - deleteFolder(auth) - usuwa folder GD
+     *    - deleteFromScrum(auth) - usuwa z Scrum
+     */
+    private async deleteMilestone(
+        auth: OAuth2Client,
+        milestone: Milestone
+    ): Promise<void> {
+        console.group('Deleting Milestone', milestone.id);
+
+        try {
+            // 1. Usuń z bazy (CASCADE usunie też MilestoneDates i powiązane Cases)
+            await this.repository.deleteFromDb(milestone);
+            console.log('Milestone deleted from DB');
+
+            // 2. Równolegle: GD + Scrum
+            await Promise.all([
+                milestone.deleteFolder(auth),
+                milestone.deleteFromScrum(auth),
+            ]);
+            console.log('Milestone deleted from GD and Scrum');
+        } finally {
+            console.groupEnd();
+        }
     }
 }

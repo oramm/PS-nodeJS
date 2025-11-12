@@ -12,9 +12,7 @@ import {
     PersonData,
     ProjectData,
 } from '../../../../types/types';
-import MilestonesController, {
-    MilestoneParentType,
-} from '../../MilestonesController';
+import { MilestoneParentType } from '../../MilestoneRepository';
 
 export type MilestoneDatesSearchParams = {
     searchText?: string;
@@ -39,7 +37,6 @@ export default class MilestoneDatesController {
         orConditions: MilestoneDatesSearchParams[] = [],
         parentType: MilestoneParentType = 'CONTRACT'
     ) {
-        MilestonesController.validateConditions(orConditions, parentType);
         const typeCondition =
             parentType === 'CONTRACT'
                 ? 'Milestones.ContractId IS NOT NULL'

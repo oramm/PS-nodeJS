@@ -150,7 +150,7 @@ export default abstract class Offer
 
     private async getOfferEvaluationMilestone() {
         return (
-            await MilestonesController.getMilestonesList(
+            await MilestonesController.find(
                 [
                     {
                         typeId: Setup.MilestoneTypes.OFFER_EVALUATION,
@@ -186,7 +186,7 @@ export default abstract class Offer
     private async deleteOfferEvaluationMilestone(auth: OAuth2Client) {
         const milestone = await this.getOfferEvaluationMilestone();
         if (milestone) {
-            await milestone.deleteController(auth);
+            await MilestonesController.delete(milestone, auth);
         }
     }
     async setCity(cityOrCityName: City | string) {
