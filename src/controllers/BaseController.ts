@@ -91,6 +91,12 @@ export default abstract class BaseController<
             // Ustaw credentials
             oAuthClient.setCredentials({ refresh_token: refreshToken });
 
+            // ✅ POPRAWKA: Wymuś pobranie access tokenu (jak w ToolsGapi.getNewCredentials)
+            const tokens = await oAuthClient.getAccessToken();
+            if (!tokens.token) {
+                throw new Error('Failed to obtain access token from Google');
+            }
+
             // Wykonaj callback z instancją i auth
             return await callback(instance, oAuthClient);
         } catch (error) {

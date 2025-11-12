@@ -30,10 +30,10 @@ Migracja modułów używających `ToolsGapi.gapiReguestHandler` do nowego wzorca
     - ✅ Controller zrefaktoryzowany (add/edit/delete z withAuth)
     - ⏳ Router ma 1 endpoint używający ToolsGapi (wymaga refaktoryzacji Contracts)
 5. ✅ **Entities** - ZAKOŃCZONE (2025-11-12) - tylko DB, bez OAuth
-6. ⏳ **Letters** - DO ZROBIENIA
-7. ⏳ **Offers** - DO ZROBIENIA
-8. ⏳ **Contracts** - DO ZROBIENIA
-9. ⏳ **Invoices** - DO ZROBIENIA
+6. ✅ **Invoices** - ZAKOŃCZONE (2025-11-12)
+7. ⏳ **Letters** - DO ZROBIENIA
+8. ⏳ **Offers** - DO ZROBIENIA
+9. ⏳ **Contracts** - DO ZROBIENIA
 10. ⏳ **Meetings** - DO ZROBIENIA
 
 ---
