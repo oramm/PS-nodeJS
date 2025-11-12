@@ -40,67 +40,215 @@ export default class TasksController extends BaseController<
         return this.instance;
     }
 
-    static async addNewTask(
-        taskPayload: TaskPayload,
-        auth?: OAuth2Client
-    ): Promise<Task> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
-        await instance.create(task);
-
-        if (auth) {
-            await this.addInScrum(task, auth);
-        }
-        console.log(`Task ${task.name} added`);
-        return task;
-    }
-
+    // ==================== READ (bez auth) ====================
+    /**
+     * Wyszukuje zadania według parametrów
+     * @param searchParams - Parametry wyszukiwania
+     * @returns Promise<Task[]> - Lista zadań
+     */
     static async find(searchParams: TasksSearchParams[] = []): Promise<Task[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
     }
 
+    // ==================== CREATE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Dodaje nowe zadanie do systemu
+     *
+     * @param taskPayload - Dane zadania do dodania
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     * @returns Promise<Task> - Dodane zadanie
+     */
+    static async add(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        return await this.withAuth<Task>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.addTask(authClient, taskPayload);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Dodaje zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do dodania
+     * @returns Promise<Task> - Dodane zadanie
+     */
+    private async addTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload
+    ): Promise<Task> {
+        console.group('TasksController.addTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
+
+            // 1. Dodaj do DB
+            await this.create(task);
+            console.log('Task added to DB');
+
+            // 2. Dodaj do Scrum Sheet
+            await TasksController.addInScrum(task, auth);
+            console.log(`Task ${task.name} added to Scrum`);
+
+            return task;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== UPDATE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Aktualizuje istniejące zadanie
+     *
+     * @param taskPayload - Dane zadania do aktualizacji
+     * @param fieldsToUpdate - Lista pól do aktualizacji
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns Promise<Task> - Zaktualizowane zadanie
+     */
+    static async edit(
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[],
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        return await this.withAuth<Task>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.editTask(
+                    authClient,
+                    taskPayload,
+                    fieldsToUpdate
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Edytuje zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do aktualizacji
+     * @param fieldsToUpdate - Lista pól do aktualizacji
+     * @returns Promise<Task> - Zaktualizowane zadanie
+     */
+    private async editTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[]
+    ): Promise<Task> {
+        console.group('TasksController.editTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
+
+            // Równoległe wykonanie DB i Scrum update
+            const dbPromise = this.repository.editInDb(
+                task,
+                undefined,
+                undefined,
+                fieldsToUpdate
+            );
+            const scrumPromise = TasksController.editInScrum(task, auth);
+            await Promise.all([dbPromise, scrumPromise]);
+
+            console.log(`Task ${task.name} updated`);
+            return task;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== DELETE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Usuwa zadanie z systemu
+     *
+     * @param taskPayload - Dane zadania do usunięcia
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns Promise<{id: number | undefined}> - ID usuniętego zadania
+     */
+    static async delete(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<{ id: number | undefined }> {
+        return await this.withAuth<{ id: number | undefined }>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.deleteTask(authClient, taskPayload);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Usuwa zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do usunięcia
+     * @returns Promise<{id: number | undefined}> - ID usuniętego zadania
+     */
+    private async deleteTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload
+    ): Promise<{ id: number | undefined }> {
+        console.group('TasksController.deleteTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
+
+            // Równoległe wykonanie DB i Scrum delete
+            const dbPromise = this.repository.deleteFromDb(task);
+            const scrumPromise = TasksController.deleteFromScrum(task, auth);
+            await Promise.all([dbPromise, scrumPromise]);
+
+            console.log(`Task with id ${task.id} deleted`);
+            return { id: task.id };
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== DEPRECATED (dla kompatybilności wstecznej) ====================
+    /**
+     * @deprecated Użyj TasksController.add(taskPayload, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
+    static async addNewTask(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        return await this.add(taskPayload, auth);
+    }
+
+    /**
+     * @deprecated Użyj TasksController.edit(taskPayload, fieldsToUpdate, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
     static async updateTask(
         taskPayload: TaskPayload,
         fieldsToUpdate: string[],
         auth?: OAuth2Client
     ): Promise<Task> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
-
-        const dbPromise = instance.edit(
-            task,
-            undefined,
-            undefined,
-            fieldsToUpdate
-        );
-        const scrumPromise = auth
-            ? this.editInScrum(task, auth)
-            : Promise.resolve();
-        await Promise.all([dbPromise, scrumPromise]);
-
-        console.log(`Task ${task.name} updated`);
-        return task;
+        return await this.edit(taskPayload, fieldsToUpdate, auth);
     }
 
+    /**
+     * @deprecated Użyj TasksController.delete(taskPayload, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
     static async deleteTask(
         taskPayload: TaskPayload,
         auth?: OAuth2Client
     ): Promise<{ id: number | undefined }> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
-
-        const dbPromise = instance.delete(task);
-        const scrumPromise = auth
-            ? this.deleteFromScrum(task, auth)
-            : Promise.resolve();
-        await Promise.all([dbPromise, scrumPromise]);
-
-        console.log(`Task with id ${task.id} deleted`);
-        return { id: task.id };
+        return await this.delete(taskPayload, auth);
     }
 
     static processTasksResult(result: any[]): Task[] {

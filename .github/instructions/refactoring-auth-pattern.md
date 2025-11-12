@@ -24,13 +24,14 @@ Migracja modułów używających `ToolsGapi.gapiReguestHandler` do nowego wzorca
 ### **Moduły do Refaktoryzacji:**
 
 1. ✅ **Cases** - ZAKOŃCZONE (wzorzec referencyjny)
-2. ⏳ **Letters** - DO ZROBIENIA
-3. ⏳ **Offers** - DO ZROBIENIA
-4. ⏳ **Milestones** - DO ZROBIENIA
-5. ⏳ **Contracts** - DO ZROBIENIA
-6. ⏳ **Invoices** - DO ZROBIENIA
-7. ⏳ **Meetings** - DO ZROBIENIA
-8. ⏳ **Projects** - DO ZROBIENIA
+2. ✅ **Tasks** - ZAKOŃCZONE (2025-11-12)
+3. ⏳ **Letters** - DO ZROBIENIA
+4. ⏳ **Offers** - DO ZROBIENIA
+5. ⏳ **Milestones** - DO ZROBIENIA
+6. ⏳ **Contracts** - DO ZROBIENIA
+7. ⏳ **Invoices** - DO ZROBIENIA
+8. ⏳ **Meetings** - DO ZROBIENIA
+9. ⏳ **Projects** - DO ZROBIENIA
 
 ---
 
