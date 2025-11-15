@@ -106,25 +106,25 @@ app.post(
 
 app.post('/letterReact', async (req: Request, res: Response, next) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         console.log('req.files', req.files);
         const item = LettersController.createProperLetter(req.parsedBody);
 
+        // Konwersja req.files do File[]
+        const files = Array.isArray(req.files) ? req.files : [];
+
         // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
         if (item instanceof OurLetter) {
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                LettersController.addNewOurLetter,
-                [item, req.files, req.session.userData],
-                LettersController
+            await LettersController.addNewOurLetter(
+                item,
+                files,
+                req.session.userData
             );
         } else if (item instanceof IncomingLetter) {
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                LettersController.addNewIncomingLetter,
-                [item, req.files, req.session.userData],
-                LettersController
+            await LettersController.addNewIncomingLetter(
+                item,
+                files,
+                req.session.userData
             );
         } else {
             throw new Error('Unknown letter type');
@@ -138,21 +138,22 @@ app.post('/letterReact', async (req: Request, res: Response, next) => {
 
 app.put('/letter/:id', async (req: Request, res: Response, next) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
         const initParamsFromClient = req.parsedBody;
 
-        if (!req.files) req.files = [];
-        console.log('req.files', req.files);
+        // Konwersja req.files do File[]
+        const files = Array.isArray(req.files) ? req.files : [];
+        console.log('req.files', files);
 
         const item = LettersController.createProperLetter(initParamsFromClient);
 
-        // Użyj LettersController.editLetter zamiast item.editController
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            LettersController.editLetter,
-            [item, req.files, req.session.userData, _fieldsToUpdate],
-            LettersController
+        // Użyj LettersController.editLetter z nowym API (withAuth)
+        await LettersController.editLetter(
+            item,
+            files,
+            req.session.userData,
+            _fieldsToUpdate
         );
         res.send(item);
     } catch (error) {
@@ -164,6 +165,8 @@ app.put(
     '/appendLetterAttachments/:id',
     async (req: Request, res: Response, next) => {
         try {
+            if (!req.session.userData)
+                throw new Error('Użytkownik niezalogowany');
             const item = LettersController.createProperLetter(req.body);
             if (
                 !req.body._blobEnviObjects ||
@@ -171,36 +174,25 @@ app.put(
             )
                 throw new Error(`No blobs to upload for Letter ${item.number}`);
 
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.appendAttachmentsHandler,
-                [req.body._blobEnviObjects],
-                item
+            await LettersController.appendAttachments(
+                item,
+                req.body._blobEnviObjects
             );
-            await item.editInDb();
 
             res.send(item);
         } catch (error) {
-            if (error instanceof Error)
-                res.status(500).send({ errorMessage: error.message });
-            console.error(error);
+            next(error);
         }
     }
 );
 
 app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const item = LettersController.createProperLetter(req.body);
         if (!(item instanceof OurLetter))
             throw new Error('Nie można wyeksportować listu otrzymanego do PDF');
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            LettersController.exportToPDF,
-            [item],
-            LettersController
-        );
+        await LettersController.exportToPDF(item);
         res.send(item);
     } catch (error) {
         next(error);
@@ -208,17 +200,12 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
 });
 
 app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
-    const item = LettersController.createProperLetter(req.body);
-    if (!(item instanceof OurLetter))
-        throw new Error('Błąd przy zatwierdzaniu pisma');
     try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            LettersController.approveLetter,
-            [item, req.session.userData],
-            LettersController
-        );
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        const item = LettersController.createProperLetter(req.body);
+        if (!(item instanceof OurLetter))
+            throw new Error('Błąd przy zatwierdzaniu pisma');
+        await LettersController.approveLetter(item, req.session.userData);
         res.send(item);
     } catch (error) {
         next(error);
@@ -237,21 +224,15 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
 
 app.delete('/letter/:id', async (req: Request, res: Response, next) => {
     try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const item = LettersController.createProperLetter(req.body);
 
         // 1. Usuń z Google Drive
-        // _letterGdController istnieje tylko w OurLetter i IncomingLetter, nie w Letter
         if (item instanceof OurLetter || item instanceof IncomingLetter) {
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item._letterGdController.deleteFromGd,
-                [item.gdDocumentId, item.gdFolderId],
-                undefined
-            );
+            await LettersController.deleteFromGd(item);
         }
 
-        // 2. Usuń z bazy danych (używamy LettersController.delete zamiast item.deleteFromDb)
+        // 2. Usuń z bazy danych
         await LettersController.delete(item);
 
         res.send(item);
