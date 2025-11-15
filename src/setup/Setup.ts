@@ -10,6 +10,11 @@ export default class Setup {
         database: process.env.DB_NAME,
         multipleStatements: true,
         timezone: '+00:00',
+        waitForConnections: true,
+        queueLimit: 0,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 0,
+        connectTimeout: 10000,
     };
 
     static biuroImapMailClient: ImapFlowOptions = {
