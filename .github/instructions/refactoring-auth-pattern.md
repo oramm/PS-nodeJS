@@ -26,14 +26,17 @@ Migracja modułów używających `ToolsGapi.gapiReguestHandler` do nowego wzorca
 1. ✅ **Cases** - ZAKOŃCZONE (wzorzec referencyjny)
 2. ✅ **Tasks** - ZAKOŃCZONE (2025-11-12)
 3. ✅ **Projects** - ZAKOŃCZONE (2025-11-12) - już zrefaktoryzowane wcześniej
-4. ⚠️ **Milestones** - CZĘŚCIOWO ZAKOŃCZONE (2025-11-12)
-    - ✅ Controller zrefaktoryzowany (add/edit/delete z withAuth)
-    - ⏳ Router ma 1 endpoint używający ToolsGapi (wymaga refaktoryzacji Contracts)
+4. ✅ **Milestones** - ZAKOŃCZONE (2025-11-14)
+    - Controller i Router korzystają w całości z `withAuth`
+    - Zależności na Contracts zostały zrefaktoryzowane, brak pozostałych wywołań `ToolsGapi`
 5. ✅ **Entities** - ZAKOŃCZONE (2025-11-12) - tylko DB, bez OAuth
 6. ✅ **Invoices** - ZAKOŃCZONE (2025-11-12)
-7. ⏳ **Letters** - DO ZROBIENIA
+7. ✅ **Letters** - ZAKOŃCZONE (2025-11-14)
+    - Controller: Wszystkie metody OAuth (`addNewOurLetter`, `addNewIncomingLetter`, `editLetter`, `exportToPDF`, `approveLetter`, `appendAttachments`, `deleteFromGd`) z `withAuth`
+    - Router: Wszystkie główne endpointy zmigrowane (POST /letterReact, PUT /letter/:id, PUT /exportOurLetterToPDF, PUT /approveOurLetter/:id, PUT /appendLetterAttachments/:id, DELETE /letter/:id)
+    - Uwaga: Endpoint testowy `/testLetter/:mode` pozostaje z `gapiReguestHandler` (niska priorytet)
 8. ⏳ **Offers** - DO ZROBIENIA
-9. ⏳ **Contracts** - DO ZROBIENIA
+9. ✅ **Contracts** - ZAKOŃCZONE (2025-11-14) – pełny CRUD + routery w `withAuth`
 10. ⏳ **Meetings** - DO ZROBIENIA
 
 ---
@@ -683,12 +686,12 @@ export default class XController extends BaseController<X, XRepository> {
 ## 🔄 Kolejność Refaktoryzacji Modułów (Rekomendowana)
 
 1. ~~**Projects**~~ - ✅ ZAKOŃCZONE (już zrefaktoryzowane wcześniej)
-2. **Letters** - podobny do Cases, średnia złożoność
-3. **Offers** - średnia złożoność
-4. **Milestones** - powiązany z Cases
-5. **Contracts** - częściowo zrefaktoryzowany (ContractsController.find już używa getInstance)
-6. **Invoices** - średnia złożoność
-7. **Meetings** - niska złożoność
+2. **Letters** - podobny do Cases, średnia złożoność (DO ZROBIENIA)
+3. **Offers** - średnia złożoność (DO ZROBIENIA)
+4. ~~**Milestones**~~ - ✅ ZAKOŃCZONE (2025-11-14, router bez `ToolsGapi`)
+5. ~~**Contracts**~~ - ✅ ZAKOŃCZONE (2025-11-14, fazy 1-5)
+6. ~~**Invoices**~~ - ✅ ZAKOŃCZONE (2025-11-12)
+7. **Meetings** - niska złożoność (DO ZROBIENIA)
 
 ---
 
