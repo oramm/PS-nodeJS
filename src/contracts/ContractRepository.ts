@@ -226,9 +226,7 @@ export default class ContractRepository extends BaseRepository<
         if (searchParams._contractRanges?.length) {
             const contractRangesCondition =
                 ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRanges.map(
-                        (range) => range.id
-                    ),
+                    searchParams._contractRanges.map((range) => range.id),
                     'ContractRangesContracts',
                     'ContractRangeId'
                 );

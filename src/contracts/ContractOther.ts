@@ -57,26 +57,7 @@ export default class ContractOther
         if (this.alias) this._ourIdOrNumber_Alias += ' ' + this.alias;
         this.setFolderName();
     }
-
-    async addInDb() {
-        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await super.addInDb(conn, true);
-            await this.addEntitiesAssociationsInDb(conn, true);
-            await this.addContractRangesAssociationsInDb(conn, true);
-        });
-    }
-
-    async editInDb(
-        extenalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean,
-        _fieldsToUpdate?: string[]
-    ) {
-        const res = await ToolsDb.transaction(async (conn) => {
-            await super.editInDb(conn, true, _fieldsToUpdate);
-            await this.editEntitiesAssociationsInDb(conn, true);
-            await this.editContractRangesAssociationsInDb(conn, true);
-        });
-    }
+    // addInDb/editInDb logika przeniesiona do ContractsController (Phase 2-3)
 
     setFolderName() {
         this._folderName = `${this.number} ${this.alias || ''}`.trim();
@@ -192,7 +173,7 @@ export default class ContractOther
 
     async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
         if (this.ourIdRelated) {
-            super.createDefaultMilestones(auth, taskId);
+            await super.createDefaultMilestones(auth, taskId);
             TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
             await CurrentSprint.setSumInContractRow(auth, this.ourIdRelated);
             await CurrentSprint.sortContract(auth, this.ourIdRelated);

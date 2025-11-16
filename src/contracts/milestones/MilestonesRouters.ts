@@ -1,7 +1,6 @@
 import MilestonesController from './MilestonesController';
 import { MilestoneParentType } from './MilestoneRepository';
 import { app } from '../../index';
-import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 import Milestone from './Milestone';
 import { Request, Response } from 'express';
 import MilestoneDatesController from './cases/milestoneDate/MilestoneDatesController';
@@ -9,6 +8,7 @@ import MilestoneDate from './cases/milestoneDate/MilestoneDate';
 import { MilestoneDateData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
+import ContractsController from '../ContractsController';
 
 app.post('/milestones', async (req: Request, res: Response, next) => {
     try {
@@ -112,16 +112,12 @@ app.put(
             const contractInstance = _contract._type.isOur
                 ? new ContractOur(_contract)
                 : new ContractOther(_contract);
-            await Promise.all([
-                ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    contractInstance.editHandler,
-                    [req.parsedBody._fieldsToUpdate],
-                    contractInstance
-                ),
-            ]);
-            item._milestone!._contract = contractInstance;
+
+            const updatedContract = await ContractsController.editWithAuth(
+                contractInstance,
+                req.parsedBody._fieldsToUpdate
+            );
+            item._milestone!._contract = updatedContract;
             res.send(item);
         } catch (error) {
             next(error);

@@ -1,7 +1,5 @@
-import mysql from 'mysql2/promise';
 import Person from '../persons/Person';
 import Contract from './Contract';
-import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
 import { auth, OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../tools/ToolsSheets';
@@ -57,112 +55,7 @@ export default class ContractOur extends Contract implements OurContractData {
     setFolderName() {
         this._folderName = `${this.ourId} ${this.alias || ''}`.trim();
     }
-
-    async addInDb() {
-        let datatoDb = Tools.cloneOfObject(this);
-        this.prepareToDboperation(datatoDb);
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await ToolsDb.addInDb('Contracts', datatoDb, conn, true);
-            this.id = datatoDb.id;
-            await ToolsDb.addInDb(
-                'OurContractsData',
-                this.getourContractDbFIelds(),
-                conn,
-                true
-            );
-            await this.addEntitiesAssociationsInDb(conn, true);
-            await this.addContractRangesAssociationsInDb(conn, true);
-        });
-    }
-
-    private getourContractDbFIelds() {
-        return {
-            _isIdNonIncrement: true,
-            id: this.id,
-            ourId: this.ourId,
-            adminId: this.adminId,
-            managerId: this.managerId,
-            cityId: this.cityId,
-        };
-    }
-    /** usuwa z pomocniczego obiektu atrybuty niepasujące to tabeli Contracts */
-    private prepareToDboperation(datatoDb: any) {
-        delete datatoDb.ourId;
-        delete datatoDb.managerId;
-        delete datatoDb.adminId;
-        delete datatoDb.cityId;
-    }
-
-    async editInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false,
-        _fieldsToUpdate?: string[]
-    ) {
-        const ourContractFields = ['ourId', 'managerId', 'adminId', 'cityId'];
-        const ourContractFieldsToUpdate = _fieldsToUpdate?.filter((field) =>
-            ourContractFields.includes(field)
-        );
-        const contractFieldsToUpdate = _fieldsToUpdate?.filter(
-            (field) => !ourContractFields.includes(field)
-        );
-
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            const datatoDb = Tools.cloneOfObject(this);
-            this.prepareToDboperation(datatoDb);
-
-            //1) Contracts
-            if (!_fieldsToUpdate || (contractFieldsToUpdate?.length ?? 0) > 0) {
-                await ToolsDb.editInDb(
-                    'Contracts',
-                    datatoDb,
-                    conn,
-                    true,
-                    contractFieldsToUpdate
-                );
-                this.id = datatoDb.id;
-            }
-
-            //2) OurContractsData
-            const ourContractDbFields = this.getourContractDbFIelds();
-            if (
-                !_fieldsToUpdate ||
-                (_fieldsToUpdate &&
-                    (ourContractFieldsToUpdate?.length ?? 0) > 0)
-            ) {
-                await ToolsDb.editInDb(
-                    'OurContractsData',
-                    ourContractDbFields,
-                    conn,
-                    true,
-                    ourContractFieldsToUpdate
-                );
-            }
-
-            // 3) Entities
-            const entityKeys = ['_employers', '_engineers', '_contractors'];
-            const anyEntityToUpdate = entityKeys.some((key) =>
-                _fieldsToUpdate?.includes(key)
-            );
-            const hasAnyEntity =
-                (this._employers?.length ?? 0) +
-                    (this._engineers?.length ?? 0) +
-                    (this._contractors?.length ?? 0) >
-                0;
-
-            if (!_fieldsToUpdate || (anyEntityToUpdate && hasAnyEntity)) {
-                console.log('Edytuję powiązania z podmiotami');
-                await this.editEntitiesAssociationsInDb(conn, true);
-            } // 4) Contract Ranges
-            if (
-                (!_fieldsToUpdate ||
-                    _fieldsToUpdate.includes('_contractRangesPerContract')) &&
-                this._contractRangesPerContract
-            ) {
-                console.log('Edytuję powiązania z zakresami');
-                await this.editContractRangesAssociationsInDb(conn, true);
-            }
-        });
-    }
+    // addInDb/editInDb logika przeniesiona do ContractsController (Phase 2-3)
 
     getType(ourId: string): string {
         return ourId.substring(ourId.indexOf('.') + 1, ourId.lastIndexOf('.'));

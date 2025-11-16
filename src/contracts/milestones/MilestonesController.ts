@@ -324,6 +324,10 @@ export default class MilestonesController extends BaseController<
      * 2. Równolegle:
      *    - deleteFolder(auth) - usuwa folder GD
      *    - deleteFromScrum(auth) - usuwa z Scrum
+     *
+     * UWAGA: Operacje GD/Scrum są wykonywane po DB i nie wpływają na rollback DB.
+     * Jeśli usuniecie z DB się powiedzie, ale GD/Scrum się nie uda, Milestone
+     * zostaje usunięty z DB, ale folder/scrum mogą pozostać (do ręcznego usunięcia).
      */
     private async deleteMilestone(
         auth: OAuth2Client,
@@ -336,12 +340,21 @@ export default class MilestonesController extends BaseController<
             await this.repository.deleteFromDb(milestone);
             console.log('Milestone deleted from DB');
 
-            // 2. Równolegle: GD + Scrum
-            await Promise.all([
-                milestone.deleteFolder(auth),
-                milestone.deleteFromScrum(auth),
-            ]);
-            console.log('Milestone deleted from GD and Scrum');
+            // 2. Równolegle: GD + Scrum (błędy nie wpływają na DB)
+            try {
+                await Promise.all([
+                    milestone.deleteFolder(auth),
+                    milestone.deleteFromScrum(auth),
+                ]);
+                console.log('Milestone deleted from GD and Scrum');
+            } catch (gdScrumError) {
+                // Loguj błąd, ale nie rollbackuj DB (już usunięte)
+                console.error(
+                    'Error deleting from GD/Scrum (DB already deleted):',
+                    gdScrumError
+                );
+                // Możesz dodać powiadomienie do użytkownika o konieczności ręcznego usunięcia
+            }
         } finally {
             console.groupEnd();
         }

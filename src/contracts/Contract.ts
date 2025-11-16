@@ -129,18 +129,24 @@ export default abstract class Contract
             : [];
 
         this._contractRangesPerContract = [];
-        if (initParamObject._contractRanges && Array.isArray(initParamObject._contractRanges)) {
-            this._contractRangesPerContract = initParamObject._contractRanges.map(
-            (item: any) => {
-            if (item && typeof item === 'object' && item.hasOwnProperty('_contractRange')) {
-                return item;
-            }
-            return { _contractRange: item };
-        }
-    );
-}
-        else if (initParamObject._contractRangesPerContract) {
-            this._contractRangesPerContract = initParamObject._contractRangesPerContract;
+        if (
+            initParamObject._contractRanges &&
+            Array.isArray(initParamObject._contractRanges)
+        ) {
+            this._contractRangesPerContract =
+                initParamObject._contractRanges.map((item: any) => {
+                    if (
+                        item &&
+                        typeof item === 'object' &&
+                        item.hasOwnProperty('_contractRange')
+                    ) {
+                        return item;
+                    }
+                    return { _contractRange: item };
+                });
+        } else if (initParamObject._contractRangesPerContract) {
+            this._contractRangesPerContract =
+                initParamObject._contractRangesPerContract;
         }
         this._contractRangesNames = initParamObject._contractRangesNames;
         this._project = initParamObject._project;
@@ -150,80 +156,7 @@ export default abstract class Contract
         this._lastUpdated = initParamObject._lastUpdated;
     }
 
-    /**batch dla dodawania kontraktów */
-    async addNewController(auth: OAuth2Client, taskId: string) {
-        if (await this.isUniquePerProject())
-            throw new Error(this.makeNotUniqueErrorMessage());
-        if (!this.startDate || !this.endDate)
-            throw new Error(
-                'addNewController: Start date or end date is not set'
-            );
-        await CurrentSprintValidator.checkColumns(auth);
-
-        try {
-            console.group(`Creating a new Contract ${this.id}`);
-            TaskStore.update(taskId, 'Tworzę foldery', 4);
-            await this.createFolders(auth);
-            console.log('Contract folders created');
-            TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
-            await this.addInDb();
-            console.log('Contract added in db');
-            TaskStore.update(taskId, 'Dodaję do scrum', 22);
-            await this.addInScrum(auth);
-            console.log('Contract added in scrum');
-            console.group('Creating default milestones');
-            TaskStore.update(taskId, 'Tworzę kamienie milowe', 45);
-            await this.createDefaultMilestones(auth, taskId);
-            console.log('Default milestones, cases & tasks created');
-            console.groupEnd();
-            console.log(`Contract ${this._ourIdOrNumber_Alias} created`);
-        } catch (error) {
-            console.group('Error while creating contract');
-            this.deleteFolder(auth).then(() => console.log('folders deleted'));
-            this.deleteFromScrum(auth).then(() =>
-                console.log('deleted from scrum')
-            );
-
-            if (this.id)
-                this.deleteFromDb().then(() => console.log('deleted from db'));
-            console.groupEnd();
-            throw error;
-        }
-    }
-    /** batch dla edycji kontraktów
-     *  jeśli pole nie wymaga zmian w innych elentach niż w db to pomijane sa handlery tych elementów
-     */
-    async editHandler(auth: OAuth2Client, _fieldsToUpdate?: string[]) {
-        console.group(`Editing contract ${this._ourIdOrNumber_Name}`);
-        const onlyDbfields = [
-            'status',
-            'comment',
-            'startDate',
-            'endDate',
-            'guaranteeEndDate',
-            'value',
-            'name',
-        ];
-        const isOnlyDbFields =
-            _fieldsToUpdate &&
-            _fieldsToUpdate.length > 0 &&
-            _fieldsToUpdate.every((field) => onlyDbfields.includes(field));
-
-        if (!isOnlyDbFields) {
-            await Promise.all([
-                this.editFolder(auth).then(() =>
-                    console.log('Contract folder edited')
-                ),
-                this.editInScrum(auth).then(() =>
-                    console.log('Contract edited in scrum')
-                ),
-            ]);
-        }
-        await this.editInDb(undefined, undefined, _fieldsToUpdate).then(() =>
-            console.log('Contract edited in db')
-        );
-        console.groupEnd();
-    }
+    // addNewController + editHandler przeniesione do ContractsController (zob. Phase 2-3 refactor)
 
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
