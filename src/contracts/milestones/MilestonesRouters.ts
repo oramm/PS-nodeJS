@@ -132,7 +132,8 @@ app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
             throw new Error('User data not available in session');
         }
 
-        await item.editController(
+        await MilestoneDatesController.edit(
+            item,
             req.session.userData,
             req.parsedBody._fieldsToUpdate
         );
@@ -161,7 +162,7 @@ app.delete('/milestoneDate/:id', async (req: Request, res: Response, next) => {
         if (!req.session.userData) {
             throw new Error('User data not available in session');
         }
-        await item.deleteController(req.session.userData);
+        await MilestoneDatesController.delete(item, req.session.userData);
 
         res.send(item);
     } catch (error) {

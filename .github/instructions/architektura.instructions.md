@@ -5,7 +5,7 @@ description: 'Clean Architecture guidelines - PRIORITY: CRITICAL | ENFORCE: STRI
 
 # Wytyczne Architektoniczne - Clean Architecture
 
-> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md)
+> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md) | [Audyt Refaktoryzacji](./architektura-refactoring-audit.md)
 
 ## 🎯 Filozofia
 
@@ -332,7 +332,10 @@ await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
 1. **Oznacz @deprecated** - nie usuwaj od razu
 2. **Stwórz nową implementację** w odpowiedniej warstwie
 3. **Migruj stopniowo** - Router → inne komponenty
-4. **Usuń deprecated** po weryfikacji (grep/search)
+4. **Przeprowadź audyt** - [szczegółowa checklist](./architektura-refactoring-audit.md)
+5. **Usuń deprecated** po weryfikacji (grep/search)
+
+> 📋 **Audyt Refaktoryzacji:** Po każdej refaktoryzacji CRUD/Repository/Model użyj [przewodnika audytu](./architektura-refactoring-audit.md) aby zweryfikować, że nie utracono funkcjonalności.
 
 ## ✅ Checklist Przed Commitem
 

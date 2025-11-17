@@ -1,6 +1,6 @@
 # Wytyczne Architektoniczne - Przewodnik Szczegółowy
 
-> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./architektura.instructions.md) | **🤖 Dla AI:** [AI Assistant](./architektura-ai-assistant.md) | **🧪 Testowanie:** [Testing Guide](./architektura-testowanie.md)
+> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./architektura.instructions.md) | **🤖 Dla AI:** [AI Assistant](./architektura-ai-assistant.md) | **🧪 Testowanie:** [Testing Guide](./architektura-testowanie.md) | **📋 Audyt:** [Refactoring Audit](./architektura-refactoring-audit.md)
 
 ## Spis Treści
 

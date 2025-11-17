@@ -7,9 +7,7 @@ description: 'AI Assistant Guidelines - Decision Trees, Pattern Recognition, Err
 
 > 🤖 **Plik specjalnie dla modeli AI** (GPT-4, Claude, Copilot)
 >
-> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md)
->
-> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md)
+> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md) | [Audyt](./architektura-refactoring-audit.md)
 
 ---
 
@@ -408,14 +406,55 @@ router.get('/items', async (req, res, next) => {
 
 ---
 
+## 🔍 PO REFAKTORYZACJI: Audyt Obowiązkowy
+
+Po każdej refaktoryzacji CRUD/Repository/Model, **ZAWSZE** przeprowadź audyt:
+
+### **Quick Checklist (dla AI):**
+
+```typescript
+// ✅ 1. Sprawdź mapowanie pól SQL → Model
+git show HEAD~1:old.ts | grep "row\." | sort > /tmp/old.txt
+grep "row\." new.ts | sort > /tmp/new.txt
+diff /tmp/old.txt /tmp/new.txt  // MUSI być puste!
+
+// ✅ 2. Sprawdź konstruktory
+grep "new ModelName\(" Repository.ts  // MUSI być wywołany!
+
+// ✅ 3. Sprawdź return type
+// Repository.find() → Promise<Model[]>, NIE Promise<ModelData[]>
+
+// ✅ 4. Sprawdź transakcje
+grep "ToolsDb.transaction" Repository.ts  // NIE MOŻE być!
+grep "ToolsDb.transaction" Controller.ts  // MUSI być!
+
+// ✅ 5. Sprawdź CRUD
+// Parametry metod (add, edit, delete) muszą być identyczne PRZED i PO
+
+// ✅ 6. Sprawdź deprecated
+grep "@deprecated" Model.ts  // MUSI istnieć!
+grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
+```
+
+### **Pełny Audyt:**
+
+📋 **[Szczegółowa checklist audytu refaktoryzacji](./architektura-refactoring-audit.md)**
+
+**KIEDY:** Po każdej refaktoryzacji warstw (Model → Controller → Repository)  
+**CZAS:** ~15-30 min  
+**WYNIK:** Raport audytu w komentarzu/commit message
+
+---
+
 ## 🔗 Powiązane Dokumenty
 
 -   [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference (5 min)
 -   [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
--   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns (PLANNED)
+-   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
+-   **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
 
 ---
 
 **Wersja:** 1.0  
-**Ostatnia aktualizacja:** 2024-10-28  
+**Ostatnia aktualizacja:** 2024-11-17  
 **Przeznaczenie:** GitHub Copilot, GPT-4, Claude, inne AI assistants
