@@ -20,7 +20,7 @@ app.post('/mailsToCheck', async (req: Request, res: Response, next) => {
 app.post('/mailToCheck', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
-        await item.addNewController(req.session.userData!);
+        await OfferInvitationMailsController.add(item, req.session.userData!);
         res.send(item);
     } catch (error) {
         next(error);
@@ -51,10 +51,9 @@ app.post('/mailInvitations', async (req: Request, res: Response, next) => {
     try {
         if (!req.parsedBody.orConditions[0])
             throw new Error('Brak warunków wyszukiwania');
-        const result =
-            await OfferInvitationMailsController.getOfferInvitationMailsList(
-                req.parsedBody.orConditions
-            );
+        const result = await OfferInvitationMailsController.find(
+            req.parsedBody.orConditions
+        );
         res.send(result);
     } catch (error) {
         next(error);
@@ -64,7 +63,7 @@ app.post('/mailInvitations', async (req: Request, res: Response, next) => {
 app.put('/mailInvitation/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
-        await item.editController(req.session.userData!);
+        await OfferInvitationMailsController.edit(item, req.session.userData!);
         res.send(item);
     } catch (error) {
         next(error);
@@ -74,7 +73,7 @@ app.put('/mailInvitation/:id', async (req: Request, res: Response, next) => {
 app.delete('/mailInvitation/:id', async (req: Request, res: Response, next) => {
     try {
         const item = new OfferInvitationMail(req.parsedBody);
-        await item.deleteFromDb();
+        await OfferInvitationMailsController.delete(item);
         res.send(item);
     } catch (error) {
         next(error);
