@@ -374,16 +374,41 @@ export default class CaseRepository extends BaseRepository<Case> {
         conn: mysql.PoolConnection
     ): Promise<Case> {
         // 1. Dodaj Case do DB
-        await this.addInDb(caseItem, conn, true);
+    await this.addInDb(caseItem, conn, true);
+    console.log('CaseRepository.addWithRelated - case inserted id=', caseItem.id);
 
-        // 2. Dodaj ProcessInstances
-        for (const processInstance of processInstances) {
-            await processInstance.addInDb(conn, true);
+        // 2. Najpierw dodaj domyślne Tasks (ustaw CaseId na nowo utworzony case)
+        for (const task of defaultTasks) {
+            console.log('About to insert default task, caseItem.id=', caseItem.id, 'task before:', { name: task.name, caseId: task.caseId });
+            // ensure task references the created case id
+            task.caseId = caseItem.id;
+            // also update internal parent reference if present
+            if (task._parent) task._parent.id = caseItem.id;
+            await task.addInDb(conn, true);
+            console.log('Inserted default task id=', task.id);
         }
 
-        // 3. Dodaj domyślne Tasks
-        for (const task of defaultTasks) {
-            await task.addInDb(conn, true);
+        // 3. Następnie dodaj zadania powiązane z processInstances (jeśli istnieją)
+        for (const processInstance of processInstances) {
+            console.log('About to insert processInstance task, caseItem.id=', caseItem.id, 'task before:', processInstance._task ? { name: processInstance._task.name, id: processInstance._task.id, caseId: processInstance._task.caseId } : undefined);
+            const taskObj = processInstance._task;
+            if (taskObj && !taskObj.id) {
+                // ustaw CaseId i zapisz zadanie
+                taskObj.caseId = caseItem.id;
+                if (taskObj._parent) taskObj._parent.id = caseItem.id;
+                await taskObj.addInDb(conn, true);
+                console.log('Inserted processInstance task id=', taskObj.id);
+            }
+        }
+
+        // 4. Teraz dodaj ProcessInstances (mają już taskId ustawione)
+        for (const processInstance of processInstances) {
+            // upewnij się, że taskId jest ustawione na id zapisanego zadania
+            if (processInstance._task && !processInstance.taskId)
+                processInstance.taskId = processInstance._task.id;
+            processInstance.caseId = caseItem.id;
+            console.log('About to insert processInstance, caseId=', processInstance.caseId, 'taskId=', processInstance.taskId);
+            await processInstance.addInDb(conn, true);
         }
 
         // 4. Pobierz wygenerowany numer (jeśli nie jest unique)

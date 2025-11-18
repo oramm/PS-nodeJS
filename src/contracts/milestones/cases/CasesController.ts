@@ -7,6 +7,7 @@ import ProcessInstance from '../../../processes/processInstances/ProcessInstance
 import Task from './tasks/Task';
 import TasksController from './tasks/TasksController';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
+import TasksTemplatesForProcessesController from './tasks/taskTemplates/TasksTemplatesForProcessesController';
 import BaseController from '../../../controllers/BaseController';
 
 export default class CasesController extends BaseController<
@@ -190,16 +191,18 @@ export default class CasesController extends BaseController<
 
         // Typ sprawy może mieć wiele procesów - sprawa automatycznie też
         for (const process of caseItem._type._processes) {
-            // Dodaj zadanie ramowe z szablonu
-            const processInstanceTask =
-                await TasksController.addInDbFromTemplateForProcess(
-                    process,
-                    caseItem,
-                    conn,
-                    true
-                );
+            // utwórz obiekt zadania na podstawie szablonu, ale NIE zapisuj go teraz do DB
+            // (zapisywanie nastąpi w repository.addWithRelated po dodaniu Case)
+            const templates = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList({ processId: process.id });
+            const taskTemplate = templates && templates.length > 0 ? templates[0] : undefined;
+            if (!taskTemplate) continue;
 
-            if (!processInstanceTask) continue;
+            const processInstanceTask = new Task({
+                name: taskTemplate.name,
+                description: taskTemplate.description,
+                status: 'Backlog',
+                _parent: caseItem,
+            });
 
             const processInstance = new ProcessInstance({
                 _process: process,
