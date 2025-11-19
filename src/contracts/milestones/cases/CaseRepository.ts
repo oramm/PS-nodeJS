@@ -376,25 +376,92 @@ export default class CaseRepository extends BaseRepository<Case> {
     ): Promise<Case> {
         // 1. Dodaj Case do DB
         await this.addInDb(caseItem, conn, true);
+        console.log(
+            'CaseRepository.addWithRelated - case inserted id=',
+            caseItem.id
+        );
 
-        // 2. Dodaj ProcessInstances
-        for (const processInstance of processInstances) {
-            await processInstance.addInDb(conn, true);
-        }
-
-        // 3. Dodaj domyślne Tasks i zachowaj zwrócone obiekty z ID
+        // 2. Dodaj domyślne Tasks (REFAKTORYZACJA - użyj TaskRepository)
         const taskRepository = new TaskRepository();
         const addedTasks: any[] = [];
+
         for (const task of defaultTasks) {
+            console.log(
+                'About to insert default task, caseItem.id=',
+                caseItem.id,
+                'task before:',
+                {
+                    name: task.name,
+                    caseId: task.caseId,
+                }
+            );
+
+            task.caseId = caseItem.id;
+            if (task._parent) task._parent.id = caseItem.id;
+
             // Repository używa innego Repository (enkapsulacja logiki dostępu do Tasks)
             const addedTask = await taskRepository.addInDb(task, conn, true);
             addedTasks.push(addedTask);
+
+            console.log('Inserted default task id=', addedTask.id);
         }
+
         // Zastąp oryginalną tablicę zadaniami z ID
         defaultTasks.length = 0;
         defaultTasks.push(...addedTasks);
 
-        // 4. Pobierz wygenerowany numer (jeśli nie jest unique)
+        // 3. Dodaj Tasks z ProcessInstances (REFAKTORYZACJA - użyj TaskRepository)
+        for (const processInstance of processInstances) {
+            console.log(
+                'About to insert processInstance task, caseItem.id=',
+                caseItem.id,
+                'task before:',
+                processInstance._task
+                    ? {
+                          name: processInstance._task.name,
+                          id: processInstance._task.id,
+                          caseId: processInstance._task.caseId,
+                      }
+                    : undefined
+            );
+
+            const taskObj = processInstance._task;
+
+            if (taskObj && !taskObj.id) {
+                taskObj.caseId = caseItem.id;
+                if (taskObj._parent) taskObj._parent.id = caseItem.id;
+
+                // Repository używa innego Repository (enkapsulacja logiki dostępu do Tasks)
+                const addedTask = await taskRepository.addInDb(
+                    taskObj,
+                    conn,
+                    true
+                );
+
+                // Zaktualizuj referencję w processInstance
+                processInstance._task = addedTask;
+
+                console.log('Inserted processInstance task id=', addedTask.id);
+            }
+        }
+
+        // 4. Dodaj ProcessInstances (mają już taskId ustawione)
+        for (const processInstance of processInstances) {
+            if (processInstance._task && !processInstance.taskId)
+                processInstance.taskId = processInstance._task.id;
+            processInstance.caseId = caseItem.id;
+
+            console.log(
+                'About to insert processInstance, caseId=',
+                processInstance.caseId,
+                'taskId=',
+                processInstance.taskId
+            );
+
+            await processInstance.addInDb(conn, true);
+        }
+
+        // 5. Pobierz wygenerowany numer (jeśli nie jest unique)
         if (!caseItem.number && !caseItem._type.isUniquePerMilestone) {
             caseItem.number = await this.getNumber(caseItem.id!, conn);
         }
