@@ -9,6 +9,7 @@ import Milestone from '../Milestone';
 import ContractOur from '../../ContractOur';
 import ContractOther from '../../ContractOther';
 import { OfferData } from '../../../types/types';
+import TaskRepository from './tasks/TaskRepository';
 
 export type CasesSearchParams = {
     projectId?: string;
@@ -381,10 +382,17 @@ export default class CaseRepository extends BaseRepository<Case> {
             await processInstance.addInDb(conn, true);
         }
 
-        // 3. Dodaj domyślne Tasks
+        // 3. Dodaj domyślne Tasks i zachowaj zwrócone obiekty z ID
+        const taskRepository = new TaskRepository();
+        const addedTasks: any[] = [];
         for (const task of defaultTasks) {
-            await task.addInDb(conn, true);
+            // Repository używa innego Repository (enkapsulacja logiki dostępu do Tasks)
+            const addedTask = await taskRepository.addInDb(task, conn, true);
+            addedTasks.push(addedTask);
         }
+        // Zastąp oryginalną tablicę zadaniami z ID
+        defaultTasks.length = 0;
+        defaultTasks.push(...addedTasks);
 
         // 4. Pobierz wygenerowany numer (jeśli nie jest unique)
         if (!caseItem.number && !caseItem._type.isUniquePerMilestone) {
