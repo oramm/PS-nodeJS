@@ -1,8 +1,10 @@
 import mysql from 'mysql2/promise';
 import Entity from '../entities/Entity';
 import ToolsDb from '../tools/ToolsDb';
+import ToolsSheets from '../tools/ToolsSheets';
 import ContractOther from './ContractOther';
 import ContractOur from './ContractOur';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import ContractType from './contractTypes/ContractType';
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
@@ -21,6 +23,12 @@ import ContractRangeContractRepository from './contractRangesContracts/ContractR
 import { OAuth2Client } from 'google-auth-library';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
+import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
+import MilestonesController from './milestones/MilestonesController';
+import TasksController from './milestones/cases/tasks/TasksController';
+import Milestone from './milestones/Milestone';
+import Contract from './Contract';
+import Task from './milestones/cases/tasks/Task';
 
 export type ContractSearchParams = {
     id?: number;
@@ -210,7 +218,11 @@ export default class ContractsController extends BaseController<
                 console.group('Creating default milestones');
                 if (taskId)
                     TaskStore.update(taskId, 'Tworzę kamienie milowe', 45);
-                await contract.createDefaultMilestones(auth, taskId || '');
+                await ContractsController.createDefaultMilestones(
+                    contract,
+                    auth,
+                    taskId || ''
+                );
                 console.log('Default milestones, cases & tasks created');
                 console.groupEnd();
             }
@@ -299,14 +311,72 @@ export default class ContractsController extends BaseController<
 
             // Operacje Google Drive i Scrum (jeśli auth i NIE tylko pola DB)
             if (auth && !isOnlyDbFields) {
-                await Promise.all([
+                const [, wasAddedToScrum] = await Promise.all([
                     contract
                         .editFolder(auth)
                         .then(() => console.log('Contract folder edited')),
-                    contract
-                        .editInScrum(auth)
-                        .then(() => console.log('Contract edited in scrum')),
+                    contract.editInScrum(auth).then((added) => {
+                        console.log('Contract edited in scrum');
+                        return added;
+                    }),
                 ]);
+
+                // Jeśli kontrakt był dodawany na nowo do Scrum, dodaj tasks
+                if (wasAddedToScrum) {
+                    await this.addExistingTasksInScrum(contract, auth);
+
+                    // Post-processing Scrum dla ContractOur
+                    if (contract instanceof ContractOur) {
+                        await CurrentSprint.setSumInContractRow(
+                            auth,
+                            contract.ourId
+                        );
+                        await CurrentSprint.sortContract(auth, contract.ourId);
+                        await CurrentSprint.makeTimesSummary(auth);
+                        await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+                    }
+                    // Post-processing Scrum dla ContractOther
+                    else if (
+                        contract instanceof ContractOther &&
+                        contract.ourIdRelated
+                    ) {
+                        // Sprawdź pozycję macierzystej umowy ENVI
+                        const currentSprintValues = <any[][]>(
+                            await ToolsSheets.getValues(auth, {
+                                spreadsheetId: Setup.ScrumSheet.GdId,
+                                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+                            })
+                        ).values;
+                        const contractOurIdColIndex =
+                            currentSprintValues[0].indexOf(
+                                Setup.ScrumSheet.CurrentSprint
+                                    .contractOurIdColName
+                            );
+                        const firstRowNumber =
+                            <number>(
+                                Tools.findFirstInRange(
+                                    contract.ourIdRelated,
+                                    currentSprintValues,
+                                    contractOurIdColIndex
+                                )
+                            ) + 1;
+
+                        await CurrentSprint.setSumInContractRow(
+                            auth,
+                            contract.ourIdRelated
+                        );
+                        await CurrentSprint.sortContract(
+                            auth,
+                            contract.ourIdRelated
+                        );
+                        if (firstRowNumber < 13) {
+                            await CurrentSprint.makeTimesSummary(auth);
+                            await CurrentSprint.makePersonTimePerTaskFormulas(
+                                auth
+                            );
+                        }
+                    }
+                }
             }
 
             // Operacje bazodanowe - TRANSAKCJA
@@ -980,5 +1050,166 @@ export default class ContractsController extends BaseController<
             JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
             WHERE  ${typeCondition} AND ${cityCondition}`;
         return sql;
+    }
+
+    /**
+     * Tworzy domyślne milestones dla kontraktu
+     * Przeniesione z Contract.ts - Controller może orkiestrować inne Controllers
+     */
+    static async createDefaultMilestones(
+        contract: Contract,
+        auth: OAuth2Client,
+        taskId: string
+    ): Promise<Milestone[]> {
+        const defaultMilestones: Milestone[] = [];
+        const sessionTask = TaskStore.get(taskId);
+
+        const defaultMilestoneTemplates =
+            await MilestoneTemplatesController.getMilestoneTemplatesList(
+                {
+                    isDefaultOnly: true,
+                    contractTypeId: contract.typeId,
+                },
+                'CONTRACT'
+            );
+
+        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
+            const template = defaultMilestoneTemplates[i];
+            const startPercent = sessionTask?.percent || 0;
+            const endPercent = 90;
+            const step =
+                (endPercent - startPercent) / defaultMilestoneTemplates.length;
+            const percent = startPercent + step * i;
+            const milestone = new Milestone({
+                name: template.name,
+                description: template.description,
+                _type: template._milestoneType,
+                _contract: contract as any,
+                status: 'Nie rozpoczęty',
+                _dates: [
+                    {
+                        startDate: contract.startDate!,
+                        endDate: contract.endDate!,
+                        milestoneId: 0, //will be set in Milestone addInDb()
+                    },
+                ],
+            });
+
+            TaskStore.update(
+                taskId,
+                `Tworzę kamień milowy ${milestone._FolderNumber_TypeName_Name}`,
+                percent
+            );
+            //zasymuluj numer kamienia nieunikalnego.
+            //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
+            if (!milestone._type.isUniquePerContract) {
+                milestone.number = 1;
+            }
+            await milestone.createFolders(auth);
+            defaultMilestones.push(milestone);
+        }
+        console.log('Milestones folders created');
+        await this.addDefaultMilestonesInDb(defaultMilestones);
+        console.log('default milestones saved in db');
+
+        for (const milestone of defaultMilestones) {
+            console.group(
+                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
+            );
+            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+        }
+        console.groupEnd();
+
+        // Post-processing dla ContractOur i ContractOther (logika Scrum)
+        if (
+            contract instanceof ContractOur &&
+            (await contract.shouldBeInScrum())
+        ) {
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
+            await CurrentSprint.setSumInContractRow(auth, contract.ourId).catch(
+                (err: any) => {
+                    console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
+                    throw new Error(
+                        'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
+                            err.message
+                    );
+                }
+            );
+
+            await CurrentSprint.sortContract(auth, contract.ourId).catch(
+                (err: any) => {
+                    console.log('Błąd przy sortowaniu kontraktu', err);
+                    throw new Error(
+                        'Błąd przy sortowaniu kontraktów w scrumie po dodaniu kamieni \n' +
+                            err.message
+                    );
+                }
+            );
+
+            await CurrentSprint.makeTimesSummary(auth).catch((err: any) => {
+                console.log('Błąd przy tworzeniu sumy czasów', err);
+                throw new Error(
+                    'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
+                        err.message
+                );
+            });
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+        } else if (contract instanceof ContractOther && contract.ourIdRelated) {
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
+            await CurrentSprint.setSumInContractRow(
+                auth,
+                contract.ourIdRelated
+            );
+            await CurrentSprint.sortContract(auth, contract.ourIdRelated);
+            await CurrentSprint.makeTimesSummary(auth);
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+        }
+
+        return defaultMilestones;
+    }
+
+    /**
+     * Dodaje domyślne milestones do bazy danych
+     * Przeniesione z Contract.ts
+     */
+    private static async addDefaultMilestonesInDb(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        await MilestonesController.addBulkWithDates(milestones, externalConn);
+    }
+
+    /**
+     * Pobiera tasks dla kontraktu
+     * Przeniesione z Contract.ts
+     */
+    static async getContractTasks(contractId: number): Promise<Task[]> {
+        return await TasksController.find([{ contractId }]);
+    }
+
+    /**
+     * Dodaje istniejące zadania kontraktu do Scrum
+     * Przeniesione z Contract.ts
+     */
+    static async addExistingTasksInScrum(
+        contract: Contract,
+        auth: OAuth2Client
+    ): Promise<void> {
+        let conn: mysql.PoolConnection | null = null;
+        try {
+            const tasks = await this.getContractTasks(contract.id!);
+            console.log(`adding ${tasks.length} tasks in scrum`);
+            conn = await ToolsDb.pool.getConnection();
+            for (const task of tasks) {
+                await TasksController.addInScrum(task, auth, conn, true);
+            }
+        } catch (error) {
+            console.error('An error occurred:', error);
+        } finally {
+            if (conn) {
+                conn.release();
+            }
+        }
     }
 }

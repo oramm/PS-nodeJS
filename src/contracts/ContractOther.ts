@@ -138,30 +138,10 @@ export default class ContractOther
             console.log('ContractOther edited In Scrum');
         } else {
             console.log('ContractOther not found in Scrum - adding tasks');
-            await this.addExistingTasksInScrum(auth);
-            //sprawdź czy jest macierzysta umowa ENVI dodana do Scruma
-            const contractOurIdColIndex = currentSprintValues[0].indexOf(
-                Setup.ScrumSheet.CurrentSprint.contractOurIdColName
-            );
-            firstRowNumber =
-                <number>(
-                    Tools.findFirstInRange(
-                        <string>this.ourIdRelated,
-                        currentSprintValues,
-                        contractOurIdColIndex
-                    )
-                ) + 1;
-
-            await CurrentSprint.setSumInContractRow(
-                auth,
-                <string>this.ourIdRelated
-            );
-            await CurrentSprint.sortContract(auth, <string>this.ourIdRelated);
-            if (firstRowNumber < 13) {
-                await CurrentSprint.makeTimesSummary(auth);
-                await CurrentSprint.makePersonTimePerTaskFormulas(auth);
-            }
+            // Zwróć true - Controller wywoła addExistingTasksInScrum
+            return true;
         }
+        return false;
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
@@ -169,18 +149,6 @@ export default class ContractOther
             searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
             valueToFind: <number>this.id,
         });
-    }
-
-    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
-        if (this.ourIdRelated) {
-            await super.createDefaultMilestones(auth, taskId);
-            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
-            await CurrentSprint.setSumInContractRow(auth, this.ourIdRelated);
-            await CurrentSprint.sortContract(auth, this.ourIdRelated);
-
-            await CurrentSprint.makeTimesSummary(auth);
-            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
-        } else throw new Error('Kontrakt nie został przypisany do umowy ENVI');
     }
 
     /**

@@ -1,5 +1,6 @@
 import Person from '../persons/Person';
 import Contract from './Contract';
+import ContractsController from './ContractsController';
 import ToolsDb from '../tools/ToolsDb';
 import { auth, OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../tools/ToolsSheets';
@@ -227,14 +228,10 @@ export default class ContractOur extends Contract implements OurContractData {
                 this.ourId
             );
             await this.addInScrum(auth);
-            await this.addExistingTasksInScrum(auth);
-
-            await CurrentSprint.setSumInContractRow(auth, this.ourId);
-            await CurrentSprint.sortContract(auth, this.ourId);
-
-            await CurrentSprint.makeTimesSummary(auth);
-            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+            // Zwróć true - Controller wywoła addExistingTasksInScrum
+            return true;
         }
+        return false;
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
@@ -242,41 +239,6 @@ export default class ContractOur extends Contract implements OurContractData {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
             valueToFind: this.ourId,
         });
-    }
-
-    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
-        await super.createDefaultMilestones(auth, taskId);
-        if (await this.shouldBeInScrum()) {
-            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
-            await CurrentSprint.setSumInContractRow(auth, this.ourId).catch(
-                (err: any) => {
-                    console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
-                    throw new Error(
-                        'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
-                            err.message
-                    );
-                }
-            );
-
-            await CurrentSprint.sortContract(auth, this.ourId).catch(
-                (err: any) => {
-                    console.log('Błąd przy sortowaniu kontraktu', err);
-                    throw new Error(
-                        'Błąd przy sortowaniu kontraktów w scrumie po dodaniu kamieni \n' +
-                            err.message
-                    );
-                }
-            );
-
-            await CurrentSprint.makeTimesSummary(auth).catch((err: any) => {
-                console.log('Błąd przy tworzeniu sumy czasów', err);
-                throw new Error(
-                    'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
-                        err.message
-                );
-            });
-            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
-        }
     }
 
     async isUniquePerProject(): Promise<boolean> {

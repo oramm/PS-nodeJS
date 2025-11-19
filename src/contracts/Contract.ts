@@ -7,8 +7,6 @@ import BusinessObject from '../BussinesObject';
 import ToolsDb from '../tools/ToolsDb';
 import ContractEntity from './ContractEntity';
 import Milestone from './milestones/Milestone';
-import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
-import TasksController from './milestones/cases/tasks/TasksController';
 import {
     ContractData,
     ContractRangePerContractData,
@@ -299,104 +297,6 @@ export default abstract class Contract
         );
     }
 
-    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
-        const defaultMilestones: Milestone[] = [];
-        const sessionTask = TaskStore.get(taskId);
-
-        const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.getMilestoneTemplatesList(
-                {
-                    isDefaultOnly: true,
-                    contractTypeId: this.typeId,
-                },
-                'CONTRACT'
-            );
-        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
-            const template = defaultMilestoneTemplates[i];
-            const startPercent = sessionTask?.percent || 0;
-            const endPercent = 90;
-            const step =
-                (endPercent - startPercent) / defaultMilestoneTemplates.length;
-            const percent = startPercent + step * i;
-            const milestone = new Milestone({
-                name: template.name,
-                description: template.description,
-                _type: template._milestoneType,
-                _contract: this as any,
-                status: 'Nie rozpoczęty',
-                _dates: [
-                    {
-                        startDate: this.startDate!,
-                        endDate: this.endDate!,
-                        milestoneId: 0, //will be set in Milestone addInDb()
-                    },
-                ],
-            });
-
-            TaskStore.update(
-                taskId,
-                `Tworzę kamień milowy ${milestone._FolderNumber_TypeName_Name}`,
-                percent
-            );
-            //zasymuluj numer kamienia nieunikalnego.
-            //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
-            if (!milestone._type.isUniquePerContract) {
-                milestone.number = 1;
-            }
-            await milestone.createFolders(auth);
-            defaultMilestones.push(milestone);
-        }
-        console.log('Milestones folders creataed');
-        await this.addDefaultMilestonesInDb(defaultMilestones);
-        console.log('default milestones saved in db');
-
-        for (const milestone of defaultMilestones) {
-            console.group(
-                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
-            );
-            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
-        }
-        console.groupEnd();
-    }
-
-    private async addDefaultMilestonesInDb(
-        milestones: Milestone[],
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        if (!externalConn && isPartOfTransaction)
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        const conn = externalConn
-            ? externalConn
-            : await ToolsDb.getPoolConnectionWithTimeout();
-        if (!externalConn)
-            console.log(
-                'new connection:: addDefaultMilestonesInDb ',
-                conn.threadId
-            );
-        try {
-            await conn.beginTransaction();
-            const promises = [];
-            for (const milestone of milestones)
-                promises.push(milestone.addInDb(conn, true));
-            await Promise.all(promises);
-            await conn.commit();
-        } catch (err) {
-            await conn.rollback();
-            throw err;
-        } finally {
-            if (!externalConn) {
-                conn.release();
-                console.log(
-                    'connection released:: addDefaultMilestonesInDb',
-                    conn.threadId
-                );
-            }
-        }
-    }
-
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
         if (this.gdFolderId) {
@@ -422,32 +322,10 @@ export default abstract class Contract
         ToolsGd.trashFileOrFolder(auth, <string>this.gdFolderId);
     }
 
-    async getTasks() {
-        return await TasksController.find([{ contractId: this.id }]);
-    }
-    /**dodaje isteniejące zadania  */
-    async addExistingTasksInScrum(auth: OAuth2Client) {
-        let conn: mysql.PoolConnection | null = null;
-        try {
-            const tasks = await this.getTasks();
-            console.log(`adding ${tasks.length} tasks in scrum`);
-            conn = await ToolsDb.pool.getConnection();
-            for (const task of tasks) {
-                await TasksController.addInScrum(task, auth, conn, true);
-            }
-        } catch (error) {
-            console.error('An error occurred:', error);
-        } finally {
-            if (conn) {
-                conn.release();
-            }
-        }
-    }
-
     /** dodaje wiesz nagowka kontraktu */
     abstract deleteFromScrum(auth: OAuth2Client): Promise<void>;
     abstract addInScrum(auth: OAuth2Client): Promise<void>;
-    abstract editInScrum(auth: OAuth2Client): Promise<void>;
+    abstract editInScrum(auth: OAuth2Client): Promise<boolean | undefined>;
     abstract setFolderName(): void;
     abstract shouldBeInScrum(): Promise<boolean>;
     abstract isUniquePerProject(): Promise<boolean>;
