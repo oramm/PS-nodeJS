@@ -177,7 +177,9 @@ export default abstract class Offer
 
     private async createOfferEvaluationMilestone(auth: OAuth2Client) {
         console.log('Creating milestone for offer evaluation');
-        await this.createDefaultMilestones(
+        const OffersController = (await import('./OffersController')).default;
+        await OffersController.createDefaultMilestones(
+            this,
             auth,
             Setup.MilestoneTypes.OFFER_EVALUATION
         );
@@ -268,7 +270,7 @@ export default abstract class Offer
         console.groupEnd();
     }
     //tymczasowa funkcja
-    private setBidValidityDate() {
+    setBidValidityDate() {
         if (!this.submissionDeadline) throw new Error('Brak terminu składania');
         let bidValidityDate: Date;
         let validityDays = 90;
@@ -291,37 +293,7 @@ export default abstract class Offer
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        if (!externalConn && isPartOfTransaction)
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        const conn = externalConn
-            ? externalConn
-            : await ToolsDb.getPoolConnectionWithTimeout();
-        if (!externalConn)
-            console.log(
-                'new connection:: addDefaultMilestonesInDb ',
-                conn.threadId
-            );
-        try {
-            await conn.beginTransaction();
-            const promises = [];
-            for (const milestone of milestones)
-                promises.push(milestone.addInDb(conn, true));
-            await Promise.all(promises);
-            await conn.commit();
-        } catch (err) {
-            await conn.rollback();
-            throw err;
-        } finally {
-            if (!externalConn) {
-                conn.release();
-                console.log(
-                    'connection released:: addDefaultMilestonesInDb',
-                    conn.threadId
-                );
-            }
-        }
+        await MilestonesController.addBulkWithDates(milestones, externalConn);
     }
 
     async editGdElements(auth: OAuth2Client, taskId?: string) {

@@ -1,25 +1,27 @@
-import ToolsDb from '../tools/ToolsDb';
-import Offer from './Offer';
-import ContractType from '../contracts/contractTypes/ContractType';
-import City from '../Admin/Cities/City';
-import CitiesController from '../Admin/Cities/CitiesController';
-import OfferRepository, { OffersSearchParams } from './OfferRepository';
 import { OAuth2Client } from 'google-auth-library';
-import { UserData } from '../types/sessionTypes';
+import CitiesController from '../Admin/Cities/CitiesController';
+import PersonsController from '../persons/PersonsController';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
-import OfferEvent from './offerEvent/OfferEvent';
-import OfferEventsController from './offerEvent/OfferEventsController';
-import PersonsController from '../persons/PersonsController';
-import OurOffer from './OurOffer';
+import EnviErrors from '../tools/Errors';
+import ToolsDb from '../tools/ToolsDb';
+import { UserData } from '../types/sessionTypes';
+import { OfferEventData, MilestoneDateData } from '../types/types';
 import ExternalOffer from './ExternalOffer';
+import Offer from './Offer';
 import OfferBondsController from './OfferBond/OfferBondsController';
-import OurOfferGdFile from './OurOfferGdFIle';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
+import OfferInvitationMailsController from './OfferInvitationMails/OfferInvitationMailsController';
+import OfferRepository, { OffersSearchParams } from './OfferRepository';
+import OurOffer from './OurOffer';
+import OurOfferGdFile from './OurOfferGdFIle';
 import ExternalOfferGdController from './gdControllers/ExternalOfferGdController';
 import OfferGdController from './gdControllers/OfferGdController';
-import EnviErrors from '../tools/Errors';
-import { OfferEventData } from '../types/types';
+import OfferEvent from './offerEvent/OfferEvent';
+import OfferEventsController from './offerEvent/OfferEventsController';
+import Milestone from '../contracts/milestones/Milestone';
+import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
+import MilestonesController from '../contracts/milestones/MilestonesController';
 
 export type { OffersSearchParams } from './OfferRepository';
 
@@ -156,7 +158,8 @@ export default class OffersController {
                 'Tworzę kamień milowy składania oferty',
                 50
             );
-            await offer.createDefaultMilestones(
+            await OffersController.createDefaultMilestones(
+                offer,
                 auth,
                 Setup.MilestoneTypes.OFFER_SUBMISSION,
                 taskId
@@ -390,7 +393,7 @@ export default class OffersController {
             ...offer._invitationMail,
             status: Setup.OfferInvitationMailStatus.NEW,
         });
-        await invitationMail.editController(userData);
+        OfferInvitationMailsController.edit(invitationMail, userData);
         offer.invitationMailId = null;
         offer._invitationMail = undefined;
     }
@@ -408,7 +411,57 @@ export default class OffersController {
             _ourOfferId: offer.id,
             status: Setup.OfferInvitationMailStatus.DONE,
         });
-        await invitationMail.editInDb();
+        await OfferInvitationMailsController.edit(invitationMail, userData);
+    }
+
+    /**
+     * Tworzy domyślne milestones dla oferty
+     * PRZENIESIONE z Offer.ts - Controller może znać inne Controllers
+     */
+    static async createDefaultMilestones(
+        offer: Offer,
+        auth: OAuth2Client,
+        milestoneTypeId: number,
+        taskId?: string
+    ): Promise<Milestone[]> {
+        const defaultMilestones: Milestone[] = [];
+
+        const defaultMilestoneTemplates =
+            await MilestoneTemplatesController.getMilestoneTemplatesList(
+                {
+                    isDefaultOnly: true,
+                    contractTypeId: offer.typeId,
+                    milestoneTypeId,
+                },
+                'OFFER'
+            );
+
+        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
+            const template = defaultMilestoneTemplates[i];
+            TaskStore.update(taskId, 'Tworzę kamień milowy', i * 15);
+            const milestone = new Milestone({
+                name: template.name,
+                description: template.description,
+                _type: template._milestoneType,
+                _offer: offer as any,
+                status: 'Nie rozpoczęty',
+                _dates: [
+                    {
+                        endDate: i
+                            ? <string>offer.submissionDeadline
+                            : offer.setBidValidityDate(),
+                    } as MilestoneDateData,
+                ],
+            });
+
+            await milestone.createFolders(auth);
+            defaultMilestones.push(milestone);
+        }
+        console.log('Milestones folders created');
+        await MilestonesController.addBulkWithDates(defaultMilestones);
+        console.log('default milestones saved in db');
+
+        return defaultMilestones;
     }
 
     static async makeNewCityObject(name: string) {
