@@ -1,21 +1,14 @@
+import { OAuth2Client } from 'google-auth-library';
+import { google } from 'googleapis';
+import mysql from 'mysql2/promise';
 import BusinessObject from '../../BussinesObject';
+import ProcessInstance from '../../processes/processInstances/ProcessInstance';
+import CurrentSprint from '../../ScrumSheet/CurrentSprint';
+import Setup from '../../setup/Setup';
+import Tools from '../../tools/Tools';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
-import CaseType from './cases/caseTypes/CaseType';
-import MilestoneType from './milestoneTypes/MilestoneType';
-import { OAuth2Client } from 'google-auth-library';
-import { drive_v3, google } from 'googleapis';
-import Setup from '../../setup/Setup';
 import ToolsSheets from '../../tools/ToolsSheets';
-import Tools from '../../tools/Tools';
-import CurrentSprint from '../../ScrumSheet/CurrentSprint';
-import Case from './cases/Case';
-import CaseTemplate from './cases/caseTemplates/CaseTemplate';
-import CaseRepository from './cases/CaseRepository';
-import mysql from 'mysql2/promise';
-import Task from './cases/tasks/Task';
-import ProcessInstance from '../../processes/processInstances/ProcessInstance';
-import ContractsController from '../ContractsController';
 import {
     ExternalOfferData,
     MilestoneData,
@@ -25,8 +18,13 @@ import {
     OurContractData,
     OurOfferData,
 } from '../../types/types';
-import { UserData } from '../../types/sessionTypes';
-import MilestoneDate from './cases/milestoneDate/MilestoneDate';
+import ContractsController from '../ContractsController';
+import Case from './cases/Case';
+import CaseRepository from './cases/CaseRepository';
+import CaseTemplate from './cases/caseTemplates/CaseTemplate';
+import CaseType from './cases/caseTypes/CaseType';
+import Task from './cases/tasks/Task';
+import MilestoneType from './milestoneTypes/MilestoneType';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
@@ -77,225 +75,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this.offerId = initParamObject._offer?.id;
         this._contract = initParamObject._contract;
         this._offer = initParamObject._offer;
-    }
-
-    /**
-     * @deprecated Użyj MilestonesController.add(milestone, auth, userData) zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestonesController.add()
-     * Model nie powinien orkiestrować operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestone.addNewController(auth, userData);
-     *
-     * // NOWE:
-     * await MilestonesController.add(milestone, auth, userData);
-     * ```
-     */
-    async addNewController(auth: OAuth2Client, userData: UserData) {
-        if (!this._dates.length)
-            throw new Error(
-                'addNewController:: Milestone dates are not defined'
-            );
-        try {
-            console.group('Adding Milestone', this._FolderNumber_TypeName_Name);
-            if (!this._contract && !this._offer)
-                throw new Error(
-                    'Contract or offer is not defined for Milestone'
-                );
-
-            if (!this.typeId) throw new Error('Milestone type is not defined');
-            await this.createFolders(auth);
-            await this.addInDb();
-            await this.createDefaultCases(auth, { isPartOfBatch: false });
-            await this.editFolder(auth);
-        } catch (err) {
-            console.error('Error in addNewController:', err);
-            this.deleteFolder(auth).catch((error) => {
-                console.error('Error deleting folder:', error);
-            });
-            this.deleteFromDb().catch((error) => {
-                console.error('Error deleting from DB:', error);
-            });
-            throw err;
-        }
-        console.groupEnd();
-    }
-
-    /**
-     * @deprecated Użyj MilestonesController.edit(milestone, auth, userData, fieldsToUpdate) zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestonesController.edit()
-     * Model nie powinien orkiestrować operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestone.editController(auth, userData, fieldsToUpdate);
-     *
-     * // NOWE:
-     * await MilestonesController.edit(milestone, auth, userData, fieldsToUpdate);
-     * ```
-     */
-    async editController(
-        auth: OAuth2Client,
-        userData: UserData,
-        _fieldsToUpdate?: string[]
-    ) {
-        console.group('Editing Milestone', this._FolderNumber_TypeName_Name);
-        if (!this.typeId) throw new Error('Milestone type is not defined');
-        if (!this.gdFolderId)
-            throw new Error('Milestone folder is not defined');
-
-        const onlyDbfields = ['status', 'description', 'number', 'name'];
-        const isOnlyDbFields =
-            _fieldsToUpdate &&
-            _fieldsToUpdate.length > 0 &&
-            _fieldsToUpdate.every((field) => onlyDbfields.includes(field));
-        await this.editInDb(undefined, undefined, _fieldsToUpdate);
-        console.log('Milestone edited in DB');
-
-        if (!isOnlyDbFields) {
-            await this.editFolder(auth);
-            console.log('Milestone folder edited in GD');
-            await this.editInScrum(auth);
-            console.log('Milestone edited in Scrum');
-        }
-        console.groupEnd();
-    }
-
-    /**
-     * @deprecated Użyj MilestonesController.add() zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestonesController.add()
-     * Model nie powinien wykonywać operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestone.addInDb();
-     *
-     * // NOWE:
-     * await MilestonesController.add(milestone);
-     * ```
-     */
-    async addInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ): Promise<this> {
-        if (!this._dates.length)
-            throw new Error('Milestone dates are not defined');
-        // jeśli jest w transakcji to robimy wewnętrzną transakcję
-        if (!isPartOfTransaction) {
-            return await ToolsDb.transaction(async (conn) => {
-                await super.addInDb(conn, true);
-                await this.addDatesInDb(conn, true);
-                return this;
-            }, externalConn);
-        }
-
-        if (!externalConn) throw new Error('No connection provided');
-        await super.addInDb(externalConn, isPartOfTransaction);
-        await this.addDatesInDb(externalConn, isPartOfTransaction);
-        return this;
-    }
-
-    async addDatesInDb(
-        externalConn: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        if (this.id === undefined)
-            throw new Error('addDatesInDb:: Milestone id is not defined');
-        const associations: MilestoneDate[] = [];
-        this._dates.map((item) => {
-            associations.push(
-                new MilestoneDate({ ...item, milestoneId: this.id! })
-            );
-        });
-        for (const association of associations) {
-            await association.addInDb(externalConn, isPartOfTransaction);
-        }
-    }
-
-    async deleteDatesFromDb(externalConn: mysql.PoolConnection) {
-        const sql = `DELETE FROM MilestoneDates WHERE MilestoneId =?`;
-        return await ToolsDb.executePreparedStmt(
-            sql,
-            [this.id],
-            this,
-            externalConn
-        );
-    }
-
-    async editDatesInDb(
-        externalConn: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        await Promise.all([
-            this.deleteDatesFromDb(externalConn),
-            this.addDatesInDb(externalConn, isPartOfTransaction),
-        ]);
-    }
-
-    /**
-     * @deprecated Użyj MilestonesController.edit() zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestonesController.edit()
-     * Model nie powinien wykonywać operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestone.editInDb();
-     *
-     * // NOWE:
-     * await MilestonesController.edit(milestone);
-     * ```
-     */
-    async editInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean,
-        _fieldsToUpdate?: string[]
-    ): Promise<this> {
-        if (_fieldsToUpdate && !_fieldsToUpdate.includes('_dates'))
-            return await super.editInDb(
-                externalConn,
-                isPartOfTransaction,
-                _fieldsToUpdate
-            );
-        return await ToolsDb.transaction(async (conn) => {
-            const [, updated] = await Promise.all([
-                this.editDatesInDb(conn, true),
-                super.editInDb(conn, isPartOfTransaction, _fieldsToUpdate),
-            ]);
-            return updated;
-        }, externalConn);
-    }
-
-    /**
-     * @deprecated Użyj MilestonesController.delete(milestone, auth) zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestonesController.delete()
-     * Model nie powinien orkiestrować operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestone.deleteController(auth);
-     *
-     * // NOWE:
-     * await MilestonesController.delete(milestone, auth);
-     * ```
-     */
-    async deleteController(auth: OAuth2Client) {
-        console.group('Deleting Milestone', this.id);
-        await this.deleteFromDb();
-        await Promise.all([
-            this.deleteFolder(auth),
-            this.deleteFromScrum(auth),
-        ]);
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {

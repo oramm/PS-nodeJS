@@ -2,9 +2,9 @@ import BaseRepository from '../../repositories/BaseRepository';
 import Milestone from './Milestone';
 import ToolsDb from '../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
+import { OfferData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
-import { OfferData } from '../../types/types';
 
 export type MilestonesSearchParams = {
     projectId?: string;
@@ -102,8 +102,9 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             AND ${typeCondition}
         ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return result.map((row) => this.mapRowToModel(row));
+        const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return rows.map((row) => this.mapRowToModel(row));
+        //return await Promise.all(result.map((row) => this.mapRowToModel(row)));
     }
 
     /**
@@ -212,9 +213,14 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             },
         };
 
-        return contractInitParam.ourId
-            ? new ContractOur(contractInitParam)
-            : new ContractOther(contractInitParam);
+        //TODO eliminacja importów dynamicznych - sprawdzić wpływ na cykle zależności
+        //czy da się zachować normalne importy statyczne
+
+        if (contractInitParam.ourId) {
+            return new ContractOur(contractInitParam);
+        } else {
+            return new ContractOther(contractInitParam);
+        }
     }
 
     /**
@@ -246,5 +252,177 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
                 description: row.OfferTypeDescription,
             },
         };
+    }
+
+    /**
+     * Dodaje wiele Milestones z ich datami w jednej transakcji (bulk insert)
+     * Używane przy tworzeniu Contract/Offer z domyślnymi Milestones
+     *
+     * @param milestones - Tablica Milestones do dodania
+     * @param externalConn - Opcjonalne zewnętrzne połączenie DB (dla większej transakcji)
+     * @returns Promise<Milestone[]> - Dodane Milestones z ustawionymi ID
+     */
+    async addMilestonesWithDates(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection
+    ): Promise<Milestone[]> {
+        const conn =
+            externalConn || (await ToolsDb.getPoolConnectionWithTimeout());
+        const isExternalTransaction = !!externalConn;
+
+        if (!isExternalTransaction) {
+            console.log(
+                'new connection:: addMilestonesWithDates',
+                conn.threadId
+            );
+        }
+
+        try {
+            if (!isExternalTransaction) {
+                await conn.beginTransaction();
+            }
+
+            // Dodaj każdy Milestone wraz z jego datami
+            for (const milestone of milestones) {
+                if (!milestone._dates.length) {
+                    throw new Error(
+                        'Milestone dates are not defined for milestone: ' +
+                            milestone.name
+                    );
+                }
+
+                // Dodaj główny rekord Milestone
+                await this.addInDb(milestone, conn, true);
+
+                // Dodaj daty dla tego Milestone
+                if (milestone.id === undefined) {
+                    throw new Error('Milestone id not set after addInDb');
+                }
+
+                const milestoneDateRepository = await import(
+                    './cases/milestoneDate/MilestoneDateRepository'
+                );
+                const dateRepo = new milestoneDateRepository.default();
+
+                for (const dateData of milestone._dates) {
+                    const milestoneDate = new (
+                        await import('./cases/milestoneDate/MilestoneDate')
+                    ).default({
+                        ...dateData,
+                        milestoneId: milestone.id,
+                    });
+                    await dateRepo.addInDb(milestoneDate, conn, true);
+                }
+            }
+
+            if (!isExternalTransaction) {
+                await conn.commit();
+            }
+
+            return milestones;
+        } catch (err) {
+            if (!isExternalTransaction) {
+                await conn.rollback();
+            }
+            throw err;
+        } finally {
+            if (!isExternalTransaction) {
+                conn.release();
+                console.log(
+                    'connection released:: addMilestonesWithDates',
+                    conn.threadId
+                );
+            }
+        }
+    }
+
+    /**
+     * Edytuje Milestone wraz z jego datami w transakcji
+     *
+     * @param milestone - Milestone do edycji
+     * @param externalConn - Opcjonalne zewnętrzne połączenie
+     * @param isPartOfTransaction - Czy część większej transakcji
+     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji
+     * @returns Promise<Milestone> - Zaktualizowany Milestone
+     */
+    async editMilestoneWithDates(
+        milestone: Milestone,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        fieldsToUpdate?: string[]
+    ): Promise<Milestone> {
+        // Jeśli nie ma _dates do edycji, tylko edytuj główny rekord
+        if (fieldsToUpdate && !fieldsToUpdate.includes('_dates')) {
+            await this.editInDb(
+                milestone,
+                externalConn,
+                isPartOfTransaction,
+                fieldsToUpdate
+            );
+            return milestone;
+        }
+
+        // Edycja z datami - wymaga transakcji
+        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            // 1. Usuń stare daty
+            await this.deleteMilestoneDates(milestone, conn);
+
+            // 2. Dodaj nowe daty
+            await this.addMilestoneDates(milestone, conn, true);
+
+            // 3. Edytuj główny rekord
+            await this.editInDb(milestone, conn, true, fieldsToUpdate);
+
+            return milestone;
+        }, externalConn);
+    }
+
+    /**
+     * Usuwa daty dla Milestone
+     */
+    private async deleteMilestoneDates(
+        milestone: Milestone,
+        externalConn: mysql.PoolConnection
+    ): Promise<void> {
+        const sql = `DELETE FROM MilestoneDates WHERE MilestoneId = ?`;
+        await ToolsDb.executePreparedStmt(
+            sql,
+            [milestone.id],
+            milestone,
+            externalConn
+        );
+    }
+
+    /**
+     * Dodaje daty dla Milestone
+     */
+    private async addMilestoneDates(
+        milestone: Milestone,
+        externalConn: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        if (milestone.id === undefined) {
+            throw new Error('Milestone id is not defined');
+        }
+
+        const milestoneDateRepository = await import(
+            './cases/milestoneDate/MilestoneDateRepository'
+        );
+        const dateRepo = new milestoneDateRepository.default();
+        const MilestoneDateClass = (
+            await import('./cases/milestoneDate/MilestoneDate')
+        ).default;
+
+        for (const dateData of milestone._dates) {
+            const milestoneDate = new MilestoneDateClass({
+                ...dateData,
+                milestoneId: milestone.id,
+            });
+            await dateRepo.addInDb(
+                milestoneDate,
+                externalConn,
+                isPartOfTransaction
+            );
+        }
     }
 }

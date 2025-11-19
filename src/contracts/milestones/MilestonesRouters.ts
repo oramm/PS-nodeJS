@@ -28,7 +28,7 @@ app.post('/milestoneDates', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const parentType = req.parsedBody.parentType as MilestoneParentType;
-        const result = await MilestoneDatesController.getMilestoneDatesList(
+        const result = await MilestoneDatesController.find(
             orConditions,
             parentType
         );

@@ -1,5 +1,4 @@
 import BusinessObject from '../../../../BussinesObject';
-import { UserData } from '../../../../types/sessionTypes';
 import ToolsDate from '../../../../tools/ToolsDate';
 import { MilestoneData, MilestoneDateData } from '../../../../types/types';
 
@@ -30,43 +29,5 @@ export default class MilestoneDate
 
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate) as string;
         this.lastUpdated = initParamObject.lastUpdated;
-    }
-
-    /**
-     * @deprecated Użyj MilestoneDatesController.edit(milestoneDate, userData, fieldsToUpdate) zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestoneDatesController.edit()
-     * Model nie powinien orkiestrować operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestoneDate.editController(userData, fieldsToUpdate);
-     *
-     * // NOWE:
-     * await MilestoneDatesController.edit(milestoneDate, userData, fieldsToUpdate);
-     * ```
-     */
-    async editController(userData: UserData, fieldsToUpdate?: string[]) {
-        return await this.editInDb(undefined, false, fieldsToUpdate);
-    }
-
-    /**
-     * @deprecated Użyj MilestoneDatesController.delete(milestoneDate, userData) zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do MilestoneDatesController.delete()
-     * Model nie powinien orkiestrować operacji I/O do bazy danych.
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await milestoneDate.deleteController(userData);
-     *
-     * // NOWE:
-     * await MilestoneDatesController.delete(milestoneDate, userData);
-     * ```
-     */
-    async deleteController(userData: UserData): Promise<void> {
-        return await this.deleteFromDb();
     }
 }

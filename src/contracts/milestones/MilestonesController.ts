@@ -75,6 +75,25 @@ export default class MilestonesController extends BaseController<
     }
 
     /**
+     * API PUBLICZNE - Dodaje wiele Milestones z datami w transakcji (bulk insert)
+     * Używane przy tworzeniu Contract/Offer z domyślnymi Milestones
+     *
+     * @param milestones - Tablica Milestones do dodania
+     * @param externalConn - Opcjonalne zewnętrzne połączenie (dla większej transakcji)
+     * @returns Promise<Milestone[]> - Dodane Milestones
+     */
+    static async addBulkWithDates(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection
+    ): Promise<Milestone[]> {
+        const instance = this.getInstance();
+        return await instance.repository.addMilestonesWithDates(
+            milestones,
+            externalConn
+        );
+    }
+
+    /**
      * API PUBLICZNE - Dodaje nowy Milestone
      *
      * @param milestone - Milestone do dodania
@@ -144,16 +163,8 @@ export default class MilestonesController extends BaseController<
             console.log('GD folders created');
 
             try {
-                // 2. Transakcja DB - Milestone + Dates
-                await ToolsDb.transaction(
-                    async (conn: mysql.PoolConnection) => {
-                        // 2a. Dodaj główny rekord Milestone
-                        await this.repository.addInDb(milestone, conn, true);
-
-                        // 2b. Dodaj daty Milestone
-                        await milestone.addDatesInDb(conn, true);
-                    }
-                );
+                // 2. Transakcja DB - Milestone + Dates (pojedynczy insert)
+                await this.repository.addMilestonesWithDates([milestone]);
 
                 console.log('Milestone added to DB');
 
@@ -252,30 +263,12 @@ export default class MilestonesController extends BaseController<
                 fieldsToUpdate.every((field) => onlyDbFields.includes(field));
 
             // 1. Transakcja DB - Milestone + Dates
-            if (fieldsToUpdate && !fieldsToUpdate.includes('_dates')) {
-                // Tylko Milestone bez Dates
-                await this.repository.editInDb(
-                    milestone,
-                    undefined,
-                    false,
-                    fieldsToUpdate
-                );
-            } else {
-                // Milestone + Dates
-                await ToolsDb.transaction(
-                    async (conn: mysql.PoolConnection) => {
-                        await Promise.all([
-                            milestone.editDatesInDb(conn, true),
-                            this.repository.editInDb(
-                                milestone,
-                                conn,
-                                true,
-                                fieldsToUpdate
-                            ),
-                        ]);
-                    }
-                );
-            }
+            await this.repository.editMilestoneWithDates(
+                milestone,
+                undefined,
+                false,
+                fieldsToUpdate
+            );
 
             console.log('Milestone edited in DB');
 

@@ -49,27 +49,6 @@ export default class MilestoneDatesController extends BaseController<
     }
 
     /**
-     * @deprecated Użyj MilestoneDatesController.find() zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do find() + MilestoneDateRepository
-     *
-     * Migracja:
-     * ```typescript
-     * // STARE:
-     * await MilestoneDatesController.getMilestoneDatesList(orConditions, parentType);
-     *
-     * // NOWE:
-     * await MilestoneDatesController.find(orConditions, parentType);
-     * ```
-     */
-    static async getMilestoneDatesList(
-        orConditions: MilestoneDatesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
-    ): Promise<MilestoneDate[]> {
-        return await this.find(orConditions, parentType);
-    }
-
-    /**
      * API PUBLICZNE - Edytuje MilestoneDate
      *
      * @param milestoneDate - MilestoneDate do edycji
