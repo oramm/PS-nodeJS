@@ -227,7 +227,7 @@ export default abstract class Offer
         const defaultMilestones: Milestone[] = [];
 
         const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.getMilestoneTemplatesList(
+            await MilestoneTemplatesController.find(
                 {
                     isDefaultOnly: true,
                     contractTypeId: this.typeId,

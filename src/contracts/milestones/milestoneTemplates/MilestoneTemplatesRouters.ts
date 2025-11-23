@@ -6,11 +6,10 @@ import PersonsController from '../../../persons/PersonsController';
 
 app.post('/milestoneTemplates', async (req: Request, res: Response, next) => {
     try {
-        const result =
-            await MilestoneTemplatesController.getMilestoneTemplatesList(
-                req.parsedBody,
-                req.parsedBody.templateType
-            );
+        const result = await MilestoneTemplatesController.find(
+            req.parsedBody,
+            req.parsedBody.templateType
+        );
         res.send(result);
     } catch (error) {
         next(error);

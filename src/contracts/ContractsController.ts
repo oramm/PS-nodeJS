@@ -1065,7 +1065,7 @@ export default class ContractsController extends BaseController<
         const sessionTask = TaskStore.get(taskId);
 
         const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.getMilestoneTemplatesList(
+            await MilestoneTemplatesController.find(
                 {
                     isDefaultOnly: true,
                     contractTypeId: contract.typeId,
