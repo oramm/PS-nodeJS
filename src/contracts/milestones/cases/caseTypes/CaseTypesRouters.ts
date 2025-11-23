@@ -7,7 +7,7 @@ import PersonsController from '../../../../persons/PersonsController';
 app.post('/caseTypes', async (req: Request, res: Response, next) => {
     try {
         const orCondition = req.parsedBody.orCondition;
-        const result = await CaseTypesController.getCaseTypesList(orCondition);
+        const result = await CaseTypesController.find(orCondition);
         res.send(result);
     } catch (err) {
         console.error(err);
@@ -24,7 +24,7 @@ app.post('/caseType', async (req: Request, res: Response, next) => {
             req.session.userData
         );
         let item = new CaseType({ ...req.parsedBody, _editor });
-        await item.addInDb();
+        await CaseTypesController.add(item);
         res.send(item);
     } catch (error) {
         next(error);
@@ -40,7 +40,7 @@ app.put('/caseType/:id', async (req: Request, res: Response, next) => {
             req.session.userData
         );
         let item = new CaseType({ ...req.parsedBody, _editor });
-        await item.editInDb();
+        await CaseTypesController.edit(item);
         res.send(item);
     } catch (error) {
         next(error);

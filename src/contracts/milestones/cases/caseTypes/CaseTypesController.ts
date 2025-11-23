@@ -1,56 +1,75 @@
-import mysql from 'mysql2/promise';
-import ProcessesController from "../../../../processes/ProcesesController";
-import ToolsDb from "../../../../tools/ToolsDb";
-import CaseType from "./CaseType";
+import BaseController from '../../../../controllers/BaseController';
+import CaseType from './CaseType';
+import CaseTypeRepository from './CaseTypeRepository';
+import ToolsDb from '../../../../tools/ToolsDb';
 
-export default class CaseTypesController {
-    static async getCaseTypesList(orConditions: any[] | undefined = []) {
-        const sql = `SELECT  
-                CaseTypes.Id,
-                CaseTypes.Name,
-                CaseTypes.Description,
-                CaseTypes.IsDefault,
-                CaseTypes.IsUniquePerMilestone,
-                CaseTypes.MilestoneTypeId,
-                CaseTypes.FolderNumber,
-                CaseTypes.LastUpdated,
-                CaseTypes.EditorId
-            FROM CaseTypes
-            WHERE ${ToolsDb.makeOrGroupsConditions(orConditions, this.makeAndConditions.bind(this))}`;
+export default class CaseTypesController extends BaseController<
+    CaseType,
+    CaseTypeRepository
+> {
+    private static instance: CaseTypesController;
 
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processCaseTypesResult(result);
+    constructor() {
+        super(new CaseTypeRepository());
     }
 
-    static makeAndConditions(initParamObject: any) {
-        const milestoneCondition = initParamObject.milestoneId
-            ? mysql.format(`(CaseTypes.MilestoneTypeId=(SELECT TypeId FROM Milestones WHERE Id=?) OR CaseTypes.MilestoneTypeId IS NULL)`, [initParamObject.milestoneId])
-            : '1';
-
-        const milestoneTypeCondition = initParamObject.milestoneTypeId
-            ? mysql.format(`CaseTypes.MilestoneTypeId=?`, [initParamObject.milestoneTypeId])
-            : '1';
-
-        return `${milestoneCondition} 
-            AND ${milestoneTypeCondition}`;
-    }
-
-    static async processCaseTypesResult(result: any[]) {
-        let newResult: [CaseType?] = [];
-        const processes = await ProcessesController.find({});
-        for (const row of result) {
-            const item = new CaseType({
-                id: row.Id,
-                name: row.Name,
-                description: row.Description,
-                isDefault: row.IsDefault,
-                isUniquePerMilestone: row.IsUniquePerMilestone,
-                _milestoneType: { id: row.MilestoneTypeId },
-                folderNumber: row.FolderNumber,
-                _processes: processes.filter((item: any) => item._caseType.id == row.Id)
-            });
-            newResult.push(item);
+    private static getInstance(): CaseTypesController {
+        if (!this.instance) {
+            this.instance = new CaseTypesController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    static async add(item: CaseType): Promise<CaseType> {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            await instance.repository.addInDb(item, conn, true);
+            return item;
+        });
+    }
+
+    static async edit(item: CaseType): Promise<CaseType> {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            await instance.repository.editInDb(item, conn, true);
+            return item;
+        });
+    }
+
+    static async delete(item: CaseType): Promise<void> {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            await instance.repository.deleteFromDb(item);
+        });
+    }
+
+    static async find(
+        orConditions: any[] | undefined = []
+    ): Promise<CaseType[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find({ orConditions });
+    }
+
+    /**
+     * @deprecated Użyj CaseTypesController.find()
+     */
+    static async getCaseTypesList(orConditions: any[] | undefined = []) {
+        return await this.find(orConditions);
+    }
+
+    /**
+     * @deprecated Logika przeniesiona do Repository
+     */
+    static makeAndConditions(initParamObject: any) {
+        // Metoda pomocnicza, teraz prywatna w Repository
+        return '';
+    }
+
+    /**
+     * @deprecated Logika przeniesiona do Repository
+     */
+    static async processCaseTypesResult(result: any[]) {
+        // Metoda pomocnicza, teraz w Repository.mapRowToModel
+        return [];
     }
 }

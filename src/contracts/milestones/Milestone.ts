@@ -382,7 +382,11 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         }
     }
 
-    async getCaseTypes() {
+    /**
+     * @deprecated Użyj CaseTypeRepository.findByMilestoneType()
+     * REFAKTORING: Logika przeniesiona do CaseTypeRepository
+     */
+    private async getCaseTypes() {
         const contractTypeId = this._contract?._type.id;
         const offerTypeId = this._offer?._type.id;
 
@@ -434,6 +438,10 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         }
     }
 
+    /**
+     * @deprecated Użyj CaseTemplateRepository.findByMilestoneType()
+     * REFAKTORING: Logika przeniesiona do CaseTemplateRepository
+     */
     async getCaseTemplates(initParamObject: {
         isDefaultOnly?: boolean;
         isInScrumByDefaultOnly?: boolean;
