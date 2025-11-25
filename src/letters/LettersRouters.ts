@@ -8,6 +8,7 @@ import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
+import multer from 'multer';
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -271,3 +272,28 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post('/letters/analyze',
+  (req, res, next) => {
+    // console.log('--- Incoming /letters/analyze ---');
+    // console.log('headers:', req.headers);
+    // console.log('content-length:', req.headers['content-length']);
+    // console.log('socket bytesRead before:', req.socket.bytesRead);
+    // req.on('aborted', () => console.log('req aborted. socket.bytesRead=', req.socket.bytesRead));
+    // req.on('close', () => console.log('req close. socket.bytesRead=', req.socket.bytesRead));
+    next();
+  },
+  upload.single('file'),
+  async (req, res, next) => {
+    try {
+      //console.log('After multer, file present?:', !!req.file, 'bytesRead after multer:', req.socket.bytesRead);
+      if (!req.file) throw new Error("Nie załączono pliku do analizy.");
+      const analysisResult = await LettersController.analyzeDocument(req.file);
+      res.send(analysisResult);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
