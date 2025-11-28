@@ -454,7 +454,7 @@ export default class OffersController {
                 ],
             });
 
-            await milestone.createFolders(auth);
+            await MilestonesController.createFolders(milestone, auth);
             defaultMilestones.push(milestone);
         }
         console.log('Milestones folders created');

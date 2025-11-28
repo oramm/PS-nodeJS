@@ -1,7 +1,7 @@
 import BaseController from '../../../../controllers/BaseController';
+import ToolsDb from '../../../../tools/ToolsDb';
 import CaseType from './CaseType';
 import CaseTypeRepository from './CaseTypeRepository';
-import ToolsDb from '../../../../tools/ToolsDb';
 
 export default class CaseTypesController extends BaseController<
     CaseType,

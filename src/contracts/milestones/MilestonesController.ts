@@ -8,6 +8,13 @@ import { OAuth2Client } from 'google-auth-library';
 import { UserData } from '../../types/sessionTypes';
 import ToolsDb from '../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
+import CaseTypeRepository from './cases/caseTypes/CaseTypeRepository';
+import ToolsGd from '../../tools/ToolsGd';
+import Case from './cases/Case';
+import CaseTemplateRepository from './cases/caseTemplates/CaseTemplateRepository';
+import CaseRepository from './cases/CaseRepository';
+import ProcessInstance from '../../processes/processInstances/ProcessInstance';
+import Task from './cases/tasks/Task';
 
 /**
  * Controller dla Milestone - warstwa orkiestracji
@@ -159,7 +166,7 @@ export default class MilestonesController extends BaseController<
             }
 
             // 1. Utwórz foldery w Google Drive
-            await milestone.createFolders(auth);
+            await MilestonesController.createFolders(milestone, auth);
             console.log('GD folders created');
 
             try {
@@ -169,7 +176,7 @@ export default class MilestonesController extends BaseController<
                 console.log('Milestone added to DB');
 
                 // 3. Utwórz domyślne sprawy (Cases)
-                await milestone.createDefaultCases(auth, {
+                await MilestonesController.createDefaultCases(milestone, auth, {
                     isPartOfBatch: false,
                 });
                 console.log('Default cases created');
@@ -351,5 +358,192 @@ export default class MilestonesController extends BaseController<
         } finally {
             console.groupEnd();
         }
+    }
+
+    /**
+     * Tworzy foldery dla kamienia milowego i jego typów spraw
+     * Orkiestracja: Model (dane) -> Repository (typy spraw) -> ToolsGd (Google Drive)
+     */
+    static async createFolders(milestone: Milestone, auth: OAuth2Client) {
+        const parentGdId =
+            milestone._contract?.gdFolderId || milestone._offer?.gdFolderId;
+        if (!parentGdId)
+            throw new Error('Contract or Offer folder id is not defined');
+
+        // 1. Ustaw numer (jeśli nieunikalny)
+        if (!milestone._type.isUniquePerContract) {
+            // Jeśli to oferta, contractId może nie być ustawione, ale wtedy isUniquePerContract powinno być true?
+            // W starej logice: WHERE TypeId = ? AND ContractId = ?
+            // Jeśli to oferta, to ContractId jest undefined.
+            // Sprawdźmy starą logikę setNumber:
+            // if (!this._type.isUniquePerContract) { ... WHERE ... ContractId = ? ... }
+            // Jeśli to oferta, to ContractId jest null/undefined. Zapytanie zwróci 0.
+            // Czy kamienie w ofertach mogą być nieunikalne?
+            // Zakładamy, że jeśli contractId istnieje, to używamy go.
+
+            if (milestone.contractId) {
+                const repo = new MilestoneRepository();
+                milestone.number = await repo.getNextNumber(
+                    milestone.typeId!,
+                    milestone.contractId
+                );
+            }
+        }
+
+        // 2. Ustaw nazwę folderu (logika w modelu)
+        milestone.setFolderName();
+
+        // 3. Utwórz folder główny kamienia (Google Drive)
+        const folder = await ToolsGd.setFolder(auth, {
+            parentId: parentGdId,
+            name: <string>milestone._folderName,
+        });
+        milestone.setGdFolderIdAndUrl(folder.id as string);
+
+        // 4. Pobierz typy spraw (Repository)
+        const caseTypeRepo = new CaseTypeRepository();
+        const contractTypeId = milestone._contract?._type.id;
+
+        if (!milestone._type.id)
+            throw new Error('Milestone type id is missing');
+
+        const caseTypes = await caseTypeRepo.findByMilestoneType(
+            milestone._type.id,
+            contractTypeId
+        );
+
+        // 5. Utwórz podfoldery dla typów spraw (Google Drive)
+        const promises = [];
+        for (const caseType of caseTypes) {
+            promises.push(
+                ToolsGd.setFolder(auth, {
+                    parentId: <string>folder.id,
+                    name: caseType._folderName,
+                })
+            );
+        }
+        await Promise.all(promises);
+        return folder;
+    }
+
+    /**
+     * Tworzy domyślne sprawy dla kamienia milowego
+     * Orkiestracja: Repository (szablony) -> Model (tworzenie spraw) -> Repository (zapis)
+     */
+    static async createDefaultCases(
+        milestone: Milestone,
+        auth: OAuth2Client,
+        parameters?: { isPartOfBatch: boolean }
+    ) {
+        const defaultCaseItems: Case[] = [];
+        const caseTemplateRepo = new CaseTemplateRepository();
+
+        if (!milestone._type.id)
+            throw new Error('Milestone type id is not defined');
+
+        // 1. Pobierz szablony spraw (Repository)
+        const defaultCaseTemplates = await caseTemplateRepo.findByMilestoneType(
+            milestone._type.id,
+            {
+                isDefaultOnly: true,
+            }
+        );
+
+        console.log(milestone._contract?._type);
+
+        // 2. Utwórz obiekty spraw (Model)
+        for (const template of defaultCaseTemplates) {
+            const caseItem = new Case({
+                name: template.name,
+                description: template.description,
+                _type: template._caseType,
+                _parent: milestone,
+            });
+
+            if (!caseItem._type) throw new Error('caseItem should have _type');
+
+            // Logika biznesowa numeracji
+            if (!caseItem._type.isUniquePerMilestone) {
+                caseItem.number = 1;
+                caseItem.setDisplayNumber();
+            }
+
+            // Operacja GD (zewnętrzna)
+            await caseItem.createFolder(auth);
+            defaultCaseItems.push(caseItem);
+        }
+
+        console.log('default cases folders created');
+
+        // 3. Zapisz sprawy w bazie (Repository)
+        const caseData = await this.addDefaultCasesInDb(defaultCaseItems);
+        console.log('cases saved in db');
+
+        // 4. Dodaj do Scrum (zewnętrzne)
+        await this.addDefaultCasesInScrum(milestone, auth, {
+            casesData: <any>caseData,
+            isPartOfBatch: parameters?.isPartOfBatch,
+        });
+        console.log('milestone added in scrum');
+    }
+
+    private static async addDefaultCasesInDb(caseItems: Case[]) {
+        const caseData = [];
+        const caseRepository = new CaseRepository();
+        let conn: mysql.PoolConnection | undefined;
+        try {
+            conn = await ToolsDb.getPoolConnectionWithTimeout();
+            console.log(
+                'new connection created for adding default cases in db',
+                conn.threadId
+            );
+            await conn.beginTransaction();
+            for (const caseItem of caseItems) {
+                const updatedCaseItem = await caseRepository.addWithRelated(
+                    caseItem,
+                    [],
+                    [],
+                    conn
+                );
+                caseData.push({
+                    caseItem: updatedCaseItem,
+                    processInstances: [],
+                    defaultTasksInDb: [],
+                });
+            }
+            await conn.commit();
+        } catch (error) {
+            console.error('An error occurred:', error);
+            await conn?.rollback();
+            throw error;
+        } finally {
+            conn?.release();
+            console.log(
+                'connection released after adding default cases in db ',
+                conn?.threadId
+            );
+        }
+        return await Promise.all(caseData);
+    }
+
+    private static async addDefaultCasesInScrum(
+        milestone: Milestone,
+        auth: OAuth2Client,
+        parameters: {
+            casesData: [
+                {
+                    caseItem: Case;
+                    processInstances: ProcessInstance[] | undefined;
+                    defaultTasksInDb: Task[];
+                }
+            ];
+            isPartOfBatch?: boolean;
+        }
+    ) {
+        for (const caseData of parameters.casesData)
+            await caseData.caseItem.addInScrum(auth, {
+                defaultTasks: caseData.defaultTasksInDb,
+                isPartOfBatch: parameters.isPartOfBatch,
+            });
     }
 }

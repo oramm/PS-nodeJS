@@ -425,4 +425,18 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             );
         }
     }
+
+    /**
+     * Pobiera następny numer dla kamienia milowego danego typu w kontrakcie
+     */
+    async getNextNumber(typeId: number, contractId: number): Promise<number> {
+        const sql = mysql.format(
+            `SELECT COUNT(*) AS PrevNumber 
+             FROM Milestones 
+             WHERE TypeId = ? AND ContractId = ?`,
+            [typeId, contractId]
+        );
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return (result[0].PrevNumber || 0) + 1;
+    }
 }

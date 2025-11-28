@@ -1,12 +1,9 @@
 import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
-import mysql from 'mysql2/promise';
 import BusinessObject from '../../BussinesObject';
-import ProcessInstance from '../../processes/processInstances/ProcessInstance';
 import CurrentSprint from '../../ScrumSheet/CurrentSprint';
 import Setup from '../../setup/Setup';
 import Tools from '../../tools/Tools';
-import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
 import ToolsSheets from '../../tools/ToolsSheets';
 import {
@@ -19,12 +16,7 @@ import {
     OurOfferData,
 } from '../../types/types';
 import ContractsController from '../ContractsController';
-import Case from './cases/Case';
-import CaseRepository from './cases/CaseRepository';
-import CaseTemplate from './cases/caseTemplates/CaseTemplate';
-import CaseType from './cases/caseTypes/CaseType';
-import Task from './cases/tasks/Task';
-import MilestoneType from './milestoneTypes/MilestoneType';
+import MilestonesController from './MilestonesController';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
@@ -82,27 +74,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
     }
 
-    private async setNumber() {
-        if (!this._type.isUniquePerContract) {
-            const sql = mysql.format(
-                `SELECT COUNT(*) AS PrevNumber 
-                 FROM Milestones 
-                 WHERE TypeId = ? AND ContractId = ?`,
-                [this.typeId, this.contractId]
-            );
-
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            try {
-                var row = result[0];
-                return <number>row.PrevNumber + 1;
-            } catch (err) {
-                throw err;
-            }
-        }
-    }
-
     async getParentContractFromDb() {
         if (!this._contract?.id)
             throw new Error('parent Contract does not have Id');
@@ -132,36 +103,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         );
     }
 
-    /** Służy do tworzenia domyślnych folderów przy dodawaniu pojedynczego milestona
-     */
-    async createFolders(auth: OAuth2Client) {
-        const parentGdId =
-            this._contract?.gdFolderId || this._offer?.gdFolderId;
-        if (!parentGdId)
-            throw new Error('Contract or Offer folder id is not defined');
-
-        this.number = await this.setNumber();
-        this.setFolderName();
-        const folder = await ToolsGd.setFolder(auth, {
-            parentId: parentGdId,
-            name: <string>this._folderName,
-        });
-        this.setGdFolderIdAndUrl(folder.id as string);
-
-        const caseTypes = await this.getCaseTypes();
-        const promises = [];
-        for (const caseType of caseTypes) {
-            promises.push(
-                ToolsGd.setFolder(auth, {
-                    parentId: <string>folder.id,
-                    name: caseType._folderName,
-                })
-            );
-        }
-        await Promise.all(promises);
-        return folder;
-    }
-
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
         if (await this.checkFolder(auth)) {
@@ -171,7 +112,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
                     <string>this.gdFolderId
                 );
             } catch (err) {
-                return await this.createFolders(auth);
+                return await MilestonesController.createFolders(this, auth);
             }
             return await ToolsGd.updateFolder(auth, {
                 name: this._folderName,
@@ -179,106 +120,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             });
         }
         //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
-        else return await this.createFolders(auth);
-    }
-
-    async createDefaultCases(
-        auth: OAuth2Client,
-        parameters?: { isPartOfBatch: boolean }
-    ) {
-        const defaultCaseItems: Case[] = [];
-
-        const defaultCaseTemplates = await this.getCaseTemplates({
-            isDefaultOnly: true,
-        });
-        console.log(this._contract?._type);
-        for (const template of defaultCaseTemplates) {
-            const caseItem = new Case({
-                name: template.name,
-                description: template.description,
-                _type: template._caseType,
-                _parent: this,
-            });
-            if (!caseItem._type) throw new Error('caseItem should have _type');
-            //zasymuluj numer sprawy nieunikalnej. UWAGA: założenie, że przy dodawaniu spraw domyślnych nie będzie więcej niż jedna sprawa tego samego typu
-            if (!caseItem._type.isUniquePerMilestone) {
-                caseItem.number = 1;
-                caseItem.setDisplayNumber();
-            }
-            await caseItem.createFolder(auth);
-            defaultCaseItems.push(caseItem);
-        }
-        console.log('default cases folders created');
-        const caseData = await this.addDefaultCasesInDb(defaultCaseItems);
-        console.log('cases saved in db');
-
-        await this.addDefaultCasesInScrum(auth, {
-            casesData: <any>caseData,
-            isPartOfBatch: parameters?.isPartOfBatch,
-        });
-        console.log('milestone added in scrum');
-    }
-
-    private async addDefaultCasesInDb(caseItems: Case[]) {
-        const caseData = [];
-        const caseRepository = new CaseRepository();
-        let conn: mysql.PoolConnection | undefined;
-        try {
-            conn = await ToolsDb.getPoolConnectionWithTimeout();
-            console.log(
-                'new connection created for adding default cases in db',
-                conn.threadId
-            );
-            await conn.beginTransaction();
-            for (const caseItem of caseItems) {
-                // Użyj CaseRepository zamiast case.addInDb()
-                const updatedCaseItem = await caseRepository.addWithRelated(
-                    caseItem,
-                    [], // processInstances - puste, bo default cases nie mają procesów
-                    [], // defaultTasks - puste, bo default cases nie mają tasków
-                    conn
-                );
-                // Zwróć obiekt w formacie oczekiwanym przez addDefaultCasesInScrum
-                caseData.push({
-                    caseItem: updatedCaseItem,
-                    processInstances: [],
-                    defaultTasksInDb: [],
-                });
-            }
-            await conn.commit();
-            console.groupEnd();
-        } catch (error) {
-            console.error('An error occurred:', error);
-            await conn?.rollback();
-            throw error;
-        } finally {
-            conn?.release();
-            console.log(
-                'connection released after adding default cases in db ',
-                conn?.threadId
-            );
-        }
-        return await Promise.all(caseData);
-    }
-
-    private async addDefaultCasesInScrum(
-        auth: OAuth2Client,
-        parameters: {
-            casesData: [
-                {
-                    caseItem: Case;
-                    processInstances: ProcessInstance[] | undefined;
-                    defaultTasksInDb: Task[];
-                }
-            ];
-            isPartOfBatch?: boolean;
-        }
-    ) {
-        for (const caseData of parameters.casesData)
-            await caseData.caseItem.addInScrum(auth, {
-                defaultTasks: caseData.defaultTasksInDb,
-                isPartOfBatch: parameters.isPartOfBatch,
-            });
+        else return await MilestonesController.createFolders(this, auth);
     }
 
     async editInScrum(auth: OAuth2Client) {
@@ -379,126 +221,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             if (lastRow < 13) {
                 CurrentSprint.makeTimesSummary(auth);
             }
-        }
-    }
-
-    /**
-     * @deprecated Użyj CaseTypeRepository.findByMilestoneType()
-     * REFAKTORING: Logika przeniesiona do CaseTypeRepository
-     */
-    private async getCaseTypes() {
-        const contractTypeId = this._contract?._type.id;
-        const offerTypeId = this._offer?._type.id;
-
-        const sql = `SELECT 
-            CaseTypes.Id,
-            CaseTypes.Name,
-            CaseTypes.FolderNumber,
-            CaseTypes.IsInScrumByDefault,
-            MilestoneTypes.Id AS MilestoneTypeId,
-            MilestoneTypes.Name AS MilestoneTypeName,
-            COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneTypeFolderNumber,
-            COALESCE(MilestoneTypes_ContractTypes.IsDefault, TRUE) AS MilestoneTypeIsDefault
-            FROM CaseTypes
-            JOIN MilestoneTypes ON MilestoneTypes.Id=CaseTypes.MilestoneTypeId AND MilestoneTypes.Id=${
-                this._type.id
-            }
-            LEFT JOIN MilestoneTypes_ContractTypes 
-                ON  MilestoneTypes_ContractTypes.MilestoneTypeId = MilestoneTypes.Id 
-                AND MilestoneTypes_ContractTypes.ContractTypeId= ${
-                    contractTypeId || 0
-                } 
-            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=MilestoneTypes.Id
-            ORDER BY MilestoneTypeId`;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            const newResult: CaseType[] = [];
-            for (const row of result) {
-                const item = new CaseType({
-                    id: row.Id,
-                    name: row.Name,
-                    folderNumber: row.FolderNumber,
-                    isInScrumByDefault: row.IsInScrumByDefault,
-                    _milestoneType: new MilestoneType({
-                        id: row.MilestoneTypeId,
-                        name: row.MilestoneTypeName,
-                        _folderNumber: row.MilestoneTypeFolderNumber,
-                        _isDefault: row.MilestoneTypeIsDefault,
-                    } as MilestoneTypeData),
-                });
-
-                newResult.push(item);
-            }
-            return newResult;
-        } catch (err) {
-            throw err;
-        }
-    }
-
-    /**
-     * @deprecated Użyj CaseTemplateRepository.findByMilestoneType()
-     * REFAKTORING: Logika przeniesiona do CaseTemplateRepository
-     */
-    async getCaseTemplates(initParamObject: {
-        isDefaultOnly?: boolean;
-        isInScrumByDefaultOnly?: boolean;
-    }) {
-        const isDefaultCondition = initParamObject.isDefaultOnly
-            ? 'CaseTypes.IsDefault=TRUE'
-            : '1';
-        const isInScrumDefaultCondition = initParamObject.isInScrumByDefaultOnly
-            ? 'CaseTypes.IsInScrumByDefault=TRUE'
-            : '1';
-        const sql = `SELECT CaseTemplates.Id,
-            CaseTemplates.Name,
-            CaseTemplates.Description,
-            CaseTypes.Id AS CaseTypeId,
-            CaseTypes.Name AS CaseTypeName,
-            CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-            CaseTypes.IsInScrumByDefault  AS CaseTypeIsInScrumByDefault,
-            CaseTypes.IsUniquePerMilestone  AS CaseTypeIsUniquePerMilestone,
-            CaseTypes.IsDefault AS CaseTypeIsDefault,
-            MilestoneTypes.Id AS MilestoneTypeId,
-            MilestoneTypes.Name AS MilestoneTypeName,
-            NULL AS MilestoneTypeIsDefault -- parametr niedostępny
-            FROM CaseTemplates
-            JOIN CaseTypes ON CaseTypes.Id=CaseTemplates.CaseTypeId
-            JOIN MilestoneTypes ON CaseTypes.MilestoneTypeId=MilestoneTypes.Id
-            WHERE ${isDefaultCondition} AND ${isInScrumDefaultCondition} AND MilestoneTypes.Id=${this._type.id}`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        try {
-            const newResult: CaseTemplate[] = [];
-            for (const row of result) {
-                const item = new CaseTemplate({
-                    id: row.Id,
-                    name: row.Name,
-                    description: row.Description,
-                    templateComment: '',
-                    _caseType: new CaseType({
-                        id: row.CaseTypeId,
-                        name: row.CaseTypeName,
-                        folderNumber: row.CaseTypeFolderNumber,
-                        isDefault: row.CaseTypeIsDefault,
-                        isInScrumByDefault: row.CaseTypeIsInScrumByDefault,
-                        isUniquePerMilestone: row.CaseTypeIsUniquePerMilestone,
-                        _milestoneType: new MilestoneType({
-                            id: row.MilestoneTypeId,
-                            name: row.MilestoneTypeName,
-                            _isDefault: row.MilestoneTypeIsDefault,
-                        } as MilestoneTypeData),
-                    }),
-                    caseTypeId: row.CaseTypeId,
-                });
-
-                newResult.push(item);
-            }
-            return newResult;
-        } catch (err) {
-            throw err;
         }
     }
 }

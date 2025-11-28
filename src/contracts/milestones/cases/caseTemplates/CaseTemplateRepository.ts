@@ -1,9 +1,9 @@
 import BaseRepository from '../../../../repositories/BaseRepository';
-import CaseTemplate from './CaseTemplate';
 import ToolsDb from '../../../../tools/ToolsDb';
-import CaseType from '../caseTypes/CaseType';
-import MilestoneType from '../../milestoneTypes/MilestoneType';
 import { MilestoneTypeData } from '../../../../types/types';
+import MilestoneType from '../../milestoneTypes/MilestoneType';
+import CaseType from '../caseTypes/CaseType';
+import CaseTemplate from './CaseTemplate';
 
 export default class CaseTemplateRepository extends BaseRepository<CaseTemplate> {
     constructor() {

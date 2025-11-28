@@ -1,34 +1,33 @@
+import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
-import Entity from '../entities/Entity';
-import ToolsDb from '../tools/ToolsDb';
-import ToolsSheets from '../tools/ToolsSheets';
-import ContractOther from './ContractOther';
-import ContractOur from './ContractOur';
-import CurrentSprint from '../ScrumSheet/CurrentSprint';
-import ContractType from './contractTypes/ContractType';
+import BaseController from '../controllers/BaseController';
+import Person from '../persons/Person';
 import Project from '../projects/Project';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
+import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
+import ToolsDb from '../tools/ToolsDb';
+import ToolsSheets from '../tools/ToolsSheets';
 import {
     CityData,
     ContractRangePerContractData,
     ContractTypeData,
 } from '../types/types';
-import Person from '../persons/Person';
+import Contract from './Contract';
+import ContractEntityRepository from './ContractEntityRepository';
+import ContractOther from './ContractOther';
+import ContractOur from './ContractOur';
+import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
 import ContractRepository from './ContractRepository';
-import BaseController from '../controllers/BaseController';
-import ContractEntityRepository from './ContractEntityRepository';
-import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
-import { OAuth2Client } from 'google-auth-library';
-import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
-import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
-import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
-import MilestonesController from './milestones/MilestonesController';
+import ContractType from './contractTypes/ContractType';
+import Task from './milestones/cases/tasks/Task';
 import TasksController from './milestones/cases/tasks/TasksController';
 import Milestone from './milestones/Milestone';
-import Contract from './Contract';
-import Task from './milestones/cases/tasks/Task';
+import MilestonesController from './milestones/MilestonesController';
+import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 
 export type ContractSearchParams = {
     id?: number;
@@ -1105,7 +1104,7 @@ export default class ContractsController extends BaseController<
             if (!milestone._type.isUniquePerContract) {
                 milestone.number = 1;
             }
-            await milestone.createFolders(auth);
+            await MilestonesController.createFolders(milestone, auth);
             defaultMilestones.push(milestone);
         }
         console.log('Milestones folders created');
@@ -1116,7 +1115,9 @@ export default class ContractsController extends BaseController<
             console.group(
                 `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
             );
-            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+            await MilestonesController.createDefaultCases(milestone, auth, {
+                isPartOfBatch: true,
+            });
         }
         console.groupEnd();
 

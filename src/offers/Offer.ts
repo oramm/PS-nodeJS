@@ -254,7 +254,7 @@ export default abstract class Offer
                 ],
             });
 
-            await milestone.createFolders(auth);
+            await MilestonesController.createFolders(milestone, auth);
             defaultMilestones.push(milestone);
         }
         console.log('Milestones folders created');
@@ -265,7 +265,9 @@ export default abstract class Offer
             console.group(
                 `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
             );
-            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
+            await MilestonesController.createDefaultCases(milestone, auth, {
+                isPartOfBatch: true,
+            });
         }
         console.groupEnd();
     }

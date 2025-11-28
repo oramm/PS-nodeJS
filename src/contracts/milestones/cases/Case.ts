@@ -1,19 +1,16 @@
+import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import BusinessObject from '../../../BussinesObject';
-import { OAuth2Client } from 'google-auth-library';
-import Task from './tasks/Task';
-import ToolsGd from '../../../tools/ToolsGd';
-import Setup from '../../../setup/Setup';
-import ToolsSheets from '../../../tools/ToolsSheets';
-import Tools from '../../../tools/Tools';
-import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
-import mysql from 'mysql2/promise';
 import CurrentSprint from '../../../ScrumSheet/CurrentSprint';
-import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
-import CaseType from './caseTypes/CaseType';
+import Setup from '../../../setup/Setup';
+import Tools from '../../../tools/Tools';
+import ToolsGd from '../../../tools/ToolsGd';
+import ToolsSheets from '../../../tools/ToolsSheets';
 import { CaseData, MilestoneData } from '../../../types/types';
+import CaseType from './caseTypes/CaseType';
+import Task from './tasks/Task';
 import TasksController from './tasks/TasksController';
-import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
+import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class Case extends BusinessObject implements CaseData {
     id?: number;
