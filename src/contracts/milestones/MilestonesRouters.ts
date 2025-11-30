@@ -58,7 +58,14 @@ app.post('/milestone', async (req: Request, res: Response, next) => {
 app.put('/milestone/:id', async (req: Request, res: Response, next) => {
     try {
         const milestone = new Milestone(req.parsedBody);
-        milestone._contract = await milestone.getParentContractFromDb();
+
+        // Pobierz parent contract przez Controller (Clean Architecture)
+        if (milestone._contract?.id) {
+            const contracts = await ContractsController.find([
+                { id: milestone._contract.id },
+            ]);
+            milestone._contract = contracts[0];
+        }
 
         // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
         const result = await MilestonesController.edit(
@@ -80,7 +87,14 @@ app.put(
         try {
             const item = req.parsedBody as MilestoneDateData;
             const milestone = new Milestone(req.parsedBody._milestone);
-            milestone._contract = await milestone.getParentContractFromDb();
+
+            // Pobierz parent contract przez Controller (Clean Architecture)
+            if (milestone._contract?.id) {
+                const contracts = await ContractsController.find([
+                    { id: milestone._contract.id },
+                ]);
+                milestone._contract = contracts[0];
+            }
 
             // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
             await MilestonesController.edit(

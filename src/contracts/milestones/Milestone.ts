@@ -15,8 +15,6 @@ import {
     OurContractData,
     OurOfferData,
 } from '../../types/types';
-import ContractsController from '../ContractsController';
-import MilestonesController from './MilestonesController';
 
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
@@ -74,12 +72,6 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
     }
 
-    async getParentContractFromDb() {
-        if (!this._contract?.id)
-            throw new Error('parent Contract does not have Id');
-        return (await ContractsController.find([{ id: this._contract.id }]))[0];
-    }
-
     setFolderName() {
         if (this._type.isUniquePerContract)
             this._folderName = this._type._folderNumber + ' ' + this._type.name;
@@ -103,24 +95,58 @@ export default class Milestone extends BusinessObject implements MilestoneData {
         );
     }
 
-    async editFolder(auth: OAuth2Client) {
-        //sytuacja normalna - folder itnieje
-        if (await this.checkFolder(auth)) {
-            try {
-                await ToolsGd.getFileOrFolderMetaDataById(
-                    auth,
-                    <string>this.gdFolderId
-                );
-            } catch (err) {
-                return await MilestonesController.createFolders(this, auth);
-            }
-            return await ToolsGd.updateFolder(auth, {
+    /**
+     * Aktualizuje nazwę folderu w Google Drive
+     * UWAGA: Jeśli folder nie istnieje, zwraca false (Controller powinien wtedy wywołać createFolders)
+     *
+     * @param auth - OAuth2Client dla operacji GD
+     * @returns true jeśli folder został zaktualizowany, false jeśli folder nie istnieje
+     */
+    async updateFolderName(auth: OAuth2Client): Promise<boolean> {
+        // Folder nie istnieje - sygnalizujemy to Controllerowi
+        if (!(await this.checkFolder(auth))) {
+            return false;
+        }
+
+        // Folder istnieje - sprawdź czy jest dostępny i zaktualizuj
+        try {
+            await ToolsGd.getFileOrFolderMetaDataById(
+                auth,
+                <string>this.gdFolderId
+            );
+            await ToolsGd.updateFolder(auth, {
                 name: this._folderName,
                 id: this.gdFolderId,
             });
+            return true;
+        } catch (err) {
+            // Folder istnieje ale jest niedostępny - sygnalizujemy to Controllerowi
+            return false;
         }
-        //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
-        else return await MilestonesController.createFolders(this, auth);
+    }
+
+    /**
+     * @deprecated Użyj MilestonesController.editFolder() zamiast tego.
+     * Model nie powinien wywoływać Controller (Clean Architecture).
+     *
+     * MIGRACJA:
+     * ```typescript
+     * // STARE:
+     * await milestone.editFolder(auth);
+     *
+     * // NOWE:
+     * await MilestonesController.editFolder(milestone, auth);
+     * ```
+     */
+    async editFolder(auth: OAuth2Client): Promise<void> {
+        // Próbuj zaktualizować folder
+        const updated = await this.updateFolderName(auth);
+        if (!updated) {
+            // Folder nie istnieje - rzuć błąd (Controller powinien obsłużyć tworzenie)
+            throw new Error(
+                'Folder does not exist or is inaccessible. Use MilestonesController.editFolder() instead.'
+            );
+        }
     }
 
     async editInScrum(auth: OAuth2Client) {

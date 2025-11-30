@@ -182,7 +182,7 @@ export default class MilestonesController extends BaseController<
                 console.log('Default cases created');
 
                 // 4. Edytuj folder (zaktualizuj nazwę z numerem)
-                await milestone.editFolder(auth);
+                await this.editMilestoneFolder(auth, milestone);
                 console.log('Folder name updated');
 
                 return milestone;
@@ -282,7 +282,7 @@ export default class MilestonesController extends BaseController<
             // 2. Równolegle: GD + Scrum (jeśli nie tylko DB fields)
             if (!isOnlyDbFields) {
                 await Promise.all([
-                    milestone.editFolder(auth),
+                    this.editMilestoneFolder(auth, milestone),
                     milestone.editInScrum(auth),
                 ]);
                 console.log('Milestone folder edited in GD');
@@ -290,6 +290,64 @@ export default class MilestonesController extends BaseController<
             }
 
             return milestone;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    /**
+     * API PUBLICZNE - Aktualizuje folder Milestone w Google Drive
+     * Jeśli folder nie istnieje, tworzy go wraz z podfolderami.
+     *
+     * REFAKTORING: Logika przeniesiona z Milestone.editFolder() (Clean Architecture)
+     * Model nie powinien wywoływać Controller.
+     *
+     * @param milestone - Milestone z danymi folderu
+     * @param auth - OAuth2Client dla operacji GD
+     * @returns Promise<void>
+     */
+    static async editFolder(
+        milestone: Milestone,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: MilestonesController,
+                authClient: OAuth2Client
+            ) => {
+                return await instance.editMilestoneFolder(
+                    authClient,
+                    milestone
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA - Aktualizuje lub tworzy folder Milestone
+     *
+     * Przepływ:
+     * 1. Próbuj zaktualizować nazwę folderu (Model.updateFolderName)
+     * 2. Jeśli folder nie istnieje → utwórz foldery (createFolders)
+     */
+    private async editMilestoneFolder(
+        auth: OAuth2Client,
+        milestone: Milestone
+    ): Promise<void> {
+        console.group('MilestonesController.editMilestoneFolder()');
+        try {
+            // Próbuj zaktualizować folder
+            const updated = await milestone.updateFolderName(auth);
+
+            if (updated) {
+                console.log('Milestone folder updated');
+            } else {
+                // Folder nie istnieje - utwórz go
+                console.log('Folder does not exist, creating...');
+                await MilestonesController.createFolders(milestone, auth);
+                console.log('Milestone folder created');
+            }
         } finally {
             console.groupEnd();
         }
