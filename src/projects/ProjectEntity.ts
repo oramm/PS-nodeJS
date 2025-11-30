@@ -1,10 +1,10 @@
 import BusinessObject from '../BussinesObject';
 import Entity from '../entities/Entity';
-import Project from './Project';
+import { ProjectData } from '../types/types';
 
 export default class ProjectEntity extends BusinessObject {
     projectId: number;
-    _project: Project;
+    _project: ProjectData;
     entityId: number | undefined;
     _entity: Entity;
     projectRole: 'EMPLOYER' | 'ENGINEER';
