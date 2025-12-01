@@ -1,7 +1,7 @@
 # Refactoring Guide: Migracja do withAuth Pattern
 
-**Wersja:** 1.0  
-**Data:** 2025-11-11  
+**Wersja:** 1.1  
+**Data:** 2025-12-01  
 **Status:** OBOWIĄZUJĄCY  
 **Priorytet:** ŚREDNI
 
@@ -35,9 +35,31 @@ Migracja modułów używających `ToolsGapi.gapiReguestHandler` do nowego wzorca
     - Controller: Wszystkie metody OAuth (`addNewOurLetter`, `addNewIncomingLetter`, `editLetter`, `exportToPDF`, `approveLetter`, `appendAttachments`, `deleteFromGd`) z `withAuth`
     - Router: Wszystkie główne endpointy zmigrowane (POST /letterReact, PUT /letter/:id, PUT /exportOurLetterToPDF, PUT /approveOurLetter/:id, PUT /appendLetterAttachments/:id, DELETE /letter/:id)
     - Uwaga: Endpoint testowy `/testLetter/:mode` pozostaje z `gapiReguestHandler` (niska priorytet)
-8. ⏳ **Offers** - DO ZROBIENIA
+8. ⏳ **Offers** - DO ZROBIENIA (średnia złożoność, przy okazji dodać testy `add()`/`edit()`)
 9. ✅ **Contracts** - ZAKOŃCZONE (2025-11-14) – pełny CRUD + routery w `withAuth`
-10. ⏳ **Meetings** - DO ZROBIENIA
+10. ⏳ **Meetings** - DO ZROBIENIA (niska złożoność)
+
+---
+
+## ⚠️ UWAGA: Wzorzec `new Model(req.body)` w Routerze
+
+W tym dokumencie są przykłady z wzorcem:
+
+```typescript
+const item = new X(req.parsedBody);
+await XController.add(item);
+```
+
+**Ten wzorzec jest LEGACY** - tolerowany w istniejącym kodzie po OAuth-refactoringu.
+
+**Nowy kod powinien używać:**
+
+```typescript
+// Router przekazuje DTO, Controller tworzy Model
+const result = await XController.addFromDto(req.parsedBody);
+```
+
+Szczegóły: [architektura.instructions.md - Standard Nazewnictwa CRUD](./architektura.instructions.md)
 
 ---
 
@@ -186,6 +208,10 @@ private async deleteItem(auth: OAuth2Client, item: X): Promise<void> { /* logika
 
 ### **Krok 4: Router - Uproszczenie (bez gapiReguestHandler)**
 
+> ⚠️ **UWAGA:** Ten krok pokazuje **tylko refaktoring OAuth** (eliminację `gapiReguestHandler`).
+> Wzorzec `new X(req.parsedBody)` w Routerze jest **LEGACY** - tolerowany po OAuth-refactoringu.
+> Docelowy wzorzec architektoniczny: `XController.addFromDto(dto)` - patrz [architektura.instructions.md](./architektura.instructions.md#standard-nazewnictwa-crud).
+
 ```typescript
 // ❌ PRZED - skomplikowane, podatne na błędy
 import ToolsGapi from '../../../setup/Sessions/ToolsGapi';
@@ -208,12 +234,12 @@ app.post('/x', async (req: Request, res: Response, next) => {
     }
 });
 
-// ✅ PO - proste, type-safe
+// ✅ PO (OAuth) - eliminacja gapiReguestHandler
 // USUŃ import ToolsGapi
 
 app.post('/x', async (req: Request, res: Response, next) => {
     try {
-        const item = new X(req.parsedBody);
+        const item = new X(req.parsedBody); // ⚠️ LEGACY - patrz uwaga powyżej
 
         // ✅ Bezpośrednie wywołanie - withAuth zarządza auth wewnętrznie
         const result = await XController.add(item);
@@ -224,12 +250,21 @@ app.post('/x', async (req: Request, res: Response, next) => {
     }
 });
 
+// ✅✅ DOCELOWY WZORZEC (architektura v2.0) - Router przekazuje DTO
+app.post('/x', async (req: Request, res: Response, next) => {
+    try {
+        // ✅ Controller tworzy Model, nie Router
+        const result = await XController.addFromDto(req.parsedBody);
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.put('/x/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = new X(req.parsedBody);
-
+        const item = new X(req.parsedBody); // ⚠️ LEGACY
         const result = await XController.edit(item);
-
         res.send(result);
     } catch (error) {
         next(error);
@@ -238,10 +273,8 @@ app.put('/x/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/x/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = new X(req.body);
-
+        const item = new X(req.body); // ⚠️ LEGACY
         await XController.delete(item);
-
         res.send(item);
     } catch (error) {
         next(error);
@@ -253,6 +286,19 @@ app.delete('/x/:id', async (req: Request, res: Response, next) => {
 
 ### **Krok 5: Model - Przekazywanie auth (jeśli wywołuje Controller)**
 
+> ⚠️ **INSTRUKCJA PRZEJŚCIOWA** dla istniejących wywołań Model → Controller.
+>
+> **NOWY KOD NIE MOŻE tworzyć takich zależności!**
+> Model importujący Controller tworzy **cykl zależności** - jest to zabronione.
+>
+> Szczegóły: [architektura-szczegoly.md - Unikanie Cykli Zależności](./architektura-szczegoly.md#7-unikanie-cykli-zależności)
+>
+> **Dozwolone rozwiązania dla nowego kodu:**
+>
+> 1. Controller orkiestruje wywołania (Model nie wie o innych Controllerach)
+> 2. Dependency Injection przez parametry (funkcja jako argument)
+> 3. Wydzielenie współdzielonej logiki do osobnego modułu
+
 ```typescript
 // ❌ PRZED - Model wywołuje Controller bez przekazywania auth
 async createRelatedItem(auth: OAuth2Client) {
@@ -261,11 +307,27 @@ async createRelatedItem(auth: OAuth2Client) {
     return result;
 }
 
-// ✅ PO - Model przekazuje auth do Controller
+// ✅ PO (LEGACY) - Model przekazuje auth do Controller
+// Tolerowane w istniejącym kodzie, ale NIE kopiuj tego wzorca!
 async createRelatedItem(auth: OAuth2Client) {
     const item = new X({...});
     const result = await XController.add(item, auth);  // ✅ Używa istniejącego auth
     return result;
+}
+
+// ✅✅ DOCELOWO - Controller orkiestruje, Model nie importuje Controllera
+// W Controller:
+static async addWithRelated(item: X, auth?: OAuth2Client): Promise<X> {
+    return await this.withAuth<X>(
+        async (instance, authClient) => {
+            const result = await instance.addItem(authClient, item);
+            // Controller tworzy powiązany obiekt, NIE Model
+            const related = new Related({...});
+            await RelatedController.add(related, authClient);
+            return result;
+        },
+        auth
+    );
 }
 ```
 

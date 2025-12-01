@@ -257,7 +257,13 @@ router.post('/letters', async (req, res) => {
     res.send(letter);
 });
 
-// ✅ POPRAWNIE - tylko wywołanie Controller:
+// ✅ POPRAWNIE - Router przekazuje DTO do Controller:
+router.post('/letters', async (req, res) => {
+    const result = await LettersController.addFromDto(req.parsedBody);
+    res.send(result);
+});
+
+// ⚠️ LEGACY (tolerowane w istniejącym kodzie, nie kopiuj):
 router.post('/letters', async (req, res) => {
     const letter = LettersController.createProperLetter(req.body);
     await LettersController.add(letter);
@@ -298,10 +304,11 @@ Przed zatwierdzeniem kodu sprawdź:
 -   [ ] ❌ Repository **NIE** ma `if (item.validate())` ani kalkulacji
 -   [ ] ❌ Router **NIE** ma `new Model()` ani logiki biznesowej
 -   [ ] ❌ Repository **NIE** zarządza transakcjami (`ToolsDb.transaction`)
--   [ ] ✅ Przepływ: Router → Controller → Repository → Model
+-   [ ] ✅ Przepływ: Router → Controller.addFromDto() → Controller.add() → Repository → Model
 -   [ ] ✅ Controller zarządza transakcjami
 -   [ ] ✅ Repository dziedziczy po `BaseRepository<T>`
 -   [ ] ✅ Controller dziedziczy po `BaseController<T, R>`
+-   [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./architektura-szczegoly.md#7-unikanie-cykli-zależności))
 
 ---
 
@@ -316,7 +323,7 @@ export class Item extends BusinessObject {
     price: number;
 
     validate(): boolean {
-        return !!this.name && this.price > 0; // Logika biznesowa
+        return !!this.name && this.price > 0; // Logika biznesowa - invarianty
     }
 }
 
@@ -358,7 +365,20 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
         return this.instance;
     }
 
-    static async add(item: Item): Promise<Item> {
+    // ✅ PUBLIC API - Router wywołuje tę metodę
+    static async addFromDto(dto: ItemDto, auth?: OAuth2Client): Promise<Item> {
+        // 1. Walidacja (jeśli potrzebna)
+        // ItemValidator.validateItemTypeData(dto);
+
+        // 2. Tworzenie instancji Model (TU, nie w Routerze!)
+        const item = new Item(dto);
+
+        // 3. Delegacja do kanonicznej metody
+        return await this.add(item, auth);
+    }
+
+    // ✅ KANONICZNA METODA - używana wewnętrznie i w testach
+    static async add(item: Item, auth?: OAuth2Client): Promise<Item> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(item, conn, true);
@@ -373,11 +393,11 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
 }
 
 // 4. ROUTER (routers/ItemsRouters.ts)
+// ✅ DOCELOWY WZORZEC - Router przekazuje DTO, nie tworzy Model
 router.post('/items', async (req, res, next) => {
     try {
-        const item = new Item(req.body);
-        await ItemsController.add(item);
-        res.send(item);
+        const result = await ItemsController.addFromDto(req.parsedBody);
+        res.send(result);
     } catch (error) {
         next(error);
     }
