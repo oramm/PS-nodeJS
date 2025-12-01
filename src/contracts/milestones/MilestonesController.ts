@@ -13,6 +13,7 @@ import ToolsGd from '../../tools/ToolsGd';
 import Case from './cases/Case';
 import CaseTemplateRepository from './cases/caseTemplates/CaseTemplateRepository';
 import CaseRepository from './cases/CaseRepository';
+import CasesController from './cases/CasesController';
 import ProcessInstance from '../../processes/processInstances/ProcessInstance';
 import Task from './cases/tasks/Task';
 
@@ -599,9 +600,11 @@ export default class MilestonesController extends BaseController<
         }
     ) {
         for (const caseData of parameters.casesData)
-            await caseData.caseItem.addInScrum(auth, {
-                defaultTasks: caseData.defaultTasksInDb,
-                isPartOfBatch: parameters.isPartOfBatch,
-            });
+            await CasesController.addInScrum(
+                caseData.caseItem,
+                auth,
+                caseData.defaultTasksInDb,
+                parameters.isPartOfBatch
+            );
     }
 }

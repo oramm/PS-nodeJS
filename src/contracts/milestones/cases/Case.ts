@@ -9,7 +9,6 @@ import ToolsSheets from '../../../tools/ToolsSheets';
 import { CaseData, MilestoneData } from '../../../types/types';
 import CaseType from './caseTypes/CaseType';
 import Task from './tasks/Task';
-import TasksController from './tasks/TasksController';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class Case extends BusinessObject implements CaseData {
@@ -209,56 +208,6 @@ export default class Case extends BusinessObject implements CaseData {
         });
     }
 
-    /**
-     * Dodaje sprawę do arkusza danych i domyślne zadania do scrumboarda
-     */
-    async addInScrum(
-        auth: OAuth2Client,
-        parameters: {
-            defaultTasks: Task[];
-            isPartOfBatch?: boolean;
-        }
-    ) {
-        const caseData = [
-            this.id,
-            this.typeId,
-            this.milestoneId,
-            this.makenameCaption(),
-            this.gdFolderId ? this.gdFolderId : '',
-        ];
-        let scrumDataValues = <any[][]>(
-            await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.Data.name,
-            })
-        ).values;
-
-        if (
-            !Tools.findFirstInRange(
-                <number>this.id,
-                scrumDataValues,
-                scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)
-            )
-        )
-            ToolsSheets.appendRowsToSpreadSheet(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                sheetName: Setup.ScrumSheet.Data.name,
-                values: [caseData],
-            });
-        console.log(`added case ${this._type.name} do sheet "Data"`);
-        //dodaj sprawę do arkusza currentSprint
-        console.groupCollapsed('adding default tasks to scrumboard');
-        for (const task of parameters.defaultTasks)
-            await TasksController.addInScrum(
-                task,
-                auth,
-                undefined,
-                parameters.isPartOfBatch
-            );
-        console.log('default tasks added to scrumboard');
-        console.groupEnd();
-    }
-
     async editInScrum(auth: OAuth2Client) {
         await Promise.all([
             this.editInDataSheet(auth),
@@ -361,7 +310,8 @@ export default class Case extends BusinessObject implements CaseData {
         }
     }
 
-    private makenameCaption() {
+    /** Publiczna dla CasesController.addInScrum() */
+    makenameCaption() {
         let nameCaption;
         if (this.gdFolderId && this.name)
             nameCaption = `=HYPERLINK("${this._gdFolderUrl}";"${this.name}")`;

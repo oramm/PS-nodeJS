@@ -9,6 +9,9 @@ import TasksController from './tasks/TasksController';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 import TasksTemplatesForProcessesController from './tasks/taskTemplates/TasksTemplatesForProcessesController';
 import BaseController from '../../../controllers/BaseController';
+import ToolsSheets from '../../../tools/ToolsSheets';
+import Tools from '../../../tools/Tools';
+import Setup from '../../../setup/Setup';
 
 export default class CasesController extends BaseController<
     Case,
@@ -141,10 +144,7 @@ export default class CasesController extends BaseController<
                     .editFolder(auth)
                     .then(() => console.log('folder name corrected'))
                     .catch((err) => console.log(err)),
-                caseItem
-                    .addInScrum(auth, {
-                        defaultTasks: defaultTasks,
-                    })
+                CasesController.addInScrum(caseItem, auth, defaultTasks)
                     .then(() => console.log('added in scrum'))
                     .catch((err) => console.log(err)),
             ]);
@@ -193,8 +193,12 @@ export default class CasesController extends BaseController<
         for (const process of caseItem._type._processes) {
             // utwórz obiekt zadania na podstawie szablonu, ale NIE zapisuj go teraz do DB
             // (zapisywanie nastąpi w repository.addWithRelated po dodaniu Case)
-            const templates = await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList({ processId: process.id });
-            const taskTemplate = templates && templates.length > 0 ? templates[0] : undefined;
+            const templates =
+                await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(
+                    { processId: process.id }
+                );
+            const taskTemplate =
+                templates && templates.length > 0 ? templates[0] : undefined;
             if (!taskTemplate) continue;
 
             const processInstanceTask = new Task({
@@ -371,6 +375,61 @@ export default class CasesController extends BaseController<
             },
             auth
         );
+    }
+
+    /**
+     * Dodaje Case do arkusza Scrum i domyślne zadania do scrumboarda
+     * PRZENIESIONE Z Case.ts - Controller orkiestruje inne Controllery
+     *
+     * @param caseItem - Case do dodania do Scrum
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param defaultTasks - Lista domyślnych zadań do dodania
+     * @param isPartOfBatch - Czy jest częścią większej operacji
+     */
+    static async addInScrum(
+        caseItem: Case,
+        auth: OAuth2Client,
+        defaultTasks: Task[],
+        isPartOfBatch?: boolean
+    ): Promise<void> {
+        const caseData = [
+            caseItem.id,
+            caseItem.typeId,
+            caseItem.milestoneId,
+            caseItem.makenameCaption(),
+            caseItem.gdFolderId ? caseItem.gdFolderId : '',
+        ];
+        let scrumDataValues = <any[][]>(
+            await ToolsSheets.getValues(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                rangeA1: Setup.ScrumSheet.Data.name,
+            })
+        ).values;
+
+        if (
+            !Tools.findFirstInRange(
+                <number>caseItem.id,
+                scrumDataValues,
+                scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)
+            )
+        )
+            ToolsSheets.appendRowsToSpreadSheet(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                sheetName: Setup.ScrumSheet.Data.name,
+                values: [caseData],
+            });
+        console.log(`added case ${caseItem._type.name} do sheet "Data"`);
+        //dodaj sprawę do arkusza currentSprint
+        console.groupCollapsed('adding default tasks to scrumboard');
+        for (const task of defaultTasks)
+            await TasksController.addInScrum(
+                task,
+                auth,
+                undefined,
+                isPartOfBatch
+            );
+        console.log('default tasks added to scrumboard');
+        console.groupEnd();
     }
 
     /**
