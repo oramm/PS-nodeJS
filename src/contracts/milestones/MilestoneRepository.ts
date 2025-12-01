@@ -2,7 +2,7 @@ import BaseRepository from '../../repositories/BaseRepository';
 import Milestone from './Milestone';
 import ToolsDb from '../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import { OfferData } from '../../types/types';
+import { MilestoneParentType, OfferData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 
@@ -12,8 +12,6 @@ export type MilestonesSearchParams = {
     typeId?: number;
     offerId?: number;
 };
-
-export type MilestoneParentType = 'CONTRACT' | 'OFFER';
 
 /**
  * Repository dla Milestone - warstwa dostępu do danych

@@ -3,7 +3,7 @@ import MilestoneDate from './MilestoneDate';
 import MilestoneDateRepository, {
     MilestoneDatesSearchParams,
 } from './MilestoneDateRepository';
-import { MilestoneParentType } from '../../MilestoneRepository';
+import { MilestoneParentType } from '../../../../types/types';
 import { MilestoneDateData } from '../../../../types/types';
 import { UserData } from '../../../../types/sessionTypes';
 

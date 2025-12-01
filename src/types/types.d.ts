@@ -4,6 +4,9 @@ export interface RepositoryDataItem {
     id?: number;
 }
 
+/** Typ rodzica Milestone - Contract lub Offer */
+export type MilestoneParentType = 'CONTRACT' | 'OFFER';
+
 export interface ProjectData extends RepositoryDataItem {
     ourId: string;
     name: string;

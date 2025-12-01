@@ -2,8 +2,8 @@ import BaseController from '../../controllers/BaseController';
 import Milestone from './Milestone';
 import MilestoneRepository, {
     MilestonesSearchParams,
-    MilestoneParentType,
 } from './MilestoneRepository';
+import { MilestoneParentType } from '../../types/types';
 import { OAuth2Client } from 'google-auth-library';
 import { UserData } from '../../types/sessionTypes';
 import ToolsDb from '../../tools/ToolsDb';

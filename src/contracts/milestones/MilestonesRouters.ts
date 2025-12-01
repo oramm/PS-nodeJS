@@ -1,5 +1,5 @@
 import MilestonesController from './MilestonesController';
-import { MilestoneParentType } from './MilestoneRepository';
+import { MilestoneParentType } from '../../types/types';
 import { app } from '../../index';
 import Milestone from './Milestone';
 import { Request, Response } from 'express';

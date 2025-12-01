@@ -8,13 +8,13 @@ import Milestone from '../../Milestone';
 import {
     ContractTypeData,
     MilestoneDateData,
+    MilestoneParentType,
     OfferData,
     OtherContractData,
     OurContractData,
     PersonData,
     ProjectData,
 } from '../../../../types/types';
-import { MilestoneParentType } from '../../MilestoneRepository';
 
 export type MilestoneDatesSearchParams = {
     searchText?: string;
