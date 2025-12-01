@@ -1,6 +1,5 @@
 import Person from '../persons/Person';
 import Contract from './Contract';
-import ContractsController from './ContractsController';
 import ToolsDb from '../tools/ToolsDb';
 import { auth, OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../tools/ToolsSheets';

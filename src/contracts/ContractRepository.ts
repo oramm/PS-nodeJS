@@ -13,7 +13,7 @@ import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ToolsDb from '../tools/ToolsDb';
 import Setup from '../setup/Setup';
-import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
+import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import Tools from '../tools/Tools';
 import Entity from '../entities/Entity';
 
@@ -300,6 +300,8 @@ export default class ContractRepository extends BaseRepository<
         return wordGroups.join(' AND ');
     }
 
+    private rangeRepository = new ContractRangeContractRepository();
+
     private async setContractPartsbySearchParams(
         searchParams: ContractSearchParams
     ) {
@@ -312,14 +314,14 @@ export default class ContractRepository extends BaseRepository<
                 contractId: searchParams.id,
                 isArchived: searchParams.isArchived,
             });
-            rangesPerContract =
-                await ContractRangesContractsController.getContractRangesContractsList(
-                    [
-                        {
-                            contractId: searchParams.id,
-                        },
-                    ]
-                );
+            // Użyj Repository zamiast Controller (Clean Architecture)
+            const rangeAssociations = await this.rangeRepository.find({
+                contractId: searchParams.id,
+            });
+            rangesPerContract = rangeAssociations.map((assoc) => ({
+                _contractRange: assoc._contractRange,
+                associationComment: assoc.associationComment,
+            }));
         }
         return { entitiesPerProject, rangesPerContract };
     }

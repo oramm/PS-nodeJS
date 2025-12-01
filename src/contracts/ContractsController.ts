@@ -923,7 +923,9 @@ export default class ContractsController extends BaseController<
         }
         return newResult;
     }
-
+    /** @deprecated
+     * @todo: do usunięcia po fazie migracji
+     */
     private static processContractsResultKeyData(
         result: any[],
         initParamObject: any
