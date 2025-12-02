@@ -1,30 +1,19 @@
-import City from '../Admin/Cities/City';
+import { OAuth2Client } from 'google-auth-library';
 import BusinessObject from '../BussinesObject';
-import mysql from 'mysql2/promise';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import Setup from '../setup/Setup';
+import EnviErrors from '../tools/Errors';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsGd from '../tools/ToolsGd';
 import {
     CityData,
     ContractTypeData,
-    MilestoneDateData as MilestoneDateData,
     OfferData,
     OfferEventData,
 } from '../types/types';
-import { OAuth2Client } from 'google-auth-library';
-import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
-import Milestone from '../contracts/milestones/Milestone';
-import ToolsDb from '../tools/ToolsDb';
 import OfferGdController from './gdControllers/OfferGdController';
-import Setup from '../setup/Setup';
-import MilestonesController from '../contracts/milestones/MilestonesController';
-import CasesController from '../contracts/milestones/cases/CasesController';
-import EnviErrors from '../tools/Errors';
 import OfferEvent from './offerEvent/OfferEvent';
 import OfferEventsController from './offerEvent/OfferEventsController';
-import PersonsController from '../persons/PersonsController';
-import { UserData } from '../types/sessionTypes';
-import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
-import CitiesController from '../Admin/Cities/CitiesController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -127,82 +116,6 @@ export default abstract class Offer
         this._lastEvent = null;
     }
 
-    async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
-        const offerEvaluationMilestone =
-            await this.getOfferEvaluationMilestone();
-
-        if (
-            this.status === Setup.OfferStatus.NOT_INTERESTED ||
-            this.status === Setup.OfferStatus.DECISION_PENDING
-        ) {
-            if (offerEvaluationMilestone) {
-                await this.deleteOfferEvaluationMilestone(auth);
-            }
-            return;
-        }
-        if (!offerEvaluationMilestone) {
-            await this.createOfferEvaluationMilestone(auth);
-            return;
-        }
-
-        await this.ensureDefaultCases(offerEvaluationMilestone, auth);
-    }
-
-    private async getOfferEvaluationMilestone() {
-        return (
-            await MilestonesController.find(
-                [
-                    {
-                        typeId: Setup.MilestoneTypes.OFFER_EVALUATION,
-                        offerId: this.id,
-                    },
-                ],
-                'OFFER'
-            )
-        )[0];
-    }
-
-    private async ensureDefaultCases(milestone: any, auth: OAuth2Client) {
-        const offerEvaluationCases = await CasesController.find([
-            {
-                offerId: this.id,
-                milestoneTypeId: Setup.MilestoneTypes.OFFER_EVALUATION,
-            },
-        ]);
-
-        if (offerEvaluationCases.length === 0) {
-            await milestone.createDefaultCases(auth, { isPartOfBatch: false });
-        }
-    }
-
-    private async createOfferEvaluationMilestone(auth: OAuth2Client) {
-        console.log('Creating milestone for offer evaluation');
-        const OffersController = (await import('./OffersController')).default;
-        await OffersController.createDefaultMilestones(
-            this,
-            auth,
-            Setup.MilestoneTypes.OFFER_EVALUATION
-        );
-    }
-
-    private async deleteOfferEvaluationMilestone(auth: OAuth2Client) {
-        const milestone = await this.getOfferEvaluationMilestone();
-        if (milestone) {
-            await MilestonesController.delete(milestone, auth);
-        }
-    }
-    async setCity(cityOrCityName: City | string) {
-        if (typeof cityOrCityName === 'string') {
-            const city = new City({ name: cityOrCityName });
-            await CitiesController.addNewCity(city);
-            this._city = city;
-            this.cityId = city.id as number;
-        } else {
-            this._city = cityOrCityName;
-            this.cityId = cityOrCityName.id as number;
-        }
-    }
-
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
@@ -216,61 +129,7 @@ export default abstract class Offer
         if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
-    /**tworzy domyślne kamienie milowe dla oferty ale tylko
-     * dla kamienni typu OFFER_SUBMISSION. pozostałe kamienie będą tworzone przy ustawieniu statusu
-     */
-    async createDefaultMilestones(
-        auth: OAuth2Client,
-        milestoneTypeId: number,
-        taskId?: string
-    ) {
-        const defaultMilestones: Milestone[] = [];
 
-        const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.find(
-                {
-                    isDefaultOnly: true,
-                    contractTypeId: this.typeId,
-                    milestoneTypeId,
-                },
-                'OFFER'
-            );
-
-        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
-            const template = defaultMilestoneTemplates[i];
-            TaskStore.update(taskId, 'Tworzę kamień milowy', i * 15);
-            const milestone = new Milestone({
-                name: template.name,
-                description: template.description,
-                _type: template._milestoneType,
-                _offer: this as any,
-                status: 'Nie rozpoczęty',
-                _dates: [
-                    {
-                        endDate: i
-                            ? <string>this.submissionDeadline
-                            : this.setBidValidityDate(),
-                    } as MilestoneDateData,
-                ],
-            });
-
-            await MilestonesController.createFolders(milestone, auth);
-            defaultMilestones.push(milestone);
-        }
-        console.log('Milestones folders created');
-        await this.addDefaultMilestonesInDb(defaultMilestones);
-        console.log('default milestones saved in db');
-
-        for (const milestone of defaultMilestones) {
-            console.group(
-                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
-            );
-            await MilestonesController.createDefaultCases(milestone, auth, {
-                isPartOfBatch: true,
-            });
-        }
-        console.groupEnd();
-    }
     //tymczasowa funkcja
     setBidValidityDate() {
         if (!this.submissionDeadline) throw new Error('Brak terminu składania');
@@ -288,14 +147,6 @@ export default abstract class Offer
         const bidValidityDateStr = ToolsDate.dateJsToSql(bidValidityDate);
         if (!bidValidityDateStr) throw new Error('Błąd daty');
         return bidValidityDateStr;
-    }
-
-    private async addDefaultMilestonesInDb(
-        milestones: Milestone[],
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        await MilestonesController.addBulkWithDates(milestones, externalConn);
     }
 
     async editGdElements(auth: OAuth2Client, taskId?: string) {

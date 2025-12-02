@@ -1,12 +1,16 @@
 import { OAuth2Client } from 'google-auth-library';
 import CitiesController from '../Admin/Cities/CitiesController';
+import Milestone from '../contracts/milestones/Milestone';
+import MilestonesController from '../contracts/milestones/MilestonesController';
+import CasesController from '../contracts/milestones/cases/CasesController';
+import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
 import PersonsController from '../persons/PersonsController';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
 import EnviErrors from '../tools/Errors';
 import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
-import { OfferEventData, MilestoneDateData } from '../types/types';
+import { MilestoneDateData, OfferEventData } from '../types/types';
 import ExternalOffer from './ExternalOffer';
 import Offer from './Offer';
 import OfferBondsController from './OfferBond/OfferBondsController';
@@ -19,9 +23,6 @@ import ExternalOfferGdController from './gdControllers/ExternalOfferGdController
 import OfferGdController from './gdControllers/OfferGdController';
 import OfferEvent from './offerEvent/OfferEvent';
 import OfferEventsController from './offerEvent/OfferEventsController';
-import Milestone from '../contracts/milestones/Milestone';
-import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
-import MilestonesController from '../contracts/milestones/MilestonesController';
 
 export type { OffersSearchParams } from './OfferRepository';
 
@@ -166,7 +167,10 @@ export default class OffersController {
             );
 
             TaskStore.update(taskId, 'Tworzę kamień milowy oceny oferty', 80);
-            await offer.createOfferEvaluationMilestoneOrCases(auth);
+            await OffersController.createOfferEvaluationMilestoneOrCases(
+                offer,
+                auth
+            );
 
             const _editor =
                 await PersonsController.getPersonFromSessionUserData(userData);
@@ -256,7 +260,10 @@ export default class OffersController {
             );
             console.log('Offer edited in db');
             TaskStore.update(taskId, 'Edytuję kamienie milowe', 80);
-            await offer.createOfferEvaluationMilestoneOrCases(auth);
+            await OffersController.createOfferEvaluationMilestoneOrCases(
+                offer,
+                auth
+            );
             console.log('Offer succesfully edited');
             console.groupEnd();
         } catch (err) {
@@ -473,5 +480,115 @@ export default class OffersController {
             newCity.code
         );
         return newCity;
+    }
+
+    /**
+     * Tworzy lub usuwa milestone oceny oferty w zależności od statusu oferty.
+     * PRZENIESIONE z Offer.ts - Controller orkiestruje inne Controllery
+     *
+     * Logika:
+     * - Jeśli status = NOT_INTERESTED lub DECISION_PENDING → usuń milestone (jeśli istnieje)
+     * - Jeśli milestone nie istnieje → utwórz go
+     * - Jeśli milestone istnieje bez spraw → utwórz domyślne sprawy
+     *
+     * @param offer - Oferta dla której tworzymy/usuwamy milestone
+     * @param auth - OAuth2Client dla operacji GD
+     */
+    static async createOfferEvaluationMilestoneOrCases(
+        offer: Offer,
+        auth: OAuth2Client
+    ): Promise<void> {
+        const offerEvaluationMilestone = await this.getOfferEvaluationMilestone(
+            offer
+        );
+
+        if (
+            offer.status === Setup.OfferStatus.NOT_INTERESTED ||
+            offer.status === Setup.OfferStatus.DECISION_PENDING
+        ) {
+            if (offerEvaluationMilestone) {
+                await this.deleteOfferEvaluationMilestone(
+                    offerEvaluationMilestone,
+                    auth
+                );
+            }
+            return;
+        }
+        if (!offerEvaluationMilestone) {
+            await this.createOfferEvaluationMilestone(offer, auth);
+            return;
+        }
+
+        await this.ensureDefaultCases(offer, offerEvaluationMilestone, auth);
+    }
+
+    /**
+     * Pobiera milestone oceny oferty
+     * PRYWATNA: Pomocnicza dla createOfferEvaluationMilestoneOrCases
+     */
+    private static async getOfferEvaluationMilestone(
+        offer: Offer
+    ): Promise<Milestone | undefined> {
+        return (
+            await MilestonesController.find(
+                [
+                    {
+                        typeId: Setup.MilestoneTypes.OFFER_EVALUATION,
+                        offerId: offer.id,
+                    },
+                ],
+                'OFFER'
+            )
+        )[0];
+    }
+
+    /**
+     * Tworzy milestone oceny oferty
+     * PRYWATNA: Pomocnicza dla createOfferEvaluationMilestoneOrCases
+     */
+    private static async createOfferEvaluationMilestone(
+        offer: Offer,
+        auth: OAuth2Client
+    ): Promise<void> {
+        console.log('Creating milestone for offer evaluation');
+        await this.createDefaultMilestones(
+            offer,
+            auth,
+            Setup.MilestoneTypes.OFFER_EVALUATION
+        );
+    }
+
+    /**
+     * Usuwa milestone oceny oferty
+     * PRYWATNA: Pomocnicza dla createOfferEvaluationMilestoneOrCases
+     */
+    private static async deleteOfferEvaluationMilestone(
+        milestone: Milestone,
+        auth: OAuth2Client
+    ): Promise<void> {
+        await MilestonesController.delete(milestone, auth);
+    }
+
+    /**
+     * Upewnia się, że milestone ma domyślne sprawy
+     * PRYWATNA: Pomocnicza dla createOfferEvaluationMilestoneOrCases
+     */
+    private static async ensureDefaultCases(
+        offer: Offer,
+        milestone: Milestone,
+        auth: OAuth2Client
+    ): Promise<void> {
+        const offerEvaluationCases = await CasesController.find([
+            {
+                offerId: offer.id,
+                milestoneTypeId: Setup.MilestoneTypes.OFFER_EVALUATION,
+            },
+        ]);
+
+        if (offerEvaluationCases.length === 0) {
+            await MilestonesController.createDefaultCases(milestone, auth, {
+                isPartOfBatch: false,
+            });
+        }
     }
 }

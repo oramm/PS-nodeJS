@@ -1,5 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
-import PersonsController from '../../persons/PersonsController';
+import SystemRoleService from './SystemRoleService';
 import ToolsDb from '../../tools/ToolsDb';
 import { Request, Response } from 'express';
 import { keys } from './credentials';
@@ -104,7 +104,7 @@ export default class ToolsGapi {
     }
 
     static async determineSystemRole(email: string) {
-        return PersonsController.getSystemRole({ systemEmail: email });
+        return SystemRoleService.getSystemRole({ systemEmail: email });
     }
 
     static async getNewCredentials(refreshToken: string) {

@@ -8,7 +8,6 @@ import ToolsGd from '../../../tools/ToolsGd';
 import ToolsSheets from '../../../tools/ToolsSheets';
 import { CaseData, MilestoneData } from '../../../types/types';
 import CaseType from './caseTypes/CaseType';
-import Task from './tasks/Task';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class Case extends BusinessObject implements CaseData {
