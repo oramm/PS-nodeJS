@@ -1,6 +1,6 @@
-import BaseRepository from '../repositories/BaseRepository';
-import mysql from 'mysql2/promise';
 import { OAuth2Client } from 'google-auth-library';
+import mysql from 'mysql2/promise';
+import BaseRepository from '../repositories/BaseRepository';
 import { oAuthClient } from '../setup/Sessions/ToolsGapi';
 
 /**

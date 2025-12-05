@@ -465,8 +465,14 @@ export default class OffersController {
             defaultMilestones.push(milestone);
         }
         console.log('Milestones folders created');
-        await MilestonesController.addBulkWithDates(defaultMilestones);
-        console.log('default milestones saved in db');
+
+        // Zapisz Milestones do DB i utwórz Cases z Tasks (spójna struktura)
+        await MilestonesController.addBulkWithDatesAndCases(
+            defaultMilestones,
+            auth,
+            { isPartOfBatch: true }
+        );
+        console.log('Milestones with Cases and Tasks created');
 
         return defaultMilestones;
     }

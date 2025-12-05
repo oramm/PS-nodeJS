@@ -128,7 +128,11 @@ export default class OurOfferGdFile extends DocumentGdFile {
         );
 
         if (makeOfferCases.length !== 1)
-            throw new Error('Wrong number of cases');
+            //lepsza nazwa błądu
+            throw new Error(
+                `Nie znaleziono sprawy przygotowania oferty 
+                - plik nie zostanie przeniesiony do folderu tworzenia oferty.`
+            );
         const makeOferCase = makeOfferCases[0];
 
         const gDocument = await ToolsGd.getFileOrFolderMetaDataById(

@@ -1110,18 +1110,14 @@ export default class ContractsController extends BaseController<
             defaultMilestones.push(milestone);
         }
         console.log('Milestones folders created');
-        await this.addDefaultMilestonesInDb(defaultMilestones);
-        console.log('default milestones saved in db');
 
-        for (const milestone of defaultMilestones) {
-            console.group(
-                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
-            );
-            await MilestonesController.createDefaultCases(milestone, auth, {
-                isPartOfBatch: true,
-            });
-        }
-        console.groupEnd();
+        // Zapisz Milestones do DB i utwórz Cases z Tasks (spójna struktura)
+        await MilestonesController.addBulkWithDatesAndCases(
+            defaultMilestones,
+            auth,
+            { isPartOfBatch: true }
+        );
+        console.log('Milestones with Cases and Tasks created');
 
         // Post-processing dla ContractOur i ContractOther (logika Scrum)
         if (

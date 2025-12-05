@@ -169,14 +169,14 @@ export default class CasesController extends BaseController<
     /**
      * Przygotowuje ProcessInstances dla Case
      *
-     * PRYWATNA: Pomocnicza dla add()
+     * PUBLIC: Używane przez MilestonesController.addDefaultCasesWithTasksInDb()
      * Tworzy instancje ProcessInstance na podstawie procesów z CaseType
      *
      * @param caseItem - Case dla którego tworzymy ProcessInstances
      * @param conn - Połączenie DB (część transakcji)
      * @returns Tablica ProcessInstance
      */
-    private static async prepareProcessInstances(
+    static async prepareProcessInstances(
         caseItem: Case,
         conn: mysql.PoolConnection
     ): Promise<ProcessInstance[]> {
@@ -223,13 +223,13 @@ export default class CasesController extends BaseController<
     /**
      * Przygotowuje domyślne Tasks dla Case
      *
-     * PRYWATNA: Pomocnicza dla add()
+     * PUBLIC: Używane przez MilestonesController.addDefaultCasesWithTasksInDb()
      * Tworzy Tasks na podstawie TaskTemplates dla danego CaseType
      *
      * @param caseItem - Case dla którego tworzymy Tasks
      * @returns Tablica Task
      */
-    private static async prepareDefaultTasks(caseItem: Case): Promise<Task[]> {
+    static async prepareDefaultTasks(caseItem: Case): Promise<Task[]> {
         const defaultTasks: Task[] = [];
 
         // Pobierz szablony zadań dla tego typu sprawy
@@ -375,6 +375,121 @@ export default class CasesController extends BaseController<
             },
             auth
         );
+    }
+
+    /**
+     * API PUBLICZNE - Dodaje wiele Cases z domyślnymi Tasks
+     *
+     * Spójna struktura: Case → Tasks
+     * Dla każdego Case:
+     * 1. Tworzy folder GD
+     * 2. Przygotowuje ProcessInstances i Tasks
+     * 3. Zapisuje do DB
+     * 4. Dodaje do Scrum
+     *
+     * @param caseItems - Tablica Cases do dodania (bez folderów GD - zostaną utworzone)
+     * @param auth - OAuth2Client dla operacji GD/Scrum
+     * @param options - Opcje: isPartOfBatch dla Scrum
+     * @returns Dane o dodanych Cases z Tasks i ProcessInstances
+     */
+    static async addBulkWithDefaultTasks(
+        caseItems: Case[],
+        auth: OAuth2Client,
+        options?: { isPartOfBatch?: boolean }
+    ): Promise<
+        {
+            caseItem: Case;
+            processInstances: ProcessInstance[];
+            defaultTasksInDb: Task[];
+        }[]
+    > {
+        const caseData: {
+            caseItem: Case;
+            processInstances: ProcessInstance[];
+            defaultTasksInDb: Task[];
+        }[] = [];
+        const caseRepository = new CaseRepository();
+        let conn: mysql.PoolConnection | undefined;
+
+        try {
+            // 1. Utwórz foldery GD dla wszystkich Cases
+            for (const caseItem of caseItems) {
+                await caseItem.createFolder(auth);
+            }
+            console.log('Case folders created in GD');
+
+            // 2. Transakcja DB - zapisz wszystkie Cases z Tasks
+            conn = await ToolsDb.getPoolConnectionWithTimeout();
+            console.log(
+                'new connection:: addBulkWithDefaultTasks',
+                conn.threadId
+            );
+            await conn.beginTransaction();
+
+            for (const caseItem of caseItems) {
+                // Przygotuj ProcessInstances (z Task dla procesu)
+                const processInstances =
+                    await CasesController.prepareProcessInstances(
+                        caseItem,
+                        conn
+                    );
+
+                // Przygotuj domyślne Tasks
+                const defaultTasks = await CasesController.prepareDefaultTasks(
+                    caseItem
+                );
+
+                // Zapisz Case z powiązanymi ProcessInstances i Tasks
+                const updatedCaseItem = await caseRepository.addWithRelated(
+                    caseItem,
+                    processInstances,
+                    defaultTasks,
+                    conn
+                );
+
+                caseData.push({
+                    caseItem: updatedCaseItem,
+                    processInstances,
+                    defaultTasksInDb: defaultTasks,
+                });
+            }
+
+            await conn.commit();
+            console.log('Cases with Tasks saved in DB');
+
+            // 3. Dodaj do Scrum
+            for (const data of caseData) {
+                await CasesController.addInScrum(
+                    data.caseItem,
+                    auth,
+                    data.defaultTasksInDb,
+                    options?.isPartOfBatch
+                );
+            }
+            console.log('Cases added to Scrum');
+
+            return caseData;
+        } catch (error) {
+            console.error('An error occurred:', error);
+            await conn?.rollback();
+            // Rollback GD - usuń utworzone foldery
+            for (const caseItem of caseItems) {
+                if (caseItem.gdFolderId) {
+                    await caseItem
+                        .deleteFolder(auth)
+                        .catch((err) =>
+                            console.error('Error deleting folder:', err)
+                        );
+                }
+            }
+            throw error;
+        } finally {
+            conn?.release();
+            console.log(
+                'connection released:: addBulkWithDefaultTasks',
+                conn?.threadId
+            );
+        }
     }
 
     /**

@@ -1,17 +1,14 @@
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import BaseController from '../../controllers/BaseController';
-import ProcessInstance from '../../processes/processInstances/ProcessInstance';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
 import { UserData } from '../../types/sessionTypes';
 import { MilestoneParentType } from '../../types/types';
 import Case from './cases/Case';
-import CaseRepository from './cases/CaseRepository';
 import CasesController from './cases/CasesController';
 import CaseTemplateRepository from './cases/caseTemplates/CaseTemplateRepository';
 import CaseTypeRepository from './cases/caseTypes/CaseTypeRepository';
-import Task from './cases/tasks/Task';
 import Milestone from './Milestone';
 import MilestoneRepository, {
     MilestonesSearchParams,
@@ -62,33 +59,18 @@ export default class MilestonesController extends BaseController<
     }
 
     /**
-     * @deprecated Użyj MilestonesController.find() zamiast tego.
-     *
-     * REFAKTORING: Logika przeniesiona do find() + MilestoneRepository
+     * @deprecated Użyj addBulkWithDatesAndCases() zamiast tego.
+     * Ta metoda NIE tworzy domyślnych Cases z Tasks dla Milestones.
      *
      * Migracja:
      * ```typescript
-     * // STARE:
-     * await MilestonesController.getMilestonesList(orConditions, parentType);
+     * // STARE (bez Cases):
+     * await MilestonesController.addBulkWithDates(milestones);
+     * for (const m of milestones) await MilestonesController.createDefaultCases(m, auth);
      *
-     * // NOWE:
-     * await MilestonesController.find(orConditions, parentType);
+     * // NOWE (z Cases i Tasks):
+     * await MilestonesController.addBulkWithDatesAndCases(milestones, auth);
      * ```
-     */
-    static async getMilestonesList(
-        orConditions: MilestonesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
-    ): Promise<Milestone[]> {
-        return await this.find(orConditions, parentType);
-    }
-
-    /**
-     * API PUBLICZNE - Dodaje wiele Milestones z datami w transakcji (bulk insert)
-     * Używane przy tworzeniu Contract/Offer z domyślnymi Milestones
-     *
-     * @param milestones - Tablica Milestones do dodania
-     * @param externalConn - Opcjonalne zewnętrzne połączenie (dla większej transakcji)
-     * @returns Promise<Milestone[]> - Dodane Milestones
      */
     static async addBulkWithDates(
         milestones: Milestone[],
@@ -102,7 +84,53 @@ export default class MilestonesController extends BaseController<
     }
 
     /**
-     * API PUBLICZNE - Dodaje nowy Milestone
+     * API PUBLICZNE - Dodaje wiele Milestones z datami, Cases i Tasks
+     *
+     * Spójna struktura: Milestone → Cases → Tasks
+     * Dla każdego Milestone:
+     * 1. Zapisuje Milestone + Dates do DB
+     * 2. Tworzy domyślne Cases z Tasks (createDefaultCases)
+     *
+     * @param milestones - Tablica Milestones do dodania (muszą mieć już utworzone foldery GD!)
+     * @param auth - OAuth2Client dla operacji GD/Scrum
+     * @param options - Opcje: isPartOfBatch dla Scrum
+     * @returns Promise<Milestone[]> - Dodane Milestones
+     */
+    static async addBulkWithDatesAndCases(
+        milestones: Milestone[],
+        auth: OAuth2Client,
+        options?: { isPartOfBatch?: boolean }
+    ): Promise<Milestone[]> {
+        const instance = this.getInstance();
+
+        // 1. Zapisz wszystkie Milestones z Dates do DB
+        await instance.repository.addMilestonesWithDates(milestones);
+        console.log('Milestones saved in DB');
+
+        // 2. Dla każdego Milestone utwórz Cases z Tasks
+        for (const milestone of milestones) {
+            console.group(
+                `Creating default cases for milestone ${milestone._FolderNumber_TypeName_Name}`
+            );
+            await MilestonesController.createDefaultCases(milestone, auth, {
+                isPartOfBatch: options?.isPartOfBatch ?? true,
+            });
+            console.groupEnd();
+        }
+
+        return milestones;
+    }
+
+    /**
+     * API PUBLICZNE - Dodaje nowy Milestone z folderami i default cases
+     *
+     * Przepływ:
+     * 1. Model: createFolders(auth) - tworzy folder GD + podfoldery dla case types
+     * 2. Controller: transakcja DB
+     *    - Repository: addMilestonesWithDates() - dodaje Milestone + Dates
+     * 3. Controller: createDefaultCases(auth) - tworzy domyślne sprawy
+     * 4. Controller: editMilestoneFolder(auth) - aktualizuje folder (nazwa z numerem)
+     * 5. Rollback folderu GD i DB przy błędzie
      *
      * @param milestone - Milestone do dodania
      * @param auth - OAuth2Client dla operacji GD
@@ -119,92 +147,89 @@ export default class MilestonesController extends BaseController<
                 instance: MilestonesController,
                 authClient: OAuth2Client
             ) => {
-                return await instance.addMilestone(
-                    authClient,
-                    milestone,
-                    userData
+                if (!milestone._dates.length) {
+                    throw new Error('Milestone dates are not defined');
+                }
+
+                console.group(
+                    'Adding Milestone',
+                    milestone._FolderNumber_TypeName_Name
                 );
+
+                try {
+                    if (!milestone._contract && !milestone._offer) {
+                        throw new Error(
+                            'Contract or offer is not defined for Milestone'
+                        );
+                    }
+
+                    if (!milestone.typeId) {
+                        throw new Error('Milestone type is not defined');
+                    }
+
+                    // 1. Utwórz foldery w Google Drive
+                    await MilestonesController.createFolders(
+                        milestone,
+                        authClient
+                    );
+                    console.log('GD folders created');
+
+                    try {
+                        // 2. Transakcja DB - Milestone + Dates (pojedynczy insert)
+                        await instance.repository.addMilestonesWithDates([
+                            milestone,
+                        ]);
+
+                        console.log('Milestone added to DB');
+
+                        // 3. Utwórz domyślne sprawy (Cases)
+                        await MilestonesController.createDefaultCases(
+                            milestone,
+                            authClient,
+                            {
+                                isPartOfBatch: false,
+                            }
+                        );
+                        console.log('Default cases created');
+
+                        // 4. Edytuj folder (zaktualizuj nazwę z numerem)
+                        await instance.editMilestoneFolder(
+                            authClient,
+                            milestone
+                        );
+                        console.log('Folder name updated');
+
+                        return milestone;
+                    } catch (dbError) {
+                        // Rollback: usuń folder GD i DB jeśli coś się nie powiodło
+                        console.error('DB transaction failed, rolling back');
+                        await milestone
+                            .deleteFolder(authClient)
+                            .catch((error) => {
+                                console.error('Error deleting folder:', error);
+                            });
+                        await milestone.deleteFromDb().catch((error) => {
+                            console.error('Error deleting from DB:', error);
+                        });
+                        throw dbError;
+                    }
+                } finally {
+                    console.groupEnd();
+                }
             },
             auth
         );
     }
 
     /**
-     * LOGIKA BIZNESOWA - Dodaje Milestone z folderami i default cases
+     * API PUBLICZNE - Edytuje Milestone
      *
      * Przepływ:
-     * 1. Model: createFolders(auth) - tworzy folder GD + podfoldery dla case types
-     * 2. Controller: transakcja DB
-     *    - Repository: addInDb() - dodaje główny rekord
-     *    - Model: addDatesInDb() - dodaje powiązane daty
-     * 3. Model: createDefaultCases(auth) - tworzy domyślne sprawy
-     * 4. Model: editFolder(auth) - aktualizuje folder (nazwa z numerem)
-     * 5. Rollback folderu GD i DB przy błędzie
-     */
-    private async addMilestone(
-        auth: OAuth2Client,
-        milestone: Milestone,
-        userData?: UserData
-    ): Promise<Milestone> {
-        if (!milestone._dates.length) {
-            throw new Error('Milestone dates are not defined');
-        }
-
-        console.group(
-            'Adding Milestone',
-            milestone._FolderNumber_TypeName_Name
-        );
-
-        try {
-            if (!milestone._contract && !milestone._offer) {
-                throw new Error(
-                    'Contract or offer is not defined for Milestone'
-                );
-            }
-
-            if (!milestone.typeId) {
-                throw new Error('Milestone type is not defined');
-            }
-
-            // 1. Utwórz foldery w Google Drive
-            await MilestonesController.createFolders(milestone, auth);
-            console.log('GD folders created');
-
-            try {
-                // 2. Transakcja DB - Milestone + Dates (pojedynczy insert)
-                await this.repository.addMilestonesWithDates([milestone]);
-
-                console.log('Milestone added to DB');
-
-                // 3. Utwórz domyślne sprawy (Cases)
-                await MilestonesController.createDefaultCases(milestone, auth, {
-                    isPartOfBatch: false,
-                });
-                console.log('Default cases created');
-
-                // 4. Edytuj folder (zaktualizuj nazwę z numerem)
-                await this.editMilestoneFolder(auth, milestone);
-                console.log('Folder name updated');
-
-                return milestone;
-            } catch (dbError) {
-                // Rollback: usuń folder GD i DB jeśli coś się nie powiodło
-                console.error('DB transaction failed, rolling back');
-                await milestone.deleteFolder(auth).catch((error) => {
-                    console.error('Error deleting folder:', error);
-                });
-                await milestone.deleteFromDb().catch((error) => {
-                    console.error('Error deleting from DB:', error);
-                });
-                throw dbError;
-            }
-        } finally {
-            console.groupEnd();
-        }
-    }
-
-    /**
-     * API PUBLICZNE - Edytuje Milestone
+     * 1. Walidacja (typeId, gdFolderId)
+     * 2. Transakcja DB - Milestone + Dates (jeśli potrzebne)
+     * 3. Równolegle (jeśli nie tylko DB fields):
+     *    - editFolder(auth) - aktualizuje folder GD
+     *    - editInScrum(auth) - aktualizuje Scrum
      *
      * @param milestone - Milestone do edycji
      * @param auth - OAuth2Client dla operacji GD
@@ -223,77 +248,60 @@ export default class MilestonesController extends BaseController<
                 instance: MilestonesController,
                 authClient: OAuth2Client
             ) => {
-                return await instance.editMilestone(
-                    authClient,
-                    milestone,
-                    userData,
-                    fieldsToUpdate
+                console.group(
+                    'Editing Milestone',
+                    milestone._FolderNumber_TypeName_Name
                 );
+
+                try {
+                    if (!milestone.typeId) {
+                        throw new Error('Milestone type is not defined');
+                    }
+                    if (!milestone.gdFolderId) {
+                        throw new Error('Milestone folder is not defined');
+                    }
+
+                    // Sprawdź czy edycja dotyczy tylko pól DB (bez GD/Scrum)
+                    const onlyDbFields = [
+                        'status',
+                        'description',
+                        'number',
+                        'name',
+                    ];
+                    const isOnlyDbFields =
+                        fieldsToUpdate &&
+                        fieldsToUpdate.length > 0 &&
+                        fieldsToUpdate.every((field) =>
+                            onlyDbFields.includes(field)
+                        );
+
+                    // 1. Transakcja DB - Milestone + Dates
+                    await instance.repository.editMilestoneWithDates(
+                        milestone,
+                        undefined,
+                        false,
+                        fieldsToUpdate
+                    );
+
+                    console.log('Milestone edited in DB');
+
+                    // 2. Równolegle: GD + Scrum (jeśli nie tylko DB fields)
+                    if (!isOnlyDbFields) {
+                        await Promise.all([
+                            instance.editMilestoneFolder(authClient, milestone),
+                            milestone.editInScrum(authClient),
+                        ]);
+                        console.log('Milestone folder edited in GD');
+                        console.log('Milestone edited in Scrum');
+                    }
+
+                    return milestone;
+                } finally {
+                    console.groupEnd();
+                }
             },
             auth
         );
-    }
-
-    /**
-     * LOGIKA BIZNESOWA - Edytuje Milestone
-     *
-     * Przepływ:
-     * 1. Walidacja (typeId, gdFolderId)
-     * 2. Transakcja DB - Milestone + Dates (jeśli potrzebne)
-     * 3. Równolegle (jeśli nie tylko DB fields):
-     *    - editFolder(auth) - aktualizuje folder GD
-     *    - editInScrum(auth) - aktualizuje Scrum
-     */
-    private async editMilestone(
-        auth: OAuth2Client,
-        milestone: Milestone,
-        userData?: UserData,
-        fieldsToUpdate?: string[]
-    ): Promise<Milestone> {
-        console.group(
-            'Editing Milestone',
-            milestone._FolderNumber_TypeName_Name
-        );
-
-        try {
-            if (!milestone.typeId) {
-                throw new Error('Milestone type is not defined');
-            }
-            if (!milestone.gdFolderId) {
-                throw new Error('Milestone folder is not defined');
-            }
-
-            // Sprawdź czy edycja dotyczy tylko pól DB (bez GD/Scrum)
-            const onlyDbFields = ['status', 'description', 'number', 'name'];
-            const isOnlyDbFields =
-                fieldsToUpdate &&
-                fieldsToUpdate.length > 0 &&
-                fieldsToUpdate.every((field) => onlyDbFields.includes(field));
-
-            // 1. Transakcja DB - Milestone + Dates
-            await this.repository.editMilestoneWithDates(
-                milestone,
-                undefined,
-                false,
-                fieldsToUpdate
-            );
-
-            console.log('Milestone edited in DB');
-
-            // 2. Równolegle: GD + Scrum (jeśli nie tylko DB fields)
-            if (!isOnlyDbFields) {
-                await Promise.all([
-                    this.editMilestoneFolder(auth, milestone),
-                    milestone.editInScrum(auth),
-                ]);
-                console.log('Milestone folder edited in GD');
-                console.log('Milestone edited in Scrum');
-            }
-
-            return milestone;
-        } finally {
-            console.groupEnd();
-        }
     }
 
     /**
@@ -357,6 +365,16 @@ export default class MilestonesController extends BaseController<
     /**
      * API PUBLICZNE - Usuwa Milestone
      *
+     * Przepływ:
+     * 1. Controller: deleteFromDb() - usuwa z DB (CASCADE dla MilestoneDates, Cases)
+     * 2. Równolegle:
+     *    - deleteFolder(auth) - usuwa folder GD
+     *    - deleteFromScrum(auth) - usuwa z Scrum
+     *
+     * UWAGA: Operacje GD/Scrum są wykonywane po DB i nie wpływają na rollback DB.
+     * Jeśli usuniecie z DB się powiedzie, ale GD/Scrum się nie uda, Milestone
+     * zostaje usunięty z DB, ale folder/scrum mogą pozostać (do ręcznego usunięcia).
+     *
      * @param milestone - Milestone do usunięcia
      * @param auth - OAuth2Client dla operacji GD
      */
@@ -369,54 +387,33 @@ export default class MilestonesController extends BaseController<
                 instance: MilestonesController,
                 authClient: OAuth2Client
             ) => {
-                return await instance.deleteMilestone(authClient, milestone);
+                console.group('Deleting Milestone', milestone.id);
+
+                try {
+                    // 1. Usuń z bazy (CASCADE usunie też MilestoneDates i powiązane Cases)
+                    await instance.repository.deleteFromDb(milestone);
+                    console.log('Milestone deleted from DB');
+
+                    // 2. Równolegle: GD + Scrum (błędy nie wpływają na DB)
+                    try {
+                        await Promise.all([
+                            milestone.deleteFolder(authClient),
+                            milestone.deleteFromScrum(authClient),
+                        ]);
+                        console.log('Milestone deleted from GD and Scrum');
+                    } catch (gdScrumError) {
+                        // Loguj błąd, ale nie rollbackuj DB (już usunięte)
+                        console.error(
+                            'Error deleting from GD/Scrum (DB already deleted):',
+                            gdScrumError
+                        );
+                    }
+                } finally {
+                    console.groupEnd();
+                }
             },
             auth
         );
-    }
-
-    /**
-     * LOGIKA BIZNESOWA - Usuwa Milestone
-     *
-     * Przepływ:
-     * 1. Controller: deleteFromDb() - usuwa z DB (CASCADE dla MilestoneDates, Cases)
-     * 2. Równolegle:
-     *    - deleteFolder(auth) - usuwa folder GD
-     *    - deleteFromScrum(auth) - usuwa z Scrum
-     *
-     * UWAGA: Operacje GD/Scrum są wykonywane po DB i nie wpływają na rollback DB.
-     * Jeśli usuniecie z DB się powiedzie, ale GD/Scrum się nie uda, Milestone
-     * zostaje usunięty z DB, ale folder/scrum mogą pozostać (do ręcznego usunięcia).
-     */
-    private async deleteMilestone(
-        auth: OAuth2Client,
-        milestone: Milestone
-    ): Promise<void> {
-        console.group('Deleting Milestone', milestone.id);
-
-        try {
-            // 1. Usuń z bazy (CASCADE usunie też MilestoneDates i powiązane Cases)
-            await this.repository.deleteFromDb(milestone);
-            console.log('Milestone deleted from DB');
-
-            // 2. Równolegle: GD + Scrum (błędy nie wpływają na DB)
-            try {
-                await Promise.all([
-                    milestone.deleteFolder(auth),
-                    milestone.deleteFromScrum(auth),
-                ]);
-                console.log('Milestone deleted from GD and Scrum');
-            } catch (gdScrumError) {
-                // Loguj błąd, ale nie rollbackuj DB (już usunięte)
-                console.error(
-                    'Error deleting from GD/Scrum (DB already deleted):',
-                    gdScrumError
-                );
-                // Możesz dodać powiadomienie do użytkownika o konieczności ręcznego usunięcia
-            }
-        } finally {
-            console.groupEnd();
-        }
     }
 
     /**
@@ -487,7 +484,10 @@ export default class MilestonesController extends BaseController<
 
     /**
      * Tworzy domyślne sprawy dla kamienia milowego
-     * Orkiestracja: Repository (szablony) -> Model (tworzenie spraw) -> Repository (zapis)
+     * Deleguje do CasesController.addBulkWithDefaultTasks()
+     *
+     * Hierarchia: Milestone → Cases → Tasks
+     * MilestonesController przygotowuje Cases, CasesController tworzy je z Tasks
      */
     static async createDefaultCases(
         milestone: Milestone,
@@ -510,7 +510,7 @@ export default class MilestonesController extends BaseController<
 
         console.log(milestone._contract?._type);
 
-        // 2. Utwórz obiekty spraw (Model)
+        // 2. Utwórz obiekty spraw (Model) - bez folderów GD
         for (const template of defaultCaseTemplates) {
             const caseItem = new Case({
                 name: template.name,
@@ -527,84 +527,15 @@ export default class MilestonesController extends BaseController<
                 caseItem.setDisplayNumber();
             }
 
-            // Operacja GD (zewnętrzna)
-            await caseItem.createFolder(auth);
             defaultCaseItems.push(caseItem);
         }
 
-        console.log('default cases folders created');
-
-        // 3. Zapisz sprawy w bazie (Repository)
-        const caseData = await this.addDefaultCasesInDb(defaultCaseItems);
-        console.log('cases saved in db');
-
-        // 4. Dodaj do Scrum (zewnętrzne)
-        await this.addDefaultCasesInScrum(milestone, auth, {
-            casesData: <any>caseData,
-            isPartOfBatch: parameters?.isPartOfBatch,
+        // 3. Deleguj tworzenie Cases z Tasks do CasesController
+        // CasesController: tworzy foldery GD, zapisuje do DB, dodaje do Scrum
+        await CasesController.addBulkWithDefaultTasks(defaultCaseItems, auth, {
+            isPartOfBatch: parameters?.isPartOfBatch ?? true,
         });
-        console.log('milestone added in scrum');
-    }
 
-    private static async addDefaultCasesInDb(caseItems: Case[]) {
-        const caseData = [];
-        const caseRepository = new CaseRepository();
-        let conn: mysql.PoolConnection | undefined;
-        try {
-            conn = await ToolsDb.getPoolConnectionWithTimeout();
-            console.log(
-                'new connection created for adding default cases in db',
-                conn.threadId
-            );
-            await conn.beginTransaction();
-            for (const caseItem of caseItems) {
-                const updatedCaseItem = await caseRepository.addWithRelated(
-                    caseItem,
-                    [],
-                    [],
-                    conn
-                );
-                caseData.push({
-                    caseItem: updatedCaseItem,
-                    processInstances: [],
-                    defaultTasksInDb: [],
-                });
-            }
-            await conn.commit();
-        } catch (error) {
-            console.error('An error occurred:', error);
-            await conn?.rollback();
-            throw error;
-        } finally {
-            conn?.release();
-            console.log(
-                'connection released after adding default cases in db ',
-                conn?.threadId
-            );
-        }
-        return await Promise.all(caseData);
-    }
-
-    private static async addDefaultCasesInScrum(
-        milestone: Milestone,
-        auth: OAuth2Client,
-        parameters: {
-            casesData: [
-                {
-                    caseItem: Case;
-                    processInstances: ProcessInstance[] | undefined;
-                    defaultTasksInDb: Task[];
-                }
-            ];
-            isPartOfBatch?: boolean;
-        }
-    ) {
-        for (const caseData of parameters.casesData)
-            await CasesController.addInScrum(
-                caseData.caseItem,
-                auth,
-                caseData.defaultTasksInDb,
-                parameters.isPartOfBatch
-            );
+        console.log('Default cases with tasks created');
     }
 }
