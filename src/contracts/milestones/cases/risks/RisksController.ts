@@ -1,108 +1,53 @@
-import ToolsDb from '../../../../tools/ToolsDb';
 import Risk from './Risk';
+import RiskRepository, { RisksSearchParams } from './RiskRepository';
 
+/**
+ * Controller dla Risk - warstwa aplikacji/serwisu
+ * ZGODNIE Z WYTYCZNYMI Clean Architecture:
+ * - Orkiestruje operacje (Repository, Model)
+ * - NIE pisze zapytań SQL (→ Repository)
+ * - NIE zawiera logiki biznesowej (→ Model)
+ *
+ * UWAGA: Risk nie dziedziczy po BusinessObject - brak operacji CUD
+ * Moduł obsługuje tylko odczyt (READ)
+ */
 export default class RisksController {
-    static async getRisksList(initParamObject: any) {
-        const projectCondition = initParamObject.projectId
-            ? `Risks.ProjectOurId="${initParamObject.projectId}"`
-            : '1';
+    private static instance: RisksController;
+    protected repository: RiskRepository;
 
-        const contractCondition = initParamObject.contractId
-            ? `Contracts.Id=${initParamObject.contractId}`
-            : '1';
-        //TODO - do obsłużenia oferty
-        const sql = `SELECT Risks.Id,
-                Risks.Name,
-                Risks.Cause,
-                Risks.ScheduleImpactDescription,
-                Risks.CostImpactDescription,
-                Risks.Probability,
-                Risks.OverallImpact,
-                OverallImpact * Probability AS Rate,
-                Risks.AdditionalActionsDescription,
-                Risks.CaseId,
-                Risks.ProjectOurId,
-                Risks.LastUpdated,
-                Cases.Id AS CaseId,
-                Cases.Name AS CaseName,
-                Cases.GdFolderId AS CaseGdFolderId,
-                CaseTypes.name AS CaseTypeName,
-                CaseTypes.FolderNumber AS CaseTypeFolderNumber,
-                Milestones.Id AS MilestoneId,
-                Milestones.Name AS MilestoneName,
-                Milestones.GdFolderId AS MilestoneGdFolderId,
-                MilestoneTypes.Id AS MilestoneTypeId,
-                COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS MilestoneFolderNumber,
-                MilestoneTypes.Name AS MilestoneTypeName,
-                OurContractsData.OurId AS ContractOurId,
-                Contracts.Id AS ContractId,
-                Contracts.Number AS ContractNumber,
-                Contracts.Name AS ContractName
-            FROM Risks
-            JOIN Cases ON Risks.CaseId=Cases.Id
-            JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId
-            JOIN Milestones ON Milestones.Id=Cases.MilestoneId
-            JOIN MilestoneTypes ON MilestoneTypes.Id=Milestones.TypeId
-            JOIN Contracts ON Milestones.ContractId = Contracts.Id
-            LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
-            LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
-            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=MilestoneTypes.Id
-            WHERE ${projectCondition} AND ${contractCondition}`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.RisksResult(result);
+    constructor() {
+        this.repository = new RiskRepository();
     }
 
-    static RisksResult(result: any[]): [Risk?] {
-        let newResult: [Risk?] = [];
-
-        for (const row of result) {
-            var item = new Risk({
-                id: row.Id,
-                name: row.Name,
-                cause: row.Cause,
-                scheduleImpactDescription: row.ScheduleImpactDescription,
-                costImpactDescription: row.CostImpactDescription,
-                probability: row.Probability,
-                overallImpact: row.OverallImpact,
-                rate: row.Rate,
-                additionalActionsDescription: row.AdditionalActionsDescription,
-                caseId: row.CaseId,
-                projectOurId: row.ProjectOurId,
-                lastUpdated: row.LastUpdated,
-                _case: {
-                    id: row.CaseId,
-                    name: row.CaseName,
-                    gdFolderId: row.CaseGdFolderId,
-                    _type: {
-                        name: row.CaseTypeName,
-                        folderNumber: row.CaseTypeFolderNumber,
-                    },
-                },
-                //parentem jest Milestone
-                _parent: {
-                    id: row.MilestoneId,
-                    name: row.MilestoneName,
-                    gdFolderId: row.MilestoneGdFolderId,
-                    _folderNumber: row.MilestoneFolderNumber,
-                    _type: {
-                        id: row.MilestoneTypeId,
-                        //folderNumber: dbResults.getString(22),
-                        name: row.MilestoneTypeName,
-                    },
-                    _parent: {
-                        ourIdNumberName:
-                            row.ContractOurId +
-                            ' ' +
-                            row.ContractNumber +
-                            ' ' +
-                            row.ContractName,
-                        id: row.ContractId,
-                    },
-                },
-            });
-            newResult.push(item);
+    /**
+     * Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+     */
+    private static getInstance(): RisksController {
+        if (!this.instance) {
+            this.instance = new RisksController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    // ==================== READ ====================
+
+    /**
+     * @deprecated Użyj find() zamiast getRisksList()
+     */
+    static async getRisksList(
+        initParamObject: RisksSearchParams
+    ): Promise<Risk[]> {
+        return this.find(initParamObject);
+    }
+
+    /**
+     * Wyszukuje ryzyka według parametrów
+     * API PUBLICZNE - zgodne z Clean Architecture
+     * @param searchParams - Parametry wyszukiwania
+     * @returns Promise<Risk[]>
+     */
+    static async find(searchParams: RisksSearchParams = {}): Promise<Risk[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(searchParams);
     }
 }

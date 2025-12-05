@@ -1,27 +1,33 @@
-import express from 'express';
 import RisksReactionsController from './RisksReactionsController';
-var app = express();
+import { app } from '../../../../../index';
+import { Request, Response } from 'express';
 
-app.get('/risksReactions', async (req: any, res: any, next) => {
+/**
+ * Router dla RisksReactions - warstwa HTTP
+ * ZGODNIE Z WYTYCZNYMI Clean Architecture:
+ * - Najcieńsza warstwa - tłumaczy HTTP na wywołania Controller
+ * - Wywołuje JEDNĄ metodę Controllera per endpoint
+ * - Zwraca odpowiedź HTTP
+ * - NIE wywołuje Repository bezpośrednio
+ * - NIE zawiera logiki biznesowej
+ *
+ * UWAGA: Moduł obsługuje tylko odczyt (GET) - reakcje na ryzyka
+ */
+
+app.get('/risksReactions', async (req: Request, res: Response, next) => {
     try {
-        const result = await RisksReactionsController.getRisksReactionsList(
-            req.query
-        );
+        const result = await RisksReactionsController.find(req.query);
         res.send(result);
     } catch (error) {
         next(error);
     }
 });
 
-app.get('/risksReaction/:id', async (req: any, res: any, next) => {
+app.get('/risksReaction/:id', async (req: Request, res: Response, next) => {
     try {
-        const result = await RisksReactionsController.getRisksReactionsList(
-            req.params
-        );
+        const result = await RisksReactionsController.find(req.params);
         res.send(result);
     } catch (error) {
         next(error);
     }
 });
-
-module.exports = app;
