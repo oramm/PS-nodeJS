@@ -1,4 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
+import BaseController from '../controllers/BaseController';
 import CitiesController from '../Admin/Cities/CitiesController';
 import Milestone from '../contracts/milestones/Milestone';
 import MilestonesController from '../contracts/milestones/MilestonesController';
@@ -23,124 +24,242 @@ import ExternalOfferGdController from './gdControllers/ExternalOfferGdController
 import OfferGdController from './gdControllers/OfferGdController';
 import OfferEvent from './offerEvent/OfferEvent';
 import OfferEventsController from './offerEvent/OfferEventsController';
+import { off } from 'process';
 
 export type { OffersSearchParams } from './OfferRepository';
 
-export default class OffersController {
-    private static repository = OfferRepository.getInstance();
+/**
+ * Controller dla Offer - warstwa orkiestracji
+ *
+ * Zgodnie z Clean Architecture:
+ * - Dziedziczy po BaseController<Offer, OfferRepository>
+ * - Orkiestruje operacje biznesowe
+ * - Deleguje do Repository dla operacji DB
+ * - Używa withAuth dla operacji wymagających OAuth
+ */
+export default class OffersController extends BaseController<
+    Offer,
+    OfferRepository
+> {
+    private static instance: OffersController;
 
-    static async getOffersList(
+    constructor() {
+        super(OfferRepository.getInstance());
+    }
+
+    // Singleton pattern
+    private static getInstance(): OffersController {
+        if (!this.instance) {
+            this.instance = new OffersController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Pobiera listę Offers według podanych warunków
+     *
+     * REFAKTORING: Zgodnie z konwencją CRUD - find() zamiast getOffersList()
+     * Controller tylko orkiestruje - Repository obsługuje SQL i mapowanie
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @returns Promise<Offer[]> - Lista znalezionych Offers
+     */
+    static async find(
         orConditions: OffersSearchParams[] = []
     ): Promise<Offer[]> {
-        return await this.repository.find(orConditions);
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
     }
 
     /**
-     * Add new offer - dispatches to specific implementation based on offer type
-     * PUBLIC: Called by Router
+     * API PUBLICZNE - Dodaje nową ofertę
+     *
+     * Przepływ:
+     * 1. withAuth pobiera OAuth token (lub używa przekazanego)
+     * 2. Dispatcher kieruje do addOurOffer lub addExternalOffer
+     * 3. Model tworzy foldery GD
+     * 4. Repository zapisuje do DB
+     * 5. Controller tworzy domyślne milestones
+     *
+     * @param offer - Offer do dodania (OurOffer lub ExternalOffer)
+     * @param userData - Dane użytkownika z sesji
+     * @param taskId - ID zadania dla progress tracking
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze nowy)
+     * @returns Dodana Offer
      */
-    static async addNew(
-        auth: OAuth2Client,
+    static async add(
         offer: Offer,
         userData: UserData,
-        taskId: string
+        taskId: string,
+        auth?: OAuth2Client
     ): Promise<void> {
-        if (offer instanceof OurOffer) {
-            return await this.addNewOurOffer(auth, offer, userData, taskId);
-        } else if (offer instanceof ExternalOffer) {
-            return await this.addNewExternalOffer(
-                auth,
-                offer,
-                userData,
-                taskId
-            );
-        }
-        throw new Error('Unknown offer type');
+        return await this.withAuth<void>(
+            async (instance: OffersController, auth: OAuth2Client) => {
+                if (offer instanceof OurOffer) {
+                    return await this.addOurOffer(
+                        auth,
+                        offer,
+                        userData,
+                        taskId
+                    );
+                } else if (offer instanceof ExternalOffer) {
+                    return await this.addExternalOffer(
+                        auth,
+                        offer,
+                        userData,
+                        taskId
+                    );
+                }
+                throw new Error('Unknown offer type');
+            },
+            auth
+        );
     }
 
     /**
-     * Edit offer - dispatches to specific implementation based on offer type
-     * PUBLIC: Called by Router
+     * API PUBLICZNE - Edytuje ofertę
+     *
+     * Przepływ:
+     * 1. withAuth pobiera OAuth token (lub używa przekazanego)
+     * 2. Dispatcher kieruje do editOurOffer lub editExternalOffer
+     * 3. Model edytuje foldery GD
+     * 4. Repository zapisuje do DB
+     *
+     * @param offer - Offer do edycji (OurOffer lub ExternalOffer)
+     * @param taskId - ID zadania dla progress tracking
+     * @param fieldsToUpdate - Lista pól do aktualizacji
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze nowy)
+     * @returns void
      */
     static async edit(
-        auth: OAuth2Client,
         offer: Offer,
         taskId?: string,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
+        auth?: OAuth2Client
     ): Promise<void> {
-        if (offer instanceof OurOffer) {
-            return await this.editOurOffer(auth, offer, taskId, fieldsToUpdate);
-        } else if (offer instanceof ExternalOffer) {
-            return await this.editExternalOffer(
-                auth,
-                offer,
-                taskId,
-                fieldsToUpdate
-            );
-        }
-        throw new Error('Unknown offer type');
+        return await this.withAuth<void>(
+            async (_instance: OffersController, authClient: OAuth2Client) => {
+                if (offer instanceof OurOffer) {
+                    return await this.editOurOffer(
+                        authClient,
+                        offer,
+                        taskId,
+                        fieldsToUpdate
+                    );
+                } else if (offer instanceof ExternalOffer) {
+                    return await this.editExternalOffer(
+                        authClient,
+                        offer,
+                        taskId,
+                        fieldsToUpdate
+                    );
+                }
+                throw new Error('Unknown offer type');
+            },
+            auth
+        );
     }
 
     /**
-     * Delete offer - dispatches to specific implementation based on offer type
-     * PUBLIC: Called by Router
+     * API PUBLICZNE - Usuwa ofertę
+     *
+     * Przepływ:
+     * 1. withAuth pobiera OAuth token (lub używa przekazanego)
+     * 2. Dispatcher kieruje do deleteOurOffer lub deleteExternalOffer
+     * 3. Repository usuwa z DB
+     * 4. Model usuwa foldery GD
+     *
+     * @param offer - Offer do usunięcia (OurOffer lub ExternalOffer)
+     * @param userData - Dane użytkownika z sesji (opcjonalne, dla OurOffer)
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze nowy)
+     * @returns void
      */
     static async delete(
-        auth: OAuth2Client,
         offer: Offer,
-        userData?: UserData
+        userData?: UserData,
+        auth?: OAuth2Client
     ): Promise<void> {
-        if (offer instanceof OurOffer) {
-            return await this.deleteOurOffer(auth, offer, userData);
-        } else if (offer instanceof ExternalOffer) {
-            return await this.deleteExternalOffer(auth, offer);
-        }
-        throw new Error('Unknown offer type');
+        return await this.withAuth<void>(
+            async (_instance: OffersController, authClient: OAuth2Client) => {
+                if (offer instanceof OurOffer) {
+                    return await this.deleteOurOffer(
+                        authClient,
+                        offer,
+                        userData
+                    );
+                } else if (offer instanceof ExternalOffer) {
+                    return await this.deleteExternalOffer(authClient, offer);
+                }
+                throw new Error('Unknown offer type');
+            },
+            auth
+        );
     }
 
     /**
-     * Send OurOffer - create SENT event and send email with offer
-     * PUBLIC: Called by Router
+     * API PUBLICZNE - Wysyła OurOffer
+     *
+     * Przepływ:
+     * 1. withAuth pobiera OAuth token (lub używa przekazanego)
+     * 2. Tworzy event SENT
+     * 3. Wysyła email z ofertą
+     * 4. Aktualizuje status oferty
+     *
+     * @param offer - OurOffer do wysłania
+     * @param userData - Dane użytkownika z sesji
+     * @param newEventData - Dane nowego wydarzenia
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns void
      */
     static async sendOurOffer(
-        auth: OAuth2Client,
         offer: OurOffer,
         userData: UserData,
-        newEventData: OfferEventData
+        newEventData: OfferEventData,
+        auth?: OAuth2Client
     ): Promise<void> {
-        // 1. Get editor from session
-        const _editor = await PersonsController.getPersonFromSessionUserData(
-            userData
+        return await this.withAuth<void>(
+            async (_instance: OffersController, authClient: OAuth2Client) => {
+                // 1. Get editor from session
+                const _editor =
+                    await PersonsController.getPersonFromSessionUserData(
+                        userData
+                    );
+
+                // 2. Create SENT event (business logic delegated to Model)
+                const newEvent = offer.createSentEvent(newEventData, _editor);
+
+                // 3. Save event
+                await OfferEventsController.addNew(newEvent);
+
+                // 4. Send mail with offer
+                await OfferEventsController.sendMailWithOffer(
+                    authClient,
+                    newEvent,
+                    offer,
+                    [userData.systemEmail]
+                );
+
+                // 5. Update offer status (business logic delegated to Model)
+                offer.markAsSent(newEvent);
+
+                // 6. Save status to DB (przekazujemy authClient bo już go mamy)
+                await this.edit(offer, undefined, ['status'], authClient);
+            },
+            auth
         );
-
-        // 2. Create SENT event (business logic delegated to Model)
-        const newEvent = offer.createSentEvent(newEventData, _editor);
-
-        // 3. Save event
-        await OfferEventsController.addNew(newEvent);
-
-        // 4. Send mail with offer
-        await OfferEventsController.sendMailWithOffer(auth, newEvent, offer, [
-            userData.systemEmail,
-        ]);
-
-        // 5. Update offer status (business logic delegated to Model)
-        offer.markAsSent(newEvent);
-
-        // 6. Save status to DB
-        await this.edit(auth, offer, undefined, ['status']);
     }
 
     /**
      * Add new offer (base logic for all offer types)
-     * PRIVATE: Called by addNewOurOffer/addNewExternalOffer
+     * PRIVATE: Called by addOurOffer/addExternalOffer
      */
-    private static async addNewBase(
+    private static async addBase(
         auth: OAuth2Client,
         offer: Offer,
         userData: UserData,
         taskId: string
     ): Promise<void> {
+        const instance = this.getInstance();
         try {
             console.group('Creating new offer');
             TaskStore.update(taskId, 'Tworzę foldery', 15);
@@ -148,7 +267,7 @@ export default class OffersController {
             console.log('Offer folder created');
 
             TaskStore.update(taskId, 'Zapisuję ofertę do bazy', 30);
-            await this.repository.addInDb(offer);
+            await instance.repository.addInDb(offer);
             console.log('Offer added in db');
 
             console.group(
@@ -184,22 +303,23 @@ export default class OffersController {
             await OfferEventsController.addNew(offer._lastEvent);
             console.groupEnd();
         } catch (err) {
-            await this.delete(auth, offer);
+            // Rollback: usuń ofertę przy błędzie (przekazujemy auth bo już go mamy)
+            await this.delete(offer, undefined, auth);
             throw err;
         }
     }
 
     /**
-     * Add new OurOffer (with specific logic for our offers)
-     * PRIVATE: Called by addNew()
+     * Add OurOffer (with specific logic for our offers)
+     * PRIVATE: Called by addInternal()
      */
-    private static async addNewOurOffer(
+    private static async addOurOffer(
         auth: OAuth2Client,
         offer: OurOffer,
         userData: UserData,
         taskId: string
     ): Promise<void> {
-        await this.addNewBase(auth, offer, userData, taskId);
+        await this.addBase(auth, offer, userData, taskId);
         await this.bindInvitationMail(offer, userData);
         const ourOfferGdFile = new OurOfferGdFile({
             enviDocumentData: { ...offer },
@@ -208,16 +328,16 @@ export default class OffersController {
     }
 
     /**
-     * Add new ExternalOffer (with specific logic for external offers)
-     * PRIVATE: Called by addNew()
+     * Add ExternalOffer (with specific logic for external offers)
+     * PRIVATE: Called by addInternal()
      */
-    private static async addNewExternalOffer(
+    private static async addExternalOffer(
         auth: OAuth2Client,
         offer: ExternalOffer,
         userData: UserData,
         taskId: string
     ): Promise<void> {
-        await this.addNewBase(auth, offer, userData, taskId);
+        await this.addBase(auth, offer, userData, taskId);
         const offerGdController = new ExternalOfferGdController();
         const { offerContentFolder, specsFolder } =
             await offerGdController.createExternalOfferFolders(auth, {
@@ -242,6 +362,7 @@ export default class OffersController {
         taskId?: string,
         fieldsToUpdate?: string[]
     ): Promise<void> {
+        const instance = this.getInstance();
         try {
             console.group('Editing offer');
             TaskStore.update(taskId, 'Edytuję ofertę', 5);
@@ -252,7 +373,7 @@ export default class OffersController {
             }
             console.log('Offer folder edited');
             TaskStore.update(taskId, 'Edytuję ofertę w bazie', 50);
-            await this.repository.editInDb(
+            await instance.repository.editInDb(
                 offer,
                 undefined,
                 undefined,
@@ -321,6 +442,7 @@ export default class OffersController {
         auth: OAuth2Client,
         offer: Offer
     ): Promise<void> {
+        const instance = this.getInstance();
         console.group('Deleting offer');
         if (!offer.gdFolderId)
             throw new EnviErrors.NoGdIdError(
@@ -329,7 +451,7 @@ export default class OffersController {
             );
 
         try {
-            if (offer.id) await this.repository.deleteFromDb(offer);
+            if (offer.id) await instance.repository.deleteFromDb(offer);
             console.log('Offer deleted from db');
         } catch (err) {
             console.error('Failed to delete from db:', err);
@@ -596,5 +718,43 @@ export default class OffersController {
                 isPartOfBatch: false,
             });
         }
+    }
+
+    /**
+     * API PUBLICZNE - Eksportuje ofertę do PDF
+     *
+     * @param offer - OurOffer do eksportu
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns void
+     */
+    static async exportOfferToPDF(
+        offer: OurOffer,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (_instance: OffersController, authClient: OAuth2Client) => {
+                await offer.exportToPDF(authClient);
+            },
+            auth
+        );
+    }
+
+    /**
+     * API PUBLICZNE - Pobiera dane plików z folderu GD oferty
+     *
+     * @param offer - Offer (OurOffer) z której pobieramy pliki
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns Lista plików z metadanymi
+     */
+    static async getOfferFilesData(
+        offer: OurOffer,
+        auth?: OAuth2Client
+    ): Promise<any[]> {
+        return await this.withAuth<any[]>(
+            async (_instance: OffersController, authClient: OAuth2Client) => {
+                return await offer.getOfferFilesData(authClient);
+            },
+            auth
+        );
     }
 }

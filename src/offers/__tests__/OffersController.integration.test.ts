@@ -38,7 +38,7 @@ describe('OffersController Integration Tests', () => {
         // if (connection) connection.release();
     });
 
-    describe('getOffersList with real database', () => {
+    describe('find with real database', () => {
         it.skip('should retrieve offers from database', async () => {
             // Arrange
             const searchParams: OffersSearchParams[] = [
@@ -46,7 +46,7 @@ describe('OffersController Integration Tests', () => {
             ];
 
             // Act
-            const offers = await OffersController.getOffersList(searchParams);
+            const offers = await OffersController.find(searchParams);
 
             // Assert
             expect(offers).toBeDefined();
@@ -61,7 +61,7 @@ describe('OffersController Integration Tests', () => {
             ];
 
             // Act
-            const offers = await OffersController.getOffersList(searchParams);
+            const offers = await OffersController.find(searchParams);
 
             // Assert
             expect(offers).toBeDefined();

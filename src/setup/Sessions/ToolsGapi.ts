@@ -135,6 +135,7 @@ export default class ToolsGapi {
     }
 
     /**
+     * @deprecated używać BaseController.withAuth
      * Wykonuje operacje na podstawie mojego Refresh tokena.
      *
      * @param gapiFunction - Funkcja Google API, która jako **pierwszy argument** przyjmuje OAuth2Client

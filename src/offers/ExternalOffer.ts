@@ -24,16 +24,25 @@ export default class ExternalOffer extends Offer implements ExternalOfferData {
         } else this._offerBond = null;
     }
 
+    /**
+     * @deprecated Użyj OfferBondsController.addNew() bezpośrednio w Router
+     */
     async addNewOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
         await OfferBondsController.addNew(this._offerBond, this);
     }
 
+    /**
+     * @deprecated Użyj OfferBondsController.edit() bezpośrednio w Router
+     */
     async editOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
         await OfferBondsController.edit(this._offerBond, this);
     }
 
+    /**
+     * @deprecated Użyj OfferBondsController.delete() bezpośrednio w Router
+     */
     async deleteOfferBondController() {
         if (!this._offerBond) throw new Error('No OfferBond data');
         await OfferBondsController.delete(this._offerBond);

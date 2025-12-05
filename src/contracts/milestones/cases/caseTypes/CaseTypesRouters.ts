@@ -49,8 +49,11 @@ app.put('/caseType/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/caseType/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new CaseType(req.body);
-        await item.deleteFromDb();
+        const item = new CaseType(req.body);
+
+        // ✅ Bezpośrednie wywołanie Controller - zgodnie z Clean Architecture
+        await CaseTypesController.delete(item);
+
         res.send(item);
     } catch (error) {
         next(error);

@@ -83,10 +83,10 @@ describe('OffersController', () => {
 
             // Act
             await OffersController.sendOurOffer(
-                mockAuth,
                 mockOffer,
                 mockUserData,
-                newEventData
+                newEventData,
+                mockAuth
             );
 
             // Assert
@@ -118,10 +118,10 @@ describe('OffersController', () => {
 
             // 6. Should save status to DB
             expect(OffersController['edit']).toHaveBeenCalledWith(
-                mockAuth,
                 mockOffer,
                 undefined,
-                ['status']
+                ['status'],
+                mockAuth
             );
         });
 
@@ -171,10 +171,10 @@ describe('OffersController', () => {
 
             // Act
             await OffersController.sendOurOffer(
-                mockAuth,
                 mockOffer,
                 mockUserData,
-                newEventData
+                newEventData,
+                mockAuth
             );
 
             // Assert - verify exact order
@@ -200,10 +200,10 @@ describe('OffersController', () => {
             // Act & Assert
             await expect(
                 OffersController.sendOurOffer(
-                    mockAuth,
                     mockOffer,
                     mockUserData,
-                    newEventData
+                    newEventData,
+                    mockAuth
                 )
             ).rejects.toThrow('Database error');
         });
@@ -224,7 +224,7 @@ describe('OffersController', () => {
             ).mockResolvedValue(undefined);
 
             // Act
-            await OffersController.delete(mockAuth, ourOffer, mockUserData);
+            await OffersController.delete(ourOffer, mockUserData, mockAuth);
 
             // Assert
             expect(OffersController['deleteOurOffer']).toHaveBeenCalledWith(
@@ -248,7 +248,7 @@ describe('OffersController', () => {
             ).mockResolvedValue(undefined);
 
             // Act
-            await OffersController.delete(mockAuth, externalOffer);
+            await OffersController.delete(externalOffer, undefined, mockAuth);
 
             // Assert
             expect(
@@ -261,9 +261,9 @@ describe('OffersController', () => {
             const unknownOffer = {} as any;
 
             // Act & Assert
-            await expect(
-                OffersController.delete(mockAuth, unknownOffer)
-            ).rejects.toThrow('Unknown offer type');
+            await expect(OffersController.delete(unknownOffer)).rejects.toThrow(
+                'Unknown offer type'
+            );
         });
     });
 
@@ -277,10 +277,10 @@ describe('OffersController', () => {
             };
 
             // Replace repository instance
-            (OffersController as any).repository = mockRepository;
+            (OffersController as any).instance = { repository: mockRepository };
 
             // Act
-            const result = await OffersController.getOffersList(searchParams);
+            const result = await OffersController.find(searchParams);
 
             // Assert
             expect(mockRepository.find).toHaveBeenCalledWith(searchParams);
