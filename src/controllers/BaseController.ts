@@ -6,6 +6,44 @@ import { oAuthClient } from '../setup/Sessions/ToolsGapi';
 /**
  * Generyczna klasa bazowa dla wszystkich kontrolerów.
  * Zapewnia podstawowe operacje CRUD używając repozytoriów.
+ *
+ * Wzorzec: Singleton + static methods
+ *
+ * WYMAGANA IMPLEMENTACJA w każdym KONKRETNYM Controller:
+ * Metody instancyjne (find, create, edit, delete) są pomocnicze.
+ * Controllery powinny eksponować STATYCZNE metody publiczne:
+ *
+ * ```typescript
+ * // Singleton
+ * private static instance: MyController;
+ * private static getInstance(): MyController {
+ *     if (!this.instance) this.instance = new MyController();
+ *     return this.instance;
+ * }
+ *
+ * // CRUD - statyczne metody publiczne
+ * static async find(params: SearchParams): Promise<T[]> {
+ *     const instance = this.getInstance();
+ *     return await instance.repository.find(params);
+ * }
+ *
+ * static async add(item: T, conn?, isTransaction?): Promise<T> {
+ *     const instance = this.getInstance();
+ *     await instance.repository.addInDb(item, conn, isTransaction);
+ *     return item;
+ * }
+ *
+ * static async edit(item: T, conn?, isTransaction?, fields?): Promise<T> {
+ *     const instance = this.getInstance();
+ *     await instance.repository.editInDb(item, conn, isTransaction, fields);
+ *     return item;
+ * }
+ *
+ * static async delete(item: T, conn?, isTransaction?): Promise<void> {
+ *     const instance = this.getInstance();
+ *     await instance.repository.deleteFromDb(item, conn, isTransaction);
+ * }
+ * ```
  */
 export default abstract class BaseController<
     T,
@@ -113,7 +151,17 @@ export default abstract class BaseController<
     }
 
     /**
-     * Tworzy nowy obiekt
+     * Tworzy nowy obiekt w bazie danych
+     *
+     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
+     * Controllery powinny eksponować STATYCZNĄ metodę add():
+     * ```typescript
+     * static async add(item: T, conn?, isTransaction?): Promise<T> {
+     *     const instance = this.getInstance();
+     *     await instance.repository.addInDb(item, conn, isTransaction);
+     *     return item;
+     * }
+     * ```
      */
     async create(
         entity: T,
@@ -128,7 +176,17 @@ export default abstract class BaseController<
     }
 
     /**
-     * Aktualizuje istniejący obiekt
+     * Aktualizuje istniejący obiekt w bazie danych
+     *
+     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
+     * Controllery powinny eksponować STATYCZNĄ metodę edit():
+     * ```typescript
+     * static async edit(item: T, conn?, isTransaction?, fields?): Promise<T> {
+     *     const instance = this.getInstance();
+     *     await instance.repository.editInDb(item, conn, isTransaction, fields);
+     *     return item;
+     * }
+     * ```
      */
     async edit(
         entity: T,
@@ -145,7 +203,16 @@ export default abstract class BaseController<
     }
 
     /**
-     * Usuwa obiekt
+     * Usuwa obiekt z bazy danych
+     *
+     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
+     * Controllery powinny eksponować STATYCZNĄ metodę delete():
+     * ```typescript
+     * static async delete(item: T, conn?, isTransaction?): Promise<void> {
+     *     const instance = this.getInstance();
+     *     await instance.repository.deleteFromDb(item, conn, isTransaction);
+     * }
+     * ```
      */
     async delete(
         entity: T,
@@ -160,7 +227,16 @@ export default abstract class BaseController<
     }
 
     /**
-     * Pobiera listę obiektów
+     * Pobiera listę obiektów z bazy danych
+     *
+     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
+     * Controllery powinny eksponować STATYCZNĄ metodę find():
+     * ```typescript
+     * static async find(params: SearchParams): Promise<T[]> {
+     *     const instance = this.getInstance();
+     *     return await instance.repository.find(params);
+     * }
+     * ```
      */
     async find(conditions?: any): Promise<T[]> {
         return await this.repository.find(conditions);

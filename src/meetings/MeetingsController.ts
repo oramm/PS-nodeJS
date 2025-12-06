@@ -1,79 +1,48 @@
-import mysql from 'mysql2/promise';
-import Tools from "../tools/Tools";
-import ToolsDb from '../tools/ToolsDb'
-import Meeting from "./Meeting";
+import MeetingRepository, { MeetingSearchParams } from './MeetingRepository';
+import Meeting from './Meeting';
+import BaseController from '../controllers/BaseController';
 
-export default class MeetingsController {
-    static async getMeetingsList(initParamObject: any) {
-        const projectConditon = (initParamObject.projectId) ? 'Contracts.ProjectOurId="' + initParamObject.projectId + '"' : '1';
-        const contractConditon = (initParamObject.contractId) ? 'Meetings.ContractId=' + initParamObject.contractId : '1';
+/**
+ * Controller dla Meeting - warstwa orkiestracji
+ *
+ * Zgodnie z Clean Architecture:
+ * - Orkiestruje operacje biznesowe
+ * - Deleguje do Repository dla operacji DB
+ * - NIE zawiera SQL ani logiki mapowania
+ */
+export default class MeetingsController extends BaseController<
+    Meeting,
+    MeetingRepository
+> {
+    private static instance: MeetingsController;
 
-        const sql = 'SELECT  Meetings.Id, \n \t' +
-            'Meetings.Name, \n \t' +
-            'Meetings.Description, \n \t' +
-            'Meetings.Date, \n \t' +
-            'Meetings.ProtocolGdId, \n \t' +
-            'Meetings.Location, \n \t' +
-            'Contracts.Id AS ContractId, \n \t' +
-            'Contracts.Number AS ContractNumber, \n \t' +
-            'Contracts.Name AS ContractName, \n \t' +
-            'Contracts.GdFolderId AS ContractGdFolderId, \n \t' +
-            'OurContractsData.OurId AS ContractOurId, \n \t' +
-            'Contracts.Name AS ContractName, \n \t' +
-            'Contracts.Name AS ContractName, \n \t' +
-            'Contracts.Name AS ContractName, \n \t' +
-            'ContractTypes.Id AS ContractTypeId, \n \t' +
-            'ContractTypes.Name AS ContractTypeName, \n \t' +
-            'ContractTypes.IsOur AS ContractTypeIsOur, \n \t' +
-            'ContractTypes.Id AS ContractTypeDescription, \n \t' +
-            'Projects.OurId AS ProjectOurId, \n \t' +
-            'Projects.Name AS ProjectName, \n \t' +
-            'Projects.GdFolderId AS ProjectGdFolderId \n' +
-            'FROM Meetings \n' +
-            'JOIN Contracts ON Contracts.Id=Meetings.ContractId \n' +
-            'LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id \n' +
-            'JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId \n' +
-            'JOIN Projects ON Projects.OurId=Contracts.ProjectOurId \n' +
-            'WHERE ' + projectConditon + ' AND ' + contractConditon;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processMeetingsResult(result);
-
-
+    constructor() {
+        super(new MeetingRepository());
     }
 
-    static processMeetingsResult(result: any[]): [Meeting?] {
-        let newResult: [Meeting?] = [];
-
-        for (const row of result) {
-            var item = new Meeting({
-                id: row.Id,
-                name: row.Name,
-                description: row.Description,
-                date: row.Date,
-                protocolGdId: row.ProtocolGdId,
-                location: row.Location,
-                _contract: {
-                    id: row.ContractId,
-                    number: row.ContractNumber,
-                    name: ToolsDb.sqlToString(row.ContractName),
-                    gdFolderId: row.ContractGdFolderId,
-                    ourId: row.ContractOurId,
-                    _parent: {
-                        ourId: row.ProjectOurId,
-                        name: row.ProjectName,
-                        gdFolderId: row.ProjectGdFolderId
-                    },
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                        description: row.ContractTypeDescription,
-                        isOur: row.ContractTypeIsOur
-                    }
-                }
-            });
-            newResult.push(item);
+    /**
+     * Singleton pattern
+     */
+    private static getInstance(): MeetingsController {
+        if (!this.instance) {
+            this.instance = new MeetingsController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    /**
+     * Wyszukuje spotkania według podanych warunków
+     *
+     * REFAKTORING: SQL przeniesiony do MeetingRepository
+     * Controller tylko orkiestruje wywołanie Repository
+     *
+     * @param orConditions - Warunki wyszukiwania (projectId, contractId)
+     * @returns Promise<Meeting[]> - Lista znalezionych spotkań
+     */
+    static async find(
+        orConditions: MeetingSearchParams[] = []
+    ): Promise<Meeting[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
     }
 }

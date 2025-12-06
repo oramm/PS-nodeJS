@@ -1,34 +1,86 @@
-import ToolsDate from "../../tools/ToolsDate";
+import BusinessObject from '../../BussinesObject';
+import ToolsDate from '../../tools/ToolsDate';
 
-export default class MeetingArrangement {
+export interface MeetingArrangementData {
     id?: number;
-    name: any;
-    description: any;
-    deadline: string | undefined;
-    _owner: any;
-    ownerId: number;
-    _parent: any;
-    meetingId: number;
-    _case: any;
-    caseId: number;
-    _lastUpdated: any;
+    name?: string;
+    description?: string;
+    deadline?: string | Date;
+    _owner?: {
+        id?: number;
+        name?: string;
+        surname?: string;
+        email?: string;
+    };
+    _parent?: {
+        id?: number;
+    };
+    _case?: {
+        id?: number;
+        name?: string;
+        _type?: {
+            id?: number;
+            name?: string;
+            folderNumber?: string;
+        };
+        _parent?: {
+            id?: number;
+            name?: string;
+            _parent?: {
+                id?: number;
+                name?: string;
+                number?: string;
+            };
+        };
+    };
+    _lastUpdated?: string;
+    _editor?: any;
+}
 
-    constructor(initParamObject: any) {
-        this.id = initParamObject.id;
+export default class MeetingArrangement extends BusinessObject {
+    name?: string;
+    description?: string;
+    deadline?: string;
+    _owner?: {
+        id?: number;
+        name?: string;
+        surname?: string;
+        email?: string;
+        _nameSurnameEmail?: string;
+    };
+    ownerId?: number;
+    _parent?: {
+        id?: number;
+    };
+    meetingId?: number;
+    _case?: MeetingArrangementData['_case'];
+    caseId?: number;
+    _lastUpdated?: string;
+
+    constructor(initParamObject: MeetingArrangementData) {
+        super({ _dbTableName: 'MeetingArrangements', ...initParamObject });
+
         this.name = initParamObject.name;
         this.description = initParamObject.description;
 
-        this.deadline = ToolsDate.dateJsToSql(initParamObject.deadline);
+        this.deadline = initParamObject.deadline
+            ? ToolsDate.dateJsToSql(initParamObject.deadline)
+            : undefined;
+
         this._owner = initParamObject._owner;
-        this.ownerId = initParamObject._owner.id;
-        this._owner._nameSurnameEmail = this._owner.name + ' ' + this._owner.surname + ' ' + this._owner.email;
+        this.ownerId = initParamObject._owner?.id;
+        if (this._owner && this._owner.name && this._owner.surname) {
+            this._owner._nameSurnameEmail = `${this._owner.name} ${
+                this._owner.surname
+            } ${this._owner.email || ''}`.trim();
+        }
 
         this._parent = initParamObject._parent;
-        this.meetingId = initParamObject._parent.id;
+        this.meetingId = initParamObject._parent?.id;
 
         this._case = initParamObject._case;
-        this.caseId = initParamObject._case.id;
+        this.caseId = initParamObject._case?.id;
+
         this._lastUpdated = initParamObject._lastUpdated;
     }
 }
-
