@@ -13,7 +13,6 @@ import {
 } from '../types/types';
 import OfferGdController from './gdControllers/OfferGdController';
 import OfferEvent from './offerEvent/OfferEvent';
-import OfferEventsController from './offerEvent/OfferEventsController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -98,22 +97,6 @@ export default abstract class Offer
         console.log('shouldEditGdElements', _fieldsToUpdate);
         if (!_fieldsToUpdate) return true;
         return _fieldsToUpdate.includes('submissionDeadline');
-    }
-
-    async addEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.addNew(this._lastEvent);
-    }
-
-    async editEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.edit(this._lastEvent);
-    }
-
-    async deleteEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.delete(this._lastEvent);
-        this._lastEvent = null;
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {

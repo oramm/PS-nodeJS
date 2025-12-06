@@ -11,7 +11,6 @@ import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import OfferEvent from './offerEvent/OfferEvent';
-import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
 
 export default class OurOffer extends Offer implements OurOfferData {
@@ -103,15 +102,5 @@ export default class OurOffer extends Offer implements OurOfferData {
             ourOfferGdFile.editFileName(auth),
         ]);
         return letterGdFolder;
-    }
-
-    async getCurrentOfferVersionNumber(offerId: number) {
-        const sql = `SELECT MAX(VersionNumber) as VersionNumber
-        FROM OfferEvents
-        WHERE OfferId = ?`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return result[0].VersionNumber;
     }
 }
