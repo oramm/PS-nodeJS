@@ -1,9 +1,8 @@
-import ToolsDb from '../../tools/ToolsDb';
-import OfferEvent from './OfferEvent';
-import Setup from '../../setup/Setup';
 import { OAuth2Client } from 'google-auth-library';
-import { OfferData } from '../../types/types';
 import BaseController from '../../controllers/BaseController';
+import Setup from '../../setup/Setup';
+import { OfferData } from '../../types/types';
+import OfferEvent from './OfferEvent';
 import OfferEventRepository, {
     OfferEventSearchParams,
 } from './OfferEventRepository';

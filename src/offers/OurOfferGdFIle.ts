@@ -1,13 +1,12 @@
-import DocumentTemplate from '../documentTemplates/DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
+import CasesController from '../contracts/milestones/cases/CasesController';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
-import ToolsDocs from '../tools/ToolsDocs';
-import { OurOfferData } from '../types/types';
 import Setup from '../setup/Setup';
 import EnviErrors from '../tools/Errors';
-import CasesController from '../contracts/milestones/cases/CasesController';
-import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
+import ToolsDocs from '../tools/ToolsDocs';
+import ToolsGd from '../tools/ToolsGd';
+import { OurOfferData } from '../types/types';
 
 export default class OurOfferGdFile extends DocumentGdFile {
     protected enviDocumentData: OurOfferData;
