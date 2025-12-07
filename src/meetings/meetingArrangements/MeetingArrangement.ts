@@ -5,7 +5,7 @@ export interface MeetingArrangementData {
     id?: number;
     name?: string;
     description?: string;
-    deadline?: string | Date;
+    deadline?: string | null;
     _owner?: {
         id?: number;
         name?: string;
@@ -37,10 +37,14 @@ export interface MeetingArrangementData {
     _editor?: any;
 }
 
-export default class MeetingArrangement extends BusinessObject {
+export default class MeetingArrangement
+    extends BusinessObject
+    implements MeetingArrangementData
+{
+    declare id?: number;
     name?: string;
     description?: string;
-    deadline?: string;
+    deadline?: string | null;
     _owner?: {
         id?: number;
         name?: string;
@@ -65,7 +69,7 @@ export default class MeetingArrangement extends BusinessObject {
 
         this.deadline = initParamObject.deadline
             ? ToolsDate.dateJsToSql(initParamObject.deadline)
-            : undefined;
+            : null;
 
         this._owner = initParamObject._owner;
         this.ownerId = initParamObject._owner?.id;

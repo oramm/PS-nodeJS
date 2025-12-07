@@ -36,15 +36,6 @@ export default class CaseEventsController {
         return this.instance;
     }
 
-    // ==================== READ ====================
-
-    /**
-     * @deprecated Użyj find() zamiast getCaseEventsList()
-     */
-    static async getCaseEventsList(initParamObject: CaseEventsSearchParams) {
-        return this.find(initParamObject);
-    }
-
     /**
      * Wyszukuje zdarzenia sprawy (pisma i ustalenia ze spotkań)
      * API PUBLICZNE - zgodne z Clean Architecture
@@ -118,7 +109,7 @@ export default class CaseEventsController {
             } else {
                 item = new MeetingArrangement({
                     id: row.Id,
-                    name: row.Name,
+                    name: row.Name ?? undefined,
                     description: row.Description,
                     deadline: row.EventDeadline,
                     _lastUpdated: row.LastUpdated,

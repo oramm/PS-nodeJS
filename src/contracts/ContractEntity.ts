@@ -3,12 +3,12 @@ import Entity from '../entities/Entity';
 import { ContractData } from '../types/types';
 
 export default class ContractEntity extends BusinessObject {
+    declare id: string;
     contractId: number;
     _contract: ContractData;
     entityId: number;
     _entity: Entity;
     contractRole: string;
-    id: string;
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Contracts_Entities' });
         this.contractId = initParamObject._contract.id;

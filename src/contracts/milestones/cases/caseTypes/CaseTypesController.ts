@@ -49,27 +49,4 @@ export default class CaseTypesController extends BaseController<
         const instance = this.getInstance();
         return await instance.repository.find({ orConditions });
     }
-
-    /**
-     * @deprecated Użyj CaseTypesController.find()
-     */
-    static async getCaseTypesList(orConditions: any[] | undefined = []) {
-        return await this.find(orConditions);
-    }
-
-    /**
-     * @deprecated Logika przeniesiona do Repository
-     */
-    static makeAndConditions(initParamObject: any) {
-        // Metoda pomocnicza, teraz prywatna w Repository
-        return '';
-    }
-
-    /**
-     * @deprecated Logika przeniesiona do Repository
-     */
-    static async processCaseTypesResult(result: any[]) {
-        // Metoda pomocnicza, teraz w Repository.mapRowToModel
-        return [];
-    }
 }

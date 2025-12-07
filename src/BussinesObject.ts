@@ -9,7 +9,7 @@ export default class BusinessObject {
     editorId?: number;
     constructor(initParamObject: {
         _dbTableName: string;
-        id?: number;
+        id?: number | string;
         _editor?: PersonData;
     }) {
         this.id = initParamObject.id;

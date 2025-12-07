@@ -1,293 +1,119 @@
-import mysql from 'mysql2/promise';
+import { OAuth2Client } from 'google-auth-library';
+import BaseController from '../../controllers/BaseController';
+import SecurityRepository from './SecurityRepository';
+import { Security, SecuritiesSearchParams } from './Security';
 import ToolsDb from '../../tools/ToolsDb';
+import Setup from '../../setup/Setup';
+import Case from '../milestones/cases/Case';
+import CasesController from '../milestones/cases/CasesController';
+import CaseTypesController from '../milestones/cases/caseTypes/CaseTypesController';
+import MilestonesController from '../milestones/MilestonesController';
 import ContractType from '../contractTypes/ContractType';
 import Project from '../../projects/Project';
-import ContractOur from '../ContractOur';
-import { Security } from './Security';
-import Person from '../../persons/Person';
-import Case from '../milestones/cases/Case';
-import { MilestoneData } from '../../types/types';
 
-export type SecuritiesSearchParams = {
-    id?: number;
-    projectId?: string;
-    _parent?: Project;
-    searchText?: string;
-    contractOurId?: string;
-    startDateFrom?: string;
-    startDateTo?: string;
-    firstPartExpiryDateFrom?: string;
-    firstPartExpiryDateTo?: string;
-    secondPartExpiryDateFrom?: string;
-    secondPartExpiryDateTo?: string;
-    status?: string;
-    contractName?: string;
-    contractAlias?: string;
-    typeId?: number;
-    _contractType?: ContractType;
-};
+export default class SecuritiesController extends BaseController<
+    Security,
+    SecurityRepository
+> {
+    private static instance: SecuritiesController;
 
-export default class SecuritiesController {
+    private constructor() {
+        super(new SecurityRepository());
+    }
+
+    public static getInstance(): SecuritiesController {
+        if (!SecuritiesController.instance) {
+            SecuritiesController.instance = new SecuritiesController();
+        }
+        return SecuritiesController.instance;
+    }
+
+    static async find(orConditions: SecuritiesSearchParams[]) {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
+    }
+
     /**
-     * Pobiera listę papierów wartościowych na podstawie podanych kryteriów wyszukiwania.
-     * @param {SecuritiesSearchParams} searchParams - Główne kryteria wyszukiwania, gdzie wszystkie warunki są połączone operatorem AND.
-     * @param {SecuritiesSearchParams[]} [orConditions] - Opcjonalna tablica dodatkowych kryteriów wyszukiwania. Każdy obiekt w tablicy reprezentuje zestaw warunków połączonych operatorem AND. Cała tablica jest łączona operatorem OR.
-     * @example
-     * // Pobierz papiery wartościowe o ID równym 1 lub 2.
-     * const result = await SecuritiesController.getSecuritiesList({}, [{id: 1}, {id: 2}]);
-     *
-     * // Pobierz papiery wartościowe o statusie 'active' dla projektu o ID 'A' lub statusie 'inactive' dla projektu o ID 'B'.
-     * const result = await SecuritiesController.getSecuritiesList({projectId: "A"}, [{status: "active"}, {projectId: "B", status: "inactive"}]);
+     * @deprecated Use find() instead
      */
     static async getSecuritiesList(orConditions: SecuritiesSearchParams[]) {
-        const sql = `SELECT 
-                    Securities.Id,
-                    Securities.ContractId,
-                    Securities.Description,
-                    Securities.Value,
-                    Securities.ReturnedValue,
-                    Securities.DeductionValue,
-                    Securities.FirstPartRate,
-                    Securities.SecondPartRate,
-                    Securities.FirstPartExpiryDate,
-                    Securities.SecondPartExpiryDate,
-                    Securities.IsCash,
-                    Securities.Status,
-                    Securities.LastUpdated,
-                    Cases.Id AS CaseId,
-                    Cases.Name AS CaseName,
-                    Cases.Number AS CaseNumber,
-                    Cases.Description AS CaseDescription,
-                    Cases.GdFolderId AS CaseGdFolderId,
-                    CaseTypes.Id AS CaseTypeId,
-                    CaseTypes.Name AS CaseTypeName,
-                    CaseTypes.IsDefault,
-                    CaseTypes.IsUniquePerMilestone,
-                    CaseTypes.MilestoneTypeId,
-                    Contracts.Id AS ContractId,
-                    Contracts.Alias AS ContractAlias, 
-                    Contracts.Number AS ContractNumber, 
-                    Contracts.Name AS ContractName, 
-                    Contracts.StartDate AS ContractStartDate, 
-                    Contracts.EndDate AS ContractEndDate,
-                    Contracts.GuaranteeEndDate AS ContractGuaranteeEndDate,
-                    Contracts.Status AS ContractStatus,
-                    OurContractsData.OurId AS ContractOurId,
-                    ContractTypes.Id AS MainContractTypeId, 
-                    ContractTypes.Name AS TypeName, 
-                    ContractTypes.IsOur AS TypeIsOur, 
-                    ContractTypes.Description AS TypeDescription,
-                    Admins.Id AS AdminsId,
-                    Admins.Name AS EditorsName,
-                    Admins.Surname AS EditorsSurname,
-                    Admins.Email AS EditorsEmail,
-                    Editors.Id AS EditorsId,
-                    Editors.Name AS EditorsName,
-                    Editors.Surname AS EditorsSurname,
-                    Editors.Email AS EditorsEmail
-                FROM Securities
-                JOIN Contracts ON Contracts.Id=Securities.ContractId 
-                JOIN OurContractsData ON OurContractsData.Id=ContractId 
-                JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
-                JOIN Cases ON Cases.Id = CaseId
-                JOIN CaseTypes ON CaseTypes.Id = Cases.TypeId
-                LEFT JOIN Persons AS Editors ON Securities.EditorId = Editors.Id
-                LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
-                LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-                WHERE ${ToolsDb.makeOrGroupsConditions(
-                    orConditions,
-                    this.makeAndConditions.bind(this)
-                )}
-                ORDER BY ContractEndDate DESC`;
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return this.processResult(result);
-        } catch (err) {
-            console.log(sql);
-            throw err;
-        }
+        return await this.find(orConditions);
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        if (searchText) searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Securities.Description Like ?
-                    OR Contracts.Name LIKE ?
-                    OR Contracts.Number LIKE ?
-                    OR Contracts.Alias LIKE ?
-                    OR OurContractsData.OurId LIKE ?)`,
-                [
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                    `%${word}%`,
-                ]
-            )
-        );
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    static async addFromDto(dto: any, auth?: OAuth2Client): Promise<Security> {
+        const item = new Security(dto);
+        return await this.add(item, auth);
     }
 
-    static makeAndConditions(searchParams: SecuritiesSearchParams) {
-        const projectOurId =
-            searchParams._parent?.ourId || searchParams.projectId;
-        const typeId = searchParams._contractType?.id || searchParams.typeId;
+    static async add(item: Security, auth?: OAuth2Client): Promise<Security> {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            // 1. Create Case
+            const caseItem = await this.createCaseForSecurity(item, auth);
+            item.caseId = caseItem.id;
+            item._case = caseItem;
 
-        const idCondition = searchParams.id
-            ? mysql.format(`Contracts.Id = ? `, [searchParams.id])
-            : '1';
-        const projectCondition = projectOurId
-            ? mysql.format(`Contracts.ProjectOurId = ? `, [projectOurId])
-            : '1';
-        const contractOurIdCondition = searchParams.contractOurId
-            ? mysql.format(`OurContractsData.OurId LIKE ? `, [
-                  `%${searchParams.contractOurId}%`,
-              ])
-            : '1';
-        const contractNameCondition = searchParams.contractName
-            ? mysql.format(`Contracts.Name = ? `, [searchParams.contractName])
-            : '1';
-        const startDateFromCondition = searchParams.startDateFrom
-            ? mysql.format(`Contracts.StartDate >= ? `, [
-                  searchParams.startDateFrom,
-              ])
-            : '1';
-        const startDateToCondition = searchParams.startDateTo
-            ? mysql.format(`Contracts.StartDate <= ? `, [
-                  searchParams.startDateTo,
-              ])
-            : '1';
-        const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
-            searchParams.status,
-            'Securities',
-            'Status'
-        );
+            // 2. Add Security to DB
+            await instance.repository.addInDb(item, conn, true);
 
-        searchParams.status
-            ? mysql.format(`Securities.Status = ? `, [searchParams.status])
-            : '1';
-
-        const firstPartExpiryDateFromCondition =
-            searchParams.firstPartExpiryDateFrom
-                ? mysql.format(
-                      `COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) >= ? `,
-                      [searchParams.firstPartExpiryDateFrom]
-                  )
-                : '1';
-        const firstPartExpiryDateToCondition =
-            searchParams.firstPartExpiryDateTo
-                ? mysql.format(
-                      `COALESCE(Securities.FirstPartExpiryDate, Contracts.EndDate) <= ? `,
-                      [searchParams.firstPartExpiryDateTo]
-                  )
-                : '1';
-
-        const secondPartExpiryDateFromCondition =
-            searchParams.secondPartExpiryDateFrom
-                ? mysql.format(`Securities.SecondPartExpiryDate >= ? `, [
-                      searchParams.secondPartExpiryDateFrom,
-                  ])
-                : '1';
-        const secondPartExpiryDateToCondition =
-            searchParams.secondPartExpiryDateTo
-                ? mysql.format(`Securities.SecondPartExpiryDate <= ? `, [
-                      searchParams.secondPartExpiryDateTo,
-                  ])
-                : '1';
-
-        const contractTypeCondition = typeId
-            ? mysql.format(`Contracts.TypeId = ? `, [typeId])
-            : '1';
-
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-
-        return `${idCondition} 
-                AND ${projectCondition}  
-                AND ${contractOurIdCondition} 
-                AND ${contractNameCondition}
-                AND ${startDateFromCondition}
-                AND ${startDateToCondition}
-                AND ${firstPartExpiryDateFromCondition}
-                AND ${firstPartExpiryDateToCondition}
-                AND ${secondPartExpiryDateFromCondition}
-                AND ${secondPartExpiryDateToCondition}
-                AND ${statusCondition}
-                AND ${contractTypeCondition}
-                AND ${searchTextCondition} `;
-    }
-
-    private static async processResult(result: any[]) {
-        const newResult: Security[] = [];
-
-        for (const row of result) {
-            const item = new Security({
-                id: row.Id,
-                description: ToolsDb.sqlToString(row.Description),
-                value: row.Value,
-                returnedValue: row.ReturnedValue,
-                deductionValue: row.DeductionValue,
-                firstPartRate: row.FirstPartRate,
-                secondPartRate: row.SecondPartRate,
-                firstPartExpiryDate: row.FirstPartExpiryDate,
-                secondPartExpiryDate: row.SecondPartExpiryDate,
-                isCash: row.IsCash,
-                status: ToolsDb.sqlToString(row.Status),
-                _lastUpdated: row.LastUpdated,
-                _case: new Case({
-                    id: row.CaseId,
-                    name: row.CaseName,
-                    number: row.CaseNumber,
-                    description: row.CaseDescription,
-                    gdFolderId: row.CaseGdFolderId,
-                    _type: {
-                        id: row.CaseTypeId,
-                        name: row.CaseTypeName,
-                        isDefault: row.IsDefault,
-                        isUniquePerMilestone: row.isUniquePerMilestone,
-                        milestoneTypeId: row.MilestoneTypeId,
-                    },
-                    _parent: {} as MilestoneData,
-                }),
-                _contract: new ContractOur({
-                    id: row.ContractId,
-                    ourId: row.ContractOurId,
-                    alias: row.ContractAlias,
-                    number: row.ContractNumber,
-                    startDate: row.ContractStartDate,
-                    endDate: row.ContractEndDate,
-                    guaranteeEndDate: row.ContractGuaranteeEndDate,
-                    name: row.ContractName,
-                    status: row.ContractStatus,
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                        description: row.ContractTypeDescription,
-                        isOur: row.ContractTypeIsOur,
-                    },
-                    _admin: new Person({
-                        id: row.AdminsId,
-                        name: row.EditorsName,
-                        surname: row.EditorsSurname,
-                        email: row.EditorsEmail,
-                    }),
-                }),
-                _editor: new Person({
-                    name: row.EditorsName,
-                    surname: row.EditorsSurname,
-                    email: row.EditorsEmail,
-                }),
-            });
             item.setGdFolderUrl();
-            newResult.push(item);
+            return item;
+        });
+    }
+
+    static async editFromDto(dto: any, auth?: OAuth2Client): Promise<Security> {
+        const item = new Security(dto);
+        return await this.edit(item, auth);
+    }
+
+    static async edit(item: Security, auth?: OAuth2Client): Promise<Security> {
+        const instance = this.getInstance();
+        await instance.repository.editInDb(item);
+        return item;
+    }
+
+    static async deleteFromDto(
+        dto: any,
+        auth?: OAuth2Client
+    ): Promise<Security> {
+        const item = new Security(dto);
+        await this.delete(item, auth);
+        return item;
+    }
+
+    static async delete(item: Security, auth?: OAuth2Client): Promise<void> {
+        const instance = this.getInstance();
+        await instance.repository.deleteFromDb(item);
+        if (item._case) {
+            await CasesController.delete(item._case, auth);
         }
-        return newResult;
+    }
+
+    private static async createCaseForSecurity(
+        security: Security,
+        auth?: OAuth2Client
+    ): Promise<Case> {
+        const caseType = (
+            await CaseTypesController.find([
+                { id: Setup.CaseTypes.SECURITY_GUARANTEE },
+            ])
+        )[0];
+
+        const milestone = (
+            await MilestonesController.find([
+                {
+                    contractId: security.contractId,
+                    typeId: Setup.MilestoneTypes.OURCONTRACT_ADMINISTRATION,
+                },
+            ])
+        )[0];
+
+        const caseItem = new Case({
+            _type: caseType,
+            _parent: milestone,
+        });
+
+        const result = await CasesController.add(caseItem, auth);
+        return result.caseItem;
     }
 }
