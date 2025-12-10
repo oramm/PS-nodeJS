@@ -14,7 +14,14 @@ export default class MilestoneDateMailReport {
             console.log('Rozpoczynanie generowania raportu terminów...');
 
             // Pobierz wszystkie daty milestone z bazy danych
-            const allMilestoneDates = await MilestoneDatesController.find([{}]);
+            const allMilestoneDates = await MilestoneDatesController.find([
+                {
+                    milestoneStatuses: [
+                        Setup.MilestoneStatus.IN_PROGRESS,
+                        Setup.MilestoneStatus.NOT_STARTED,
+                    ],
+                },
+            ]);
 
             // Filtruj terminy przeterminowane i zbliżające się
             const { overdueDates, upcomingDates } =
