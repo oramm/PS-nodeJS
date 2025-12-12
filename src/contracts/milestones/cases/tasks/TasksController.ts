@@ -363,9 +363,9 @@ export default class TasksController extends BaseController<
             conn.threadId
         );
         const taskTemplate = (
-            await TasksTemplateForProcesssController.getTasksTemplateForProcesssList(
-                { processId: process.id }
-            )
+            await TasksTemplateForProcesssController.find({
+                processId: process.id,
+            })
         )[0];
         if (taskTemplate) {
             const task = new Task({
@@ -374,8 +374,13 @@ export default class TasksController extends BaseController<
                 status: 'Backlog',
                 _parent: parentCase,
             });
-
-            return await task.addInDb(conn, isPartOfTransaction);
+            const instance = this.getInstance();
+            return await instance.repository.addInDb(
+                task,
+                conn,
+                isPartOfTransaction
+            );
+            //return await task.addInDb(conn, isPartOfTransaction);
         }
     }
 

@@ -1,3 +1,4 @@
+import BaseController from '../../controllers/BaseController';
 import ContractType from './ContractType';
 import ContractTypeRepository, {
     ContractTypesSearchParams,
@@ -8,12 +9,14 @@ import ContractTypeRepository, {
  * Wzorzec: Singleton + static methods + delegacja do Repository
  * Przepływ: Router → Controller → Repository → Model
  */
-export default class ContractTypesController {
+export default class ContractTypesController extends BaseController<
+    ContractType,
+    ContractTypeRepository
+> {
     private static instance: ContractTypesController;
-    private repository: ContractTypeRepository;
 
     private constructor() {
-        this.repository = new ContractTypeRepository();
+        super(new ContractTypeRepository());
     }
 
     private static getInstance(): ContractTypesController {

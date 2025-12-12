@@ -193,10 +193,9 @@ export default class CasesController extends BaseController<
         for (const process of caseItem._type._processes) {
             // utwórz obiekt zadania na podstawie szablonu, ale NIE zapisuj go teraz do DB
             // (zapisywanie nastąpi w repository.addWithRelated po dodaniu Case)
-            const templates =
-                await TasksTemplatesForProcessesController.getTasksTemplateForProcesssList(
-                    { processId: process.id }
-                );
+            const templates = await TasksTemplatesForProcessesController.find({
+                processId: process.id,
+            });
             const taskTemplate =
                 templates && templates.length > 0 ? templates[0] : undefined;
             if (!taskTemplate) continue;

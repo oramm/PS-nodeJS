@@ -37,16 +37,6 @@ export default class TasksTemplatesForProcessesController extends BaseController
     }
 
     // ==================== READ ====================
-
-    /**
-     * @deprecated Użyj find() zamiast getTasksTemplateForProcesssList()
-     */
-    static async getTasksTemplateForProcesssList(
-        initParamObject: TaskTemplatesForProcessesSearchParams
-    ): Promise<TaskTemplateForProcess[]> {
-        return this.find(initParamObject);
-    }
-
     /**
      * Wyszukuje szablony zadań dla procesów
      * API PUBLICZNE - zgodne z Clean Architecture
