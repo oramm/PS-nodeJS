@@ -1,13 +1,11 @@
+import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
+import BaseController from '../controllers/BaseController';
 import ToolsDb from '../tools/ToolsDb';
 import Project from './Project';
-import Entity from '../entities/Entity';
+import ProjectEntitiesController from './ProjectEntitiesController';
 import ProjectEntity from './ProjectEntity';
-import { UserData } from '../types/sessionTypes';
-import Setup from '../setup/Setup';
-import BaseController from '../controllers/BaseController';
 import ProjectRepository, { ProjectSearchParams } from './ProjectRepository';
-import { OAuth2Client } from 'google-auth-library';
 
 export default class ProjectsController extends BaseController<
     Project,
@@ -40,7 +38,23 @@ export default class ProjectsController extends BaseController<
         orConditions: ProjectSearchParams[] = []
     ): Promise<Project[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        const projects = await instance.repository.find(orConditions);
+
+        if (orConditions[0]?.onlyKeyData) return projects;
+
+        const projectIds = projects
+            .map((p) => p.id)
+            .filter((id): id is number => typeof id === 'number');
+        if (projectIds.length === 0) return projects;
+
+        const associations = await ProjectEntitiesController.find({
+            projectIds,
+        });
+        for (const project of projects) {
+            project.setProjectEntityAssociations(associations);
+        }
+
+        return projects;
     }
 
     /**
@@ -218,7 +232,7 @@ export default class ProjectsController extends BaseController<
                     _entity: entity,
                     projectRole: 'EMPLOYER',
                 });
-                await association.addInDb1(conn, true);
+                await ProjectEntitiesController.add(association, conn, true);
             }
         }
 
@@ -230,7 +244,7 @@ export default class ProjectsController extends BaseController<
                     _entity: entity,
                     projectRole: 'ENGINEER',
                 });
-                await association.addInDb1(conn, true);
+                await ProjectEntitiesController.add(association, conn, true);
             }
         }
     }
@@ -256,6 +270,7 @@ export default class ProjectsController extends BaseController<
         project: Project,
         conn: mysql.PoolConnection
     ): Promise<void> {
-        await this.repository.deleteProjectEntityAssociations(project, conn);
+        if (!project.id) throw new Error('Project.id is required');
+        await ProjectEntitiesController.deleteByProjectId(project.id, conn);
     }
 }

@@ -2,8 +2,6 @@ import BaseRepository from '../repositories/BaseRepository';
 import Project from './Project';
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import Entity from '../entities/Entity';
-import ProjectEntity from './ProjectEntity';
 import Setup from '../setup/Setup';
 
 export type ProjectSearchParams = {
@@ -63,16 +61,8 @@ export default class ProjectRepository extends BaseRepository<Project> {
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
-        // Pobierz powiązane dane Entity-Project
-        const entitiesPerAllProjects =
-            await this.getProjectEntityAssociationsList(
-                orConditions[0]?.onlyKeyData ? undefined : {}
-            );
-
-        // Mapuj wyniki
-        return result.map((row) =>
-            this.mapRowToModel(row, entitiesPerAllProjects)
-        );
+        // Mapuj wyniki (asocjacje Project-Entity są doklejane w Controller)
+        return result.map((row) => this.mapRowToModel(row));
     }
 
     /**
@@ -82,10 +72,7 @@ export default class ProjectRepository extends BaseRepository<Project> {
      * @param entitiesPerAllProjects - Lista asocjacji Project-Entity
      * @returns Project - Zmapowana instancja
      */
-    protected mapRowToModel(
-        row: any,
-        entitiesPerAllProjects: ProjectEntity[] = []
-    ): Project {
+    protected mapRowToModel(row: any): Project {
         const project = new Project({
             id: row.Id,
             ourId: row.OurId,
@@ -106,8 +93,6 @@ export default class ProjectRepository extends BaseRepository<Project> {
             googleCalendarId: row.GoogleCalendarId,
             lastUpdated: row.LastUpdated,
         });
-
-        project.setProjectEntityAssociations(entitiesPerAllProjects);
         return project;
     }
 
@@ -163,73 +148,5 @@ export default class ProjectRepository extends BaseRepository<Project> {
         );
 
         return conditions.join(' AND ');
-    }
-
-    /**
-     * Pobiera asocjacje Project-Entity
-     */
-    private async getProjectEntityAssociationsList(initParamObject?: {
-        projectId?: string;
-    }): Promise<ProjectEntity[]> {
-        if (!initParamObject) return [];
-
-        const projectCondition =
-            initParamObject && initParamObject.projectId
-                ? mysql.format('Projects.OurId = ?', [
-                      initParamObject.projectId,
-                  ])
-                : '1';
-
-        const sql = `SELECT  
-            Projects_Entities.ProjectId,
-            Projects_Entities.EntityId,
-            Projects_Entities.ProjectRole,
-            Entities.Name,
-            Entities.Address,
-            Entities.TaxNumber,
-            Entities.Www,
-            Entities.Email,
-            Entities.Phone
-        FROM Projects_Entities
-        JOIN Projects ON Projects_Entities.ProjectId = Projects.Id
-        JOIN Entities ON Projects_Entities.EntityId = Entities.Id
-        WHERE ${projectCondition}
-        ORDER BY Projects_Entities.ProjectRole, Entities.Name`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return result.map((row) => this.mapProjectEntityAssociation(row));
-    }
-
-    /**
-     * Mapuje wiersz asocjacji Project-Entity
-     */
-    private mapProjectEntityAssociation(row: any): ProjectEntity {
-        return new ProjectEntity({
-            projectRole: row.ProjectRole,
-            _project: {
-                id: row.ProjectId,
-            },
-            _entity: new Entity({
-                id: row.EntityId,
-                name: row.Name,
-                address: row.Address,
-                taxNumber: row.TaxNumber,
-                www: row.Www,
-                email: row.Email,
-                phone: row.Phone,
-            }),
-        });
-    }
-
-    /**
-     * Usuwa asocjacje Project-Entity dla danego projektu
-     */
-    async deleteProjectEntityAssociations(
-        project: Project,
-        conn: mysql.PoolConnection
-    ): Promise<void> {
-        const sql = `DELETE FROM Projects_Entities WHERE ProjectId = ?`;
-        await ToolsDb.executePreparedStmt(sql, [project.id], project, conn);
     }
 }
