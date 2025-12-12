@@ -390,6 +390,8 @@ static async addFromDto(dto: ItemDto, auth?: OAuth2Client): Promise<Item> {
 
 ### BaseRepository<T>
 
+**Wzorzec:** Baza dla wszystkich Repository z metodami CRUD i budowaniem warunków SQL.
+
 ```typescript
 abstract class BaseRepository<T> {
     async addInDb(item: T, conn?, isTransaction?): Promise<void>;
@@ -400,13 +402,77 @@ abstract class BaseRepository<T> {
 }
 ```
 
+**Wzorzec budowania warunków SQL (`makeAndConditions`):**
+
+```typescript
+// ✅ POPRAWNIE - array + join pattern
+private makeAndConditions(searchParams: SearchParams): string {
+    const whereClauses: string[] = [];
+
+    if (searchParams.projectId)
+        whereClauses.push(`Projects.OurId = '${searchParams.projectId}'`);
+    if (searchParams.contractId)
+        whereClauses.push(`Contracts.Id = ${searchParams.contractId}`);
+    if (searchParams.ids?.length)
+        whereClauses.push(`Items.Id IN (${searchParams.ids.join(',')})`);
+
+    return whereClauses.length > 0 ? whereClauses.join(' AND ') : '1';
+}
+
+// ❌ ŹLE - inline warunki w find()
+async find(params) {
+    let sql = 'SELECT ... WHERE 1';
+    if (params.id) sql += ` AND Id = ${params.id}`;  // NIE RÓB TAK!
+}
+```
+
 ### BaseController<T, R>
+
+**Wzorzec:** Singleton z prywatnymi metodami instancyjnymi.
 
 ```typescript
 abstract class BaseController<T, R extends BaseRepository<T>> {
     protected repository: R;
-    static getInstance(): this; // Singleton
+
+    // PRYWATNY Singleton - NIE eksponuj getInstance()!
+    private static instance: MyController;
+    private static getInstance(): MyController { ... }
+
+    // Metody instancyjne - tylko helpery wewnętrzne
+    protected async create(item, conn?, isTransaction?): Promise<void>;
+    protected async edit(item, conn?, isTransaction?, fields?): Promise<void>;
+    protected async delete(item, conn?, isTransaction?): Promise<void>;
 }
+```
+
+**ZASADA: Każdy Controller MUSI eksponować statyczne metody CRUD:**
+
+```typescript
+// ✅ PROSTY PRZYPADEK (asocjacje, proste modele):
+static async add(item: T, conn?, isTransaction?): Promise<T> {
+    const instance = this.getInstance();
+    await instance.repository.addInDb(item, conn, isTransaction);
+    return item;
+}
+
+// ✅ ZŁOŻONY PRZYPADEK (z Google Drive, walidacją):
+static async add(item: T, auth?: OAuth2Client): Promise<T> {
+    return await this.withAuth(async (instance, authClient) => {
+        await item.createFolder(authClient);
+        await instance.repository.addInDb(item);
+        return item;
+    }, auth);
+}
+```
+
+**UŻYCIE:**
+
+```typescript
+// ✅ POPRAWNIE - statyczne wywołanie:
+await MyController.add(item, conn, true);
+
+// ❌ BŁĘDNIE - NIE eksponuj getInstance():
+await MyController.getInstance().create(item); // NIE RÓB TAK!
 ```
 
 ### ToolsGapi.gapiReguestHandler()
