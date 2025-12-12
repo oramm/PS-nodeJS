@@ -152,20 +152,10 @@ export default class ContractOther
     }
 
     /**
-     * @returns true jeśli kontrakt ma unikalny numer w ramach projektu
+     * @deprecated Logic moved to ContractRepository.isUnique()
      */
     async isUniquePerProject(): Promise<boolean> {
-        const sql = `SELECT Id FROM Contracts WHERE 
-            Number = '${this.number}' AND ProjectOurId = "${this.projectOurId}"`;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return result[0] ? true : false;
-        } catch (err) {
-            throw err;
-        }
+        throw new Error('Deprecated: Use ContractRepository.isUnique()');
     }
     protected makeNotUniqueErrorMessage(): string {
         return (

@@ -1,13 +1,8 @@
-import BaseRepository from '../../../../repositories/BaseRepository';
-import MilestoneDate from './MilestoneDate';
-import ToolsDb from '../../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import ContractOur from '../../../ContractOur';
-import ContractOther from '../../../ContractOther';
-import Milestone from '../../Milestone';
+import BaseRepository from '../../../../repositories/BaseRepository';
+import ToolsDb from '../../../../tools/ToolsDb';
 import {
     ContractTypeData,
-    MilestoneDateData,
     MilestoneParentType,
     OfferData,
     OtherContractData,
@@ -15,6 +10,10 @@ import {
     PersonData,
     ProjectData,
 } from '../../../../types/types';
+import ContractOther from '../../../ContractOther';
+import ContractOur from '../../../ContractOur';
+import Milestone from '../../Milestone';
+import MilestoneDate from './MilestoneDate';
 
 export type MilestoneDatesSearchParams = {
     searchText?: string;

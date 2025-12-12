@@ -16,6 +16,7 @@ import {
     ContractTypeData,
 } from '../types/types';
 import Contract from './Contract';
+import ContractEntityController from './ContractEntityController';
 import ContractEntityRepository from './ContractEntityRepository';
 import ContractOther from './ContractOther';
 import ContractOur from './ContractOur';
@@ -62,7 +63,6 @@ export default class ContractsController extends BaseController<
     private static instance: ContractsController;
 
     // Repository dla asocjacji
-    private static entityRepository = new ContractEntityRepository();
     private static rangeRepository = new ContractRangeContractRepository();
 
     constructor() {
@@ -83,6 +83,39 @@ export default class ContractsController extends BaseController<
     }
 
     /**
+     * Tworzy instancję kontraktu z DTO
+     */
+    static async createContractFromDto(
+        dto: any,
+        isNew: boolean = false
+    ): Promise<ContractOur | ContractOther> {
+        if (typeof dto.value === 'string') {
+            dto.value = parseFloat(
+                dto.value.replace(/ /g, '').replace(',', '.')
+            );
+        }
+
+        let contract: ContractOur | ContractOther;
+        if (dto._type?.isOur || dto.ourId) {
+            let ourId = dto.ourId;
+            if (isNew && !ourId) {
+                ourId = await this.makeOurId(
+                    dto._city as CityData,
+                    dto._type as ContractTypeData
+                );
+            }
+            contract = new ContractOur({ ...dto, ourId });
+        } else {
+            contract = new ContractOther(dto);
+        }
+
+        if (isNew && (!contract._project || !contract._project.id)) {
+            throw new Error('Nie przypisano projektu do kontraktu');
+        }
+        return contract;
+    }
+
+    /**
      * Dodaje nowy kontrakt do bazy danych
      * REFAKTORING: Przeniesione z Contract.addInDb() i Contract.addNewController()
      *
@@ -99,7 +132,7 @@ export default class ContractsController extends BaseController<
         const instance = this.getInstance();
 
         // Walidacja biznesowa
-        if (await contract.isUniquePerProject()) {
+        if (await instance.repository.isUniquePerProject(contract)) {
             // Twórz komunikat błędu bez wywoływania protected metody
             const contractInfo =
                 contract instanceof ContractOur
@@ -131,70 +164,11 @@ export default class ContractsController extends BaseController<
             // Operacje bazodanowe - TRANSAKCJA
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                // 1. Dodaj główny rekord Contract
-                const contractData: any = Tools.cloneOfObject(contract);
-
-                if (contract instanceof ContractOur) {
-                    // Przygotuj dane dla ContractOur
-                    delete contractData.ourId;
-                    delete contractData.managerId;
-                    delete contractData.adminId;
-                    delete contractData.cityId;
-
-                    await ToolsDb.addInDb(
-                        'Contracts',
-                        contractData,
-                        conn,
-                        true
-                    );
-                    contract.id = contractData.id;
-
-                    // Dodaj dane w tabeli OurContractsData
-                    const ourContractData = {
-                        _isIdNonIncrement: true,
-                        id: contract.id,
-                        ourId: contract.ourId,
-                        adminId: contract.adminId,
-                        managerId: contract.managerId,
-                        cityId: contract.cityId,
-                    };
-                    await ToolsDb.addInDb(
-                        'OurContractsData',
-                        ourContractData,
-                        conn,
-                        true
-                    );
-                } else {
-                    // ContractOther
-                    await instance.repository.addInDb(contract, conn, true);
-                }
+                // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
+                await instance.repository.addInDb(contract, conn, true);
 
                 // 2. Dodaj asocjacje Entity (CONTRACTOR, ENGINEER, EMPLOYER)
-                // Dla ADD używamy addAssociations (nie editAssociations - nie ma czego usuwać)
-                if (contract._contractors?.length) {
-                    await this.entityRepository.addAssociations(
-                        contract,
-                        contract._contractors,
-                        'CONTRACTOR',
-                        conn
-                    );
-                }
-                if (contract._engineers?.length) {
-                    await this.entityRepository.addAssociations(
-                        contract,
-                        contract._engineers,
-                        'ENGINEER',
-                        conn
-                    );
-                }
-                if (contract._employers?.length) {
-                    await this.entityRepository.addAssociations(
-                        contract,
-                        contract._employers,
-                        'EMPLOYER',
-                        conn
-                    );
-                }
+                await ContractEntityController.addAssociations(contract, conn);
 
                 // 3. Dodaj asocjacje ContractRange
                 if (contract._contractRangesPerContract?.length) {
@@ -380,136 +354,40 @@ export default class ContractsController extends BaseController<
 
             // Operacje bazodanowe - TRANSAKCJA
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                if (contract instanceof ContractOur) {
-                    // === ContractOur - specjalna logika dla podzielonych tabel ===
+                // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
+                await instance.repository.editInDb(
+                    contract,
+                    conn,
+                    true,
+                    fieldsToUpdate
+                );
 
-                    // Podziel fieldsToUpdate na pola dla każdej tabeli
-                    const ourContractFields = [
-                        'ourId',
-                        'managerId',
-                        'adminId',
-                        'cityId',
-                    ];
-                    const ourContractFieldsToUpdate = fieldsToUpdate?.filter(
-                        (field) => ourContractFields.includes(field)
-                    );
-                    const contractFieldsToUpdate = fieldsToUpdate?.filter(
-                        (field) => !ourContractFields.includes(field)
-                    );
+                // 2. Update asocjacji Entity
+                const entityKeys = ['_employers', '_engineers', '_contractors'];
+                const anyEntityToUpdate =
+                    !fieldsToUpdate ||
+                    entityKeys.some((key) => fieldsToUpdate.includes(key));
 
-                    // 1. Update tabeli Contracts
-                    if (
-                        !fieldsToUpdate ||
-                        (contractFieldsToUpdate?.length ?? 0) > 0
-                    ) {
-                        const contractData: any = Tools.cloneOfObject(contract);
-
-                        // Usuń pola które nie należą do Contracts
-                        delete contractData.ourId;
-                        delete contractData.managerId;
-                        delete contractData.adminId;
-                        delete contractData.cityId;
-
-                        await ToolsDb.editInDb(
-                            'Contracts',
-                            contractData,
-                            conn,
-                            true,
-                            contractFieldsToUpdate
-                        );
-                    }
-
-                    // 2. Update tabeli OurContractsData
-                    const ourContractDbFields = {
-                        _isIdNonIncrement: true,
-                        id: contract.id,
-                        ourId: contract.ourId,
-                        adminId: contract.adminId,
-                        managerId: contract.managerId,
-                        cityId: contract.cityId,
-                    };
-
-                    if (
-                        !fieldsToUpdate ||
-                        (ourContractFieldsToUpdate?.length ?? 0) > 0
-                    ) {
-                        await ToolsDb.editInDb(
-                            'OurContractsData',
-                            ourContractDbFields,
-                            conn,
-                            true,
-                            ourContractFieldsToUpdate
-                        );
-                    }
-
-                    // 3. Update asocjacji Entity
-                    const entityKeys = [
-                        '_employers',
-                        '_engineers',
-                        '_contractors',
-                    ];
-                    const anyEntityToUpdate = entityKeys.some((key) =>
-                        fieldsToUpdate?.includes(key)
-                    );
-                    const hasAnyEntity =
-                        (contract._employers?.length ?? 0) +
-                            (contract._engineers?.length ?? 0) +
-                            (contract._contractors?.length ?? 0) >
-                        0;
-
-                    if (
-                        !fieldsToUpdate ||
-                        (anyEntityToUpdate && hasAnyEntity)
-                    ) {
-                        console.log('Edytuję powiązania z podmiotami');
-                        await this.entityRepository.editAssociations(
-                            contract,
-                            contract._contractors || [],
-                            contract._engineers || [],
-                            contract._employers || [],
-                            conn
-                        );
-                    }
-
-                    // 4. Update asocjacji ContractRange
-                    if (
-                        (!fieldsToUpdate ||
-                            fieldsToUpdate.includes(
-                                '_contractRangesPerContract'
-                            )) &&
-                        contract._contractRangesPerContract
-                    ) {
-                        console.log('Edytuję powiązania z zakresami');
-                        await this.rangeRepository.editAssociations(
-                            contract,
-                            contract._contractRangesPerContract,
-                            conn
-                        );
-                    }
-                } else {
-                    // === ContractOther - prostsza logika ===
-
-                    // 1. Update tabeli Contracts
-                    await instance.repository.editInDb(
+                if (anyEntityToUpdate) {
+                    console.log('Edytuję powiązania z podmiotami');
+                    await ContractEntityController.editAssociations(
                         contract,
-                        conn,
-                        true,
-                        fieldsToUpdate
-                    );
-
-                    // 2. Update asocjacji Entity (zawsze - brak warunkowania)
-                    await this.entityRepository.editAssociations(
-                        contract,
-                        contract._contractors || [],
-                        contract._engineers || [],
-                        contract._employers || [],
                         conn
                     );
+                }
 
-                    // 3. Update asocjacji ContractRange (zawsze - brak warunkowania)
+                // 3. Update asocjacji ContractRange
+                if (
+                    (!fieldsToUpdate ||
+                        fieldsToUpdate.includes(
+                            '_contractRangesPerContract'
+                        )) &&
+                    contract._contractRangesPerContract
+                ) {
+                    console.log('Edytuję powiązania z zakresami');
                     await this.rangeRepository.editAssociations(
                         contract,
-                        contract._contractRangesPerContract || [],
+                        contract._contractRangesPerContract,
                         conn
                     );
                 }
@@ -561,8 +439,8 @@ export default class ContractsController extends BaseController<
         try {
             // 1. Usunięcie z bazy danych - TRANSAKCJA
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                // Usuń asocjacje Entity (CASCADE nie obsłuży tego automatycznie)
-                await this.entityRepository.deleteByContractId(
+                // Usuń asocjacje Entity
+                await ContractEntityController.deleteAssociations(
                     contract.id!,
                     conn
                 );
@@ -575,20 +453,7 @@ export default class ContractsController extends BaseController<
                 );
                 console.log('Contract ranges associations deleted');
 
-                // Usuń z tabeli OurContractsData (tylko dla ContractOur)
-                if (contract instanceof ContractOur) {
-                    const sql = `DELETE FROM OurContractsData WHERE id = ?`;
-                    await ToolsDb.executePreparedStmt(
-                        sql,
-                        [contract.id],
-                        contract,
-                        conn,
-                        true
-                    );
-                    console.log('OurContractsData deleted');
-                }
-
-                // Usuń z tabeli Contracts
+                // Usuń z tabeli Contracts (i OurContractsData)
                 await instance.repository.deleteFromDb(contract, conn, true);
                 console.log('Contract deleted from Contracts table');
             });
@@ -989,7 +854,7 @@ export default class ContractsController extends BaseController<
         contractId?: number;
         isArchived?: boolean;
     }) {
-        const associations = await this.entityRepository.find({
+        const associations = await ContractEntityController.find({
             projectId: initParamObject.projectId,
             contractId: initParamObject.contractId,
         });

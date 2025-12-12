@@ -240,19 +240,6 @@ export default class ContractOur extends Contract implements OurContractData {
         });
     }
 
-    async isUniquePerProject(): Promise<boolean> {
-        const sql = `SELECT Id FROM OurContractsData WHERE OurId = "${this.ourId}"`;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return result[0] ? true : false;
-        } catch (err) {
-            throw err;
-        }
-    }
-
     protected makeNotUniqueErrorMessage(): string {
         return `Umowa ENVI o numerze ${this.ourId} już istnieje`;
     }

@@ -27,6 +27,200 @@ export default class ContractRepository extends BaseRepository<
         super('Contracts');
     }
 
+    async addInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        // Dla ContractOur - musimy usunąć pola które należą do OurContractsData
+        // przed zapisem do tabeli Contracts (nie ma tam tych kolumn)
+        if (item instanceof ContractOur) {
+            // Tymczasowo zapisz wartości
+            const ourId = item.ourId;
+            const managerId = item.managerId;
+            const adminId = item.adminId;
+            const cityId = item.cityId;
+
+            // Usuń pola przed INSERT do Contracts
+            delete (item as any).ourId;
+            delete (item as any).managerId;
+            delete (item as any).adminId;
+            delete (item as any).cityId;
+
+            try {
+                // Dodaj do tabeli Contracts
+                await super.addInDb(item, externalConn, isPartOfTransaction);
+
+                // Przywróć wartości do obiektu
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+
+                // Dodaj dane w tabeli OurContractsData
+                const ourData = {
+                    _isIdNonIncrement: true,
+                    Id: item.id,
+                    OurId: ourId,
+                    ManagerId: managerId,
+                    AdminId: adminId,
+                    CityId: cityId,
+                };
+                await ToolsDb.addInDb(
+                    'OurContractsData',
+                    ourData,
+                    externalConn,
+                    isPartOfTransaction
+                );
+            } catch (error) {
+                // Przywróć wartości nawet przy błędzie
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+                throw error;
+            }
+        } else {
+            // ContractOther - standardowy zapis
+            await super.addInDb(item, externalConn, isPartOfTransaction);
+        }
+    }
+
+    async editInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        fieldsToUpdate?: string[]
+    ): Promise<void> {
+        // Dla ContractOur - musimy obsłużyć podzielone tabele
+        if (item instanceof ContractOur) {
+            // Pola które należą do OurContractsData (nie do Contracts)
+            const ourContractFields = [
+                'ourId',
+                'managerId',
+                'adminId',
+                'cityId',
+            ];
+
+            // Rozdziel fieldsToUpdate na pola dla każdej tabeli
+            const ourContractFieldsToUpdate = fieldsToUpdate?.filter((field) =>
+                ourContractFields.includes(field)
+            );
+            const contractFieldsToUpdate = fieldsToUpdate?.filter(
+                (field) => !ourContractFields.includes(field)
+            );
+
+            // Tymczasowo zapisz i usuń wartości pól OurContractsData
+            const ourId = item.ourId;
+            const managerId = item.managerId;
+            const adminId = item.adminId;
+            const cityId = item.cityId;
+
+            delete (item as any).ourId;
+            delete (item as any).managerId;
+            delete (item as any).adminId;
+            delete (item as any).cityId;
+
+            try {
+                // 1. Update tabeli Contracts (jeśli są pola do update)
+                if (
+                    !fieldsToUpdate ||
+                    (contractFieldsToUpdate?.length ?? 0) > 0
+                ) {
+                    await super.editInDb(
+                        item,
+                        externalConn,
+                        isPartOfTransaction,
+                        contractFieldsToUpdate
+                    );
+                }
+
+                // Przywróć wartości
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+
+                // 2. Update tabeli OurContractsData (jeśli są pola do update)
+                if (
+                    !fieldsToUpdate ||
+                    (ourContractFieldsToUpdate?.length ?? 0) > 0
+                ) {
+                    const ourData = {
+                        _isIdNonIncrement: true,
+                        Id: item.id,
+                        OurId: ourId,
+                        ManagerId: managerId,
+                        AdminId: adminId,
+                        CityId: cityId,
+                    };
+                    await ToolsDb.editInDb(
+                        'OurContractsData',
+                        ourData,
+                        externalConn,
+                        isPartOfTransaction,
+                        ourContractFieldsToUpdate
+                    );
+                }
+            } catch (error) {
+                // Przywróć wartości nawet przy błędzie
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+                throw error;
+            }
+        } else {
+            // ContractOther - standardowy update
+            await super.editInDb(
+                item,
+                externalConn,
+                isPartOfTransaction,
+                fieldsToUpdate
+            );
+        }
+    }
+
+    async deleteFromDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        if (item instanceof ContractOur) {
+            const sql = `DELETE FROM OurContractsData WHERE Id = ?`;
+            await ToolsDb.executePreparedStmt(
+                sql,
+                [item.id],
+                item,
+                externalConn,
+                isPartOfTransaction
+            );
+        }
+        await super.deleteFromDb(item, externalConn, isPartOfTransaction);
+    }
+
+    async isUniquePerProject(
+        contract: ContractOur | ContractOther
+    ): Promise<boolean> {
+        if (contract instanceof ContractOur) {
+            const sql = `SELECT Id FROM OurContractsData WHERE OurId = ?`;
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(
+                    mysql.format(sql, [contract.ourId])
+                )
+            );
+            return result.length > 0;
+        } else {
+            const sql = `SELECT Id FROM Contracts WHERE Number = ? AND ProjectOurId = ?`;
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(
+                    mysql.format(sql, [contract.number, contract.projectOurId])
+                )
+            );
+            return result.length > 0;
+        }
+    }
+
     /**
      * Wyszukuje miasta z opcjonalnymi kryteriami
      */
@@ -315,9 +509,9 @@ export default class ContractRepository extends BaseRepository<
                 isArchived: searchParams.isArchived,
             });
             // Użyj Repository zamiast Controller (Clean Architecture)
-            const rangeAssociations = await this.rangeRepository.find({
-                contractId: searchParams.id,
-            });
+            const rangeAssociations = await this.rangeRepository.find([
+                { contractId: searchParams.id },
+            ]);
             rangesPerContract = rangeAssociations.map((assoc) => ({
                 _contractRange: assoc._contractRange,
                 associationComment: assoc.associationComment,

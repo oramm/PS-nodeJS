@@ -74,17 +74,19 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
 
     /**
      * Dodaje asocjacje Entity-Contract do bazy danych
-     * @param contract - Kontrakt
+     * @param contract - Kontrakt (musi mieć id)
      * @param entities - Lista encji do powiązania (EntityData lub Entity)
      * @param role - Rola encji (CONTRACTOR, ENGINEER, EMPLOYER)
      * @param conn - Połączenie do bazy danych (dla transakcji)
      */
     async addAssociations(
-        contract: ContractOur | ContractOther,
+        contract: { id?: number },
         entities: EntityData[] | Entity[],
         role: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER',
         conn: mysql.PoolConnection
     ): Promise<void> {
+        if (!contract.id)
+            throw new Error('Contract ID is required for associations');
         for (const entity of entities) {
             const association = new ContractEntity({
                 _contract: { id: contract.id },
@@ -106,40 +108,5 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
     ): Promise<void> {
         const sql = `DELETE FROM ${this.tableName} WHERE ContractId = ?`;
         await ToolsDb.executePreparedStmt(sql, [contractId], undefined, conn);
-    }
-
-    /**
-     * Edytuje asocjacje Entity-Contract (usuwa stare i dodaje nowe)
-     * @param contract - Kontrakt
-     * @param contractors - Lista kontrahentów (EntityData lub Entity)
-     * @param engineers - Lista inżynierów (EntityData lub Entity)
-     * @param employers - Lista zamawiających (EntityData lub Entity)
-     * @param conn - Połączenie do bazy danych (dla transakcji)
-     */
-    async editAssociations(
-        contract: ContractOur | ContractOther,
-        contractors: EntityData[] | Entity[],
-        engineers: EntityData[] | Entity[],
-        employers: EntityData[] | Entity[],
-        conn: mysql.PoolConnection
-    ): Promise<void> {
-        // Usuń stare asocjacje
-        await this.deleteByContractId(contract.id!, conn);
-
-        // Dodaj nowe asocjacje
-        if (contractors?.length) {
-            await this.addAssociations(
-                contract,
-                contractors,
-                'CONTRACTOR',
-                conn
-            );
-        }
-        if (engineers?.length) {
-            await this.addAssociations(contract, engineers, 'ENGINEER', conn);
-        }
-        if (employers?.length) {
-            await this.addAssociations(contract, employers, 'EMPLOYER', conn);
-        }
     }
 }

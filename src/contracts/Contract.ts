@@ -182,119 +182,58 @@ export default abstract class Contract
         this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
     }
 
+    /**
+     * @deprecated Logic moved to ContractEntityController
+     */
     async addEntitiesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        const entityAssociations: ContractEntity[] = [];
-        this._contractors?.map((item) => {
-            entityAssociations.push(
-                new ContractEntity({
-                    contractRole: 'CONTRACTOR',
-                    _contract: this,
-                    _entity: item,
-                })
-            );
-        });
-        this._engineers?.map((item) => {
-            entityAssociations.push(
-                new ContractEntity({
-                    contractRole: 'ENGINEER',
-                    _contract: this,
-                    _entity: item,
-                })
-            );
-        });
-        this._employers?.map((item) => {
-            entityAssociations.push(
-                new ContractEntity({
-                    contractRole: 'EMPLOYER',
-                    _contract: this,
-                    _entity: item,
-                })
-            );
-        });
-        for (const association of entityAssociations) {
-            console.log(
-                `adding association ${association.contractRole} ${association._entity.name}`
-            );
-            await association.addInDb(externalConn, isPartOfTransaction);
-        }
+        throw new Error(
+            'Deprecated: Use ContractEntityController.addAssociations'
+        );
     }
-    /** wywoływana w EditContractHandler */
+    /** @deprecated Logic moved to ContractEntityController */
     protected async editEntitiesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        await this.deleteEntitiesAssociationsFromDb(
-            externalConn,
-            isPartOfTransaction
-        );
-        await this.addEntitiesAssociationsInDb(
-            externalConn,
-            isPartOfTransaction
+        throw new Error(
+            'Deprecated: Use ContractEntityController.editAssociations'
         );
     }
 
+    /** @deprecated Logic moved to ContractEntityController */
     async deleteEntitiesAssociationsFromDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        console.log('deleting entities associations from db');
-        const sql = `DELETE FROM Contracts_Entities WHERE ContractId =?`;
-        return await ToolsDb.executePreparedStmt(
-            sql,
-            [this.id],
-            this,
-            externalConn,
-            isPartOfTransaction
+        throw new Error(
+            'Deprecated: Use ContractEntityController.deleteAssociations'
         );
     }
+    /** @deprecated Logic moved to ContractRangesController */
     protected async addContractRangesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        console.log('contractRanges', this._contractRangesPerContract);
-        for (const rangeAssociation of this._contractRangesPerContract) {
-            const associationData: ContractRangePerContractData = {
-                _contract: this,
-                _contractRange: rangeAssociation._contractRange,
-                associationComment: rangeAssociation.associationComment,
-            };
-            const associationObject = new ContractRangeContract(
-                associationData
-            );
-            await associationObject.addInDb(externalConn, isPartOfTransaction);
-        }
+        throw new Error('Deprecated: Use ContractRangesController');
     }
 
+    /** @deprecated Logic moved to ContractRangesController */
     protected async editContractRangesAssociationsInDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        await this.deleteContractRangesContractsFromDb(
-            externalConn,
-            isPartOfTransaction
-        );
-        await this.addContractRangesAssociationsInDb(
-            externalConn,
-            isPartOfTransaction
-        );
+        throw new Error('Deprecated: Use ContractRangesController');
     }
 
+    /** @deprecated Logic moved to ContractRangesController */
     protected async deleteContractRangesContractsFromDb(
         externalConn: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ) {
-        console.log('Deleting ContractRanges associations from db');
-        const sql = `DELETE FROM ContractRangesContracts WHERE ContractId = ?`;
-        return await ToolsDb.executePreparedStmt(
-            sql,
-            [this.id],
-            this,
-            externalConn,
-            isPartOfTransaction
-        );
+        throw new Error('Deprecated: Use ContractRangesController');
     }
 
     async editFolder(auth: OAuth2Client) {
@@ -328,6 +267,9 @@ export default abstract class Contract
     abstract editInScrum(auth: OAuth2Client): Promise<boolean | undefined>;
     abstract setFolderName(): void;
     abstract shouldBeInScrum(): Promise<boolean>;
-    abstract isUniquePerProject(): Promise<boolean>;
+    /** @deprecated Logic moved to ContractRepository.isUnique() */
+    async isUniquePerProject(): Promise<boolean> {
+        throw new Error('Deprecated: Use ContractRepository.isUnique()');
+    }
     protected abstract makeNotUniqueErrorMessage(): string;
 }

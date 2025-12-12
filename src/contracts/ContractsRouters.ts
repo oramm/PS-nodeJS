@@ -62,29 +62,11 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
     try {
         console.log('req.session', req.session);
 
-        // Parsowanie wartości numerycznej
-        if (typeof req.parsedBody.value === 'string') {
-            req.body.value = parseFloat(
-                req.parsedBody.value.replace(/ /g, '').replace(',', '.')
-            );
-        }
-
         // Tworzenie odpowiedniej instancji Contract
-        let contract: ContractOur | ContractOther;
-        if (req.parsedBody._type.isOur) {
-            const ourId = await ContractsController.makeOurId(
-                req.parsedBody._city as CityData,
-                req.parsedBody._type as ContractTypeData
-            );
-            contract = new ContractOur({ ...req.parsedBody, ourId });
-        } else {
-            contract = new ContractOther(req.parsedBody);
-        }
-
-        // Walidacja
-        if (!contract._project || !contract._project.id) {
-            throw new Error('Nie przypisano projektu do kontraktu');
-        }
+        const contract = await ContractsController.createContractFromDto(
+            req.parsedBody,
+            true
+        );
 
         // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
@@ -162,9 +144,10 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
 
         // Stwórz instancję odpowiedniej klasy
         const contractInstance =
-            itemFromClient.ourId || itemFromClient._type.isOur
-                ? new ContractOur(itemFromClient)
-                : new ContractOther(itemFromClient);
+            await ContractsController.createContractFromDto(
+                itemFromClient,
+                false
+            );
 
         // REFAKTORING: użyj ContractsController.editWithAuth()
         const updatedContract = await ContractsController.editWithAuth(
@@ -180,9 +163,10 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = req.body._type.isOur
-            ? new ContractOur(req.body)
-            : new ContractOther(req.body);
+        const item = await ContractsController.createContractFromDto(
+            req.body,
+            false
+        );
 
         // REFAKTORING: użyj ContractsController.deleteWithAuth()
         const deletedContract = await ContractsController.deleteWithAuth(item);

@@ -4,7 +4,19 @@ import ContractRangeContract from './ContractRangeContract';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 import ToolsDb from '../../tools/ToolsDb';
-import { ContractRangePerContractData } from '../../types/types';
+import {
+    ContractRangePerContractData,
+    ContractRangeData,
+    ContractData,
+} from '../../types/types';
+
+export type ContractRangesContractsSearchParams = {
+    contractRangeId?: number;
+    _contractRange?: ContractRangeData;
+    _contract?: ContractData;
+    contractId?: number;
+    searchText?: string;
+};
 
 /**
  * Repository dla asocjacji Contract-ContractRange
@@ -32,37 +44,83 @@ export default class ContractRangeContractRepository extends BaseRepository<Cont
     }
 
     /**
-     * Wyszukuje asocjacje Contract-ContractRange
+     * Wyszukuje asocjacje Contract-ContractRange z obsługą orConditions
+     * @param orConditions - tablica warunków łączonych przez OR
      */
-    async find(params?: {
-        contractId?: number;
-        contractRangeId?: number;
-    }): Promise<ContractRangeContract[]> {
-        const contractCondition = params?.contractId
-            ? mysql.format('ContractRangesContracts.ContractId = ?', [
-                  params.contractId,
-              ])
-            : '1';
-
-        const rangeCondition = params?.contractRangeId
-            ? mysql.format('ContractRangesContracts.ContractRangeId = ?', [
-                  params.contractRangeId,
-              ])
-            : '1';
-
-        const sql = `SELECT
+    async find(
+        orConditions: ContractRangesContractsSearchParams[] = []
+    ): Promise<ContractRangeContract[]> {
+        const sql = `SELECT ContractRangesContracts.ContractRangeId,
             ContractRangesContracts.ContractId,
-            ContractRangesContracts.ContractRangeId,
             ContractRangesContracts.AssociationComment,
+            ContractRanges.Id AS ContractRangeId,
             ContractRanges.Name AS ContractRangeName,
             ContractRanges.Description AS ContractRangeDescription
         FROM ContractRangesContracts
         JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
-        WHERE ${contractCondition} AND ${rangeCondition}
-        ORDER BY ContractRanges.Name`;
+        JOIN Contracts ON ContractRangesContracts.ContractId = Contracts.Id
+        WHERE ${this.makeOrGroupsConditions(
+            orConditions,
+            this.makeAndConditions.bind(this)
+        )}
+        ORDER BY ContractRanges.Name ASC, Contracts.Name ASC`;
 
         const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return rows.map((row) => this.mapRowToModel(row));
+    }
+
+    /**
+     * Tworzy warunek wyszukiwania tekstu
+     */
+    private makeSearchTextCondition(searchText: string | undefined): string {
+        if (!searchText) return '1';
+        searchText = searchText.toString();
+        const words = searchText.split(' ');
+        const conditions = words.map((word) =>
+            mysql.format(
+                `(ContractRanges.Name LIKE ? OR Contracts.Name LIKE ? OR ContractRangesContracts.AssociationComment LIKE ?)`,
+                [`%${word}%`, `%${word}%`, `%${word}%`]
+            )
+        );
+
+        return conditions.join(' AND ');
+    }
+
+    /**
+     * Tworzy warunki AND dla pojedynczego zestawu parametrów wyszukiwania
+     */
+    private makeAndConditions(
+        searchParams: ContractRangesContractsSearchParams
+    ): string {
+        const conditions: string[] = [];
+        const searchTextCondition = this.makeSearchTextCondition(
+            searchParams.searchText
+        );
+        if (searchTextCondition !== '1') {
+            conditions.push(searchTextCondition);
+        }
+
+        const contractRangeId =
+            searchParams.contractRangeId || searchParams._contractRange?.id;
+        if (contractRangeId) {
+            conditions.push(
+                mysql.format(`ContractRangesContracts.ContractRangeId = ?`, [
+                    contractRangeId,
+                ])
+            );
+        }
+
+        const contractId =
+            searchParams.contractId || searchParams._contract?.id;
+        if (contractId) {
+            conditions.push(
+                mysql.format(`ContractRangesContracts.ContractId = ?`, [
+                    contractId,
+                ])
+            );
+        }
+
+        return conditions.length ? conditions.join(' AND ') : '1';
     }
 
     /**
