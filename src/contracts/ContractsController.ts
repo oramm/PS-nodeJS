@@ -219,8 +219,8 @@ export default class ContractsController extends BaseController<
 
             // Rollback bazy danych (jeśli ID zostało przypisane)
             if (contract.id) {
-                contract
-                    .deleteFromDb()
+                instance.repository
+                    .deleteFromDb(contract)
                     .then(() => console.log('deleted from db'));
             }
 

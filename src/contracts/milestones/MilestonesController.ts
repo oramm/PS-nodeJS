@@ -205,12 +205,14 @@ export default class MilestonesController extends BaseController<
                         console.error('DB transaction failed, rolling back');
                         await milestone
                             .deleteFolder(authClient)
-                            .catch((error) => {
+                            .catch((error: unknown) => {
                                 console.error('Error deleting folder:', error);
                             });
-                        await milestone.deleteFromDb().catch((error) => {
-                            console.error('Error deleting from DB:', error);
-                        });
+                        await instance.repository
+                            .deleteFromDb(milestone)
+                            .catch((error: unknown) => {
+                                console.error('Error deleting from DB:', error);
+                            });
                         throw dbError;
                     }
                 } finally {

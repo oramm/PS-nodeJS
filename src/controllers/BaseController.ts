@@ -9,40 +9,50 @@ import { oAuthClient } from '../setup/Sessions/ToolsGapi';
  *
  * Wzorzec: Singleton + static methods
  *
+ * ARCHITEKTURA:
+ * - getInstance() ZAWSZE prywatny - nie eksponuj na zewnątrz
+ * - Metody instancyjne (create, edit, delete, find) są TYLKO POMOCNICZE
+ * - Każdy konkretny Controller MUSI eksponować STATYCZNE metody publiczne
+ *
  * WYMAGANA IMPLEMENTACJA w każdym KONKRETNYM Controller:
- * Metody instancyjne (find, create, edit, delete) są pomocnicze.
- * Controllery powinny eksponować STATYCZNE metody publiczne:
  *
  * ```typescript
- * // Singleton
+ * // Singleton - PRYWATNY
  * private static instance: MyController;
  * private static getInstance(): MyController {
  *     if (!this.instance) this.instance = new MyController();
  *     return this.instance;
  * }
  *
- * // CRUD - statyczne metody publiczne
- * static async find(params: SearchParams): Promise<T[]> {
- *     const instance = this.getInstance();
- *     return await instance.repository.find(params);
- * }
- *
+ * // PROSTY PRZYPADEK (np. asocjacje, proste modele):
  * static async add(item: T, conn?, isTransaction?): Promise<T> {
  *     const instance = this.getInstance();
  *     await instance.repository.addInDb(item, conn, isTransaction);
  *     return item;
  * }
  *
- * static async edit(item: T, conn?, isTransaction?, fields?): Promise<T> {
- *     const instance = this.getInstance();
- *     await instance.repository.editInDb(item, conn, isTransaction, fields);
- *     return item;
+ * // ZŁOŻONY PRZYPADEK (np. z Google Drive, walidacją):
+ * static async add(item: T, auth?: OAuth2Client): Promise<T> {
+ *     return await this.withAuth(async (instance, authClient) => {
+ *         // Logika biznesowa z auth
+ *         await instance.repository.addInDb(item);
+ *         return item;
+ *     }, auth);
  * }
  *
- * static async delete(item: T, conn?, isTransaction?): Promise<void> {
- *     const instance = this.getInstance();
- *     await instance.repository.deleteFromDb(item, conn, isTransaction);
- * }
+ * // Pozostałe metody CRUD:
+ * static async find(params: SearchParams): Promise<T[]> { ... }
+ * static async edit(item: T, conn?, isTransaction?, fields?): Promise<T> { ... }
+ * static async delete(item: T, conn?, isTransaction?): Promise<void> { ... }
+ * ```
+ *
+ * UŻYCIE:
+ * ```typescript
+ * // ✅ POPRAWNIE - statyczne wywołanie:
+ * await MyController.add(item, conn, true);
+ *
+ * // ❌ BŁĘDNIE - nie eksponuj getInstance():
+ * await MyController.getInstance().create(item);  // NIE RÓB TAK!
  * ```
  */
 export default abstract class BaseController<
@@ -153,15 +163,9 @@ export default abstract class BaseController<
     /**
      * Tworzy nowy obiekt w bazie danych
      *
-     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
-     * Controllery powinny eksponować STATYCZNĄ metodę add():
-     * ```typescript
-     * static async add(item: T, conn?, isTransaction?): Promise<T> {
-     *     const instance = this.getInstance();
-     *     await instance.repository.addInDb(item, conn, isTransaction);
-     *     return item;
-     * }
-     * ```
+     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
+     * Controllery MUSZĄ eksponować STATYCZNĄ metodę add().
+     * NIE eksponuj getInstance() publicznie!
      */
     async create(
         entity: T,
@@ -178,15 +182,9 @@ export default abstract class BaseController<
     /**
      * Aktualizuje istniejący obiekt w bazie danych
      *
-     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
-     * Controllery powinny eksponować STATYCZNĄ metodę edit():
-     * ```typescript
-     * static async edit(item: T, conn?, isTransaction?, fields?): Promise<T> {
-     *     const instance = this.getInstance();
-     *     await instance.repository.editInDb(item, conn, isTransaction, fields);
-     *     return item;
-     * }
-     * ```
+     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
+     * Controllery MUSZĄ eksponować STATYCZNĄ metodę edit().
+     * NIE eksponuj getInstance() publicznie!
      */
     async edit(
         entity: T,
@@ -205,14 +203,9 @@ export default abstract class BaseController<
     /**
      * Usuwa obiekt z bazy danych
      *
-     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
-     * Controllery powinny eksponować STATYCZNĄ metodę delete():
-     * ```typescript
-     * static async delete(item: T, conn?, isTransaction?): Promise<void> {
-     *     const instance = this.getInstance();
-     *     await instance.repository.deleteFromDb(item, conn, isTransaction);
-     * }
-     * ```
+     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
+     * Controllery MUSZĄ eksponować STATYCZNĄ metodę delete().
+     * NIE eksponuj getInstance() publicznie!
      */
     async delete(
         entity: T,
@@ -229,14 +222,9 @@ export default abstract class BaseController<
     /**
      * Pobiera listę obiektów z bazy danych
      *
-     * UWAGA: To jest metoda INSTANCYJNA (pomocnicza).
-     * Controllery powinny eksponować STATYCZNĄ metodę find():
-     * ```typescript
-     * static async find(params: SearchParams): Promise<T[]> {
-     *     const instance = this.getInstance();
-     *     return await instance.repository.find(params);
-     * }
-     * ```
+     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
+     * Controllery MUSZĄ eksponować STATYCZNĄ metodę find().
+     * NIE eksponuj getInstance() publicznie!
      */
     async find(conditions?: any): Promise<T[]> {
         return await this.repository.find(conditions);

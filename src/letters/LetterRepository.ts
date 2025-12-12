@@ -145,7 +145,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
         // Pobierz asocjacje dla wszystkich letterów
         const [_casesAssociationsPerProject, _letterEntitiesPerProject] =
             await Promise.all([
-                LetterCaseAssociationsController.getLetterCaseAssociationsList(
+                LetterCaseAssociationsController.find(
                     orConditions[0] as LetterCaseSearchParams
                 ),
                 LetterEntityAssociationsController.getLetterEntityAssociationsList(

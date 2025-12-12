@@ -21,6 +21,7 @@ import ToolsGd from '../tools/ToolsGd';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
+import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 
 export default class LettersController extends BaseController<
     Letter,
@@ -272,10 +273,12 @@ export default class LettersController extends BaseController<
         });
 
         // Zapis do bazy w ramach transakcji
-        const entityAssociationController =
-            LetterEntityAssociationsController.getInstance();
         for (const association of entityAssociations) {
-            await entityAssociationController.create(association, conn, true);
+            await LetterEntityAssociationsController.add(
+                association,
+                conn,
+                true
+            );
         }
     }
 
@@ -305,7 +308,7 @@ export default class LettersController extends BaseController<
 
         // Zapis do bazy w ramach transakcji
         for (const association of caseAssociations) {
-            await association.addInDb(conn, true);
+            await LetterCaseAssociationsController.add(association, conn, true);
         }
     }
 
