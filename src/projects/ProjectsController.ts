@@ -80,9 +80,6 @@ export default class ProjectsController extends BaseController<
             await project.createProjectFolder(auth);
             console.log('GD folder created');
 
-            // 2. Pobierz asocjacje z klienta (już są w project._employers i project._engineers)
-            await project.setProjectEntityAssociationsFromDb();
-
             try {
                 // 3. Transakcja DB
                 await ToolsDb.transaction(
@@ -221,7 +218,7 @@ export default class ProjectsController extends BaseController<
                     _entity: entity,
                     projectRole: 'EMPLOYER',
                 });
-                await association.addInDb(conn, true);
+                await association.addInDb1(conn, true);
             }
         }
 
@@ -233,7 +230,7 @@ export default class ProjectsController extends BaseController<
                     _entity: entity,
                     projectRole: 'ENGINEER',
                 });
-                await association.addInDb(conn, true);
+                await association.addInDb1(conn, true);
             }
         }
     }
@@ -259,7 +256,6 @@ export default class ProjectsController extends BaseController<
         project: Project,
         conn: mysql.PoolConnection
     ): Promise<void> {
-        const sql = `DELETE FROM Projects_Entities WHERE ProjectId = ?`;
-        await ToolsDb.executePreparedStmt(sql, [project.id], project, conn);
+        await this.repository.deleteProjectEntityAssociations(project, conn);
     }
 }

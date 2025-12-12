@@ -221,4 +221,15 @@ export default class ProjectRepository extends BaseRepository<Project> {
             }),
         });
     }
+
+    /**
+     * Usuwa asocjacje Project-Entity dla danego projektu
+     */
+    async deleteProjectEntityAssociations(
+        project: Project,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        const sql = `DELETE FROM Projects_Entities WHERE ProjectId = ?`;
+        await ToolsDb.executePreparedStmt(sql, [project.id], project, conn);
+    }
 }
