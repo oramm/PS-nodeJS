@@ -430,6 +430,10 @@ async find(params) {
 
 **Wzorzec:** Singleton z prywatnymi metodami instancyjnymi.
 
+> ⚠️ **DEPRECATED:** Metody `instance.create()`, `instance.edit()`, `instance.delete()` są **@deprecated**.
+> W nowym kodzie używaj bezpośrednio `instance.repository.addInDb()`, `instance.repository.editInDb()`, `instance.repository.deleteFromDb()`.
+> Szczegóły: [refactoring-auth-pattern.md](./refactoring-auth-pattern.md)
+
 ```typescript
 abstract class BaseController<T, R extends BaseRepository<T>> {
     protected repository: R;
@@ -438,7 +442,7 @@ abstract class BaseController<T, R extends BaseRepository<T>> {
     private static instance: MyController;
     private static getInstance(): MyController { ... }
 
-    // Metody instancyjne - tylko helpery wewnętrzne
+    // @deprecated - używaj instance.repository.*InDb() zamiast tych metod
     protected async create(item, conn?, isTransaction?): Promise<void>;
     protected async edit(item, conn?, isTransaction?, fields?): Promise<void>;
     protected async delete(item, conn?, isTransaction?): Promise<void>;

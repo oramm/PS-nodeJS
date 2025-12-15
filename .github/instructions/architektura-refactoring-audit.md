@@ -578,6 +578,6 @@ Jeśli audyt wykryje poniższe problemy - **STOP** i napraw przed kontynuacją:
 
 ---
 
-**Wersja:** 1.0  
-**Ostatnia aktualizacja:** 2024-11-17  
+**Wersja:** 1.1  
+**Ostatnia aktualizacja:** 2025-12-15  
 **Przeznaczenie:** Quality Assurance po refaktoryzacji Clean Architecture
