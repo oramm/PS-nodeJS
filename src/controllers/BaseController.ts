@@ -161,11 +161,10 @@ export default abstract class BaseController<
     }
 
     /**
-     * Tworzy nowy obiekt w bazie danych
+     * @deprecated Użyj bezpośrednio `instance.repository.addInDb(entity, conn, isTransaction)`.
+     * Ta metoda jest tylko pass-through do repository i zostanie usunięta w przyszłości.
      *
-     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
-     * Controllery MUSZĄ eksponować STATYCZNĄ metodę add().
-     * NIE eksponuj getInstance() publicznie!
+     * Tworzy nowy obiekt w bazie danych.
      */
     async create(
         entity: T,
@@ -180,11 +179,10 @@ export default abstract class BaseController<
     }
 
     /**
-     * Aktualizuje istniejący obiekt w bazie danych
+     * @deprecated Użyj bezpośrednio `instance.repository.editInDb(entity, conn, isTransaction, fieldsToUpdate)`.
+     * Ta metoda jest tylko pass-through do repository i zostanie usunięta w przyszłości.
      *
-     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
-     * Controllery MUSZĄ eksponować STATYCZNĄ metodę edit().
-     * NIE eksponuj getInstance() publicznie!
+     * Aktualizuje istniejący obiekt w bazie danych.
      */
     async edit(
         entity: T,
@@ -201,11 +199,10 @@ export default abstract class BaseController<
     }
 
     /**
-     * Usuwa obiekt z bazy danych
+     * @deprecated Użyj bezpośrednio `instance.repository.deleteFromDb(entity, conn, isTransaction)`.
+     * Ta metoda jest tylko pass-through do repository i zostanie usunięta w przyszłości.
      *
-     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
-     * Controllery MUSZĄ eksponować STATYCZNĄ metodę delete().
-     * NIE eksponuj getInstance() publicznie!
+     * Usuwa obiekt z bazy danych.
      */
     async delete(
         entity: T,
@@ -220,11 +217,10 @@ export default abstract class BaseController<
     }
 
     /**
-     * Pobiera listę obiektów z bazy danych
+     * @deprecated Użyj bezpośrednio `instance.repository.find(conditions)`.
+     * Ta metoda jest tylko pass-through do repository i zostanie usunięta w przyszłości.
      *
-     * UWAGA: To jest metoda INSTANCYJNA (helper dla wewnętrznego użycia).
-     * Controllery MUSZĄ eksponować STATYCZNĄ metodę find().
-     * NIE eksponuj getInstance() publicznie!
+     * Pobiera listę obiektów z bazy danych.
      */
     async find(conditions?: any): Promise<T[]> {
         return await this.repository.find(conditions);

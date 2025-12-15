@@ -1,15 +1,13 @@
 import { OAuth2Client } from 'google-auth-library';
 import BaseController from '../../controllers/BaseController';
-import SecurityRepository from './SecurityRepository';
-import { Security, SecuritiesSearchParams } from './Security';
-import ToolsDb from '../../tools/ToolsDb';
 import Setup from '../../setup/Setup';
+import ToolsDb from '../../tools/ToolsDb';
 import Case from '../milestones/cases/Case';
 import CasesController from '../milestones/cases/CasesController';
 import CaseTypesController from '../milestones/cases/caseTypes/CaseTypesController';
 import MilestonesController from '../milestones/MilestonesController';
-import ContractType from '../contractTypes/ContractType';
-import Project from '../../projects/Project';
+import { SecuritiesSearchParams, Security } from './Security';
+import SecurityRepository from './SecurityRepository';
 
 export default class SecuritiesController extends BaseController<
     Security,
@@ -31,13 +29,6 @@ export default class SecuritiesController extends BaseController<
     static async find(orConditions: SecuritiesSearchParams[]) {
         const instance = this.getInstance();
         return await instance.repository.find(orConditions);
-    }
-
-    /**
-     * @deprecated Use find() instead
-     */
-    static async getSecuritiesList(orConditions: SecuritiesSearchParams[]) {
-        return await this.find(orConditions);
     }
 
     static async addFromDto(dto: any, auth?: OAuth2Client): Promise<Security> {

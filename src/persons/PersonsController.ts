@@ -30,7 +30,11 @@ export default class PersonsController extends BaseController<
         return instance.repository.find(searchParams);
     }
 
-    static async addNewPerson(personData: {
+    /**
+     * CREATE (DTO)
+     * Router powinien wywoływać tę metodę.
+     */
+    static async addFromDto(personData: {
         name: string;
         surname: string;
         position?: string;
@@ -41,7 +45,6 @@ export default class PersonsController extends BaseController<
         systemRoleId?: number;
         entityId?: number;
     }): Promise<Person> {
-        const instance = this.getInstance();
         const person = new Person(personData);
         if (!person._entity?.id)
             throw new Error('Person must be associated with an entity.');
@@ -49,54 +52,119 @@ export default class PersonsController extends BaseController<
         delete person.systemRoleId;
         delete person.systemEmail;
 
-        await instance.create(person);
+        return await this.add(person);
+    }
+
+    /**
+     * CREATE
+     * Dodaje osobę (tylko DB).
+     */
+    static async add(person: Person): Promise<Person> {
+        const instance = this.getInstance();
+        await instance.repository.addInDb(person);
+        //await instance.create(person);
         console.log(`Person ${person.name} ${person.surname} added in db`);
         return person;
     }
 
-    static async updatePerson(
+    /**
+     * UPDATE (DTO)
+     * Router powinien wywoływać tę metodę.
+     */
+    static async editFromDto(
         personData: any,
         fieldsToUpdate: string[]
     ): Promise<Person> {
-        const instance = this.getInstance();
         const person = new Person(personData);
-        await instance.edit(person, undefined, undefined, fieldsToUpdate);
+        return await this.edit(person, fieldsToUpdate);
+    }
+
+    /**
+     * UPDATE
+     * Edytuje osobę (tylko DB).
+     */
+    static async edit(
+        person: Person,
+        fieldsToUpdate: string[]
+    ): Promise<Person> {
+        const instance = this.getInstance();
+        await instance.repository.editInDb(
+            person,
+            undefined,
+            undefined,
+            fieldsToUpdate
+        );
         console.log(`Person ${person.name} ${person.surname} updated in db`);
         return person;
     }
 
-    static async deletePerson(
+    /**
+     * DELETE (DTO)
+     * Router powinien wywoływać tę metodę.
+     */
+    static async deleteFromDto(
         personData: any
     ): Promise<{ id: number | undefined }> {
-        const instance = this.getInstance();
         const person = new Person(personData);
-        await instance.delete(person);
-        console.log(`Person with id ${person.id} deleted from db`);
+        await this.delete(person);
         return { id: person.id };
     }
 
-    static async updateUser(
-        userData: any,
-        auth: OAuth2Client
-    ): Promise<Person> {
+    /**
+     * DELETE
+     * Usuwa osobę (tylko DB).
+     */
+    static async delete(person: Person): Promise<void> {
         const instance = this.getInstance();
-        const user = new Person(userData);
+        await instance.repository.deleteFromDb(person);
+        console.log(`Person with id ${person.id} deleted from db`);
+    }
 
-        const fieldsToUpdate = [
-            'name',
-            'surname',
-            'position',
-            'email',
-            'cellphone',
-            'phone',
-            'comment',
-            'systemRoleId',
-            'systemEmail',
-        ];
-        await instance.edit(user, undefined, undefined, fieldsToUpdate);
+    /**
+     * UPDATE USER (DTO)
+     * Use-case: edycja użytkownika ENVI + aktualizacja ScrumSheet.
+     * Router powinien wywoływać tę metodę.
+     */
+    static async editUserFromDto(userData: any): Promise<Person> {
+        return await this.withAuth(async (instance, auth) => {
+            const user = new Person(userData);
 
-        console.log(`User ${user.name} ${user.surname} updated in db`);
-        return user;
+            const fieldsToUpdate = [
+                'name',
+                'surname',
+                'position',
+                'email',
+                'cellphone',
+                'phone',
+                'comment',
+                'systemRoleId',
+                'systemEmail',
+            ];
+
+            await instance.repository.editInDb(
+                user,
+                undefined,
+                undefined,
+                fieldsToUpdate
+            );
+            console.log(`User ${user.name} ${user.surname} updated in db`);
+
+            // TODO:
+            // NOTE: ScrumSheet importuje PersonsController, więc używamy dynamic import
+            // (legacy workaround do czasu osobnej analizy/refaktoryzacji modułu ScrumSheet).
+            const [{ default: Planning }, { default: CurrentSprint }] =
+                await Promise.all([
+                    import('../ScrumSheet/Planning'),
+                    import('../ScrumSheet/CurrentSprint'),
+                ]);
+
+            await Promise.all([
+                Planning.refreshTimeAvailable(auth),
+                CurrentSprint.makePersonTimePerTaskFormulas(auth),
+            ]);
+
+            return user;
+        });
     }
 
     static async getPersonFromSessionUserData(
@@ -139,7 +207,8 @@ export default class PersonsController extends BaseController<
                 'User must have systemRoleId, systemEmail, and be associated with an entity.'
             );
         }
-        await instance.create(user);
+
+        await instance.repository.addInDb(user);
         console.log(`User ${user.name} ${user.surname} added in db`);
         return user;
     }
