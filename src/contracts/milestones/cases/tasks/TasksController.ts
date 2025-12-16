@@ -388,6 +388,7 @@ export default class TasksController extends BaseController<
 
         const sql = `SELECT
             Cases.Name AS CaseName,
+            Cases.GdFolderId AS CaseGdFolderId,
             Cases.TypeId AS CaseTypeId,
             Cases.Number AS CaseNumber,
             CaseTypes.Name AS CaseTypeName,
@@ -423,6 +424,7 @@ export default class TasksController extends BaseController<
             var row = result[0];
             return {
                 caseName: <string | undefined>row.CaseName,
+                caseGdFolderId: <string | undefined>row.CaseGdFolderId,
                 caseTypeId: <number>row.CaseTypeId,
                 caseNumber: <number>row.CaseNumber,
                 caseTypeName: <string>row.CaseTypeName,
@@ -562,6 +564,14 @@ export default class TasksController extends BaseController<
                 ? ' ' + parents.contractAlias
                 : '';
 
+            // Create case name as HYPERLINK formula when we have gd folder id
+            const caseLabel =
+                parents.caseGdFolderId && parents.caseName
+                    ? `=HYPERLINK("${ToolsGd.createGdFolderUrl(
+                          parents.caseGdFolderId
+                      )}";"${parents.caseName}")`
+                    : parents.caseName;
+
             const parentsData = [
                 [
                     parents.projectId,
@@ -581,7 +591,7 @@ export default class TasksController extends BaseController<
                         ' ' +
                         parents.caseTypeName +
                         parentCaseDisplayNumber,
-                    parents.caseName,
+                    caseLabel,
                     task.name,
                     task.deadline ? task.deadline : '',
                     '',
