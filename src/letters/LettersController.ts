@@ -406,7 +406,7 @@ export default class LettersController extends BaseController<
             }
 
             // 5. Utwórz skróty w folderach Cases
-            if (letter.gdDocumentId && letter._cases.length > 0) {
+            if ((letter.gdDocumentId || letter.gdFolderId) && letter._cases.length > 0) {
                 const shortcutCreationPromises = letter._cases.map(
                     async (caseItem) => {
                         if (caseItem.gdFolderId) {
@@ -418,8 +418,12 @@ export default class LettersController extends BaseController<
                                 }
                             );
 
+                            const targetId = letter.gdDocumentId
+                                ? letter.gdDocumentId
+                                : letter.gdFolderId;
+
                             await ToolsGd.createShortcut(auth, {
-                                targetId: letter.gdDocumentId!,
+                                targetId: targetId!,
                                 parentId: lettersSubfolder.id!,
                                 name: `${letter.number} ${letter.description}`,
                             });
@@ -506,7 +510,7 @@ export default class LettersController extends BaseController<
             await LettersController.addNew(letter);
 
             // 3. Utwórz skróty w folderach Cases
-            if (letter.gdDocumentId && letter._cases.length > 0) {
+            if ((letter.gdDocumentId || letter.gdFolderId) && letter._cases.length > 0) {
                 const shortcutPromises = letter._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
                         const lettersSubfolder = await ToolsGd.setFolder(auth, {
@@ -514,8 +518,12 @@ export default class LettersController extends BaseController<
                             name: 'Pisma',
                         });
 
+                        const targetId = letter.gdDocumentId
+                            ? letter.gdDocumentId
+                            : letter.gdFolderId;
+
                         await ToolsGd.createShortcut(auth, {
-                            targetId: letter.gdDocumentId!,
+                            targetId: targetId!,
                             parentId: lettersSubfolder.id!,
                             name: `${letter.number} ${letter.description}`,
                         });
