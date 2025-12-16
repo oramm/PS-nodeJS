@@ -107,6 +107,28 @@ export default abstract class IncomingLetter
                 oldGdDocumentId,
                 oldGdFolderId
             );
+            // Po usunięciu starych załączników zaktualizuj/utwórz skróty w folderach spraw
+            try {
+                const targetId = this.gdDocumentId || this.gdFolderId;
+                if (targetId && this._cases && this._cases.length > 0) {
+                    const shortcutPromises = this._cases.map(async (caseItem) => {
+                        if (caseItem.gdFolderId) {
+                            const lettersSubfolder = await ToolsGd.setFolder(auth, {
+                                parentId: caseItem.gdFolderId,
+                                name: 'Pisma',
+                            });
+                            await ToolsGd.createShortcut(auth, {
+                                targetId: targetId!,
+                                parentId: lettersSubfolder.id!,
+                                name: `${this.number} ${this.description}`,
+                            });
+                        }
+                    });
+                    await Promise.all(shortcutPromises);
+                }
+            } catch (shortcutErr) {
+                console.error('Error updating case shortcuts after replaceAttachments:', shortcutErr);
+            }
         } catch (error) {
             console.error('Error during deleteFromGd:', error);
             if (!(error instanceof Error))
