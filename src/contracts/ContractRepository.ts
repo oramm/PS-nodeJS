@@ -148,11 +148,11 @@ export default class ContractRepository extends BaseRepository<
                 ) {
                     const ourData = {
                         _isIdNonIncrement: true,
-                        Id: item.id,
-                        OurId: ourId,
-                        ManagerId: managerId,
-                        AdminId: adminId,
-                        CityId: cityId,
+                        id: item.id,
+                        ourId: ourId,
+                        managerId: managerId,
+                        adminId: adminId,
+                        cityId: cityId,
                     };
                     await ToolsDb.editInDb(
                         'OurContractsData',
