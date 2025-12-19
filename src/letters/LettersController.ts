@@ -140,36 +140,12 @@ export default class LettersController extends BaseController<
 
     /**
      * PUBLIC API: Zatwierdza pismo wychodzące
+     * Tworzy event APPROVED i aktualizuje letter._lastEvent
      *
      * @param letter - instancja pisma wychodzącego do zatwierdzenia
      * @param userData - dane użytkownika zatwierdzającego
-     * @param auth - opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async approveLetter(
-        letter: OurLetter,
-        userData: UserData,
-        auth?: OAuth2Client
-    ): Promise<void> {
-        return await this.withAuth<void>(
-            async (
-                instance: LettersController,
-                authClient: OAuth2Client
-            ): Promise<void> => {
-                return await instance.approveLetterPrivate(
-                    authClient,
-                    letter,
-                    userData
-                );
-            },
-            auth
-        );
-    }
-
-    /**
-     * PRIVATE: Logika zatwierdzania pisma
-     */
-    private async approveLetterPrivate(
-        auth: OAuth2Client,
         letter: OurLetter,
         userData: UserData
     ): Promise<void> {
@@ -406,7 +382,10 @@ export default class LettersController extends BaseController<
             }
 
             // 5. Utwórz skróty w folderach Cases
-            if ((letter.gdDocumentId || letter.gdFolderId) && letter._cases.length > 0) {
+            if (
+                (letter.gdDocumentId || letter.gdFolderId) &&
+                letter._cases.length > 0
+            ) {
                 const shortcutCreationPromises = letter._cases.map(
                     async (caseItem) => {
                         if (caseItem.gdFolderId) {
@@ -510,7 +489,10 @@ export default class LettersController extends BaseController<
             await LettersController.addNew(letter);
 
             // 3. Utwórz skróty w folderach Cases
-            if ((letter.gdDocumentId || letter.gdFolderId) && letter._cases.length > 0) {
+            if (
+                (letter.gdDocumentId || letter.gdFolderId) &&
+                letter._cases.length > 0
+            ) {
                 const shortcutPromises = letter._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
                         const lettersSubfolder = await ToolsGd.setFolder(auth, {
@@ -717,6 +699,19 @@ export default class LettersController extends BaseController<
         if (!isOnlyDbFields) {
             await letter.editLetterGdElements(auth, files);
             console.log('Letter folder and file in GD edited');
+        }
+
+        // 3. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
+        const statusChanged =
+            !fieldsToUpdate || fieldsToUpdate.includes('status');
+        if (
+            statusChanged &&
+            (letter.status === 'Zatwierdzony' ||
+                letter.status === Setup.LetterStatus.APPROVED)
+        ) {
+            if (letter instanceof OurLetter) {
+                await LettersController.approveLetter(letter, userData);
+            }
         }
 
         console.groupEnd();
