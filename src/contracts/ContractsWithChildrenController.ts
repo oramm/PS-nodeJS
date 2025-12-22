@@ -30,6 +30,7 @@ export type ContractsWithChildrenSearchParams = {
     deadlineTo?: string;
     searchText?: string;
     statusType?: 'active' | 'archived' | 'all';
+    statuses?: string[];
 };
 
 export default class ContractsWithChildrenController {
@@ -150,6 +151,15 @@ export default class ContractsWithChildrenController {
             default:
                 statusTypeCondition = '1';
         }
+
+        const statusCondition = searchParams.statuses?.length
+            ? ToolsDb.makeOrConditionFromValueOrArray(
+                  searchParams.statuses,
+                  'Contracts',
+                  'Status'
+              )
+            : '1';
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
@@ -158,6 +168,7 @@ export default class ContractsWithChildrenController {
             AND ${milestoneCondition}
             AND ${caseCondition} 
             AND ${statusTypeCondition} 
+            AND ${statusCondition}
             AND ${projectCondition}
             AND ${searchTextCondition}`;
     }

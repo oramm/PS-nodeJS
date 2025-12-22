@@ -94,11 +94,13 @@ export default class LettersController extends BaseController<
             | IncomingLetterContract
             | IncomingLetterOffer;
 
-        // Our Letter Contract (nowy typ)
+        const isNewLetter = !initParam.id;
+
+        // Our Letter Contract (nowy typ) - nowe pismo lub edycja gdy id == number
         if (
             initParam.isOur &&
-            initParam.id == initParam.number &&
-            initParam._project?.id
+            initParam._project?.id &&
+            (isNewLetter || initParam.id == initParam.number)
         ) {
             item = new OurLetterContract(initParam);
             if (initParam._contract)
@@ -106,8 +108,12 @@ export default class LettersController extends BaseController<
             return item;
         }
 
-        // Our Letter Contract (stary typ - OurOldTypeLetter)
-        if (initParam.isOur && initParam.id !== initParam.number) {
+        // Our Letter Contract (stary typ - OurOldTypeLetter) - tylko edycja istniejącego pisma
+        if (
+            initParam.isOur &&
+            !isNewLetter &&
+            initParam.id !== initParam.number
+        ) {
             return new OurOldTypeLetter(initParam);
         }
 
