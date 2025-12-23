@@ -300,6 +300,11 @@ export interface InvoiceData extends RepositoryDataItem {
     _documentOpenUrl?: string;
     _totalGrossValue?: number;
     _totalNetValue?: number;
+    // KSeF integration fields
+    ksefNumber?: string | null;
+    ksefStatus?: string | null;
+    ksefSessionId?: string | null;
+    ksefUpo?: string | null;
 }
 
 export interface InvoiceItemData extends RepositoryDataItem {

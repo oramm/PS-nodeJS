@@ -35,6 +35,10 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     gdId?: string | null;
     _documentOpenUrl?: string;
     _totalNetValue?: number;
+    ksefNumber?: string | null;
+    ksefStatus?: string | null;
+    ksefSessionId?: string | null;
+    ksefUpo?: string | null;
     _totalGrossValue?: number;
 
     constructor(initParamObject: InvoiceData) {
@@ -76,6 +80,10 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this._totalNetValue = initParamObject._totalNetValue as number;
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
+        this.ksefNumber = (initParamObject as any).ksefNumber;
+        this.ksefStatus = (initParamObject as any).ksefStatus;
+        this.ksefSessionId = (initParamObject as any).ksefSessionId;
+        this.ksefUpo = (initParamObject as any).ksefUpo;
         //this._items = initParamObject._items;
     }
 
