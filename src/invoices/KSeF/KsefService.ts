@@ -328,6 +328,13 @@ export default class KsefService {
     }
 
     // ==================== SESJA WYSYŁKI (KSeF 2.0) ====================
+    
+    // Konfiguracja schematu FA(3) - obowiązuje od 01.09.2025
+    private static readonly FORM_CODE = {
+        systemCode: 'FA (3)',
+        schemaVersion: '1-0E',
+        value: 'FA'
+    };
 
     /**
      * Otwórz sesję interaktywną
@@ -337,7 +344,7 @@ export default class KsefService {
      * 
      * Request body:
      * {
-     *   formCode: { systemCode: "FA (2)", schemaVersion: "1-0E", value: "FA" },
+     *   formCode: { systemCode: "FA (3)", schemaVersion: "1-0E", value: "FA" },
      *   encryption: { encryptedSymmetricKey: "...", initializationVector: "..." }
      * }
      */
@@ -346,7 +353,7 @@ export default class KsefService {
             await this.authenticateWithKsefToken();
         }
 
-        console.log('   [Session] Otwieranie sesji interaktywnej...');
+        console.log(`   [Session] Otwieranie sesji interaktywnej (schemat: ${KsefService.FORM_CODE.systemCode})...`);
 
         // Generuj klucz AES-256 i IV dla tej sesji
         this.aesKey = crypto.randomBytes(32); // 256 bits
@@ -362,11 +369,7 @@ export default class KsefService {
         const encryptedAesKey = this.encryptAesKeyRaw(this.aesKey);
 
         const requestBody = {
-            formCode: {
-                systemCode: 'FA (2)',    // Wersja schematu faktury
-                schemaVersion: '1-0E',   // Wersja schematu XSD
-                value: 'FA'              // Identyfikator formularza
-            },
+            formCode: KsefService.FORM_CODE,
             encryption: {
                 encryptedSymmetricKey: encryptedAesKey,
                 initializationVector: this.aesIv.toString('base64')
@@ -538,10 +541,10 @@ export default class KsefService {
     }
 
     /**
-     * Pobranie UPO dla faktury
+     * Pobranie UPO dla faktury w ramach aktywnej sesji
      * GET /sessions/{referenceNumber}/invoices/{invoiceReferenceNumber}/upo
      */
-    async downloadUpo(invoiceReferenceNumber: string): Promise<Buffer> {
+    async downloadUpoFromSession(invoiceReferenceNumber: string): Promise<Buffer> {
         if (!this.sessionReferenceNumber || !this.accessToken) {
             throw new Error('Brak aktywnej sesji');
         }
@@ -599,6 +602,47 @@ export default class KsefService {
         // Możesz też unieważnić sesję uwierzytelnienia jeśli chcesz
         // DELETE /auth/sessions/current
         this.accessToken = null;
+    }
+
+    // ==================== STATUS I UPO ====================
+
+    /**
+     * Pobierz status faktury po numerze KSeF
+     * GET /invoices/{ksefNumber}
+     */
+    async getStatus(ksefNumber: string): Promise<any> {
+        if (!this.accessToken) {
+            await this.authenticateWithKsefToken();
+        }
+
+        const response = await this.client.get(`/invoices/${ksefNumber}`, {
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${this.accessToken}`
+            }
+        });
+
+        return response.data;
+    }
+
+    /**
+     * Pobierz UPO (Urzędowe Poświadczenie Odbioru) dla faktury
+     * GET /invoices/{ksefNumber}/upo
+     */
+    async downloadUpo(ksefNumber: string): Promise<Buffer> {
+        if (!this.accessToken) {
+            await this.authenticateWithKsefToken();
+        }
+
+        const response = await this.client.get(`/invoices/${ksefNumber}/upo`, {
+            headers: {
+                'Accept': 'application/pdf',
+                'Authorization': `Bearer ${this.accessToken}`
+            },
+            responseType: 'arraybuffer'
+        });
+
+        return Buffer.from(response.data);
     }
 
     // ==================== POMOCNICZE ====================

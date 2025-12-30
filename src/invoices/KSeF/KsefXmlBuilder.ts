@@ -2,26 +2,28 @@ import Invoice from '../Invoice';
 import ToolsDb from '../../tools/ToolsDb';
 
 /**
- * Generator XML faktur w formacie FA(2) dla KSeF
+ * Generator XML faktur w formacie FA(3) dla KSeF
  * 
- * Zgodny ze schematem: http://crd.gov.pl/wzor/2023/06/29/12648/
+ * Schemat: http://crd.gov.pl/wzor/2025/06/25/13775/
  * Wersja schematu: 1-0E
- * 
- * Dokumentacja: https://github.com/CIRFMF/ksef-docs/blob/main/faktury/schemy/FA/schemat_FA(2)_v1-0E.xsd
+ * Obowiązuje od: 01.09.2025
  */
 export default class KsefXmlBuilder {
-    private static readonly FA_NAMESPACE = 'http://crd.gov.pl/wzor/2023/06/29/12648/';
+    // Konfiguracja schematu FA(3)
+    private static readonly NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
+    private static readonly SYSTEM_CODE = 'FA (3)';
+    private static readonly VARIANT = '3';
+    
     private static readonly ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/';
     private static readonly XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance';
     private static readonly SCHEMA_VERSION = '1-0E';
-    private static readonly FORM_CODE_SYSTEM = 'FA (2)';  // Atrybut kodSystemowy
-    private static readonly FORM_CODE_VALUE = 'FA';        // Treść elementu KodFormularza (wg TKodFormularza enum)
-    private static readonly VARIANT = '2';
+    private static readonly FORM_CODE_VALUE = 'FA';  // Treść elementu KodFormularza (enum TKodFormularza)
 
     /**
-     * Buduje XML faktury zgodny ze schematem FA(2) v1-0E
+     * Buduje XML faktury zgodny ze schematem FA(3) v1-0E
      */
     static buildXml(invoice: Invoice): string {
+        
         // Dane sprzedawcy z konfiguracji
         const sellerNip = process.env.KSEF_NIP || '';
         const sellerName = process.env.KSEF_SELLER_NAME || 'ENVI Sp. z o.o.';
@@ -47,11 +49,11 @@ export default class KsefXmlBuilder {
         const vatSections = this.buildVatSectionsXml(vatSummary);
 
         return `<?xml version="1.0" encoding="UTF-8"?>
-<Faktura xmlns="${this.FA_NAMESPACE}"
+<Faktura xmlns="${this.NAMESPACE}"
          xmlns:etd="${this.ETD_NAMESPACE}"
          xmlns:xsi="${this.XSI_NAMESPACE}">
     <Naglowek>
-        <KodFormularza kodSystemowy="${this.FORM_CODE_SYSTEM}" wersjaSchemy="${this.SCHEMA_VERSION}">${this.FORM_CODE_VALUE}</KodFormularza>
+        <KodFormularza kodSystemowy="${this.SYSTEM_CODE}" wersjaSchemy="${this.SCHEMA_VERSION}">${this.FORM_CODE_VALUE}</KodFormularza>
         <WariantFormularza>${this.VARIANT}</WariantFormularza>
         <DataWytworzeniaFa>${creationDateTime}</DataWytworzeniaFa>
         <SystemInfo>ENVI-PS-NodeJS</SystemInfo>
@@ -77,6 +79,8 @@ export default class KsefXmlBuilder {
             <KodKraju>PL</KodKraju>
             <AdresL1>${buyerAddress}</AdresL1>
         </Adres>` : ''}
+        <JST>2</JST>
+        <GV>2</GV>
     </Podmiot2>
     <Fa>
         <KodWaluty>PLN</KodWaluty>

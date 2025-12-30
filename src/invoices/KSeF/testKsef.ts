@@ -11,7 +11,7 @@ import KsefXmlBuilder from './KsefXmlBuilder';
 import InvoiceKsefValidator from './InvoiceKsefValidator';
 import KsefService from './KsefService';
 
-const TEST_INVOICE_ID = 6165;
+const TEST_INVOICE_ID = 6166;
 
 async function testKsef() {
     console.log('='.repeat(60));
