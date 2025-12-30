@@ -3,10 +3,23 @@ export default class InvoiceKsefValidator {
     static validateForKsef(invoiceDto: any) {
         const errors: string[] = [];
         if (!invoiceDto) errors.push('Missing invoice');
-        if (!invoiceDto._seller || !invoiceDto._seller.nip) errors.push('Seller NIP required');
-        if (!invoiceDto._buyer || !invoiceDto._buyer.nip) errors.push('Buyer NIP required');
+        
+        // Seller NIP comes from ENV
+        const sellerNip = process.env.KSEF_NIP;
+        if (!sellerNip) errors.push('Seller NIP required (ustaw KSEF_NIP w .env)');
+        
+        // Buyer info comes from _entity.taxNumber
+        if (!invoiceDto._entity || !invoiceDto._entity.taxNumber) {
+            errors.push('Buyer NIP required (_entity.taxNumber)');
+        }
+        
         if (!invoiceDto.issueDate) errors.push('Issue date required');
-        if (!invoiceDto.total && invoiceDto.total !== 0) errors.push('Total required');
+        
+        // Total is _totalNetValue
+        const total = invoiceDto._totalNetValue;
+        if (total === undefined || total === null) {
+            errors.push('Total required (_totalNetValue)');
+        }
 
         if (errors.length) {
             const err = new Error(`KSeF validation failed: ${errors.join(', ')}`);
