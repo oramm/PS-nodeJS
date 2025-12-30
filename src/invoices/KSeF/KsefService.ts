@@ -497,16 +497,30 @@ export default class KsefService {
     }
 
     /**
-     * Sprawdzenie statusu faktury w sesji
-     * GET /sessions/{referenceNumber}/invoices/{invoiceReferenceNumber}
+     * Sprawdzenie statusu faktury
+     * GET /sessions/{sessionReferenceNumber}/invoices/{invoiceReferenceNumber}
+     * 
+     * UWAGA: Wymaga autoryzacji, ale sesja wysyłki może być już zamknięta.
+     * Ten endpoint pozwala sprawdzić status faktury wysłanej w DOWOLNEJ sesji
+     * używając numeru referencyjnego sesji i faktury.
+     * 
+     * @param invoiceReferenceNumber - numer referencyjny faktury (z wysyłki)
+     * @param sessionReferenceNumber - numer referencyjny sesji (opcjonalny, użyje bieżącej jeśli nie podany)
      */
-    async getInvoiceStatus(invoiceReferenceNumber: string): Promise<any> {
-        if (!this.sessionReferenceNumber || !this.accessToken) {
-            throw new Error('Brak aktywnej sesji');
+    async getInvoiceStatus(invoiceReferenceNumber: string, sessionReferenceNumber?: string): Promise<any> {
+        // Upewnij się że mamy token autoryzacji
+        if (!this.accessToken) {
+            await this.authenticateWithKsefToken();
+        }
+
+        // Użyj przekazanej sesji lub bieżącej
+        const sessionRef = sessionReferenceNumber || this.sessionReferenceNumber;
+        if (!sessionRef) {
+            throw new Error('Brak numeru referencyjnego sesji - podaj sessionReferenceNumber');
         }
 
         const response = await this.client.get(
-            `/sessions/${this.sessionReferenceNumber}/invoices/${invoiceReferenceNumber}`,
+            `/sessions/${sessionRef}/invoices/${invoiceReferenceNumber}`,
             {
                 headers: {
                     'Accept': 'application/json',
@@ -663,5 +677,12 @@ export default class KsefService {
      */
     hasActiveSession(): boolean {
         return !!this.sessionReferenceNumber;
+    }
+
+    /**
+     * Pobierz numer referencyjny aktywnej sesji wysyłki
+     */
+    getSessionReferenceNumber(): string | null {
+        return this.sessionReferenceNumber;
     }
 }

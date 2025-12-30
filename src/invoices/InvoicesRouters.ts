@@ -1,4 +1,5 @@
 import InvoicesController from './InvoicesController';
+import { KsefController } from './KSeF';
 import { app } from '../index';
 import { Request, Response } from 'express';
 
@@ -128,6 +129,103 @@ app.delete('/invoice/:id', async (req: Request, res: Response, next) => {
         const result = await InvoicesController.delete(req.body, 'FETCH_TOKEN');
         res.send(result);
     } catch (error) {
+        next(error);
+    }
+});
+
+// ==================== KSeF API ====================
+
+/**
+ * POST /invoice/:id/ksef/send
+ * Wysyła fakturę do KSeF
+ * 
+ * Response: { invoiceId, referenceNumber, status, message }
+ */
+app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => {
+    try {
+        const invoiceId = parseInt(req.params.id, 10);
+        if (isNaN(invoiceId)) {
+            return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+        }
+        
+        const result = await KsefController.submitInvoiceById(invoiceId);
+        res.json(result);
+    } catch (error: any) {
+        console.error('[KSeF] Błąd wysyłki faktury:', error.message);
+        if (error.validationErrors) {
+            return res.status(400).json({ 
+                error: 'Walidacja nie powiodła się', 
+                details: error.validationErrors 
+            });
+        }
+        next(error);
+    }
+});
+
+/**
+ * GET /invoice/:id/ksef/status
+ * Sprawdza status faktury w KSeF
+ * 
+ * Response: { invoiceId, referenceNumber, ksefNumber, status, ... }
+ */
+app.get('/invoice/:id/ksef/status', async (req: Request, res: Response, next) => {
+    try {
+        const invoiceId = parseInt(req.params.id, 10);
+        if (isNaN(invoiceId)) {
+            return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+        }
+        
+        const result = await KsefController.checkStatusByInvoiceId(invoiceId);
+        res.json(result);
+    } catch (error: any) {
+        console.error('[KSeF] Błąd sprawdzania statusu:', error.message);
+        next(error);
+    }
+});
+
+/**
+ * GET /invoice/:id/ksef/upo
+ * Pobiera UPO (Urzędowe Poświadczenie Odbioru) w formacie PDF
+ * 
+ * Response: Plik PDF
+ */
+app.get('/invoice/:id/ksef/upo', async (req: Request, res: Response, next) => {
+    try {
+        const invoiceId = parseInt(req.params.id, 10);
+        if (isNaN(invoiceId)) {
+            return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+        }
+        
+        const upoBuffer = await KsefController.downloadUpoByInvoiceId(invoiceId);
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="UPO_faktura_${invoiceId}.pdf"`);
+        res.send(upoBuffer);
+    } catch (error: any) {
+        console.error('[KSeF] Błąd pobierania UPO:', error.message);
+        next(error);
+    }
+});
+
+/**
+ * GET /invoice/:id/ksef/xml
+ * Pobiera XML faktury z KSeF
+ * 
+ * Response: XML faktury
+ */
+app.get('/invoice/:id/ksef/xml', async (req: Request, res: Response, next) => {
+    try {
+        const invoiceId = parseInt(req.params.id, 10);
+        if (isNaN(invoiceId)) {
+            return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+        }
+        
+        const xml = await KsefController.getInvoiceXmlByInvoiceId(invoiceId);
+        
+        res.setHeader('Content-Type', 'application/xml');
+        res.send(xml);
+    } catch (error: any) {
+        console.error('[KSeF] Błąd pobierania XML:', error.message);
         next(error);
     }
 });

@@ -98,16 +98,21 @@ async function testKsef() {
             await new Promise(resolve => setTimeout(resolve, 3000));
             
             try {
-                const status = await service.getInvoiceStatus(invoiceRef);
-                console.log('   Status:', JSON.stringify(status, null, 2));
-                
-                // Sprawdź czy KSeF zwrócił numer faktury
-                if (status.ksefReferenceNumber) {
-                    console.log('\n✅ SUKCES! Faktura w KSeF:');
-                    console.log('   Numer KSeF:', status.ksefReferenceNumber);
-                }
-                if (status.processingCode) {
-                    console.log('   Kod przetwarzania:', status.processingCode, '-', status.processingDescription || '');
+                const sessionRef = service.getSessionReferenceNumber();
+                if (!sessionRef) {
+                    console.log('   ⚠️ Brak aktywnej sesji - nie można sprawdzić statusu');
+                } else {
+                    const status = await service.getInvoiceStatus(invoiceRef, sessionRef);
+                    console.log('   Status:', JSON.stringify(status, null, 2));
+                    
+                    // Sprawdź czy KSeF zwrócił numer faktury
+                    if (status.ksefNumber) {
+                        console.log('\n✅ SUKCES! Faktura w KSeF:');
+                        console.log('   Numer KSeF:', status.ksefNumber);
+                    }
+                    if (status.status?.code) {
+                        console.log('   Kod statusu:', status.status.code, '-', status.status.description || '');
+                    }
                 }
             } catch (statusErr: any) {
                 console.log('   ⚠️ Nie można sprawdzić statusu:', statusErr.message);
