@@ -1,14 +1,12 @@
-import Person from '../persons/Person';
-import Contract from './Contract';
-import ToolsDb from '../tools/ToolsDb';
-import { auth, OAuth2Client } from 'google-auth-library';
-import ToolsSheets from '../tools/ToolsSheets';
-import Setup from '../setup/Setup';
-import CurrentSprint from '../ScrumSheet/CurrentSprint';
+import { OAuth2Client } from 'google-auth-library';
 import City from '../Admin/Cities/City';
-import { OurContractData } from '../types/types';
-import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import Person from '../persons/Person';
 import PersonsController from '../persons/PersonsController';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
+import Setup from '../setup/Setup';
+import ToolsSheets from '../tools/ToolsSheets';
+import { OurContractData } from '../types/types';
+import Contract from './Contract';
 
 export default class ContractOur extends Contract implements OurContractData {
     ourId: string;

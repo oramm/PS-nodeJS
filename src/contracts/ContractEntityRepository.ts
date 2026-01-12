@@ -6,10 +6,13 @@ import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ToolsDb from '../tools/ToolsDb';
 import { EntityData } from '../types/types';
+import ContractEntityAssociationsHelper from './ContractEntityAssociationsHelper';
 
 /**
  * Repository dla asocjacji Contract-Entity
  * Tabela: Contracts_Entities
+ *
+ * WZORZEC: Używa ContractEntityAssociationsHelper dla metody find()
  */
 export default class ContractEntityRepository extends BaseRepository<ContractEntity> {
     constructor() {
@@ -39,37 +42,29 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
 
     /**
      * Wyszukuje asocjacje Contract-Entity
+     * WZORZEC: Deleguje do ContractEntityAssociationsHelper (unikanie duplikacji SQL)
      */
     async find(params?: {
         contractId?: number;
         projectId?: string;
     }): Promise<ContractEntity[]> {
-        const projectCondition = params?.projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [params.projectId])
-            : '1';
+        const associations =
+            await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
+                {
+                    projectId: params?.projectId,
+                    contractId: params?.contractId,
+                }
+            );
 
-        const contractCondition = params?.contractId
-            ? mysql.format('Contracts.Id = ?', [params.contractId])
-            : '1';
-
-        const sql = `SELECT
-            Contracts_Entities.ContractId,
-            Contracts_Entities.EntityId,
-            Contracts_Entities.ContractRole,
-            Entities.Name,
-            Entities.Address,
-            Entities.TaxNumber,
-            Entities.Www,
-            Entities.Email,
-            Entities.Phone
-        FROM Contracts_Entities
-        JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-        JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
-        WHERE ${projectCondition} AND ${contractCondition}
-        ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
-
-        const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return rows.map((row) => this.mapRowToModel(row));
+        // Konwersja ContractEntityAssociation[] → ContractEntity[]
+        return associations.map(
+            (assoc) =>
+                new ContractEntity({
+                    contractRole: assoc.contractRole,
+                    _contract: assoc._contract,
+                    _entity: assoc._entity,
+                })
+        );
     }
 
     /**
