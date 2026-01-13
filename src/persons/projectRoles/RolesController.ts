@@ -45,7 +45,6 @@ export default class RolesController extends BaseController<
                     'ProjectRole must have projectOurId to be added'
                 );
             const contracts = await ContractsController.find([
-                //zmienić na .find()
                 { projectOurId: item.projectOurId },
             ]);
 
@@ -56,6 +55,8 @@ export default class RolesController extends BaseController<
                         ...item,
                         contractId: contract.id,
                     });
+                    // Walidacja przed zapisem
+                    projectRoleInstanceForContract.validate();
                     promises.push(
                         instance.create(
                             projectRoleInstanceForContract,
@@ -76,7 +77,8 @@ export default class RolesController extends BaseController<
     }
 
     static async updateRole(
-        roleData: ContractRoleData | ProjectRoleData
+        roleData: ContractRoleData | ProjectRoleData,
+        fieldsToUpdate?: string[]
     ): Promise<any> {
         this.validateRole(roleData);
         const instance = this.getInstance();
@@ -98,13 +100,21 @@ export default class RolesController extends BaseController<
                         id: role.id,
                         contractId: role.contractId,
                     });
-                    promises.push(instance.edit(updatedRole, conn, true));
+                    // Walidacja przed edycją
+                    updatedRole.validate();
+                    console.log(
+                        'Editing role for contract ',
+                        updatedRole.contractId
+                    );
+                    promises.push(
+                        instance.edit(updatedRole, conn, true, fieldsToUpdate)
+                    );
                 }
                 const result = await Promise.all(promises);
                 return result[0];
             });
         } else {
-            await instance.edit(item);
+            await instance.edit(item, undefined, undefined, fieldsToUpdate);
         }
         return item;
     }
@@ -127,9 +137,14 @@ export default class RolesController extends BaseController<
                 const promises: Promise<ProjectRoleData>[] = [];
 
                 for (const role of rolesToDelete) {
-                    promises.push(
-                        instance.delete(new ProjectRole(role), conn, true)
+                    const projectRole = new ProjectRole(role);
+                    // Walidacja przed usunięciem (opcjonalna, ale dla spójności)
+                    projectRole.validate();
+                    console.log(
+                        'Deleting role for contract ',
+                        projectRole.contractId
                     );
+                    promises.push(instance.delete(projectRole, conn, true));
                 }
                 const result = await Promise.all(promises);
                 return result[0];

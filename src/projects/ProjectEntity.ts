@@ -1,14 +1,14 @@
 import BusinessObject from '../BussinesObject';
 import Entity from '../entities/Entity';
-import Project from './Project';
+import { ProjectData } from '../types/types';
 
 export default class ProjectEntity extends BusinessObject {
     projectId: number;
-    _project: Project;
+    _project: ProjectData;
     entityId: number | undefined;
     _entity: Entity;
     projectRole: 'EMPLOYER' | 'ENGINEER';
-    id: string;
+    declare id?: number;
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Projects_Entities' });
         this.projectId = initParamObject._project.id;
@@ -19,6 +19,6 @@ export default class ProjectEntity extends BusinessObject {
 
         this.projectRole = initParamObject.projectRole;
         //id jest usuwane w addInDb(), więc przy asocjacjach musi byś ręcznie odtworeone w controllerze
-        this.id = '' + this.projectId + this.entityId;
+        this.id = Number('' + this.projectId + this.entityId);
     }
 }

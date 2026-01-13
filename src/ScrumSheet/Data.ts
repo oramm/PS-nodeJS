@@ -2,8 +2,9 @@ import ToolsSheets from '../tools/ToolsSheets';
 import { OAuth2Client } from 'google-auth-library';
 import Setup from '../setup/Setup';
 import Person from '../persons/Person';
-import ScrumSheet from './ScrumSheet';
+import PersonsController from '../persons/PersonsController';
 import CasesController from '../contracts/milestones/cases/CasesController';
+import Case from '../contracts/milestones/cases/Case';
 
 export default class Data {
     static async synchronizePersonsInScrum(
@@ -17,11 +18,13 @@ export default class Data {
             })
         ).values;
 
-        if (!persons)
-            persons = await ScrumSheet.scrumGetPersons([
-                'ENVI_EMPLOYEE',
-                'ENVI_MANAGER',
-            ]);
+        if (!persons) {
+            const orConditions = [
+                { systemRoleName: 'ENVI_EMPLOYEE' },
+                { systemRoleName: 'ENVI_MANAGER' },
+            ];
+            persons = (await PersonsController.find(orConditions)) || [];
+        }
 
         const personIdColIndex = dataValues[0].indexOf(
             Setup.ScrumSheet.Data.personIdColName
@@ -63,7 +66,7 @@ export default class Data {
             })
         ).values;
 
-        const cases = await CasesController.getCasesList();
+        const cases = await CasesController.find();
         const caseIdColIndex = dataValues[0].indexOf(
             Setup.ScrumSheet.Data.caseIdColName
         );
@@ -79,7 +82,7 @@ export default class Data {
                 `R${dataValues.length + 1}C${caseGdFolderIdColIndex}`,
         });
 
-        const casesData = cases.map((item) => [
+        const casesData = cases.map((item: Case) => [
             item.id,
             item.typeId ? item.typeId : '',
             item.milestoneId,

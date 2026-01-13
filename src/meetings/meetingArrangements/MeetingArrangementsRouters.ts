@@ -4,10 +4,7 @@ var app = express();
 
 app.get('/meetingArrangements', async (req: any, res: any, next) => {
     try {
-        const result =
-            await MeetingArrangementsController.getMeetingArrangementsList(
-                req.query
-            );
+        const result = await MeetingArrangementsController.find(req.query);
         res.send(result);
     } catch (error) {
         next(error);
@@ -16,10 +13,9 @@ app.get('/meetingArrangements', async (req: any, res: any, next) => {
 
 app.get('/meetingArrangement/:id', async (req: any, res: any, next) => {
     try {
-        const result =
-            await MeetingArrangementsController.getMeetingArrangementsList(
-                req.params
-            );
+        const result = await MeetingArrangementsController.find({
+            id: parseInt(req.params.id, 10),
+        });
         res.send(result);
     } catch (error) {
         next(error);

@@ -1,108 +1,143 @@
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb';
-import {
-    ContractRangeData,
-    ContractData,
-    ContractRangePerContractData,
-} from '../../types/types';
+import ContractRangeContractRepository, {
+    ContractRangesContractsSearchParams,
+} from './ContractRangeContractRepository';
+import ContractRangeContract from './ContractRangeContract';
+import { ContractRangePerContractData } from '../../types/types';
 
-type ContractRangesContractsSearchParams = {
-    contractRangeId?: number;
-    _contractRange?: ContractRangeData;
-    _contract?: ContractData;
-    contractId?: number;
-    searchText?: string;
-};
-
+/**
+ * Controller dla asocjacji ContractRange-Contract
+ * Wzorzec: Singleton + static methods
+ * Przepływ: Router → Controller → Repository → Model
+ */
 export default class ContractRangesContractsController {
+    private static instance: ContractRangesContractsController;
+    private repository: ContractRangeContractRepository;
+
+    private constructor() {
+        this.repository = new ContractRangeContractRepository();
+    }
+
+    private static getInstance(): ContractRangesContractsController {
+        if (!this.instance) {
+            this.instance = new ContractRangesContractsController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Wyszukuje asocjacje ContractRange-Contract
+     * @param orConditions - tablica warunków wyszukiwania łączonych przez OR
+     */
+    static async find(
+        orConditions: ContractRangesContractsSearchParams[] = []
+    ): Promise<ContractRangeContract[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
+    }
+
+    /**
+     * @deprecated Użyj find() zamiast getContractRangesContractsList()
+     * Zachowane dla kompatybilności wstecznej
+     */
     static async getContractRangesContractsList(
         orConditions: ContractRangesContractsSearchParams[] = []
-    ) {
-        const sql = `SELECT ContractRangesContracts.ContractRangeId,
-            ContractRangesContracts.ContractId,
-            ContractRangesContracts.AssociationComment,
-            ContractRanges.Id AS ContractRangeId,
-            ContractRanges.Name AS ContractRangeName,
-            ContractRanges.Description AS ContractRangeDescription
-        FROM ContractRangesContracts
-        JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
-        JOIN Contracts ON ContractRangesContracts.ContractId = Contracts.Id
-        WHERE ${ToolsDb.makeOrGroupsConditions(
-            orConditions,
-            this.makeAndConditions.bind(this)
-        )}
-        ORDER BY ContractRanges.Name ASC, Contracts.Name ASC`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processContractRangesContractsResult(result);
+    ): Promise<ContractRangePerContractData[]> {
+        const results = await this.find(orConditions);
+        return this.mapToData(results);
     }
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
-        searchText = searchText.toString();
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(ContractRanges.Name LIKE ? OR Contracts.Name LIKE ? OR ContractRangesContracts.AssociationComment LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]
-            )
-        );
-
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
+    /**
+     * Dodaje nową asocjację ContractRange-Contract z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async addFromDto(
+        dto: ContractRangePerContractData
+    ): Promise<ContractRangeContract> {
+        const instance = this.getInstance();
+        const contractRangeContract = new ContractRangeContract(dto);
+        await instance.repository.addInDb(contractRangeContract);
+        // Odtwórz id - jest usuwane w addInDb()
+        contractRangeContract.id =
+            '' +
+            contractRangeContract.contractRangeId +
+            contractRangeContract.contractId;
+        return contractRangeContract;
     }
 
-    static makeAndConditions(
-        searchParams: ContractRangesContractsSearchParams
-    ) {
-        const conditions: string[] = [];
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
-        );
-        if (searchTextCondition !== '1') {
-            conditions.push(searchTextCondition);
-        }
-
-        const contractRangeId =
-            searchParams.contractRangeId || searchParams._contractRange?.id;
-        if (contractRangeId) {
-            conditions.push(
-                mysql.format(`ContractRangesContracts.ContractRangeId = ?`, [
-                    contractRangeId,
-                ])
-            );
-        }
-
-        const contractId =
-            searchParams.contractId || searchParams._contract?.id;
-        if (contractId) {
-            conditions.push(
-                mysql.format(`ContractRangesContracts.ContractId = ?`, [
-                    contractId,
-                ])
-            );
-        }
-
-        return conditions.length ? conditions.join(' AND ') : '1';
+    /**
+     * Dodaje asocjację (wewnętrzne/testy)
+     * @param item - instancja ContractRangeContract
+     */
+    static async add(
+        item: ContractRangeContract
+    ): Promise<ContractRangeContract> {
+        const instance = this.getInstance();
+        await instance.repository.addInDb(item);
+        // Odtwórz id - jest usuwane w addInDb()
+        item.id = '' + item.contractRangeId + item.contractId;
+        return item;
     }
-    static processContractRangesContractsResult(
-        result: any[]
+
+    /**
+     * Edytuje asocjację ContractRange-Contract z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async editFromDto(
+        dto: ContractRangePerContractData
+    ): Promise<ContractRangeContract> {
+        const instance = this.getInstance();
+        const contractRangeContract = new ContractRangeContract(dto);
+        await instance.repository.editInDb(contractRangeContract);
+        return contractRangeContract;
+    }
+
+    /**
+     * Edytuje asocjację (wewnętrzne/testy)
+     * @param item - instancja ContractRangeContract
+     */
+    static async edit(
+        item: ContractRangeContract
+    ): Promise<ContractRangeContract> {
+        const instance = this.getInstance();
+        await instance.repository.editInDb(item);
+        return item;
+    }
+
+    /**
+     * Usuwa asocjację ContractRange-Contract z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async deleteFromDto(
+        dto: ContractRangePerContractData
+    ): Promise<ContractRangeContract> {
+        const instance = this.getInstance();
+        const contractRangeContract = new ContractRangeContract(dto);
+        await instance.repository.deleteFromDb(contractRangeContract);
+        return contractRangeContract;
+    }
+
+    /**
+     * Usuwa asocjację (wewnętrzne/testy)
+     * @param item - instancja ContractRangeContract
+     */
+    static async delete(item: ContractRangeContract): Promise<void> {
+        const instance = this.getInstance();
+        await instance.repository.deleteFromDb(item);
+    }
+
+    /**
+     * Mapuje tablicę ContractRangeContract na ContractRangePerContractData
+     * (dla kompatybilności z istniejącym kodem)
+     */
+    private static mapToData(
+        items: ContractRangeContract[]
     ): ContractRangePerContractData[] {
-        let newResult: ContractRangePerContractData[] = [];
-
-        for (const row of result) {
-            const item: ContractRangePerContractData = {
-                contractRangeId: row.ContractRangeId,
-                contractId: row.ContractId,
-                associationComment: row.AssociationComment,
-                _contractRange: {
-                    id: row.ContractRangeId,
-                    name: row.ContractRangeName,
-                    description: row.ContractRangeDescription,
-                },
-            };
-            newResult.push(item);
-        }
-        return newResult;
+        return items.map((item) => ({
+            contractRangeId: item.contractRangeId,
+            contractId: item.contractId,
+            associationComment: item.associationComment,
+            _contractRange: item._contractRange,
+            _contract: item._contract,
+        }));
     }
 }

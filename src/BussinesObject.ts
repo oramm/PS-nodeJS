@@ -1,7 +1,6 @@
 import ToolsDb from './tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import { PersonData } from './types/types';
-import PersonsController from './persons/PersonsController';
 
 export default class BusinessObject {
     id?: number | string;
@@ -10,64 +9,12 @@ export default class BusinessObject {
     editorId?: number;
     constructor(initParamObject: {
         _dbTableName: string;
-        id?: number;
+        id?: number | string;
         _editor?: PersonData;
     }) {
         this.id = initParamObject.id;
         this._dbTableName = initParamObject._dbTableName;
         this._editor = initParamObject._editor;
         this.editorId = this._editor?.id;
-    }
-
-    /** Zamiast tego używać metody PersonsController.getPersonFromSessionUserData()
-     * @deprecated */
-    async setEditorId() {
-        if (!this._editor) return; // throw new Error('Brakuje obiektu _editor!');
-        const editorRole = await PersonsController.getSystemRole({ id: this._editor.id });
-        if (!editorRole)
-            throw new Error(`W systemie nie ma użytkownika ${this._editor.name} ${this._editor.surname}`);
-        this.editorId = editorRole.personId;
-        this._editor.id = this.editorId;
-    }
-
-    /** @deprecated */
-    async addInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        return await ToolsDb.addInDb(
-            this._dbTableName,
-            this,
-            externalConn,
-            isPartOfTransaction
-        );
-    }
-
-    /** @deprecated */
-    async editInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false,
-        _fieldsToUpdate?: string[]
-    ) {
-        return await ToolsDb.editInDb(
-            this._dbTableName,
-            this,
-            externalConn,
-            isPartOfTransaction,
-            _fieldsToUpdate
-        );
-    }
-
-    /** @deprecated */
-    async deleteFromDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        return await ToolsDb.deleteFromDb(
-            this._dbTableName,
-            this,
-            externalConn,
-            isPartOfTransaction
-        );
     }
 }

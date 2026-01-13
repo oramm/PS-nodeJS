@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import ContractsController from './ContractsController';
 import { app } from '../index';
-import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
@@ -33,10 +32,9 @@ app.post(
             let isArchived = false;
             if (typeof orConditions.isArchived === 'string')
                 isArchived = orConditions.isArchived === 'true';
-            const result =
-                await ContractsWithChildrenController.getContractsList(
-                    orConditions
-                );
+            const result = await ContractsWithChildrenController.find(
+                orConditions
+            );
             res.send(result);
         } catch (error) {
             next(error);
@@ -62,29 +60,18 @@ app.post(
 app.post('/contractReact', async (req: Request, res: Response, next) => {
     try {
         console.log('req.session', req.session);
-        let item: ContractOur | ContractOther;
 
-        if (typeof req.parsedBody.value === 'string')
-            req.body.value = parseFloat(
-                req.parsedBody.value.replace(/ /g, '').replace(',', '.')
-            );
+        // Tworzenie odpowiedniej instancji Contract
+        const contract = await ContractsController.createContractFromDto(
+            req.parsedBody,
+            true
+        );
 
-        if (req.parsedBody._type.isOur) {
-            const ourId = await ContractsController.makeOurId(
-                req.parsedBody._city as CityData,
-                req.parsedBody._type as ContractTypeData
-            );
-            item = new ContractOur({ ...req.parsedBody, ourId });
-        } else {
-            item = new ContractOther(req.parsedBody);
-        }
-
-        if (!item._project || !item._project.id)
-            throw new Error('Nie przypisano projektu do kontraktu');
-
+        // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
 
+        // Odpowiedź HTTP 202 - przetwarzanie w tle
         res.status(202).send({
             progressMesage: 'Kontrakt w trakcie przetwarzania',
             status: 'processing',
@@ -92,23 +79,18 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             taskId,
         } as SessionTask);
 
-        // Przetwarzanie w tle
+        // Przetwarzanie w tle z autoryzacją
         setImmediate(async () => {
             try {
-                await ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    item.addNewController,
-                    [taskId],
-                    item
-                );
+                // REFAKTORING: Użycie ContractsController.addWithAuth() zamiast ToolsGapi.gapiReguestHandler
+                await ContractsController.addWithAuth(contract, taskId);
                 TaskStore.complete(
                     taskId,
-                    item,
+                    contract,
                     'Kontrakt pomyślnie zarejestrowany'
                 );
             } catch (err) {
-                console.error('Błąd async GAPI:', err);
+                console.error('Błąd podczas tworzenia kontraktu:', err);
                 TaskStore.fail(taskId, (err as Error).message);
             }
         });
@@ -159,22 +141,20 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         if (!itemFromClient || !itemFromClient.id)
             throw new Error(`Próba edycji kontraktu bez Id`);
 
-        //Jeśli tworzysz instancje klasy na podstawie obiektu, musisz przekazać 'itemFromClient'
+        // Stwórz instancję odpowiedniej klasy
         const contractInstance =
-            itemFromClient.ourId || itemFromClient._type.isOur
-                ? new ContractOur(itemFromClient)
-                : new ContractOther(itemFromClient);
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                contractInstance.editHandler,
-                [_fieldsToUpdate],
-                contractInstance
-            ),
-        ]);
+            await ContractsController.createContractFromDto(
+                itemFromClient,
+                false
+            );
 
-        res.send(contractInstance);
+        // REFAKTORING: użyj ContractsController.editWithAuth()
+        const updatedContract = await ContractsController.editWithAuth(
+            contractInstance,
+            _fieldsToUpdate
+        );
+
+        res.send(updatedContract);
     } catch (error) {
         next(error);
     }
@@ -182,28 +162,15 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = req.body._type.isOur
-            ? new ContractOur(req.body)
-            : new ContractOther(req.body);
-        await item.deleteFromDb();
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFolder,
-                undefined,
-                item
-            ),
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFromScrum,
-                undefined,
-                item
-            ),
-        ]);
-        res.send(item);
-        console.log(`Contract ${item.name} deleted`);
+        const item = await ContractsController.createContractFromDto(
+            req.body,
+            false
+        );
+
+        // REFAKTORING: użyj ContractsController.deleteWithAuth()
+        const deletedContract = await ContractsController.deleteWithAuth(item);
+
+        res.send(deletedContract);
     } catch (error) {
         next(error);
     }

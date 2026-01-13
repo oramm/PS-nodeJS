@@ -5,9 +5,11 @@ import IncomingLetterContractGdController from './gdControlers/IncomingLetterCon
 export default class OurOldTypeLetter extends IncomingLetter {
     isOur: any = true;
     _letterGdController = new IncomingLetterContractGdController();
+    _project: any;
 
     constructor(initParamObject: any) {
         super(initParamObject);
+        this._project = initParamObject._project;
     }
     /**do usunięcia - trzeba dodać gdController */
     makeFolderName(): string {

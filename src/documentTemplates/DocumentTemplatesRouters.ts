@@ -14,7 +14,13 @@ app.post('/documentTemplates', async (req: Request, res: Response, next) => {
 
 app.post('/documentTemplate', async (req: Request, res: Response, next) => {
     try {
-        const item = await DocumentTemplatesController.addNewTemplate(req.body);
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
+        const item = await DocumentTemplatesController.addNewTemplate(
+            req.parsedBody,
+            req.session.userData
+        );
         res.send(item);
     } catch (error) {
         next(error);
@@ -23,19 +29,31 @@ app.post('/documentTemplate', async (req: Request, res: Response, next) => {
 
 app.put('/documentTemplate/:id', async (req: Request, res: Response, next) => {
     try {
+        if (!req.session.userData) {
+            throw new Error('Not authenticated');
+        }
         const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const item = await DocumentTemplatesController.updateTemplate(req.parsedBody, fieldsToUpdate);
+        const item = await DocumentTemplatesController.updateTemplate(
+            req.parsedBody,
+            req.session.userData,
+            fieldsToUpdate
+        );
         res.send(item);
     } catch (error) {
         next(error);
     }
 });
 
-app.delete('/documentTemplate/:id', async (req: Request, res: Response, next) => {
-    try {
-        const result = await DocumentTemplatesController.deleteTemplate(req.body);
-        res.send(result);
-    } catch (error) {
-        next(error);
+app.delete(
+    '/documentTemplate/:id',
+    async (req: Request, res: Response, next) => {
+        try {
+            const result = await DocumentTemplatesController.deleteTemplate(
+                req.body
+            );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);

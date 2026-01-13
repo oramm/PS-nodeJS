@@ -1,21 +1,34 @@
+import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
-import Entity from '../entities/Entity';
-import ToolsDb from '../tools/ToolsDb';
-import ContractOther from './ContractOther';
-import ContractOur from './ContractOur';
-import ContractType from './contractTypes/ContractType';
+import BaseController from '../controllers/BaseController';
+import Person from '../persons/Person';
 import Project from '../projects/Project';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
+import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
+import ToolsDb from '../tools/ToolsDb';
+import ToolsSheets from '../tools/ToolsSheets';
 import {
     CityData,
     ContractRangePerContractData,
     ContractTypeData,
 } from '../types/types';
-import Person from '../persons/Person';
+import Contract from './Contract';
+import ContractEntityController from './ContractEntityController';
+import ContractEntityRepository from './ContractEntityRepository';
+import ContractOther from './ContractOther';
+import ContractOur from './ContractOur';
+import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
 import ContractRepository from './ContractRepository';
-import BaseController from '../controllers/BaseController';
+import ContractType from './contractTypes/ContractType';
+import Task from './milestones/cases/tasks/Task';
+import TasksController from './milestones/cases/tasks/TasksController';
+import Milestone from './milestones/Milestone';
+import MilestonesController from './milestones/MilestonesController';
+import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
 
 export type ContractSearchParams = {
     id?: number;
@@ -48,6 +61,10 @@ export default class ContractsController extends BaseController<
     ContractRepository
 > {
     private static instance: ContractsController;
+
+    // Repository dla asocjacji
+    private static rangeRepository = new ContractRangeContractRepository();
+
     constructor() {
         super(new ContractRepository());
     }
@@ -66,84 +83,418 @@ export default class ContractsController extends BaseController<
     }
 
     /**
-     * @deprecated Use ContractsController.find() instead. This method will be removed in a future version.
+     * Tworzy instancję kontraktu z DTO
      */
-    static async getContractsList1(orConditions: ContractSearchParams[] = []) {
-        const sql = `SELECT mainContracts.Id, 
-            mainContracts.Alias, 
-            mainContracts.Number, 
-            mainContracts.Name, 
-            mainContracts.OurIdRelated, 
-            mainContracts.ProjectOurId,
-            mainContracts.StartDate, 
-            mainContracts.EndDate, 
-            mainContracts.GuaranteeEndDate,
-            mainContracts.Value,
-            mainContracts.Comment, 
-            mainContracts.Status, 
-            mainContracts.GdFolderId, 
-            mainContracts.MeetingProtocolsGdFolderId, 
-            mainContracts.MaterialCardsGdFolderId,
-            mainContracts.LastUpdated,
-            OurContractsData.OurId, 
-            OurContractsData.ManagerId, 
-            OurContractsData.AdminId,
-            Cities.Id AS CityId,
-            Cities.Name AS CityName,
-            Cities.Code AS CityCode,
-            Projects.Id AS ProjectId,
-            Projects.OurId AS ProjectOurId,
-            Projects.Name AS ProjectName,
-            Projects.Alias AS ProjectAlias,
-            Projects.GdFolderId AS ProjectGdFolderId,
-            ${this.makeOptionalColumns(orConditions[0])},
-            Admins.Name AS AdminName, 
-            Admins.Surname AS AdminSurname, 
-            Admins.Email AS AdminEmail, 
-            Managers.Name AS ManagerName, 
-            Managers.Surname AS ManagerSurname, 
-            Managers.Email AS ManagerEmail, 
-            RelatedContracts.Id AS RelatedId, 
-            RelatedContracts.Name AS RelatedName, 
-            RelatedContracts.GdFolderId AS RelatedGdFolderId,
-            RelatedOurContractsData.AdminId AS RelatedAdminId,
-            RelatedOurContractsData.ManagerId AS RelatedManagerId,
-            ContractTypes.Id AS MainContractTypeId, 
-            ContractTypes.Name AS TypeName, 
-            ContractTypes.IsOur AS TypeIsOur, 
-            ContractTypes.Description AS TypeDescription,
-            GROUP_CONCAT(DISTINCT ContractRanges.Name ORDER BY ContractRanges.Name SEPARATOR ', ') AS ContractRangesNames
-          FROM Contracts AS mainContracts
-          LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
-          LEFT JOIN Cities ON Cities.Id=OurContractsData.CityId
-          JOIN Projects ON Projects.OurId=mainContracts.ProjectOurId
-          LEFT JOIN Contracts AS RelatedContracts ON RelatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
-          LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = mainContracts.OurIdRelated
-          LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
-          LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
-          LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-          LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
-          LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id
-          LEFT JOIN ContractRangesContracts ON ContractRangesContracts.ContractId=mainContracts.Id
-          LEFT JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
-          WHERE ${ToolsDb.makeOrGroupsConditions(
-              orConditions,
-              this.makeAndConditions.bind(this)
-          )}
-          GROUP BY mainContracts.Id
-          ORDER BY mainContracts.EndDate, mainContracts.ProjectOurId, OurContractsData.OurId, mainContracts.Number`;
+    static async createContractFromDto(
+        dto: any,
+        isNew: boolean = false
+    ): Promise<ContractOur | ContractOther> {
+        if (typeof dto.value === 'string') {
+            dto.value = parseFloat(
+                dto.value.replace(/ /g, '').replace(',', '.')
+            );
+        }
+
+        let contract: ContractOur | ContractOther;
+        if (dto._type?.isOur || dto.ourId) {
+            let ourId = dto.ourId;
+            if (isNew && !ourId) {
+                ourId = await this.makeOurId(
+                    dto._city as CityData,
+                    dto._type as ContractTypeData
+                );
+            }
+            contract = new ContractOur({ ...dto, ourId });
+        } else {
+            contract = new ContractOther(dto);
+        }
+
+        if (isNew && (!contract._project || !contract._project.id)) {
+            throw new Error('Nie przypisano projektu do kontraktu');
+        }
+        return contract;
+    }
+
+    /**
+     * Dodaje nowy kontrakt do bazy danych
+     * REFAKTORING: Przeniesione z Contract.addInDb() i Contract.addNewController()
+     *
+     * @param contract - instancja ContractOur lub ContractOther
+     * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
+     * @param taskId - ID zadania dla TaskStore (opcjonalny - dla progress tracking)
+     * @returns Zaktualizowany kontrakt z ID z bazy danych
+     */
+    static async add(
+        contract: ContractOur | ContractOther,
+        auth?: OAuth2Client,
+        taskId?: string
+    ): Promise<ContractOur | ContractOther> {
+        const instance = this.getInstance();
+
+        // Walidacja biznesowa
+        if (await instance.repository.isUniquePerProject(contract)) {
+            // Twórz komunikat błędu bez wywoływania protected metody
+            const contractInfo =
+                contract instanceof ContractOur
+                    ? `OurId: ${contract.ourId}`
+                    : `Number/Alias: ${contract.number || contract.alias}`;
+            throw new Error(
+                `Contract with ${contractInfo} already exists in this project`
+            );
+        }
+        if (!contract.startDate || !contract.endDate) {
+            throw new Error('Start date or end date is not set');
+        }
+
+        // Walidacja arkusza Scrum (tylko jeśli auth dostępne)
+        if (auth) {
+            await CurrentSprintValidator.checkColumns(auth);
+        }
 
         try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return orConditions[0].onlyKeyData
-                ? this.processContractsResultKeyData(result, orConditions[0])
-                : await this.processContractsResult(result, orConditions[0]);
-        } catch (err) {
-            console.log(sql);
-            throw err;
+            console.group(`Creating a new Contract ${contract.id}`);
+
+            // Operacje Google Drive (jeśli auth dostępne)
+            if (auth) {
+                if (taskId) TaskStore.update(taskId, 'Tworzę foldery', 4);
+                await contract.createFolders(auth);
+                console.log('Contract folders created');
+            }
+
+            // Operacje bazodanowe - TRANSAKCJA
+            if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
+                await instance.repository.addInDb(contract, conn, true);
+
+                // 2. Dodaj asocjacje Entity (CONTRACTOR, ENGINEER, EMPLOYER)
+                await ContractEntityController.addAssociations(contract, conn);
+
+                // 3. Dodaj asocjacje ContractRange
+                if (contract._contractRangesPerContract?.length) {
+                    await this.rangeRepository.addAssociations(
+                        contract,
+                        contract._contractRangesPerContract,
+                        conn
+                    );
+                }
+            });
+            console.log('Contract added in db');
+
+            // Operacje Scrum (jeśli auth dostępne)
+            if (auth) {
+                if (taskId) TaskStore.update(taskId, 'Dodaję do scrum', 22);
+                await contract.addInScrum(auth);
+                console.log('Contract added in scrum');
+
+                // Kamienie milowe
+                console.group('Creating default milestones');
+                if (taskId)
+                    TaskStore.update(taskId, 'Tworzę kamienie milowe', 45);
+                await ContractsController.createDefaultMilestones(
+                    contract,
+                    auth,
+                    taskId || ''
+                );
+                console.log('Default milestones, cases & tasks created');
+                console.groupEnd();
+            }
+
+            console.log(`Contract ${contract._ourIdOrNumber_Alias} created`);
+            console.groupEnd();
+
+            return contract;
+        } catch (error) {
+            console.group('Error while creating contract');
+
+            // Rollback operacji zewnętrznych
+            if (auth) {
+                contract
+                    .deleteFolder(auth)
+                    .then(() => console.log('folders deleted'));
+                contract
+                    .deleteFromScrum(auth)
+                    .then(() => console.log('deleted from scrum'));
+            }
+
+            // Rollback bazy danych (jeśli ID zostało przypisane)
+            if (contract.id) {
+                instance.repository
+                    .deleteFromDb(contract)
+                    .then(() => console.log('deleted from db'));
+            }
+
+            console.groupEnd();
+            throw error;
         }
+    }
+
+    /**
+     * Public wrapper dla dodawania kontraktu z automatyczną autoryzacją
+     * Używany w Router gdy auth musi być pobrany z session
+     *
+     * @param contract - instancja ContractOur lub ContractOther
+     * @param taskId - ID zadania dla TaskStore (opcjonalny)
+     * @returns Zaktualizowany kontrakt z ID z bazy danych
+     */
+    static async addWithAuth(
+        contract: ContractOur | ContractOther,
+        taskId?: string
+    ): Promise<ContractOur | ContractOther> {
+        return await this.withAuth(async (instance, auth) => {
+            return await this.add(contract, auth, taskId);
+        });
+    }
+
+    /**
+     * Edytuje istniejący kontrakt
+     * REFAKTORING: Przeniesione z Contract.editInDb() i Contract.editHandler()
+     *
+     * @param contract - instancja ContractOur lub ContractOther z nowymi danymi
+     * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
+     * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji (jeśli undefined, wszystkie pola)
+     * @returns Zaktualizowany kontrakt
+     */
+    static async edit(
+        contract: ContractOur | ContractOther,
+        auth?: OAuth2Client,
+        fieldsToUpdate?: string[]
+    ): Promise<ContractOur | ContractOther> {
+        const instance = this.getInstance();
+
+        console.group(`Editing contract ${contract._ourIdOrNumber_Name}`);
+
+        try {
+            // Lista pól które wymagają tylko update DB (bez GD/Scrum)
+            const onlyDbFields = [
+                'status',
+                'comment',
+                'startDate',
+                'endDate',
+                'guaranteeEndDate',
+                'value',
+                'name',
+            ];
+
+            // Sprawdź czy to tylko pola DB
+            const isOnlyDbFields =
+                fieldsToUpdate &&
+                fieldsToUpdate.length > 0 &&
+                fieldsToUpdate.every((field) => onlyDbFields.includes(field));
+
+            // Operacje Google Drive i Scrum (jeśli auth i NIE tylko pola DB)
+            if (auth && !isOnlyDbFields) {
+                const [, wasAddedToScrum] = await Promise.all([
+                    contract
+                        .editFolder(auth)
+                        .then(() => console.log('Contract folder edited')),
+                    contract.editInScrum(auth).then((added) => {
+                        console.log('Contract edited in scrum');
+                        return added;
+                    }),
+                ]);
+
+                // Jeśli kontrakt był dodawany na nowo do Scrum, dodaj tasks
+                if (wasAddedToScrum) {
+                    await this.addExistingTasksInScrum(contract, auth);
+
+                    // Post-processing Scrum dla ContractOur
+                    if (contract instanceof ContractOur) {
+                        await CurrentSprint.setSumInContractRow(
+                            auth,
+                            contract.ourId
+                        );
+                        await CurrentSprint.sortContract(auth, contract.ourId);
+                        await CurrentSprint.makeTimesSummary(auth);
+                        await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+                    }
+                    // Post-processing Scrum dla ContractOther
+                    else if (
+                        contract instanceof ContractOther &&
+                        contract.ourIdRelated
+                    ) {
+                        // Sprawdź pozycję macierzystej umowy ENVI
+                        const currentSprintValues = <any[][]>(
+                            await ToolsSheets.getValues(auth, {
+                                spreadsheetId: Setup.ScrumSheet.GdId,
+                                rangeA1: Setup.ScrumSheet.CurrentSprint.name,
+                            })
+                        ).values;
+                        const contractOurIdColIndex =
+                            currentSprintValues[0].indexOf(
+                                Setup.ScrumSheet.CurrentSprint
+                                    .contractOurIdColName
+                            );
+                        const firstRowNumber =
+                            <number>(
+                                Tools.findFirstInRange(
+                                    contract.ourIdRelated,
+                                    currentSprintValues,
+                                    contractOurIdColIndex
+                                )
+                            ) + 1;
+
+                        await CurrentSprint.setSumInContractRow(
+                            auth,
+                            contract.ourIdRelated
+                        );
+                        await CurrentSprint.sortContract(
+                            auth,
+                            contract.ourIdRelated
+                        );
+                        if (firstRowNumber < 13) {
+                            await CurrentSprint.makeTimesSummary(auth);
+                            await CurrentSprint.makePersonTimePerTaskFormulas(
+                                auth
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Operacje bazodanowe - TRANSAKCJA
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
+                await instance.repository.editInDb(
+                    contract,
+                    conn,
+                    true,
+                    fieldsToUpdate
+                );
+
+                // 2. Update asocjacji Entity
+                const entityKeys = ['_employers', '_engineers', '_contractors'];
+                const anyEntityToUpdate =
+                    !fieldsToUpdate ||
+                    entityKeys.some((key) => fieldsToUpdate.includes(key));
+
+                if (anyEntityToUpdate) {
+                    console.log('Edytuję powiązania z podmiotami');
+                    await ContractEntityController.editAssociations(
+                        contract,
+                        conn
+                    );
+                }
+
+                // 3. Update asocjacji ContractRange
+                if (
+                    (!fieldsToUpdate ||
+                        fieldsToUpdate.includes(
+                            '_contractRangesPerContract'
+                        )) &&
+                    contract._contractRangesPerContract
+                ) {
+                    console.log('Edytuję powiązania z zakresami');
+                    await this.rangeRepository.editAssociations(
+                        contract,
+                        contract._contractRangesPerContract,
+                        conn
+                    );
+                }
+            });
+
+            console.log('Contract edited in db');
+            console.groupEnd();
+
+            return contract;
+        } catch (error) {
+            console.groupEnd();
+            throw error;
+        }
+    }
+
+    /**
+     * Public wrapper dla edycji kontraktu z automatyczną autoryzacją
+     * Używany w Router gdy auth musi być pobrany z session
+     *
+     * @param contract - instancja ContractOur lub ContractOther z nowymi danymi
+     * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji
+     * @returns Zaktualizowany kontrakt
+     */
+    static async editWithAuth(
+        contract: ContractOur | ContractOther,
+        fieldsToUpdate?: string[]
+    ): Promise<ContractOur | ContractOther> {
+        return await this.withAuth(async (instance, auth) => {
+            return await this.edit(contract, auth, fieldsToUpdate);
+        });
+    }
+
+    /**
+     * Usuwa kontrakt z bazy danych, Google Drive i Scrum
+     * REFAKTORING: Ujednolicona logika DELETE dla ContractOur i ContractOther
+     *
+     * @param contract - instancja ContractOur lub ContractOther do usunięcia
+     * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
+     * @returns Usunięty kontrakt
+     */
+    static async delete(
+        contract: ContractOur | ContractOther,
+        auth?: OAuth2Client
+    ): Promise<ContractOur | ContractOther> {
+        const instance = this.getInstance();
+
+        console.group(`Deleting contract ${contract._ourIdOrNumber_Name}`);
+
+        try {
+            // 1. Usunięcie z bazy danych - TRANSAKCJA
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                // Usuń asocjacje Entity
+                await ContractEntityController.deleteAssociations(
+                    contract.id!,
+                    conn
+                );
+                console.log('Contract entities associations deleted');
+
+                // Usuń asocjacje ContractRange
+                await this.rangeRepository.deleteByContractId(
+                    contract.id!,
+                    conn
+                );
+                console.log('Contract ranges associations deleted');
+
+                // Usuń z tabeli Contracts (i OurContractsData)
+                await instance.repository.deleteFromDb(contract, conn, true);
+                console.log('Contract deleted from Contracts table');
+            });
+
+            // 2. Operacje Google Drive i Scrum (jeśli auth dostępne)
+            if (auth) {
+                await Promise.all([
+                    contract
+                        .deleteFolder(auth)
+                        .then(() =>
+                            console.log('Contract folder deleted from GD')
+                        ),
+                    contract
+                        .deleteFromScrum(auth)
+                        .then(() => console.log('Contract deleted from Scrum')),
+                ]);
+            }
+
+            console.log(`Contract ${contract.name} deleted`);
+            console.groupEnd();
+
+            return contract;
+        } catch (error) {
+            console.groupEnd();
+            throw error;
+        }
+    }
+
+    /**
+     * Public wrapper dla usunięcia kontraktu z automatyczną autoryzacją
+     * Używany w Router gdy auth musi być pobrany z session
+     *
+     * @param contract - instancja ContractOur lub ContractOther do usunięcia
+     * @returns Usunięty kontrakt
+     */
+    static async deleteWithAuth(
+        contract: ContractOur | ContractOther
+    ): Promise<ContractOur | ContractOther> {
+        return await this.withAuth(async (instance, auth) => {
+            return await this.delete(contract, auth);
+        });
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {
@@ -437,7 +788,9 @@ export default class ContractsController extends BaseController<
         }
         return newResult;
     }
-
+    /** @deprecated
+     * @todo: do usunięcia po fazie migracji
+     */
     private static processContractsResultKeyData(
         result: any[],
         initParamObject: any
@@ -501,63 +854,17 @@ export default class ContractsController extends BaseController<
         contractId?: number;
         isArchived?: boolean;
     }) {
-        const projectConditon =
-            initParamObject && initParamObject.projectId
-                ? mysql.format('Contracts.ProjectOurId = ?', [
-                      initParamObject.projectId,
-                  ])
-                : '1';
+        const associations = await ContractEntityController.find({
+            projectId: initParamObject.projectId,
+            contractId: initParamObject.contractId,
+        });
 
-        const contractConditon =
-            initParamObject && initParamObject.contractId
-                ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
-                : '1';
-        const sql = `SELECT
-            Contracts_Entities.ContractId,
-            Contracts_Entities.EntityId,
-            Contracts_Entities.ContractRole,
-            Entities.Name,
-            Entities.Address,
-            Entities.TaxNumber,
-            Entities.Www,
-            Entities.Email,
-            Entities.Phone
-                    FROM Contracts_Entities
-                    JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-                    JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
-                    LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-                    WHERE ${projectConditon} 
-                    AND ${contractConditon}
-                    ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return this.processContractEntityAssociations(result);
-    }
-
-    private static processContractEntityAssociations(result: any[]) {
-        let newResult: any[] = [];
-
-        for (const row of result) {
-            const item = {
-                contractRole: row.ContractRole,
-                _contract: {
-                    id: row.ContractId,
-                },
-                _entity: new Entity({
-                    id: row.EntityId,
-                    name: row.Name,
-                    address: row.Address,
-                    taxNumber: row.TaxNumber,
-                    www: row.Www,
-                    email: row.Email,
-                    phone: row.Phone,
-                }),
-            };
-
-            newResult.push(item);
-        }
-        return newResult;
+        // Konwertuj do starego formatu dla kompatybilności
+        return associations.map((assoc) => ({
+            contractRole: assoc.contractRole,
+            _contract: assoc._contract,
+            _entity: assoc._entity,
+        }));
     }
 
     static async makeOurId(city: CityData, type: ContractTypeData) {
@@ -609,5 +916,164 @@ export default class ContractsController extends BaseController<
             JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
             WHERE  ${typeCondition} AND ${cityCondition}`;
         return sql;
+    }
+
+    /**
+     * Tworzy domyślne milestones dla kontraktu
+     * Przeniesione z Contract.ts - Controller może orkiestrować inne Controllers
+     */
+    static async createDefaultMilestones(
+        contract: Contract,
+        auth: OAuth2Client,
+        taskId: string
+    ): Promise<Milestone[]> {
+        const defaultMilestones: Milestone[] = [];
+        const sessionTask = TaskStore.get(taskId);
+
+        const defaultMilestoneTemplates =
+            await MilestoneTemplatesController.find(
+                {
+                    isDefaultOnly: true,
+                    contractTypeId: contract.typeId,
+                },
+                'CONTRACT'
+            );
+
+        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
+            const template = defaultMilestoneTemplates[i];
+            const startPercent = sessionTask?.percent || 0;
+            const endPercent = 90;
+            const step =
+                (endPercent - startPercent) / defaultMilestoneTemplates.length;
+            const percent = startPercent + step * i;
+            const milestone = new Milestone({
+                name: template.name,
+                description: template.description,
+                _type: template._milestoneType,
+                _contract: contract as any,
+                status: 'Nie rozpoczęty',
+                _dates: [
+                    {
+                        startDate: contract.startDate!,
+                        endDate: contract.endDate!,
+                        milestoneId: 0, //will be set in Milestone addInDb()
+                    },
+                ],
+            });
+
+            TaskStore.update(
+                taskId,
+                `Tworzę kamień milowy ${milestone._FolderNumber_TypeName_Name}`,
+                percent
+            );
+            //zasymuluj numer kamienia nieunikalnego.
+            //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
+            if (!milestone._type.isUniquePerContract) {
+                milestone.number = 1;
+            }
+            await MilestonesController.createFolders(milestone, auth);
+            defaultMilestones.push(milestone);
+        }
+        console.log('Milestones folders created');
+
+        // Zapisz Milestones do DB i utwórz Cases z Tasks (spójna struktura)
+        await MilestonesController.addBulkWithDatesAndCases(
+            defaultMilestones,
+            auth,
+            { isPartOfBatch: true }
+        );
+        console.log('Milestones with Cases and Tasks created');
+
+        // Post-processing dla ContractOur i ContractOther (logika Scrum)
+        if (
+            contract instanceof ContractOur &&
+            (await contract.shouldBeInScrum())
+        ) {
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
+            await CurrentSprint.setSumInContractRow(auth, contract.ourId).catch(
+                (err: any) => {
+                    console.log('Błąd przy dodawaniu sumy w kontrakcie', err);
+                    throw new Error(
+                        'Błąd przy liczeniu sumy w nagłówku kontraktu przy dodawaniu do scruma \n' +
+                            err.message
+                    );
+                }
+            );
+
+            await CurrentSprint.sortContract(auth, contract.ourId).catch(
+                (err: any) => {
+                    console.log('Błąd przy sortowaniu kontraktu', err);
+                    throw new Error(
+                        'Błąd przy sortowaniu kontraktów w scrumie po dodaniu kamieni \n' +
+                            err.message
+                    );
+                }
+            );
+
+            await CurrentSprint.makeTimesSummary(auth).catch((err: any) => {
+                console.log('Błąd przy tworzeniu sumy czasów', err);
+                throw new Error(
+                    'Błąd przy dodawaniu do scruma podczas tworzeniu sumy czasów pracy \n' +
+                        err.message
+                );
+            });
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+        } else if (contract instanceof ContractOther && contract.ourIdRelated) {
+            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
+            await CurrentSprint.setSumInContractRow(
+                auth,
+                contract.ourIdRelated
+            );
+            await CurrentSprint.sortContract(auth, contract.ourIdRelated);
+            await CurrentSprint.makeTimesSummary(auth);
+            await CurrentSprint.makePersonTimePerTaskFormulas(auth);
+        }
+
+        return defaultMilestones;
+    }
+
+    /**
+     * Dodaje domyślne milestones do bazy danych
+     * Przeniesione z Contract.ts
+     */
+    private static async addDefaultMilestonesInDb(
+        milestones: Milestone[],
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        await MilestonesController.addBulkWithDates(milestones, externalConn);
+    }
+
+    /**
+     * Pobiera tasks dla kontraktu
+     * Przeniesione z Contract.ts
+     */
+    static async getContractTasks(contractId: number): Promise<Task[]> {
+        return await TasksController.find([{ contractId }]);
+    }
+
+    /**
+     * Dodaje istniejące zadania kontraktu do Scrum
+     * Przeniesione z Contract.ts
+     */
+    static async addExistingTasksInScrum(
+        contract: Contract,
+        auth: OAuth2Client
+    ): Promise<void> {
+        let conn: mysql.PoolConnection | null = null;
+        try {
+            const tasks = await this.getContractTasks(contract.id!);
+            console.log(`adding ${tasks.length} tasks in scrum`);
+            conn = await ToolsDb.pool.getConnection();
+            for (const task of tasks) {
+                await TasksController.addInScrum(task, auth, conn, true);
+            }
+        } catch (error) {
+            console.error('An error occurred:', error);
+        } finally {
+            if (conn) {
+                conn.release();
+            }
+        }
     }
 }

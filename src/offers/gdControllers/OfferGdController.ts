@@ -1,7 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 
-import ToolsGd from '../../tools/ToolsGd';
 import Setup from '../../setup/Setup';
+import ToolsGd from '../../tools/ToolsGd';
 import { OfferData } from '../../types/types';
 
 export default class OfferGdController {

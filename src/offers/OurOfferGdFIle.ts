@@ -1,13 +1,12 @@
-import DocumentTemplate from '../documentTemplates/DocumentTemplate';
 import { OAuth2Client } from 'google-auth-library';
+import CasesController from '../contracts/milestones/cases/CasesController';
 import DocumentGdFile from '../documentTemplates/DocumentGdFile';
-import ToolsDocs from '../tools/ToolsDocs';
-import { OurOfferData } from '../types/types';
 import Setup from '../setup/Setup';
 import EnviErrors from '../tools/Errors';
-import CasesController from '../contracts/milestones/cases/CasesController';
-import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
+import ToolsDocs from '../tools/ToolsDocs';
+import ToolsGd from '../tools/ToolsGd';
+import { OurOfferData } from '../types/types';
 
 export default class OurOfferGdFile extends DocumentGdFile {
     protected enviDocumentData: OurOfferData;
@@ -123,12 +122,16 @@ export default class OurOfferGdFile extends DocumentGdFile {
         if (!this.enviDocumentData.gdDocumentId)
             throw new EnviErrors.NoGdIdError();
 
-        const makeOfferCases = await CasesController.getCasesList(
+        const makeOfferCases = await CasesController.find(
             [{ offerId: this.enviDocumentData.id, typeId: 100 }] // 100 - CaseTypes.id dla typu sprawy "Przygotowanie oferty"
         );
 
         if (makeOfferCases.length !== 1)
-            throw new Error('Wrong number of cases');
+            //lepsza nazwa błądu
+            throw new Error(
+                `Nie znaleziono sprawy przygotowania oferty 
+                - plik nie zostanie przeniesiony do folderu tworzenia oferty.`
+            );
         const makeOferCase = makeOfferCases[0];
 
         const gDocument = await ToolsGd.getFileOrFolderMetaDataById(

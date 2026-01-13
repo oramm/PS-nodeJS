@@ -1,17 +1,32 @@
 import BusinessObject from '../../BussinesObject';
-import ContractOur from '../ContractOur';
-import { OAuth2Client } from 'google-auth-library';
-import CasesController from '../milestones/cases/CasesController';
-import Setup from '../../setup/Setup';
-import ToolsGd from '../../tools/ToolsGd';
 import Person from '../../persons/Person';
-import ToolsDate from '../../tools/ToolsDate';
-import Case from '../milestones/cases/Case';
-import MilestonesController from '../milestones/MilestonesController';
-import CaseTypesController from '../milestones/cases/caseTypes/CaseTypesController';
 import Tools from '../../tools/Tools';
-import ToolsDb from '../../tools/ToolsDb';
-import { CaseData } from '../../types/types';
+import ToolsDate from '../../tools/ToolsDate';
+import ToolsGd from '../../tools/ToolsGd';
+import ContractOur from '../ContractOur';
+import Case from '../milestones/cases/Case';
+
+import Project from '../../projects/Project';
+import ContractType from '../contractTypes/ContractType';
+
+export type SecuritiesSearchParams = {
+    id?: number;
+    projectId?: string;
+    _parent?: Project;
+    searchText?: string;
+    contractOurId?: string;
+    startDateFrom?: string;
+    startDateTo?: string;
+    firstPartExpiryDateFrom?: string;
+    firstPartExpiryDateTo?: string;
+    secondPartExpiryDateFrom?: string;
+    secondPartExpiryDateTo?: string;
+    status?: string;
+    contractName?: string;
+    contractAlias?: string;
+    typeId?: number;
+    _contractType?: ContractType;
+};
 
 export class Security extends BusinessObject {
     id?: number;
@@ -85,72 +100,12 @@ export class Security extends BusinessObject {
             );
     }
 
-    async addNewController(auth: OAuth2Client) {
-        const caseItem = await this.createCase(auth);
-        this.caseId = caseItem.id;
-        await this.addInDb();
-
-        this.setGdFolderUrl();
-    }
-
-    async editController(auth: OAuth2Client) {
-        await this.editInDb();
-    }
-
-    async getCase(): Promise<Case | undefined> {
-        return (
-            await CasesController.getCasesList([
-                {
-                    contractId: this.contractId,
-                    typeId: Setup.CaseTypes.SECURITY_GUARANTEE,
-                },
-            ])
-        )[0];
-    }
-
-    async getMilestone() {
-        const milestone = (
-            await MilestonesController.getMilestonesList([
-                {
-                    contractId: this.contractId,
-                    typeId: Setup.MilestoneTypes.OURCONTRACT_ADMINISTRATION,
-                },
-            ])
-        )[0];
-        return milestone;
-    }
-
-    async getCaseType() {
-        const caseType = (
-            await CaseTypesController.getCaseTypesList([
-                { id: Setup.CaseTypes.SECURITY_GUARANTEE },
-            ])
-        )[0];
-        return caseType;
-    }
-
-    async createCase(auth: OAuth2Client) {
-        const caseItem = new Case({
-            _type: await this.getCaseType(),
-            _parent: await this.getMilestone(),
-        });
-        await caseItem.createFolder(auth);
-        await caseItem.addInDb();
-        return caseItem;
-    }
-
     /**Ustawia wartość atrybutu */
     setGdFolderUrl() {
         if (this._case?.gdFolderId)
             this._gdFolderUrl = ToolsGd.createGdFolderUrl(
                 this._case?.gdFolderId
             );
-    }
-
-    async deleteController(auth: OAuth2Client) {
-        await this.deleteFromDb();
-
-        if (this._case) await this._case.deleteController(auth);
     }
 }
 

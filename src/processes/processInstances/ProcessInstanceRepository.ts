@@ -16,14 +16,12 @@ export default class ProcessInstanceRepository extends BaseRepository<ProcessIns
             _task: {
                 id: row.TaskId,
             },
-            _editor: {
-                id: row.EditorId,
-            },
+            editorId: row.EditorId,
             _lastUpdated: row.LastUpdated,
             _process: {
                 id: row.ProcessId,
-                name: ToolsDb.stringToSql(row.ProcessName),
-                description: row.ProcessDescription,
+                name: ToolsDb.sqlToString(row.ProcessName),
+                description: ToolsDb.sqlToString(row.ProcessDescription),
             },
         });
     }

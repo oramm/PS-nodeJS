@@ -1,6 +1,6 @@
 # Wytyczne Architektoniczne - Przewodnik Szczegółowy
 
-> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./architektura.instructions.md) | **🤖 Dla AI:** [AI Assistant](./architektura-ai-assistant.md) | **🧪 Testowanie:** [Testing Guide](./architektura-testowanie.md)
+> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./architektura.instructions.md) | **🤖 Dla AI:** [AI Assistant](./architektura-ai-assistant.md) | **🧪 Testowanie:** [Testing Guide](./architektura-testowanie.md) | **📋 Audyt:** [Refactoring Audit](./architektura-refactoring-audit.md)
 
 ## Spis Treści
 
@@ -10,6 +10,7 @@
 4. [Model a Operacje I/O](#4-model-a-operacje-io)
 5. [Strategia Deprecation](#5-strategia-deprecation)
 6. [Przykłady Refaktoringu](#6-przykłady-refaktoringu)
+7. [Unikanie Cykli Zależności](#7-unikanie-cykli-zależności)
 
 ---
 
@@ -185,7 +186,7 @@ export default class LettersController extends BaseController<
     }
 
     // Publiczne metody statyczne używają getInstance()
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
@@ -221,7 +222,7 @@ export default class LettersController extends BaseController<
 ```typescript
 // ✅ POPRAWNIE - Controller zarządza transakcją
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             // 1. Dodaj główny rekord
             await this.repository.addInDb(letter, conn, true);
@@ -309,7 +310,7 @@ class OurLetter extends Letter {
 
     /**
      * Tworzy plik dokumentu na Google Drive
-     * PUBLIC: wywoływana przez LettersController.addNewOurLetter()
+     * PUBLIC: wywoływana przez LettersController.add() lub metody pomocnicze
      */
     async createLetterFile(auth: OAuth2Client): Promise<GdDocument> {
         const gdFile = this.makeLetterGdFileController(this._template);
@@ -360,7 +361,7 @@ class Letter {
 
 // ✅ POPRAWNIE - przez Controller → Repository
 class LettersController {
-    static async addNew(letter: Letter): Promise<void> {
+    static async add(letter: Letter): Promise<void> {
         const instance = this.getInstance();
         await instance.repository.addInDb(letter);
     }
@@ -392,9 +393,9 @@ Stopniowa migracja kodu bez łamania istniejącej funkcjonalności.
 ````typescript
 class Letter {
     /**
-     * @deprecated Użyj LettersController.addNew(letter) zamiast tego.
+     * @deprecated Użyj LettersController.add(letter) zamiast tego.
      *
-     * REFAKTORING: Logika przeniesiona do LettersController.addNew()
+     * REFAKTORING: Logika przeniesiona do LettersController.add()
      * Model nie powinien wykonywać operacji I/O do bazy danych.
      *
      * Migracja:
@@ -403,7 +404,7 @@ class Letter {
      * await letter.addInDb();
      *
      * // NOWE:
-     * await LettersController.addNew(letter);
+     * await LettersController.add(letter);
      * ```
      */
     async addInDb(): Promise<void> {
@@ -424,7 +425,7 @@ class LettersController {
      * Dodaje nowy list do bazy danych
      * REFAKTORING: Logika przeniesiona z Letter.addInDb()
      */
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
@@ -447,7 +448,7 @@ router.post('/letters', async (req, res) => {
     // await letter.addInDb();
 
     // NOWE:
-    await LettersController.addNew(letter);
+    await LettersController.add(letter);
 
     res.send(letter);
 });
@@ -475,7 +476,7 @@ Select-String -Path "src/**/*.ts" -Pattern "\.addInDb\(\)"
 
 ## 6. Przykłady Refaktoringu
 
-### Przykład 1: addInDb → LettersController.addNew
+### Przykład 1: addInDb → LettersController.add
 
 **PRZED:**
 
@@ -500,11 +501,11 @@ class Letter {
 ```typescript
 // Router
 const letter = LettersController.createProperLetter(req.body);
-await LettersController.addNew(letter); // ✅ Przez Controller
+await LettersController.add(letter); // ✅ Przez Controller
 
 // Controller
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(letter, conn, true);
             await this.addEntitiesAssociations(letter, conn);
@@ -564,7 +565,7 @@ class OurLetter {
 
 ```typescript
 class LettersController {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         return await ToolsDb.transaction(async (conn) => {
             // 1. Główny rekord
             await instance.repository.addInDb(letter, conn, true);
@@ -627,6 +628,177 @@ class LettersController {
 -   [Clean Architecture (Robert C. Martin)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 -   [SOLID Principles](https://en.wikipedia.org/wiki/SOLID)
 -   [Dependency Injection w TypeScript](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+
+---
+
+## 7. Unikanie Cykli Zależności
+
+### Cel
+
+Eliminacja cykli zależności (`madge --circular`) dla utrzymania jednokierunkowego przepływu.
+
+### 🚨 Zakazane Importy (bez wyjątków w nowym kodzie)
+
+```
+❌ Model → Controller     (Model NIE może importować Controllera)
+❌ Model → Repository     (Model NIE może importować Repository)
+❌ Repository → Controller (Repository NIE może importować Controllera)
+❌ Router → Repository    (Router NIE może bezpośrednio importować Repository)
+```
+
+### ✅ Dozwolone Kierunki Zależności
+
+```mermaid
+flowchart TD
+    Router --> Controller
+    Controller --> Repository
+    Controller --> Model
+    Repository --> Model
+    Model --> ToolsGd
+    Model --> ToolsEmail
+    Repository --> ToolsDb
+    Controller --> ToolsDb
+```
+
+### Wzorce Rozwiązywania Cykli
+
+#### 1. Wydzielenie typów do osobnych plików
+
+**Problem:** `ModelA` importuje `ModelB` dla typu, `ModelB` importuje `ModelA`.
+
+**Rozwiązanie:** Wynieś interfejsy/typy do `types/types.d.ts`:
+
+```typescript
+// ❌ ZŁE - cykl
+// ModelA.ts
+import ModelB from './ModelB'; // dla typu _modelB: ModelB
+
+// ModelB.ts
+import ModelA from './ModelA'; // dla typu _modelA: ModelA
+
+// ✅ DOBRZE - brak cyklu
+// types/types.d.ts
+export interface ModelAData {
+    id: number;
+    name: string;
+}
+export interface ModelBData {
+    id: number;
+    _modelA: ModelAData;
+}
+
+// ModelA.ts
+import { ModelBData } from '../types/types';
+_modelB: ModelBData; // interfejs zamiast klasy
+
+// ModelB.ts
+import { ModelAData } from '../types/types';
+_modelA: ModelAData; // interfejs zamiast klasy
+```
+
+#### 2. TypeResolver dla polimorfizmu
+
+**Problem:** Validator i Repository mają zduplikowaną logikę wyboru typu.
+
+**Rozwiązanie:** Wspólny `TypeResolver` bez zależności od DB/HTTP:
+
+```typescript
+// src/letters/LetterTypeResolver.ts
+export type LetterTypeFlags = {
+    isOur: boolean;
+    hasProject: boolean;
+    hasOffer: boolean;
+    idEqualsNumber: boolean;
+};
+
+export default class LetterTypeResolver {
+    static resolve(flags: LetterTypeFlags): string | null {
+        if (flags.isOur && flags.idEqualsNumber && flags.hasProject)
+            return 'OurLetterContract';
+        if (flags.isOur && !flags.idEqualsNumber)
+            return 'OurOldTypeLetter';
+        // ... pozostałe warunki
+        return null;
+    }
+}
+
+// Validator używa:
+const flags = { isOur: dto.isOur, hasProject: !!dto._project?.id, ... };
+const type = LetterTypeResolver.resolve(flags);
+
+// Repository używa:
+const flags = { isOur: row.IsOur, hasProject: !!row.ProjectId, ... };
+const type = LetterTypeResolver.resolve(flags);
+```
+
+#### 3. Dependency Injection przez parametry
+
+**Problem:** Model musi wywołać coś, co wymaga Controllera.
+
+**Rozwiązanie:** Przekaż funkcję jako parametr:
+
+```typescript
+// ❌ ZŁE - Model importuje Controller
+class Milestone {
+    async createCases() {
+        const templates = await CaseTemplatesController.find(...);  // ❌ CYKL!
+    }
+}
+
+// ✅ DOBRZE - Controller przekazuje funkcję
+class Milestone {
+    async createCases(
+        templatesFetcher: () => Promise<CaseTemplate[]>
+    ) {
+        const templates = await templatesFetcher();  // ✅ Brak importu
+    }
+}
+
+// Controller wywołuje:
+await milestone.createCases(
+    () => CaseTemplatesController.find(...)
+);
+```
+
+#### 4. Dynamic Import (ostateczność - tylko legacy)
+
+**Problem:** Nie da się inaczej rozbić cyklu w starym kodzie.
+
+**Rozwiązanie tymczasowe:** `await import()` zamiast statycznego importu:
+
+```typescript
+// ❌ NIE używaj w nowym kodzie!
+// Tylko jako plaster na legacy do stopniowej refaktoryzacji
+
+async someMethod() {
+    // Dynamic import nie tworzy statycznego cyklu
+    const { default: OtherController } = await import('./OtherController');
+    await OtherController.doSomething();
+}
+```
+
+**⚠️ UWAGA:** Dynamic import to **obejście**, nie rozwiązanie. Przy najbliższej okazji refaktoruj na jeden z wcześniejszych wzorców.
+
+### Weryfikacja
+
+```bash
+# Sprawdź cykle
+yarn check:cycles
+# lub
+npx madge --circular --extensions ts src
+
+# Oczekiwany wynik:
+# ✓ No circular dependency found!
+```
+
+### Checklist przy nowym imporcie
+
+Przed dodaniem `import X from './X'` sprawdź:
+
+1. [ ] Czy `X` już importuje coś z mojego modułu? (grep/IDE)
+2. [ ] Czy mogę użyć interfejsu zamiast klasy?
+3. [ ] Czy import jest zgodny z dozwolonym kierunkiem?
+4. [ ] Czy `yarn check:cycles` przechodzi?
 
 ---
 

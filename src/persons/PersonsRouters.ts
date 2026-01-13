@@ -1,8 +1,6 @@
 import PersonsController from './PersonsController';
 import { app } from '../index';
-import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import { Request, Response } from 'express';
-import { OAuth2Client } from 'google-auth-library';
 
 app.post('/persons', async (req: Request, res: Response, next) => {
     try {
@@ -16,7 +14,7 @@ app.post('/persons', async (req: Request, res: Response, next) => {
 
 app.post('/person', async (req: Request, res: Response, next) => {
     try {
-        let item = await PersonsController.addNewPerson(req.body);
+        const item = await PersonsController.addFromDto(req.body);
         res.send(item);
     } catch (error) {
         next(error);
@@ -26,7 +24,7 @@ app.post('/person', async (req: Request, res: Response, next) => {
 app.put('/person/:id', async (req: Request, res: Response, next) => {
     try {
         const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const item = await PersonsController.updatePerson(
+        const item = await PersonsController.editFromDto(
             req.parsedBody,
             fieldsToUpdate
         );
@@ -38,15 +36,10 @@ app.put('/person/:id', async (req: Request, res: Response, next) => {
 
 app.put('/user/:id', async (req: Request, res: Response, next) => {
     try {
-        // Router obsługuje przepływ autoryzacji, a kontroler logikę biznesową
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            async (auth: OAuth2Client) => {
-                const item = await PersonsController.updateUser(req.body, auth);
-                res.send(item);
-            }
+        const item = await PersonsController.editUserFromDto(
+            req.parsedBody ?? req.body
         );
+        res.send(item);
     } catch (error) {
         next(error);
     }
@@ -54,7 +47,7 @@ app.put('/user/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/person/:id', async (req: Request, res: Response, next) => {
     try {
-        const result = await PersonsController.deletePerson(req.body);
+        const result = await PersonsController.deleteFromDto(req.body);
         res.send(result);
     } catch (error) {
         next(error);

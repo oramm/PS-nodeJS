@@ -1,5 +1,4 @@
 import BusinessObject from '../../../../BussinesObject';
-import { UserData } from '../../../../types/sessionTypes';
 import ToolsDate from '../../../../tools/ToolsDate';
 import { MilestoneData, MilestoneDateData } from '../../../../types/types';
 
@@ -30,13 +29,5 @@ export default class MilestoneDate
 
         this.endDate = ToolsDate.dateJsToSql(initParamObject.endDate) as string;
         this.lastUpdated = initParamObject.lastUpdated;
-    }
-
-    async editController(userData: UserData, fieldsToUpdate?: string[]) {
-        return await this.editInDb(undefined, false, fieldsToUpdate);
-    }
-
-    async deleteController(userData: UserData): Promise<void> {
-        return await this.deleteFromDb();
     }
 }

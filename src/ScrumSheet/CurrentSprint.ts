@@ -3,7 +3,7 @@ import { OAuth2Client } from 'google-auth-library';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import Person from '../persons/Person';
-import ScrumSheet from './ScrumSheet';
+import PersonsController from '../persons/PersonsController';
 import CurrentSprintValidator from './CurrentSprintValidator';
 
 export default class CurrentSprint {
@@ -550,7 +550,10 @@ export default class CurrentSprint {
             currentSprintValues[0].indexOf(
                 Setup.ScrumSheet.CurrentSprint.timesColName
             ) + 1;
-        if (!persons) persons = await ScrumSheet.scrumGetPersons();
+        if (!persons) {
+            const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
+            persons = (await PersonsController.find(orConditions)) || [];
+        }
 
         await ToolsSheets.deleteColumns(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
@@ -768,7 +771,10 @@ export default class CurrentSprint {
                 })
             ).values;
 
-        if (!persons) persons = await ScrumSheet.scrumGetPersons();
+        if (!persons) {
+            const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
+            persons = (await PersonsController.find(orConditions)) || [];
+        }
 
         const timesColIndex = currentSprintValues[0].indexOf(
             Setup.ScrumSheet.CurrentSprint.timesColName

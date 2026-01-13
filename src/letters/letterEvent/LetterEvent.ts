@@ -2,11 +2,9 @@ import { drive_v3 } from 'googleapis';
 import BusinessObject from '../../BussinesObject';
 import {
     LetterEventData,
-    PersonData,
     OurLetterContractData,
+    PersonData,
 } from '../../types/types';
-import { OAuth2Client } from 'google-auth-library';
-import ToolsMail from '../../tools/ToolsMail';
 
 /**
  * Przy odczytywaniu z bazy danych, jeśli w bazie danych jest zapisany JSON, to trzeba go przekonwertować na obiekt

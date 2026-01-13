@@ -5,7 +5,7 @@ description: 'Clean Architecture guidelines - PRIORITY: CRITICAL | ENFORCE: STRI
 
 # Wytyczne Architektoniczne - Clean Architecture
 
-> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md)
+> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md) | [Audyt Refaktoryzacji](./architektura-refactoring-audit.md)
 
 ## 🎯 Filozofia
 
@@ -27,9 +27,45 @@ AI: Te reguły są **nie negocjowalne** - zawsze enforce przy generowaniu/review
 
 ## 📐 Przepływ Danych (OBOWIĄZKOWY)
 
+**ASCII (quick reference):**
+
 ```
-Router → Validator (optional) → Controller → Repository → Model
-         (transform)              (Service)                (Domain)
+Router → Controller.addFromDto(dto) → Controller.add(model) → Repository → Model
+                                              ↓
+                                         ToolsGd/ToolsEmail
+```
+
+**Mermaid (pełny diagram):**
+
+```mermaid
+flowchart LR
+    subgraph HTTP["HTTP Layer"]
+        Router
+    end
+    subgraph App["Application Layer"]
+        Validator
+        Controller
+    end
+    subgraph Data["Data Layer"]
+        Repository
+    end
+    subgraph Domain["Domain Layer"]
+        Model
+    end
+    subgraph Tools["External Tools"]
+        ToolsGd
+        ToolsEmail
+        ToolsDb
+    end
+
+    Router -->|"dto"| Controller
+    Controller -.->|"optional"| Validator
+    Controller -->|"model"| Repository
+    Repository --> Model
+    Repository --> ToolsDb
+    Model -.->|"GD/Email only"| ToolsGd
+    Model -.->|"GD/Email only"| ToolsEmail
+    Controller -->|"orkiestruje"| Model
 ```
 
 **Zasada:** Żadna warstwa NIE może komunikować się z warstwą "wyżej".
@@ -49,46 +85,71 @@ Router → Validator (optional) → Controller → Repository → Model
 ✅ **Powinien:**
 
 -   Definiować endpointy (`app.post('/items', ...)`)
--   Wywołać **jedną** metodę Controllera
+-   Wywołać **jedną** metodę Controllera (np. `Controller.addFromDto(dto)`)
 -   Zwrócić odpowiedź HTTP (`res.send()`, `next(error)`)
--   Opcjonalnie wywołać Validator do wstępnej walidacji/transformacji danych
 
 ❌ **NIE powinien:**
 
 -   Zawierać logiki biznesowej
--   Tworzyć instancji Model (`new Item()`)
+-   Tworzyć instancji Model (`new Item()`) - to robi Controller
 -   Wywoływać Repository bezpośrednio
+-   Wywoływać Validator bezpośrednio (deleguj do Controller)
+
+**Wzorzec docelowy:**
+
+```typescript
+// ✅ DOBRZE - Router przekazuje DTO do Controller
+router.post('/items', async (req, res, next) => {
+    try {
+        const result = await ItemsController.addFromDto(req.parsedBody);
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ❌ LEGACY - Router tworzy Model (tolerowane w istniejącym kodzie)
+router.post('/items', async (req, res, next) => {
+    const item = new Item(req.parsedBody); // ❌ Nie kopiuj tego wzorca
+    await ItemsController.add(item);
+    res.send(item);
+});
+```
 
 ---
 
 ### **Validator (Validation Layer)**
 
-**Rola:** Osobna klasa do walidacji danych (opcjonalna, jeśli potrzebna).
+**Rola:** Osobna klasa do walidacji danych wejściowych (HTTP/DTO).
+
+**Kiedy Validator jest OBOWIĄZKOWY:**
+
+-   Encja z **polimorfizmem** (różne podklasy, np. Letter → OurLetter/IncomingLetter)
+-   Encja ze **złożonym DTO** (>10 pól, zależności między polami)
+-   Wymagana **walidacja kontekstowa** (sprawdzenie stanu innych obiektów)
+
+**Przykłady encji wymagających Validatora:** `Letters`, `Offers`, `Invoices`
 
 ✅ **Powinien:**
 
 -   Być **osobną klasą** (np. `LetterValidator`, `InvoiceValidator`)
 -   Walidować atrybuty wymagane do określenia typu obiektu
--   Walidować spójność danych biznesowych
 -   Dostarczać szczegółowe komunikaty błędów (diagnostyka)
 -   Być **stateless** (tylko statyczne metody)
--   **Rzucać błędem** przy nieprawidłowych danych (nie naprawiać ich)
+-   **Rzucać błędem** przy nieprawidłowych danych (fail-fast)
+-   Używać **TypeResolver** dla logiki wyboru typu (patrz: Polimorfizm)
 
 ❌ **NIE powinien:**
 
 -   Być **wewnątrz** Router, Controller, Repository ani Model
 -   Zawierać logiki biznesowej (→ Model)
 -   Wykonywać operacji I/O (baza danych, API)
--   Zależeć od innych Validatorów (każdy niezależny)
--   **Transformować/naprawiać** niepełnych danych (fail-fast zamiast fix)
+-   **Naprawiać/transformować** niepełnych danych
+-   Duplikować logiki wyboru typu (używaj TypeResolver)
 
 **Lokalizacja:** Obok Model w warstwie domenowej (np. `src/letters/LetterValidator.ts`)
 
-**Wywołanie:**
-
--   **Router** może wywołać dla wstępnej walidacji danych z HTTP
--   **Controller** wywołuje przed utworzeniem instancji Model
--   **NIE** wywoływany przez Model ani Repository
+**Wywołanie:** Tylko przez **Controller** (w metodzie `addFromDto`/`editFromDto`)
 
 **Filozofia:** Validator **wymusza kompletność danych** - jeśli klient przesłał niepełne dane, to błąd, nie workaround.
 
@@ -195,63 +256,141 @@ class Letter {
 ✅ **Powinien:**
 
 -   Definiować właściwości obiektu
--   Zawierać logikę biznesową i walidację
+-   Zawierać **invarianty domenowe** (np. `validate(): boolean`)
+-   Zawierać logikę biznesową (kalkulacje, generowanie numerów)
 -   Otrzymywać dane przez parametry metod
+
+**Walidacja w Model vs Validator:**
+
+-   **Model.validate()** - invarianty wewnętrzne obiektu (np. "data końca ≥ data początku")
+-   **Validator** - walidacja danych wejściowych HTTP/DTO (np. "czy przesłano wymagane pola")
 
 ❌ **NIE powinien:**
 
--   Importować Controller czy Repository
+-   Importować Controller ani Repository
 -   Wykonywać operacji I/O do **bazy danych**
 -   Zawierać logiki HTTP
+-   Pobierać OAuth token (musi otrzymać `auth` w parametrze)
 
-**Wyjątek I/O:** Model **MOŻE** mieć operacje na systemach zewnętrznych (Google Drive, Email),
-jeśli Controller orkiestruje wywołanie. Zobacz [szczegóły](./architektura-szczegoly.md#model-io).
+**Wyjątek I/O - GD/Email:**
+
+Model **MOŻE** mieć operacje na Google Drive / Email, jeśli:
+
+1. ✅ Controller **orkiestruje** wywołanie (decyduje KIEDY)
+2. ✅ Model otrzymuje `auth: OAuth2Client` jako **parametr** (nie pobiera sam)
+3. ✅ Model importuje tylko `ToolsGd`/`ToolsEmail` (nie Controllery!)
+
+Zobacz [szczegóły](./architektura-szczegoly.md#model-io).
 
 ## 🔧 Wzorce Implementacyjne
 
-### Validator (Optional)
+### Validator Pattern
 
-**Kiedy używać:** Gdy potrzebna jest złożona walidacja lub transformacja danych.
+**Kiedy używać:** Encje z polimorfizmem, złożonym DTO lub walidacją kontekstową.
 
 ```typescript
 export default class EntityValidator {
-    // Walidacja typu/struktury danych
-    static validateEntityTypeData(initParam: any): ValidationResult {
-        const result = { isValid: false, errors: [], missingFields: [] };
-        // ... logika walidacji
+    // Walidacja typu/struktury danych wejściowych
+    static validateEntityTypeData(dto: EntityDto): ValidationResult {
+        const result = { isValid: false, errors: [], expectedType: null };
+
+        // Użyj TypeResolver dla logiki wyboru typu
+        const typeFlags = this.extractTypeFlags(dto);
+        const resolvedType = EntityTypeResolver.resolve(typeFlags);
+
+        if (!resolvedType) {
+            result.errors.push('Cannot determine entity type');
+            return result;
+        }
+
+        result.isValid = true;
+        result.expectedType = resolvedType;
         return result;
-    }
-
-    // Walidacja spójności danych biznesowych
-    static validateEntityData(entity: Entity): string[] {
-        const errors: string[] = [];
-        // ... logika walidacji
-        return errors;
-    }
-
-    // Transformacja/naprawa danych (workaround)
-    static fixIncompleteData(initParam: any): boolean {
-        // ... logika transformacji
-        return true; // czy dane zostały naprawione
     }
 
     // Formatowanie błędów (diagnostyka)
     static formatValidationError(
-        initParam: any,
+        dto: any,
         validation: ValidationResult
     ): string {
-        // ... formatowanie komunikatu błędu
-        return errorMessage;
+        return `Validation failed: ${validation.errors.join(', ')}`;
     }
 }
 ```
 
-**Przykłady użycia:**
+### TypeResolver Pattern (dla polimorfizmu)
 
--   `LetterValidator` - walidacja typu Letter (OurLetter, IncomingLetter, etc.)
--   `InvoiceValidator` - walidacja danych faktury
+**Cel:** Współdzielona logika wyboru typu między Validator i Repository.
+
+```typescript
+// src/letters/LetterTypeResolver.ts
+export type LetterTypeFlags = {
+    isOur: boolean;
+    hasProject: boolean;
+    hasOffer: boolean;
+    idEqualsNumber: boolean;
+};
+
+export default class LetterTypeResolver {
+    static resolve(flags: LetterTypeFlags): string | null {
+        // Ta sama logika dla HTTP (Validator) i DB (Repository)
+        if (flags.isOur && flags.idEqualsNumber && flags.hasProject)
+            return 'OurLetterContract';
+        if (flags.isOur && !flags.idEqualsNumber) return 'OurOldTypeLetter';
+        if (flags.isOur && flags.hasOffer) return 'OurLetterOffer';
+        if (!flags.isOur && flags.hasProject) return 'IncomingLetterContract';
+        if (!flags.isOur && flags.hasOffer) return 'IncomingLetterOffer';
+        return null;
+    }
+}
+```
+
+**Przykłady encji z Validatorem:** `Letters`, `Offers`, `Invoices`
+
+---
+
+## 📋 Standard Nazewnictwa CRUD
+
+**Obowiązujący standard** dla metod Controller:
+
+```typescript
+// ✅ CRUD Methods Standard (docelowy)
+static async find(params)           // READ - wyszukiwanie z warunkami
+static async addFromDto(dto, auth?) // CREATE z DTO - Router wywołuje tę metodę
+static async add(item, auth?)       // CREATE z Model - wewnętrzne/testy
+static async editFromDto(dto, auth?)// UPDATE z DTO - Router wywołuje tę metodę
+static async edit(item, auth?)      // UPDATE z Model - wewnętrzne/testy
+static async delete(item, auth?)    // DELETE - usuwanie rekordu
+```
+
+**Wzorzec addFromDto:**
+
+```typescript
+static async addFromDto(dto: ItemDto, auth?: OAuth2Client): Promise<Item> {
+    // 1. Walidacja (jeśli potrzebna)
+    ItemValidator.validateItemTypeData(dto);
+
+    // 2. Tworzenie instancji Model
+    const item = new Item(dto);
+
+    // 3. Delegacja do kanonicznej metody
+    return await this.add(item, auth);
+}
+```
+
+**Deprecated patterns** (do usunięcia w starym kodzie):
+
+-   ❌ `addNew()` → użyj `addFromDto()` lub `add()`
+-   ❌ `getList()`, `getMilestoneTypesList()` → użyj `find()`
+-   ❌ `new Model(req.body)` w Router → użyj `Controller.addFromDto(dto)`
+
+---
+
+## 🔧 Wzorce Implementacyjne
 
 ### BaseRepository<T>
+
+**Wzorzec:** Baza dla wszystkich Repository z metodami CRUD i budowaniem warunków SQL.
 
 ```typescript
 abstract class BaseRepository<T> {
@@ -263,21 +402,124 @@ abstract class BaseRepository<T> {
 }
 ```
 
+**Wzorzec budowania warunków SQL (`makeAndConditions`):**
+
+```typescript
+// ✅ POPRAWNIE - array + join pattern
+private makeAndConditions(searchParams: SearchParams): string {
+    const whereClauses: string[] = [];
+
+    if (searchParams.projectId)
+        whereClauses.push(`Projects.OurId = '${searchParams.projectId}'`);
+    if (searchParams.contractId)
+        whereClauses.push(`Contracts.Id = ${searchParams.contractId}`);
+    if (searchParams.ids?.length)
+        whereClauses.push(`Items.Id IN (${searchParams.ids.join(',')})`);
+
+    return whereClauses.length > 0 ? whereClauses.join(' AND ') : '1';
+}
+
+// ❌ ŹLE - inline warunki w find()
+async find(params) {
+    let sql = 'SELECT ... WHERE 1';
+    if (params.id) sql += ` AND Id = ${params.id}`;  // NIE RÓB TAK!
+}
+```
+
 ### BaseController<T, R>
+
+**Wzorzec:** Singleton z prywatnymi metodami instancyjnymi.
+
+> ⚠️ **DEPRECATED:** Metody `instance.create()`, `instance.edit()`, `instance.delete()` są **@deprecated**.
+> W nowym kodzie używaj bezpośrednio `instance.repository.addInDb()`, `instance.repository.editInDb()`, `instance.repository.deleteFromDb()`.
+> Szczegóły: [refactoring-auth-pattern.md](./refactoring-auth-pattern.md)
 
 ```typescript
 abstract class BaseController<T, R extends BaseRepository<T>> {
     protected repository: R;
-    static getInstance(): this; // Singleton
+
+    // PRYWATNY Singleton - NIE eksponuj getInstance()!
+    private static instance: MyController;
+    private static getInstance(): MyController { ... }
+
+    // @deprecated - używaj instance.repository.*InDb() zamiast tych metod
+    protected async create(item, conn?, isTransaction?): Promise<void>;
+    protected async edit(item, conn?, isTransaction?, fields?): Promise<void>;
+    protected async delete(item, conn?, isTransaction?): Promise<void>;
 }
 ```
+
+**ZASADA: Każdy Controller MUSI eksponować statyczne metody CRUD:**
+
+```typescript
+// ✅ PROSTY PRZYPADEK (asocjacje, proste modele):
+static async add(item: T, conn?, isTransaction?): Promise<T> {
+    const instance = this.getInstance();
+    await instance.repository.addInDb(item, conn, isTransaction);
+    return item;
+}
+
+// ✅ ZŁOŻONY PRZYPADEK (z Google Drive, walidacją):
+static async add(item: T, auth?: OAuth2Client): Promise<T> {
+    return await this.withAuth(async (instance, authClient) => {
+        await item.createFolder(authClient);
+        await instance.repository.addInDb(item);
+        return item;
+    }, auth);
+}
+```
+
+**UŻYCIE:**
+
+```typescript
+// ✅ POPRAWNIE - statyczne wywołanie:
+await MyController.add(item, conn, true);
+
+// ❌ BŁĘDNIE - NIE eksponuj getInstance():
+await MyController.getInstance().create(item); // NIE RÓB TAK!
+```
+
+### ToolsGapi.gapiReguestHandler()
+
+**Kiedy używać:** Do operacji wymagających autoryzacji Google API (Drive, Docs, Gmail).
+
+```typescript
+// ✅ POPRAWNIE - funkcja async z OAuth2Client jako pierwszy parametr
+await ToolsGapi.gapiReguestHandler(req, res, async (auth: OAuth2Client) => {
+    await model.someGoogleApiMethod(auth);
+});
+
+// ✅ POPRAWNIE - z dodatkowymi argumentami
+await ToolsGapi.gapiReguestHandler(
+    req,
+    res,
+    model.exportToPDF,
+    [documentId, options],
+    model
+);
+
+// ❌ ŹLE - funkcja bez 'async'
+await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
+    // ❌ Brak async
+    model.someMethod(auth);
+});
+```
+
+**Zasady:**
+
+-   Funkcja **MUSI** przyjmować `OAuth2Client` jako pierwszy parametr
+-   Funkcja **MUSI** być `async` lub zwracać `Promise`
+-   Używaj tylko w **Router** (nie w Controller/Repository/Model)
 
 ## 📋 Zasady Refaktoringu
 
 1. **Oznacz @deprecated** - nie usuwaj od razu
 2. **Stwórz nową implementację** w odpowiedniej warstwie
 3. **Migruj stopniowo** - Router → inne komponenty
-4. **Usuń deprecated** po weryfikacji (grep/search)
+4. **Przeprowadź audyt** - [szczegółowa checklist](./architektura-refactoring-audit.md)
+5. **Usuń deprecated** po weryfikacji (grep/search)
+
+> 📋 **Audyt Refaktoryzacji:** Po każdej refaktoryzacji CRUD/Repository/Model użyj [przewodnika audytu](./architektura-refactoring-audit.md) aby zweryfikować, że nie utracono funkcjonalności.
 
 ## ✅ Checklist Przed Commitem
 

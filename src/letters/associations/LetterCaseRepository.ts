@@ -73,21 +73,7 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
     async find(
         searchParams: LetterCaseSearchParams = {}
     ): Promise<LetterCase[]> {
-        const projectId = searchParams.projectId;
-        const contractId = searchParams.contractId;
-        const offerId = searchParams.offerId;
-
-        const projectCondition = projectId
-            ? mysql.format('Contracts.ProjectOurId = ?', [projectId])
-            : '1';
-
-        const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
-            : '1';
-
-        const offerCondition = offerId
-            ? mysql.format('Offers.Id = ?', [offerId])
-            : '1';
+        const whereConditions = this.makeAndConditions(searchParams);
 
         const sql = `SELECT  
                 Letters_Cases.LetterId, 
@@ -148,14 +134,41 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
                 AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=Milestones.TypeId
-            WHERE   ${projectCondition} 
-                AND ${contractCondition}
-                AND ${offerCondition}
+            WHERE ${whereConditions}
             ORDER BY Letters_Cases.LetterId, Cases.Name`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
         return result.map((row) => this.mapRowToModel(row));
+    }
+
+    /**
+     * Buduje warunki WHERE (AND) dla zapytań
+     */
+    private makeAndConditions(searchParams: LetterCaseSearchParams): string {
+        const whereClauses: string[] = [];
+
+        if (searchParams.projectId) {
+            whereClauses.push(
+                mysql.format('Contracts.ProjectOurId = ?', [
+                    searchParams.projectId,
+                ])
+            );
+        }
+
+        if (searchParams.contractId) {
+            whereClauses.push(
+                mysql.format('Contracts.Id = ?', [searchParams.contractId])
+            );
+        }
+
+        if (searchParams.offerId) {
+            whereClauses.push(
+                mysql.format('Offers.Id = ?', [searchParams.offerId])
+            );
+        }
+
+        return whereClauses.length > 0 ? whereClauses.join(' AND ') : '1';
     }
 
     /**

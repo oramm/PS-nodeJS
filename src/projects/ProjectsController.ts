@@ -1,193 +1,276 @@
+import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
+import BaseController from '../controllers/BaseController';
 import ToolsDb from '../tools/ToolsDb';
 import Project from './Project';
-import Entity from '../entities/Entity';
+import ProjectEntitiesController from './ProjectEntitiesController';
 import ProjectEntity from './ProjectEntity';
-import { UserData } from '../types/sessionTypes';
-import Setup from '../setup/Setup';
+import ProjectRepository, { ProjectSearchParams } from './ProjectRepository';
 
-type ProjectSearchParams = {
-    userData: UserData;
-    id?: number;
-    ourId?: string;
-    searchText?: string;
-    systemEmail?: string;
-    onlyKeyData?: boolean;
-    contractId?: number;
-    status?: string;
-};
+export default class ProjectsController extends BaseController<
+    Project,
+    ProjectRepository
+> {
+    private static instance: ProjectsController;
 
-export default class ProjectsController {
-    /**pobiera listę projektów
-     * @param {Object} searchParams.userData - dane użytkownika zalogowanego do systemu (z sesji)
+    constructor() {
+        super(new ProjectRepository());
+    }
+
+    // Singleton pattern
+    private static getInstance(): ProjectsController {
+        if (!this.instance) {
+            this.instance = new ProjectsController();
+        }
+        return this.instance;
+    }
+
+    /**
+     * Pobiera listę projektów według podanych warunków
+     *
+     * REFAKTORING: Deleguje do ProjectRepository.find()
+     * Controller tylko orkiestruje - Repository obsługuje SQL i mapowanie
+     *
+     * @param orConditions - Warunki wyszukiwania (OR groups)
+     * @returns Promise<Project[]> - Lista znalezionych Projects
      */
-    static async getProjectsList(orConditions: ProjectSearchParams[]) {
-        const sql = `SELECT  Projects.Id,
-                Projects.OurId,
-                Projects.Name,
-                Projects.Alias, 
-                Projects.StartDate, 
-                Projects.EndDate, 
-                Projects.Status, 
-                Projects.Comment, 
-                Projects.FinancialComment, 
-                Projects.InvestorId, 
-                Projects.TotalValue, 
-                Projects.QualifiedValue, 
-                Projects.DotationValue, 
-                Projects.GdFolderId, 
-                Projects.LettersGdFolderId, 
-                Projects.GoogleGroupId, 
-                Projects.GoogleCalendarId, 
-                Projects.LastUpdated
-                FROM Projects
-                /* JOIN Roles ON Roles.ProjectOurId = Projects.OurId */
-                WHERE ${ToolsDb.makeOrGroupsConditions(
-                    orConditions,
-                    this.makeAndConditions.bind(this)
-                )}
-                GROUP BY Projects.OurId ASC`;
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processProjectsResult(result, {});
-    }
+    static async find(
+        orConditions: ProjectSearchParams[] = []
+    ): Promise<Project[]> {
+        const instance = this.getInstance();
+        const projects = await instance.repository.find(orConditions);
 
-    static makeSearchTextCondition(searchText: string | undefined) {
-        if (!searchText) return '1';
+        if (orConditions[0]?.onlyKeyData) return projects;
 
-        const words = searchText.split(' ');
-        const conditions = words.map((word) =>
-            mysql.format(
-                `(Projects.OurId LIKE ?
-        OR Projects.Name LIKE ?
-        OR Projects.Alias LIKE ?)`,
-                [`%${word}%`, `%${word}%`, `%${word}%`]
-            )
-        );
+        const projectIds = projects
+            .map((p) => p.id)
+            .filter((id): id is number => typeof id === 'number');
+        if (projectIds.length === 0) return projects;
 
-        const searchTextCondition = conditions.join(' AND ');
-        return searchTextCondition;
-    }
-
-    private static makeAndConditions(searchParams: ProjectSearchParams) {
-        const projectIdCondition = searchParams.id
-            ? mysql.format('Projects.Id = ?', [searchParams.id])
-            : '1';
-        const projectOurIdCondition = searchParams.ourId
-            ? mysql.format('Projects.OurId LIKE ?', [`%${searchParams.ourId}%`])
-            : '1';
-
-        let status: string | string[] | undefined = searchParams.status;
-        if (searchParams.status === 'ACTIVE') {
-            status = [
-                Setup.ProjectStatuses.NOT_STARTED,
-                Setup.ProjectStatuses.IN_PROGRESS,
-            ];
+        const associations = await ProjectEntitiesController.find({
+            projectIds,
+        });
+        for (const project of projects) {
+            project.setProjectEntityAssociations(associations);
         }
-        const statusCondition = Array.isArray(status)
-            ? mysql.format('Projects.Status IN (?)', [status])
-            : searchParams.status
-            ? mysql.format('Projects.Status = ?', [status])
-            : '1';
 
-        const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
+        return projects;
+    }
+
+    /**
+     * API PUBLICZNE - Dodaje nowy Project
+     *
+     * @param project - Project do dodania
+     * @param auth - OAuth2Client dla operacji GD
+     * @returns Dodany Project
+     */
+    static async add(project: Project, auth?: OAuth2Client): Promise<Project> {
+        return await this.withAuth<Project>(
+            async (instance: ProjectsController, authClient: OAuth2Client) => {
+                return await instance.addProject(authClient, project);
+            },
+            auth
         );
-        const conditions = `${projectIdCondition}
-            AND ${projectOurIdCondition}
-            AND ${statusCondition}
-            AND ${searchTextCondition} `;
-        return conditions;
     }
 
-    private static async processProjectsResult(
-        result: any[],
-        initParamObject: any
-    ) {
-        let newResult: Project[] = [];
-        let entitiesPerAllProjects: any = [];
-        //zostawiam bo może w przyszłości będzie analiza instytucji vs projekty
-        if (!initParamObject.onlyKeyData === true)
-            entitiesPerAllProjects =
-                await this.getProjectEntityAssociationsList(initParamObject);
+    /**
+     * LOGIKA BIZNESOWA - Dodaje Project z asocjacjami
+     *
+     * Przepływ:
+     * 1. Model: createProjectFolder(auth) - tworzy folder GD
+     * 2. Controller: transakcja DB
+     *    - Repository: addInDb() - dodaje główny rekord
+     *    - addProjectEntitiesAssociations() - dodaje asocjacje
+     * 3. Rollback folderu GD przy błędzie DB
+     */
+    private async addProject(
+        auth: OAuth2Client,
+        project: Project
+    ): Promise<Project> {
+        console.group('ProjectsController.addProject()');
 
-        for (const row of result) {
-            const item = new Project({
-                id: row.Id,
-                ourId: row.OurId,
-                name: ToolsDb.sqlToString(row.Name),
-                alias: row.Alias,
-                startDate: row.StartDate,
-                endDate: row.EndDate,
-                status: row.Status,
-                comment: ToolsDb.sqlToString(row.Comment),
-                financialComment: ToolsDb.sqlToString(row.FinancialComment),
-                investorId: row.InvestorId,
-                totalValue: row.TotalValue,
-                qualifiedValue: row.QualifiedValue,
-                dotationValue: row.DotationValue,
-                gdFolderId: row.GdFolderId,
-                lettersGdFolderId: row.LettersGdFolderId,
-                googleGroupId: row.GoogleGroupId,
-                googleCalendarId: row.GoogleCalendarId,
-                lastUpdated: row.LastUpdated,
-            });
-            item.setProjectEntityAssociations(entitiesPerAllProjects);
-            newResult.push(item);
+        try {
+            // 1. Utwórz folder w Google Drive
+            await project.createProjectFolder(auth);
+            console.log('GD folder created');
+
+            try {
+                // 3. Transakcja DB
+                await ToolsDb.transaction(
+                    async (conn: mysql.PoolConnection) => {
+                        // 3a. Dodaj główny rekord Project
+                        await this.repository.addInDb(project, conn, true);
+
+                        // 3b. Dodaj asocjacje Project-Entity
+                        await this.addProjectEntitiesAssociations(
+                            project,
+                            conn
+                        );
+                    }
+                );
+
+                console.log('Project added to DB');
+                return project;
+            } catch (dbError) {
+                // Rollback: usuń folder GD jeśli DB się nie powiodło
+                console.error('DB transaction failed, rolling back GD folder');
+                await project.deleteProjectFolder(auth);
+                throw dbError;
+            }
+        } finally {
+            console.groupEnd();
         }
-        return newResult;
     }
 
-    static async getProjectEntityAssociationsList(initParamObject: {
-        projectId: string;
-    }) {
-        const projectConditon =
-            initParamObject && initParamObject.projectId
-                ? 'Projects.OurId="' + initParamObject.projectId + '"'
-                : '1';
-
-        const sql =
-            'SELECT  Projects_Entities.ProjectId, \n \t' +
-            'Projects_Entities.EntityId, \n \t' +
-            'Projects_Entities.ProjectRole, \n \t' +
-            'Entities.Name, \n \t' +
-            'Entities.Address, \n \t' +
-            'Entities.TaxNumber, \n \t' +
-            'Entities.Www, \n \t' +
-            'Entities.Email, \n \t' +
-            'Entities.Phone \n \t' +
-            'FROM Projects_Entities \n' +
-            'JOIN Projects ON Projects_Entities.ProjectId = Projects.Id \n' +
-            'JOIN Entities ON Projects_Entities.EntityId=Entities.Id \n' +
-            'WHERE ' +
-            projectConditon +
-            ' \n' +
-            'ORDER BY Projects_Entities.ProjectRole, Entities.Name';
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return this.processProjectEntityAssociations(result);
+    /**
+     * API PUBLICZNE - Edytuje Project
+     *
+     * @param project - Project do edycji
+     * @param auth - OAuth2Client dla operacji GD
+     * @returns Zaktualizowany Project
+     */
+    static async edit(project: Project, auth?: OAuth2Client): Promise<Project> {
+        return await this.withAuth<Project>(
+            async (instance: ProjectsController, authClient: OAuth2Client) => {
+                return await instance.editProject(authClient, project);
+            },
+            auth
+        );
     }
 
-    private static processProjectEntityAssociations(result: any[]) {
-        let newResult: ProjectEntity[] = [];
+    /**
+     * LOGIKA BIZNESOWA - Edytuje Project z asocjacjami
+     *
+     * Przepływ:
+     * 1. Controller: transakcja DB
+     *    - Repository: editInDb() - edytuje główny rekord
+     *    - editProjectEntitiesAssociations() - aktualizuje asocjacje
+     * 2. Model: editProjectFolder(auth) - równolegle aktualizuje GD
+     */
+    private async editProject(
+        auth: OAuth2Client,
+        project: Project
+    ): Promise<Project> {
+        console.group('ProjectsController.editProject()');
 
-        for (const row of result) {
-            const item = new ProjectEntity({
-                projectRole: row.ProjectRole,
-                _project: {
-                    id: row.ProjectId,
-                },
-                _entity: new Entity({
-                    id: row.EntityId,
-                    name: row.Name,
-                    address: row.Address,
-                    taxNumber: row.TaxNumber,
-                    www: row.Www,
-                    email: row.Email,
-                    phone: row.Phone,
+        try {
+            // Równolegle: DB i GD
+            await Promise.all([
+                // 1. Transakcja DB
+                ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                    // 1a. Edytuj główny rekord
+                    await this.repository.editInDb(project, conn, true);
+
+                    // 1b. Edytuj asocjacje (delete + insert)
+                    await this.editProjectEntitiesAssociations(project, conn);
                 }),
-            });
-            newResult.push(item);
+
+                // 2. Edytuj folder GD
+                project.editProjectFolder(auth),
+            ]);
+
+            console.log('Project edited');
+            return project;
+        } finally {
+            console.groupEnd();
         }
-        return newResult;
+    }
+
+    /**
+     * API PUBLICZNE - Usuwa Project
+     *
+     * @param project - Project do usunięcia
+     * @param auth - OAuth2Client dla operacji GD
+     */
+    static async delete(project: Project, auth?: OAuth2Client): Promise<void> {
+        return await this.withAuth<void>(
+            async (instance: ProjectsController, authClient: OAuth2Client) => {
+                return await instance.deleteProject(authClient, project);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA - Usuwa Project
+     *
+     * Przepływ:
+     * 1. Controller: deleteFromDb() - usuwa z DB (CASCADE dla asocjacji)
+     * 2. Model: deleteProjectFolder(auth) - usuwa folder GD
+     */
+    private async deleteProject(
+        auth: OAuth2Client,
+        project: Project
+    ): Promise<void> {
+        console.group('ProjectsController.deleteProject()');
+
+        try {
+            // 1. Usuń z bazy (CASCADE usunie też Projects_Entities)
+            await this.repository.deleteFromDb(project);
+            console.log('Project deleted from DB');
+
+            // 2. Usuń folder GD
+            await project.deleteProjectFolder(auth);
+            console.log(`Project: ${project.ourId} ${project.alias} deleted`);
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    /**
+     * PRIVATE HELPER - Dodaje asocjacje Project-Entity
+     */
+    private async addProjectEntitiesAssociations(
+        project: Project,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        // Dodaj EMPLOYERS
+        if (project._employers) {
+            for (const entity of project._employers) {
+                const association = new ProjectEntity({
+                    _project: project,
+                    _entity: entity,
+                    projectRole: 'EMPLOYER',
+                });
+                await ProjectEntitiesController.add(association, conn, true);
+            }
+        }
+
+        // Dodaj ENGINEERS
+        if (project._engineers) {
+            for (const entity of project._engineers) {
+                const association = new ProjectEntity({
+                    _project: project,
+                    _entity: entity,
+                    projectRole: 'ENGINEER',
+                });
+                await ProjectEntitiesController.add(association, conn, true);
+            }
+        }
+    }
+
+    /**
+     * PRIVATE HELPER - Edytuje asocjacje Project-Entity (delete + insert)
+     */
+    private async editProjectEntitiesAssociations(
+        project: Project,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        // 1. Usuń stare asocjacje
+        await this.deleteProjectEntityAssociations(project, conn);
+
+        // 2. Dodaj nowe asocjacje
+        await this.addProjectEntitiesAssociations(project, conn);
+    }
+
+    /**
+     * PRIVATE HELPER - Usuwa asocjacje Project-Entity
+     */
+    private async deleteProjectEntityAssociations(
+        project: Project,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        if (!project.id) throw new Error('Project.id is required');
+        await ProjectEntitiesController.deleteByProjectId(project.id, conn);
     }
 }

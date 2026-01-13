@@ -24,6 +24,7 @@ import LetterEntityAssociationsController from './associations/LetterEntityAssoc
 import ToolsAI from '../tools/ToolsAI';
 import { EntityData } from '../types/types';
 import EntitiesController from '../entities/EntitiesController';
+import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 
 export default class LettersController extends BaseController<
     Letter,
@@ -96,11 +97,13 @@ export default class LettersController extends BaseController<
             | IncomingLetterContract
             | IncomingLetterOffer;
 
-        // Our Letter Contract (nowy typ)
+        const isNewLetter = !initParam.id;
+
+        // Our Letter Contract (nowy typ) - nowe pismo lub edycja gdy id == number
         if (
             initParam.isOur &&
-            initParam.id == initParam.number &&
-            initParam._project?.id
+            initParam._project?.id &&
+            (isNewLetter || initParam.id == initParam.number)
         ) {
             item = new OurLetterContract(initParam);
             if (initParam._contract)
@@ -108,8 +111,12 @@ export default class LettersController extends BaseController<
             return item;
         }
 
-        // Our Letter Contract (stary typ - OurOldTypeLetter)
-        if (initParam.isOur && initParam.id !== initParam.number) {
+        // Our Letter Contract (stary typ - OurOldTypeLetter) - tylko edycja istniejącego pisma
+        if (
+            initParam.isOur &&
+            !isNewLetter &&
+            initParam.id !== initParam.number
+        ) {
             return new OurOldTypeLetter(initParam);
         }
 
@@ -141,13 +148,13 @@ export default class LettersController extends BaseController<
     }
 
     /**
-     * Zatwierdza pismo wychodzące - tworzy zdarzenie APPROVED
+     * PUBLIC API: Zatwierdza pismo wychodzące
+     * Tworzy event APPROVED i aktualizuje letter._lastEvent
+     *
      * @param letter - instancja pisma wychodzącego do zatwierdzenia
-     * @param auth - klient OAuth2 do operacji Google Drive
      * @param userData - dane użytkownika zatwierdzającego
      */
     static async approveLetter(
-        auth: OAuth2Client,
         letter: OurLetter,
         userData: UserData
     ): Promise<void> {
@@ -251,10 +258,12 @@ export default class LettersController extends BaseController<
         });
 
         // Zapis do bazy w ramach transakcji
-        const entityAssociationController =
-            LetterEntityAssociationsController.getInstance();
         for (const association of entityAssociations) {
-            await entityAssociationController.create(association, conn, true);
+            await LetterEntityAssociationsController.add(
+                association,
+                conn,
+                true
+            );
         }
     }
 
@@ -284,20 +293,45 @@ export default class LettersController extends BaseController<
 
         // Zapis do bazy w ramach transakcji
         for (const association of caseAssociations) {
-            await association.addInDb(conn, true);
+            await LetterCaseAssociationsController.add(association, conn, true);
         }
     }
 
     /**
-     * ORKIESTRACJA: Dodaje nowy OurLetter (pismo wychodzące)
-     * Przeniesiona z OurLetter.addNewController()
+     * PUBLIC API: Dodaje nowy OurLetter (pismo wychodzące)
      *
      * @param letter - instancja OurLetter do dodania
-     * @param auth - OAuth2Client dla operacji Google Drive
      * @param files - załączniki
      * @param userData - dane użytkownika
+     * @param auth - opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async addNewOurLetter(
+        letter: OurLetter,
+        files: Express.Multer.File[] = [],
+        userData: UserData,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.addNewOurLetterPrivate(
+                    authClient,
+                    letter,
+                    files,
+                    userData
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika dodawania OurLetter
+     * Przeniesiona z OurLetter.addNewController()
+     */
+    private async addNewOurLetterPrivate(
         auth: OAuth2Client,
         letter: OurLetter,
         files: Express.Multer.File[] = [],
@@ -320,7 +354,7 @@ export default class LettersController extends BaseController<
             );
 
             // 3. Dodaj do bazy danych (z transakcją i asocjacjami)
-            await this.addNew(letter);
+            await LettersController.addNew(letter);
 
             // 4. Przygotuj operacje post-DB
             const ourLetterGdFile = letter.makeLetterGdFileController(
@@ -357,7 +391,10 @@ export default class LettersController extends BaseController<
             }
 
             // 5. Utwórz skróty w folderach Cases
-            if (letter.gdDocumentId && letter._cases.length > 0) {
+            if (
+                (letter.gdDocumentId || letter.gdFolderId) &&
+                letter._cases.length > 0
+            ) {
                 const shortcutCreationPromises = letter._cases.map(
                     async (caseItem) => {
                         if (caseItem.gdFolderId) {
@@ -369,8 +406,12 @@ export default class LettersController extends BaseController<
                                 }
                             );
 
+                            const targetId = letter.gdDocumentId
+                                ? letter.gdDocumentId
+                                : letter.gdFolderId;
+
                             await ToolsGd.createShortcut(auth, {
-                                targetId: letter.gdDocumentId!,
+                                targetId: targetId!,
                                 parentId: lettersSubfolder.id!,
                                 name: `${letter.number} ${letter.description}`,
                             });
@@ -399,15 +440,40 @@ export default class LettersController extends BaseController<
     }
 
     /**
-     * ORKIESTRACJA: Dodaje nowy IncomingLetter (pismo przychodzące)
-     * Przeniesiona z IncomingLetter.addNewController()
+     * PUBLIC API: Dodaje nowy IncomingLetter (pismo przychodzące)
      *
      * @param letter - instancja IncomingLetter do dodania
-     * @param auth - OAuth2Client dla operacji Google Drive
      * @param files - załączniki
      * @param userData - dane użytkownika
+     * @param auth - opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async addNewIncomingLetter(
+        letter: IncomingLetter,
+        files: Express.Multer.File[] = [],
+        userData: UserData,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.addNewIncomingLetterPrivate(
+                    authClient,
+                    letter,
+                    files,
+                    userData
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika dodawania IncomingLetter
+     * Przeniesiona z IncomingLetter.addNewController()
+     */
+    private async addNewIncomingLetterPrivate(
         auth: OAuth2Client,
         letter: IncomingLetter,
         files: Express.Multer.File[] = [],
@@ -429,10 +495,13 @@ export default class LettersController extends BaseController<
             }
 
             // 2. Dodaj do bazy danych (z transakcją i asocjacjami)
-            await this.addNew(letter);
+            await LettersController.addNew(letter);
 
             // 3. Utwórz skróty w folderach Cases
-            if (letter.gdDocumentId && letter._cases.length > 0) {
+            if (
+                (letter.gdDocumentId || letter.gdFolderId) &&
+                letter._cases.length > 0
+            ) {
                 const shortcutPromises = letter._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
                         const lettersSubfolder = await ToolsGd.setFolder(auth, {
@@ -440,8 +509,12 @@ export default class LettersController extends BaseController<
                             name: 'Pisma',
                         });
 
+                        const targetId = letter.gdDocumentId
+                            ? letter.gdDocumentId
+                            : letter.gdFolderId;
+
                         await ToolsGd.createShortcut(auth, {
-                            targetId: letter.gdDocumentId!,
+                            targetId: targetId!,
                             parentId: lettersSubfolder.id!,
                             name: `${letter.number} ${letter.description}`,
                         });
@@ -569,18 +642,44 @@ export default class LettersController extends BaseController<
     }
 
     /**
-     * Edytuje Letter (DB + GD)
-     *
-     * REFAKTORING: Logika przeniesiona z Letter.editController()
-     * ORKIESTRACJA: Decyduje czy aktualizować tylko DB czy też GD
+     * PUBLIC API: Edytuje Letter (zarówno DB jak i GD)
      *
      * @param letter - Letter do edycji
-     * @param auth - OAuth2Client dla operacji Google Drive
      * @param files - nowe pliki/załączniki
      * @param userData - dane użytkownika
      * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji
+     * @param auth - opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async editLetter(
+        letter: Letter,
+        files: Express.Multer.File[],
+        userData: UserData,
+        fieldsToUpdate?: string[],
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.editLetterPrivate(
+                    authClient,
+                    letter,
+                    files,
+                    userData,
+                    fieldsToUpdate
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika edycji Letter
+     * REFAKTORING: Logika przeniesiona z Letter.editController()
+     * ORKIESTRACJA: Decyduje czy aktualizować tylko DB czy też GD
+     */
+    private async editLetterPrivate(
         auth: OAuth2Client,
         letter: Letter,
         files: Express.Multer.File[],
@@ -602,13 +701,26 @@ export default class LettersController extends BaseController<
         console.group('Letter edit');
 
         // 1. Edytuj w bazie danych
-        await this.edit(letter, fieldsToUpdate);
+        await LettersController.edit(letter, fieldsToUpdate);
         console.log('Letter edited in DB');
 
         // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD
         if (!isOnlyDbFields) {
             await letter.editLetterGdElements(auth, files);
             console.log('Letter folder and file in GD edited');
+        }
+
+        // 3. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
+        const statusChanged =
+            !fieldsToUpdate || fieldsToUpdate.includes('status');
+        if (
+            statusChanged &&
+            (letter.status === 'Zatwierdzony' ||
+                letter.status === Setup.LetterStatus.APPROVED)
+        ) {
+            if (letter instanceof OurLetter) {
+                await LettersController.approveLetter(letter, userData);
+            }
         }
 
         console.groupEnd();
@@ -629,15 +741,108 @@ export default class LettersController extends BaseController<
     }
 
     /**
-     * Eksportuje OurLetter do PDF
+     * PUBLIC API: Dodaje załączniki do istniejącego Letter
      *
-     * REFAKTORING: Logika przeniesiona z bezpośredniego wywołania w Routerze
-     * ORKIESTRACJA: Deleguje do OurLetter.exportToPDF()
+     * @param letter - Letter do którego dodajemy załączniki
+     * @param blobEnviObjects - obiekty blob do przesłania
+     * @param auth - opcjonalny OAuth2Client
+     */
+    static async appendAttachments(
+        letter: Letter,
+        blobEnviObjects: any[],
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.appendAttachmentsPrivate(
+                    authClient,
+                    letter,
+                    blobEnviObjects
+                );
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika dodawania załączników
+     */
+    private async appendAttachmentsPrivate(
+        auth: OAuth2Client,
+        letter: Letter,
+        blobEnviObjects: any[]
+    ): Promise<void> {
+        // 1. Dodaj załączniki do GD
+        await letter.appendAttachmentsHandler(auth, blobEnviObjects);
+
+        // 2. Aktualizuj Letter w bazie danych
+        await LettersController.edit(letter);
+    }
+
+    /**
+     * PUBLIC API: Usuwa Letter z Google Drive
+     *
+     * @param letter - Letter do usunięcia z GD
+     * @param auth - opcjonalny OAuth2Client
+     */
+    static async deleteFromGd(
+        letter: OurLetter | IncomingLetter,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.deleteFromGdPrivate(authClient, letter);
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika usuwania Letter z Google Drive
+     */
+    private async deleteFromGdPrivate(
+        auth: OAuth2Client,
+        letter: OurLetter | IncomingLetter
+    ): Promise<void> {
+        await letter._letterGdController.deleteFromGd(
+            auth,
+            letter.gdDocumentId || null,
+            letter.gdFolderId || null
+        );
+    }
+
+    /**
+     * PUBLIC API: Eksportuje OurLetter do PDF
      *
      * @param letter - OurLetter do wyeksportowania
-     * @param auth - OAuth2Client dla operacji Google Drive
+     * @param auth - opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async exportToPDF(
+        letter: OurLetter,
+        auth?: OAuth2Client
+    ): Promise<void> {
+        return await this.withAuth<void>(
+            async (
+                instance: LettersController,
+                authClient: OAuth2Client
+            ): Promise<void> => {
+                return await instance.exportToPDFPrivate(authClient, letter);
+            },
+            auth
+        );
+    }
+
+    /**
+     * PRIVATE: Logika eksportu do PDF
+     * ORKIESTRACJA: Deleguje do OurLetter.exportToPDF()
+     */
+    private async exportToPDFPrivate(
         auth: OAuth2Client,
         letter: OurLetter
     ): Promise<void> {

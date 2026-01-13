@@ -4,13 +4,79 @@ import Tools from './Tools';
 import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
-    static pool: mysql.Pool = mysql.createPool(Setup.dbConfig).pool.promise();
+    private static _pool: mysql.Pool;
+    private static isResetting = false;
+    private static resetPromise: Promise<void> | null = null;
 
-    static initialize() {
-        // Ustawienie strefy czasowej dla każdego nowego połączenia
-        ToolsDb.pool.on('connection', async (connection) => {
+    static get pool(): mysql.Pool {
+        if (!this._pool) {
+            this._pool = this.createPool();
+        }
+        return this._pool;
+    }
+
+    private static createPool(): mysql.Pool {
+        const pool = mysql.createPool(Setup.dbConfig);
+
+        // Event handler dla nowych połączeń
+        pool.on('connection', (connection) => {
             connection.query("SET time_zone = '+00:00'");
         });
+
+        return pool;
+    }
+
+    static initialize() {
+        // Inicjalizacja poola (wywołuje getter)
+        const pool = this.pool;
+        console.log('[DB] Pool initialized with auto-reconnect support');
+    }
+
+    private static async resetPool(): Promise<void> {
+        // Jeśli reset już trwa, poczekaj na jego zakończenie
+        if (this.resetPromise) {
+            console.log('[DB] Waiting for ongoing pool reset...');
+            return this.resetPromise;
+        }
+
+        if (this.isResetting) {
+            console.log('[DB] Pool reset already in progress, skipping...');
+            return;
+        }
+
+        this.isResetting = true;
+        console.log('[DB] Resetting connection pool...');
+
+        this.resetPromise = (async () => {
+            const oldPool = this._pool;
+
+            try {
+                // Utwórz nowy pool PRZED zamknięciem starego
+                this._pool = this.createPool();
+
+                // Zamknij stary pool asynchronicznie (bez await - w tle)
+                if (oldPool) {
+                    oldPool
+                        .end()
+                        .then(() =>
+                            console.log('[DB] Old pool closed successfully')
+                        )
+                        .catch((err) =>
+                            console.error('[DB] Error closing old pool:', err)
+                        );
+                }
+
+                console.log('[DB] Pool reset completed');
+            } catch (error) {
+                console.error('[DB] Error during pool reset:', error);
+                throw error;
+            } finally {
+                this.isResetting = false;
+                this.resetPromise = null;
+            }
+        })();
+
+        return this.resetPromise;
     }
 
     static async getPoolConnectionWithTimeout() {
@@ -41,13 +107,58 @@ export default class ToolsDb {
         externalConn?: mysql.PoolConnection,
         params: any[] = []
     ) {
-        const conn = externalConn || this.pool;
-        try {
-            return (await conn.query(sql, params))[0];
-        } catch (error) {
-            console.log(sql);
-            throw error;
+        const maxRetries = 3;
+        let lastError: any;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const conn = externalConn || this.pool;
+                return (await conn.query(sql, params))[0];
+            } catch (error: any) {
+                lastError = error;
+
+                // Sprawdź czy to błąd połączenia
+                const isConnectionError =
+                    error.code === 'ECONNRESET' ||
+                    error.code === 'PROTOCOL_CONNECTION_LOST' ||
+                    error.fatal ||
+                    error.message?.includes('closed state') ||
+                    error.message?.includes("reading 'once'") ||
+                    error.message?.includes('Pool is closed');
+
+                if (isConnectionError) {
+                    console.warn(
+                        `[DB] Connection error (attempt ${attempt}/${maxRetries}):`,
+                        error.code || error.message
+                    );
+
+                    // Reset poola tylko przy pierwszej próbie i tylko gdy nie użyto externalConn
+                    if (attempt === 1 && !externalConn) {
+                        await this.resetPool();
+                    }
+
+                    // Retry z exponential backoff
+                    if (attempt < maxRetries) {
+                        const backoffTime = 1000 * Math.pow(2, attempt - 1);
+                        console.log(
+                            `[DB] Retrying in ${backoffTime}ms (attempt ${
+                                attempt + 1
+                            }/${maxRetries})...`
+                        );
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, backoffTime)
+                        );
+                        continue;
+                    }
+                }
+
+                // Dla innych błędów lub ostatniej próby
+                console.error('[DB] Query error:', sql);
+                throw error;
+            }
         }
+
+        throw lastError;
     }
 
     static prepareValueToSql(value: any) {
@@ -63,7 +174,7 @@ export default class ToolsDb {
         else return 'null';
     }
 
-    static prepareValueToPreparedStmtSql(value: any) {
+    static prepareValueToPreparedStmtSql(value: any, fieldName?: string): any {
         //"startDate":"12-06-2018"
         if (
             value === null ||
@@ -73,6 +184,15 @@ export default class ToolsDb {
         )
             return value;
         if (value === undefined) return null;
+        // Arrays are not allowed - throw error
+        if (Array.isArray(value)) {
+            const fieldInfo = fieldName ? `Field '${fieldName}'` : 'Field';
+            throw new Error(
+                `${fieldInfo} has invalid array value: ${JSON.stringify(
+                    value
+                )}. Expected scalar value.`
+            );
+        }
         if (Tools.isValidJsonString(value)) return value;
         if (typeof value === 'string') {
             if (ToolsDate.isStringADate(value))
@@ -81,6 +201,8 @@ export default class ToolsDb {
             else return this.stringToSql(value);
         }
         if (ToolsDate.isValidDate(value)) return ToolsDate.dateJsToSql(value);
+        // Default case: return null for any other type (objects, etc.)
+        return null;
     }
 
     static stringToSql(string: string): string {
@@ -170,6 +292,29 @@ export default class ToolsDb {
         if (_fieldsToUpdate && _fieldsToUpdate.length === 0)
             throw new Error('No fields to update!');
 
+        // Validate id field
+        if (!object.id) {
+            throw new Error(
+                `Field 'id' is required for UPDATE in table '${tableName}'. Got: ${JSON.stringify(
+                    object.id
+                )}`
+            );
+        }
+        if (Array.isArray(object.id)) {
+            throw new Error(
+                `Field 'id' cannot be an array. Got: ${JSON.stringify(
+                    object.id
+                )}. Check client data.`
+            );
+        }
+        if (typeof object.id !== 'string' && typeof object.id !== 'number') {
+            throw new Error(
+                `Field 'id' must be string or number. Got: ${JSON.stringify(
+                    object.id
+                )}`
+            );
+        }
+
         const conn: mysql.PoolConnection =
             externalConn || (await this.pool.getConnection());
         if (!externalConn)
@@ -182,7 +327,6 @@ export default class ToolsDb {
                 object,
                 _fieldsToUpdate
             );
-            console.log(stmt.string);
             const result = await conn.execute(stmt.string, stmt.values);
             const newObject = result[0];
 
@@ -194,7 +338,8 @@ export default class ToolsDb {
 
             console.error('Error occurred during statement execution: ', e);
             if (stmt) {
-                console.error('Statement with error: ', stmt);
+                console.error('Statement with error: ', stmt.string);
+                console.log('SQL Values:', stmt.values);
             } else {
                 console.error('Statement was not defined.');
             }
@@ -381,7 +526,9 @@ export default class ToolsDb {
             // jeśli nie chcę aby zmienna była zmieniana w DB trzeba dodać znak '_' albo skasować parametr z obiektu: 'delete parametr'
             if (this.isValidDbAttribute(key, object)) {
                 //console.log(key + ' = ' + object[key]);
-                values.push(this.prepareValueToPreparedStmtSql(object[key]));
+                values.push(
+                    this.prepareValueToPreparedStmtSql(object[key], key)
+                );
             }
         }
         if (queryType === 'UPDATE') values.push(object.id);

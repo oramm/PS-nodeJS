@@ -1,7 +1,7 @@
-import { OAuth2Client } from 'google-auth-library';
+import Setup from '../../../../setup/Setup';
 import ToolsMail from '../../../../tools/ToolsMail';
-import MilestoneDatesController from './MilestoneDatesController';
 import { MilestoneDateData } from '../../../../types/types';
+import MilestoneDatesController from './MilestoneDatesController';
 
 export default class MilestoneDateMailReport {
     /**
@@ -13,8 +13,14 @@ export default class MilestoneDateMailReport {
             console.log('Rozpoczynanie generowania raportu terminów...');
 
             // Pobierz wszystkie daty milestone z bazy danych
-            const allMilestoneDates =
-                await MilestoneDatesController.getMilestoneDatesList([{}]);
+            const allMilestoneDates = await MilestoneDatesController.find([
+                {
+                    milestoneStatuses: [
+                        Setup.MilestoneStatus.IN_PROGRESS,
+                        Setup.MilestoneStatus.NOT_STARTED,
+                    ],
+                },
+            ]);
 
             // Filtruj terminy przeterminowane i zbliżające się
             const { overdueDates, upcomingDates } =
@@ -72,7 +78,6 @@ export default class MilestoneDateMailReport {
 
         for (const milestoneDate of allDates) {
             if (!milestoneDate.endDate) continue;
-
             const endDate = new Date(milestoneDate.endDate);
 
             // Sprawdź czy termin minął
@@ -177,8 +182,7 @@ export default class MilestoneDateMailReport {
         let html = '<h2>Raport terminów - Kamienie milowe</h2>';
 
         if (overdueDates.length > 0) {
-            html +=
-                '<h3 style="color: #d32f2f;">🔴 Terminy przeterminowane</h3>';
+            html += '<h3 style="color: #d32f2f;">🔴 Termin minął</h3>';
             html +=
                 '<table border="1" style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">';
             html += '<tr style="background-color: #f5f5f5;">';

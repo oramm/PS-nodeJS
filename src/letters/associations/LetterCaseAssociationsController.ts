@@ -30,7 +30,7 @@ export default class LetterCaseAssociationsController extends BaseController<
     /**
      * Singleton pattern - pobiera instancję kontrolera
      */
-    static getInstance(): LetterCaseAssociationsController {
+    private static getInstance(): LetterCaseAssociationsController {
         if (!LetterCaseAssociationsController.instance) {
             LetterCaseAssociationsController.instance =
                 new LetterCaseAssociationsController();
@@ -39,9 +39,30 @@ export default class LetterCaseAssociationsController extends BaseController<
     }
 
     /**
+     * Dodaje nową asocjację Letter-Case do bazy danych
+     *
+     * @param association - asocjacja Letter-Case do dodania
+     * @param conn - połączenie do bazy (dla transakcji)
+     * @param isPartOfTransaction - czy operacja jest częścią większej transakcji
+     */
+    static async add(
+        association: LetterCase,
+        conn: any,
+        isPartOfTransaction: boolean = true
+    ): Promise<LetterCase> {
+        const instance = this.getInstance();
+        await instance.repository.addInDb(
+            association,
+            conn,
+            isPartOfTransaction
+        );
+        return association;
+    }
+
+    /**
      * Pobiera listę asocjacji Letter-Case według parametrów wyszukiwania
      */
-    static async getLetterCaseAssociationsList(
+    static async find(
         searchParams: LetterCaseSearchParams = {}
     ): Promise<LetterCase[]> {
         const instance = this.getInstance();
@@ -54,16 +75,5 @@ export default class LetterCaseAssociationsController extends BaseController<
         };
 
         return await instance.repository.find(repoSearchParams);
-    }
-
-    /**
-     * @deprecated Użyj repository.find() zamiast tego
-     */
-    static processLetterCaseAssociationsResult(result: any[]) {
-        console.warn(
-            'processLetterCaseAssociationsResult is deprecated. Use repository.find() instead.'
-        );
-        const instance = this.getInstance();
-        return result.map((row) => instance.repository['mapRowToModel'](row));
     }
 }

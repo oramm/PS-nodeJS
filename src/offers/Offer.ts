@@ -1,30 +1,18 @@
-import City from '../Admin/Cities/City';
+import { OAuth2Client } from 'google-auth-library';
 import BusinessObject from '../BussinesObject';
-import mysql from 'mysql2/promise';
+import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import Setup from '../setup/Setup';
+import EnviErrors from '../tools/Errors';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsGd from '../tools/ToolsGd';
 import {
     CityData,
     ContractTypeData,
-    MilestoneDateData as MilestoneDateData,
     OfferData,
     OfferEventData,
 } from '../types/types';
-import { OAuth2Client } from 'google-auth-library';
-import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
-import Milestone from '../contracts/milestones/Milestone';
-import ToolsDb from '../tools/ToolsDb';
 import OfferGdController from './gdControllers/OfferGdController';
-import Setup from '../setup/Setup';
-import MilestonesController from '../contracts/milestones/MilestonesController';
-import CasesController from '../contracts/milestones/cases/CasesController';
-import EnviErrors from '../tools/Errors';
 import OfferEvent from './offerEvent/OfferEvent';
-import OfferEventsController from './offerEvent/OfferEventsController';
-import PersonsController from '../persons/PersonsController';
-import { UserData } from '../types/sessionTypes';
-import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
-import CitiesController from '../Admin/Cities/CitiesController';
 
 export default abstract class Offer
     extends BusinessObject
@@ -105,210 +93,10 @@ export default abstract class Offer
         } else this._lastEvent = null;
     }
 
-    async addNewController(
-        auth: OAuth2Client,
-        userData: UserData,
-        taskId: string
-    ) {
-        try {
-            console.group('Creating new offer');
-            TaskStore.update(taskId, 'Tworzę foldery', 15);
-            await this.createGdElements(auth);
-            console.log('Offer folder created');
-            TaskStore.update(taskId, 'Zapisuję ofertę do bazy', 30);
-            await this.addInDb();
-            console.log('Offer added in db');
-            console.group(
-                'Creating default milestones for offer submission milestone'
-            );
-            TaskStore.update(
-                taskId,
-                'Tworzę kamień milowy składania oferty',
-                50
-            );
-            await this.createDefaultMilestones(
-                auth,
-                Setup.MilestoneTypes.OFFER_SUBMISSION,
-                taskId
-            );
-            TaskStore.update(taskId, 'Tworzę kamień milowy oceny oferty', 80);
-            await this.createOfferEvaluationMilestoneOrCases(auth);
-            const _editor =
-                await PersonsController.getPersonFromSessionUserData(userData);
-            this._lastEvent = new OfferEvent({
-                offerId: this.id as number,
-                eventType: Setup.OfferEventType.CREATED,
-                _editor,
-            });
-            TaskStore.update(taskId, 'Zapisuję nowe wydarzenie dla oferty', 95);
-            await OfferEventsController.addNew(this._lastEvent);
-            console.groupEnd();
-        } catch (err) {
-            this.deleteController(auth);
-            throw err;
-        }
-    }
-
-    async editController(
-        auth: OAuth2Client,
-        taskId?: string,
-        _fieldsToUpdate?: string[]
-    ) {
-        try {
-            console.group('Editing offer');
-            TaskStore.update(taskId, 'Edytuję ofertę', 5);
-
-            if (this.shouldEditGdElements(_fieldsToUpdate)) {
-                TaskStore.update(taskId, 'Edytuję ofertę na Dysku Google', 20);
-                await this.editGdElements(auth, taskId);
-            }
-            console.log('Offer folder edited');
-            TaskStore.update(taskId, 'Edytuję ofertę w bazie', 50);
-            await this.editInDb(undefined, undefined, _fieldsToUpdate);
-            console.log('Offer edited in db');
-            TaskStore.update(taskId, 'Edytuję kamienie milowe', 80);
-            await this.createOfferEvaluationMilestoneOrCases(auth);
-            console.log('Offer succesfully edited');
-            console.groupEnd();
-        } catch (err) {
-            console.log('Offer edit error');
-            throw err;
-        }
-    }
-
-    private shouldEditGdElements(_fieldsToUpdate: string[] | undefined) {
+    shouldEditGdElements(_fieldsToUpdate: string[] | undefined) {
         console.log('shouldEditGdElements', _fieldsToUpdate);
         if (!_fieldsToUpdate) return true;
         return _fieldsToUpdate.includes('submissionDeadline');
-    }
-
-    async deleteController(auth: OAuth2Client, userData?: UserData) {
-        console.group('Deleting offer');
-        if (!this.gdFolderId)
-            throw new EnviErrors.NoGdIdError(
-                'Brak folderu oferty',
-                'NO_FOLDER'
-            );
-        try {
-            if (this.id) await this.deleteFromDb();
-            console.log('Offer deleted from db');
-        } catch (err) {
-            console.error('Failed to delete from db:', err);
-            if (err instanceof Error) {
-                // Przekształcenie komunikatu błędu
-                let userFriendlyMessage =
-                    'Wystąpił błąd podczas usuwania oferty.';
-                let errorCode = 'DB_ERROR';
-                if ('errno' in err && err.errno === 1451) {
-                    userFriendlyMessage =
-                        'Nie można usunąć oferty, ponieważ są dla niej zarejestrowane pisma. \n\n Aby usunąć ofertę należy najpierw usunąć wszystkie pisma z nią związane.';
-                    errorCode = 'FOREIGN_KEY_CONSTRAINT';
-                }
-                throw new EnviErrors.DbError(userFriendlyMessage, errorCode);
-            }
-            throw err; // Rzucenie pierwotnego błędu, jeśli nie jest to instancja Error
-        }
-        try {
-            const offerGdController = new OfferGdController();
-            await offerGdController.deleteFromGd(auth, this.gdFolderId);
-            console.log('Offer folder deleted');
-        } catch (err) {
-            console.error('Failed to delete from Google Drive:', err);
-            throw new EnviErrors.NoGdIdError(
-                'Błąd podczas usuwania folderu z Google Drive.'
-            );
-        }
-        console.groupEnd();
-    }
-
-    async addEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.addNew(this._lastEvent);
-    }
-
-    async editEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.edit(this._lastEvent);
-    }
-
-    async deleteEventController() {
-        if (!this._lastEvent) throw new Error('No last event');
-        await OfferEventsController.delete(this._lastEvent);
-        this._lastEvent = null;
-    }
-
-    async createOfferEvaluationMilestoneOrCases(auth: OAuth2Client) {
-        const offerEvaluationMilestone =
-            await this.getOfferEvaluationMilestone();
-
-        if (
-            this.status === Setup.OfferStatus.NOT_INTERESTED ||
-            this.status === Setup.OfferStatus.DECISION_PENDING
-        ) {
-            if (offerEvaluationMilestone) {
-                await this.deleteOfferEvaluationMilestone(auth);
-            }
-            return;
-        }
-        if (!offerEvaluationMilestone) {
-            await this.createOfferEvaluationMilestone(auth);
-            return;
-        }
-
-        await this.ensureDefaultCases(offerEvaluationMilestone, auth);
-    }
-
-    private async getOfferEvaluationMilestone() {
-        return (
-            await MilestonesController.getMilestonesList(
-                [
-                    {
-                        typeId: Setup.MilestoneTypes.OFFER_EVALUATION,
-                        offerId: this.id,
-                    },
-                ],
-                'OFFER'
-            )
-        )[0];
-    }
-
-    private async ensureDefaultCases(milestone: any, auth: OAuth2Client) {
-        const offerEvaluationCases = await CasesController.getCasesList([
-            {
-                offerId: this.id,
-                milestoneTypeId: Setup.MilestoneTypes.OFFER_EVALUATION,
-            },
-        ]);
-
-        if (offerEvaluationCases.length === 0) {
-            await milestone.createDefaultCases(auth, { isPartOfBatch: false });
-        }
-    }
-
-    private async createOfferEvaluationMilestone(auth: OAuth2Client) {
-        console.log('Creating milestone for offer evaluation');
-        await this.createDefaultMilestones(
-            auth,
-            Setup.MilestoneTypes.OFFER_EVALUATION
-        );
-    }
-
-    private async deleteOfferEvaluationMilestone(auth: OAuth2Client) {
-        const milestone = await this.getOfferEvaluationMilestone();
-        if (milestone) {
-            await milestone.deleteController(auth);
-        }
-    }
-    async setCity(cityOrCityName: City | string) {
-        if (typeof cityOrCityName === 'string') {
-            const city = new City({ name: cityOrCityName });
-            await CitiesController.addNewCity(city);
-            this._city = city;
-            this.cityId = city.id as number;
-        } else {
-            this._city = cityOrCityName;
-            this.cityId = cityOrCityName.id as number;
-        }
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {
@@ -324,61 +112,9 @@ export default abstract class Offer
         if (!gdFolder.id) throw new Error('Folder  not created');
         this.setGdFolderIdAndUrl(<string>gdFolder.id);
     }
-    /**tworzy domyślne kamienie milowe dla oferty ale tylko
-     * dla kamienni typu OFFER_SUBMISSION. pozostałe kamienie będą tworzone przy ustawieniu statusu
-     */
-    async createDefaultMilestones(
-        auth: OAuth2Client,
-        milestoneTypeId: number,
-        taskId?: string
-    ) {
-        const defaultMilestones: Milestone[] = [];
 
-        const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.getMilestoneTemplatesList(
-                {
-                    isDefaultOnly: true,
-                    contractTypeId: this.typeId,
-                    milestoneTypeId,
-                },
-                'OFFER'
-            );
-
-        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
-            const template = defaultMilestoneTemplates[i];
-            TaskStore.update(taskId, 'Tworzę kamień milowy', i * 15);
-            const milestone = new Milestone({
-                name: template.name,
-                description: template.description,
-                _type: template._milestoneType,
-                _offer: this as any,
-                status: 'Nie rozpoczęty',
-                _dates: [
-                    {
-                        endDate: i
-                            ? <string>this.submissionDeadline
-                            : this.setBidValidityDate(),
-                    } as MilestoneDateData,
-                ],
-            });
-
-            await milestone.createFolders(auth);
-            defaultMilestones.push(milestone);
-        }
-        console.log('Milestones folders created');
-        await this.addDefaultMilestonesInDb(defaultMilestones);
-        console.log('default milestones saved in db');
-
-        for (const milestone of defaultMilestones) {
-            console.group(
-                `--- creating default cases for milestone ${milestone._FolderNumber_TypeName_Name} ...`
-            );
-            await milestone.createDefaultCases(auth, { isPartOfBatch: true });
-        }
-        console.groupEnd();
-    }
     //tymczasowa funkcja
-    private setBidValidityDate() {
+    setBidValidityDate() {
         if (!this.submissionDeadline) throw new Error('Brak terminu składania');
         let bidValidityDate: Date;
         let validityDays = 90;
@@ -394,44 +130,6 @@ export default abstract class Offer
         const bidValidityDateStr = ToolsDate.dateJsToSql(bidValidityDate);
         if (!bidValidityDateStr) throw new Error('Błąd daty');
         return bidValidityDateStr;
-    }
-
-    private async addDefaultMilestonesInDb(
-        milestones: Milestone[],
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
-    ) {
-        if (!externalConn && isPartOfTransaction)
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        const conn = externalConn
-            ? externalConn
-            : await ToolsDb.getPoolConnectionWithTimeout();
-        if (!externalConn)
-            console.log(
-                'new connection:: addDefaultMilestonesInDb ',
-                conn.threadId
-            );
-        try {
-            await conn.beginTransaction();
-            const promises = [];
-            for (const milestone of milestones)
-                promises.push(milestone.addInDb(conn, true));
-            await Promise.all(promises);
-            await conn.commit();
-        } catch (err) {
-            await conn.rollback();
-            throw err;
-        } finally {
-            if (!externalConn) {
-                conn.release();
-                console.log(
-                    'connection released:: addDefaultMilestonesInDb',
-                    conn.threadId
-                );
-            }
-        }
     }
 
     async editGdElements(auth: OAuth2Client, taskId?: string) {

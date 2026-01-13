@@ -26,7 +26,11 @@ app.post('/role', async (req: Request, res: Response, next) => {
 
 app.put('/role/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = await RolesController.updateRole(req.parsedBody);
+        const { _fieldsToUpdate, ...roleData } = req.parsedBody;
+        const item = await RolesController.updateRole(
+            roleData,
+            _fieldsToUpdate
+        );
         res.send(item);
     } catch (error) {
         next(error);

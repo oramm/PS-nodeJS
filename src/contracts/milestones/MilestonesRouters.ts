@@ -1,8 +1,6 @@
-import MilestonesController, {
-    MilestoneParentType,
-} from './MilestonesController';
+import MilestonesController from './MilestonesController';
+import { MilestoneParentType } from '../../types/types';
 import { app } from '../../index';
-import ToolsGapi from '../../setup/Sessions/ToolsGapi';
 import Milestone from './Milestone';
 import { Request, Response } from 'express';
 import MilestoneDatesController from './cases/milestoneDate/MilestoneDatesController';
@@ -10,12 +8,13 @@ import MilestoneDate from './cases/milestoneDate/MilestoneDate';
 import { MilestoneDateData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
+import ContractsController from '../ContractsController';
 
 app.post('/milestones', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const parentType = req.parsedBody.parentType as MilestoneParentType;
-        const result = await MilestonesController.getMilestonesList(
+        const result = await MilestonesController.find(
             orConditions,
             parentType
         );
@@ -29,7 +28,7 @@ app.post('/milestoneDates', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const parentType = req.parsedBody.parentType as MilestoneParentType;
-        const result = await MilestoneDatesController.getMilestoneDatesList(
+        const result = await MilestoneDatesController.find(
             orConditions,
             parentType
         );
@@ -41,16 +40,16 @@ app.post('/milestoneDates', async (req: Request, res: Response, next) => {
 
 app.post('/milestone', async (req: Request, res: Response, next) => {
     try {
-        let item = new Milestone(req.parsedBody);
-        //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Milestones
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.addNewController,
-            [req.session.userData],
-            item
+        const milestone = new Milestone(req.parsedBody);
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        const result = await MilestonesController.add(
+            milestone,
+            undefined,
+            req.session.userData
         );
-        res.send(item);
+
+        res.send(result);
     } catch (error) {
         next(error);
     }
@@ -58,16 +57,25 @@ app.post('/milestone', async (req: Request, res: Response, next) => {
 
 app.put('/milestone/:id', async (req: Request, res: Response, next) => {
     try {
-        const item = new Milestone(req.parsedBody);
-        item._contract = await item.getParentContractFromDb();
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.editController,
-            [req.session.userData, req.parsedBody._fieldsToUpdate],
-            item
+        const milestone = new Milestone(req.parsedBody);
+
+        // Pobierz parent contract przez Controller (Clean Architecture)
+        if (milestone._contract?.id) {
+            const contracts = await ContractsController.find([
+                { id: milestone._contract.id },
+            ]);
+            milestone._contract = contracts[0];
+        }
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        const result = await MilestonesController.edit(
+            milestone,
+            undefined,
+            req.session.userData,
+            req.parsedBody._fieldsToUpdate
         );
-        res.send(item);
+
+        res.send(result);
     } catch (error) {
         next(error);
     }
@@ -78,17 +86,25 @@ app.put(
     async (req: Request, res: Response, next) => {
         try {
             const item = req.parsedBody as MilestoneDateData;
-            const _milestone = new Milestone(req.parsedBody._milestone);
-            _milestone._contract = await _milestone.getParentContractFromDb();
+            const milestone = new Milestone(req.parsedBody._milestone);
 
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                _milestone.editController,
-                [req.session.userData, req.parsedBody._fieldsToUpdate],
-                _milestone
+            // Pobierz parent contract przez Controller (Clean Architecture)
+            if (milestone._contract?.id) {
+                const contracts = await ContractsController.find([
+                    { id: milestone._contract.id },
+                ]);
+                milestone._contract = contracts[0];
+            }
+
+            // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+            await MilestonesController.edit(
+                milestone,
+                undefined,
+                req.session.userData,
+                req.parsedBody._fieldsToUpdate
             );
-            res.send({ ...item, _milestone });
+
+            res.send({ ...item, _milestone: milestone });
         } catch (error) {
             if (error instanceof Error)
                 res.status(500).send({ errorMessage: error.message });
@@ -110,16 +126,12 @@ app.put(
             const contractInstance = _contract._type.isOur
                 ? new ContractOur(_contract)
                 : new ContractOther(_contract);
-            await Promise.all([
-                ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    contractInstance.editHandler,
-                    [req.parsedBody._fieldsToUpdate],
-                    contractInstance
-                ),
-            ]);
-            item._milestone!._contract = contractInstance;
+
+            const updatedContract = await ContractsController.editWithAuth(
+                contractInstance,
+                req.parsedBody._fieldsToUpdate
+            );
+            item._milestone!._contract = updatedContract;
             res.send(item);
         } catch (error) {
             next(error);
@@ -134,7 +146,8 @@ app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
             throw new Error('User data not available in session');
         }
 
-        await item.editController(
+        await MilestoneDatesController.edit(
+            item,
             req.session.userData,
             req.parsedBody._fieldsToUpdate
         );
@@ -146,26 +159,12 @@ app.put('/milestoneDate/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/milestone/:id', async (req: Request, res: Response, next) => {
     try {
-        let item = new Milestone(req.body);
-        console.log('delete');
-        await item.deleteFromDb();
-        await Promise.all([
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFolder,
-                undefined,
-                item
-            ),
-            ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.deleteFromScrum,
-                undefined,
-                item
-            ),
-        ]);
-        res.send(item);
+        const milestone = new Milestone(req.body);
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        await MilestonesController.delete(milestone);
+
+        res.send(milestone);
     } catch (error) {
         next(error);
     }
@@ -177,7 +176,7 @@ app.delete('/milestoneDate/:id', async (req: Request, res: Response, next) => {
         if (!req.session.userData) {
             throw new Error('User data not available in session');
         }
-        await item.deleteController(req.session.userData);
+        await MilestoneDatesController.delete(item, req.session.userData);
 
         res.send(item);
     } catch (error) {

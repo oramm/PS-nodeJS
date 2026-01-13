@@ -4,15 +4,21 @@ import Setup from '../setup/Setup';
 import ToolsDb from '../tools/ToolsDb';
 import InvoiceItem from './InvoiceItem';
 import Tools from '../tools/Tools';
-import InvoiceItemsController from './InvoiceItemsController';
+import InvoiceItemRepository from './InvoiceItemRepository';
 
 export default class InvoiceItemValidator {
     private contract: ContractOur;
     private invoiceItem: InvoiceItem;
+    private repository: InvoiceItemRepository;
 
-    constructor(contract: ContractOur, invoiceItem: InvoiceItem) {
+    constructor(
+        contract: ContractOur,
+        invoiceItem: InvoiceItem,
+        repository: InvoiceItemRepository
+    ) {
         this.contract = contract;
         this.invoiceItem = invoiceItem;
+        this.repository = repository;
     }
 
     async checkValueAgainstContract(
@@ -130,9 +136,7 @@ export default class InvoiceItemValidator {
     private async checkEditedValueAgainstRemainingValue() {
         const [otherItemsValueObject, thisItemSaved] = await Promise.all([
             this.getItemsValue(),
-            InvoiceItemsController.find([
-                { invoiceItemId: this.invoiceItem.id },
-            ]),
+            this.repository.find([{ invoiceItemId: this.invoiceItem.id }]),
         ]);
         console.log('thisItemSaved', thisItemSaved[0]._netValue);
         //wartość pozycji w bazie dla wszystkich faktur z bieżącego kontraktu bez bieżącej pozycji

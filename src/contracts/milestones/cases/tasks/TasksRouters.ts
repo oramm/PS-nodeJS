@@ -1,8 +1,6 @@
-import ToolsGapi from '../../../../setup/Sessions/ToolsGapi';
 import TasksController from './TasksController';
 import { app } from '../../../../index';
 import { Request, Response } from 'express';
-import { OAuth2Client } from 'google-auth-library';
 
 app.post('/tasks', async (req: Request, res: Response, next) => {
     try {
@@ -16,14 +14,8 @@ app.post('/tasks', async (req: Request, res: Response, next) => {
 
 app.post('/task', async (req: Request, res: Response, next) => {
     try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            async (auth: OAuth2Client) => {
-                const item = await TasksController.addNewTask(req.body, auth);
-                res.send(item);
-            }
-        );
+        const item = await TasksController.add(req.body);
+        res.send(item);
     } catch (error) {
         next(error);
     }
@@ -31,19 +23,9 @@ app.post('/task', async (req: Request, res: Response, next) => {
 
 app.put('/task/:id', async (req: Request, res: Response, next) => {
     try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            async (auth: OAuth2Client) => {
-                const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-                const item = await TasksController.updateTask(
-                    req.parsedBody,
-                    fieldsToUpdate,
-                    auth
-                );
-                res.send(item);
-            }
-        );
+        const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+        const item = await TasksController.edit(req.parsedBody, fieldsToUpdate);
+        res.send(item);
     } catch (error) {
         next(error);
     }
@@ -51,14 +33,8 @@ app.put('/task/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/task/:id', async (req: Request, res: Response, next) => {
     try {
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            async (auth: OAuth2Client) => {
-                const result = await TasksController.deleteTask(req.body, auth);
-                res.send(result);
-            }
-        );
+        const result = await TasksController.delete(req.body);
+        res.send(result);
     } catch (error) {
         next(error);
     }

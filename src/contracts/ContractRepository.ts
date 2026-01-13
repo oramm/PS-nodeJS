@@ -13,8 +13,11 @@ import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ToolsDb from '../tools/ToolsDb';
 import Setup from '../setup/Setup';
-import ContractRangesContractsController from './contractRangesContracts/ContractRangesController';
+import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import Tools from '../tools/Tools';
+import ContractEntityAssociationsHelper, {
+    ContractEntityAssociation,
+} from './ContractEntityAssociationsHelper';
 import Entity from '../entities/Entity';
 
 /**
@@ -25,6 +28,200 @@ export default class ContractRepository extends BaseRepository<
 > {
     constructor() {
         super('Contracts');
+    }
+
+    async addInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        // Dla ContractOur - musimy usunąć pola które należą do OurContractsData
+        // przed zapisem do tabeli Contracts (nie ma tam tych kolumn)
+        if (item instanceof ContractOur) {
+            // Tymczasowo zapisz wartości
+            const ourId = item.ourId;
+            const managerId = item.managerId;
+            const adminId = item.adminId;
+            const cityId = item.cityId;
+
+            // Usuń pola przed INSERT do Contracts
+            delete (item as any).ourId;
+            delete (item as any).managerId;
+            delete (item as any).adminId;
+            delete (item as any).cityId;
+
+            try {
+                // Dodaj do tabeli Contracts
+                await super.addInDb(item, externalConn, isPartOfTransaction);
+
+                // Przywróć wartości do obiektu
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+
+                // Dodaj dane w tabeli OurContractsData
+                const ourData = {
+                    _isIdNonIncrement: true,
+                    Id: item.id,
+                    OurId: ourId,
+                    ManagerId: managerId,
+                    AdminId: adminId,
+                    CityId: cityId,
+                };
+                await ToolsDb.addInDb(
+                    'OurContractsData',
+                    ourData,
+                    externalConn,
+                    isPartOfTransaction
+                );
+            } catch (error) {
+                // Przywróć wartości nawet przy błędzie
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+                throw error;
+            }
+        } else {
+            // ContractOther - standardowy zapis
+            await super.addInDb(item, externalConn, isPartOfTransaction);
+        }
+    }
+
+    async editInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        fieldsToUpdate?: string[]
+    ): Promise<void> {
+        // Dla ContractOur - musimy obsłużyć podzielone tabele
+        if (item instanceof ContractOur) {
+            // Pola które należą do OurContractsData (nie do Contracts)
+            const ourContractFields = [
+                'ourId',
+                'managerId',
+                'adminId',
+                'cityId',
+            ];
+
+            // Rozdziel fieldsToUpdate na pola dla każdej tabeli
+            const ourContractFieldsToUpdate = fieldsToUpdate?.filter((field) =>
+                ourContractFields.includes(field)
+            );
+            const contractFieldsToUpdate = fieldsToUpdate?.filter(
+                (field) => !ourContractFields.includes(field)
+            );
+
+            // Tymczasowo zapisz i usuń wartości pól OurContractsData
+            const ourId = item.ourId;
+            const managerId = item.managerId;
+            const adminId = item.adminId;
+            const cityId = item.cityId;
+
+            delete (item as any).ourId;
+            delete (item as any).managerId;
+            delete (item as any).adminId;
+            delete (item as any).cityId;
+
+            try {
+                // 1. Update tabeli Contracts (jeśli są pola do update)
+                if (
+                    !fieldsToUpdate ||
+                    (contractFieldsToUpdate?.length ?? 0) > 0
+                ) {
+                    await super.editInDb(
+                        item,
+                        externalConn,
+                        isPartOfTransaction,
+                        contractFieldsToUpdate
+                    );
+                }
+
+                // Przywróć wartości
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+
+                // 2. Update tabeli OurContractsData (jeśli są pola do update)
+                if (
+                    !fieldsToUpdate ||
+                    (ourContractFieldsToUpdate?.length ?? 0) > 0
+                ) {
+                    const ourData = {
+                        _isIdNonIncrement: true,
+                        id: item.id,
+                        ourId: ourId,
+                        managerId: managerId,
+                        adminId: adminId,
+                        cityId: cityId,
+                    };
+                    await ToolsDb.editInDb(
+                        'OurContractsData',
+                        ourData,
+                        externalConn,
+                        isPartOfTransaction,
+                        ourContractFieldsToUpdate
+                    );
+                }
+            } catch (error) {
+                // Przywróć wartości nawet przy błędzie
+                item.ourId = ourId;
+                item.managerId = managerId;
+                item.adminId = adminId;
+                item.cityId = cityId;
+                throw error;
+            }
+        } else {
+            // ContractOther - standardowy update
+            await super.editInDb(
+                item,
+                externalConn,
+                isPartOfTransaction,
+                fieldsToUpdate
+            );
+        }
+    }
+
+    async deleteFromDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean
+    ): Promise<void> {
+        if (item instanceof ContractOur) {
+            const sql = `DELETE FROM OurContractsData WHERE Id = ?`;
+            await ToolsDb.executePreparedStmt(
+                sql,
+                [item.id],
+                item,
+                externalConn,
+                isPartOfTransaction
+            );
+        }
+        await super.deleteFromDb(item, externalConn, isPartOfTransaction);
+    }
+
+    async isUniquePerProject(
+        contract: ContractOur | ContractOther
+    ): Promise<boolean> {
+        if (contract instanceof ContractOur) {
+            const sql = `SELECT Id FROM OurContractsData WHERE OurId = ?`;
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(
+                    mysql.format(sql, [contract.ourId])
+                )
+            );
+            return result.length > 0;
+        } else {
+            const sql = `SELECT Id FROM Contracts WHERE Number = ? AND ProjectOurId = ?`;
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(
+                    mysql.format(sql, [contract.number, contract.projectOurId])
+                )
+            );
+            return result.length > 0;
+        }
     }
 
     /**
@@ -76,12 +273,19 @@ export default class ContractRepository extends BaseRepository<
                     Admins.Email AS AdminEmail, 
                     Managers.Name AS ManagerName, 
                     Managers.Surname AS ManagerSurname, 
-                    Managers.Email AS ManagerEmail, 
+                    Managers.Email AS ManagerEmail,
                     RelatedContracts.Id AS RelatedId, 
                     RelatedContracts.Name AS RelatedName, 
                     RelatedContracts.GdFolderId AS RelatedGdFolderId,
-                    RelatedOurContractsData.AdminId AS RelatedAdminId,
-                    RelatedOurContractsData.ManagerId AS RelatedManagerId,
+                    RelatedOurContractsData.OurId AS RelatedOurId,
+                    RelatedManagers.Id AS RelatedManagerId,
+                    RelatedManagers.Name AS RelatedManagerName,
+                    RelatedManagers.Surname AS RelatedManagerSurname,
+                    RelatedManagers.Email AS RelatedManagerEmail,
+                    RelatedAdmins.Id AS RelatedAdminId,
+                    RelatedAdmins.Name AS RelatedAdminName,
+                    RelatedAdmins.Surname AS RelatedAdminSurname,
+                    RelatedAdmins.Email AS RelatedAdminEmail,
                     ContractTypes.Id AS MainContractTypeId, 
                     ContractTypes.Name AS TypeName, 
                     ContractTypes.IsOur AS TypeIsOur, 
@@ -96,6 +300,8 @@ export default class ContractRepository extends BaseRepository<
                   LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
                   LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
                   LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
+                  LEFT JOIN Persons AS RelatedManagers ON RelatedOurContractsData.ManagerId = RelatedManagers.Id
+                  LEFT JOIN Persons AS RelatedAdmins ON RelatedOurContractsData.AdminId = RelatedAdmins.Id
                   LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
                   LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id
                   LEFT JOIN ContractRangesContracts ON ContractRangesContracts.ContractId=mainContracts.Id
@@ -226,9 +432,7 @@ export default class ContractRepository extends BaseRepository<
         if (searchParams._contractRanges?.length) {
             const contractRangesCondition =
                 ToolsDb.makeOrConditionFromValueOrArray(
-                    searchParams._contractRanges.map(
-                        (range) => range.id
-                    ),
+                    searchParams._contractRanges.map((range) => range.id),
                     'ContractRangesContracts',
                     'ContractRangeId'
                 );
@@ -302,6 +506,8 @@ export default class ContractRepository extends BaseRepository<
         return wordGroups.join(' AND ');
     }
 
+    private rangeRepository = new ContractRangeContractRepository();
+
     private async setContractPartsbySearchParams(
         searchParams: ContractSearchParams
     ) {
@@ -309,85 +515,24 @@ export default class ContractRepository extends BaseRepository<
         let rangesPerContract: ContractRangePerContractData[] = [];
         //wybrano widok szczegółowy dla projketu lub kontraktu
         if (searchParams.projectOurId || searchParams.id) {
-            entitiesPerProject = await this.getContractEntityAssociationsList({
-                projectId: searchParams.projectOurId,
-                contractId: searchParams.id,
-                isArchived: searchParams.isArchived,
-            });
-            rangesPerContract =
-                await ContractRangesContractsController.getContractRangesContractsList(
-                    [
-                        {
-                            contractId: searchParams.id,
-                        },
-                    ]
+            entitiesPerProject =
+                await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
+                    {
+                        projectId: searchParams.projectOurId,
+                        contractId: searchParams.id,
+                        isArchived: searchParams.isArchived,
+                    }
                 );
+            // Użyj Repository zamiast Controller (Clean Architecture)
+            const rangeAssociations = await this.rangeRepository.find([
+                { contractId: searchParams.id },
+            ]);
+            rangesPerContract = rangeAssociations.map((assoc) => ({
+                _contractRange: assoc._contractRange,
+                associationComment: assoc.associationComment,
+            }));
         }
         return { entitiesPerProject, rangesPerContract };
-    }
-
-    private async getContractEntityAssociationsList(initParamObject: {
-        projectId?: string;
-        contractId?: number;
-        isArchived?: boolean;
-    }) {
-        const projectConditon =
-            initParamObject && initParamObject.projectId
-                ? mysql.format('Contracts.ProjectOurId = ?', [
-                      initParamObject.projectId,
-                  ])
-                : '1';
-
-        const contractConditon =
-            initParamObject && initParamObject.contractId
-                ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
-                : '1';
-        const sql = `SELECT
-                Contracts_Entities.ContractId,
-                Contracts_Entities.EntityId,
-                Contracts_Entities.ContractRole,
-                Entities.Name,
-                Entities.Address,
-                Entities.TaxNumber,
-                Entities.Www,
-                Entities.Email,
-                Entities.Phone
-                        FROM Contracts_Entities
-                        JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-                        JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
-                        LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-                        WHERE ${projectConditon} 
-                        AND ${contractConditon}
-                        ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return this.processContractEntityAssociations(result);
-    }
-
-    private processContractEntityAssociations(result: any[]) {
-        let newResult: ContractEntityAssociation[] = [];
-
-        for (const row of result) {
-            const item: ContractEntityAssociation = {
-                contractRole: row.ContractRole,
-                _contract: {
-                    id: row.ContractId,
-                },
-                _entity: new Entity({
-                    id: row.EntityId,
-                    name: row.Name,
-                    address: row.Address,
-                    taxNumber: row.TaxNumber,
-                    www: row.Www,
-                    email: row.Email,
-                    phone: row.Phone,
-                }),
-            };
-
-            newResult.push(item);
-        }
-        return newResult;
     }
 
     /**
@@ -415,13 +560,31 @@ export default class ContractRepository extends BaseRepository<
             number: row.Number,
             name: ToolsDb.sqlToString(row.Name!),
             _city: this.mapCityToModel(row),
-            //kontrakt powiązany z kontraktem na roboty
-            _ourContract: {
-                ourId: row.OurIdRelated,
-                id: row.RelatedId,
-                name: ToolsDb.sqlToString(row.RelatedName || ''),
-                gdFolderId: row.RelatedGdFolderId,
-            },
+            //kontrakt powiązany z kontraktem na roboty (tylko dla ContractOther)
+            _ourContract: row.RelatedId
+                ? {
+                      ourId: row.RelatedOurId,
+                      id: row.RelatedId,
+                      name: ToolsDb.sqlToString(row.RelatedName || ''),
+                      gdFolderId: row.RelatedGdFolderId,
+                      _admin: row.RelatedAdminEmail
+                          ? {
+                                id: row.RelatedAdminId,
+                                name: row.RelatedAdminName,
+                                surname: row.RelatedAdminSurname,
+                                email: row.RelatedAdminEmail,
+                            }
+                          : undefined,
+                      _manager: row.RelatedManagerEmail
+                          ? {
+                                id: row.RelatedManagerId,
+                                name: row.RelatedManagerName,
+                                surname: row.RelatedManagerSurname,
+                                email: row.RelatedManagerEmail,
+                            }
+                          : undefined,
+                  }
+                : undefined,
             _project: {
                 id: row.ProjectId,
                 ourId: row.ProjectOurId,
@@ -563,13 +726,9 @@ export default class ContractRepository extends BaseRepository<
         return sql;
     }
 }
-export type ContractEntityAssociation = {
-    contractRole: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER';
-    _contract: {
-        id: number;
-    };
-    _entity: Entity;
-};
+
+// Re-eksport typu dla backward compatibility
+export type { ContractEntityAssociation } from './ContractEntityAssociationsHelper';
 
 export type ContractPartsData = {
     entitiesPerProject: ContractEntityAssociation[];
@@ -642,8 +801,17 @@ type ContractRow = {
     CityName?: string | null;
     CityCode?: string | null;
     RelatedId?: number | null;
+    RelatedOurId?: string | null;
     RelatedName?: string | null;
     RelatedGdFolderId?: string | null;
+    RelatedManagerId?: number | null;
+    RelatedManagerName?: string | null;
+    RelatedManagerSurname?: string | null;
+    RelatedManagerEmail?: string | null;
+    RelatedAdminId?: number | null;
+    RelatedAdminName?: string | null;
+    RelatedAdminSurname?: string | null;
+    RelatedAdminEmail?: string | null;
     ContractRangesNames?: string | null;
     LastUpdated?: Date | string | null;
     entitiesPerProject?: ContractEntityAssociation[];

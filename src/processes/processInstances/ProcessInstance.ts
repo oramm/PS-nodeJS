@@ -17,9 +17,9 @@ export default class ProcessInstance extends BusinessObject {
         this.id = initParamObject.id;
         this.processId = initParamObject._process.id;
 
-        this.caseId = initParamObject._case.id;
-        this.taskId = initParamObject._task.id;
-        this.editorId = initParamObject.editorId;
+        this.caseId = initParamObject._case?.id ?? initParamObject.caseId;
+        this.taskId = initParamObject._task?.id ?? initParamObject.taskId;
+        this.editorId = initParamObject.editorId ?? initParamObject._editor?.id;
 
         this._lastUpdated = initParamObject._lastUpdated;
 

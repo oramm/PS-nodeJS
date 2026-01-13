@@ -5,14 +5,11 @@ import Task from './Task';
 import Milestone from '../../Milestone';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
-import {
-    OtherContractData,
-    OurContractData,
-} from '../../../../types/types';
-import TaskRepository,{TasksSearchParams,} from './TaskRepository';
+import { OtherContractData, OurContractData } from '../../../../types/types';
+import TaskRepository, { TasksSearchParams } from './TaskRepository';
 import Process from '../../../../processes/Process';
 import TasksTemplateForProcesssController from './taskTemplates/TasksTemplatesForProcessesController';
-import ScrumSheet from '../../../../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../../../../ScrumSheet/CurrentSprint';
 import BaseController from '../../../../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../../../../tools/ToolsSheets';
@@ -22,14 +19,14 @@ import { MilestoneData } from '../../../../types/types';
 import PersonsController from '../../../../persons/PersonsController';
 import { TaskData } from '../../../../types/types';
 
-export type {TasksSearchParams};
+export type { TasksSearchParams };
 
 type TaskPayload = TaskData & { _case?: any };
 
 export default class TasksController extends BaseController<
-    Task, 
+    Task,
     TaskRepository
-> {    
+> {
     private static instance: TasksController;
 
     constructor() {
@@ -43,60 +40,215 @@ export default class TasksController extends BaseController<
         return this.instance;
     }
 
-static async addNewTask(
-    taskPayload: TaskPayload, 
-    auth?: OAuth2Client
-) : Promise<Task> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
-        await instance.create(task);
-        
-        if(auth) {
-            await this.addInScrum(task, auth);
-        }
-        console.log(`Task ${task.name} added`);
-        return task;
-    }
-
-    static async find(
-        searchParams: TasksSearchParams[] = []
-    ): Promise<Task[]> {
+    // ==================== READ (bez auth) ====================
+    /**
+     * Wyszukuje zadania według parametrów
+     * @param searchParams - Parametry wyszukiwania
+     * @returns Promise<Task[]> - Lista zadań
+     */
+    static async find(searchParams: TasksSearchParams[] = []): Promise<Task[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
     }
 
-    static async updateTask(
-        taskPayload: TaskPayload, 
-        fieldsToUpdate: string[], 
+    // ==================== CREATE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Dodaje nowe zadanie do systemu
+     *
+     * @param taskPayload - Dane zadania do dodania
+     * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     * @returns Promise<Task> - Dodane zadanie
+     */
+    static async add(
+        taskPayload: TaskPayload,
         auth?: OAuth2Client
     ): Promise<Task> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
-
-        const dbPromise = instance.edit(task, undefined, undefined, fieldsToUpdate);
-        const scrumPromise = auth ? this.editInScrum(task, auth) : Promise.resolve();
-        await Promise.all([dbPromise, scrumPromise]);
-
-        console.log(`Task ${task.name} updated`);
-        return task;
+        return await this.withAuth<Task>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.addTask(authClient, taskPayload);
+            },
+            auth
+        );
     }
-    
-    static async deleteTask(
-        taskPayload: TaskPayload, 
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Dodaje zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do dodania
+     * @returns Promise<Task> - Dodane zadanie
+     */
+    private async addTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload
+    ): Promise<Task> {
+        console.group('TasksController.addTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
+
+            // 1. Dodaj do DB
+            await this.create(task);
+            console.log('Task added to DB');
+
+            // 2. Dodaj do Scrum Sheet
+            await TasksController.addInScrum(task, auth);
+            console.log(`Task ${task.name} added to Scrum`);
+
+            return task;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== UPDATE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Aktualizuje istniejące zadanie
+     *
+     * @param taskPayload - Dane zadania do aktualizacji
+     * @param fieldsToUpdate - Lista pól do aktualizacji
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns Promise<Task> - Zaktualizowane zadanie
+     */
+    static async edit(
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[],
         auth?: OAuth2Client
-    ): Promise<{id: number | undefined}> {
-        const instance = this.getInstance();
-        const { _case, ...rest } = taskPayload;
-        const task = new Task({ ...rest, _parent: _case });
+    ): Promise<Task> {
+        return await this.withAuth<Task>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.editTask(
+                    authClient,
+                    taskPayload,
+                    fieldsToUpdate
+                );
+            },
+            auth
+        );
+    }
 
-        const dbPromise = instance.delete(task);
-        const scrumPromise = auth ? this.deleteFromScrum(task, auth) : Promise.resolve();
-        await Promise.all([dbPromise, scrumPromise]);
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Edytuje zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do aktualizacji
+     * @param fieldsToUpdate - Lista pól do aktualizacji
+     * @returns Promise<Task> - Zaktualizowane zadanie
+     */
+    private async editTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[]
+    ): Promise<Task> {
+        console.group('TasksController.editTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
 
-        console.log(`Task with id ${task.id} deleted`);
-        return {id: task.id};
+            // Równoległe wykonanie DB i Scrum update
+            const dbPromise = this.repository.editInDb(
+                task,
+                undefined,
+                undefined,
+                fieldsToUpdate
+            );
+            const scrumPromise = TasksController.editInScrum(task, auth);
+            await Promise.all([dbPromise, scrumPromise]);
+
+            console.log(`Task ${task.name} updated`);
+            return task;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== DELETE ====================
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Usuwa zadanie z systemu
+     *
+     * @param taskPayload - Dane zadania do usunięcia
+     * @param auth - Opcjonalny OAuth2Client
+     * @returns Promise<{id: number | undefined}> - ID usuniętego zadania
+     */
+    static async delete(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<{ id: number | undefined }> {
+        return await this.withAuth<{ id: number | undefined }>(
+            async (instance: TasksController, authClient: OAuth2Client) => {
+                return await instance.deleteTask(authClient, taskPayload);
+            },
+            auth
+        );
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Usuwa zadanie - orkiestruje DB i Scrum operations
+     *
+     * @param auth - OAuth2Client dla operacji Google Sheets
+     * @param taskPayload - Dane zadania do usunięcia
+     * @returns Promise<{id: number | undefined}> - ID usuniętego zadania
+     */
+    private async deleteTask(
+        auth: OAuth2Client,
+        taskPayload: TaskPayload
+    ): Promise<{ id: number | undefined }> {
+        console.group('TasksController.deleteTask()');
+        try {
+            const { _case, ...rest } = taskPayload;
+            const task = new Task({ ...rest, _parent: _case });
+
+            // Równoległe wykonanie DB i Scrum delete
+            const dbPromise = this.repository.deleteFromDb(task);
+            const scrumPromise = TasksController.deleteFromScrum(task, auth);
+            await Promise.all([dbPromise, scrumPromise]);
+
+            console.log(`Task with id ${task.id} deleted`);
+            return { id: task.id };
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== DEPRECATED (dla kompatybilności wstecznej) ====================
+    /**
+     * @deprecated Użyj TasksController.add(taskPayload, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
+    static async addNewTask(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        return await this.add(taskPayload, auth);
+    }
+
+    /**
+     * @deprecated Użyj TasksController.edit(taskPayload, fieldsToUpdate, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
+    static async updateTask(
+        taskPayload: TaskPayload,
+        fieldsToUpdate: string[],
+        auth?: OAuth2Client
+    ): Promise<Task> {
+        return await this.edit(taskPayload, fieldsToUpdate, auth);
+    }
+
+    /**
+     * @deprecated Użyj TasksController.delete(taskPayload, auth) zamiast tego.
+     * Metoda zachowana dla kompatybilności wstecznej.
+     */
+    static async deleteTask(
+        taskPayload: TaskPayload,
+        auth?: OAuth2Client
+    ): Promise<{ id: number | undefined }> {
+        return await this.delete(taskPayload, auth);
     }
 
     static processTasksResult(result: any[]): Task[] {
@@ -197,9 +349,9 @@ static async addNewTask(
         return newResult;
     }
 
-/* Służy do dodwania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
-        *
-        */
+    /* Służy do dodwania zadań domyślnych dla procesów. Jest odpalana w addNewProcessInstancesForCaseInDb()
+     *
+     */
     static async addInDbFromTemplateForProcess(
         process: Process,
         parentCase: Case,
@@ -211,9 +363,9 @@ static async addNewTask(
             conn.threadId
         );
         const taskTemplate = (
-            await TasksTemplateForProcesssController.getTasksTemplateForProcesssList(
-                { processId: process.id }
-            )
+            await TasksTemplateForProcesssController.find({
+                processId: process.id,
+            })
         )[0];
         if (taskTemplate) {
             const task = new Task({
@@ -222,8 +374,13 @@ static async addNewTask(
                 status: 'Backlog',
                 _parent: parentCase,
             });
-
-            return await task.addInDb(conn, isPartOfTransaction);
+            const instance = this.getInstance();
+            return await instance.repository.addInDb(
+                task,
+                conn,
+                isPartOfTransaction
+            );
+            //return await task.addInDb(conn, isPartOfTransaction);
         }
     }
 
@@ -236,6 +393,7 @@ static async addNewTask(
 
         const sql = `SELECT
             Cases.Name AS CaseName,
+            Cases.GdFolderId AS CaseGdFolderId,
             Cases.TypeId AS CaseTypeId,
             Cases.Number AS CaseNumber,
             CaseTypes.Name AS CaseTypeName,
@@ -271,6 +429,7 @@ static async addNewTask(
             var row = result[0];
             return {
                 caseName: <string | undefined>row.CaseName,
+                caseGdFolderId: <string | undefined>row.CaseGdFolderId,
                 caseTypeId: <number>row.CaseTypeId,
                 caseNumber: <number>row.CaseNumber,
                 caseTypeName: <string>row.CaseTypeName,
@@ -293,7 +452,7 @@ static async addNewTask(
             throw err;
         }
     }
-    
+
     static async addInScrum(
         task: Task,
         auth: OAuth2Client,
@@ -311,7 +470,9 @@ static async addNewTask(
                 return;
             }
             if (!task.caseId) {
-                throw new Error('Task must have a caseId to be added to Scrum.');
+                throw new Error(
+                    'Task must have a caseId to be added to Scrum.'
+                );
             }
             const parents = await this.getParents(task.caseId, conn);
             let currentSprintValues = <any[][]>(
@@ -408,6 +569,14 @@ static async addNewTask(
                 ? ' ' + parents.contractAlias
                 : '';
 
+            // Create case name as HYPERLINK formula when we have gd folder id
+            const caseLabel =
+                parents.caseGdFolderId && parents.caseName
+                    ? `=HYPERLINK("${ToolsGd.createGdFolderUrl(
+                          parents.caseGdFolderId
+                      )}";"${parents.caseName}")`
+                    : parents.caseName;
+
             const parentsData = [
                 [
                     parents.projectId,
@@ -427,7 +596,7 @@ static async addNewTask(
                         ' ' +
                         parents.caseTypeName +
                         parentCaseDisplayNumber,
-                    parents.caseName,
+                    caseLabel,
                     task.name,
                     task.deadline ? task.deadline : '',
                     '',
@@ -449,24 +618,15 @@ static async addNewTask(
                 values: parentsData,
             });
 
-            await ScrumSheet.CurrentSprint.setSprintSumsInRows(
-                auth,
-                lastContractRow + 1
-            );
+            await CurrentSprint.setSprintSumsInRows(auth, lastContractRow + 1);
 
             if (!isPartOfBatch) {
                 //odtwórz #Times (ostatnie kolumny arkusza)
-                await ScrumSheet.CurrentSprint.setSumInContractRow(
-                    auth,
-                    ourContractOurId
-                );
-                await ScrumSheet.CurrentSprint.sortContract(
-                    auth,
-                    ourContractOurId
-                );
+                await CurrentSprint.setSumInContractRow(auth, ourContractOurId);
+                await CurrentSprint.sortContract(auth, ourContractOurId);
                 console.log('tasks rows in contract sorted');
                 if (lastContractRow < 13) {
-                    await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
+                    await CurrentSprint.makeTimesSummary(auth);
                     console.log('times Summary table is rebuilt');
                 }
             }
@@ -480,7 +640,7 @@ static async addNewTask(
             }
         }
     }
-    
+
     /**
      * sprawdza czy zadanie powinno znaleźć się w arkuszu SCRUM
      * @param externalConn
@@ -498,7 +658,9 @@ static async addNewTask(
         console.log('Task shouldBeInScrum conn', conn.threadId);
         try {
             if (task._owner && task._owner.id) {
-                const systemRole = await PersonsController.getSystemRole({ id: task._owner.id });
+                const systemRole = await PersonsController.getSystemRole({
+                    id: task._owner.id,
+                });
                 if (!systemRole)
                     throw new Error('Użytkownik nie zarejestrowany w systemie');
                 test =
@@ -508,9 +670,11 @@ static async addNewTask(
             } else test = task.status !== 'Backlog';
 
             if (!test) return test;
-            
+
             if (!task.caseId) {
-                throw new Error('Task must have a caseId to be checked in Scrum.');
+                throw new Error(
+                    'Task must have a caseId to be checked in Scrum.'
+                );
             }
             const parents = await this.getParents(task.caseId, conn);
             const result = await ToolsSheets.getValues(auth, {
@@ -600,7 +764,7 @@ static async addNewTask(
     }
 
     static async deleteFromScrum(task: Task, auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
             valueToFind: <number>task.id,
         });

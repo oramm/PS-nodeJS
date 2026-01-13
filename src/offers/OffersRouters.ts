@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
-import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import OurOffer from './OurOffer';
 import { CityData, OfferData } from '../types/types';
 import OffersController from './OffersController';
@@ -8,11 +7,12 @@ import ExternalOffer from './ExternalOffer';
 import EnviErrors from '../tools/Errors';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
+import OfferBondsController from './OfferBond/OfferBondsController';
 
 app.post('/offers', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await OffersController.getOffersList(orConditions);
+        const result = await OffersController.find(orConditions);
         res.send(result);
     } catch (error) {
         next(error);
@@ -33,22 +33,17 @@ app.post('/offer', async (req: Request, res: Response, next) => {
             taskId,
         } as SessionTask);
 
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
         setImmediate(async () => {
             try {
-                await ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    item.addNewController,
-                    [req.session.userData, taskId],
-                    item
-                );
+                await OffersController.add(item, req.session.userData!, taskId);
                 TaskStore.complete(
                     taskId,
                     item,
                     'Oferta pomyślnie zarejestrowana'
                 );
             } catch (err) {
-                console.error('Błąd async GAPI:', err);
+                console.error('Błąd async:', err);
                 TaskStore.fail(taskId, (err as Error).message);
             }
         });
@@ -70,18 +65,17 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
             taskId,
         } as SessionTask);
 
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
         setImmediate(async () => {
             try {
-                await ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    item.editController,
-                    [taskId, req.parsedBody._fieldsToUpdate],
-                    item
+                await OffersController.edit(
+                    item,
+                    taskId,
+                    req.parsedBody._fieldsToUpdate
                 );
-                TaskStore.complete(taskId, item, 'Oferta zmnieniona pomyślnie');
+                TaskStore.complete(taskId, item, 'Oferta zmieniona pomyślnie');
             } catch (err) {
-                console.error('Błąd async GAPI:', err);
+                console.error('Błąd async:', err);
                 TaskStore.fail(taskId, (err as Error).message);
             }
         });
@@ -97,14 +91,15 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
         const item = await makeOfferObject(req);
         if (!req.parsedBody._newEvent?._gdFilesBasicData?.length)
             throw new Error('Brak plików do wysłania');
-        if (item instanceof OurOffer)
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.sendOfferController,
-                [req.session.userData, req.parsedBody._newEvent],
-                item
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        if (item instanceof OurOffer) {
+            await OffersController.sendOurOffer(
+                item,
+                req.session.userData!,
+                req.parsedBody._newEvent
             );
+        }
         res.send(item);
     } catch (error) {
         next(error);
@@ -114,14 +109,11 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
 app.put('/exportOurOfferToPDF', async (req: Request, res: Response, next) => {
     try {
         const item = await makeOfferObject(req);
-        if (item instanceof OurOffer)
-            await ToolsGapi.gapiReguestHandler(
-                req,
-                res,
-                item.exportToPDF,
-                [req.session.userData],
-                item
-            );
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        if (item instanceof OurOffer) {
+            await OffersController.exportOfferToPDF(item);
+        }
         res.send(item);
     } catch (error) {
         next(error);
@@ -133,14 +125,10 @@ app.post(
     async (req: Request, res: Response, next) => {
         try {
             const item = await makeOfferObject(req);
+
+            // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
             if (item instanceof OurOffer) {
-                const result = await ToolsGapi.gapiReguestHandler(
-                    req,
-                    res,
-                    item.getOfferFilesData,
-                    undefined,
-                    item
-                );
+                const result = await OffersController.getOfferFilesData(item);
                 res.send(result);
             }
         } catch (error) {
@@ -152,7 +140,11 @@ app.post(
 app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = (await makeOfferObject(req)) as ExternalOffer;
-        await item.addNewOfferBondController();
+
+        // ✅ Bezpośrednie wywołanie Controller zamiast metody Model
+        if (!item._offerBond) throw new Error('No OfferBond data');
+        await OfferBondsController.addNew(item._offerBond, item);
+
         res.send(item);
     } catch (error) {
         next(error);
@@ -162,7 +154,11 @@ app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
 app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = (await makeOfferObject(req)) as ExternalOffer;
-        await item.editOfferBondController();
+
+        // ✅ Bezpośrednie wywołanie Controller zamiast metody Model
+        if (!item._offerBond) throw new Error('No OfferBond data');
+        await OfferBondsController.edit(item._offerBond, item);
+
         res.send(item);
     } catch (error) {
         next(error);
@@ -172,7 +168,12 @@ app.put('/editOfferBond/:id', async (req: Request, res: Response, next) => {
 app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
     try {
         const item = (await makeOfferObject(req)) as ExternalOffer;
-        await item.deleteOfferBondController();
+
+        // ✅ Bezpośrednie wywołanie Controller zamiast metody Model
+        if (!item._offerBond) throw new Error('No OfferBond data');
+        await OfferBondsController.delete(item._offerBond);
+        item._offerBond = null;
+
         res.send(item);
     } catch (error) {
         next(error);
@@ -182,13 +183,10 @@ app.put('/deleteOfferBond/:id', async (req: Request, res: Response, next) => {
 app.delete('/offer/:id', async (req: Request, res: Response, next) => {
     try {
         const item = await makeOfferObject(req);
-        await ToolsGapi.gapiReguestHandler(
-            req,
-            res,
-            item.deleteController,
-            undefined,
-            item
-        );
+
+        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
+        await OffersController.delete(item, req.session.userData);
+
         res.send(item);
     } catch (error) {
         console.error(error);

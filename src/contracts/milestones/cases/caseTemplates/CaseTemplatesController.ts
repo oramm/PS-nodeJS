@@ -1,8 +1,12 @@
+import BaseController from '../../../../controllers/BaseController';
 import ToolsDb from '../../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import MilestoneType from '../../milestoneTypes/MilestoneType';
 import CaseType from '../caseTypes/CaseType';
 import CaseTemplate from './CaseTemplate';
+import CaseTemplateRepository from './CaseTemplateRepository';
+import PersonsController from '../../../../persons/PersonsController';
+import { UserData } from '../../../../types/sessionTypes';
 
 export type CaseTemplatesSearchParams = {
     isDefaultOnly?: boolean;
@@ -11,11 +15,60 @@ export type CaseTemplatesSearchParams = {
     milestoneTypeId?: number;
 };
 
-export default class CaseTemplatesController {
+/**
+ * Controller dla CaseTemplate - warstwa aplikacji/serwisu
+ * ZGODNIE Z WYTYCZNYMI Clean Architecture:
+ * - Orkiestruje operacje (Repository, Model, transakcje)
+ * - Zarządza transakcjami bazodanowymi
+ * - NIE pisze zapytań SQL (→ Repository)
+ * - NIE zawiera logiki biznesowej (→ Model)
+ */
+export default class CaseTemplatesController extends BaseController<
+    CaseTemplate,
+    CaseTemplateRepository
+> {
+    private static instance: CaseTemplatesController;
+
+    constructor() {
+        super(new CaseTemplateRepository());
+    }
+
+    /**
+     * Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
+     */
+    private static getInstance(): CaseTemplatesController {
+        if (!this.instance) {
+            this.instance = new CaseTemplatesController();
+        }
+        return this.instance;
+    }
+
+    // ==================== READ ====================
+
+    /**
+     * Wyszukuje szablony spraw
+     * API PUBLICZNE - zgodne z Clean Architecture
+     *
+     * @deprecated Użyj find() zamiast getCaseTemplatesList()
+     */
     static async getCaseTemplatesList(
         searchParams: CaseTemplatesSearchParams,
         milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
     ) {
+        return this.find(searchParams, milestoneParentType);
+    }
+
+    /**
+     * Wyszukuje szablony spraw
+     * API PUBLICZNE - zgodne z Clean Architecture
+     * @param searchParams - Parametry wyszukiwania
+     * @param milestoneParentType - Typ rodzica kamienia milowego (CONTRACT | OFFER)
+     * @returns Promise<CaseTemplate[]>
+     */
+    static async find(
+        searchParams: CaseTemplatesSearchParams = {},
+        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
+    ): Promise<CaseTemplate[]> {
         const isDefaultCondition = searchParams.isDefaultOnly
             ? 'CaseTypes.IsDefault = TRUE'
             : '1';
@@ -72,8 +125,8 @@ export default class CaseTemplatesController {
         return this.processCaseTemplatesResult(result);
     }
 
-    static processCaseTemplatesResult(result: any[]): [CaseTemplate?] {
-        let newResult: [CaseTemplate?] = [];
+    static processCaseTemplatesResult(result: any[]): CaseTemplate[] {
+        let newResult: CaseTemplate[] = [];
 
         for (const row of result) {
             const item = new CaseTemplate({
@@ -101,5 +154,141 @@ export default class CaseTemplatesController {
             newResult.push(item);
         }
         return newResult;
+    }
+
+    // ==================== ADD ====================
+
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Dodaje nowy CaseTemplate do bazy danych
+     *
+     * @param item - CaseTemplate do dodania
+     * @param userData - Dane użytkownika z sesji (do ustawienia _editor)
+     * @returns Promise<CaseTemplate> - Dodany obiekt
+     */
+    static async add(
+        item: CaseTemplate,
+        userData?: UserData
+    ): Promise<CaseTemplate> {
+        const instance = this.getInstance();
+        return await instance.addItem(item, userData);
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Dodaje CaseTemplate do bazy danych
+     */
+    private async addItem(
+        item: CaseTemplate,
+        userData?: UserData
+    ): Promise<CaseTemplate> {
+        console.group('CaseTemplatesController.addItem()');
+        try {
+            // Ustaw _editor jeśli userData jest przekazany
+            if (userData && !item._editor) {
+                item._editor =
+                    await PersonsController.getPersonFromSessionUserData(
+                        userData
+                    );
+                item.editorId = item._editor.id;
+            }
+
+            // Transakcja DB
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await this.repository.addInDb(item, conn, true);
+            });
+            console.log('added in db');
+            return item;
+        } catch (err) {
+            console.error('Error adding CaseTemplate:', err);
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== EDIT ====================
+
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Aktualizuje istniejący CaseTemplate
+     *
+     * @param item - CaseTemplate do aktualizacji
+     * @param userData - Dane użytkownika z sesji (do ustawienia _editor)
+     * @returns Promise<CaseTemplate> - Zaktualizowany obiekt
+     */
+    static async edit(
+        item: CaseTemplate,
+        userData?: UserData
+    ): Promise<CaseTemplate> {
+        const instance = this.getInstance();
+        return await instance.editItem(item, userData);
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Aktualizuje CaseTemplate w bazie danych
+     */
+    private async editItem(
+        item: CaseTemplate,
+        userData?: UserData
+    ): Promise<CaseTemplate> {
+        console.group('CaseTemplatesController.editItem()');
+        try {
+            // Ustaw _editor jeśli userData jest przekazany
+            if (userData && !item._editor) {
+                item._editor =
+                    await PersonsController.getPersonFromSessionUserData(
+                        userData
+                    );
+                item.editorId = item._editor.id;
+            }
+
+            // Transakcja DB
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await this.repository.editInDb(item, conn, true);
+            });
+            console.log('edited in db');
+            return item;
+        } catch (err) {
+            console.error('Error editing CaseTemplate:', err);
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== DELETE ====================
+
+    /**
+     * API PUBLICZNE (dla Routera i innych klas)
+     * Usuwa CaseTemplate z bazy danych
+     *
+     * @param item - CaseTemplate do usunięcia
+     * @returns Promise<void>
+     */
+    static async delete(item: CaseTemplate): Promise<void> {
+        const instance = this.getInstance();
+        return await instance.deleteItem(item);
+    }
+
+    /**
+     * LOGIKA BIZNESOWA (prywatna)
+     * Usuwa CaseTemplate z bazy danych
+     */
+    private async deleteItem(item: CaseTemplate): Promise<void> {
+        console.group('CaseTemplatesController.deleteItem()');
+        try {
+            // Transakcja DB
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await this.repository.deleteFromDb(item, conn, true);
+            });
+            console.log('deleted from db');
+        } catch (err) {
+            console.error('Error deleting CaseTemplate:', err);
+            throw err;
+        } finally {
+            console.groupEnd();
+        }
     }
 }

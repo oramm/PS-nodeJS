@@ -7,9 +7,7 @@ description: 'AI Assistant Guidelines - Decision Trees, Pattern Recognition, Err
 
 > 🤖 **Plik specjalnie dla modeli AI** (GPT-4, Claude, Copilot)
 >
-> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md)
->
-> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md)
+> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md) | [Audyt](./architektura-refactoring-audit.md)
 
 ---
 
@@ -26,7 +24,7 @@ START: Nowa metoda/logika do implementacji
 │
 ├─ ❓ Czy orkiestruje wiele operacji (transakcje, wywołania repo/model)?
 │  └─ ✅ TAK → **CONTROLLER**
-│     └─ Przykład: `static async addNew(item)` z transakcją
+│     └─ Przykład: `static async add(item)` z transakcją
 │
 ├─ ❓ Czy jest logiką biznesową obiektu (walidacja, kalkulacje, generowanie)?
 │  └─ ✅ TAK → **MODEL**
@@ -58,7 +56,7 @@ async (req: Request, res: Response, next?: NextFunction) => {
 router.post('/letters', async (req, res, next) => {
     try {
         const letter = LettersController.createProperLetter(req.body);
-        await LettersController.addNew(letter);
+        await LettersController.add(letter);
         res.send(letter);
     } catch (error) {
         next(error);
@@ -86,7 +84,7 @@ static async methodName(
 
 // ✅ PRZYKŁAD:
 class LettersController extends BaseController<Letter, LetterRepository> {
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async add(letter: Letter): Promise<Letter> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             // Orkiestracja: Repository + asocjacje
@@ -99,7 +97,7 @@ class LettersController extends BaseController<Letter, LetterRepository> {
 
 // ❌ ANTI-PATTERN - Controller z SQL:
 class LettersController {
-    static async addNew(letter: Letter) {
+    static async add(letter: Letter) {
         const sql = `INSERT INTO Letters ...`;  // ❌ SQL → Repository
         await db.query(sql);
     }
@@ -199,13 +197,13 @@ import LettersController from './LettersController';  // ❌ CYKL!
 
 class Letter {
     async save() {
-        await LettersController.addNew(this);  // ❌ Model → Controller
+        await LettersController.add(this);  // ❌ Model → Controller
     }
 }
 
 // ✅ POPRAWNIE - Controller wywołuje Repository:
 // W LettersController.ts:
-static async addNew(letter: Letter) {
+static async add(letter: Letter) {
     await this.repository.addInDb(letter);
 }
 ```
@@ -221,7 +219,7 @@ class Letter {
 }
 
 // ✅ POPRAWNIE - przez Controller → Repository:
-await LettersController.addNew(letter);
+await LettersController.add(letter);
 ```
 
 #### 3. **Repository zawiera logikę biznesową**
@@ -259,10 +257,16 @@ router.post('/letters', async (req, res) => {
     res.send(letter);
 });
 
-// ✅ POPRAWNIE - tylko wywołanie Controller:
+// ✅ POPRAWNIE - Router przekazuje DTO do Controller:
+router.post('/letters', async (req, res) => {
+    const result = await LettersController.addFromDto(req.parsedBody);
+    res.send(result);
+});
+
+// ⚠️ LEGACY (tolerowane w istniejącym kodzie, nie kopiuj):
 router.post('/letters', async (req, res) => {
     const letter = LettersController.createProperLetter(req.body);
-    await LettersController.addNew(letter);
+    await LettersController.add(letter);
     res.send(letter);
 });
 ```
@@ -280,7 +284,7 @@ async addWithAssociations(letter: Letter) {
 
 // ✅ POPRAWNIE - transakcje w Controller:
 class LettersController {
-    static async addNew(letter: Letter) {
+    static async add(letter: Letter) {
         return await ToolsDb.transaction(async (conn) => {
             await this.repository.addInDb(letter, conn, true);
             await this.addEntitiesAssociations(letter, conn);  // Controller orkiestruje
@@ -300,10 +304,11 @@ Przed zatwierdzeniem kodu sprawdź:
 -   [ ] ❌ Repository **NIE** ma `if (item.validate())` ani kalkulacji
 -   [ ] ❌ Router **NIE** ma `new Model()` ani logiki biznesowej
 -   [ ] ❌ Repository **NIE** zarządza transakcjami (`ToolsDb.transaction`)
--   [ ] ✅ Przepływ: Router → Controller → Repository → Model
+-   [ ] ✅ Przepływ: Router → Controller.addFromDto() → Controller.add() → Repository → Model
 -   [ ] ✅ Controller zarządza transakcjami
 -   [ ] ✅ Repository dziedziczy po `BaseRepository<T>`
 -   [ ] ✅ Controller dziedziczy po `BaseController<T, R>`
+-   [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./architektura-szczegoly.md#7-unikanie-cykli-zależności))
 
 ---
 
@@ -318,7 +323,7 @@ export class Item extends BusinessObject {
     price: number;
 
     validate(): boolean {
-        return !!this.name && this.price > 0; // Logika biznesowa
+        return !!this.name && this.price > 0; // Logika biznesowa - invarianty
     }
 }
 
@@ -360,7 +365,20 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
         return this.instance;
     }
 
-    static async addNew(item: Item): Promise<Item> {
+    // ✅ PUBLIC API - Router wywołuje tę metodę
+    static async addFromDto(dto: ItemDto, auth?: OAuth2Client): Promise<Item> {
+        // 1. Walidacja (jeśli potrzebna)
+        // ItemValidator.validateItemTypeData(dto);
+
+        // 2. Tworzenie instancji Model (TU, nie w Routerze!)
+        const item = new Item(dto);
+
+        // 3. Delegacja do kanonicznej metody
+        return await this.add(item, auth);
+    }
+
+    // ✅ KANONICZNA METODA - używana wewnętrznie i w testach
+    static async add(item: Item, auth?: OAuth2Client): Promise<Item> {
         const instance = this.getInstance();
         return await ToolsDb.transaction(async (conn) => {
             await instance.repository.addInDb(item, conn, true);
@@ -375,11 +393,11 @@ export class ItemsController extends BaseController<Item, ItemRepository> {
 }
 
 // 4. ROUTER (routers/ItemsRouters.ts)
+// ✅ DOCELOWY WZORZEC - Router przekazuje DTO, nie tworzy Model
 router.post('/items', async (req, res, next) => {
     try {
-        const item = new Item(req.body);
-        await ItemsController.addNew(item);
-        res.send(item);
+        const result = await ItemsController.addFromDto(req.parsedBody);
+        res.send(result);
     } catch (error) {
         next(error);
     }
@@ -408,14 +426,55 @@ router.get('/items', async (req, res, next) => {
 
 ---
 
+## 🔍 PO REFAKTORYZACJI: Audyt Obowiązkowy
+
+Po każdej refaktoryzacji CRUD/Repository/Model, **ZAWSZE** przeprowadź audyt:
+
+### **Quick Checklist (dla AI):**
+
+```typescript
+// ✅ 1. Sprawdź mapowanie pól SQL → Model
+git show HEAD~1:old.ts | grep "row\." | sort > /tmp/old.txt
+grep "row\." new.ts | sort > /tmp/new.txt
+diff /tmp/old.txt /tmp/new.txt  // MUSI być puste!
+
+// ✅ 2. Sprawdź konstruktory
+grep "new ModelName\(" Repository.ts  // MUSI być wywołany!
+
+// ✅ 3. Sprawdź return type
+// Repository.find() → Promise<Model[]>, NIE Promise<ModelData[]>
+
+// ✅ 4. Sprawdź transakcje
+grep "ToolsDb.transaction" Repository.ts  // NIE MOŻE być!
+grep "ToolsDb.transaction" Controller.ts  // MUSI być!
+
+// ✅ 5. Sprawdź CRUD
+// Parametry metod (add, edit, delete) muszą być identyczne PRZED i PO
+
+// ✅ 6. Sprawdź deprecated
+grep "@deprecated" Model.ts  // MUSI istnieć!
+grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
+```
+
+### **Pełny Audyt:**
+
+📋 **[Szczegółowa checklist audytu refaktoryzacji](./architektura-refactoring-audit.md)**
+
+**KIEDY:** Po każdej refaktoryzacji warstw (Model → Controller → Repository)  
+**CZAS:** ~15-30 min  
+**WYNIK:** Raport audytu w komentarzu/commit message
+
+---
+
 ## 🔗 Powiązane Dokumenty
 
 -   [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference (5 min)
 -   [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
--   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns (PLANNED)
+-   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
+-   **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
 
 ---
 
 **Wersja:** 1.0  
-**Ostatnia aktualizacja:** 2024-10-28  
+**Ostatnia aktualizacja:** 2024-11-17  
 **Przeznaczenie:** GitHub Copilot, GPT-4, Claude, inne AI assistants

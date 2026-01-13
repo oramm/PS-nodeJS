@@ -1,49 +1,75 @@
+import BaseController from '../../controllers/BaseController';
+import ContractType from './ContractType';
+import ContractTypeRepository, {
+    ContractTypesSearchParams,
+} from './ContractTypeRepository';
 
-import { RowDataPacket } from "mysql2";
-import mysql from 'mysql2/promise';
-import ToolsDb from '../../tools/ToolsDb'
-import ContractType from "./ContractType";
+/**
+ * Controller dla typów kontraktów
+ * Wzorzec: Singleton + static methods + delegacja do Repository
+ * Przepływ: Router → Controller → Repository → Model
+ */
+export default class ContractTypesController extends BaseController<
+    ContractType,
+    ContractTypeRepository
+> {
+    private static instance: ContractTypesController;
 
-export type ContractTypesSearchParams = {
-    status?: string,
-}
-
-export default class ContractTypesController {
-    static async getContractTypesList(initParamObject: ContractTypesSearchParams[] = []) {
-
-        const sql = `SELECT ContractTypes.Id,
-                        ContractTypes.Name,
-                        ContractTypes.Description,
-                        ContractTypes.IsOur,
-                        ContractTypes.Status
-                    FROM ContractTypes
-                    WHERE ${ToolsDb.makeOrGroupsConditions(initParamObject, this.makeAndConditions.bind(this))}`;
-
-        const result = <RowDataPacket[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return this.processContractTypesResult(result);
+    private constructor() {
+        super(new ContractTypeRepository());
     }
 
-    static makeAndConditions(searchParams: ContractTypesSearchParams) {
-        const { status } = searchParams;
-        const statusCondition = status
-            ? mysql.format(`ContractTypes.Status=?`, [status])
-            : '1';
-
-        return `${statusCondition}`;
-    }
-
-    static processContractTypesResult(result: RowDataPacket[]): ContractType[] {
-        let newResult: ContractType[] = [];
-        for (const row of result) {
-            const item = new ContractType({
-                id: row.Id,
-                name: row.Name,
-                description: row.Description,
-                isOur: row.IsOur,
-                status: row.Status,
-            });
-            newResult.push(item);
+    private static getInstance(): ContractTypesController {
+        if (!this.instance) {
+            this.instance = new ContractTypesController();
         }
-        return newResult;
+        return this.instance;
+    }
+
+    /**
+     * Wyszukuje typy kontraktów według podanych kryteriów
+     * @param orConditions - tablica warunków wyszukiwania łączonych przez OR
+     */
+    static async find(
+        orConditions: ContractTypesSearchParams[] = [{}]
+    ): Promise<ContractType[]> {
+        const instance = this.getInstance();
+        return await instance.repository.find(orConditions);
+    }
+
+    /**
+     * Dodaje nowy typ kontraktu z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async addFromDto(dto: any): Promise<ContractType> {
+        const instance = this.getInstance();
+        const item = new ContractType(dto);
+        await instance.repository.addInDb(item);
+        return item;
+    }
+
+    /**
+     * Edytuje typ kontraktu z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async editFromDto(dto: any): Promise<ContractType> {
+        const instance = this.getInstance();
+        const item = new ContractType(dto);
+        await instance.repository.editInDb(item);
+        return item;
+    }
+
+    /**
+     * Usuwa typ kontraktu z DTO
+     * @param dto - dane z żądania HTTP
+     */
+    static async deleteFromDto(dto: any): Promise<ContractType> {
+        const instance = this.getInstance();
+        const item = new ContractType(dto);
+        await instance.repository.deleteFromDb(item);
+        return item;
     }
 }
+
+// Re-export typu dla backward compatibility
+export type { ContractTypesSearchParams } from './ContractTypeRepository';

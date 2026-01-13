@@ -26,12 +26,33 @@ export default class LetterEntityAssociationsController extends BaseController<
     /**
      * Singleton pattern - pobiera instancję kontrolera
      */
-    static getInstance(): LetterEntityAssociationsController {
+    private static getInstance(): LetterEntityAssociationsController {
         if (!LetterEntityAssociationsController.instance) {
             LetterEntityAssociationsController.instance =
                 new LetterEntityAssociationsController();
         }
         return LetterEntityAssociationsController.instance;
+    }
+
+    /**
+     * Dodaje nową asocjację Letter-Entity do bazy danych
+     *
+     * @param association - asocjacja Letter-Entity do dodania
+     * @param conn - połączenie do bazy (dla transakcji)
+     * @param isPartOfTransaction - czy operacja jest częścią większej transakcji
+     */
+    static async add(
+        association: LetterEntity,
+        conn: any,
+        isPartOfTransaction: boolean = true
+    ): Promise<LetterEntity> {
+        const instance = this.getInstance();
+        await instance.repository.addInDb(
+            association,
+            conn,
+            isPartOfTransaction
+        );
+        return association;
     }
 
     /**

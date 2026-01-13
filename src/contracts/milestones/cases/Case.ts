@@ -1,20 +1,14 @@
+import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import BusinessObject from '../../../BussinesObject';
-import { OAuth2Client } from 'google-auth-library';
-import Task from './tasks/Task';
-import ToolsGd from '../../../tools/ToolsGd';
-import ToolsDb from '../../../tools/ToolsDb';
+import CurrentSprint from '../../../ScrumSheet/CurrentSprint';
 import Setup from '../../../setup/Setup';
-import ToolsSheets from '../../../tools/ToolsSheets';
 import Tools from '../../../tools/Tools';
-import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
-import mysql from 'mysql2/promise';
-import ScrumSheet from '../../../ScrumSheet/ScrumSheet';
-import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
-import CaseType from './caseTypes/CaseType';
+import ToolsGd from '../../../tools/ToolsGd';
+import ToolsSheets from '../../../tools/ToolsSheets';
 import { CaseData, MilestoneData } from '../../../types/types';
-import TasksController from './tasks/TasksController';
-import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
+import CaseType from './caseTypes/CaseType';
+import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 
 export default class Case extends BusinessObject implements CaseData {
     id?: number;
@@ -72,43 +66,6 @@ export default class Case extends BusinessObject implements CaseData {
             : [];
     }
 
-    async addNewController(auth: OAuth2Client) {
-        console.group('Case.addNewController()');
-        try {
-            let caseData:
-                | {
-                      caseItem: Case;
-                      processInstances: ProcessInstance[] | undefined;
-                      defaultTasksInDb: Task[];
-                  }
-                | undefined;
-            //numer sprawy jest inicjowany dopiero po dodaniu do bazy - trigger w Db Cases
-            await this.createFolder(auth);
-            console.log('folder created');
-
-            caseData = await this.addInDb();
-            console.log('added in db');
-
-            await Promise.all([
-                this.editFolder(auth)
-                    .then(() => console.log('folder name corrected'))
-                    .catch((err) => console.log(err)),
-                this.addInScrum(auth, {
-                    defaultTasks: caseData?.defaultTasksInDb,
-                })
-                    .then(() => console.log('added in scrum'))
-                    .catch((err) => console.log(err)),
-            ]);
-        } catch (err) {
-            await this.deleteFolder(auth)
-                .then(() => console.log('folder deleted'))
-                .catch((err) => console.log(err));
-            throw err;
-        } finally {
-            console.groupEnd();
-        }
-    }
-
     setGdFolderIdAndUrl(gdFolderId: string) {
         this.gdFolderId = gdFolderId;
         this._gdFolderUrl = ToolsGd.createGdFolderUrl(gdFolderId);
@@ -137,69 +94,6 @@ export default class Case extends BusinessObject implements CaseData {
             this._folderName += ' - przenieś pliki i usuń folder';
         else if (this._type.isUniquePerMilestone)
             this._folderName = this._type.folderNumber + ' ' + this._type.name;
-    }
-
-    /**jest wywoływana w addInDb()
-     * tworzy instancję procesu i zadanie do scrumboarda na podstawie szablonu
-     */
-    async addNewProcessInstancesInDb(
-        externalConn: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false
-    ) {
-        if (!externalConn && isPartOfTransaction)
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        console.log(
-            'Case.addNewProcessInstancesInDb():: Id',
-            externalConn.threadId
-        );
-        const result = [];
-        if (!this._type._processes || this._type._processes.length <= 0) return;
-
-        //typ sprawy może mieć wiele procesów - sprawa automatycznie też
-        for (const process of this._type._processes) {
-            //dodaj zadanie ramowe z szablonu
-            const processInstanceTask = await TasksController.addInDbFromTemplateForProcess(
-                process,
-                this,
-                externalConn,
-                isPartOfTransaction
-            );
-
-            if (!processInstanceTask) continue;
-
-            const processInstance = new ProcessInstance({
-                _process: process,
-                _case: this,
-                _task: processInstanceTask,
-            });
-            await processInstance.addInDb(externalConn, isPartOfTransaction);
-            result.push(processInstance);
-        }
-        return result;
-    }
-    /** jest wywoływana w editCase()
-     * kasuje Instancje procesu i zadanie ramowe, potem tworzy je nanowo dla nowego typu sprawy
-     */
-    async editProcessInstancesInDb(
-        externalConn: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false
-    ) {
-        if (!externalConn && isPartOfTransaction)
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        await this.deleteProcessInstancesFromDb();
-        await this.addNewProcessInstancesInDb(
-            externalConn,
-            isPartOfTransaction
-        );
-    }
-
-    async deleteProcessInstancesFromDb() {
-        const sql = `DELETE FROM ProcessInstances WHERE CaseId =?`;
-        return await ToolsDb.executePreparedStmt(sql, [this.id], this);
     }
 
     /** sprawdza czy folder istnieje
@@ -306,177 +200,11 @@ export default class Case extends BusinessObject implements CaseData {
                 });
         }
     }
-    /** dla spraw uniquePerMilestone numeru nie ma */
-    async getNumberFromDb(externalConn?: mysql.PoolConnection) {
-        if (this._type.isUniquePerMilestone) return;
-        try {
-            const sql = `SELECT Cases.Number FROM Cases WHERE Cases.Id=${this.id}`;
-
-            const result = <mysql.RowDataPacket[]>(
-                await ToolsDb.getQueryCallbackAsync(sql, externalConn)
-            );
-            const row = result[0];
-            if (!row?.Number)
-                throw new Error(
-                    `No Number found in db for nonUnique Case ${this.id}`
-                );
-
-            return row.Number as number;
-        } catch (err) {
-            console.log(
-                'Error in getNumberFromDb() in Case',
-                this._typeFolderNumber_TypeName_Number_Name
-            );
-            throw err;
-        }
-    }
 
     async getTasksTemplates() {
         return await TaskTemplatesController.getTaskTemplatesList({
             caseTypeId: this.typeId,
         });
-    }
-
-    /** Tworzy domyślne zasania i zapisuje je w db
-     */
-    async createDefaultTasksInDb(
-        externalConn: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false
-    ) {
-        console.log(
-            'createDefaultTasksInDb :: connection Id',
-            externalConn?.threadId
-        );
-        const defaultTasks = [];
-        const defaultTaskTemplates = await this.getTasksTemplates();
-        for (const template of defaultTaskTemplates) {
-            const task = new Task({
-                name: template.name,
-                description: template.description,
-                status: template.status ? template.status : 'Nie rozpoczęty',
-                //deadline: template.deadline,
-                _parent: this,
-                _owner: this.makeTaskOwner(),
-            });
-            await task.addInDb(externalConn, isPartOfTransaction);
-            defaultTasks.push(task);
-        }
-        return defaultTasks;
-    }
-
-    private makeTaskOwner() {
-        if (this._parent?._contract && '_manager' in this._parent?._contract)
-            return this._parent?._contract?._manager;
-    }
-
-    async addInDb(
-        externalConn?: mysql.PoolConnection,
-        isPartOfTransaction: boolean = false
-    ) {
-        let conn: mysql.PoolConnection | undefined;
-        try {
-            conn = externalConn
-                ? externalConn
-                : await ToolsDb.getPoolConnectionWithTimeout();
-            if (!externalConn)
-                console.log('caseAddInDb:: connection created', conn.threadId);
-            else console.log('Case.addInDb:: Connection Id: ', conn.threadId);
-
-            if (!isPartOfTransaction) await conn.beginTransaction();
-            let caseItem: Case = await super.addInDb(conn, true);
-            const [processInstances, defaultTasks] = await Promise.all([
-                this.addNewProcessInstancesInDb(conn, true),
-                this.createDefaultTasksInDb(conn, true),
-            ]);
-
-            if (!isPartOfTransaction) await conn.commit();
-            if (!this.number) this.number = await this.getNumberFromDb(conn);
-            this.setDisplayNumber();
-            return {
-                caseItem,
-                processInstances: processInstances,
-                defaultTasksInDb: defaultTasks,
-            };
-        } catch (err) {
-            if (!isPartOfTransaction) {
-                await conn?.rollback();
-                console.log('<- rollback <-');
-            }
-            throw err;
-        } finally {
-            if (!externalConn) {
-                conn?.release();
-                console.log(
-                    'caseAddInDb:: connection released',
-                    conn?.threadId
-                );
-            }
-        }
-    }
-
-    async editInDb() {
-        const conn: mysql.PoolConnection = await ToolsDb.pool.getConnection();
-        try {
-            await conn.beginTransaction();
-            const promises = [];
-            promises.push(super.editInDb(conn, true));
-            if (this._processesInstances && this._processesInstances.length > 0)
-                promises.push(this.editProcessInstancesInDb(conn, true));
-
-            const res = await Promise.all(promises);
-            await conn.commit();
-            return res[0];
-        } catch (err) {
-            await conn.rollback();
-            throw err;
-        } finally {
-            conn.release();
-        }
-    }
-
-    /**
-     * Dodaje sprawę do arkusza danych i domyślne zadania do scrumboarda
-     */
-    async addInScrum(
-        auth: OAuth2Client,
-        parameters: {
-            defaultTasks: Task[];
-            isPartOfBatch?: boolean;
-        }
-    ) {
-        const caseData = [
-            this.id,
-            this.typeId,
-            this.milestoneId,
-            this.makenameCaption(),
-            this.gdFolderId ? this.gdFolderId : '',
-        ];
-        let scrumDataValues = <any[][]>(
-            await ToolsSheets.getValues(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                rangeA1: Setup.ScrumSheet.Data.name,
-            })
-        ).values;
-
-        if (
-            !Tools.findFirstInRange(
-                <number>this.id,
-                scrumDataValues,
-                scrumDataValues[0].indexOf(Setup.ScrumSheet.Data.caseIdColName)
-            )
-        )
-            ToolsSheets.appendRowsToSpreadSheet(auth, {
-                spreadsheetId: Setup.ScrumSheet.GdId,
-                sheetName: Setup.ScrumSheet.Data.name,
-                values: [caseData],
-            });
-        console.log(`added case ${this._type.name} do sheet "Data"`);
-        //dodaj sprawę do arkusza currentSprint
-        console.groupCollapsed('adding default tasks to scrumboard');
-        for (const task of parameters.defaultTasks)
-            await TasksController.addInScrum(task, auth, undefined, parameters.isPartOfBatch);
-        console.log('default tasks added to scrumboard');
-        console.groupEnd();
     }
 
     async editInScrum(auth: OAuth2Client) {
@@ -581,20 +309,13 @@ export default class Case extends BusinessObject implements CaseData {
         }
     }
 
-    private makenameCaption() {
+    /** Publiczna dla CasesController.addInScrum() */
+    makenameCaption() {
         let nameCaption;
         if (this.gdFolderId && this.name)
             nameCaption = `=HYPERLINK("${this._gdFolderUrl}";"${this.name}")`;
         else nameCaption = this.name ? this.name : '';
         return nameCaption;
-    }
-
-    async deleteController(auth: OAuth2Client) {
-        await this.deleteFromDb();
-        await Promise.all([
-            this.deleteFolder(auth),
-            this.deleteFromScrumSheet(auth),
-        ]);
     }
 
     async deleteFromScrumSheet(auth: OAuth2Client) {
@@ -633,7 +354,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     private async deleteFromCurrentSprintSheet(auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.caseIdColName,
             valueToFind: <number>this.id,
         });

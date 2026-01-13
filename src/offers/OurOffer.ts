@@ -11,10 +11,6 @@ import EnviErrors from '../tools/Errors';
 import Setup from '../setup/Setup';
 import ToolsGd from '../tools/ToolsGd';
 import OfferEvent from './offerEvent/OfferEvent';
-import OfferEventsController from './offerEvent/OfferEventsController';
-import { UserData } from '../types/sessionTypes';
-import PersonsController from '../persons/PersonsController';
-import ToolsDb from '../tools/ToolsDb';
 import OfferInvitationMail from './OfferInvitationMails/OfferInvitationMail';
 
 export default class OurOffer extends Offer implements OurOfferData {
@@ -38,70 +34,29 @@ export default class OurOffer extends Offer implements OurOfferData {
         }
     }
 
-    async addNewController(
-        auth: OAuth2Client,
-        userData: UserData,
-        taskId: string
-    ) {
-        await super.addNewController(auth, userData, taskId);
-        await this.bindInvitationMail(userData);
-        const ourOfferGdFile = new OurOfferGdFile({
-            enviDocumentData: { ...this },
-        });
-        await ourOfferGdFile.moveToMakeOfferFolder(auth);
-    }
-
-    protected async bindInvitationMail(userData: UserData) {
-        if (this._invitationMail === undefined) return;
-        const invitationMail = new OfferInvitationMail({
-            ...this._invitationMail,
-            _ourOfferId: this.id,
-            status: Setup.OfferInvitationMailStatus.DONE,
-        });
-        await invitationMail.editController(userData);
-    }
-
-    /** Kasuje invitationMailId ustawia status maila na NEW */
-    protected async unbindInvitationMail(userData: UserData) {
-        if (!this._invitationMail || !this._invitationMail.id) return;
-        const invitationMail = new OfferInvitationMail({
-            ...this._invitationMail,
-            status: Setup.OfferInvitationMailStatus.NEW,
-        });
-        await invitationMail.editController(userData);
-        this.invitationMailId = null;
-        this._invitationMail = undefined;
-    }
-
-    async deleteController(auth: OAuth2Client, userData: UserData) {
-        await ToolsDb.transaction(async () => {
-            this.unbindInvitationMail(userData);
-            super.deleteController(auth);
-        });
-    }
-
-    async sendOfferController(
-        auth: OAuth2Client,
-        userData: UserData,
-        newEventData: OfferEventData
-    ) {
-        const _editor = await PersonsController.getPersonFromSessionUserData(
-            userData
-        );
-
-        const newEvent = new OfferEvent({
+    /**
+     * Create SENT event for this offer
+     * BUSINESS LOGIC: Creates OfferEvent with SENT type
+     */
+    createSentEvent(
+        newEventData: OfferEventData,
+        editor: PersonData
+    ): OfferEvent {
+        return new OfferEvent({
             ...newEventData,
             eventType: Setup.OfferEventType.SENT,
-            _editor, //editorId: ustawia się w BussinesObject,
+            _editor: editor,
             offerId: this.id,
         });
-        await OfferEventsController.addNew(newEvent);
-        await OfferEventsController.sendMailWithOffer(auth, newEvent, this, [
-            userData.systemEmail,
-        ]);
-        this._lastEvent = newEvent;
+    }
+
+    /**
+     * Mark offer as sent
+     * BUSINESS LOGIC: Updates offer status and lastEvent
+     */
+    markAsSent(event: OfferEvent): void {
+        this._lastEvent = event;
         this.status = Setup.OfferStatus.DONE;
-        await this.editController(auth, undefined, ['status']);
     }
 
     async createGdElements(auth: OAuth2Client) {
@@ -147,15 +102,5 @@ export default class OurOffer extends Offer implements OurOfferData {
             ourOfferGdFile.editFileName(auth),
         ]);
         return letterGdFolder;
-    }
-
-    async getCurrentOfferVersionNumber(offerId: number) {
-        const sql = `SELECT MAX(VersionNumber) as VersionNumber
-        FROM OfferEvents
-        WHERE OfferId = ?`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return result[0].VersionNumber;
     }
 }

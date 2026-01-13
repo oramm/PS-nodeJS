@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import Contract from './Contract';
 import ContractOur from './ContractOur';
 import Setup from '../setup/Setup';
-import ScrumSheet from '../ScrumSheet/ScrumSheet';
+import CurrentSprint from '../ScrumSheet/CurrentSprint';
 import ToolsSheets from '../tools/ToolsSheets';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
@@ -57,26 +57,7 @@ export default class ContractOther
         if (this.alias) this._ourIdOrNumber_Alias += ' ' + this.alias;
         this.setFolderName();
     }
-
-    async addInDb() {
-        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await super.addInDb(conn, true);
-            await this.addEntitiesAssociationsInDb(conn, true);
-            await this.addContractRangesAssociationsInDb(conn, true);
-        });
-    }
-
-    async editInDb(
-        extenalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean,
-        _fieldsToUpdate?: string[]
-    ) {
-        const res = await ToolsDb.transaction(async (conn) => {
-            await super.editInDb(conn, true, _fieldsToUpdate);
-            await this.editEntitiesAssociationsInDb(conn, true);
-            await this.editContractRangesAssociationsInDb(conn, true);
-        });
-    }
+    // addInDb/editInDb logika przeniesiona do ContractsController (Phase 2-3)
 
     setFolderName() {
         this._folderName = `${this.number} ${this.alias || ''}`.trim();
@@ -145,7 +126,7 @@ export default class ContractOther
                 )
             ) + 1;
         if (firstRowNumber) {
-            await ScrumSheet.CurrentSprint.editRowsByColValue(auth, {
+            await CurrentSprint.editRowsByColValue(auth, {
                 searchColName:
                     Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
                 valueToFind: <number>this.id,
@@ -157,77 +138,24 @@ export default class ContractOther
             console.log('ContractOther edited In Scrum');
         } else {
             console.log('ContractOther not found in Scrum - adding tasks');
-            await this.addExistingTasksInScrum(auth);
-            //sprawdź czy jest macierzysta umowa ENVI dodana do Scruma
-            const contractOurIdColIndex = currentSprintValues[0].indexOf(
-                Setup.ScrumSheet.CurrentSprint.contractOurIdColName
-            );
-            firstRowNumber =
-                <number>(
-                    Tools.findFirstInRange(
-                        <string>this.ourIdRelated,
-                        currentSprintValues,
-                        contractOurIdColIndex
-                    )
-                ) + 1;
-
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
-                auth,
-                <string>this.ourIdRelated
-            );
-            await ScrumSheet.CurrentSprint.sortContract(
-                auth,
-                <string>this.ourIdRelated
-            );
-            if (firstRowNumber < 13) {
-                await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-                await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(
-                    auth
-                );
-            }
+            // Zwróć true - Controller wywoła addExistingTasksInScrum
+            return true;
         }
+        return false;
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
-        ScrumSheet.CurrentSprint.deleteRowsByColValue(auth, {
+        CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
             valueToFind: <number>this.id,
         });
     }
 
-    async createDefaultMilestones(auth: OAuth2Client, taskId: string) {
-        if (this.ourIdRelated) {
-            super.createDefaultMilestones(auth, taskId);
-            TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
-            await ScrumSheet.CurrentSprint.setSumInContractRow(
-                auth,
-                this.ourIdRelated
-            );
-            await ScrumSheet.CurrentSprint.sortContract(
-                auth,
-                this.ourIdRelated
-            );
-
-            await ScrumSheet.CurrentSprint.makeTimesSummary(auth);
-            await ScrumSheet.CurrentSprint.makePersonTimePerTaskFormulas(auth);
-        } else throw new Error('Kontrakt nie został przypisany do umowy ENVI');
-    }
-
     /**
-     * @returns true jeśli kontrakt ma unikalny numer w ramach projektu
+     * @deprecated Logic moved to ContractRepository.isUnique()
      */
     async isUniquePerProject(): Promise<boolean> {
-        const sql = `SELECT Id FROM Contracts WHERE 
-            Number = '${this.number}' AND ProjectOurId = "${this.projectOurId}"`;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            return result[0] ? true : false;
-        } catch (err) {
-            throw err;
-        }
+        throw new Error('Deprecated: Use ContractRepository.isUnique()');
     }
     protected makeNotUniqueErrorMessage(): string {
         return (
