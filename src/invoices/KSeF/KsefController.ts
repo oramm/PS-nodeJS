@@ -161,34 +161,60 @@ export default class KsefController {
     /**
      * Pobiera UPO (Urzędowe Poświadczenie Odbioru) dla faktury
      * 
+     * Flow pobierania UPO:
+     * 1. Jeśli mamy ważny upoDownloadUrl - użyj go (najszybsze, bez autoryzacji)
+     * 2. Jeśli URL wygasł lub brak - odpytaj status żeby uzyskać nowy URL
+     * 3. Pobierz UPO z nowego URL
+     * 
      * @param invoiceId - ID faktury w systemie
-     * @returns Buffer z plikiem UPO (PDF)
+     * @returns Buffer z plikiem UPO (XML)
      */
     static async downloadUpoByInvoiceId(invoiceId: number): Promise<Buffer> {
-        const meta = await KsefMetadataRepository.findByInvoiceId(invoiceId);
+        let meta = await KsefMetadataRepository.findByInvoiceId(invoiceId);
         if (!meta) {
             throw new Error(`Faktura ${invoiceId} nie była wysłana do KSeF`);
         }
 
-        // Preferuj bezpośredni URL jeśli dostępny (nie wymaga autoryzacji)
-        if (meta.UpoDownloadUrl && meta.UpoDownloadUrlExpirationDate) {
-            const expDate = new Date(meta.UpoDownloadUrlExpirationDate);
-            if (expDate > new Date()) {
-                // URL jeszcze ważny - pobierz bezpośrednio
-                const axios = require('axios');
-                const resp = await axios.get(meta.UpoDownloadUrl, { responseType: 'arraybuffer' });
-                return Buffer.from(resp.data);
-            }
-        }
-
-        // Fallback: pobierz przez API (wymaga ksefNumber)
         if (!meta.KsefNumber) {
             throw new Error('Brak numeru KSeF - sprawdź najpierw status faktury');
         }
-        
-        // Nowa instancja serwisu (fresh token)
+
+        // 1. Preferuj bezpośredni URL jeśli dostępny i ważny
+        if (meta.UpoDownloadUrl && meta.UpoDownloadUrlExpirationDate) {
+            const expDate = new Date(meta.UpoDownloadUrlExpirationDate);
+            if (expDate > new Date()) {
+                console.log(`   [KSeF] Pobieranie UPO przez bezpośredni URL (ważny do ${expDate.toISOString()})`);
+                const service = new KsefService();
+                return await service.downloadUpoFromUrl(meta.UpoDownloadUrl);
+            }
+            console.log('   [KSeF] URL UPO wygasł, odpytuję o nowy...');
+        }
+
+        // 2. URL wygasł lub nie mamy - odpytaj status żeby uzyskać nowy URL
+        if (!meta.SessionReferenceNumber || !meta.ReferenceNumber) {
+            throw new Error('Brak danych sesji - nie można uzyskać nowego URL UPO');
+        }
+
         const service = new KsefService();
-        return await service.downloadUpo(meta.KsefNumber);
+        const statusResp = await service.getInvoiceStatus(
+            meta.ReferenceNumber, 
+            meta.SessionReferenceNumber
+        );
+
+        // 3. Zaktualizuj metadata z nowym URL
+        if (statusResp.upoDownloadUrl) {
+            await KsefMetadataRepository.updateMetadata(invoiceId, {
+                upoDownloadUrl: statusResp.upoDownloadUrl,
+                upoDownloadUrlExpirationDate: statusResp.upoDownloadUrlExpirationDate,
+            });
+            
+            console.log(`   [KSeF] Uzyskano nowy URL UPO, pobieranie...`);
+            return await service.downloadUpoFromUrl(statusResp.upoDownloadUrl);
+        }
+
+        // 4. Fallback: pobierz przez endpoint sesyjny
+        console.log('   [KSeF] Brak URL UPO, próba przez endpoint sesyjny...');
+        return await service.downloadUpoByKsefNumber(meta.KsefNumber, meta.SessionReferenceNumber);
     }
 
     /**

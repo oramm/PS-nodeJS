@@ -185,9 +185,8 @@ app.get('/invoice/:id/ksef/status', async (req: Request, res: Response, next) =>
 
 /**
  * GET /invoice/:id/ksef/upo
- * Pobiera UPO (Urzędowe Poświadczenie Odbioru) w formacie PDF
+ * Pobiera UPO (Urzędowe Poświadczenie Odbioru)
  * 
- * Response: Plik PDF
  */
 app.get('/invoice/:id/ksef/upo', async (req: Request, res: Response, next) => {
     try {
@@ -198,8 +197,8 @@ app.get('/invoice/:id/ksef/upo', async (req: Request, res: Response, next) => {
         
         const upoBuffer = await KsefController.downloadUpoByInvoiceId(invoiceId);
         
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="UPO_faktura_${invoiceId}.pdf"`);
+        res.setHeader('Content-Type', 'application/xml');
+        res.setHeader('Content-Disposition', `inline; filename="UPO_faktura_${invoiceId}.xml"`);
         res.send(upoBuffer);
     } catch (error: any) {
         console.error('[KSeF] Błąd pobierania UPO:', error.message);

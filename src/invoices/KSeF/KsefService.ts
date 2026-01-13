@@ -640,22 +640,43 @@ export default class KsefService {
     }
 
     /**
-     * Pobierz UPO (Urzędowe Poświadczenie Odbioru) dla faktury
-     * GET /invoices/{ksefNumber}/upo
+     * Pobierz UPO (Urzędowe Poświadczenie Odbioru) dla faktury przez sesję
+     * GET /sessions/{sessionRef}/invoices/ksef/{ksefNumber}/upo
+     * 
+     * UWAGA: W KSeF API 2.0 nie ma bezpośredniego endpointu /invoices/{ksefNumber}/upo
+     * UPO można pobrać tylko:
+     * 1. Przez upoDownloadUrl z odpowiedzi statusu (preferowane)
+     * 2. Przez endpoint sesyjny (wymaga sessionReferenceNumber)
      */
-    async downloadUpo(ksefNumber: string): Promise<Buffer> {
+    async downloadUpoByKsefNumber(ksefNumber: string, sessionReferenceNumber: string): Promise<Buffer> {
         if (!this.accessToken) {
             await this.authenticateWithKsefToken();
         }
 
-        const response = await this.client.get(`/invoices/${ksefNumber}/upo`, {
-            headers: {
-                'Accept': 'application/pdf',
-                'Authorization': `Bearer ${this.accessToken}`
-            },
+        // Pobieranie UPO przez sesję wymaga sessionReferenceNumber
+        const response = await this.client.get(
+            `/sessions/${sessionReferenceNumber}/invoices/ksef/${ksefNumber}/upo`,
+            {
+                headers: {
+                    'Accept': 'application/xml', // UPO zwracane jako XML
+                    'Authorization': `Bearer ${this.accessToken}`
+                },
+                responseType: 'arraybuffer'
+            }
+        );
+
+        return Buffer.from(response.data);
+    }
+    
+    /**
+     * Pobierz UPO przez bezpośredni URL (nie wymaga autoryzacji)
+     * Preferowana metoda - używa linku z odpowiedzi statusu
+     */
+    async downloadUpoFromUrl(upoDownloadUrl: string): Promise<Buffer> {
+        const axios = require('axios');
+        const response = await axios.get(upoDownloadUrl, {
             responseType: 'arraybuffer'
         });
-
         return Buffer.from(response.data);
     }
 
