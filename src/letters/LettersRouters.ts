@@ -245,8 +245,9 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.post('/letters/analyze',
-  (req, res, next) => {
+app.post(
+  '/letters/analyze',
+  ((req: Request, res: Response, next: any) => {
     // console.log('--- Incoming /letters/analyze ---');
     // console.log('headers:', req.headers);
     // console.log('content-length:', req.headers['content-length']);
@@ -254,9 +255,9 @@ app.post('/letters/analyze',
     // req.on('aborted', () => console.log('req aborted. socket.bytesRead=', req.socket.bytesRead));
     // req.on('close', () => console.log('req close. socket.bytesRead=', req.socket.bytesRead));
     next();
-  },
-  upload.single('file'),
-  async (req, res, next) => {
+  }) as any,
+  upload.single('file') as any,
+  async (req: Request, res: Response, next: any) => {
     try {
       //console.log('After multer, file present?:', !!req.file, 'bytesRead after multer:', req.socket.bytesRead);
       if (!req.file) throw new Error("Nie załączono pliku do analizy.");
