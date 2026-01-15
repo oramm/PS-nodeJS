@@ -3,6 +3,7 @@ import SystemRoleService from './SystemRoleService';
 import ToolsDb from '../../tools/ToolsDb';
 import { Request, Response } from 'express';
 import { keys } from './credentials';
+import { SystemRoleName } from '../../types/sessionTypes';
 
 export const oAuthClient: OAuth2Client = new OAuth2Client(
     keys.installed.client_id,
@@ -49,6 +50,44 @@ export default class ToolsGapi {
 
     static async loginHandler(req: Request, res: Response) {
         try {
+            // ⚠️ DEV MODE: Check for mock authentication
+            const { dev_mode, mock_user } = req.body;
+
+            if (dev_mode === true) {
+                // SECURITY: Only allow in development with explicit flag
+                // SAFE: If ENABLE_DEV_LOGIN is undefined (not set), login will be blocked
+                if (
+                    process.env.NODE_ENV !== 'development' ||
+                    process.env.ENABLE_DEV_LOGIN !== 'true'
+                ) {
+                    throw new Error(
+                        'Dev mode login is not allowed in this environment'
+                    );
+                }
+
+                console.warn(
+                    '🔧 DEV MODE: Mock authentication - bypassing Google OAuth'
+                );
+
+                // Mock user data for Playwright/testing
+                req.session.userData = {
+                    enviId: 1,
+                    googleId: 'mock-google-id-playwright',
+                    systemEmail: 'playwright@test.local',
+                    userName: mock_user || 'Playwright Test User',
+                    picture: 'https://www.gravatar.com/avatar/?d=mp',
+                    systemRoleName: SystemRoleName.ADMIN,
+                    systemRoleId: 1,
+                };
+
+                console.log(
+                    '🔧 DEV: Mock user data set in session:',
+                    req.session.userData
+                );
+                return; // Exit early, skip Google OAuth
+            }
+
+            // NORMAL FLOW: Google OAuth verification
             const token = req.body.id_token;
 
             if (!token) throw new Error('No token provided');

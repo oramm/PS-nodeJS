@@ -37,7 +37,8 @@ export const app = express();
 //https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
     origin: [
-        'http://localhost',
+        'http://localhost', // Port 80 (domyślny)
+        'http://localhost:9000', // Apache - MUSISZ dodać jawnie
         'https://erp-envi.herokuapp.com',
         'https://erp.envi.com.pl',
         'https://ps.envi.com.pl',

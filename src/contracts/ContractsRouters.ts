@@ -32,10 +32,9 @@ app.post(
             let isArchived = false;
             if (typeof orConditions.isArchived === 'string')
                 isArchived = orConditions.isArchived === 'true';
-            const result =
-                await ContractsWithChildrenController.getContractsList(
-                    orConditions
-                );
+            const result = await ContractsWithChildrenController.find(
+                orConditions
+            );
             res.send(result);
         } catch (error) {
             next(error);

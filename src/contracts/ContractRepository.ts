@@ -15,6 +15,9 @@ import ToolsDb from '../tools/ToolsDb';
 import Setup from '../setup/Setup';
 import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import Tools from '../tools/Tools';
+import ContractEntityAssociationsHelper, {
+    ContractEntityAssociation,
+} from './ContractEntityAssociationsHelper';
 import Entity from '../entities/Entity';
 
 /**
@@ -270,12 +273,19 @@ export default class ContractRepository extends BaseRepository<
                     Admins.Email AS AdminEmail, 
                     Managers.Name AS ManagerName, 
                     Managers.Surname AS ManagerSurname, 
-                    Managers.Email AS ManagerEmail, 
+                    Managers.Email AS ManagerEmail,
                     RelatedContracts.Id AS RelatedId, 
                     RelatedContracts.Name AS RelatedName, 
                     RelatedContracts.GdFolderId AS RelatedGdFolderId,
-                    RelatedOurContractsData.AdminId AS RelatedAdminId,
-                    RelatedOurContractsData.ManagerId AS RelatedManagerId,
+                    RelatedOurContractsData.OurId AS RelatedOurId,
+                    RelatedManagers.Id AS RelatedManagerId,
+                    RelatedManagers.Name AS RelatedManagerName,
+                    RelatedManagers.Surname AS RelatedManagerSurname,
+                    RelatedManagers.Email AS RelatedManagerEmail,
+                    RelatedAdmins.Id AS RelatedAdminId,
+                    RelatedAdmins.Name AS RelatedAdminName,
+                    RelatedAdmins.Surname AS RelatedAdminSurname,
+                    RelatedAdmins.Email AS RelatedAdminEmail,
                     ContractTypes.Id AS MainContractTypeId, 
                     ContractTypes.Name AS TypeName, 
                     ContractTypes.IsOur AS TypeIsOur, 
@@ -290,6 +300,8 @@ export default class ContractRepository extends BaseRepository<
                   LEFT JOIN ContractTypes ON ContractTypes.Id = mainContracts.TypeId
                   LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
                   LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
+                  LEFT JOIN Persons AS RelatedManagers ON RelatedOurContractsData.ManagerId = RelatedManagers.Id
+                  LEFT JOIN Persons AS RelatedAdmins ON RelatedOurContractsData.AdminId = RelatedAdmins.Id
                   LEFT JOIN Invoices ON Invoices.ContractId=mainContracts.Id
                   LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id
                   LEFT JOIN ContractRangesContracts ON ContractRangesContracts.ContractId=mainContracts.Id
@@ -503,11 +515,14 @@ export default class ContractRepository extends BaseRepository<
         let rangesPerContract: ContractRangePerContractData[] = [];
         //wybrano widok szczegółowy dla projketu lub kontraktu
         if (searchParams.projectOurId || searchParams.id) {
-            entitiesPerProject = await this.getContractEntityAssociationsList({
-                projectId: searchParams.projectOurId,
-                contractId: searchParams.id,
-                isArchived: searchParams.isArchived,
-            });
+            entitiesPerProject =
+                await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
+                    {
+                        projectId: searchParams.projectOurId,
+                        contractId: searchParams.id,
+                        isArchived: searchParams.isArchived,
+                    }
+                );
             // Użyj Repository zamiast Controller (Clean Architecture)
             const rangeAssociations = await this.rangeRepository.find([
                 { contractId: searchParams.id },
@@ -518,70 +533,6 @@ export default class ContractRepository extends BaseRepository<
             }));
         }
         return { entitiesPerProject, rangesPerContract };
-    }
-
-    private async getContractEntityAssociationsList(initParamObject: {
-        projectId?: string;
-        contractId?: number;
-        isArchived?: boolean;
-    }) {
-        const projectConditon =
-            initParamObject && initParamObject.projectId
-                ? mysql.format('Contracts.ProjectOurId = ?', [
-                      initParamObject.projectId,
-                  ])
-                : '1';
-
-        const contractConditon =
-            initParamObject && initParamObject.contractId
-                ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
-                : '1';
-        const sql = `SELECT
-                Contracts_Entities.ContractId,
-                Contracts_Entities.EntityId,
-                Contracts_Entities.ContractRole,
-                Entities.Name,
-                Entities.Address,
-                Entities.TaxNumber,
-                Entities.Www,
-                Entities.Email,
-                Entities.Phone
-                        FROM Contracts_Entities
-                        JOIN Contracts ON Contracts_Entities.ContractId = Contracts.Id
-                        JOIN Entities ON Contracts_Entities.EntityId = Entities.Id
-                        LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
-                        WHERE ${projectConditon} 
-                        AND ${contractConditon}
-                        ORDER BY Contracts_Entities.ContractRole, Entities.Name`;
-
-        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-
-        return this.processContractEntityAssociations(result);
-    }
-
-    private processContractEntityAssociations(result: any[]) {
-        let newResult: ContractEntityAssociation[] = [];
-
-        for (const row of result) {
-            const item: ContractEntityAssociation = {
-                contractRole: row.ContractRole,
-                _contract: {
-                    id: row.ContractId,
-                },
-                _entity: new Entity({
-                    id: row.EntityId,
-                    name: row.Name,
-                    address: row.Address,
-                    taxNumber: row.TaxNumber,
-                    www: row.Www,
-                    email: row.Email,
-                    phone: row.Phone,
-                }),
-            };
-
-            newResult.push(item);
-        }
-        return newResult;
     }
 
     /**
@@ -609,13 +560,31 @@ export default class ContractRepository extends BaseRepository<
             number: row.Number,
             name: ToolsDb.sqlToString(row.Name!),
             _city: this.mapCityToModel(row),
-            //kontrakt powiązany z kontraktem na roboty
-            _ourContract: {
-                ourId: row.OurIdRelated,
-                id: row.RelatedId,
-                name: ToolsDb.sqlToString(row.RelatedName || ''),
-                gdFolderId: row.RelatedGdFolderId,
-            },
+            //kontrakt powiązany z kontraktem na roboty (tylko dla ContractOther)
+            _ourContract: row.RelatedId
+                ? {
+                      ourId: row.RelatedOurId,
+                      id: row.RelatedId,
+                      name: ToolsDb.sqlToString(row.RelatedName || ''),
+                      gdFolderId: row.RelatedGdFolderId,
+                      _admin: row.RelatedAdminEmail
+                          ? {
+                                id: row.RelatedAdminId,
+                                name: row.RelatedAdminName,
+                                surname: row.RelatedAdminSurname,
+                                email: row.RelatedAdminEmail,
+                            }
+                          : undefined,
+                      _manager: row.RelatedManagerEmail
+                          ? {
+                                id: row.RelatedManagerId,
+                                name: row.RelatedManagerName,
+                                surname: row.RelatedManagerSurname,
+                                email: row.RelatedManagerEmail,
+                            }
+                          : undefined,
+                  }
+                : undefined,
             _project: {
                 id: row.ProjectId,
                 ourId: row.ProjectOurId,
@@ -757,13 +726,9 @@ export default class ContractRepository extends BaseRepository<
         return sql;
     }
 }
-export type ContractEntityAssociation = {
-    contractRole: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER';
-    _contract: {
-        id: number;
-    };
-    _entity: Entity;
-};
+
+// Re-eksport typu dla backward compatibility
+export type { ContractEntityAssociation } from './ContractEntityAssociationsHelper';
 
 export type ContractPartsData = {
     entitiesPerProject: ContractEntityAssociation[];
@@ -836,8 +801,17 @@ type ContractRow = {
     CityName?: string | null;
     CityCode?: string | null;
     RelatedId?: number | null;
+    RelatedOurId?: string | null;
     RelatedName?: string | null;
     RelatedGdFolderId?: string | null;
+    RelatedManagerId?: number | null;
+    RelatedManagerName?: string | null;
+    RelatedManagerSurname?: string | null;
+    RelatedManagerEmail?: string | null;
+    RelatedAdminId?: number | null;
+    RelatedAdminName?: string | null;
+    RelatedAdminSurname?: string | null;
+    RelatedAdminEmail?: string | null;
     ContractRangesNames?: string | null;
     LastUpdated?: Date | string | null;
     entitiesPerProject?: ContractEntityAssociation[];
