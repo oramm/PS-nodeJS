@@ -42,7 +42,7 @@ COMMENT='Metadane wysyłki faktur do KSeF';
 -- Dodaj kolumny KSeF do tabeli Invoices jeśli nie istnieją
 -- (sprawdź czy już istnieją przed wykonaniem)
 
--- ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefNumber VARCHAR(64) NULL;
--- ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefStatus VARCHAR(20) NULL;
--- ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefSessionId VARCHAR(64) NULL;
--- ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefUpo TEXT NULL;
+ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefNumber VARCHAR(64) NULL;
+ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefStatus VARCHAR(20) NULL;
+ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefSessionId VARCHAR(64) NULL;
+ALTER TABLE Invoices ADD COLUMN IF NOT EXISTS KsefUpo TEXT NULL;

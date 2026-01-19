@@ -1,34 +1,37 @@
 import Invoice from '../Invoice';
 import ToolsDb from '../../tools/ToolsDb';
+import Setup from '../../setup/Setup';
 
 /**
  * Generator XML faktur w formacie FA(3) dla KSeF
- * 
+ *
  * Schemat: http://crd.gov.pl/wzor/2025/06/25/13775/
  * Wersja schematu: 1-0E
  * Obowiązuje od: 01.09.2025
  */
 export default class KsefXmlBuilder {
     // Konfiguracja schematu FA(3)
-    private static readonly NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
+    private static readonly NAMESPACE =
+        'http://crd.gov.pl/wzor/2025/06/25/13775/';
     private static readonly SYSTEM_CODE = 'FA (3)';
     private static readonly VARIANT = '3';
-    
-    private static readonly ETD_NAMESPACE = 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/';
-    private static readonly XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance';
+
+    private static readonly ETD_NAMESPACE =
+        'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/';
+    private static readonly XSI_NAMESPACE =
+        'http://www.w3.org/2001/XMLSchema-instance';
     private static readonly SCHEMA_VERSION = '1-0E';
-    private static readonly FORM_CODE_VALUE = 'FA';  // Treść elementu KodFormularza (enum TKodFormularza)
+    private static readonly FORM_CODE_VALUE = 'FA'; // Treść elementu KodFormularza (enum TKodFormularza)
 
     /**
      * Buduje XML faktury zgodny ze schematem FA(3) v1-0E
      */
     static buildXml(invoice: Invoice): string {
-        
-        // Dane sprzedawcy z konfiguracji
-        const sellerNip = process.env.KSEF_NIP || '';
-        const sellerName = process.env.KSEF_SELLER_NAME || 'ENVI Sp. z o.o.';
-        const sellerStreet = process.env.KSEF_SELLER_STREET || 'ul. Lubicz 25';
-        const sellerCity = process.env.KSEF_SELLER_CITY || 'Kraków';
+        // Dane sprzedawcy z Setup.KSeF (już zwalidowane w InvoiceKsefValidator)
+        const { nip: sellerNip, seller } = Setup.KSeF;
+        const sellerName = seller.name!;
+        const sellerStreet = seller.street!;
+        const sellerCity = seller.city!;
 
         // Dane nabywcy z faktury
         const buyerName = this.escapeXml(invoice._entity?.name || '');
@@ -37,7 +40,8 @@ export default class KsefXmlBuilder {
 
         // Data i numer faktury
         const issueDate = this.formatDate(invoice.issueDate);
-        const invoiceNumber = invoice.number || `FV/${invoice.id}/${new Date().getFullYear()}`;
+        const invoiceNumber =
+            invoice.number || `FV/${invoice.id}/${new Date().getFullYear()}`;
         const creationDateTime = this.formatDateTime(new Date());
 
         // Pozycje faktury i sumy
@@ -70,15 +74,23 @@ export default class KsefXmlBuilder {
         </Adres>
     </Podmiot1>
     <Podmiot2>
-        <DaneIdentyfikacyjne>${buyerNip ? `
-            <NIP>${buyerNip}</NIP>` : `
-            <BrakID>1</BrakID>`}
+        <DaneIdentyfikacyjne>${
+            buyerNip
+                ? `
+            <NIP>${buyerNip}</NIP>`
+                : `
+            <BrakID>1</BrakID>`
+        }
             <Nazwa>${buyerName}</Nazwa>
-        </DaneIdentyfikacyjne>${buyerAddress ? `
+        </DaneIdentyfikacyjne>${
+            buyerAddress
+                ? `
         <Adres>
             <KodKraju>PL</KodKraju>
             <AdresL1>${buyerAddress}</AdresL1>
-        </Adres>` : ''}
+        </Adres>`
+                : ''
+        }
         <JST>2</JST>
         <GV>2</GV>
     </Podmiot2>
@@ -111,25 +123,30 @@ export default class KsefXmlBuilder {
     /**
      * Buduje sekcje XML dla pozycji faktury (FaWiersz)
      */
-    private static buildItemsXml(items: any[]): { itemsXml: string; vatSummary: Map<string, { net: number; vat: number }> } {
+    private static buildItemsXml(items: any[]): {
+        itemsXml: string;
+        vatSummary: Map<string, { net: number; vat: number }>;
+    } {
         const vatSummary = new Map<string, { net: number; vat: number }>();
-        
+
         let xml = '';
         items.forEach((item, index) => {
             const lineNum = index + 1;
             const name = this.escapeXml(item.description || item.name || '');
             const quantity = item.quantity || 1;
             const unitPrice = item.unitPrice || item.UnitPrice || 0;
-            const netValue = item._netValue || item.net || (quantity * unitPrice);
-            const vatRate = this.normalizeVatRate(item.vatRate || item._vatRate || 23);
+            const netValue = item._netValue || item.net || quantity * unitPrice;
+            const vatRate = this.normalizeVatRate(
+                item.vatRate || item._vatRate || 23,
+            );
             const vatValue = this.calculateVat(netValue, vatRate);
 
             // Sumuj dla podsumowania VAT
             const rateKey = vatRate.toString();
             const existing = vatSummary.get(rateKey) || { net: 0, vat: 0 };
-            vatSummary.set(rateKey, { 
-                net: existing.net + netValue, 
-                vat: existing.vat + vatValue 
+            vatSummary.set(rateKey, {
+                net: existing.net + netValue,
+                vat: existing.vat + vatValue,
             });
 
             xml += `
@@ -150,7 +167,9 @@ export default class KsefXmlBuilder {
     /**
      * Buduje sekcje podsumowania VAT (P_13_x, P_14_x)
      */
-    private static buildVatSectionsXml(vatSummary: Map<string, { net: number; vat: number }>): string {
+    private static buildVatSectionsXml(
+        vatSummary: Map<string, { net: number; vat: number }>,
+    ): string {
         let xml = '';
 
         // Stawka 23%
@@ -197,7 +216,10 @@ export default class KsefXmlBuilder {
     /**
      * Oblicza sumę brutto
      */
-    private static calculateTotalGross(items: any[], vatSummary: Map<string, { net: number; vat: number }>): number {
+    private static calculateTotalGross(
+        items: any[],
+        vatSummary: Map<string, { net: number; vat: number }>,
+    ): number {
         let totalNet = 0;
         let totalVat = 0;
 
@@ -212,8 +234,12 @@ export default class KsefXmlBuilder {
     /**
      * Oblicza VAT od wartości netto
      */
-    private static calculateVat(netValue: number, vatRate: number | string): number {
-        const rate = typeof vatRate === 'string' ? parseFloat(vatRate) || 0 : vatRate;
+    private static calculateVat(
+        netValue: number,
+        vatRate: number | string,
+    ): number {
+        const rate =
+            typeof vatRate === 'string' ? parseFloat(vatRate) || 0 : vatRate;
         if (rate === 0 || isNaN(rate)) return 0;
         return Math.round(netValue * rate) / 100;
     }

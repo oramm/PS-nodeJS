@@ -229,6 +229,9 @@ export default class KsefController {
         // Nowa instancja serwisu (fresh token)
         const service = new KsefService();
         const resp = await service.getInvoiceByKsefNumber(meta.KsefNumber);
-        return resp.invoiceXml || resp;
+        if (!resp.invoiceXml) {
+            throw new Error('Brak XML faktury w odpowiedzi KSeF');
+        }
+        return resp.invoiceXml;
     }
 }

@@ -289,5 +289,37 @@ export default class Setup {
         PAPER: 'Papier',
     };
 
+    /**
+     * Konfiguracja KSeF
+     *
+     * Format w .env:
+     *   KSEF_API_URL_TEST="https://api-test.ksef.mf.gov.pl/v2"
+     *   KSEF_API_URL_PROD="https://ksef.mf.gov.pl/api/v2"
+     *   KSEF_AUTH_TOKEN_TEST="<token>"
+     *   KSEF_AUTH_TOKEN_PROD="<token>"
+     *   KSEF_NIP="..."
+     *   KSEF_SELLER_NAME="..."
+     *   KSEF_SELLER_STREET="..."
+     *   KSEF_SELLER_CITY="..."
+     */
+    static KSeF = {
+        /** NIP firmy (10 cyfr) */
+        nip: process.env.KSEF_NIP,
+        /** Token autoryzacyjny KSeF */
+        token:
+            process.env.KSEF_AUTH_TOKEN_TEST ||
+            process.env.KSEF_AUTH_TOKEN_PROD,
+        /** API URL */
+        apiUrl:
+            process.env.KSEF_API_URL_TEST || process.env.KSEF_API_URL_PROD,
+        /** Dane sprzedawcy */
+        seller: {
+            name: process.env.KSEF_SELLER_NAME,
+            street: process.env.KSEF_SELLER_STREET,
+            city: process.env.KSEF_SELLER_CITY,
+            postalCode: process.env.KSEF_SELLER_POSTAL_CODE,
+        },
+    };
+
     static x: 'sss' | 'ddd';
 }
