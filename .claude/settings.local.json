@@ -1,15 +1,17 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(yarn build)",
-      "Bash(npx tsc:*)",
-      "Bash(npx ts-node src/invoices/KSeF/test-service-changes.ts)",
-      "Bash(npx ts-node:*)",
-      "WebSearch",
-      "WebFetch(domain:ksef-test.mf.gov.pl)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:api-test.ksef.mf.gov.pl)",
-      "Bash(ls:*)"
-    ]
-  }
+    "permissions": {
+        "allow": [
+            "Bash(yarn build)",
+            "Bash(npx tsc:*)",
+            "Bash(npx ts-node src/invoices/KSeF/test-service-changes.ts)",
+            "Bash(npx ts-node:*)",
+            "WebSearch",
+            "WebFetch(domain:ksef-test.mf.gov.pl)",
+            "WebFetch(domain:github.com)",
+            "WebFetch(domain:api-test.ksef.mf.gov.pl)",
+            "Bash(ls:*)",
+            "Bash(git stash:*)",
+            "Bash(git check-ignore:*)"
+        ]
+    }
 }

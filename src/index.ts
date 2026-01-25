@@ -50,11 +50,14 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Do NOT automatically parse multipart/form-data here — let route-level
+// multer middleware handle parsing to avoid consuming the request stream
+// prematurely (which causes busboy 'Unexpected end of form' errors).
 app.use((req: any, res: any, next: any) => {
-    if (req.is('multipart/form-data')) {
-        (upload.any() as any)(req, res, next);
-        console.log('Multipart form data - upload.any()');
-    } else next();
+    if (req.is && req.is('multipart/form-data')) {
+        console.log('Multipart form data detected - defer parsing to route-level multer');
+    }
+    next();
 });
 
 // Przechowuje liczbę prób połączenia

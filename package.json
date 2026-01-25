@@ -53,16 +53,19 @@
         "imapflow": "^1.0.169",
         "js-base64": "^3.6.0",
         "mailparser": "^3.7.1",
+        "mammoth": "^1.11.0",
         "mongodb": "^5.1.0",
         "multer": "^1.4.5-lts.1",
         "mysql2": "^3.2.0",
         "node-cron": "^4.2.1",
         "nodemailer": "^6.9.14",
         "nodemon": "^3.0.2",
-        "open": "^7.4.2"
+        "open": "^7.4.2",
+        "openai": "^6.16.0",
+        "pdf-parse": "^2.4.5"
     },
     "engines": {
-        "node": ">=22.17.0 <23.0.0"
+        "node": ">=22.17.0 <25.0.0"
     },
     "resolutions": {
         "@types/express-serve-static-core": "4.17.41",
