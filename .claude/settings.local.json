@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(yarn build)"
+      "Bash(yarn build)",
+      "Bash(git stash:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }
