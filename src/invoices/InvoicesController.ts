@@ -131,7 +131,8 @@ export default class InvoicesController extends BaseController<
             quantity: number;
             unitPrice: number;
             vatTax: number;
-        }>
+        }>,
+        invoiceFile?: Express.Multer.File
     ): Promise<Invoice> {
         const instance = this.getInstance();
         console.group('InvoicesController.createCorrectionInvoice()');
@@ -196,6 +197,11 @@ export default class InvoicesController extends BaseController<
 
             // 5. Zapisz fakturę korygującą
             await instance.create(correctionInvoice);
+            
+            // Sprawdź czy id zostało ustawione
+            if (!correctionInvoice.id) {
+                throw new Error('Błąd krytyczny: Faktura korygująca nie otrzymała ID po zapisie do bazy');
+            }
             console.log(`Faktura korygująca ${correctionInvoice.id} utworzona`);
 
             // 6. Utwórz pozycje korekty
@@ -243,6 +249,30 @@ export default class InvoicesController extends BaseController<
                 originalInvoice.status = Setup.InvoiceStatus.WITHDRAWN;
                 await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
                 console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako wycofana`);
+            }
+
+            // 9. Upload pliku do Google Drive (jeśli załączono)
+            if (invoiceFile) {
+                await InvoicesController.withAuth(async (inst, authClient) => {
+                    const parentGdFolderId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71';
+                    
+                    // Usuń stary plik jeśli istnieje
+                    if (correctionInvoice.gdId) {
+                        await ToolsGd.trashFile(authClient, correctionInvoice.gdId);
+                    }
+                    
+                    // Upload nowego pliku
+                    const fileData = await ToolsGd.uploadFileMulter(
+                        authClient,
+                        invoiceFile,
+                        undefined,
+                        parentGdFolderId
+                    );
+                    
+                    correctionInvoice.setGdIdAndUrl(fileData.id);
+                    await inst.repository.editInDb(correctionInvoice, undefined, undefined, ['gdId']);
+                    console.log(`Plik załączony do korekty ${correctionInvoice.id}, gdId: ${fileData.id}`);
+                });
             }
 
             return correctionInvoice;

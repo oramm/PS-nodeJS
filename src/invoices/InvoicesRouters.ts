@@ -187,7 +187,28 @@ app.post('/invoice/:id/correction', async (req: Request, res: Response, next) =>
             return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
         }
         
-        const { correctionType, correctionReason, customItems } = req.body;
+        const { correctionType, correctionReason } = req.body;
+        
+        // Parsuj customItems - może być stringiem JSON (z FormData) lub obiektem
+        let customItems = req.body.customItems;
+        if (typeof customItems === 'string' && customItems.trim()) {
+            try {
+                customItems = JSON.parse(customItems);
+            } catch (e) {
+                return res.status(400).json({ error: 'Nieprawidłowy format customItems (JSON)' });
+            }
+        }
+        
+        // Obsługa pliku załącznika (tak jak w /issueInvoice/:id)
+        let invoiceFile: Express.Multer.File | undefined;
+        if (req.files) {
+            if (Array.isArray(req.files) && req.files.length > 0) {
+                invoiceFile = req.files[0];
+            } else if (typeof req.files === 'object' && 'file' in req.files) {
+                const fileArray = (req.files as any).file;
+                invoiceFile = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+            }
+        }
         
         if (!correctionType || !['zero', 'custom'].includes(correctionType)) {
             return res.status(400).json({ 
@@ -199,7 +220,9 @@ app.post('/invoice/:id/correction', async (req: Request, res: Response, next) =>
             return res.status(400).json({ error: 'Brak przyczyny korekty (correctionReason)' });
         }
         
-        if (correctionType === 'custom' && (!customItems || customItems.length === 0)) {
+        // Walidacja customItems tylko dla typu 'custom'
+        const parsedCustomItems = Array.isArray(customItems) ? customItems : undefined;
+        if (correctionType === 'custom' && (!parsedCustomItems || parsedCustomItems.length === 0)) {
             return res.status(400).json({ 
                 error: 'Dla typu "custom" wymagane są pozycje korekty (customItems)' 
             });
@@ -214,8 +237,17 @@ app.post('/invoice/:id/correction', async (req: Request, res: Response, next) =>
             correctionType,
             correctionReason,
             req.session.userData,
-            customItems
+            parsedCustomItems,
+            invoiceFile
         );
+        
+        // Upewnij się, że id jest ustawione przed zwróceniem odpowiedzi
+        if (!correctionInvoice.id) {
+            console.error('[Correction] BŁĄD: Korekta nie ma ID po utworzeniu!', correctionInvoice);
+            return res.status(500).json({ error: 'Błąd wewnętrzny: korekta nie otrzymała ID' });
+        }
+        
+        console.log(`[Correction] Zwracam korektę id=${correctionInvoice.id}, number=${correctionInvoice.number}`);
         
         res.json({ 
             correctionInvoice,
