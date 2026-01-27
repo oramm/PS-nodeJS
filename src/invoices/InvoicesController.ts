@@ -37,14 +37,36 @@ export default class InvoicesController extends BaseController<
     // ==================== READ (bez auth) ====================
     /**
      * Wyszukuje faktury według parametrów
+     * Dla każdej faktury dołącza listę jej korekt (_corrections)
+     * 
      * @param searchParams - Parametry wyszukiwania
-     * @returns Promise<Invoice[]> - Lista faktur
+     * @param includeCorrections - Czy dołączyć korekty (domyślnie true)
+     * @returns Promise<Invoice[]> - Lista faktur z korektami
      */
     static async find(
-        searchParams: InvoicesSearchParams[] = []
+        searchParams: InvoicesSearchParams[] = [],
+        includeCorrections: boolean = true
     ): Promise<Invoice[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(searchParams);
+        const invoices = await instance.repository.find(searchParams);
+
+        // Pobierz korekty dla wszystkich faktur jednym zapytaniem
+        if (includeCorrections && invoices.length > 0) {
+            const invoiceIds = invoices
+                .map(inv => inv.id)
+                .filter((id): id is number => id !== undefined);
+            
+            const correctionsMap = await instance.repository.findCorrectionsBulk(invoiceIds);
+            
+            // Przypisz korekty do faktur
+            invoices.forEach(invoice => {
+                if (invoice.id !== undefined) {
+                    invoice._corrections = correctionsMap.get(invoice.id) || [];
+                }
+            });
+        }
+
+        return invoices;
     }
 
     // ==================== CREATE ====================
@@ -82,6 +104,148 @@ export default class InvoicesController extends BaseController<
                 `Invoice for contract ${invoice._contract.ourId} added in db`
             );
             return invoice;
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // ==================== CORRECTION INVOICE ====================
+    /**
+     * API PUBLICZNE
+     * Tworzy fakturę korygującą na podstawie oryginalnej faktury
+     * 
+     * @param originalInvoiceId - ID faktury do skorygowania
+     * @param correctionType - Typ korekty: 'zero' (anulowanie) lub 'custom' (własne pozycje)
+     * @param correctionReason - Przyczyna korekty
+     * @param userData - Dane użytkownika z sesji
+     * @param customItems - Własne pozycje korekty (tylko dla typu 'custom')
+     * @returns Promise<Invoice> - Utworzona faktura korygująca (zapisana w DB)
+     */
+    static async createCorrectionInvoice(
+        originalInvoiceId: number,
+        correctionType: 'zero' | 'custom',
+        correctionReason: string,
+        userData: UserData,
+        customItems?: Array<{
+            description: string;
+            quantity: number;
+            unitPrice: number;
+            vatTax: number;
+        }>
+    ): Promise<Invoice> {
+        const instance = this.getInstance();
+        console.group('InvoicesController.createCorrectionInvoice()');
+        
+        try {
+            // 1. Pobierz oryginalną fakturę z pozycjami
+            const originalInvoices = await instance.repository.find([{ id: originalInvoiceId }]);
+            const originalInvoice = originalInvoices[0];
+            if (!originalInvoice) {
+                throw new Error(`Faktura ${originalInvoiceId} nie znaleziona`);
+            }
+
+            // 2. Pobierz pozycje oryginalnej faktury
+            const originalItems = await InvoiceItemsController.find([{ invoiceId: originalInvoiceId }]);
+            if (!originalItems || originalItems.length === 0) {
+                throw new Error(`Faktura ${originalInvoiceId} nie ma pozycji`);
+            }
+
+            // 3. Utwórz nową fakturę korygującą
+            const today = new Date().toISOString().split('T')[0];
+            // Normalizuj bazowy numer oryginalnej faktury (usuń wiodące FV/ jeśli istnieje)
+            const baseOriginalNumber = originalInvoice.number
+                ? originalInvoice.number.replace(/^FV\/?/, '')
+                : String(originalInvoiceId);
+
+            // Pobierz istniejące korekty i wybierz następny indeks n
+            const existingCorrections = await instance.repository.findCorrections(originalInvoiceId);
+            let maxN = 0;
+            for (const c of existingCorrections) {
+                if (!c.number) continue;
+                const m = c.number.match(/^FV-K_(\d+)\/(.+)$/);
+                if (m && m[2] === baseOriginalNumber) {
+                    const val = parseInt(m[1], 10);
+                    if (!isNaN(val) && val > maxN) maxN = val;
+                }
+            }
+            const nextN = maxN + 1;
+            const correctionNumber = `FV-K_${nextN}/${baseOriginalNumber}`;
+
+            const correctionInvoiceData: InvoiceData = {
+                number: correctionNumber,
+                description: `Korekta do faktury ${originalInvoice.number || originalInvoiceId}: ${correctionReason}`,
+                issueDate: today,
+                daysToPay: originalInvoice.daysToPay,
+                status: Setup.InvoiceStatus.DONE, // Korekta od razu gotowa
+                _contract: originalInvoice._contract,
+                _entity: originalInvoice._entity,
+                _editor: originalInvoice._editor,
+                _owner: originalInvoice._owner,
+                correctedInvoiceId: originalInvoiceId,
+                correctionReason: correctionReason,
+            };
+
+            const correctionInvoice = new Invoice(correctionInvoiceData);
+            
+            // 4. Walidacja
+            const validator = new InvoiceValidator(
+                new ContractOur(correctionInvoice._contract),
+                correctionInvoice
+            );
+            await validator.checkValueWithContract(true);
+
+            // 5. Zapisz fakturę korygującą
+            await instance.create(correctionInvoice);
+            console.log(`Faktura korygująca ${correctionInvoice.id} utworzona`);
+
+            // 6. Utwórz pozycje korekty
+            let itemsToCreate: Array<{
+                description: string;
+                quantity: number;
+                unitPrice: number;
+                vatTax: number;
+            }>;
+
+            if (correctionType === 'zero') {
+                // Korekta do zera - zaneguj wszystkie pozycje oryginału
+                itemsToCreate = originalItems.map(item => ({
+                    description: item.description,
+                    quantity: item.quantity,
+                    unitPrice: -Math.abs(item.unitPrice), // Ujemna cena = korekta in minus
+                    vatTax: item.vatTax,
+                }));
+            } else if (customItems && customItems.length > 0) {
+                // Korekta z własnymi pozycjami
+                itemsToCreate = customItems;
+            } else {
+                throw new Error('Dla typu "custom" wymagane są pozycje korekty (customItems)');
+            }
+
+            // 7. Dodaj pozycje do faktury korygującej
+            for (const itemData of itemsToCreate) {
+                await InvoiceItemsController.addNewInvoiceItem({
+                    description: itemData.description,
+                    quantity: itemData.quantity,
+                    unitPrice: itemData.unitPrice,
+                    vatTax: itemData.vatTax,
+                    _parent: correctionInvoice as any,
+                    _editor: correctionInvoice._editor as any,
+                    _lastUpdated: today,
+                    _grossValue: 0,
+                    _netValue: 0,
+                    _vatValue: 0,
+                }, userData);
+            }
+            console.log(`Dodano ${itemsToCreate.length} pozycji do faktury korygującej`);
+
+            // 8. Opcjonalnie: oznacz oryginalną fakturę jako skorygowaną
+            if (correctionType === 'zero') {
+                originalInvoice.status = Setup.InvoiceStatus.WITHDRAWN;
+                await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
+                console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako wycofana`);
+            }
+
+            return correctionInvoice;
         } finally {
             console.groupEnd();
         }
@@ -426,6 +590,15 @@ export default class InvoicesController extends BaseController<
                         number: null,
                         sentDate: null,
                         paymentDeadline: null,
+                        // Nie kopiuj danych KSeF - nowa faktura nie była wysłana
+                        ksefNumber: null,
+                        ksefStatus: null,
+                        ksefSessionId: null,
+                        ksefUpo: null,
+                        // Nie kopiuj powiązań z korektą
+                        correctedInvoiceId: null,
+                        correctionReason: null,
+                        _corrections: undefined,
                     };
 
                     const invoiceCopy = await InvoicesController.add(

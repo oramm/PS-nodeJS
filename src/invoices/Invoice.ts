@@ -4,6 +4,7 @@ import ToolsGd from '../tools/ToolsGd';
 import BusinessObject from '../BussinesObject';
 import Setup from '../setup/Setup';
 import {
+    CorrectionInvoiceSummary,
     EntityData,
     InvoiceData,
     OurContractData,
@@ -40,6 +41,12 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     ksefSessionId?: string | null;
     ksefUpo?: string | null;
     _totalGrossValue?: number;
+    /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
+    correctedInvoiceId?: number | null;
+    /** Przyczyna korekty */
+    correctionReason?: string | null;
+    /** Lista faktur korygujących tę fakturę */
+    _corrections?: CorrectionInvoiceSummary[];
 
     constructor(initParamObject: InvoiceData) {
         super({ ...initParamObject, _dbTableName: 'Invoices' });
@@ -84,6 +91,8 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this.ksefStatus = (initParamObject as any).ksefStatus;
         this.ksefSessionId = (initParamObject as any).ksefSessionId;
         this.ksefUpo = (initParamObject as any).ksefUpo;
+        this.correctedInvoiceId = (initParamObject as any).correctedInvoiceId;
+        this.correctionReason = (initParamObject as any).correctionReason;
         //this._items = initParamObject._items;
     }
 

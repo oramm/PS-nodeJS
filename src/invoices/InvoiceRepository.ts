@@ -6,6 +6,7 @@ import Person from '../persons/Person';
 import ToolsDb from '../tools/ToolsDb';
 import ContractOur from '../contracts/ContractOur';
 import mysql from 'mysql2/promise';
+import { CorrectionInvoiceSummary } from '../types/types';
 
 export interface InvoicesSearchParams {
     id?: number;
@@ -17,6 +18,7 @@ export interface InvoicesSearchParams {
     issueDateFrom?: string;
     issueDateTo?: string;
     statuses?: string[];
+    ksefNumber?: string;
 }
 
 export default class InvoiceRepository extends BaseRepository<Invoice> {
@@ -66,6 +68,8 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             ksefStatus: row.KsefStatus,
             ksefSessionId: row.KsefSessionId,
             ksefUpo: row.KsefUpo,
+            correctedInvoiceId: row.CorrectedInvoiceId,
+            correctionReason: ToolsDb.sqlToString(row.CorrectionReason),
             _lastUpdated: row.LastUpdated,
             _entity: {
                 id: row.EntityId,
@@ -113,6 +117,8 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Invoices.KsefStatus,
             Invoices.KsefSessionId,
             Invoices.KsefUpo,
+            Invoices.CorrectedInvoiceId,
+            Invoices.CorrectionReason,
             Invoices.LastUpdated,
             Invoices.ContractId,
             Entities.Id AS EntityId,
@@ -237,6 +243,11 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                 )
             );
         }
+        if (searchParams.ksefNumber) {
+            conditions.push(
+                mysql.format(`Invoices.KsefNumber = ?`, [searchParams.ksefNumber])
+            );
+        }
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
@@ -245,5 +256,78 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         }
 
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
+    }
+
+    /**
+     * Znajduje wszystkie faktury korygujące daną fakturę
+     * @param originalInvoiceId - ID faktury oryginalnej
+     * @returns Lista uproszczonych danych korekt
+     */
+    async findCorrections(originalInvoiceId: number): Promise<CorrectionInvoiceSummary[]> {
+        const sql = mysql.format(`
+            SELECT 
+                Invoices.Id,
+                Invoices.Number,
+                Invoices.IssueDate,
+                Invoices.CorrectionReason,
+                ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
+            FROM Invoices
+            LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+            WHERE Invoices.CorrectedInvoiceId = ?
+            GROUP BY Invoices.Id
+            ORDER BY Invoices.IssueDate DESC`, [originalInvoiceId]);
+
+        const rows = await this.executeQuery(sql);
+        return rows.map((row: any) => ({
+            id: row.Id,
+            number: row.Number,
+            issueDate: row.IssueDate,
+            correctionReason: row.CorrectionReason,
+            _totalNetValue: row.TotalNetValue
+        }));
+    }
+
+    /**
+     * Pobiera korekty dla listy faktur (bulk)
+     * @param invoiceIds - Lista ID faktur
+     * @returns Mapa: invoiceId -> lista korekt
+     */
+    async findCorrectionsBulk(invoiceIds: number[]): Promise<Map<number, CorrectionInvoiceSummary[]>> {
+        if (invoiceIds.length === 0) return new Map();
+
+        const sql = mysql.format(`
+            SELECT 
+                Invoices.Id,
+                Invoices.Number,
+                Invoices.IssueDate,
+                Invoices.CorrectionReason,
+                Invoices.CorrectedInvoiceId,
+                ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
+            FROM Invoices
+            LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+            WHERE Invoices.CorrectedInvoiceId IN (?)
+            GROUP BY Invoices.Id
+            ORDER BY Invoices.IssueDate DESC`, [invoiceIds]);
+
+        const rows = await this.executeQuery(sql);
+        
+        const result = new Map<number, CorrectionInvoiceSummary[]>();
+        // Inicjalizuj pustą tablicę dla każdego invoiceId
+        invoiceIds.forEach(id => result.set(id, []));
+        
+        rows.forEach((row: any) => {
+            const originalId = row.CorrectedInvoiceId;
+            const corrections = result.get(originalId) || [];
+            corrections.push({
+                id: row.Id,
+                number: row.Number,
+                issueDate: row.IssueDate,
+                correctionReason: row.CorrectionReason,
+                _totalNetValue: row.TotalNetValue
+            });
+            result.set(originalId, corrections);
+        });
+
+        return result;
     }
 }

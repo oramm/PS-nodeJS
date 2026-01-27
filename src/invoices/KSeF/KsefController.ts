@@ -1,7 +1,7 @@
 import InvoiceRepository from '../InvoiceRepository';
 import InvoiceItemsController from '../InvoiceItemsController';
 import KsefService from './KsefService';
-import KsefXmlBuilder from './KsefXmlBuilder';
+import KsefXmlBuilder, { OriginalInvoiceData } from './KsefXmlBuilder';
 import InvoiceKsefValidator from './InvoiceKsefValidator';
 import KsefMetadataRepository from './KsefMetadataRepository';
 import Setup from '../../setup/Setup';
@@ -21,6 +21,127 @@ export default class KsefController {
     // Nie używamy static service - tworzymy nową instancję dla każdej operacji
     // ponieważ tokeny KSeF wygasają po ~15 minutach
     private static repo = new InvoiceRepository();
+
+    /**
+     * Wysyła fakturę korygującą do KSeF
+     * 
+     * Faktura korygująca referencjonuje oryginalną fakturę i zawiera zmianę wartości.
+     * 
+     * Wymagane dane oryginalnej faktury (jeśli nie podane, zostaną pobrane z bazy):
+     * - originalKsefNumber: numer KSeF oryginalnej faktury
+     * - originalInvoiceNumber: numer wewnętrzny oryginalnej faktury (opcjonalny, pobierany z bazy)
+     * - originalIssueDate: data wystawienia oryginalnej faktury (opcjonalny, pobierany z bazy)
+     * 
+     * @param invoiceId - ID faktury korygującej w systemie
+     * @param originalKsefNumber - Numer KSeF faktury oryginalnej
+     * @param originalData - Opcjonalne dodatkowe dane oryginalnej faktury
+     * @returns { invoiceId, referenceNumber, status }
+     */
+    static async submitCorrectionById(
+        invoiceId: number, 
+        originalKsefNumber: string,
+        originalData?: {
+            originalInvoiceNumber?: string;
+            originalIssueDate?: string;
+            correctionReason?: string;
+            correctionType?: 1 | 2 | 3;
+        }
+    ) {
+        const service = new KsefService();
+        
+        // 1. Pobierz fakturę korygującą z pozycjami
+        const invoices = await this.repo.find([{ id: invoiceId }]);
+        const invoice = invoices[0];
+        if (!invoice) throw new Error(`Faktura ${invoiceId} nie znaleziona`);
+
+        // 2. Pobierz pozycje faktury jeśli nie załadowane
+        if (!invoice._items || invoice._items.length === 0) {
+            invoice._items = await InvoiceItemsController.find([{ invoiceId }]);
+        }
+
+        // 3. Waliduj dane wymagane przez KSeF
+        InvoiceKsefValidator.validateForKsef(invoice as any);
+
+        // 4. Przygotuj dane oryginalnej faktury
+        let originalInvoiceData: OriginalInvoiceData;
+        
+        if (originalData?.originalInvoiceNumber && originalData?.originalIssueDate) {
+            // Użyj danych przekazanych w parametrach
+            originalInvoiceData = {
+                ksefNumber: originalKsefNumber,
+                invoiceNumber: originalData.originalInvoiceNumber,
+                issueDate: originalData.originalIssueDate
+            };
+        } else {
+            // Pobierz dane oryginalnej faktury z bazy na podstawie ksefNumber
+            const originalInvoices = await this.repo.find([{ ksefNumber: originalKsefNumber }]);
+            const originalInvoice = originalInvoices[0];
+            
+            if (originalInvoice) {
+                originalInvoiceData = {
+                    ksefNumber: originalKsefNumber,
+                    invoiceNumber: originalInvoice.number || `FV/${originalInvoice.id}`,
+                    issueDate: originalInvoice.issueDate 
+                        ? new Date(originalInvoice.issueDate).toISOString().split('T')[0]
+                        : new Date().toISOString().split('T')[0]
+                };
+            } else {
+                // Fallback - użyj danych z parametrów lub domyślne
+                originalInvoiceData = {
+                    ksefNumber: originalKsefNumber,
+                    invoiceNumber: originalData?.originalInvoiceNumber || 'BRAK',
+                    issueDate: originalData?.originalIssueDate || new Date().toISOString().split('T')[0]
+                };
+                console.warn(`   [KSeF] Nie znaleziono oryginalnej faktury w bazie (ksefNumber: ${originalKsefNumber}). Używam przekazanych/domyślnych danych.`);
+            }
+        }
+
+        // 5. Generuj XML korekty zgodnie ze schematem FA(3)
+        const correctionReason = originalData?.correctionReason || 'Korekta faktury';
+        const correctionType = originalData?.correctionType || 1; // Domyślnie: data wystawienia faktury korygowanej
+        
+        const xml = KsefXmlBuilder.buildCorrectionXml(
+            invoice, 
+            originalInvoiceData,
+            correctionReason,
+            correctionType
+        );
+        console.log(`   [KSeF] Wygenerowano XML korekty FA(3) dla faktury ${invoice.number || invoiceId} (koryguje: ${originalKsefNumber})`);
+
+        // 5. Wyślij korekty do KSeF (otwiera sesję, szyfruje i wysyła)
+        const resp = await service.submitInvoice(xml, true); // true = korekta
+
+        // 6. Zapisz metadata - referenceNumber
+        const meta = {
+            invoiceId,
+            referenceNumber: resp.referenceNumber,
+            sessionReferenceNumber: service.getSessionReferenceNumber(),
+            status: 'PENDING',
+            submittedAt: new Date(),
+            isCorrectionInvoice: true,
+            referencesOriginalKsefNumber: originalKsefNumber,
+            responseRaw: resp,
+        };
+        await KsefMetadataRepository.saveMetadata(invoiceId, meta);
+
+        // 7. Zaktualizuj status faktury
+        try {
+            invoice.ksefStatus = 'PENDING_CORRECTION';
+            invoice.ksefSessionId = resp.referenceNumber;
+            await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId']);
+            console.log(`   [KSeF] Korekta faktury ${invoiceId} wysłana, referenceNumber: ${resp.referenceNumber}`);
+        } catch (err) {
+            console.error('Nie udało się zaktualizować statusu faktury:', err);
+        }
+
+        return { 
+            invoiceId, 
+            referenceNumber: resp.referenceNumber,
+            status: 'PENDING',
+            originalKsefNumber,
+            message: 'Korekta wysłana do KSeF. Użyj checkStatus aby sprawdzić jej status.'
+        };
+    }
 
     /**
      * Wysyła fakturę do KSeF

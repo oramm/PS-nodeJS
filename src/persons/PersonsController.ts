@@ -122,49 +122,34 @@ export default class PersonsController extends BaseController<
 
     /**
      * UPDATE USER (DTO)
-     * Use-case: edycja użytkownika ENVI + aktualizacja ScrumSheet.
+     * Use-case: edycja użytkownika ENVI.
      * Router powinien wywoływać tę metodę.
      */
     static async editUserFromDto(userData: any): Promise<Person> {
-        return await this.withAuth(async (instance, auth) => {
-            const user = new Person(userData);
+        const instance = this.getInstance();
+        const user = new Person(userData);
 
-            const fieldsToUpdate = [
-                'name',
-                'surname',
-                'position',
-                'email',
-                'cellphone',
-                'phone',
-                'comment',
-                'systemRoleId',
-                'systemEmail',
-            ];
+        const fieldsToUpdate = [
+            'name',
+            'surname',
+            'position',
+            'email',
+            'cellphone',
+            'phone',
+            'comment',
+            'systemRoleId',
+            'systemEmail',
+        ];
 
-            await instance.repository.editInDb(
-                user,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
-            console.log(`User ${user.name} ${user.surname} updated in db`);
+        await instance.repository.editInDb(
+            user,
+            undefined,
+            undefined,
+            fieldsToUpdate
+        );
+        console.log(`User ${user.name} ${user.surname} updated in db`);
 
-            // TODO:
-            // NOTE: ScrumSheet importuje PersonsController, więc używamy dynamic import
-            // (legacy workaround do czasu osobnej analizy/refaktoryzacji modułu ScrumSheet).
-            const [{ default: Planning }, { default: CurrentSprint }] =
-                await Promise.all([
-                    import('../ScrumSheet/Planning'),
-                    import('../ScrumSheet/CurrentSprint'),
-                ]);
-
-            await Promise.all([
-                Planning.refreshTimeAvailable(auth),
-                CurrentSprint.makePersonTimePerTaskFormulas(auth),
-            ]);
-
-            return user;
-        });
+        return user;
     }
 
     static async getPersonFromSessionUserData(

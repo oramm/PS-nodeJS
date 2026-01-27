@@ -478,8 +478,22 @@ export default class KsefService {
      */
     private ksefTokenEncryptionCert: string | null = null;
     private symmetricKeyEncryptionCert: string | null = null;
+    
+    // Statyczny cache dla certyfikatów (współdzielony między instancjami)
+    private static cachedTokenCert: string | null = null;
+    private static cachedAesCert: string | null = null;
+    private static certCacheExpiry: number = 0;
 
     private async fetchPublicKeys(): Promise<void> {
+        // Sprawdź cache (certyfikaty ważne 1 godzinę)
+        const now = Date.now();
+        if (KsefService.cachedTokenCert && KsefService.cachedAesCert && now < KsefService.certCacheExpiry) {
+            console.log('   [Auth] ✅ Użyto certyfikatów z cache');
+            this.ksefTokenEncryptionCert = KsefService.cachedTokenCert;
+            this.symmetricKeyEncryptionCert = KsefService.cachedAesCert;
+            return;
+        }
+        
         console.log('   [Auth] Pobieranie certyfikatów KSeF...');
 
         const certificates = await this.requestJson<KsefCertificate[]>(
@@ -510,6 +524,11 @@ export default class KsefService {
             );
         }
         this.symmetricKeyEncryptionCert = aesCert.certificate;
+        
+        // Zapisz do cache (ważne 1 godzinę)
+        KsefService.cachedTokenCert = this.ksefTokenEncryptionCert;
+        KsefService.cachedAesCert = this.symmetricKeyEncryptionCert;
+        KsefService.certCacheExpiry = now + 3600000; // 1h
 
         console.log('   [Auth] ✅ Pobrano certyfikaty KSeF');
     }
@@ -677,12 +696,12 @@ export default class KsefService {
      * Faktura musi być zaszyfrowana AES-256-CBC
      * Request body zawiera metadane i zaszyfrowaną treść
      */
-    async submitInvoice(xml: string): Promise<SendInvoiceResponse> {
+    async submitInvoice(xml: string, isCorrectionInvoice: boolean = false): Promise<any> {
         if (!this.sessionReferenceNumber) {
             await this.openSession();
         }
 
-        console.log('   [Send] Szyfrowanie i wysyłka faktury...');
+        console.log(`   [Send] ${isCorrectionInvoice ? 'Szyfrowanie i wysyłka korekty' : 'Szyfrowanie i wysyłka faktury'}...`);
 
         // Konwertuj XML do bajtów
         const invoiceBytes = Buffer.from(xml, 'utf-8');
@@ -728,10 +747,8 @@ export default class KsefService {
             { Authorization: `Bearer ${this.accessToken}` },
         );
 
-        console.log(
-            '   [Send] ✅ Faktura wysłana, referenceNumber:',
-            response.invoiceReferenceNumber || response.referenceNumber,
-        );
+        const logType = isCorrectionInvoice ? 'Korekta wysłana' : 'Faktura wysłana';
+        console.log(`   [Send] ✅ ${logType}, referenceNumber:`, response.invoiceReferenceNumber || response.referenceNumber);
         return response;
     }
 
@@ -813,12 +830,25 @@ export default class KsefService {
             );
         }
 
-        return await this.requestJson<InvoiceStatusResponse>(
+        const response = await this.requestJson<InvoiceStatusResponse>(
             'GET',
             `/sessions/${sessionRef}/invoices/${invoiceReferenceNumber}`,
             undefined,
-            { Authorization: `Bearer ${this.accessToken}` },
+            {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${this.accessToken}`
+            }
         );
+
+        // Loguj szczegółowy błąd jeśli występuje
+        if (response.status?.code >= 400) {
+            console.error('   [KSeF] ❌ Błąd faktury:', response.status?.description);
+            if (response.status?.details) {
+                console.error('   [KSeF] Szczegóły:', JSON.stringify(response.status.details, null, 2));
+            }
+        }
+
+        return response;
     }
 
     /**

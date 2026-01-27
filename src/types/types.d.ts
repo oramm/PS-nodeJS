@@ -283,6 +283,15 @@ export interface DocumentTemplateData extends RepositoryDataItem {
     _nameContentsAlias?: string;
 }
 
+/** Uproszczone dane faktury korygującej (do wyświetlenia na liście) */
+export interface CorrectionInvoiceSummary {
+    id: number;
+    number: string | null;
+    issueDate: string;
+    correctionReason?: string | null;
+    _totalNetValue?: number;
+}
+
 export interface InvoiceData extends RepositoryDataItem {
     number?: string | null;
     description?: string;
@@ -305,6 +314,13 @@ export interface InvoiceData extends RepositoryDataItem {
     ksefStatus?: string | null;
     ksefSessionId?: string | null;
     ksefUpo?: string | null;
+    // Correction invoice fields
+    /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
+    correctedInvoiceId?: number | null;
+    /** Przyczyna korekty */
+    correctionReason?: string | null;
+    /** Lista faktur korygujących tę fakturę */
+    _corrections?: CorrectionInvoiceSummary[];
 }
 
 export interface InvoiceItemData extends RepositoryDataItem {

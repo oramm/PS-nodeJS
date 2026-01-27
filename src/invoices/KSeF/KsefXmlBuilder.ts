@@ -3,6 +3,18 @@ import ToolsDb from '../../tools/ToolsDb';
 import Setup from '../../setup/Setup';
 
 /**
+ * Interfejs danych oryginalnej faktury wymaganych do korekty
+ */
+export interface OriginalInvoiceData {
+    /** Numer KSeF oryginalnej faktury (format: XXXXXXXXXX-YYYYMMDD-XXXXXX-XXXXXX-XX) */
+    ksefNumber: string;
+    /** Numer wewnętrzny oryginalnej faktury (np. FV/001/2025) */
+    invoiceNumber: string;
+    /** Data wystawienia oryginalnej faktury (YYYY-MM-DD) */
+    issueDate: string;
+}
+
+/**
  * Generator XML faktur w formacie FA(3) dla KSeF
  *
  * Schemat: http://crd.gov.pl/wzor/2025/06/25/13775/
@@ -21,7 +33,126 @@ export default class KsefXmlBuilder {
     private static readonly XSI_NAMESPACE =
         'http://www.w3.org/2001/XMLSchema-instance';
     private static readonly SCHEMA_VERSION = '1-0E';
-    private static readonly FORM_CODE_VALUE = 'FA'; // Treść elementu KodFormularza (enum TKodFormularza)
+    private static readonly FORM_CODE_VALUE = 'FA';  // Treść elementu KodFormularza (enum TKodFormularza)
+
+    /**
+     * Buduje XML faktury korygującej zgodny ze schematem FA(3)
+     * 
+     * Schemat FA(3) wymaga dla faktur korygujących (RodzajFaktury=KOR):
+     * - PrzyczynaKorekty: przyczyna korekty
+     * - TypKorekty: 1=w dacie faktury pierwotnej, 2=w dacie korekty, 3=inna data
+     * - DaneFaKorygowanej: dane faktury korygowanej (data, numer, numer KSeF)
+     * 
+     * @param invoice - Faktura korygująca (pozycje pokazują różnicę: ujemne lub dodatnie)
+     * @param originalInvoice - Dane oryginalnej faktury do korekty
+     * @param correctionReason - Przyczyna korekty (opcjonalna, domyślnie "Korekta faktury")
+     * @param correctionType - Typ skutku korekty: 1=data pierwotna, 2=data korekty (domyślnie 2)
+     */
+    static buildCorrectionXml(
+        invoice: Invoice, 
+        originalInvoice: OriginalInvoiceData,
+        correctionReason: string = 'Korekta faktury',
+        correctionType: 1 | 2 | 3 = 2
+    ): string {
+        // Dane sprzedawcy z Setup.KSeF (tak samo jak w buildXml)
+        const { nip: sellerNip, seller } = Setup.KSeF;
+        const sellerName = seller.name || process.env.KSEF_SELLER_NAME || 'ENVI Sp. z o.o.';
+        const sellerStreet = seller.street || process.env.KSEF_SELLER_STREET || 'ul. Lubicz 25';
+        const sellerCity = seller.city || process.env.KSEF_SELLER_CITY || 'Kraków';
+
+        // Dane nabywcy z faktury korygującej
+        const buyerName = this.escapeXml(invoice._entity?.name || '');
+        const buyerNip = invoice._entity?.taxNumber || '';
+        const buyerAddress = this.escapeXml(invoice._entity?.address || '');
+
+        // Data i numer faktury korygującej
+        const issueDate = this.formatDate(invoice.issueDate);
+        const invoiceNumber = invoice.number || `FV-K/${invoice.id}/${new Date().getFullYear()}`;
+        const creationDateTime = this.formatDateTime(new Date());
+
+        // Dane oryginalnej faktury
+        const originalIssueDate = this.formatDate(originalInvoice.issueDate);
+        const originalNumber = this.escapeXml(originalInvoice.invoiceNumber);
+        const originalKsefNumber = originalInvoice.ksefNumber;
+
+        // Pozycje faktury i sumy
+        const items = invoice._items || [];
+        const { itemsXml, vatSummary } = this.buildItemsXml(items);
+
+        const totalGross = this.calculateTotalGross(items, vatSummary);
+        const vatSections = this.buildVatSectionsXml(vatSummary);
+
+        // Sekcja danych korekty (wymagana gdy RodzajFaktury = KOR, KOR_ZAL, KOR_ROZ)
+        const correctionSection = `
+        <PrzyczynaKorekty>${this.escapeXml(correctionReason)}</PrzyczynaKorekty>
+        <TypKorekty>${correctionType}</TypKorekty>
+        <DaneFaKorygowanej>
+            <DataWystFaKorygowanej>${originalIssueDate}</DataWystFaKorygowanej>
+            <NrFaKorygowanej>${originalNumber}</NrFaKorygowanej>
+            <NrKSeF>1</NrKSeF>
+            <NrKSeFFaKorygowanej>${originalKsefNumber}</NrKSeFFaKorygowanej>
+        </DaneFaKorygowanej>`;
+
+        // Generuj XML faktury korygującej zgodny ze schematem FA(3)
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="${this.NAMESPACE}"
+         xmlns:etd="${this.ETD_NAMESPACE}"
+         xmlns:xsi="${this.XSI_NAMESPACE}">
+    <Naglowek>
+        <KodFormularza kodSystemowy="${this.SYSTEM_CODE}" wersjaSchemy="${this.SCHEMA_VERSION}">${this.FORM_CODE_VALUE}</KodFormularza>
+        <WariantFormularza>${this.VARIANT}</WariantFormularza>
+        <DataWytworzeniaFa>${creationDateTime}</DataWytworzeniaFa>
+        <SystemInfo>ENVI-PS-NodeJS</SystemInfo>
+    </Naglowek>
+    <Podmiot1>
+        <DaneIdentyfikacyjne>
+            <NIP>${sellerNip}</NIP>
+            <Nazwa>${this.escapeXml(sellerName)}</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>${this.escapeXml(sellerStreet)}</AdresL1>
+            <AdresL2>${this.escapeXml(sellerCity)}</AdresL2>
+        </Adres>
+    </Podmiot1>
+    <Podmiot2>
+        <DaneIdentyfikacyjne>${buyerNip ? `
+            <NIP>${buyerNip}</NIP>` : `
+            <BrakID>1</BrakID>`}
+            <Nazwa>${buyerName}</Nazwa>
+        </DaneIdentyfikacyjne>${buyerAddress ? `
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>${buyerAddress}</AdresL1>
+        </Adres>` : ''}
+        <JST>2</JST>
+        <GV>2</GV>
+    </Podmiot2>
+    <Fa>
+        <KodWaluty>PLN</KodWaluty>
+        <P_1>${issueDate}</P_1>
+        <P_2>${this.escapeXml(invoiceNumber)}</P_2>${vatSections}
+        <P_15>${this.formatAmount(totalGross)}</P_15>
+        <Adnotacje>
+            <P_16>2</P_16>
+            <P_17>2</P_17>
+            <P_18>2</P_18>
+            <P_18A>2</P_18A>
+            <Zwolnienie>
+                <P_19N>1</P_19N>
+            </Zwolnienie>
+            <NoweSrodkiTransportu>
+                <P_22N>1</P_22N>
+            </NoweSrodkiTransportu>
+            <P_23>2</P_23>
+            <PMarzy>
+                <P_PMarzyN>1</P_PMarzyN>
+            </PMarzy>
+        </Adnotacje>
+        <RodzajFaktury>KOR</RodzajFaktury>${correctionSection}${itemsXml}
+    </Fa>
+</Faktura>`;
+    }
 
     /**
      * Buduje XML faktury zgodny ze schematem FA(3) v1-0E
@@ -135,9 +266,10 @@ export default class KsefXmlBuilder {
             const name = this.escapeXml(item.description || item.name || '');
             const quantity = item.quantity || 1;
             const unitPrice = item.unitPrice || item.UnitPrice || 0;
-            const netValue = item._netValue || item.net || quantity * unitPrice;
+            const netValue = item._netValue || item.net || (quantity * unitPrice);
+            // Pobierz stawkę VAT z różnych pól pozycji (vatTax z bazy, vatRate z DTO)
             const vatRate = this.normalizeVatRate(
-                item.vatRate || item._vatRate || 23,
+                item.vatRate ?? item._vatRate ?? item.vatTax ?? item.VatTax ?? 23
             );
             const vatValue = this.calculateVat(netValue, vatRate);
 
@@ -234,27 +366,38 @@ export default class KsefXmlBuilder {
     /**
      * Oblicza VAT od wartości netto
      */
-    private static calculateVat(
-        netValue: number,
-        vatRate: number | string,
-    ): number {
-        const rate =
-            typeof vatRate === 'string' ? parseFloat(vatRate) || 0 : vatRate;
-        if (rate === 0 || isNaN(rate)) return 0;
-        return Math.round(netValue * rate) / 100;
+    private static calculateVat(netValue: number, vatRate: number | string): number {
+        if (typeof vatRate === 'string') {
+            if (vatRate === 'zw' || vatRate === 'np') return 0;
+            vatRate = parseFloat(vatRate) || 0;
+        }
+        if (!vatRate || vatRate === 0 || isNaN(vatRate as number)) return 0;
+        return Math.round(netValue * (vatRate as number)) / 100;
     }
 
     /**
      * Normalizuje stawkę VAT do formatu KSeF
+     * Wartości: 23, 8, 5, 0, 'zw', 'np'
      */
     private static normalizeVatRate(rate: any): number | string {
         if (typeof rate === 'string') {
-            const lower = rate.toLowerCase();
+            const lower = rate.trim().toLowerCase().replace('%', '');
             if (lower === 'zw' || lower === 'zwolniony') return 'zw';
             if (lower === 'np' || lower === 'np.') return 'np';
-            return parseFloat(rate) || 23;
+            const numeric = parseFloat(lower);
+            if (isNaN(numeric)) return 23;
+            rate = numeric;
         }
-        return rate || 23;
+        
+        // Jeśli liczba: konwertuj ułamek (0.08) na procenty (8)
+        if (typeof rate === 'number') {
+            if (rate < 1 && rate > 0) rate = rate * 100;
+            // Zaokrąglij do liczby całkowitej dla standardowych stawek
+            const rounded = Math.round(rate);
+            return rounded;
+        }
+        
+        return 23;
     }
 
     /**
