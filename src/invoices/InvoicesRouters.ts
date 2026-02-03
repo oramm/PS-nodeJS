@@ -2,6 +2,10 @@ import InvoicesController from './InvoicesController';
 import { KsefController } from './KSeF';
 import { app } from '../index';
 import { Request, Response } from 'express';
+import multer from 'multer';
+
+// Middleware do parsowania plików
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.post('/invoices', async (req: Request, res: Response, next) => {
     try {
@@ -79,26 +83,45 @@ app.put(
     }
 );
 
-app.put('/issueInvoice/:id', async (req: Request, res: Response, next) => {
-    try {
-        if (!req.files) req.files = [];
-        console.log(req.files);
-        if (!Array.isArray(req.files)) throw new Error('Nie załączono pliku');
-        let invoiceFile: Express.Multer.File;
-        invoiceFile = req.files[0];
+app.put(
+    '/issueInvoice/:id',
+    upload.single('file') as any,
+    async (req: Request, res: Response, next) => {
+        try {
+            const invoiceFile = req.file;
+            if (!invoiceFile) {
+                throw new Error('Nie załączono pliku faktury');
+            }
 
-        const itemFromClient = req.parsedBody;
+            // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
+            let itemFromClient = req.parsedBody;
+            if (!itemFromClient || Object.keys(itemFromClient).length === 0) {
+                itemFromClient = {};
+                for (const key in req.body) {
+                    try {
+                        itemFromClient[key] = JSON.parse(req.body[key]);
+                    } catch {
+                        itemFromClient[key] = req.body[key];
+                    }
+                }
+            }
+            
+            // Upewnij się że id jest ustawione (z URL jeśli brakuje w body)
+            if (!itemFromClient.id && req.params.id) {
+                itemFromClient.id = parseInt(req.params.id, 10);
+            }
 
-        const item = await InvoicesController.issue(
-            itemFromClient,
-            invoiceFile,
-            'FETCH_TOKEN'
-        );
-        res.send(item);
-    } catch (error) {
-        next(error);
+            const item = await InvoicesController.issue(
+                itemFromClient,
+                invoiceFile,
+                'FETCH_TOKEN'
+            );
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
 
 app.put('/setAsSentInvoice/:id', async (req: Request, res: Response, next) => {
     try {

@@ -708,6 +708,17 @@ export default class LettersController extends BaseController<
         if (!isOnlyDbFields) {
             await letter.editLetterGdElements(auth, files);
             console.log('Letter folder and file in GD edited');
+
+            // Po operacjach na Google Drive mogą zmienić się identyfikatory
+            // plików/folderów (gdDocumentId, gdFolderId) oraz liczba plików.
+            // Zapisz te zmiany w bazie danych, aby linki w aplikacji wskazywały
+            // na nowo utworzone zasoby.
+            try {
+                await LettersController.edit(letter);
+                console.log('Letter GD-related fields persisted to DB');
+            } catch (err) {
+                console.error('Failed to persist GD changes to DB:', err);
+            }
         }
 
         // 3. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
