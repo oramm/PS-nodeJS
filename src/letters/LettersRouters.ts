@@ -109,37 +109,54 @@ app.post(
     }
 );
 
-app.post('/letterReact', async (req: Request, res: Response, next) => {
-    try {
-        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
-        console.log('req.files', req.files);
-        const item = LettersController.createProperLetter(req.parsedBody);
+app.post(
+    '/letterReact',
+    uploadLetters.array('file') as any,
+    async (req: Request, res: Response, next) => {
+        try {
+            if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
 
-        // Konwersja req.files do File[]
-        const files = Array.isArray(req.files) ? req.files : [];
+            // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
+            let initParamsFromClient = req.parsedBody;
+            if (!initParamsFromClient || Object.keys(initParamsFromClient).length === 0) {
+                initParamsFromClient = {};
+                for (const key in req.body) {
+                    try {
+                        initParamsFromClient[key] = JSON.parse(req.body[key]);
+                    } catch {
+                        initParamsFromClient[key] = req.body[key];
+                    }
+                }
+            }
 
-        // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
-        if (item instanceof OurLetter) {
-            await LettersController.addNewOurLetter(
-                item,
-                files,
-                req.session.userData
-            );
-        } else if (item instanceof IncomingLetter) {
-            await LettersController.addNewIncomingLetter(
-                item,
-                files,
-                req.session.userData
-            );
-        } else {
-            throw new Error('Unknown letter type');
+            const item = LettersController.createProperLetter(initParamsFromClient);
+
+            // Konwersja req.files do File[]
+            const files = Array.isArray(req.files) ? req.files : [];
+
+            // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
+            if (item instanceof OurLetter) {
+                await LettersController.addNewOurLetter(
+                    item,
+                    files,
+                    req.session.userData
+                );
+            } else if (item instanceof IncomingLetter) {
+                await LettersController.addNewIncomingLetter(
+                    item,
+                    files,
+                    req.session.userData
+                );
+            } else {
+                throw new Error('Unknown letter type');
+            }
+
+            res.send(item);
+        } catch (error) {
+            next(error);
         }
-
-        res.send(item);
-    } catch (error) {
-        next(error);
     }
-});
+);
 
 app.put(
     '/letter/:id',
