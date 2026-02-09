@@ -38,6 +38,57 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-09 - Persons V2 P1-A schema only
+
+### 1. Scope
+- Added SQL migration for Persons V2 schema objects:
+- `PersonAccounts`
+- `PersonProfiles`
+- `PersonProfileExperiences`
+- `PersonProfileEducations` (skeleton)
+- `PersonProfileSkills` (skeleton)
+- `SkillsDictionary` (skeleton)
+
+### 2. DB impact
+- Schema only.
+- New file: `src/persons/migrations/001_create_persons_v2_schema.sql`.
+- No data backfill executed.
+- No runtime read/write code changes.
+
+### 3. ENV impact
+- `.env.example`: not changed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+- Config vars: not required for this checkpoint.
+- Restart/release steps:
+- Apply migration in controlled release process.
+
+### 5. Developer actions
+- Reviewed and approved SQL migration in branch `persons-v2`.
+- Executed migration locally (`NODE_ENV=development`).
+
+### 6. Verification
+- Validate table presence and constraints in `information_schema` after migration:
+- tables, columns, indexes, key_column_usage, referential_constraints.
+- Local verification result (`localhost/envikons_myEnvi`):
+- 6 tables found,
+- 7 foreign keys found,
+- 13 unique indexes found,
+- 21 indexes total.
+
+### 7. Rollback
+- Drop newly created V2 tables in reverse dependency order:
+- `PersonProfileSkills`
+- `PersonProfileEducations`
+- `PersonProfileExperiences`
+- `SkillsDictionary`
+- `PersonProfiles`
+- `PersonAccounts`
+
+### 8. Owner
+- Persons V2 refactor session (Codex + repository owner).
+
 ## 2026-02-08 - Team docs canonical model rollout
 
 ### 1. Scope
