@@ -19,6 +19,8 @@
 - `docs/team/operations/db-changes.md`
 - `docs/team/operations/deployment-heroku.md`
 - `docs/team/operations/post-change-checklist.md`
+- `docs/team/operations/persons-v2-refactor-plan.md`
+- `docs/team/operations/persons-v2-refactor-progress.md`
 
 ## Change policy
 

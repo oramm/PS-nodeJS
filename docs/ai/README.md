@@ -23,3 +23,12 @@
 3. Apply changes.
 4. If DB/env/deploy impact exists, update:
    `docs/team/operations/post-change-checklist.md`.
+
+## Persons V2 Refactor (AI session contract)
+
+For clean-context implementation sessions, use canonical docs:
+
+1. `docs/team/operations/persons-v2-refactor-plan.md`
+2. `docs/team/operations/persons-v2-refactor-progress.md`
+
+LLM must automatically append progress entry at end of each session and update phase snapshot when a checkpoint is closed.
