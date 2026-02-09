@@ -1,5 +1,5 @@
-﻿# Dev Login Setup
+﻿# Wytyczne DB
 
-Moved to: `docs/team/runbooks/dev-login.md`
+Moved to: `docs/team/operations/db-changes.md`
 
 This file is a temporary redirect and will be removed after transition.

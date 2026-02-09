@@ -7,7 +7,9 @@
     "settings": {
         "typescript.tsdk": "node_modules\\typescript\\lib",
         "chat.tools.terminal.autoApprove": {
-            "git add": true
+            "git add": true,
+            "mysql": true,
+            "&": true
         }
     }
 }

@@ -1,6 +1,9 @@
 node_modules/
 build/
 .env
+.env.development
+.env.production
+.env.local
 Tests/
 
 # Test coverage (generowane lokalnie - NIE commitować!)

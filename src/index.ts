@@ -3,8 +3,8 @@ import cors from 'cors';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
 import MongoStore from 'connect-mongo';
-import dotenv from 'dotenv';
-dotenv.config();
+import { loadEnv } from './setup/loadEnv';
+loadEnv();
 
 import './types/sessionTypes';
 import { keys } from './setup/Sessions/credentials';

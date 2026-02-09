@@ -472,6 +472,7 @@ grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
 -   [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
 -   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
 -   **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
+-   [Konfiguracja srodowisk](./srodowiska.instructions.md) - dev/prod, loadEnv, .env files
 
 ---
 

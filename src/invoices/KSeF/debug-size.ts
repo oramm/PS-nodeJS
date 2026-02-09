@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import { loadEnv } from './../../setup/loadEnv';
+loadEnv();
 import InvoiceRepository from '../InvoiceRepository';
 import InvoiceItemsController from '../InvoiceItemsController';
 import KsefXmlBuilder from './KsefXmlBuilder';
