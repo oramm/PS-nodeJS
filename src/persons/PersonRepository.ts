@@ -4,6 +4,7 @@ import Person from './Person';
 import { SystemRoleName } from '../types/sessionTypes';
 import BaseRepository from '../repositories/BaseRepository';
 import Entity from '../entities/Entity';
+import EnviErrors from '../tools/Errors';
 
 export interface PersonsSearchParams {
     projectId?: string;
@@ -35,6 +36,32 @@ export default class PersonRepository extends BaseRepository<Person> {
 
     constructor() {
         super('Persons');
+    }
+
+    private makeSystemEmailConflictError(systemEmail: string): EnviErrors.DbError {
+        return new EnviErrors.DbError(
+            `SystemEmail '${systemEmail}' is already used by another person account.`,
+            'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+        );
+    }
+
+    private async ensureSystemEmailIsAvailable(
+        conn: mysql.PoolConnection,
+        personId: number,
+        systemEmail: string,
+    ): Promise<void> {
+        const [rows] = await conn.query<any[]>(
+            `SELECT PersonId
+             FROM PersonAccounts
+             WHERE SystemEmail = ?
+               AND PersonId <> ?
+             LIMIT 1`,
+            [systemEmail, personId],
+        );
+
+        if (rows.length > 0) {
+            throw this.makeSystemEmailConflictError(systemEmail);
+        }
     }
 
     private isV2ReadEnabled(): boolean {
@@ -438,85 +465,104 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (!Object.values(syncFieldMap).some(Boolean)) return;
 
-        const [rows] = await conn.query<any[]>(
-            'SELECT Id FROM PersonAccounts WHERE PersonId = ? LIMIT 1',
-            [person.id],
-        );
-
-        if (rows.length > 0) {
-            const setParts: string[] = [];
-            const updateValues: any[] = [];
-
-            if (syncFieldMap.systemRoleId) {
-                setParts.push('SystemRoleId = ?');
-                updateValues.push(person.systemRoleId ?? null);
-            }
-            if (syncFieldMap.systemEmail) {
-                setParts.push('SystemEmail = ?');
-                updateValues.push(person.systemEmail ?? null);
-            }
-            if (syncFieldMap.googleId) {
-                setParts.push('GoogleId = ?');
-                updateValues.push(person.googleId ?? null);
-            }
-            if (syncFieldMap.googleRefreshToken) {
-                setParts.push('GoogleRefreshToken = ?');
-                updateValues.push(person.googleRefreshToken ?? null);
-            }
-            if (syncFieldMap.microsoftId) {
-                setParts.push('MicrosoftId = ?');
-                updateValues.push(person.microsoftId ?? null);
-            }
-            if (syncFieldMap.microsoftRefreshToken) {
-                setParts.push('MicrosoftRefreshToken = ?');
-                updateValues.push(person.microsoftRefreshToken ?? null);
+        try {
+            if (
+                syncFieldMap.systemEmail &&
+                person.systemEmail &&
+                person.systemEmail.trim().length > 0
+            ) {
+                await this.ensureSystemEmailIsAvailable(
+                    conn,
+                    person.id,
+                    person.systemEmail,
+                );
             }
 
-            updateValues.push(person.id);
-            await conn.execute(
-                `UPDATE PersonAccounts SET ${setParts.join(', ')} WHERE PersonId = ?`,
-                updateValues,
+            const [rows] = await conn.query<any[]>(
+                'SELECT Id FROM PersonAccounts WHERE PersonId = ? LIMIT 1',
+                [person.id],
             );
-        } else {
-            const columns = ['PersonId'];
-            const placeholders = ['?'];
-            const insertValues: any[] = [person.id];
 
-            if (syncFieldMap.systemRoleId) {
-                columns.push('SystemRoleId');
-                placeholders.push('?');
-                insertValues.push(person.systemRoleId ?? null);
-            }
-            if (syncFieldMap.systemEmail) {
-                columns.push('SystemEmail');
-                placeholders.push('?');
-                insertValues.push(person.systemEmail ?? null);
-            }
-            if (syncFieldMap.googleId) {
-                columns.push('GoogleId');
-                placeholders.push('?');
-                insertValues.push(person.googleId ?? null);
-            }
-            if (syncFieldMap.googleRefreshToken) {
-                columns.push('GoogleRefreshToken');
-                placeholders.push('?');
-                insertValues.push(person.googleRefreshToken ?? null);
-            }
-            if (syncFieldMap.microsoftId) {
-                columns.push('MicrosoftId');
-                placeholders.push('?');
-                insertValues.push(person.microsoftId ?? null);
-            }
-            if (syncFieldMap.microsoftRefreshToken) {
-                columns.push('MicrosoftRefreshToken');
-                placeholders.push('?');
-                insertValues.push(person.microsoftRefreshToken ?? null);
-            }
+            if (rows.length > 0) {
+                const setParts: string[] = [];
+                const updateValues: any[] = [];
 
-            await conn.execute(
-                `INSERT INTO PersonAccounts (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
-                insertValues,
-            );
+                if (syncFieldMap.systemRoleId) {
+                    setParts.push('SystemRoleId = ?');
+                    updateValues.push(person.systemRoleId ?? null);
+                }
+                if (syncFieldMap.systemEmail) {
+                    setParts.push('SystemEmail = ?');
+                    updateValues.push(person.systemEmail ?? null);
+                }
+                if (syncFieldMap.googleId) {
+                    setParts.push('GoogleId = ?');
+                    updateValues.push(person.googleId ?? null);
+                }
+                if (syncFieldMap.googleRefreshToken) {
+                    setParts.push('GoogleRefreshToken = ?');
+                    updateValues.push(person.googleRefreshToken ?? null);
+                }
+                if (syncFieldMap.microsoftId) {
+                    setParts.push('MicrosoftId = ?');
+                    updateValues.push(person.microsoftId ?? null);
+                }
+                if (syncFieldMap.microsoftRefreshToken) {
+                    setParts.push('MicrosoftRefreshToken = ?');
+                    updateValues.push(person.microsoftRefreshToken ?? null);
+                }
+
+                updateValues.push(person.id);
+                await conn.execute(
+                    `UPDATE PersonAccounts SET ${setParts.join(', ')} WHERE PersonId = ?`,
+                    updateValues,
+                );
+            } else {
+                const columns = ['PersonId'];
+                const placeholders = ['?'];
+                const insertValues: any[] = [person.id];
+
+                if (syncFieldMap.systemRoleId) {
+                    columns.push('SystemRoleId');
+                    placeholders.push('?');
+                    insertValues.push(person.systemRoleId ?? null);
+                }
+                if (syncFieldMap.systemEmail) {
+                    columns.push('SystemEmail');
+                    placeholders.push('?');
+                    insertValues.push(person.systemEmail ?? null);
+                }
+                if (syncFieldMap.googleId) {
+                    columns.push('GoogleId');
+                    placeholders.push('?');
+                    insertValues.push(person.googleId ?? null);
+                }
+                if (syncFieldMap.googleRefreshToken) {
+                    columns.push('GoogleRefreshToken');
+                    placeholders.push('?');
+                    insertValues.push(person.googleRefreshToken ?? null);
+                }
+                if (syncFieldMap.microsoftId) {
+                    columns.push('MicrosoftId');
+                    placeholders.push('?');
+                    insertValues.push(person.microsoftId ?? null);
+                }
+                if (syncFieldMap.microsoftRefreshToken) {
+                    columns.push('MicrosoftRefreshToken');
+                    placeholders.push('?');
+                    insertValues.push(person.microsoftRefreshToken ?? null);
+                }
+
+                await conn.execute(
+                    `INSERT INTO PersonAccounts (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
+                    insertValues,
+                );
+            }
+        } catch (error: any) {
+            if (error?.code === 'ER_DUP_ENTRY' && person.systemEmail) {
+                throw this.makeSystemEmailConflictError(person.systemEmail);
+            }
+            throw error;
         }
 
         console.log(

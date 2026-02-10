@@ -20,7 +20,7 @@ Plan reference:
 - Flags state:
 - `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; P1-E parity and rollback rehearsal completed)
 - `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; P2-B write-path split implemented for contact/account + OAuth account writes)
-- Overall status: `P2-C_CLOSED`
+- Overall status: `P2-D_CLOSED`
 
 ## Session Log Template
 
@@ -71,6 +71,68 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-10 - Session 10 - P2-D idempotency hardening
+
+### 1. Scope
+
+- Phase: 2
+- Checkpoint ID: P2-D
+- Planned tasks:
+    - Harden `PersonAccounts` account upsert for uniqueness conflict handling.
+    - Add duplicate-prevention checks for `SystemEmail` updates/inserts.
+    - Verify `SystemEmail` conflict returns controlled error and does not touch another person's account row.
+
+### 2. Completed
+
+- Added controlled conflict handling in `PersonRepository.upsertPersonAccountInDb`:
+    - Introduced pre-write duplicate prevention check for `SystemEmail` against other `PersonId`.
+    - Added controlled domain error mapping for `ER_DUP_ENTRY` race-condition fallback.
+    - Preserved update targeting by `PersonId` (`UPDATE ... WHERE PersonId = ?`) to avoid cross-person mutation.
+- Added P2-D integration-style repository tests:
+    - conflict path returns controlled error and performs no write.
+    - race-condition duplicate maps to controlled error.
+    - safe update path still writes only current person row.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/persons/__tests__/PersonRepository.p2d.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/persons/__tests__/PersonRepository.p2d.integration.test.ts --runInBand` -> PASS (6/6 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `PersonRepository P2-D idempotency hardening`:
+        - `returns controlled error and prevents write when SystemEmail is already used by another person` -> PASS
+        - `maps ER_DUP_ENTRY race condition to controlled SystemEmail conflict error` -> PASS
+        - `updates account row only by current PersonId when SystemEmail is available` -> PASS
+- Files changed:
+    - `src/persons/PersonRepository.ts`
+    - `src/persons/__tests__/PersonRepository.p2d.integration.test.ts`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false` -> unchanged legacy write path by default.
+    - `PERSONS_MODEL_V2_WRITE_DUAL=true` -> account upsert now performs explicit duplicate-prevention checks and controlled conflict error mapping for `SystemEmail`.
+- Legacy behavior check result:
+    - Legacy path remains unchanged with default flags.
+
+### 5. Risks/Blockers
+
+- Controlled conflict currently propagates through existing global error middleware as HTTP 500 with deterministic error message (no dedicated 409 mapping yet).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P3-A
+- Add dedicated v2 endpoints for account/profile/experience operations.
+- Keep legacy endpoint compatibility during consumer migration start.
+
+### 7. Phase Checkpoint
+
+- CLOSED
 
 ## 2026-02-10 - Session 9 - P2-C endpoint compatibility validation
 
