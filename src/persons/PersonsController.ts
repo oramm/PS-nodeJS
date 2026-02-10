@@ -176,11 +176,10 @@ export default class PersonsController extends BaseController<
     }
 
     static async getPersonBySystemEmail(systemEmail: string): Promise<Person> {
-        return (
-            await this.find([
-                { systemEmail: systemEmail, showPrivateData: true },
-            ])
-        )[0];
+        const instance = this.getInstance();
+        return <Person>(
+            await instance.repository.getPersonBySystemEmail(systemEmail)
+        );
     }
 
     static async getSystemRole(params: { id?: number; systemEmail?: string }) {

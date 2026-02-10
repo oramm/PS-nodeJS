@@ -21,6 +21,13 @@ export default class PersonRepository extends BaseRepository<Person> {
         super('Persons');
     }
 
+    private isV2ReadEnabled(): boolean {
+        return (
+            (process.env.PERSONS_MODEL_V2_READ_ENABLED || '').toLowerCase() ===
+            'true'
+        );
+    }
+
     protected mapRowToModel(row: any): Person {
         return new Person({
             id: row.Id,
@@ -39,11 +46,51 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     async find(orConditions: PersonsSearchParams[] = []): Promise<Person[]> {
+        return this.findByReadFacade(orConditions);
+    }
+
+    async findByReadFacade(
+        orConditions: PersonsSearchParams[] = []
+    ): Promise<Person[]> {
+        if (!this.isV2ReadEnabled()) {
+            return this.findLegacy(orConditions);
+        }
+
+        try {
+            return await this.findV2(orConditions);
+        } catch (err) {
+            console.warn(
+                '[PersonsV2] find v2 read path failed, fallback to legacy path.',
+                err
+            );
+            return this.findLegacy(orConditions);
+        }
+    }
+
+    async getPersonBySystemEmailByReadFacade(
+        systemEmail: string
+    ): Promise<Person | undefined> {
+        const people = await this.findByReadFacade([
+            { systemEmail, showPrivateData: true },
+        ]);
+        return people[0];
+    }
+
+    async getPersonBySystemEmail(
+        systemEmail: string
+    ): Promise<Person | undefined> {
+        return this.getPersonBySystemEmailByReadFacade(systemEmail);
+    }
+
+    private async findLegacy(
+        orConditions: PersonsSearchParams[] = []
+    ): Promise<Person[]> {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
-                      this.makeAndConditions.bind(this)
+                      (searchParams) =>
+                          this.makeAndConditions(searchParams, 'legacy')
                   )
                 : '1';
 
@@ -72,7 +119,71 @@ export default class PersonRepository extends BaseRepository<Person> {
         return rows.map((row) => this.mapRowToModel(row));
     }
 
+    private async findV2(
+        orConditions: PersonsSearchParams[] = []
+    ): Promise<Person[]> {
+        const conditions =
+            orConditions.length > 0
+                ? this.makeOrGroupsConditions(
+                      orConditions,
+                      (searchParams) =>
+                          this.makeAndConditions(searchParams, 'v2')
+                  )
+                : '1';
+
+        const sql = `SELECT Persons.Id, 
+                            Persons.EntityId, 
+                            Persons.Name, 
+                            Persons.Surname, 
+                            Persons.Position, 
+                            Persons.Email, 
+                            Persons.Cellphone, 
+                            Persons.Phone, 
+                            Persons.Comment, 
+                            COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail,
+                            COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName,
+                            COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
+                            Entities.Name AS EntityName
+                    FROM Persons
+                    JOIN Entities ON Persons.EntityId=Entities.Id
+                    LEFT JOIN Roles ON Roles.PersonId = Persons.Id
+                    LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
+                    LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id
+                    JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id
+                    WHERE ${conditions}
+                    GROUP BY Persons.Id
+                    ORDER BY Persons.Surname, Persons.Name ASC`;
+
+        const rows = await this.executeQuery(sql);
+        return rows.map((row) => this.mapRowToModel(row));
+    }
+
     async getSystemRole(params: { id?: number; systemEmail?: string }) {
+        return this.getSystemRoleByReadFacade(params);
+    }
+
+    async getSystemRoleByReadFacade(params: { id?: number; systemEmail?: string }) {
+        if (!this.isV2ReadEnabled()) {
+            return this.getSystemRoleLegacy(params);
+        }
+
+        try {
+            const systemRole = await this.getSystemRoleV2(params);
+            if (systemRole) return systemRole;
+            return this.getSystemRoleLegacy(params);
+        } catch (err) {
+            console.warn(
+                '[PersonsV2] getSystemRole v2 read path failed, fallback to legacy path.',
+                err
+            );
+            return this.getSystemRoleLegacy(params);
+        }
+    }
+
+    private async getSystemRoleLegacy(params: {
+        id?: number;
+        systemEmail?: string;
+    }) {
         if (!params.id && !params.systemEmail)
             throw new Error('Person should have an ID or systemEmail');
         const personIdCondition = params.id
@@ -116,8 +227,73 @@ export default class PersonRepository extends BaseRepository<Person> {
         }
     }
 
-    private makeAndConditions(searchParams: PersonsSearchParams): string {
+    private async getSystemRoleV2(params: {
+        id?: number;
+        systemEmail?: string;
+    }) {
+        if (!params.id && !params.systemEmail)
+            throw new Error('Person should have an ID or systemEmail');
+
+        const personIdCondition = params.id
+            ? mysql.format('Persons.Id = ?', [params.id])
+            : '1';
+
+        const systemEmailCondition = params.systemEmail
+            ? mysql.format(
+                  'COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) = ?',
+                  [params.systemEmail]
+              )
+            : '1';
+
+        const sql =
+            'SELECT \n \t' +
+            'COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId, \n \t ' +
+            'Persons.Id AS PersonId, \n \t ' +
+            'COALESCE(PersonAccounts.GoogleId, Persons.GoogleId) AS GoogleId, \n \t ' +
+            'COALESCE(PersonAccounts.GoogleRefreshToken, Persons.GoogleRefreshToken) AS GoogleRefreshToken, \n \t ' +
+            'PersonAccounts.MicrosoftId AS MicrosoftId, \n \t ' +
+            'COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName \n' +
+            'FROM Persons \n ' +
+            'LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1 \n' +
+            'LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id \n' +
+            'LEFT JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id \n' +
+            'WHERE ' +
+            systemEmailCondition +
+            ' AND ' +
+            personIdCondition;
+
+        try {
+            const result: any[] = <any[]>(
+                await ToolsDb.getQueryCallbackAsync(sql)
+            );
+            const row = result[0];
+            if (!row) return undefined;
+            return {
+                id: <number>row.SystemRoleId,
+                name: <SystemRoleName>row.SystemRoleName,
+                personId: <number>row.PersonId,
+                googleId: <string | undefined>row.GoogleId,
+                microsofId: <string | undefined>row.MicrosoftId,
+                googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
+            };
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    private makeAndConditions(
+        searchParams: PersonsSearchParams,
+        readPath: 'legacy' | 'v2' = 'legacy'
+    ): string {
         const conditions: string[] = [];
+        const systemRoleNameColumn =
+            readPath === 'v2'
+                ? 'COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name)'
+                : 'SystemRoles.Name';
+        const systemEmailColumn =
+            readPath === 'v2'
+                ? 'COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail)'
+                : 'Persons.SystemEmail';
 
         if (searchParams.projectId) {
             conditions.push(
@@ -136,7 +312,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (searchParams.systemRoleName) {
             conditions.push(
-                mysql.format(`SystemRoles.Name REGEXP ?`, [
+                mysql.format(`${systemRoleNameColumn} REGEXP ?`, [
                     searchParams.systemRoleName,
                 ])
             );
@@ -144,7 +320,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (searchParams.systemEmail) {
             conditions.push(
-                mysql.format(`Persons.systemEmail=?`, [
+                mysql.format(`${systemEmailColumn}=?`, [
                     searchParams.systemEmail,
                 ])
             );

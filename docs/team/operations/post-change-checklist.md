@@ -38,6 +38,46 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-09 - Persons V2 P1-C read facade (flagged)
+
+### 1. Scope
+- Added Persons read facade methods in repository:
+- `findByReadFacade`
+- `getSystemRoleByReadFacade`
+- `getPersonBySystemEmailByReadFacade`
+- Added V2 read path implementations with controlled fallback to legacy path.
+- Kept existing public read methods unchanged for upcoming `P1-D` switch.
+
+### 2. DB impact
+- None (no schema/data migration changes in this checkpoint).
+
+### 3. ENV impact
+- `.env.example`: updated.
+- New/changed variables:
+- `PERSONS_MODEL_V2_READ_ENABLED` (default `false`)
+- `PERSONS_MODEL_V2_WRITE_DUAL` (default `false`, scaffold kept for upcoming dual-write phase)
+
+### 4. Heroku impact
+- Config vars: required before enabling V2 read path.
+- Restart/release steps:
+- Set `PERSONS_MODEL_V2_READ_ENABLED=false` for safe default rollout.
+- Enable (`true`) only in controlled verification window.
+
+### 5. Developer actions
+- No migration execution needed.
+- Run build/tests and parity checks before enabling read flag in shared environments.
+
+### 6. Verification
+- With `PERSONS_MODEL_V2_READ_ENABLED=false`: facade uses legacy SQL path.
+- With `PERSONS_MODEL_V2_READ_ENABLED=true`: facade uses V2 joins with fallback to legacy on error/no row for role lookup.
+
+### 7. Rollback
+- Set `PERSONS_MODEL_V2_READ_ENABLED=false`.
+- No DB rollback required.
+
+### 8. Owner
+- Persons V2 refactor session (Codex + repository owner).
+
 ## 2026-02-09 - Persons V2 P1-A schema only
 
 ### 1. Scope
