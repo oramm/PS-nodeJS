@@ -159,6 +159,8 @@ require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');
 
+require('./costInvoices/CostInvoicesRouter');
+
 require('./projects/ProjectsRouters');
 
 require('./contracts/ContractsRouters');
