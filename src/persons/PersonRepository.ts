@@ -273,7 +273,9 @@ export default class PersonRepository extends BaseRepository<Person> {
                 name: <SystemRoleName>row.SystemRoleName,
                 personId: <number>row.PersonId,
                 googleId: <string | undefined>row.GoogleId,
-                microsofId: <string | undefined>row.MicrosoftId,
+                microsofId: <string | undefined>(
+                    row.MicrosoftId ?? undefined
+                ),
                 googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
             };
         } catch (err) {

@@ -14,12 +14,12 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `1 (in progress)`
-- Last completed phase: `NONE`
+- Active phase: `2 (ready)`
+- Last completed phase: `1`
 - Flags state:
-- `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; public read methods switched to facade in P1-D, so runtime still follows legacy path while flag is OFF)
+- `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; P1-E parity and rollback rehearsal completed)
 - `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; unchanged)
-- Overall status: `P1-D_CLOSED`
+- Overall status: `P1-E_CLOSED (PHASE_1_COMPLETE)`
 
 ## Session Log Template
 
@@ -63,6 +63,65 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-10 - Session 5 - P1-E read parity and rollback rehearsal
+
+### 1. Scope
+- Phase: 1
+- Checkpoint ID: P1-E
+- Planned tasks:
+  - Compare legacy vs V2 outputs for:
+    - `find`
+    - `getSystemRole`
+    - `getPersonBySystemEmail`
+  - Confirm rollback behavior by switching `PERSONS_MODEL_V2_READ_ENABLED=false`.
+
+### 2. Completed
+- Added and executed parity script:
+  - `tmp/verify-persons-v2-p1e-read-parity.ts`
+- Verified side-by-side outputs for required read methods under:
+  - `READ_ENABLED=false` (legacy baseline),
+  - `READ_ENABLED=true` (V2 path),
+  - rollback to `READ_ENABLED=false`.
+- Found and fixed one compatibility mismatch in `getSystemRole` mapping:
+  - V2 returned `microsofId: null` while legacy behaved as `undefined`.
+  - Updated V2 mapping to keep legacy-compatible shape (`null -> undefined`).
+
+### 3. Evidence
+- Commands/checks:
+  - `$env:NODE_ENV='development'; npx ts-node tmp/verify-persons-v2-p1e-read-parity.ts` -> PASS:
+    - `find(by id)` parity `true`
+    - `find(by systemEmail)` parity `true`
+    - `getSystemRole` parity `true`
+    - `getPersonBySystemEmail` parity `true`
+    - rollback (`READ_ENABLED=false`) parity `true` for all checks
+  - `npm run build` -> PASS (`tsc` completed successfully).
+- Tests:
+  - Dedicated checkpoint parity script run successfully (runtime/API full suite not run in this checkpoint).
+- Files changed:
+  - `src/persons/PersonRepository.ts`
+  - `tmp/verify-persons-v2-p1e-read-parity.ts`
+  - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+- Read flag state and effect:
+  - `PERSONS_MODEL_V2_READ_ENABLED=false` -> verified legacy output baseline and rollback behavior.
+  - `PERSONS_MODEL_V2_READ_ENABLED=true` -> verified parity for required public read methods with legacy-compatible outputs.
+- Write flag state and effect:
+  - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged in this checkpoint.
+- Legacy behavior check result:
+  - Confirmed by side-by-side comparisons and rollback rehearsal.
+
+### 5. Risks/Blockers
+- Parity evidence is from local environment (`NODE_ENV=development`, local DB target). Stage/prod verification remains operational follow-up outside this checkpoint.
+
+### 6. Next Session (exact next actions)
+- Next checkpoint ID: P2-A
+- Implement dual-write plumbing behind `PERSONS_MODEL_V2_WRITE_DUAL`.
+- Keep `WRITE_DUAL=false` behavior unchanged as baseline and add gated path only.
+
+### 7. Phase Checkpoint
+- CLOSED
 
 ## 2026-02-10 - Session 4 - P1-D public read methods switched to facade
 
