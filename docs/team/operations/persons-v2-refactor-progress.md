@@ -19,8 +19,8 @@ Plan reference:
 - Last completed phase: `1`
 - Flags state:
 - `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; P1-E parity and rollback rehearsal completed)
-- `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; P2-A plumbing patched for safe account sync)
-- Overall status: `P2-A_PATCHED`
+- `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; P2-B write-path split implemented for contact/account + OAuth account writes)
+- Overall status: `P2-C_CLOSED`
 
 ## Session Log Template
 
@@ -71,6 +71,137 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-10 - Session 9 - P2-C endpoint compatibility validation
+
+### 1. Scope
+
+- Phase: 2
+- Checkpoint ID: P2-C
+- Planned tasks:
+    - Validate legacy endpoint compatibility for person update flow.
+    - Validate partial update behavior for account fields:
+        - `systemRoleId` only must not clear `systemEmail` in `PersonAccounts`.
+        - `systemEmail` only must not clear `systemRoleId` in `PersonAccounts`.
+
+### 2. Completed
+
+- Added integration-level controller compatibility tests for `PersonsController.editFromDto`:
+    - Legacy path (`PERSONS_MODEL_V2_WRITE_DUAL=false`) still uses legacy `Persons` update flow.
+    - Dual-write path (`PERSONS_MODEL_V2_WRITE_DUAL=true`) with account-only partial update routes to `PersonAccounts` upsert only.
+- Verified selective account sync contract during partial updates:
+    - `systemRoleId` only -> upsert called with `['systemRoleId']` (no `systemEmail` sync).
+    - `systemEmail` only -> upsert called with `['systemEmail']` (no `systemRoleId` sync).
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `PersonsController P2-C endpoint compatibility`:
+        - `keeps legacy edit endpoint operational when WRITE_DUAL=false` -> PASS
+        - `editing only systemRoleId does not sync/clear systemEmail in PersonAccounts` -> PASS
+        - `editing only systemEmail does not sync/clear systemRoleId in PersonAccounts` -> PASS
+- Files changed:
+    - `src/persons/__tests__/PersonsController.p2c.integration.test.ts`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false` -> legacy edit endpoint path unchanged and operational.
+    - `PERSONS_MODEL_V2_WRITE_DUAL=true` -> account partial updates preserve non-updated account field by selective sync.
+- Legacy behavior check result:
+    - Confirmed for update endpoint flow under default flag (`WRITE_DUAL=false`).
+
+### 5. Risks/Blockers
+
+- `SystemEmail` unique conflict runtime hardening scenario is still pending (`P2-D`).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P2-D
+- Add idempotency hardening and conflict handling assertions around `PersonAccounts` uniqueness.
+- Validate that `SystemEmail` conflict never mutates another person's account row.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-10 - Session 8 - P2-B write-path split
+
+### 1. Scope
+
+- Phase: 2
+- Checkpoint ID: P2-B
+- Planned tasks:
+    - Split dual-write paths:
+        - contact -> `Persons`
+        - account -> `PersonAccounts`
+        - profile/experience -> profile tables (scope validation only; no active write endpoint found in current codebase).
+    - Keep default `WRITE_DUAL=false` behavior unchanged.
+
+### 2. Completed
+
+- Updated `PersonsController` dual-write flow to split writes by field group:
+    - `add()` and `addNewSystemUser()` now write contact payload to `Persons` without account fields, then upsert account data to `PersonAccounts`.
+    - `edit()` and `editUserFromDto()` now split `fieldsToUpdate`:
+        - contact fields -> `Persons`
+        - account fields -> `PersonAccounts`
+        - account-only update no longer writes account fields back to `Persons` when `WRITE_DUAL=true`.
+- Extended `PersonRepository.upsertPersonAccountInDb` for full account payload sync:
+    - added support for `googleId`, `googleRefreshToken`, `microsoftId`, `microsoftRefreshToken`,
+    - retained selective field-sync semantics (only explicitly requested fields are changed).
+- Added field-splitting helpers in `PersonRepository`:
+    - `getPersonsWriteFields()`
+    - `getAccountWriteFields()`
+    - `hasProfileWriteFields()`
+- Switched OAuth account writes in `ToolsGapi`:
+    - with `WRITE_DUAL=true` -> account writes go to `PersonAccounts` via repository upsert,
+    - with `WRITE_DUAL=false` -> legacy write to `Persons` remains unchanged.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - Runtime/API test suite not run in this checkpoint.
+- Files changed:
+    - `src/persons/PersonRepository.ts`
+    - `src/persons/PersonsController.ts`
+    - `src/setup/Sessions/ToolsGapi.ts`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false` -> unchanged legacy write behavior.
+    - `PERSONS_MODEL_V2_WRITE_DUAL=true` -> split write path active:
+        - contact writes in `Persons`,
+        - account writes in `PersonAccounts` (including OAuth token/id fields).
+- Legacy behavior check result:
+    - Default flag path unchanged.
+    - Dual-write runtime compatibility validation remains pending for P2-C.
+
+### 5. Risks/Blockers
+
+- Current codebase has no active write endpoint for profile/experience payloads in `PersonsController`; profile tables remain untouched by runtime writes in this checkpoint.
+- Integration/runtime verification for split dual-write behavior is still pending (P2-C).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P2-C
+- Validate endpoint compatibility with legacy endpoints still operational under dual-write split.
+- Add integration checks for partial account updates and controlled behavior before enabling `WRITE_DUAL` in shared environments.
+
+### 7. Phase Checkpoint
+
+- CLOSED
 
 ## 2026-02-10 - Session 7 - P2-A dual-write safety patch
 

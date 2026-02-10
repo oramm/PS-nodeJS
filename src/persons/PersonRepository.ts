@@ -17,6 +17,22 @@ export interface PersonsSearchParams {
 }
 
 export default class PersonRepository extends BaseRepository<Person> {
+    static readonly ACCOUNT_FIELDS = [
+        'systemRoleId',
+        'systemEmail',
+        'googleId',
+        'googleRefreshToken',
+        'microsoftId',
+        'microsoftRefreshToken',
+    ] as const;
+
+    static readonly PROFILE_FIELDS = [
+        'headline',
+        'summary',
+        'profileIsVisible',
+        'profileExperiences',
+    ] as const;
+
     constructor() {
         super('Persons');
     }
@@ -370,24 +386,57 @@ export default class PersonRepository extends BaseRepository<Person> {
      * - jeśli nie istnieje -> tworzy nowy rekord konta.
      */
     async upsertPersonAccountInDb(
-        person: Person,
+        person: {
+            id?: number;
+            systemRoleId?: number;
+            systemEmail?: string;
+            googleId?: string;
+            googleRefreshToken?: string;
+            microsoftId?: string;
+            microsoftRefreshToken?: string;
+        },
         conn: mysql.PoolConnection,
-        fieldsToSync: Array<'systemRoleId' | 'systemEmail'> = [
+        fieldsToSync: Array<
+            | 'systemRoleId'
+            | 'systemEmail'
+            | 'googleId'
+            | 'googleRefreshToken'
+            | 'microsoftId'
+            | 'microsoftRefreshToken'
+        > = [
             'systemRoleId',
             'systemEmail',
+            'googleId',
+            'googleRefreshToken',
+            'microsoftId',
+            'microsoftRefreshToken',
         ],
     ): Promise<void> {
         if (!person.id)
             throw new Error('Person must have an ID for account upsert');
 
-        const syncSystemRole =
-            fieldsToSync.includes('systemRoleId') &&
-            person.systemRoleId !== undefined;
-        const syncSystemEmail =
-            fieldsToSync.includes('systemEmail') &&
-            person.systemEmail !== undefined;
+        const syncFieldMap = {
+            systemRoleId:
+                fieldsToSync.includes('systemRoleId') &&
+                person.systemRoleId !== undefined,
+            systemEmail:
+                fieldsToSync.includes('systemEmail') &&
+                person.systemEmail !== undefined,
+            googleId:
+                fieldsToSync.includes('googleId') &&
+                person.googleId !== undefined,
+            googleRefreshToken:
+                fieldsToSync.includes('googleRefreshToken') &&
+                person.googleRefreshToken !== undefined,
+            microsoftId:
+                fieldsToSync.includes('microsoftId') &&
+                person.microsoftId !== undefined,
+            microsoftRefreshToken:
+                fieldsToSync.includes('microsoftRefreshToken') &&
+                person.microsoftRefreshToken !== undefined,
+        };
 
-        if (!syncSystemRole && !syncSystemEmail) return;
+        if (!Object.values(syncFieldMap).some(Boolean)) return;
 
         const [rows] = await conn.query<any[]>(
             'SELECT Id FROM PersonAccounts WHERE PersonId = ? LIMIT 1',
@@ -398,13 +447,29 @@ export default class PersonRepository extends BaseRepository<Person> {
             const setParts: string[] = [];
             const updateValues: any[] = [];
 
-            if (syncSystemRole) {
+            if (syncFieldMap.systemRoleId) {
                 setParts.push('SystemRoleId = ?');
                 updateValues.push(person.systemRoleId ?? null);
             }
-            if (syncSystemEmail) {
+            if (syncFieldMap.systemEmail) {
                 setParts.push('SystemEmail = ?');
                 updateValues.push(person.systemEmail ?? null);
+            }
+            if (syncFieldMap.googleId) {
+                setParts.push('GoogleId = ?');
+                updateValues.push(person.googleId ?? null);
+            }
+            if (syncFieldMap.googleRefreshToken) {
+                setParts.push('GoogleRefreshToken = ?');
+                updateValues.push(person.googleRefreshToken ?? null);
+            }
+            if (syncFieldMap.microsoftId) {
+                setParts.push('MicrosoftId = ?');
+                updateValues.push(person.microsoftId ?? null);
+            }
+            if (syncFieldMap.microsoftRefreshToken) {
+                setParts.push('MicrosoftRefreshToken = ?');
+                updateValues.push(person.microsoftRefreshToken ?? null);
             }
 
             updateValues.push(person.id);
@@ -417,15 +482,35 @@ export default class PersonRepository extends BaseRepository<Person> {
             const placeholders = ['?'];
             const insertValues: any[] = [person.id];
 
-            if (syncSystemRole) {
+            if (syncFieldMap.systemRoleId) {
                 columns.push('SystemRoleId');
                 placeholders.push('?');
                 insertValues.push(person.systemRoleId ?? null);
             }
-            if (syncSystemEmail) {
+            if (syncFieldMap.systemEmail) {
                 columns.push('SystemEmail');
                 placeholders.push('?');
                 insertValues.push(person.systemEmail ?? null);
+            }
+            if (syncFieldMap.googleId) {
+                columns.push('GoogleId');
+                placeholders.push('?');
+                insertValues.push(person.googleId ?? null);
+            }
+            if (syncFieldMap.googleRefreshToken) {
+                columns.push('GoogleRefreshToken');
+                placeholders.push('?');
+                insertValues.push(person.googleRefreshToken ?? null);
+            }
+            if (syncFieldMap.microsoftId) {
+                columns.push('MicrosoftId');
+                placeholders.push('?');
+                insertValues.push(person.microsoftId ?? null);
+            }
+            if (syncFieldMap.microsoftRefreshToken) {
+                columns.push('MicrosoftRefreshToken');
+                placeholders.push('?');
+                insertValues.push(person.microsoftRefreshToken ?? null);
             }
 
             await conn.execute(
@@ -437,5 +522,42 @@ export default class PersonRepository extends BaseRepository<Person> {
         console.log(
             `[PersonsV2] PersonAccount upserted for PersonId=${person.id}`,
         );
+    }
+
+    getPersonsWriteFields(fieldsToUpdate: string[] = []): string[] {
+        if (fieldsToUpdate.length === 0) return [];
+        const accountFields = new Set<string>([...PersonRepository.ACCOUNT_FIELDS]);
+        const profileFields = new Set<string>([...PersonRepository.PROFILE_FIELDS]);
+        return fieldsToUpdate.filter(
+            (field) => !accountFields.has(field) && !profileFields.has(field),
+        );
+    }
+
+    getAccountWriteFields(
+        fieldsToUpdate: string[] = [],
+    ): Array<
+        | 'systemRoleId'
+        | 'systemEmail'
+        | 'googleId'
+        | 'googleRefreshToken'
+        | 'microsoftId'
+        | 'microsoftRefreshToken'
+    > {
+        const accountFields = new Set<string>([...PersonRepository.ACCOUNT_FIELDS]);
+        return fieldsToUpdate.filter((field) =>
+            accountFields.has(field),
+        ) as Array<
+            | 'systemRoleId'
+            | 'systemEmail'
+            | 'googleId'
+            | 'googleRefreshToken'
+            | 'microsoftId'
+            | 'microsoftRefreshToken'
+        >;
+    }
+
+    hasProfileWriteFields(fieldsToUpdate: string[] = []): boolean {
+        const profileFields = new Set<string>([...PersonRepository.PROFILE_FIELDS]);
+        return fieldsToUpdate.some((field) => profileFields.has(field));
     }
 }

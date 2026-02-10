@@ -67,7 +67,13 @@ export default class PersonsController extends BaseController<
             (person.systemRoleId || person.systemEmail)
         ) {
             await ToolsDb.transaction(async (conn) => {
-                await instance.repository.addInDb(person, conn, true);
+                const personForPersonsWrite = new Person({
+                    ...person,
+                    systemRoleId: undefined,
+                    systemEmail: undefined,
+                });
+                await instance.repository.addInDb(personForPersonsWrite, conn, true);
+                person.id = personForPersonsWrite.id;
                 await instance.repository.upsertPersonAccountInDb(person, conn);
             });
         } else {
@@ -98,28 +104,30 @@ export default class PersonsController extends BaseController<
         fieldsToUpdate: string[],
     ): Promise<Person> {
         const instance = this.getInstance();
-        const accountFields: Array<'systemRoleId' | 'systemEmail'> = [
-            'systemRoleId',
-            'systemEmail',
-        ];
-        const accountFieldsToSync = accountFields.filter((field) =>
-            fieldsToUpdate.includes(field),
-        );
+        const accountFieldsToSync =
+            instance.repository.getAccountWriteFields(fieldsToUpdate);
+        const personFieldsToUpdate =
+            instance.repository.getPersonsWriteFields(fieldsToUpdate);
         const hasAccountFields = accountFieldsToSync.length > 0;
+        const hasPersonFields = personFieldsToUpdate.length > 0;
 
-        if (instance.repository.isV2WriteDualEnabled() && hasAccountFields) {
+        if (instance.repository.isV2WriteDualEnabled()) {
             await ToolsDb.transaction(async (conn) => {
-                await instance.repository.editInDb(
-                    person,
-                    conn,
-                    true,
-                    fieldsToUpdate,
-                );
-                await instance.repository.upsertPersonAccountInDb(
-                    person,
-                    conn,
-                    accountFieldsToSync,
-                );
+                if (hasPersonFields) {
+                    await instance.repository.editInDb(
+                        person,
+                        conn,
+                        true,
+                        personFieldsToUpdate,
+                    );
+                }
+                if (hasAccountFields) {
+                    await instance.repository.upsertPersonAccountInDb(
+                        person,
+                        conn,
+                        accountFieldsToSync,
+                    );
+                }
             });
         } else {
             await instance.repository.editInDb(
@@ -175,19 +183,28 @@ export default class PersonsController extends BaseController<
                 'systemRoleId',
                 'systemEmail',
             ];
+            const accountFieldsToSync =
+                instance.repository.getAccountWriteFields(fieldsToUpdate);
+            const personFieldsToUpdate =
+                instance.repository.getPersonsWriteFields(fieldsToUpdate);
 
             if (instance.repository.isV2WriteDualEnabled()) {
                 await ToolsDb.transaction(async (conn) => {
-                    await instance.repository.editInDb(
-                        user,
-                        conn,
-                        true,
-                        fieldsToUpdate,
-                    );
-                    await instance.repository.upsertPersonAccountInDb(
-                        user,
-                        conn,
-                    );
+                    if (personFieldsToUpdate.length > 0) {
+                        await instance.repository.editInDb(
+                            user,
+                            conn,
+                            true,
+                            personFieldsToUpdate,
+                        );
+                    }
+                    if (accountFieldsToSync.length > 0) {
+                        await instance.repository.upsertPersonAccountInDb(
+                            user,
+                            conn,
+                            accountFieldsToSync,
+                        );
+                    }
                 });
             } else {
                 await instance.repository.editInDb(
@@ -259,7 +276,13 @@ export default class PersonsController extends BaseController<
 
         if (instance.repository.isV2WriteDualEnabled()) {
             await ToolsDb.transaction(async (conn) => {
-                await instance.repository.addInDb(user, conn, true);
+                const userForPersonsWrite = new Person({
+                    ...user,
+                    systemRoleId: undefined,
+                    systemEmail: undefined,
+                });
+                await instance.repository.addInDb(userForPersonsWrite, conn, true);
+                user.id = userForPersonsWrite.id;
                 await instance.repository.upsertPersonAccountInDb(user, conn);
             });
         } else {
