@@ -28,6 +28,13 @@ export default class PersonRepository extends BaseRepository<Person> {
         );
     }
 
+    isV2WriteDualEnabled(): boolean {
+        return (
+            (process.env.PERSONS_MODEL_V2_WRITE_DUAL || '').toLowerCase() ===
+            'true'
+        );
+    }
+
     protected mapRowToModel(row: any): Person {
         return new Person({
             id: row.Id,
@@ -50,7 +57,7 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     async findByReadFacade(
-        orConditions: PersonsSearchParams[] = []
+        orConditions: PersonsSearchParams[] = [],
     ): Promise<Person[]> {
         if (!this.isV2ReadEnabled()) {
             return this.findLegacy(orConditions);
@@ -61,14 +68,14 @@ export default class PersonRepository extends BaseRepository<Person> {
         } catch (err) {
             console.warn(
                 '[PersonsV2] find v2 read path failed, fallback to legacy path.',
-                err
+                err,
             );
             return this.findLegacy(orConditions);
         }
     }
 
     async getPersonBySystemEmailByReadFacade(
-        systemEmail: string
+        systemEmail: string,
     ): Promise<Person | undefined> {
         const people = await this.findByReadFacade([
             { systemEmail, showPrivateData: true },
@@ -77,20 +84,18 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     async getPersonBySystemEmail(
-        systemEmail: string
+        systemEmail: string,
     ): Promise<Person | undefined> {
         return this.getPersonBySystemEmailByReadFacade(systemEmail);
     }
 
     private async findLegacy(
-        orConditions: PersonsSearchParams[] = []
+        orConditions: PersonsSearchParams[] = [],
     ): Promise<Person[]> {
         const conditions =
             orConditions.length > 0
-                ? this.makeOrGroupsConditions(
-                      orConditions,
-                      (searchParams) =>
-                          this.makeAndConditions(searchParams, 'legacy')
+                ? this.makeOrGroupsConditions(orConditions, (searchParams) =>
+                      this.makeAndConditions(searchParams, 'legacy'),
                   )
                 : '1';
 
@@ -120,14 +125,12 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     private async findV2(
-        orConditions: PersonsSearchParams[] = []
+        orConditions: PersonsSearchParams[] = [],
     ): Promise<Person[]> {
         const conditions =
             orConditions.length > 0
-                ? this.makeOrGroupsConditions(
-                      orConditions,
-                      (searchParams) =>
-                          this.makeAndConditions(searchParams, 'v2')
+                ? this.makeOrGroupsConditions(orConditions, (searchParams) =>
+                      this.makeAndConditions(searchParams, 'v2'),
                   )
                 : '1';
 
@@ -162,7 +165,10 @@ export default class PersonRepository extends BaseRepository<Person> {
         return this.getSystemRoleByReadFacade(params);
     }
 
-    async getSystemRoleByReadFacade(params: { id?: number; systemEmail?: string }) {
+    async getSystemRoleByReadFacade(params: {
+        id?: number;
+        systemEmail?: string;
+    }) {
         if (!this.isV2ReadEnabled()) {
             return this.getSystemRoleLegacy(params);
         }
@@ -174,7 +180,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         } catch (err) {
             console.warn(
                 '[PersonsV2] getSystemRole v2 read path failed, fallback to legacy path.',
-                err
+                err,
             );
             return this.getSystemRoleLegacy(params);
         }
@@ -194,19 +200,15 @@ export default class PersonRepository extends BaseRepository<Person> {
             ? mysql.format('Persons.SystemEmail = ?', [params.systemEmail])
             : '1';
 
-        const sql =
-            'SELECT \n \t' +
-            'Persons.SystemRoleId, \n \t ' +
-            'Persons.Id AS PersonId, \n \t ' +
-            'Persons.GoogleId AS GoogleId, \n \t ' +
-            'Persons.GoogleRefreshToken AS GoogleRefreshToken, \n \t ' +
-            'SystemRoles.Name AS SystemRoleName \n' +
-            'FROM Persons \n ' +
-            'JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id \n' +
-            'WHERE ' +
-            systemEmailCondition +
-            ' AND ' +
-            personIdCondition;
+        const sql = `SELECT 
+                Persons.SystemRoleId, 
+                Persons.Id AS PersonId, 
+                Persons.GoogleId AS GoogleId, 
+                Persons.GoogleRefreshToken AS GoogleRefreshToken, 
+                SystemRoles.Name AS SystemRoleName 
+                FROM Persons 
+                JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id 
+                WHERE ${systemEmailCondition} AND ${personIdCondition}`;
 
         try {
             const result: any[] = <any[]>(
@@ -241,26 +243,22 @@ export default class PersonRepository extends BaseRepository<Person> {
         const systemEmailCondition = params.systemEmail
             ? mysql.format(
                   'COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) = ?',
-                  [params.systemEmail]
+                  [params.systemEmail],
               )
             : '1';
 
-        const sql =
-            'SELECT \n \t' +
-            'COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId, \n \t ' +
-            'Persons.Id AS PersonId, \n \t ' +
-            'COALESCE(PersonAccounts.GoogleId, Persons.GoogleId) AS GoogleId, \n \t ' +
-            'COALESCE(PersonAccounts.GoogleRefreshToken, Persons.GoogleRefreshToken) AS GoogleRefreshToken, \n \t ' +
-            'PersonAccounts.MicrosoftId AS MicrosoftId, \n \t ' +
-            'COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName \n' +
-            'FROM Persons \n ' +
-            'LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1 \n' +
-            'LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id \n' +
-            'LEFT JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id \n' +
-            'WHERE ' +
-            systemEmailCondition +
-            ' AND ' +
-            personIdCondition;
+        const sql = `SELECT 
+                        COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
+                        Persons.Id AS PersonId,
+                        COALESCE(PersonAccounts.GoogleId, Persons.GoogleId) AS GoogleId,
+                        COALESCE(PersonAccounts.GoogleRefreshToken, Persons.GoogleRefreshToken) AS GoogleRefreshToken,
+                        PersonAccounts.MicrosoftId AS MicrosoftId,
+                        COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName
+                    FROM Persons
+                    LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
+                    LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id
+                    LEFT JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id
+                    WHERE ${systemEmailCondition} AND ${personIdCondition}`;
 
         try {
             const result: any[] = <any[]>(
@@ -273,9 +271,7 @@ export default class PersonRepository extends BaseRepository<Person> {
                 name: <SystemRoleName>row.SystemRoleName,
                 personId: <number>row.PersonId,
                 googleId: <string | undefined>row.GoogleId,
-                microsofId: <string | undefined>(
-                    row.MicrosoftId ?? undefined
-                ),
+                microsofId: <string | undefined>(row.MicrosoftId ?? undefined),
                 googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
             };
         } catch (err) {
@@ -285,7 +281,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
     private makeAndConditions(
         searchParams: PersonsSearchParams,
-        readPath: 'legacy' | 'v2' = 'legacy'
+        readPath: 'legacy' | 'v2' = 'legacy',
     ): string {
         const conditions: string[] = [];
         const systemRoleNameColumn =
@@ -299,7 +295,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (searchParams.projectId) {
             conditions.push(
-                mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId])
+                mysql.format(`Roles.ProjectOurId=?`, [searchParams.projectId]),
             );
         }
 
@@ -307,8 +303,8 @@ export default class PersonRepository extends BaseRepository<Person> {
             conditions.push(
                 mysql.format(
                     `(Roles.ContractId=(SELECT ProjectOurId FROM Contracts WHERE Contracts.Id=?) OR Roles.ContractId IS NULL)`,
-                    [searchParams.contractId]
-                )
+                    [searchParams.contractId],
+                ),
             );
         }
 
@@ -316,7 +312,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             conditions.push(
                 mysql.format(`${systemRoleNameColumn} REGEXP ?`, [
                     searchParams.systemRoleName,
-                ])
+                ]),
             );
         }
 
@@ -324,7 +320,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             conditions.push(
                 mysql.format(`${systemEmailColumn}=?`, [
                     searchParams.systemEmail,
-                ])
+                ]),
             );
         }
 
@@ -336,14 +332,14 @@ export default class PersonRepository extends BaseRepository<Person> {
             searchParams._entities,
             'Persons',
             'EntityId',
-            'id'
+            'id',
         );
         if (entityCondition !== '1') {
             conditions.push(entityCondition);
         }
 
         const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
+            searchParams.searchText,
         );
         if (searchTextCondition !== '1') {
             conditions.push(searchTextCondition);
@@ -362,9 +358,84 @@ export default class PersonRepository extends BaseRepository<Person> {
                 OR Persons.Surname LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Email LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Comment LIKE ${mysql.escape(`%${word}%`)}
-                OR Persons.Position LIKE ${mysql.escape(`%${word}%`)})`
-            )
+                OR Persons.Position LIKE ${mysql.escape(`%${word}%`)})`,
+            ),
         );
         return conditions.join(' AND ');
+    }
+
+    /**
+     * Upsert = "INSERT albo UPDATE":
+     * - jeśli konto dla PersonId istnieje -> aktualizuje wskazane pola,
+     * - jeśli nie istnieje -> tworzy nowy rekord konta.
+     */
+    async upsertPersonAccountInDb(
+        person: Person,
+        conn: mysql.PoolConnection,
+        fieldsToSync: Array<'systemRoleId' | 'systemEmail'> = [
+            'systemRoleId',
+            'systemEmail',
+        ],
+    ): Promise<void> {
+        if (!person.id)
+            throw new Error('Person must have an ID for account upsert');
+
+        const syncSystemRole =
+            fieldsToSync.includes('systemRoleId') &&
+            person.systemRoleId !== undefined;
+        const syncSystemEmail =
+            fieldsToSync.includes('systemEmail') &&
+            person.systemEmail !== undefined;
+
+        if (!syncSystemRole && !syncSystemEmail) return;
+
+        const [rows] = await conn.query<any[]>(
+            'SELECT Id FROM PersonAccounts WHERE PersonId = ? LIMIT 1',
+            [person.id],
+        );
+
+        if (rows.length > 0) {
+            const setParts: string[] = [];
+            const updateValues: any[] = [];
+
+            if (syncSystemRole) {
+                setParts.push('SystemRoleId = ?');
+                updateValues.push(person.systemRoleId ?? null);
+            }
+            if (syncSystemEmail) {
+                setParts.push('SystemEmail = ?');
+                updateValues.push(person.systemEmail ?? null);
+            }
+
+            updateValues.push(person.id);
+            await conn.execute(
+                `UPDATE PersonAccounts SET ${setParts.join(', ')} WHERE PersonId = ?`,
+                updateValues,
+            );
+        } else {
+            const columns = ['PersonId'];
+            const placeholders = ['?'];
+            const insertValues: any[] = [person.id];
+
+            if (syncSystemRole) {
+                columns.push('SystemRoleId');
+                placeholders.push('?');
+                insertValues.push(person.systemRoleId ?? null);
+            }
+            if (syncSystemEmail) {
+                columns.push('SystemEmail');
+                placeholders.push('?');
+                insertValues.push(person.systemEmail ?? null);
+            }
+
+            await conn.execute(
+                `INSERT INTO PersonAccounts (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
+                insertValues,
+            );
+        }
+
+        console.log(
+            `[PersonsV2] PersonAccount upserted for PersonId=${person.id}`,
+        );
     }
 }

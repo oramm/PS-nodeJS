@@ -3,6 +3,7 @@ import { UserData } from '../types/sessionTypes';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
+import ToolsDb from '../tools/ToolsDb';
 
 export type { PersonsSearchParams };
 
@@ -24,7 +25,7 @@ export default class PersonsController extends BaseController<
     }
 
     static async find(
-        searchParams: PersonsSearchParams[] = []
+        searchParams: PersonsSearchParams[] = [],
     ): Promise<Person[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
@@ -61,8 +62,17 @@ export default class PersonsController extends BaseController<
      */
     static async add(person: Person): Promise<Person> {
         const instance = this.getInstance();
-        await instance.repository.addInDb(person);
-        //await instance.create(person);
+        if (
+            instance.repository.isV2WriteDualEnabled() &&
+            (person.systemRoleId || person.systemEmail)
+        ) {
+            await ToolsDb.transaction(async (conn) => {
+                await instance.repository.addInDb(person, conn, true);
+                await instance.repository.upsertPersonAccountInDb(person, conn);
+            });
+        } else {
+            await instance.repository.addInDb(person);
+        }
         console.log(`Person ${person.name} ${person.surname} added in db`);
         return person;
     }
@@ -73,7 +83,7 @@ export default class PersonsController extends BaseController<
      */
     static async editFromDto(
         personData: any,
-        fieldsToUpdate: string[]
+        fieldsToUpdate: string[],
     ): Promise<Person> {
         const person = new Person(personData);
         return await this.edit(person, fieldsToUpdate);
@@ -85,15 +95,40 @@ export default class PersonsController extends BaseController<
      */
     static async edit(
         person: Person,
-        fieldsToUpdate: string[]
+        fieldsToUpdate: string[],
     ): Promise<Person> {
         const instance = this.getInstance();
-        await instance.repository.editInDb(
-            person,
-            undefined,
-            undefined,
-            fieldsToUpdate
+        const accountFields: Array<'systemRoleId' | 'systemEmail'> = [
+            'systemRoleId',
+            'systemEmail',
+        ];
+        const accountFieldsToSync = accountFields.filter((field) =>
+            fieldsToUpdate.includes(field),
         );
+        const hasAccountFields = accountFieldsToSync.length > 0;
+
+        if (instance.repository.isV2WriteDualEnabled() && hasAccountFields) {
+            await ToolsDb.transaction(async (conn) => {
+                await instance.repository.editInDb(
+                    person,
+                    conn,
+                    true,
+                    fieldsToUpdate,
+                );
+                await instance.repository.upsertPersonAccountInDb(
+                    person,
+                    conn,
+                    accountFieldsToSync,
+                );
+            });
+        } else {
+            await instance.repository.editInDb(
+                person,
+                undefined,
+                undefined,
+                fieldsToUpdate,
+            );
+        }
         console.log(`Person ${person.name} ${person.surname} updated in db`);
         return person;
     }
@@ -103,7 +138,7 @@ export default class PersonsController extends BaseController<
      * Router powinien wywoływać tę metodę.
      */
     static async deleteFromDto(
-        personData: any
+        personData: any,
     ): Promise<{ id: number | undefined }> {
         const person = new Person(personData);
         await this.delete(person);
@@ -141,12 +176,27 @@ export default class PersonsController extends BaseController<
                 'systemEmail',
             ];
 
-            await instance.repository.editInDb(
-                user,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
+            if (instance.repository.isV2WriteDualEnabled()) {
+                await ToolsDb.transaction(async (conn) => {
+                    await instance.repository.editInDb(
+                        user,
+                        conn,
+                        true,
+                        fieldsToUpdate,
+                    );
+                    await instance.repository.upsertPersonAccountInDb(
+                        user,
+                        conn,
+                    );
+                });
+            } else {
+                await instance.repository.editInDb(
+                    user,
+                    undefined,
+                    undefined,
+                    fieldsToUpdate,
+                );
+            }
             console.log(`User ${user.name} ${user.surname} updated in db`);
 
             // TODO:
@@ -168,7 +218,7 @@ export default class PersonsController extends BaseController<
     }
 
     static async getPersonFromSessionUserData(
-        userData: UserData
+        userData: UserData,
     ): Promise<Person> {
         const person = (await this.find([{ id: userData.enviId }]))[0];
         if (!person) throw new Error('No person found');
@@ -203,11 +253,18 @@ export default class PersonsController extends BaseController<
         const user = new Person(userData);
         if (!user.systemRoleId || !user.systemEmail || !user._entity?.id) {
             throw new Error(
-                'User must have systemRoleId, systemEmail, and be associated with an entity.'
+                'User must have systemRoleId, systemEmail, and be associated with an entity.',
             );
         }
 
-        await instance.repository.addInDb(user);
+        if (instance.repository.isV2WriteDualEnabled()) {
+            await ToolsDb.transaction(async (conn) => {
+                await instance.repository.addInDb(user, conn, true);
+                await instance.repository.upsertPersonAccountInDb(user, conn);
+            });
+        } else {
+            await instance.repository.addInDb(user);
+        }
         console.log(`User ${user.name} ${user.surname} added in db`);
         return user;
     }
