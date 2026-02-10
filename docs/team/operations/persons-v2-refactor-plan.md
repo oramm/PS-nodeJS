@@ -142,11 +142,19 @@ Default unit of work is:
 - profile/experience -> profile tables
 
 3. `P2-C` Endpoint compatibility validation (legacy endpoints still operational).
+
+- partial update validation:
+  - updating only `systemRoleId` must not clear `systemEmail` in `PersonAccounts`,
+  - updating only `systemEmail` must not clear `systemRoleId` in `PersonAccounts`.
+
 4. `P2-D` Idempotency hardening:
 
 - uniqueness constraints,
 - conflict handling,
 - duplicate prevention checks.
+- unique conflict safety:
+  - setting an already used `SystemEmail` must return a controlled error,
+  - `SystemEmail` conflict must not modify another person's (`PersonId`) account row.
 
 ### DoD
 
@@ -154,6 +162,10 @@ Default unit of work is:
 2. Flag ON = consistent writes in both paths where required.
 3. No duplicate accounts/profiles.
 4. Audit report PASS (or tracked FAIL with fixes before merge).
+5. Evidence includes at least:
+
+- 1 integration test for partial update (`systemRoleId` only / `systemEmail` only),
+- 1 integration test for `SystemEmail` unique conflict without cross-person overwrite.
 
 ## Phase 3 - V2 Endpoints and Consumer Migration (checkpoints)
 
