@@ -15,12 +15,13 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `2`
-- Last completed phase: `1`
+- Active phase: `4`
+- Last completed phase: `3`
 - Flags state:
 - `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; P1-E parity and rollback rehearsal completed)
 - `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; P2-B write-path split implemented for contact/account + OAuth account writes)
-- Overall status: `P2-D_CLOSED`
+- `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`: `false` (default OFF; P3-D transition validation confirms legacy contract preservation with controlled v2 rollout)
+- Overall status: `P3-D_CLOSED`
 
 ## Session Log Template
 
@@ -71,6 +72,266 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-10 - Session 14 - P3-D transition validation
+
+### 1. Scope
+
+- Phase: 3
+- Checkpoint ID: P3-D
+- Planned tasks:
+    - Validate transition state where legacy contracts remain preserved while v2 contracts are available.
+    - Produce explicit compatibility evidence for both legacy and v2 Persons contracts.
+    - Close phase checkpoint with next action prepared for Phase 4.
+
+### 2. Completed
+
+- Added dedicated P3-D contract test for `PersonsRouters` route registration:
+    - verifies legacy routes (`/persons`, `/person`, `/person/:id`, `/user/:id`, `/systemUser`) are still registered.
+    - verifies dedicated v2 routes (`/v2/persons/:personId/account`, `/v2/persons/:personId/profile`, `/v2/persons/:personId/profile/experiences`) are also registered.
+- Executed transition validation suite covering:
+    - legacy write compatibility (`P2-C`),
+    - dedicated v2 endpoint behavior (`P3-A`),
+    - migrated consumer behavior with safe fallback gating (`P3-B`),
+    - simultaneous legacy/v2 route exposure (`P3-D`).
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/persons/__tests__/PersonsRouters.p3d.contract.test.ts --runInBand` -> PASS (1/1 test).
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/persons/__tests__/PersonsController.p3a.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts src/persons/__tests__/PersonsRouters.p3d.contract.test.ts --runInBand` -> PASS (10/10 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `PersonsRouters P3-D transition validation`:
+        - `keeps legacy routes registered while dedicated v2 routes are available` -> PASS
+    - `PersonsController P2-C endpoint compatibility` -> PASS (legacy edit compatibility and partial account update behavior).
+    - `PersonsController P3-A v2 dedicated endpoints` -> PASS (v2 account/profile/experience contracts).
+    - `ToolsGapi P3-B first consumer migration` -> PASS (legacy fallback + v2 gated consumer migration).
+- Files changed:
+    - `src/persons/__tests__/PersonsRouters.p3d.contract.test.ts`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged default behavior.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`; default keeps legacy-safe path.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=true`; migrated Sessions consumer uses v2 account contract.
+- Legacy behavior check result:
+    - Confirmed: legacy contracts are still preserved while v2 contracts are present and validated.
+
+### 5. Risks/Blockers
+
+- No blocking issue for Phase 3 close.
+- Dedicated v2 not-found/conflict HTTP mapping remains generic through global middleware (tracked earlier), but does not block transition validation checkpoint.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-A
+- Freeze legacy account-field writes in `Persons`.
+- Define compatibility guardrails and rollback notes for the first deprecation step.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-10 - Session 13 - P3-C remaining consumer migration validation
+
+### 1. Scope
+
+- Phase: 3
+- Checkpoint ID: P3-C
+- Planned tasks:
+    - Migrate remaining consumer modules to Persons V2 account/profile/experience contracts.
+    - Validate module-by-module that no additional runtime consumers still write account/profile data through legacy `Persons` fields.
+    - Keep transition compatibility intact while preserving legacy endpoints.
+
+### 2. Completed
+
+- Completed runtime consumer inventory for account/profile write flows:
+    - only `src/setup/Sessions/ToolsGapi.ts` performs consumer-level account writes outside `PersonsController`.
+    - this module was migrated in `P3-B` with gated v2 account write path.
+- Confirmed there are no remaining runtime consumer modules writing account/profile/experience data directly to legacy `Persons` fields beyond the documented gated fallback.
+- Re-validated migrated consumer compatibility behavior and Persons V2 endpoint stability through integration tests.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `rg -n --hidden --glob '!node_modules/**' "PersonsController\.(add|addFromDto|edit|editFromDto|editUserFromDto|addNewSystemUser)|ToolsDb\.editInDb\('Persons'|upsertPersonAccountInDb\(" src` -> only consumer-level legacy account write found in `src/setup/Sessions/ToolsGapi.ts` (already migrated/gated in P3-B); no additional remaining consumer write modules.
+    - `rg -n --hidden --glob '!node_modules/**' "new PersonsController\(|PersonsController\.|SystemRoleService|getSystemRole\(" src | rg -v "__tests__"` -> non-Sessions modules use read-oriented Persons contracts (`find`, `getSystemRole`, `getPersonFromSessionUserData`) and are out of account/profile write migration scope.
+    - `npx jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx jest src/persons/__tests__/PersonsController.p3a.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (6/6 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `ToolsGapi P3-B first consumer migration` -> PASS (legacy fallback + v2 gate + dual-write compatibility).
+    - `PersonsController P3-A v2 dedicated endpoints` -> PASS (account/profile/experience v2 write paths operational).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged default behavior.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`; default still keeps legacy fallback for migrated Sessions consumer until controlled rollout.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=true`; Sessions consumer uses v2 account contract (`PersonAccounts`) as validated.
+- Legacy behavior check result:
+    - Legacy routes and default-flag behavior remain unchanged; v2 contracts stay available for migrated consumers.
+
+### 5. Risks/Blockers
+
+- Full transition completion still depends on `P3-D` contract-level validation and migration checklist sign-off before broader flag enablement.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P3-D
+- Execute transition validation checklist:
+    - confirm legacy contracts are preserved while migration checklist is completed.
+    - document readiness criteria and rollback points for post-migration stabilization.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-10 - Session 12 - P3-B first consumer migration (Sessions OAuth)
+
+### 1. Scope
+
+- Phase: 3
+- Checkpoint ID: P3-B
+- Planned tasks:
+    - Migrate first consumer module to dedicated Persons V2 account write path.
+    - Keep transition production-safe with legacy fallback preserved.
+    - Add consumer-level contract compatibility validation for rollout.
+
+### 2. Completed
+
+- Migrated first consumer module: `src/setup/Sessions/ToolsGapi.ts`.
+- Added sessions-level rollout gate:
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`
+- Implemented routing logic for OAuth account updates:
+    - `SESSIONS_ACCOUNT_ENABLED=false` and `WRITE_DUAL=false` -> legacy write to `Persons`.
+    - `SESSIONS_ACCOUNT_ENABLED=true` -> v2 account write to `PersonAccounts`.
+    - `SESSIONS_ACCOUNT_ENABLED=false` and `WRITE_DUAL=true` -> preserved existing dual-write account path.
+- Added P3-B consumer compatibility tests for all three modes above.
+- Updated operations docs and `.env.example` for env-impacting rollout key.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx jest src/persons/__tests__/PersonsController.p3a.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (6/6 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `ToolsGapi P3-B first consumer migration`:
+        - `keeps legacy Persons write path when sessions migration flag is OFF and dual-write is OFF` -> PASS
+        - `uses v2 account write path when sessions migration flag is ON` -> PASS
+        - `preserves existing dual-write path when sessions migration flag is OFF and dual-write is ON` -> PASS
+- Files changed:
+    - `src/setup/Sessions/ToolsGapi.ts`
+    - `src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts`
+    - `.env.example`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged default fallback behavior.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`; default keeps legacy OAuth consumer path unchanged.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=true`; OAuth account updates in Sessions module use v2 `PersonAccounts` path.
+- Legacy behavior check result:
+    - Verified by test: with both rollout flags OFF, Sessions module still writes through legacy `Persons` path.
+
+### 5. Risks/Blockers
+
+- Sessions rollout to v2 account path is gated by new env var and still requires controlled enablement in shared environments.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P3-C
+- Migrate remaining consumer modules to dedicated `/v2/persons/*` endpoints/module contracts.
+- Continue module-by-module compatibility validation until transition checklist is complete.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-10 - Session 11 - P3-A dedicated v2 endpoints
+
+### 1. Scope
+
+- Phase: 3
+- Checkpoint ID: P3-A
+- Planned tasks:
+    - Add dedicated Persons V2 endpoints for account/profile/experience operations.
+    - Keep legacy endpoints unchanged during transition.
+    - Add verification tests for new controller v2 paths.
+
+### 2. Completed
+
+- Added dedicated v2 API routes in `PersonsRouters`:
+    - `GET/PUT /v2/persons/:personId/account`
+    - `GET/PUT /v2/persons/:personId/profile`
+    - `GET/POST/PUT/DELETE /v2/persons/:personId/profile/experiences`
+- Added dedicated v2 controller methods in `PersonsController`:
+    - account get/upsert handlers for `PersonAccounts`
+    - profile get/upsert handlers for `PersonProfiles`
+    - experience list/create/update/delete handlers for `PersonProfileExperiences`
+- Extended `PersonRepository` with v2 account/profile/experience operations:
+    - account read by `PersonId`
+    - profile upsert/read by `PersonId`
+    - experience list/create/update/delete scoped by `PersonId`
+    - profile auto-create helper when creating first experience for person without existing profile row
+- Added P3-A integration-style controller tests covering dedicated v2 account/profile/experience write paths.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx tsc --noEmit` -> PASS (no type errors).
+    - `npx jest src/persons/__tests__/PersonsController.p3a.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/persons/__tests__/PersonRepository.p2d.integration.test.ts src/persons/__tests__/PersonsController.p3a.integration.test.ts --runInBand` -> PASS (9/9 tests).
+- Tests:
+    - `PersonsController P3-A v2 dedicated endpoints`:
+        - `upserts account via dedicated v2 path` -> PASS
+        - `upserts profile via dedicated v2 path` -> PASS
+        - `creates experience via dedicated v2 path` -> PASS
+- Files changed:
+    - `src/persons/PersonRepository.ts`
+    - `src/persons/PersonsController.ts`
+    - `src/persons/PersonsRouters.ts`
+    - `src/persons/__tests__/PersonsController.p3a.integration.test.ts`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged in this checkpoint.
+    - Dedicated `/v2/persons/*` endpoints write/read directly from v2 tables and do not modify legacy endpoint behavior.
+- Legacy behavior check result:
+    - Existing legacy routes (`/person`, `/persons`, `/user/:id`, `/systemUser`) remain unchanged and operational.
+
+### 5. Risks/Blockers
+
+- Dedicated v2 routes currently return generic 500 via global error middleware for not-found/conflict cases (no explicit 404/409 mapping yet).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P3-B
+- Migrate first consumer module to new dedicated `/v2/persons/*` endpoints.
+- Add consumer-level validation for contract compatibility during rollout.
+
+### 7. Phase Checkpoint
+
+- CLOSED
 
 ## 2026-02-10 - Session 10 - P2-D idempotency hardening
 

@@ -27,7 +27,7 @@ app.post('/offer', async (req: Request, res: Response, next) => {
         const item = await makeOfferObject(req);
         TaskStore.update(taskId, 'Rejestracja oferty w toku', 5);
         res.status(202).send({
-            progressMesage: 'Oferta w trakcie przetwarzania',
+            progressMessage: 'Oferta w trakcie przetwarzania',
             status: 'processing',
             percent: 0,
             taskId,
@@ -40,7 +40,7 @@ app.post('/offer', async (req: Request, res: Response, next) => {
                 TaskStore.complete(
                     taskId,
                     item,
-                    'Oferta pomyślnie zarejestrowana'
+                    'Oferta pomyślnie zarejestrowana',
                 );
             } catch (err) {
                 console.error('Błąd async:', err);
@@ -59,7 +59,7 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
         TaskStore.create(taskId);
 
         res.status(202).send({
-            progressMesage: 'Oferta w trakcie przetwarzania',
+            progressMessage: 'Oferta w trakcie przetwarzania',
             status: 'processing',
             percent: 0,
             taskId,
@@ -71,7 +71,7 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
                 await OffersController.edit(
                     item,
                     taskId,
-                    req.parsedBody._fieldsToUpdate
+                    req.parsedBody._fieldsToUpdate,
                 );
                 TaskStore.complete(taskId, item, 'Oferta zmieniona pomyślnie');
             } catch (err) {
@@ -97,7 +97,7 @@ app.put('/sendOffer/:id', async (req: Request, res: Response, next) => {
             await OffersController.sendOurOffer(
                 item,
                 req.session.userData!,
-                req.parsedBody._newEvent
+                req.parsedBody._newEvent,
             );
         }
         res.send(item);
@@ -134,7 +134,7 @@ app.post(
         } catch (error) {
             next(error);
         }
-    }
+    },
 );
 
 app.put('/addNewOfferBond/:id', async (req: Request, res: Response, next) => {
@@ -228,10 +228,10 @@ async function makeOfferObject(req: Request) {
     if (typeof req.parsedBody._employer === 'string')
         employerName = req.parsedBody._employer;
     const lastEventGdFilesJSON = JSON.stringify(
-        req.parsedBody._lastEvent?._gdFilesBasicData
+        req.parsedBody._lastEvent?._gdFilesBasicData,
     );
     const lastEventRecipientsJSON = JSON.stringify(
-        req.parsedBody._lastEvent?._recipients
+        req.parsedBody._lastEvent?._recipients,
     );
     const offerInitParams: OfferData = {
         ...req.parsedBody,

@@ -21,6 +21,9 @@ type GapiFunction<TArgs extends any[] = any[], TResult = any> = (
 ) => Promise<TResult>;
 
 export default class ToolsGapi {
+    private static readonly PERSONS_V2_SESSIONS_ACCOUNT_ENABLED_FLAG =
+        'PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED';
+
     static scopes = [
         'https://www.googleapis.com/auth/tasks',
         'https://www.googleapis.com/auth/documents',
@@ -274,10 +277,15 @@ export default class ToolsGapi {
         microsoftId?: string;
         microsoftRefreshToken?: string;
     }) {
+        const isV2SessionsAccountEnabled =
+            this.readBooleanEnv(
+                this.PERSONS_V2_SESSIONS_ACCOUNT_ENABLED_FLAG
+            ) === true;
+
         const isV2WriteDualEnabled =
-            (process.env.PERSONS_MODEL_V2_WRITE_DUAL || '').toLowerCase() ===
-            'true';
-        if (!isV2WriteDualEnabled) {
+            this.readBooleanEnv('PERSONS_MODEL_V2_WRITE_DUAL') === true;
+
+        if (!isV2SessionsAccountEnabled && !isV2WriteDualEnabled) {
             return await ToolsDb.editInDb('Persons', data);
         }
 
@@ -298,6 +306,10 @@ export default class ToolsGapi {
                 fieldsToSync,
             );
         });
+    }
+
+    private static readBooleanEnv(flagName: string): boolean {
+        return (process.env[flagName] || '').toLowerCase() === 'true';
     }
 
     static async editUserGoogleIdInDb(userId: number, googleId: string) {

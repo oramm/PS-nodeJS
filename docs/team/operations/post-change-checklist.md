@@ -46,6 +46,105 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-10 - Persons V2 P3-B first consumer migration (Sessions OAuth)
+
+### 1. Scope
+
+- Migrated first consumer module (`src/setup/Sessions/ToolsGapi.ts`) to consume Persons V2 account write path in a rollout-safe way.
+- Added dedicated rollout gate for Sessions module:
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`
+- Kept legacy behavior and previous dual-write behavior as explicit fallback paths.
+- Added consumer-level compatibility tests for flag matrix (legacy, sessions-v2, dual-write).
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime account write path for OAuth session updates can target `PersonAccounts` when sessions migration flag is enabled.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED` (default `false`)
+
+### 4. Heroku impact
+
+- Config vars: add `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false` (safe default).
+- Restart/release steps:
+    - Deploy with `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false` to preserve legacy flow.
+    - Enable `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=true` in controlled rollout for Sessions/OAuth consumer only.
+
+### 5. Developer actions
+
+- No migration/install steps required.
+- Run targeted test and TypeScript check before enabling the new flag.
+
+### 6. Verification
+
+- `npx jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` passes.
+- `npx jest src/persons/__tests__/PersonsController.p3a.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` passes.
+- `npx tsc --noEmit` passes.
+
+### 7. Rollback
+
+- Set `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`.
+- Existing fallback paths remain:
+    - legacy `Persons` write path (`WRITE_DUAL=false`),
+    - dual-write account path (`WRITE_DUAL=true`).
+
+### 8. Owner
+
+- Persons V2 refactor session (Codex + repository owner).
+
+## 2026-02-10 - Persons V2 P3-A dedicated v2 endpoints
+
+### 1. Scope
+
+- Added dedicated Persons V2 API endpoints for:
+    - account (`/v2/persons/:personId/account`)
+    - profile (`/v2/persons/:personId/profile`)
+    - experiences (`/v2/persons/:personId/profile/experiences`)
+- Added controller/repository operations for `PersonAccounts`, `PersonProfiles`, and `PersonProfileExperiences`.
+- Kept all legacy person endpoints unchanged for transition compatibility.
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime writes/reads can now target existing V2 tables through new dedicated endpoints.
+
+### 3. ENV impact
+
+- `.env.example`: not changed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: unchanged.
+- Restart/release steps:
+    - Deploy backend with new routes.
+    - Keep both legacy and v2 endpoints available during consumer migration.
+
+### 5. Developer actions
+
+- No migration/install steps required.
+- Validate endpoint behavior with integration tests and TypeScript build check.
+
+### 6. Verification
+
+- `npx tsc --noEmit` passes.
+- `npx jest src/persons/__tests__/PersonsController.p3a.integration.test.ts --runInBand` passes.
+- Legacy compatibility regression pack:
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/persons/__tests__/PersonRepository.p2d.integration.test.ts src/persons/__tests__/PersonsController.p3a.integration.test.ts --runInBand` passes.
+
+### 7. Rollback
+
+- Revert commit introducing `/v2/persons/*` routes and corresponding controller/repository methods.
+- Legacy routes are unaffected and remain valid fallback.
+
+### 8. Owner
+
+- Persons V2 refactor session (Codex + repository owner).
+
 ## 2026-02-10 - Persons V2 P2-A dual-write safety patch (flagged)
 
 ### 1. Scope

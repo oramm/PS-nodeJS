@@ -32,7 +32,7 @@ export type SessionTask = {
     status: 'processing' | 'done' | 'error';
     result?: any;
     error?: string;
-    progressMesage?: string;
+    progressMessage?: string;
     percent?: number;
     timeout?: NodeJS.Timeout;
 };

@@ -1,6 +1,11 @@
 import Person from './Person';
 import { UserData } from '../types/sessionTypes';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
+import {
+    PersonAccountV2Payload,
+    PersonProfileExperienceV2Payload,
+    PersonProfileV2Payload,
+} from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
@@ -252,6 +257,127 @@ export default class PersonsController extends BaseController<
     static async getSystemRole(params: { id?: number; systemEmail?: string }) {
         const instance = this.getInstance();
         return instance.repository.getSystemRole(params);
+    }
+
+    static async getPersonAccountV2(
+        personId: number,
+    ): Promise<PersonAccountV2Payload | undefined> {
+        const instance = this.getInstance();
+        return instance.repository.getPersonAccountV2(personId);
+    }
+
+    static async upsertPersonAccountV2(
+        accountData: PersonAccountV2Payload,
+    ): Promise<PersonAccountV2Payload> {
+        const instance = this.getInstance();
+        if (!accountData.personId) {
+            throw new Error('personId is required');
+        }
+
+        const fieldsToSync = instance.repository.getAccountWriteFields(
+            Object.keys(accountData).filter((key) => key !== 'personId'),
+        );
+        if (fieldsToSync.length === 0) {
+            throw new Error('No account fields provided for v2 account upsert');
+        }
+
+        await ToolsDb.transaction(async (conn) => {
+            await instance.repository.upsertPersonAccountInDb(
+                {
+                    id: accountData.personId,
+                    systemRoleId: accountData.systemRoleId,
+                    systemEmail: accountData.systemEmail,
+                    googleId: accountData.googleId,
+                    googleRefreshToken: accountData.googleRefreshToken,
+                    microsoftId: accountData.microsoftId,
+                    microsoftRefreshToken: accountData.microsoftRefreshToken,
+                },
+                conn,
+                fieldsToSync,
+            );
+        });
+
+        const account = await instance.repository.getPersonAccountV2(
+            accountData.personId,
+        );
+        if (!account) {
+            throw new Error(
+                `Failed to load account after upsert for PersonId=${accountData.personId}`,
+            );
+        }
+        return account;
+    }
+
+    static async getPersonProfileV2(personId: number) {
+        const instance = this.getInstance();
+        const profile = await instance.repository.getPersonProfileV2(personId);
+        if (!profile) return undefined;
+        const profileExperiences =
+            await instance.repository.listPersonProfileExperiencesV2(personId);
+        return {
+            ...profile,
+            profileExperiences,
+        };
+    }
+
+    static async upsertPersonProfileV2(profileData: PersonProfileV2Payload) {
+        const instance = this.getInstance();
+        if (!profileData.personId) {
+            throw new Error('personId is required');
+        }
+        return await ToolsDb.transaction(async (conn) => {
+            return instance.repository.upsertPersonProfileInDb(profileData, conn);
+        });
+    }
+
+    static async listPersonProfileExperiencesV2(personId: number) {
+        const instance = this.getInstance();
+        return instance.repository.listPersonProfileExperiencesV2(personId);
+    }
+
+    static async addPersonProfileExperienceV2(
+        personId: number,
+        experienceData: PersonProfileExperienceV2Payload,
+    ) {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            return instance.repository.addPersonProfileExperienceInDb(
+                personId,
+                experienceData,
+                conn,
+            );
+        });
+    }
+
+    static async editPersonProfileExperienceV2(
+        personId: number,
+        experienceId: number,
+        experienceData: PersonProfileExperienceV2Payload,
+    ) {
+        const instance = this.getInstance();
+        return await ToolsDb.transaction(async (conn) => {
+            return instance.repository.editPersonProfileExperienceInDb(
+                personId,
+                experienceId,
+                experienceData,
+                conn,
+            );
+        });
+    }
+
+    static async deletePersonProfileExperienceV2(
+        personId: number,
+        experienceId: number,
+    ): Promise<{ id: number }> {
+        const instance = this.getInstance();
+        await ToolsDb.transaction(async (conn) => {
+            await instance.repository.deletePersonProfileExperienceInDb(
+                personId,
+                experienceId,
+                conn,
+            );
+        });
+        return { id: experienceId };
     }
 
     static async addNewSystemUser(userData: {

@@ -21,13 +21,13 @@ export default class TaskStore {
     static update(
         taskId: string | undefined,
         message: string,
-        percent: number
+        percent: number,
     ) {
         if (!taskId) return;
         const task = this.items[taskId];
         if (task) {
             task.status = 'processing';
-            task.progressMesage = '⏳ ' + message;
+            task.progressMessage = '⏳ ' + message;
             task.percent = percent;
         }
     }
@@ -50,13 +50,13 @@ export default class TaskStore {
     static complete(
         taskId: string,
         result: any,
-        message: string = 'Zadanie zakończone'
+        message: string = 'Zadanie zakończone',
     ) {
         const task = this.items[taskId];
         if (task) {
             task.status = 'done';
             task.result = result;
-            task.progressMesage = message;
+            task.progressMessage = message;
             task.percent = 100;
             // nie resetuj timeouta — nadal auto cleanup po TTL
         }

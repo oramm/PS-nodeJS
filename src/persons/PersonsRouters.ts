@@ -2,6 +2,14 @@ import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
 
+const parsePositiveInt = (raw: string, fieldName: string): number => {
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+        throw new Error(`${fieldName} must be a positive integer`);
+    }
+    return value;
+};
+
 app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
@@ -62,3 +70,148 @@ app.post('/systemUser', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+app.get('/v2/persons/:personId/account', async (req: Request, res: Response, next) => {
+    try {
+        const personId = parsePositiveInt(req.params.personId, 'personId');
+        const account = await PersonsController.getPersonAccountV2(personId);
+        res.send(account || null);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put('/v2/persons/:personId/account', async (req: Request, res: Response, next) => {
+    try {
+        const personId = parsePositiveInt(req.params.personId, 'personId');
+        const payload = req.parsedBody ?? req.body;
+        const account = await PersonsController.upsertPersonAccountV2({
+            personId,
+            systemRoleId: payload?.systemRoleId,
+            systemEmail: payload?.systemEmail,
+            googleId: payload?.googleId,
+            googleRefreshToken: payload?.googleRefreshToken,
+            microsoftId: payload?.microsoftId,
+            microsoftRefreshToken: payload?.microsoftRefreshToken,
+            isActive: payload?.isActive,
+        });
+        res.send(account);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get('/v2/persons/:personId/profile', async (req: Request, res: Response, next) => {
+    try {
+        const personId = parsePositiveInt(req.params.personId, 'personId');
+        const profile = await PersonsController.getPersonProfileV2(personId);
+        res.send(profile || null);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put('/v2/persons/:personId/profile', async (req: Request, res: Response, next) => {
+    try {
+        const personId = parsePositiveInt(req.params.personId, 'personId');
+        const payload = req.parsedBody ?? req.body;
+        const profile = await PersonsController.upsertPersonProfileV2({
+            personId,
+            headline: payload?.headline,
+            summary: payload?.summary,
+            profileIsVisible: payload?.profileIsVisible,
+        });
+        res.send(profile);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get(
+    '/v2/persons/:personId/profile/experiences',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const experiences =
+                await PersonsController.listPersonProfileExperiencesV2(personId);
+            res.send(experiences);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+app.post(
+    '/v2/persons/:personId/profile/experiences',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const payload = req.parsedBody ?? req.body;
+            const experience = await PersonsController.addPersonProfileExperienceV2(
+                personId,
+                {
+                    organizationName: payload?.organizationName,
+                    positionName: payload?.positionName,
+                    description: payload?.description,
+                    dateFrom: payload?.dateFrom,
+                    dateTo: payload?.dateTo,
+                    isCurrent: payload?.isCurrent,
+                    sortOrder: payload?.sortOrder,
+                },
+            );
+            res.send(experience);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+app.put(
+    '/v2/persons/:personId/profile/experiences/:experienceId',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const experienceId = parsePositiveInt(
+                req.params.experienceId,
+                'experienceId',
+            );
+            const payload = req.parsedBody ?? req.body;
+            const experience = await PersonsController.editPersonProfileExperienceV2(
+                personId,
+                experienceId,
+                {
+                    organizationName: payload?.organizationName,
+                    positionName: payload?.positionName,
+                    description: payload?.description,
+                    dateFrom: payload?.dateFrom,
+                    dateTo: payload?.dateTo,
+                    isCurrent: payload?.isCurrent,
+                    sortOrder: payload?.sortOrder,
+                },
+            );
+            res.send(experience);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+app.delete(
+    '/v2/persons/:personId/profile/experiences/:experienceId',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const experienceId = parsePositiveInt(
+                req.params.experienceId,
+                'experienceId',
+            );
+            const result = await PersonsController.deletePersonProfileExperienceV2(
+                personId,
+                experienceId,
+            );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
