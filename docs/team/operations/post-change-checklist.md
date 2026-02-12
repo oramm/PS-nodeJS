@@ -184,7 +184,8 @@ Copy the block below for each change:
 ### 7. Rollback
 
 - Revert the P4-A freeze commit to restore previous legacy-write fallback behavior.
-- Read-side compatibility layers remain available (`PERSONS_MODEL_V2_READ_ENABLED` fallback), so rollback scope is limited to write routing logic.
+- Historical note (valid at P4-A time): read-side compatibility fallback existed then.
+- Current state after `P4-B`: when `PERSONS_MODEL_V2_READ_ENABLED=true`, runtime read fallback to legacy is removed.
 
 ### 8. Owner
 

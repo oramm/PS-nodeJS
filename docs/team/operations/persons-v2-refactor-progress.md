@@ -73,6 +73,381 @@ Copy for each session:
 
 ## Session Entries
 
+## 2026-02-12 - Session 22 - P4-D.4 high-risk PR readiness pack
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-D.4
+- Planned tasks:
+    - Finalize retirement PR checklist.
+    - Prepare release communication/deprecation note.
+    - Prepare rollback runbook + post-change checklist draft.
+
+### 2. Completed
+
+- Finalized high-risk PR readiness checklist for legacy retirement execution:
+    - RC1: Scope lock verified (`PUT /user/:id` retirement path + legacy sync retirement gate constraints).
+    - RC2: Backward compatibility matrix A/B/C attached in PR description.
+    - RC3: Deprecation metadata included (`owner`, `sunset target`, `exit criteria`).
+    - RC4: Observability plan attached (`traffic`, `error rate`, `consumer migration status`).
+    - RC5: Rollback playbook attached with trigger thresholds and restore sequence.
+    - RC6: ScrumSheet v2 sync gate linked (`P4-D.SS-V2-IMPL`) as hard prerequisite for legacy sync retirement.
+    - RC7: Release communication draft prepared and reviewed for technical accuracy.
+
+- Prepared release communication/deprecation note draft (for PR/release notes):
+    - announce `PUT /user/:id` deprecation status (active during sunset window),
+    - state sunset policy (`Release N+2`) and owner accountability,
+    - provide migration directive to v2 account/profile/experience paths,
+    - include explicit flag semantics: `PERSONS_MODEL_V2_READ_ENABLED=false` legacy read, `true` strict v2 read.
+
+- Prepared rollback runbook draft for high-risk retirement PR execution:
+    - rollback trigger T1: unexpected error-rate regression in person update/sync operations,
+    - rollback trigger T2: unresolved consumer dependency discovered during sunset checkpoint,
+    - rollback action R1: revert high-risk PR changeset,
+    - rollback action R2: restore previous release artifact/config as needed,
+    - rollback action R3: keep legacy sync path active until v2 replacement gate is revalidated.
+
+- Prepared post-change checklist draft outline for execution PR:
+    - deployment impact confirmation,
+    - environment/config verification,
+    - endpoint traffic and error-rate verification,
+    - consumer migration confirmation,
+    - owner sign-off and incident fallback contacts.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `docs review only` -> readiness pack prepared as planning artifact without runtime modifications.
+- Tests:
+    - not run (documentation-only session; no application code changes).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Compatibility matrix delta:
+    - No matrix state change; this checkpoint finalizes execution-readiness artifacts for planned state transitions.
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> strict v2 read path (no runtime fallback to legacy).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` remains retired/removed (post-`P4-C`).
+- Legacy behavior check result:
+    - No runtime behavior change in this session; readiness artifacts only.
+
+### 5. Risks/Blockers
+
+- Execution remains blocked until high-risk PR window is approved and staffed by release owner.
+- Legacy ScrumSheet sync retirement remains blocked by completion/acceptance of `P4-D.SS-V2-IMPL`.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: WAITING
+- Open and execute separate high-risk PR for `P4-D` retirement scope using finalized readiness pack.
+- Confirm release calendar date for `Release N+2` sunset milestone in PR metadata.
+- Start/track mini-stage `P4-D.SS-V2-IMPL` before any legacy sync retirement action.
+
+### 7. Phase Checkpoint
+
+- OPEN (phase checkpoint `P4-D` remains open until high-risk PR execution evidence is completed).
+
+### 8. P4-D Required Status
+
+- `PUT /user/:id` status: `deprecated` (active in sunset window).
+- Sunset target and owner: `Release N+2`, owner `Persons API maintainer (Backend owner for Persons V2)`.
+- ScrumSheet sync status: `dual` (contract finalized; implementation pending under `P4-D.SS-V2-IMPL`; legacy retirement still gated).
+
+## 2026-02-12 - Session 21 - P4-D.3 ScrumSheet sync contract decision
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-D.3
+- Planned tasks:
+    - Finalize dedicated v2 sync contract for ScrumSheet.
+    - Capture dependency map and migration order.
+    - Create follow-up mini-stage backlog item for implementation.
+
+### 2. Completed
+
+- Finalized dedicated ScrumSheet v2 sync contract decision (retirement gate artifact):
+    - contract mode: `v2-only target`, with controlled temporary dual-availability only during mini-stage rollout,
+    - source of account/profile truth: `PersonAccounts`, `PersonProfiles`, `PersonProfileExperiences`,
+    - legacy `Persons` account columns are explicitly non-authoritative and must not be used as sync source.
+
+- Agreed v2 sync contract (interface-level policy) for ScrumSheet integration:
+    - Upsert account data by `PersonId` using v2 account surface (`/v2/persons/:personId/account`).
+    - Read profile baseline by `PersonId` using v2 profile surface (`/v2/persons/:personId/profile`).
+    - Manage profile experience collection via v2 experience surface (`/v2/persons/:personId/profile/experiences`).
+    - Identity anchor remains `Persons.Id` (`PersonId`) as foreign-key bridge across v2 tables.
+
+- Captured dependency map for migration execution:
+    - D1: Persons API v2 account/profile/experience endpoints availability in target environment.
+    - D2: ScrumSheet field mapping confirmation (`legacy -> v2`) signed by integration owner.
+    - D3: Observability hooks for v2 sync path (request volume + error-rate tracking).
+    - D4: Consumer cutover readiness confirmation for any module still using legacy sync path.
+
+- Defined migration order (ScrumSheet sync):
+    - Step 1: Implement dedicated ScrumSheet v2 adapter path (feature-gated inside ScrumSheet integration layer).
+    - Step 2: Run shadow/dual telemetry window to compare legacy vs v2 sync outcomes.
+    - Step 3: Cut over default sync path to v2.
+    - Step 4: Keep legacy sync path as rollback fallback only during agreed mini-stage window.
+    - Step 5: Remove legacy sync path only after go/no-go acceptance criteria are green.
+
+- Created mini-stage backlog item for implementation after `P4-D` sign-off:
+    - Backlog ID: `P4-D.SS-V2-IMPL`.
+    - Scope: implement ScrumSheet v2 adapter + telemetry + cutover toggle + retirement gate validation.
+    - Exit criteria: v2 sync accepted, legacy dependency set to zero active consumers, retirement gate approved.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `docs review only` -> contract decision and migration planning recorded without runtime modifications.
+- Tests:
+    - not run (documentation-only session; no application code changes).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Compatibility matrix delta:
+    - ScrumSheet state progressed from `legacy only` decision context to `contract defined; implementation pending`.
+    - Legacy sync retirement remains gated by v2 implementation acceptance (`P4-D.SS-V2-IMPL` exit criteria).
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> strict v2 read path (no runtime fallback to legacy).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` remains retired/removed (post-`P4-C`).
+- Legacy behavior check result:
+    - No runtime behavior change in this session; sync contract and retirement gate were documented.
+
+### 5. Risks/Blockers
+
+- Implementation dependency: backlog item `P4-D.SS-V2-IMPL` must be delivered before legacy sync retirement can start.
+- Operational dependency: telemetry baseline for v2 sync path must be established before cutover decision.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-D.4
+- Finalize high-risk PR readiness pack (checklist, release communication, rollback runbook draft).
+- Link `P4-D.SS-V2-IMPL` as mandatory post-sign-off implementation item in PR notes.
+
+### 7. Phase Checkpoint
+
+- OPEN (phase checkpoint `P4-D` still open; sub-checkpoint `P4-D.3` completed in this session).
+
+### 8. P4-D Required Status
+
+- `PUT /user/:id` status: `deprecated` (active in sunset window; unchanged in this session).
+- Sunset target and owner: `Release N+2`, owner `Persons API maintainer (Backend owner for Persons V2)`.
+- ScrumSheet sync status: `dual` (contract finalized; implementation pending under `P4-D.SS-V2-IMPL`; legacy retirement still gated).
+
+## 2026-02-12 - Session 20 - P4-D.2 backward-compat matrix and sunset policy
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-D.2
+- Planned tasks:
+    - Produce backward-compatibility matrix for release states A/B/C.
+    - Assign deprecation owner and sunset target for `PUT /user/:id` (`2 release cycles`).
+    - Define verification signals for retirement readiness (`traffic`, `error rate`, `consumer status`).
+
+### 2. Completed
+
+- Published backward-compatibility matrix for retirement planning:
+
+| Endpoint/Surface                                                      | State A (current release)                                         | State B (sunset window, 2 release cycles) | State C (post-sunset)                                        |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ |
+| `PUT /user/:id` (legacy)                                              | active                                                            | deprecated, active                        | removed                                                      |
+| Legacy person read endpoints (`/persons`, `/person`, `/person/:id`)   | active                                                            | active                                    | active (until dedicated retirement decision in high-risk PR) |
+| Legacy person write endpoints (`/person`, `/systemUser`)              | active (with frozen legacy account-field persistence from `P4-A`) | active (same behavior)                    | active or removed per high-risk PR scope gate                |
+| V2 account endpoint (`/v2/persons/:personId/account`)                 | active                                                            | active                                    | active                                                       |
+| V2 profile endpoint (`/v2/persons/:personId/profile`)                 | active                                                            | active                                    | active                                                       |
+| V2 experience endpoints (`/v2/persons/:personId/profile/experiences`) | active                                                            | active                                    | active                                                       |
+| ScrumSheet sync path (legacy)                                         | legacy only                                                       | legacy only (retirement blocked)          | removed only after v2 sync acceptance gate                   |
+| ScrumSheet sync path (v2)                                             | not ready                                                         | planned/in implementation mini-stage      | required/active                                              |
+
+- Assigned `PUT /user/:id` deprecation ownership and sunset target:
+    - owner: `Persons API maintainer (Backend owner for Persons V2)`.
+    - sunset target: `Release N+2` from deprecation mark date (exact date to be stamped in high-risk PR release note).
+
+- Defined measurable verification signals and exit criteria for legacy endpoint removal decision:
+    - traffic signal: `PUT /user/:id` production request volume trend reaches near-zero and remains below retirement threshold for the final sunset segment.
+    - error-rate signal: no regression spike on person-account update flows after deprecation notice rollout.
+    - consumer-status signal: all known consumers explicitly marked `migrated to v2` by owner confirmation.
+    - removal gate: endpoint removal can proceed only when all three signals are green in one release checkpoint review.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `docs review only` -> matrix/sunset policy defined without runtime modifications.
+- Tests:
+    - not run (documentation-only session; no application code changes).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Compatibility matrix delta:
+    - Added explicit A/B/C states for legacy and v2 endpoint surfaces.
+    - Added explicit legacy ScrumSheet retirement dependency gate tied to v2 replacement acceptance.
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> strict v2 read path (no runtime fallback to legacy).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` remains retired/removed (post-`P4-C`).
+- Legacy behavior check result:
+    - No runtime behavior change in this session; this checkpoint only establishes policy and release-state mapping.
+
+### 5. Risks/Blockers
+
+- Exact deprecation date for `Release N+2` still requires release calendar alignment during high-risk PR preparation.
+- Final removal remains blocked by ScrumSheet v2 sync acceptance gate (`legacy only` at current state).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-D.3
+- Finalize dedicated ScrumSheet v2 sync contract.
+- Capture dependency map and migration order for ScrumSheet sync consumers.
+- Create follow-up mini-stage backlog item for implementation after `P4-D` sign-off.
+
+### 7. Phase Checkpoint
+
+- OPEN (phase checkpoint `P4-D` still open; sub-checkpoint `P4-D.2` completed in this session).
+
+### 8. P4-D Required Status
+
+- `PUT /user/:id` status: `deprecated` (sunset policy defined; endpoint remains active during sunset window).
+- Sunset target and owner: `Release N+2`, owner assigned to `Persons API maintainer (Backend owner for Persons V2)`.
+- ScrumSheet sync status: `legacy only` (retirement blocked until v2 sync replacement acceptance).
+
+## 2026-02-12 - Session 19 - P4-D.1 scope lock and risk gates
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-D.1
+- Planned tasks:
+    - Freeze retirement scope for final deprecation stage (`P4-D`) to prevent scope drift.
+    - Confirm rollback boundary after already closed `P4-B` and `P4-C` checkpoints.
+    - Define explicit go/no-go evidence gates required before high-risk production retirement execution.
+
+### 2. Completed
+
+- Locked `P4-D` retirement scope to planning artifacts only (no runtime/code execution in this session):
+    - legacy endpoint retirement track centered on `PUT /user/:id` deprecation/sunset/removal path,
+    - legacy compatibility retirement track for account-field legacy surface in `Persons` (already frozen in `P4-A`),
+    - legacy sync retirement dependency explicitly gated by ScrumSheet v2 sync replacement acceptance.
+- Confirmed rollback boundary for post-`P4-B`/`P4-C` state:
+    - no runtime read fallback exists when `PERSONS_MODEL_V2_READ_ENABLED=true`,
+    - no dual-write compatibility toggle remains available (`PERSONS_MODEL_V2_WRITE_DUAL` retired),
+    - rollback requires release/config rollback strategy at PR/release level, not feature-toggle flip.
+- Defined `P4-D` production execution go/no-go evidence gates:
+    - Gate 1: backward-compatibility matrix published for state A/B/C with owner accountability,
+    - Gate 2: `PUT /user/:id` deprecation owner + sunset target (`2 release cycles`) + measurable exit criteria,
+    - Gate 3: traffic/error/consumer-status signals captured for sunset monitoring,
+    - Gate 4: ScrumSheet v2 sync contract decision documented with explicit go/no-go retirement gate,
+    - Gate 5: rollback runbook + release communication draft prepared before high-risk PR execution.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `docs review only` -> checkpoint executed as planning/risk-gate session without runtime modifications.
+- Tests:
+    - not run (documentation-only session; no application code changes).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> strict v2 read path (no runtime fallback to legacy).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` remains retired/removed (post-`P4-C`).
+- Legacy behavior check result:
+    - Compatibility remains unchanged in runtime in this session; retirement execution is explicitly blocked behind `P4-D` go/no-go gates.
+
+### 5. Risks/Blockers
+
+- High-risk retirement cannot proceed until matrix/deprecation/sync-contract artifacts are completed in next `P4-D.*` sessions.
+- ScrumSheet legacy sync path remains a hard blocker for final legacy retirement until v2 replacement is accepted.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-D.2
+- Build and publish backward-compatibility matrix for release states A/B/C.
+- Assign `PUT /user/:id` deprecation owner, sunset target, and verification signals (traffic/error/consumer status).
+
+### 7. Phase Checkpoint
+
+- OPEN (phase checkpoint `P4-D` still open; sub-checkpoint `P4-D.1` completed in this session).
+
+### 8. P4-D Required Status
+
+- `PUT /user/:id` status: `active` (deprecation metadata to be finalized in `P4-D.2`).
+- Sunset target and owner: `OPEN` (to be assigned in `P4-D.2`).
+- ScrumSheet sync status: `legacy only` (retirement blocked until v2 sync replacement acceptance).
+
+## 2026-02-12 - Session 18 - P4-D replanning (final stage only)
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-D (planning refinement)
+- Planned tasks:
+    - Align plan with current status (`P4-A`/`P4-B`/`P4-C` closed; `P4-D` open).
+    - Add explicit deprecation policy for legacy `PUT /user/:id`.
+    - Add final-session sequence and compatibility matrix requirements.
+
+### 2. Completed
+
+- Updated `persons-v2-refactor-plan.md` to reflect final-stage-only execution.
+- Added mandatory `P4-D` scope details:
+    - legacy endpoint deprecation and sunset (`2 release cycles`),
+    - ScrumSheet sync decision/contract gate,
+    - backward compatibility matrix (current/sunset/post-sunset),
+    - explicit `PERSONS_MODEL_V2_READ_ENABLED` behavior (`false` legacy, `true` strict v2).
+- Added final-session breakdown (`P4-D.1` -> `P4-D.4`) to guide next implementation sessions.
+- Clarified one historical rollback note in `post-change-checklist` to match post-`P4-B` reality.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `docs review only` -> no runtime code changes required.
+- Tests:
+    - not run (documentation-only session).
+- Files changed:
+    - `docs/team/operations/persons-v2-refactor-plan.md`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> strict v2 read path (no legacy fallback).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` remains retired (post-`P4-C`).
+- Legacy behavior check result:
+    - Legacy endpoint retirement is now explicitly gated by deprecation + sunset policy in plan.
+
+### 5. Risks/Blockers
+
+- Final retirement still depends on explicit ScrumSheet sync replacement acceptance before removing legacy sync path.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-D
+- Execute `P4-D.1` scope lock and risk gates.
+- Produce first version of backward compatibility matrix with current/sunset/post-sunset states.
+
+### 7. Phase Checkpoint
+
+- OPEN
+
 ## 2026-02-12 - Session 17 - P4-C disable/remove dual-write after full migration
 
 ### 1. Scope

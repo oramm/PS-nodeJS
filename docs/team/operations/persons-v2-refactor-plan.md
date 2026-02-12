@@ -35,7 +35,11 @@ Do not restart analysis from zero if progress file already has validated state.
 2. Use feature flags for rollout:
 
 - `PERSONS_MODEL_V2_READ_ENABLED` (default `false`)
-- `PERSONS_MODEL_V2_WRITE_DUAL` (default `false`)
+
+Historical note:
+
+- `PERSONS_MODEL_V2_WRITE_DUAL` was migration-only and was retired in `P4-C`.
+- Do not reintroduce it without explicit rollback decision.
 
 3. Keep architecture rules:
 
@@ -60,6 +64,13 @@ Default unit of work is:
 1. One session = one checkpoint.
 2. If checkpoint is too large, split it into `-1`, `-2` sub-checkpoints in progress file before implementation.
 3. Do not combine multiple OPEN checkpoints in one session unless explicitly requested.
+
+## Current Execution Focus (2026-02-12)
+
+1. Checkpoints `P4-A`, `P4-B`, `P4-C` are CLOSED.
+2. The only OPEN phase checkpoint is `P4-D`.
+3. Replanning scope must stay minimal and focused on final retirement/deprecation work.
+4. Do not reopen closed checkpoints unless production evidence requires rollback or hotfix.
 
 ## Phase 0 - Guardrails and Baseline (checkpoints)
 
@@ -144,8 +155,8 @@ Default unit of work is:
 3. `P2-C` Endpoint compatibility validation (legacy endpoints still operational).
 
 - partial update validation:
-  - updating only `systemRoleId` must not clear `systemEmail` in `PersonAccounts`,
-  - updating only `systemEmail` must not clear `systemRoleId` in `PersonAccounts`.
+    - updating only `systemRoleId` must not clear `systemEmail` in `PersonAccounts`,
+    - updating only `systemEmail` must not clear `systemRoleId` in `PersonAccounts`.
 
 4. `P2-D` Idempotency hardening:
 
@@ -153,8 +164,8 @@ Default unit of work is:
 - conflict handling,
 - duplicate prevention checks.
 - unique conflict safety:
-  - setting an already used `SystemEmail` must return a controlled error,
-  - `SystemEmail` conflict must not modify another person's (`PersonId`) account row.
+    - setting an already used `SystemEmail` must return a controlled error,
+    - `SystemEmail` conflict must not modify another person's (`PersonId`) account row.
 
 ### DoD
 
@@ -190,12 +201,60 @@ Default unit of work is:
 1. `P4-A` Freeze legacy account-field writes in `Persons`.
 2. `P4-B` Remove read fallback after stabilization.
 3. `P4-C` Disable/remove dual-write after full migration.
-4. `P4-D` Legacy-column retirement plan and execution in separate high-risk PR.
+4. `P4-D` Legacy-column and legacy endpoint retirement plan + execution in separate high-risk PR.
+
+`P4-D` scope (mandatory):
+
+- Legacy endpoint `PUT /user/:id`:
+    - mark as `deprecated` immediately,
+    - keep active during sunset window (`2 release cycles`),
+    - remove only after migration evidence confirms no active dependency.
+- ScrumSheet synchronization:
+    - in `P4-D` finalize decision and API contract for dedicated v2 sync path,
+    - schedule implementation as short follow-up mini-stage after `P4-D` sign-off,
+    - do not retire legacy sync path before v2 replacement acceptance.
+- Backward compatibility matrix is required and must define endpoint states:
+    - state A: current release (legacy + v2 active),
+    - state B: sunset window (legacy deprecated, still active),
+    - state C: post-sunset (legacy removed, v2 only).
+- `PERSONS_MODEL_V2_READ_ENABLED` semantics must be explicit in release docs:
+    - backend-owned read-path switch,
+    - `false` -> legacy read path,
+    - `true` -> strict v2 read path (no runtime fallback to legacy).
 
 ### DoD
 
 1. All active flows use v2 model.
 2. Rollback strategy documented for each removed compatibility layer.
+3. Endpoint compatibility matrix is published for current/sunset/post-sunset states.
+4. `PUT /user/:id` deprecation includes owner, sunset target, and measurable exit criteria.
+5. ScrumSheet sync replacement decision is documented with go/no-go retirement gate.
+
+## Final-Stage Sessions (P4-D only)
+
+1. `P4-D.1` Scope lock and risk gates:
+
+- freeze retirement scope (columns + endpoints),
+- confirm rollback boundary after `P4-B`/`P4-C`,
+- define go/no-go evidence for production execution.
+
+2. `P4-D.2` Backward-compat matrix + sunset policy:
+
+- produce matrix for legacy/v2 endpoints by release state,
+- assign deprecation owner and sunset target (`2 release cycles`),
+- define verification signals (`traffic`, `error rate`, `consumer status`).
+
+3. `P4-D.3` ScrumSheet sync contract decision:
+
+- finalize dedicated v2 sync contract,
+- capture dependency map and migration order,
+- create follow-up mini-stage backlog item for implementation.
+
+4. `P4-D.4` High-risk PR readiness pack:
+
+- finalize retirement PR checklist,
+- prepare release communication/deprecation note,
+- prepare rollback runbook + post-change checklist draft.
 
 ## Required Output Per Session
 
@@ -206,6 +265,14 @@ At the end of every session, update progress file with:
 3. Evidence (commands, test results, file-level references).
 4. Open risks/blockers.
 5. Exact next tasks for next clean-context session.
+6. Compatibility matrix delta (what changed in legacy/v2 availability table).
+7. Flag behavior statement for `PERSONS_MODEL_V2_READ_ENABLED` (`false` vs `true`).
+
+For `P4-D` sessions additionally require:
+
+1. `PUT /user/:id` status (`active` | `deprecated` | `removed`).
+2. Sunset target (`release index/date`) and owner.
+3. ScrumSheet sync status (`legacy only` | `dual` | `v2 ready`) and retirement gate.
 
 In the final reply, LLM must also include a short "Next step" line:
 
