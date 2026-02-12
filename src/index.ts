@@ -3,8 +3,8 @@ import cors from 'cors';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
 import MongoStore from 'connect-mongo';
-import dotenv from 'dotenv';
-dotenv.config();
+import { loadEnv } from './setup/loadEnv';
+loadEnv();
 
 import './types/sessionTypes';
 import { keys } from './setup/Sessions/credentials';
@@ -34,7 +34,6 @@ const client = new MongoClient(uri);
 
 export const app = express();
 
-//https://github.com/expressjs/session/issues/374#issuecomment-405282149
 const corsOptions = {
     origin: [
         'http://localhost', // Port 80 (domyślny)
@@ -50,11 +49,16 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Do NOT automatically parse multipart/form-data here — let route-level
+// multer middleware handle parsing to avoid consuming the request stream
+// prematurely (which causes busboy 'Unexpected end of form' errors).
 app.use((req: any, res: any, next: any) => {
-    if (req.is('multipart/form-data')) {
-        (upload.any() as any)(req, res, next);
-        console.log('Multipart form data - upload.any()');
-    } else next();
+    if (req.is && req.is('multipart/form-data')) {
+        console.log(
+            'Multipart form data detected - defer parsing to route-level multer',
+        );
+    }
+    next();
 });
 
 // Przechowuje liczbę prób połączenia
@@ -69,7 +73,7 @@ async function connectWithRetry() {
 
         console.error(
             `Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`,
-            err
+            err,
         );
 
         // Oczekuje 5 sekund przed kolejną próbą
@@ -106,7 +110,7 @@ process.on('unhandledRejection', (reason, promise) => {
         'Nieobsłużone odrzucenie Promise:',
         promise,
         'powód:',
-        reason
+        reason,
     );
     // Podobnie jak powyżej, możemy tutaj dodać kod do łagodnego zamykania aplikacji
 });
@@ -141,12 +145,12 @@ app.use(
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             maxAge: 24 * 60 * 60 * 1000,
         },
-    }) as any
+    }) as any,
 );
 
 app.use((req, res, next) => {
     console.log(
-        `Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `
+        `Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `,
     );
     next();
 });
@@ -203,7 +207,7 @@ app.use(
 
         const message = err instanceof Error ? err.message : 'Nieznany błąd';
         res.status(500).send({ errorMessage: message });
-    }
+    },
 );
 
 app.listen(port, async () => {
@@ -220,7 +224,7 @@ cron.schedule('0 5 * * 1', async () => {
             null as any,
             ScrumBackup.backupScrumSheet,
             [],
-            ScrumBackup
+            ScrumBackup,
         );
     } catch (error) {
         console.error('Błąd podczas wykonywania zaplanowanego zadania:', error);

@@ -4,9 +4,10 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "start": "nodemon --exec ts-node src/index.ts",
+        "start": "cross-env NODE_ENV=development nodemon --exec ts-node src/index.ts",
+        "start:prod": "nodemon --exec ts-node src/index.ts",
         "build": "tsc",
-        "debug": "nodemon --inspect-brk ts-node src/index.ts",
+        "debug": "cross-env NODE_ENV=development nodemon --inspect-brk ts-node src/index.ts",
         "send-milestone-report": "node build/scripts/send-milestone-report.js",
         "check:cycles": "madge --circular --extensions ts,tsx src",
         "test": "jest",
@@ -30,6 +31,7 @@
         "@types/multer": "^1.4.7",
         "@types/node": "^22.4.0",
         "@types/node-cron": "^3.0.11",
+        "cross-env": "^10.1.0",
         "jest": "^30.2.0",
         "madge": "^8.0.0",
         "ts-jest": "^29.4.5",
@@ -55,13 +57,16 @@
         "imapflow": "^1.0.169",
         "js-base64": "^3.6.0",
         "mailparser": "^3.7.1",
+        "mammoth": "^1.11.0",
         "mongodb": "^5.1.0",
         "multer": "^1.4.5-lts.1",
         "mysql2": "^3.2.0",
         "node-cron": "^4.2.1",
         "nodemailer": "^6.9.14",
         "nodemon": "^3.0.2",
-        "open": "^7.4.2"
+        "open": "^7.4.2",
+        "openai": "^6.16.0",
+        "pdf-parse": "^2.4.5"
     },
     "engines": {
         "node": ">=22.17.0 <25.0.0"

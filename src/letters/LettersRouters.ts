@@ -7,6 +7,11 @@ import ToolsDocs from '../tools/ToolsDocs';
 import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
+import LetterValidator from './LetterValidator';
+import multer from 'multer';
+
+// Middleware do parsowania plików
+const uploadLetters = multer({ storage: multer.memoryStorage() });
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -104,62 +109,100 @@ app.post(
     }
 );
 
-app.post('/letterReact', async (req: Request, res: Response, next) => {
-    try {
-        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
-        console.log('req.files', req.files);
-        const item = LettersController.createProperLetter(req.parsedBody);
+app.post(
+    '/letterReact',
+    uploadLetters.array('file') as any,
+    async (req: Request, res: Response, next) => {
+        try {
+            if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
 
-        // Konwersja req.files do File[]
-        const files = Array.isArray(req.files) ? req.files : [];
+            // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
+            let initParamsFromClient = req.parsedBody;
+            if (!initParamsFromClient || Object.keys(initParamsFromClient).length === 0) {
+                initParamsFromClient = {};
+                for (const key in req.body) {
+                    try {
+                        initParamsFromClient[key] = JSON.parse(req.body[key]);
+                    } catch {
+                        initParamsFromClient[key] = req.body[key];
+                    }
+                }
+            }
 
-        // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
-        if (item instanceof OurLetter) {
-            await LettersController.addNewOurLetter(
-                item,
-                files,
-                req.session.userData
-            );
-        } else if (item instanceof IncomingLetter) {
-            await LettersController.addNewIncomingLetter(
-                item,
-                files,
-                req.session.userData
-            );
-        } else {
-            throw new Error('Unknown letter type');
+            const item = LettersController.createProperLetter(initParamsFromClient);
+
+            // Konwersja req.files do File[]
+            const files = Array.isArray(req.files) ? req.files : [];
+
+            // Użyj odpowiedniej metody z LettersController w zależności od typu Letter
+            if (item instanceof OurLetter) {
+                await LettersController.addNewOurLetter(
+                    item,
+                    files,
+                    req.session.userData
+                );
+            } else if (item instanceof IncomingLetter) {
+                await LettersController.addNewIncomingLetter(
+                    item,
+                    files,
+                    req.session.userData
+                );
+            } else {
+                throw new Error('Unknown letter type');
+            }
+
+            res.send(item);
+        } catch (error) {
+            next(error);
         }
-
-        res.send(item);
-    } catch (error) {
-        next(error);
     }
-});
+);
 
-app.put('/letter/:id', async (req: Request, res: Response, next) => {
-    try {
-        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
-        const _fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const initParamsFromClient = req.parsedBody;
+app.put(
+    '/letter/:id',
+    uploadLetters.array('file') as any,
+    async (req: Request, res: Response, next) => {
+        try {
+            if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
 
-        // Konwersja req.files do File[]
-        const files = Array.isArray(req.files) ? req.files : [];
-        console.log('req.files', files);
+            // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
+            let initParamsFromClient = req.parsedBody;
+            if (!initParamsFromClient || Object.keys(initParamsFromClient).length === 0) {
+                initParamsFromClient = {};
+                for (const key in req.body) {
+                    try {
+                        initParamsFromClient[key] = JSON.parse(req.body[key]);
+                    } catch {
+                        initParamsFromClient[key] = req.body[key];
+                    }
+                }
+            }
 
-        const item = LettersController.createProperLetter(initParamsFromClient);
+            // Upewnij się że id jest ustawione (z URL jeśli brakuje w body)
+            if (!initParamsFromClient.id && req.params.id) {
+                initParamsFromClient.id = parseInt(req.params.id, 10);
+            }
 
-        // Użyj LettersController.editLetter z nowym API (withAuth)
-        await LettersController.editLetter(
-            item,
-            files,
-            req.session.userData,
-            _fieldsToUpdate
-        );
-        res.send(item);
-    } catch (error) {
-        next(error);
+            const _fieldsToUpdate = initParamsFromClient._fieldsToUpdate;
+
+            // Konwersja req.files do File[]
+            const files = Array.isArray(req.files) ? req.files : [];
+
+            const item = LettersController.createProperLetter(initParamsFromClient);
+
+            // Użyj LettersController.editLetter z nowym API (withAuth)
+            await LettersController.editLetter(
+                item,
+                files,
+                req.session.userData,
+                _fieldsToUpdate
+            );
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
     }
-});
+);
 
 app.put(
     '/appendLetterAttachments/:id',
@@ -167,16 +210,16 @@ app.put(
         try {
             if (!req.session.userData)
                 throw new Error('Użytkownik niezalogowany');
-            const item = LettersController.createProperLetter(req.body);
+            const item = LettersController.createProperLetter(req.parsedBody);
             if (
-                !req.body._blobEnviObjects ||
-                !Array.isArray(req.body._blobEnviObjects)
+                !req.parsedBody._blobEnviObjects ||
+                !Array.isArray(req.parsedBody._blobEnviObjects)
             )
                 throw new Error(`No blobs to upload for Letter ${item.number}`);
 
             await LettersController.appendAttachments(
                 item,
-                req.body._blobEnviObjects
+                req.parsedBody._blobEnviObjects
             );
 
             res.send(item);
@@ -240,3 +283,29 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post(
+  '/letters/analyze',
+  ((req: Request, res: Response, next: any) => {
+    // console.log('--- Incoming /letters/analyze ---');
+    // console.log('headers:', req.headers);
+    // console.log('content-length:', req.headers['content-length']);
+    // console.log('socket bytesRead before:', req.socket.bytesRead);
+    // req.on('aborted', () => console.log('req aborted. socket.bytesRead=', req.socket.bytesRead));
+    // req.on('close', () => console.log('req close. socket.bytesRead=', req.socket.bytesRead));
+    next();
+  }) as any,
+  upload.single('file') as any,
+  async (req: Request, res: Response, next: any) => {
+    try {
+      //console.log('After multer, file present?:', !!req.file, 'bytesRead after multer:', req.socket.bytesRead);
+      if (!req.file) throw new Error("Nie załączono pliku do analizy.");
+      const analysisResult = await LettersController.analyzeDocument(req.file);
+      res.send(analysisResult);
+    } catch (error) {
+      next(error);
+    }
+  }
+);

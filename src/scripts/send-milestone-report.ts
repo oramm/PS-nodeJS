@@ -1,9 +1,9 @@
 console.log('Initializing minimal environment...');
 
 // Tylko podstawowe inicjalizacje - bez routerów!
-import dotenv from 'dotenv';
+import { loadEnv } from '../setup/loadEnv';
 import ToolsDb from '../tools/ToolsDb';
-dotenv.config();
+loadEnv();
 
 // Import typów wymaganych przez aplikację
 import '../types/sessionTypes';

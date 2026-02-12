@@ -4,6 +4,7 @@ import ToolsDb from '../../tools/ToolsDb';
 import { Request, Response } from 'express';
 import { keys } from './credentials';
 import { SystemRoleName } from '../../types/sessionTypes';
+import PersonRepository from '../../persons/PersonRepository';
 
 export const oAuthClient: OAuth2Client = new OAuth2Client(
     keys.installed.client_id,
@@ -270,8 +271,26 @@ export default class ToolsGapi {
         id: number;
         googleId?: string;
         googleRefreshToken?: string;
+        microsoftId?: string;
+        microsoftRefreshToken?: string;
     }) {
-        return await ToolsDb.editInDb('Persons', data);
+        const repository = new PersonRepository();
+        const fieldsToSync = repository.getAccountWriteFields(Object.keys(data));
+        if (fieldsToSync.length === 0) return;
+
+        return await ToolsDb.transaction(async (conn) => {
+            await repository.upsertPersonAccountInDb(
+                {
+                    id: data.id,
+                    googleId: data.googleId,
+                    googleRefreshToken: data.googleRefreshToken,
+                    microsoftId: data.microsoftId,
+                    microsoftRefreshToken: data.microsoftRefreshToken,
+                },
+                conn,
+                fieldsToSync,
+            );
+        });
     }
 
     static async editUserGoogleIdInDb(userId: number, googleId: string) {

@@ -9,7 +9,14 @@
       "WebFetch(domain:ksef-test.mf.gov.pl)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:api-test.ksef.mf.gov.pl)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git stash:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(where:*)",
+      "Bash(php:*)",
+      "Bash(sc query:*)",
+      "Bash(yarn add:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

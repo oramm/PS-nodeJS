@@ -101,15 +101,12 @@ export default class KsefService {
     // ==================== KONFIGURACJA (z Setup.KSeF) ====================
 
     /**
-     * Zwraca URL API KSeF z konfiguracji
+     * Zwraca URL API KSeF na podstawie środowiska
      */
     static getApiUrl(): string {
-        if (!Setup.KSeF.apiUrl) {
-            throw new Error(
-                'KSEF_API_URL_TEST lub KSEF_API_URL_PROD nie ustawione w .env',
-            );
-        }
-        return Setup.KSeF.apiUrl;
+        return Setup.KSeF.environment === 'production'
+            ? 'https://ksef.mf.gov.pl/api'
+            : 'https://ksef-test.mf.gov.pl/api';
     }
 
     /**
@@ -117,20 +114,16 @@ export default class KsefService {
      * @throws Error jeśli konfiguracja niepoprawna
      */
     static validateConfig(): void {
-        const { nip, token, apiUrl } = Setup.KSeF;
+        const { nip, token, environment } = Setup.KSeF;
 
         if (!nip || !/^\d{10}$/.test(nip)) {
             throw new Error('KSEF_NIP must be 10 digits (no dashes)');
         }
         if (!token) {
-            throw new Error(
-                'KSEF_AUTH_TOKEN_TEST lub KSEF_AUTH_TOKEN_PROD wymagane',
-            );
+            throw new Error('KSEF_TOKEN is required');
         }
-        if (!apiUrl) {
-            throw new Error(
-                'KSEF_API_URL_TEST lub KSEF_API_URL_PROD wymagane',
-            );
+        if (!['test', 'production'].includes(environment)) {
+            throw new Error('KSEF_ENVIRONMENT must be "test" or "production"');
         }
     }
 

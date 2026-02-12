@@ -21,6 +21,9 @@ import ToolsGd from '../tools/ToolsGd';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
+import ToolsAI from '../tools/ToolsAI';
+import { EntityData } from '../types/types';
+import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 
 export default class LettersController extends BaseController<
@@ -705,6 +708,17 @@ export default class LettersController extends BaseController<
         if (!isOnlyDbFields) {
             await letter.editLetterGdElements(auth, files);
             console.log('Letter folder and file in GD edited');
+
+            // Po operacjach na Google Drive mogą zmienić się identyfikatory
+            // plików/folderów (gdDocumentId, gdFolderId) oraz liczba plików.
+            // Zapisz te zmiany w bazie danych, aby linki w aplikacji wskazywały
+            // na nowo utworzone zasoby.
+            try {
+                await LettersController.edit(letter);
+                console.log('Letter GD-related fields persisted to DB');
+            } catch (err) {
+                console.error('Failed to persist GD changes to DB:', err);
+            }
         }
 
         // 3. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
@@ -845,4 +859,74 @@ export default class LettersController extends BaseController<
     ): Promise<void> {
         await letter.exportToPDF(auth);
     }
+
+    /**
+     * Analizuje przesłany plik (PDF/DOCX) przy użyciu AI i zwraca rozpoznane metadane pisma.
+     *
+     * @param file - plik przesłany przez multer (buffer)
+     * @returns obiekt z polami { value, confidence } dla każdego rozpoznanego pola
+     */
+    static async analyzeDocument(file: Express.Multer.File): Promise<any> {
+        const { aiResult, text } = await ToolsAI.analyzeDocument(file);
+
+        // Normalize AI output into frontend-friendly schema:
+        const normalizeValue = (v: any) => {
+            if (v === null || v === undefined) return null;
+            if (typeof v === 'string') {
+                const trimmed = v.trim();
+                if (trimmed === '' || trimmed.toLowerCase() === 'null' || trimmed.toLowerCase().startsWith('brak')) return null;
+                return trimmed;
+            }
+            return v;
+        };
+
+        const fieldConfidence = (v: any) => (v ? 3 : 1);
+
+        const normalized = {
+            number: { value: normalizeValue(aiResult.number) ?? null, confidence: fieldConfidence(aiResult.number) },
+            creationDate: { value: normalizeValue(aiResult.creationDate) ?? null, confidence: fieldConfidence(aiResult.creationDate) },
+            description: { value: normalizeValue(aiResult.description) ?? null, confidence: fieldConfidence(aiResult.description) },
+            responseDueDate: { value: normalizeValue(aiResult.responseDueDate) ?? null, confidence: fieldConfidence(aiResult.responseDueDate) },
+            senderName: { value: normalizeValue(aiResult.senderName) ?? null, confidence: fieldConfidence(aiResult.senderName) },
+        };
+
+        // Wzbogacenie danych: Wyszukaj encję w bazie danych (używamy znormalizowanej wartości senderName)
+        let senderEntity: EntityData[] = [];
+        const senderValue = normalized.senderName.value;
+        if (senderValue) {
+            const foundEntities = await EntitiesController.find([
+                { name: senderValue },
+            ]);
+            if (foundEntities.length > 0) senderEntity = foundEntities;
+        }
+
+        // Zwracamy obiekt w kształcie oczekiwanym przez front-end: każde pole ma { value, confidence }
+        const analyzedFile = reqFileToAnalyzedFile(file);
+        return {
+            number: normalized.number,
+            creationDate: normalized.creationDate,
+            description: normalized.description,
+            responseDueDate: normalized.responseDueDate,
+            senderName: normalized.senderName,
+            _entitiesMain: {
+                value: senderEntity,
+                confidence: senderEntity.length > 0 ? 3 : 1,
+            },
+            _extractedText: text,
+            _aiRaw: aiResult,
+            _analyzedFile: analyzedFile,
+        };
+    }
+}
+
+/**
+ * Helper: konwertuje plik Multer na obiekt z base64 dla frontendu
+ */
+function reqFileToAnalyzedFile(file: Express.Multer.File): { name: string; mime: string; base64: string } {
+    const base64 = file && file.buffer ? file.buffer.toString('base64') : '';
+    return {
+        name: file?.originalname || 'file',
+        mime: file?.mimetype || 'application/octet-stream',
+        base64,
+    };
 }

@@ -290,29 +290,28 @@ export default class Setup {
     };
 
     /**
-     * Konfiguracja KSeF
+     * Konfiguracja KSeF - tylko surowe wartości z .env
+     * Logika walidacji i budowania URL jest w KsefService
      *
      * Format w .env:
-     *   KSEF_API_URL_TEST="https://api-test.ksef.mf.gov.pl/v2"
-     *   KSEF_API_URL_PROD="https://ksef.mf.gov.pl/api/v2"
-     *   KSEF_AUTH_TOKEN_TEST="<token>"
-     *   KSEF_AUTH_TOKEN_PROD="<token>"
-     *   KSEF_NIP="..."
-     *   KSEF_SELLER_NAME="..."
-     *   KSEF_SELLER_STREET="..."
-     *   KSEF_SELLER_CITY="..."
+     *   KSEF_ENVIRONMENT="test"           # test | production
+     *   KSEF_NIP="1234567890"            # 10 cyfr
+     *   KSEF_TOKEN="..."                 # Token z KSeF
+     *   KSEF_SELLER_NAME="ENVI Sp. z o.o."
+     *   KSEF_SELLER_STREET="ul. Testowa 10"
+     *   KSEF_SELLER_CITY="Warszawa"
+     *   KSEF_SELLER_POSTAL_CODE="00-001"
      */
     static KSeF = {
+        /** Środowisko: 'test' | 'production' */
+        environment: (process.env.KSEF_ENVIRONMENT || 'test') as
+            | 'test'
+            | 'production',
         /** NIP firmy (10 cyfr) */
         nip: process.env.KSEF_NIP,
         /** Token autoryzacyjny KSeF */
-        token:
-            process.env.KSEF_AUTH_TOKEN_TEST ||
-            process.env.KSEF_AUTH_TOKEN_PROD,
-        /** API URL */
-        apiUrl:
-            process.env.KSEF_API_URL_TEST || process.env.KSEF_API_URL_PROD,
-        /** Dane sprzedawcy */
+        token: process.env.KSEF_TOKEN,
+        /** Dane sprzedawcy - WYMAGANE w .env */
         seller: {
             name: process.env.KSEF_SELLER_NAME,
             street: process.env.KSEF_SELLER_STREET,

@@ -32,14 +32,13 @@ app.post(
             let isArchived = false;
             if (typeof orConditions.isArchived === 'string')
                 isArchived = orConditions.isArchived === 'true';
-            const result = await ContractsWithChildrenController.find(
-                orConditions
-            );
+            const result =
+                await ContractsWithChildrenController.find(orConditions);
             res.send(result);
         } catch (error) {
             next(error);
         }
-    }
+    },
 );
 
 app.post(
@@ -47,14 +46,13 @@ app.post(
     async (req: Request, res: Response, next) => {
         try {
             const orConditions = req.parsedBody.orConditions;
-            const result = await ContractsSettlementController.getSums(
-                orConditions
-            );
+            const result =
+                await ContractsSettlementController.getSums(orConditions);
             res.send(result);
         } catch (error) {
             next(error);
         }
-    }
+    },
 );
 
 app.post('/contractReact', async (req: Request, res: Response, next) => {
@@ -64,7 +62,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         // Tworzenie odpowiedniej instancji Contract
         const contract = await ContractsController.createContractFromDto(
             req.parsedBody,
-            true
+            true,
         );
 
         // Inicjalizacja task tracking
@@ -73,7 +71,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
 
         // Odpowiedź HTTP 202 - przetwarzanie w tle
         res.status(202).send({
-            progressMesage: 'Kontrakt w trakcie przetwarzania',
+            progressMessage: 'Kontrakt w trakcie przetwarzania',
             status: 'processing',
             percent: 0,
             taskId,
@@ -87,7 +85,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                 TaskStore.complete(
                     taskId,
                     contract,
-                    'Kontrakt pomyślnie zarejestrowany'
+                    'Kontrakt pomyślnie zarejestrowany',
                 );
             } catch (err) {
                 console.error('Błąd podczas tworzenia kontraktu:', err);
@@ -102,7 +100,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
 async function simulateTaskProgress(
     taskId: string,
     processedItem: any,
-    throwError = false
+    throwError = false,
 ) {
     try {
         TaskStore.update(taskId, 'Rozpoczęcie przetwarzania', 0);
@@ -125,7 +123,7 @@ async function simulateTaskProgress(
         TaskStore.complete(
             taskId,
             processedItem,
-            '✅ Wszystkie kroki zakończone'
+            '✅ Wszystkie kroki zakończone',
         );
     } catch (err) {
         TaskStore.fail(taskId, (err as Error).message);
@@ -145,13 +143,13 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         const contractInstance =
             await ContractsController.createContractFromDto(
                 itemFromClient,
-                false
+                false,
             );
 
         // REFAKTORING: użyj ContractsController.editWithAuth()
         const updatedContract = await ContractsController.editWithAuth(
             contractInstance,
-            _fieldsToUpdate
+            _fieldsToUpdate,
         );
 
         res.send(updatedContract);
@@ -164,7 +162,7 @@ app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const item = await ContractsController.createContractFromDto(
             req.body,
-            false
+            false,
         );
 
         // REFAKTORING: użyj ContractsController.deleteWithAuth()
