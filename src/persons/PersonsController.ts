@@ -67,17 +67,22 @@ export default class PersonsController extends BaseController<
      */
     static async add(person: Person): Promise<Person> {
         const instance = this.getInstance();
-        if (
-            instance.repository.isV2WriteDualEnabled() &&
-            (person.systemRoleId || person.systemEmail)
-        ) {
+        const hasAccountFields =
+            person.systemRoleId !== undefined ||
+            person.systemEmail !== undefined;
+
+        if (hasAccountFields) {
             await ToolsDb.transaction(async (conn) => {
                 const personForPersonsWrite = new Person({
                     ...person,
                     systemRoleId: undefined,
                     systemEmail: undefined,
                 });
-                await instance.repository.addInDb(personForPersonsWrite, conn, true);
+                await instance.repository.addInDb(
+                    personForPersonsWrite,
+                    conn,
+                    true,
+                );
                 person.id = personForPersonsWrite.id;
                 await instance.repository.upsertPersonAccountInDb(person, conn);
             });
@@ -116,31 +121,38 @@ export default class PersonsController extends BaseController<
         const hasAccountFields = accountFieldsToSync.length > 0;
         const hasPersonFields = personFieldsToUpdate.length > 0;
 
-        if (instance.repository.isV2WriteDualEnabled()) {
+        if (hasPersonFields && hasAccountFields) {
             await ToolsDb.transaction(async (conn) => {
-                if (hasPersonFields) {
-                    await instance.repository.editInDb(
-                        person,
-                        conn,
-                        true,
-                        personFieldsToUpdate,
-                    );
-                }
-                if (hasAccountFields) {
+                await instance.repository.editInDb(
+                    person,
+                    conn,
+                    true,
+                    personFieldsToUpdate,
+                );
+                await instance.repository.upsertPersonAccountInDb(
+                    person,
+                    conn,
+                    accountFieldsToSync,
+                );
+            });
+        } else {
+            if (hasPersonFields) {
+                await instance.repository.editInDb(
+                    person,
+                    undefined,
+                    undefined,
+                    personFieldsToUpdate,
+                );
+            }
+            if (hasAccountFields) {
+                await ToolsDb.transaction(async (conn) => {
                     await instance.repository.upsertPersonAccountInDb(
                         person,
                         conn,
                         accountFieldsToSync,
                     );
-                }
-            });
-        } else {
-            await instance.repository.editInDb(
-                person,
-                undefined,
-                undefined,
-                fieldsToUpdate,
-            );
+                });
+            }
         }
         console.log(`Person ${person.name} ${person.surname} updated in db`);
         return person;
@@ -171,6 +183,8 @@ export default class PersonsController extends BaseController<
     /**
      * UPDATE USER (DTO)
      * Use-case: edycja użytkownika ENVI + aktualizacja ScrumSheet.
+     * @deprecated Używaj editFromDto() dla danych osobowych i upsertPersonAccountV2() dla konta.
+     * UWAGA: v2 nie synchronizuje ScrumSheet automatycznie - metoda zostanie wycofana po dodaniu tej funkcjonalności do v2.
      * Router powinien wywoływać tę metodę.
      */
     static async editUserFromDto(userData: any): Promise<Person> {
@@ -193,31 +207,41 @@ export default class PersonsController extends BaseController<
             const personFieldsToUpdate =
                 instance.repository.getPersonsWriteFields(fieldsToUpdate);
 
-            if (instance.repository.isV2WriteDualEnabled()) {
+            if (
+                personFieldsToUpdate.length > 0 &&
+                accountFieldsToSync.length > 0
+            ) {
                 await ToolsDb.transaction(async (conn) => {
-                    if (personFieldsToUpdate.length > 0) {
-                        await instance.repository.editInDb(
-                            user,
-                            conn,
-                            true,
-                            personFieldsToUpdate,
-                        );
-                    }
-                    if (accountFieldsToSync.length > 0) {
+                    await instance.repository.editInDb(
+                        user,
+                        conn,
+                        true,
+                        personFieldsToUpdate,
+                    );
+                    await instance.repository.upsertPersonAccountInDb(
+                        user,
+                        conn,
+                        accountFieldsToSync,
+                    );
+                });
+            } else {
+                if (personFieldsToUpdate.length > 0) {
+                    await instance.repository.editInDb(
+                        user,
+                        undefined,
+                        undefined,
+                        personFieldsToUpdate,
+                    );
+                }
+                if (accountFieldsToSync.length > 0) {
+                    await ToolsDb.transaction(async (conn) => {
                         await instance.repository.upsertPersonAccountInDb(
                             user,
                             conn,
                             accountFieldsToSync,
                         );
-                    }
-                });
-            } else {
-                await instance.repository.editInDb(
-                    user,
-                    undefined,
-                    undefined,
-                    fieldsToUpdate,
-                );
+                    });
+                }
             }
             console.log(`User ${user.name} ${user.surname} updated in db`);
 
@@ -326,7 +350,10 @@ export default class PersonsController extends BaseController<
             throw new Error('personId is required');
         }
         return await ToolsDb.transaction(async (conn) => {
-            return instance.repository.upsertPersonProfileInDb(profileData, conn);
+            return instance.repository.upsertPersonProfileInDb(
+                profileData,
+                conn,
+            );
         });
     }
 
@@ -380,6 +407,12 @@ export default class PersonsController extends BaseController<
         return { id: experienceId };
     }
 
+    /**
+     * CREATE SYSTEM USER (DTO)
+     * Tworzy użytkownika systemowego z kontem w jednym żądaniu.
+     * @deprecated Używaj addFromDto() do utworzenia osoby, a następnie upsertPersonAccountV2() do dodania konta.
+     * Metoda zostanie usunięta w kolejnej wersji major.
+     */
     static async addNewSystemUser(userData: {
         name: string;
         surname: string;
@@ -400,20 +433,16 @@ export default class PersonsController extends BaseController<
             );
         }
 
-        if (instance.repository.isV2WriteDualEnabled()) {
-            await ToolsDb.transaction(async (conn) => {
-                const userForPersonsWrite = new Person({
-                    ...user,
-                    systemRoleId: undefined,
-                    systemEmail: undefined,
-                });
-                await instance.repository.addInDb(userForPersonsWrite, conn, true);
-                user.id = userForPersonsWrite.id;
-                await instance.repository.upsertPersonAccountInDb(user, conn);
+        await ToolsDb.transaction(async (conn) => {
+            const userForPersonsWrite = new Person({
+                ...user,
+                systemRoleId: undefined,
+                systemEmail: undefined,
             });
-        } else {
-            await instance.repository.addInDb(user);
-        }
+            await instance.repository.addInDb(userForPersonsWrite, conn, true);
+            user.id = userForPersonsWrite.id;
+            await instance.repository.upsertPersonAccountInDb(user, conn);
+        });
         console.log(`User ${user.name} ${user.surname} added in db`);
         return user;
     }

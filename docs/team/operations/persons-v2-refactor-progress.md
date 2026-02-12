@@ -18,10 +18,10 @@ Plan reference:
 - Active phase: `4`
 - Last completed phase: `3`
 - Flags state:
-- `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; P1-E parity and rollback rehearsal completed)
-- `PERSONS_MODEL_V2_WRITE_DUAL`: `false` (default OFF; P2-B write-path split implemented for contact/account + OAuth account writes)
-- `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`: `false` (default OFF; P3-D transition validation confirms legacy contract preservation with controlled v2 rollout)
-- Overall status: `P3-D_CLOSED`
+- `PERSONS_MODEL_V2_READ_ENABLED`: `false` (default OFF; `P4-B` removed v2->legacy read fallback when flag is ON)
+- `PERSONS_MODEL_V2_WRITE_DUAL`: `removed` (`P4-C` dual-write compatibility layer retired)
+- `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`: `false` (retained env key; Sessions OAuth account writes are frozen to `PersonAccounts` in P4-A)
+- Overall status: `P4-C_CLOSED`
 
 ## Session Log Template
 
@@ -72,6 +72,192 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-12 - Session 17 - P4-C disable/remove dual-write after full migration
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-C
+- Planned tasks:
+    - Remove remaining dual-write compatibility-layer artifacts.
+    - Keep scope limited to dual-write retirement without expanding deprecation phase.
+    - Produce focused evidence with yarn-based verification.
+
+### 2. Completed
+
+- Removed last production runtime dual-write artifact:
+    - deleted `PersonRepository.isV2WriteDualEnabled()` and `PERSONS_MODEL_V2_WRITE_DUAL` env access from runtime `src` code.
+- Updated Sessions migration integration test matrix to retire the obsolete `WRITE_DUAL` branch case.
+- Removed `PERSONS_MODEL_V2_WRITE_DUAL` from `.env.example` as part of compatibility-layer retirement.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (2/2 tests).
+    - `yarn jest src/persons/__tests__/PersonsController.p2c.integration.test.ts --runInBand` -> PASS (4/4 tests).
+    - `yarn tsc --noEmit` -> PASS (no type errors).
+    - `rg -n "PERSONS_MODEL_V2_WRITE_DUAL" src/**/*.ts` -> no matches (runtime source cleared of WRITE_DUAL).
+- Tests:
+    - `ToolsGapi P3-B first consumer migration` -> PASS (2/2; dual-write branch removed from test matrix).
+    - `PersonsController P2-C endpoint compatibility` -> PASS (4/4; account writes remain routed via `PersonAccounts`).
+- Files changed:
+    - `src/persons/PersonRepository.ts`
+    - `src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts`
+    - `.env.example`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL` removed from runtime path and `.env.example` in this checkpoint.
+    - account writes continue through `PersonAccounts`; legacy dual-write toggle is no longer available.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`; unchanged behavior in this checkpoint.
+- Legacy behavior check result:
+    - legacy account-field writes into `Persons` remain frozen (from P4-A), and no dual-write compatibility path remains active.
+
+### 5. Risks/Blockers
+
+- Rollback from this point requires code/config rollback (cannot be toggled by `PERSONS_MODEL_V2_WRITE_DUAL` anymore).
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-D
+- Prepare and execute legacy-column retirement plan in a separate high-risk PR.
+- Document explicit rollback strategy for removed compatibility layers in that PR scope.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-11 - Session 16 - P4-B remove read fallback after stabilization
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-B
+- Planned tasks:
+    - Remove legacy read fallback from Persons v2 read facade.
+    - Keep checkpoint scope limited to read-path behavior change.
+    - Add focused evidence for fallback removal.
+
+### 2. Completed
+
+- Removed fallback behavior from `PersonRepository.findByReadFacade`:
+    - `READ_ENABLED=true` now executes `findV2` directly.
+    - query errors in v2 path no longer fallback to legacy `findLegacy`.
+- Removed fallback behavior from `PersonRepository.getSystemRoleByReadFacade`:
+    - `READ_ENABLED=true` now executes `getSystemRoleV2` directly.
+    - no-row and query-error cases no longer fallback to `getSystemRoleLegacy`.
+- Added focused regression test file for P4-B fallback removal behavior.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/persons/__tests__/PersonRepository.p4b.read-fallback.test.ts --runInBand` -> PASS (2/2 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `PersonRepository P4-B remove read fallback`:
+        - `does not fallback to legacy find path when v2 find fails` -> PASS
+        - `does not fallback to legacy getSystemRole path when v2 getSystemRole returns undefined` -> PASS
+- Files changed:
+    - `src/persons/PersonRepository.ts`
+    - `src/persons/__tests__/PersonRepository.p4b.read-fallback.test.ts`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false` -> legacy read path remains unchanged.
+    - `PERSONS_MODEL_V2_READ_ENABLED=true` -> v2 read path is now strict (no legacy fallback).
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; unchanged in this checkpoint.
+- Legacy behavior check result:
+    - Legacy read behavior remains available only with `READ_ENABLED=false`; runtime fallback from v2 to legacy has been removed per deprecation plan.
+
+### 5. Risks/Blockers
+
+- With `READ_ENABLED=true`, v2 read-path errors now propagate directly; operational rollout should ensure monitoring/alerting is in place before enabling in shared environments.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-C
+- Disable/remove dual-write after full migration.
+- Document rollback strategy for dual-write compatibility-layer removal.
+
+### 7. Phase Checkpoint
+
+- CLOSED
+
+## 2026-02-11 - Session 15 - P4-A freeze legacy account-field writes
+
+### 1. Scope
+
+- Phase: 4
+- Checkpoint ID: P4-A
+- Planned tasks:
+    - Freeze legacy account-field writes in `Persons`.
+    - Keep write compatibility by routing account writes to `PersonAccounts`.
+    - Add checkpoint evidence and rollback notes.
+
+### 2. Completed
+
+- Updated `PersonsController` write paths (`add`, `edit`, `editUserFromDto`, `addNewSystemUser`):
+    - account fields are no longer written into `Persons`.
+    - account fields are persisted through `upsertPersonAccountInDb` (`PersonAccounts`) even when `PERSONS_MODEL_V2_WRITE_DUAL=false`.
+- Updated Sessions consumer path in `ToolsGapi`:
+    - removed fallback `ToolsDb.editInDb('Persons', ...)` for OAuth account updates.
+    - OAuth account writes now route to `PersonAccounts` only.
+- Updated integration tests to validate frozen legacy write behavior.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts --runInBand` -> PASS (4/4 tests).
+    - `npx jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (3/3 tests).
+    - `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` -> PASS (7/7 tests).
+    - `npx tsc --noEmit` -> PASS (no type errors).
+- Tests:
+    - `PersonsController P2-C endpoint compatibility`:
+        - `freezes legacy account-field writes in Persons when WRITE_DUAL=false` -> PASS
+        - `freezes legacy account fields in Persons on addNewSystemUser` -> PASS
+    - `ToolsGapi P3-B first consumer migration`:
+        - `freezes legacy Persons write path and updates account via PersonAccounts when both flags are OFF` -> PASS
+- Files changed:
+    - `src/persons/PersonsController.ts`
+    - `src/setup/Sessions/ToolsGapi.ts`
+    - `src/persons/__tests__/PersonsController.p2c.integration.test.ts`
+    - `src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts`
+    - `docs/team/operations/post-change-checklist.md`
+    - `docs/team/operations/persons-v2-refactor-progress.md`
+
+### 4. Compatibility/Flags
+
+- Read flag state and effect:
+    - `PERSONS_MODEL_V2_READ_ENABLED=false`; unchanged in this checkpoint.
+- Write flag state and effect:
+    - `PERSONS_MODEL_V2_WRITE_DUAL=false`; account fields are still frozen away from `Persons` and routed to `PersonAccounts`.
+    - `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED=false`; no longer re-enables legacy `Persons` account writes in Sessions OAuth flow.
+- Legacy behavior check result:
+    - Legacy endpoints stay operational, but legacy account-field persistence in `Persons` is intentionally disabled (frozen) as planned for deprecation phase.
+
+### 5. Risks/Blockers
+
+- `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED` remains in env surface but no longer controls legacy fallback behavior for OAuth account writes; operational cleanup/deprecation of the flag remains future work.
+
+### 6. Next Session (exact next actions)
+
+- Next checkpoint ID: P4-B
+- Remove read fallback after stabilization.
+- Prepare explicit rollback notes for fallback removal step.
+
+### 7. Phase Checkpoint
+
+- CLOSED
 
 ## 2026-02-10 - Session 14 - P3-D transition validation
 

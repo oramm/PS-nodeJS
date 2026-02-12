@@ -46,6 +46,150 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
+
+### 1. Scope
+
+- Removed remaining dual-write compatibility-layer artifacts related to `PERSONS_MODEL_V2_WRITE_DUAL`.
+- Deleted `isV2WriteDualEnabled()` from `PersonRepository`.
+- Simplified Sessions migration integration test matrix by removing obsolete dual-write branch case.
+- Removed `PERSONS_MODEL_V2_WRITE_DUAL` from `.env.example`.
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime write behavior remains aligned with previous deprecation steps:
+    - account writes continue through `PersonAccounts`,
+    - no dual-write fallback/toggle path remains.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - removed `PERSONS_MODEL_V2_WRITE_DUAL`.
+
+### 4. Heroku impact
+
+- Config vars: remove `PERSONS_MODEL_V2_WRITE_DUAL` from environment config (no longer used).
+- Restart/release steps:
+    - standard backend deploy,
+    - verify account update flows still persist through `PersonAccounts`.
+
+### 5. Developer actions
+
+- No migration/install actions required.
+- Run targeted integration tests and TypeScript check before release.
+
+### 6. Verification
+
+- `yarn jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` passes.
+- `yarn jest src/persons/__tests__/PersonsController.p2c.integration.test.ts --runInBand` passes.
+- `yarn tsc --noEmit` passes.
+
+### 7. Rollback
+
+- Revert P4-C commit and restore `PERSONS_MODEL_V2_WRITE_DUAL` in code/config if temporary dual-write toggle must be reinstated.
+- Keep `PERSONS_MODEL_V2_READ_ENABLED=false` if read-side rollback is required independently.
+
+### 8. Owner
+
+- Persons V2 refactor session (Codex + repository owner).
+
+## 2026-02-11 - Persons V2 P4-B remove read fallback
+
+### 1. Scope
+
+- Removed legacy read fallback from Persons v2 read facade methods in `PersonRepository`.
+- `findByReadFacade` and `getSystemRoleByReadFacade` now use strict v2 behavior when `PERSONS_MODEL_V2_READ_ENABLED=true`.
+- Added focused tests that verify no fallback to legacy path on v2 error/no-row cases.
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime read behavior changed for `PERSONS_MODEL_V2_READ_ENABLED=true`:
+    - v2 read query errors are no longer redirected to legacy queries,
+    - missing v2 `getSystemRole` result no longer triggers legacy fallback.
+
+### 3. ENV impact
+
+- `.env.example`: not changed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: `PERSONS_MODEL_V2_READ_ENABLED` behavior changed (ON now means strict v2 read path).
+- Restart/release steps:
+    - standard backend deploy.
+    - keep `PERSONS_MODEL_V2_READ_ENABLED=false` until v2 read-path readiness is validated in target environment.
+
+### 5. Developer actions
+
+- No migration/install actions required.
+- Run targeted P4-B test and TypeScript check before release.
+
+### 6. Verification
+
+- `npx jest src/persons/__tests__/PersonRepository.p4b.read-fallback.test.ts --runInBand` passes.
+- `npx tsc --noEmit` passes.
+
+### 7. Rollback
+
+- Revert the P4-B commit to restore v2->legacy read fallback behavior.
+- Operational fallback remains possible by keeping `PERSONS_MODEL_V2_READ_ENABLED=false` until re-validation.
+
+### 8. Owner
+
+- Persons V2 refactor session (Codex + repository owner).
+
+## 2026-02-11 - Persons V2 P4-A freeze legacy account-field writes
+
+### 1. Scope
+
+- Frozen legacy account-field writes into `Persons` for active write flows.
+- Updated `PersonsController` write methods so account fields are always routed to `PersonAccounts`.
+- Removed `ToolsGapi` fallback write to `Persons` for OAuth account updates.
+- Updated integration tests to validate frozen legacy write path.
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime write behavior changed:
+    - account fields (`systemRoleId`, `systemEmail`, OAuth account fields) no longer write to legacy `Persons` columns.
+    - account writes are persisted via `PersonAccounts`.
+
+### 3. ENV impact
+
+- `.env.example`: not changed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: existing Persons V2 flags remain, but Sessions account writes are now frozen away from legacy `Persons` path regardless of `PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED`.
+- Restart/release steps:
+    - standard backend deploy.
+    - verify login/account update flow writes to `PersonAccounts` in target environment.
+
+### 5. Developer actions
+
+- No migration/install actions required.
+- Run targeted integration tests and TypeScript check before release.
+
+### 6. Verification
+
+- `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts --runInBand` passes.
+- `npx jest src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` passes.
+- `npx jest src/persons/__tests__/PersonsController.p2c.integration.test.ts src/setup/Sessions/__tests__/ToolsGapi.p3b.integration.test.ts --runInBand` passes.
+- `npx tsc --noEmit` passes.
+
+### 7. Rollback
+
+- Revert the P4-A freeze commit to restore previous legacy-write fallback behavior.
+- Read-side compatibility layers remain available (`PERSONS_MODEL_V2_READ_ENABLED` fallback), so rollback scope is limited to write routing logic.
+
+### 8. Owner
+
+- Persons V2 refactor session (Codex + repository owner).
+
 ## 2026-02-10 - Persons V2 P3-B first consumer migration (Sessions OAuth)
 
 ### 1. Scope

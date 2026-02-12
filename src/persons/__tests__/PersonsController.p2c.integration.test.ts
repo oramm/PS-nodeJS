@@ -20,11 +20,8 @@ describe('PersonsController P2-C endpoint compatibility', () => {
         (PersonsController as any).instance = undefined;
     });
 
-    it('keeps legacy edit endpoint operational when WRITE_DUAL=false', async () => {
+    it('freezes legacy account-field writes in Persons when WRITE_DUAL=false', async () => {
         const { default: PersonsController } = await import('../PersonsController');
-        const isDualSpy = jest
-            .spyOn(PersonRepository.prototype, 'isV2WriteDualEnabled')
-            .mockReturnValue(false);
         const editSpy = jest
             .spyOn(PersonRepository.prototype, 'editInDb')
             .mockResolvedValue(undefined as any);
@@ -43,19 +40,17 @@ describe('PersonsController P2-C endpoint compatibility', () => {
             ['systemRoleId'],
         );
 
-        expect(isDualSpy).toHaveBeenCalled();
-        expect(editSpy).toHaveBeenCalledWith(
+        expect(editSpy).not.toHaveBeenCalled();
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(upsertSpy).toHaveBeenCalledWith(
             expect.objectContaining({ id: 210001, systemRoleId: 2 }),
-            undefined,
-            undefined,
+            mockConn,
             ['systemRoleId'],
         );
-        expect(upsertSpy).not.toHaveBeenCalled();
     });
 
     it('editing only systemRoleId does not sync/clear systemEmail in PersonAccounts', async () => {
         const { default: PersonsController } = await import('../PersonsController');
-        jest.spyOn(PersonRepository.prototype, 'isV2WriteDualEnabled').mockReturnValue(true);
         const editSpy = jest
             .spyOn(PersonRepository.prototype, 'editInDb')
             .mockResolvedValue(undefined as any);
@@ -85,7 +80,6 @@ describe('PersonsController P2-C endpoint compatibility', () => {
 
     it('editing only systemEmail does not sync/clear systemRoleId in PersonAccounts', async () => {
         const { default: PersonsController } = await import('../PersonsController');
-        jest.spyOn(PersonRepository.prototype, 'isV2WriteDualEnabled').mockReturnValue(true);
         const editSpy = jest
             .spyOn(PersonRepository.prototype, 'editInDb')
             .mockResolvedValue(undefined as any);
@@ -113,6 +107,46 @@ describe('PersonsController P2-C endpoint compatibility', () => {
             }),
             mockConn,
             ['systemEmail'],
+        );
+    });
+
+    it('freezes legacy account fields in Persons on addNewSystemUser', async () => {
+        const { default: PersonsController } = await import('../PersonsController');
+        const addSpy = jest
+            .spyOn(PersonRepository.prototype, 'addInDb')
+            .mockImplementation(async (person: any) => {
+                person.id = 210004;
+                return person;
+            });
+        const upsertSpy = jest
+            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
+            .mockResolvedValue(undefined);
+
+        await PersonsController.addNewSystemUser({
+            name: 'System',
+            surname: 'User',
+            systemRoleId: 1,
+            systemEmail: 'p4a.user@test.local',
+            entityId: 1,
+            _entity: { id: 1 },
+        } as any);
+
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(addSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                systemRoleId: undefined,
+                systemEmail: undefined,
+            }),
+            mockConn,
+            true,
+        );
+        expect(upsertSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 210004,
+                systemRoleId: 1,
+                systemEmail: 'p4a.user@test.local',
+            }),
+            mockConn,
         );
     });
 });

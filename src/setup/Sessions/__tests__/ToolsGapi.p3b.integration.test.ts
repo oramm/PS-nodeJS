@@ -3,38 +3,46 @@ import ToolsDb from '../../../tools/ToolsDb';
 import PersonRepository from '../../../persons/PersonRepository';
 
 describe('ToolsGapi P3-B first consumer migration', () => {
-    const originalSessionsFlag = process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED;
-    const originalWriteDualFlag = process.env.PERSONS_MODEL_V2_WRITE_DUAL;
+    const originalSessionsFlag =
+        process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED;
 
     beforeEach(() => {
         jest.restoreAllMocks();
         process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED = 'false';
-        process.env.PERSONS_MODEL_V2_WRITE_DUAL = 'false';
     });
 
     afterAll(() => {
-        process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED = originalSessionsFlag;
-        process.env.PERSONS_MODEL_V2_WRITE_DUAL = originalWriteDualFlag;
+        process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED =
+            originalSessionsFlag;
     });
 
-    it('keeps legacy Persons write path when sessions migration flag is OFF and dual-write is OFF', async () => {
+    it('freezes legacy Persons write path and updates account via PersonAccounts when both flags are OFF', async () => {
         const editInDbSpy = jest
             .spyOn(ToolsDb, 'editInDb')
             .mockResolvedValue(undefined as any);
+        const upsertSpy = jest
+            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
+            .mockResolvedValue(undefined as any);
         const transactionSpy = jest.spyOn(ToolsDb, 'transaction');
-        const upsertSpy = jest.spyOn(
-            PersonRepository.prototype,
-            'upsertPersonAccountInDb'
+        transactionSpy.mockImplementation(async (callback: any) =>
+            callback({}),
         );
 
         await ToolsGapi.editUserGoogleIdInDb(101, 'google-101');
 
-        expect(editInDbSpy).toHaveBeenCalledWith('Persons', {
-            id: 101,
-            googleId: 'google-101',
-        });
-        expect(transactionSpy).not.toHaveBeenCalled();
-        expect(upsertSpy).not.toHaveBeenCalled();
+        expect(editInDbSpy).not.toHaveBeenCalled();
+        expect(transactionSpy).toHaveBeenCalledTimes(1);
+        expect(upsertSpy).toHaveBeenCalledWith(
+            {
+                id: 101,
+                googleId: 'google-101',
+                googleRefreshToken: undefined,
+                microsoftId: undefined,
+                microsoftRefreshToken: undefined,
+            },
+            {},
+            ['googleId'],
+        );
     });
 
     it('uses v2 account write path when sessions migration flag is ON', async () => {
@@ -63,38 +71,7 @@ describe('ToolsGapi P3-B first consumer migration', () => {
                 microsoftRefreshToken: undefined,
             },
             {},
-            ['googleRefreshToken']
-        );
-    });
-
-    it('preserves existing dual-write path when sessions migration flag is OFF and dual-write is ON', async () => {
-        process.env.PERSONS_MODEL_V2_SESSIONS_ACCOUNT_ENABLED = 'false';
-        process.env.PERSONS_MODEL_V2_WRITE_DUAL = 'true';
-
-        const editInDbSpy = jest
-            .spyOn(ToolsDb, 'editInDb')
-            .mockResolvedValue(undefined as any);
-        const upsertSpy = jest
-            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
-            .mockResolvedValue(undefined as any);
-        const transactionSpy = jest
-            .spyOn(ToolsDb, 'transaction')
-            .mockImplementation(async (callback: any) => callback({}));
-
-        await ToolsGapi.editUserGoogleIdInDb(303, 'google-303');
-
-        expect(editInDbSpy).not.toHaveBeenCalled();
-        expect(transactionSpy).toHaveBeenCalledTimes(1);
-        expect(upsertSpy).toHaveBeenCalledWith(
-            {
-                id: 303,
-                googleId: 'google-303',
-                googleRefreshToken: undefined,
-                microsoftId: undefined,
-                microsoftRefreshToken: undefined,
-            },
-            {},
-            ['googleId']
+            ['googleRefreshToken'],
         );
     });
 });

@@ -45,7 +45,9 @@ export default class PersonRepository extends BaseRepository<Person> {
         super('Persons');
     }
 
-    private makeSystemEmailConflictError(systemEmail: string): EnviErrors.DbError {
+    private makeSystemEmailConflictError(
+        systemEmail: string,
+    ): EnviErrors.DbError {
         return new EnviErrors.DbError(
             `SystemEmail '${systemEmail}' is already used by another person account.`,
             'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
@@ -74,13 +76,6 @@ export default class PersonRepository extends BaseRepository<Person> {
     private isV2ReadEnabled(): boolean {
         return (
             (process.env.PERSONS_MODEL_V2_READ_ENABLED || '').toLowerCase() ===
-            'true'
-        );
-    }
-
-    isV2WriteDualEnabled(): boolean {
-        return (
-            (process.env.PERSONS_MODEL_V2_WRITE_DUAL || '').toLowerCase() ===
             'true'
         );
     }
@@ -190,16 +185,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         if (!this.isV2ReadEnabled()) {
             return this.findLegacy(orConditions);
         }
-
-        try {
-            return await this.findV2(orConditions);
-        } catch (err) {
-            console.warn(
-                '[PersonsV2] find v2 read path failed, fallback to legacy path.',
-                err,
-            );
-            return this.findLegacy(orConditions);
-        }
+        return this.findV2(orConditions);
     }
 
     async getPersonBySystemEmailByReadFacade(
@@ -300,18 +286,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         if (!this.isV2ReadEnabled()) {
             return this.getSystemRoleLegacy(params);
         }
-
-        try {
-            const systemRole = await this.getSystemRoleV2(params);
-            if (systemRole) return systemRole;
-            return this.getSystemRoleLegacy(params);
-        } catch (err) {
-            console.warn(
-                '[PersonsV2] getSystemRole v2 read path failed, fallback to legacy path.',
-                err,
-            );
-            return this.getSystemRoleLegacy(params);
-        }
+        return this.getSystemRoleV2(params);
     }
 
     private async getSystemRoleLegacy(params: {
@@ -736,7 +711,10 @@ export default class PersonRepository extends BaseRepository<Person> {
         experience: PersonProfileExperienceV2Payload,
         conn: mysql.PoolConnection,
     ): Promise<PersonProfileExperienceV2Record> {
-        const personProfileId = await this.ensurePersonProfileId(conn, personId);
+        const personProfileId = await this.ensurePersonProfileId(
+            conn,
+            personId,
+        );
         const columns = ['PersonProfileId'];
         const placeholders = ['?'];
         const values: any[] = [personProfileId];
@@ -885,8 +863,12 @@ export default class PersonRepository extends BaseRepository<Person> {
 
     getPersonsWriteFields(fieldsToUpdate: string[] = []): string[] {
         if (fieldsToUpdate.length === 0) return [];
-        const accountFields = new Set<string>([...PersonRepository.ACCOUNT_FIELDS]);
-        const profileFields = new Set<string>([...PersonRepository.PROFILE_FIELDS]);
+        const accountFields = new Set<string>([
+            ...PersonRepository.ACCOUNT_FIELDS,
+        ]);
+        const profileFields = new Set<string>([
+            ...PersonRepository.PROFILE_FIELDS,
+        ]);
         return fieldsToUpdate.filter(
             (field) => !accountFields.has(field) && !profileFields.has(field),
         );
@@ -902,7 +884,9 @@ export default class PersonRepository extends BaseRepository<Person> {
         | 'microsoftId'
         | 'microsoftRefreshToken'
     > {
-        const accountFields = new Set<string>([...PersonRepository.ACCOUNT_FIELDS]);
+        const accountFields = new Set<string>([
+            ...PersonRepository.ACCOUNT_FIELDS,
+        ]);
         return fieldsToUpdate.filter((field) =>
             accountFields.has(field),
         ) as Array<
@@ -916,7 +900,9 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     hasProfileWriteFields(fieldsToUpdate: string[] = []): boolean {
-        const profileFields = new Set<string>([...PersonRepository.PROFILE_FIELDS]);
+        const profileFields = new Set<string>([
+            ...PersonRepository.PROFILE_FIELDS,
+        ]);
         return fieldsToUpdate.some((field) => profileFields.has(field));
     }
 
