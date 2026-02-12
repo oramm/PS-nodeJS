@@ -104,9 +104,14 @@ export default class KsefService {
      * Zwraca URL API KSeF na podstawie środowiska
      */
     static getApiUrl(): string {
+        const override = Setup.KSeF.apiBaseUrl?.trim();
+        if (override) {
+            return override.replace(/\/+$/, '');
+        }
+
         return Setup.KSeF.environment === 'production'
-            ? 'https://ksef.mf.gov.pl/api'
-            : 'https://ksef-test.mf.gov.pl/api';
+            ? 'https://api.ksef.mf.gov.pl/v2'
+            : 'https://api-test.ksef.mf.gov.pl/v2';
     }
 
     /**
@@ -235,7 +240,24 @@ export default class KsefService {
                 return {} as T;
             }
 
-            return JSON.parse(text) as T;
+            const contentType =
+                response.headers.get('content-type')?.toLowerCase() || '';
+            const looksLikeHtml = /^\s*</.test(text);
+            const preview = text.slice(0, 180).replace(/\s+/g, ' ').trim();
+
+            if (!contentType.includes('application/json') || looksLikeHtml) {
+                throw new Error(
+                    `KSeF zwrócił nie-JSON (status=${response.status}, content-type=${contentType || 'unknown'}, requestUrl=${url}, responseUrl=${response.url}, bodyStart=${preview}). Sprawdź KSEF_API_BASE_URL / sieć / dostęp do środowiska KSeF.`,
+                );
+            }
+
+            try {
+                return JSON.parse(text) as T;
+            } catch {
+                throw new Error(
+                    `KSeF zwrócił nieprawidłowy JSON (status=${response.status}, requestUrl=${url}, responseUrl=${response.url}, bodyStart=${preview}).`,
+                );
+            }
         } finally {
             clearTimeout(timeoutId);
         }
@@ -472,7 +494,7 @@ export default class KsefService {
      */
     private ksefTokenEncryptionCert: string | null = null;
     private symmetricKeyEncryptionCert: string | null = null;
-    
+
     // Statyczny cache dla certyfikatów (współdzielony między instancjami)
     private static cachedTokenCert: string | null = null;
     private static cachedAesCert: string | null = null;
@@ -481,13 +503,17 @@ export default class KsefService {
     private async fetchPublicKeys(): Promise<void> {
         // Sprawdź cache (certyfikaty ważne 1 godzinę)
         const now = Date.now();
-        if (KsefService.cachedTokenCert && KsefService.cachedAesCert && now < KsefService.certCacheExpiry) {
+        if (
+            KsefService.cachedTokenCert &&
+            KsefService.cachedAesCert &&
+            now < KsefService.certCacheExpiry
+        ) {
             console.log('   [Auth] ✅ Użyto certyfikatów z cache');
             this.ksefTokenEncryptionCert = KsefService.cachedTokenCert;
             this.symmetricKeyEncryptionCert = KsefService.cachedAesCert;
             return;
         }
-        
+
         console.log('   [Auth] Pobieranie certyfikatów KSeF...');
 
         const certificates = await this.requestJson<KsefCertificate[]>(
@@ -518,7 +544,7 @@ export default class KsefService {
             );
         }
         this.symmetricKeyEncryptionCert = aesCert.certificate;
-        
+
         // Zapisz do cache (ważne 1 godzinę)
         KsefService.cachedTokenCert = this.ksefTokenEncryptionCert;
         KsefService.cachedAesCert = this.symmetricKeyEncryptionCert;
@@ -690,12 +716,17 @@ export default class KsefService {
      * Faktura musi być zaszyfrowana AES-256-CBC
      * Request body zawiera metadane i zaszyfrowaną treść
      */
-    async submitInvoice(xml: string, isCorrectionInvoice: boolean = false): Promise<any> {
+    async submitInvoice(
+        xml: string,
+        isCorrectionInvoice: boolean = false,
+    ): Promise<any> {
         if (!this.sessionReferenceNumber) {
             await this.openSession();
         }
 
-        console.log(`   [Send] ${isCorrectionInvoice ? 'Szyfrowanie i wysyłka korekty' : 'Szyfrowanie i wysyłka faktury'}...`);
+        console.log(
+            `   [Send] ${isCorrectionInvoice ? 'Szyfrowanie i wysyłka korekty' : 'Szyfrowanie i wysyłka faktury'}...`,
+        );
 
         // Konwertuj XML do bajtów
         const invoiceBytes = Buffer.from(xml, 'utf-8');
@@ -741,8 +772,13 @@ export default class KsefService {
             { Authorization: `Bearer ${this.accessToken}` },
         );
 
-        const logType = isCorrectionInvoice ? 'Korekta wysłana' : 'Faktura wysłana';
-        console.log(`   [Send] ✅ ${logType}, referenceNumber:`, response.invoiceReferenceNumber || response.referenceNumber);
+        const logType = isCorrectionInvoice
+            ? 'Korekta wysłana'
+            : 'Faktura wysłana';
+        console.log(
+            `   [Send] ✅ ${logType}, referenceNumber:`,
+            response.invoiceReferenceNumber || response.referenceNumber,
+        );
         return response;
     }
 
@@ -829,16 +865,22 @@ export default class KsefService {
             `/sessions/${sessionRef}/invoices/${invoiceReferenceNumber}`,
             undefined,
             {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${this.accessToken}`
-            }
+                Accept: 'application/json',
+                Authorization: `Bearer ${this.accessToken}`,
+            },
         );
 
         // Loguj szczegółowy błąd jeśli występuje
         if (response.status?.code >= 400) {
-            console.error('   [KSeF] ❌ Błąd faktury:', response.status?.description);
+            console.error(
+                '   [KSeF] ❌ Błąd faktury:',
+                response.status?.description,
+            );
             if (response.status?.details) {
-                console.error('   [KSeF] Szczegóły:', JSON.stringify(response.status.details, null, 2));
+                console.error(
+                    '   [KSeF] Szczegóły:',
+                    JSON.stringify(response.status.details, null, 2),
+                );
             }
         }
 
@@ -1024,7 +1066,7 @@ export default class KsefService {
 
     /**
      * Pobierz listę faktur zakupowych (gdzie nasza firma jest nabywcą - Subject2)
-     * 
+     *
      * Używa asynchronicznego eksportu:
      * 1. POST /invoices/exports - inicjuje eksport (NIE wymaga sesji interaktywnej!)
      * 2. GET /invoices/exports/{referenceNumber} - polling statusu
@@ -1039,17 +1081,27 @@ export default class KsefService {
         dateFrom: Date,
         dateTo: Date,
         pageOffset: number = 0,
-    ): Promise<{ invoices: PurchaseInvoiceListItem[]; hasMorePages: boolean; totalCount: number }> {
+    ): Promise<{
+        invoices: PurchaseInvoiceListItem[];
+        hasMorePages: boolean;
+        totalCount: number;
+    }> {
         // Upewnij się że mamy accessToken (NIE sesję interaktywną!)
         if (!this.accessToken) {
             await this.authenticateWithKsefToken();
         }
 
         // 1. Inicjuj eksport faktur zakupowych
-        const { referenceNumber } = await this.initiateInvoiceExport(dateFrom, dateTo, 'Subject2');
+        const { referenceNumber } = await this.initiateInvoiceExport(
+            dateFrom,
+            dateTo,
+            'Subject2',
+        );
 
         // 2. Czekaj na zakończenie eksportu
-        const exportStatus = await this.waitForExportCompletion(referenceNumber) as ExportStatusWithPackage;
+        const exportStatus = (await this.waitForExportCompletion(
+            referenceNumber,
+        )) as ExportStatusWithPackage;
 
         // 3. Sprawdź czy są faktury do pobrania
         const invoiceCount = exportStatus.package?.invoiceCount ?? 0;
@@ -1058,7 +1110,9 @@ export default class KsefService {
             return { invoices: [], hasMorePages: false, totalCount: 0 };
         }
 
-        console.log(`   [KSeF] Eksport zawiera ${invoiceCount} faktur w ${exportStatus.package.parts.length} paczkach`);
+        console.log(
+            `   [KSeF] Eksport zawiera ${invoiceCount} faktur w ${exportStatus.package.parts.length} paczkach`,
+        );
 
         // 4. Pobierz i odszyfruj wszystkie paczki
         const invoices: PurchaseInvoiceListItem[] = [];
@@ -1067,7 +1121,9 @@ export default class KsefService {
             invoices.push(...partInvoices);
         }
 
-        console.log(`   [KSeF] Znaleziono ${invoices.length} faktur zakupowych`);
+        console.log(
+            `   [KSeF] Znaleziono ${invoices.length} faktur zakupowych`,
+        );
 
         return {
             invoices,
@@ -1079,8 +1135,12 @@ export default class KsefService {
     /**
      * Pobierz zaszyfrowaną paczkę, odszyfruj i wypakuj faktury
      */
-    private async downloadAndProcessPackagePart(part: ExportPackagePart): Promise<PurchaseInvoiceListItem[]> {
-        console.log(`   [KSeF] Pobieranie paczki: ${part.partName} (${part.encryptedPartSize} B)`);
+    private async downloadAndProcessPackagePart(
+        part: ExportPackagePart,
+    ): Promise<PurchaseInvoiceListItem[]> {
+        console.log(
+            `   [KSeF] Pobieranie paczki: ${part.partName} (${part.encryptedPartSize} B)`,
+        );
 
         // 1. Pobierz zaszyfrowany plik
         const encryptedData = await this.downloadFromUrl(part.url);
@@ -1091,7 +1151,11 @@ export default class KsefService {
             throw new Error('Brak klucza AES do odszyfrowania paczki');
         }
 
-        const decryptedData = this.decryptAes(encryptedData, this.aesKey, this.aesIv);
+        const decryptedData = this.decryptAes(
+            encryptedData,
+            this.aesKey,
+            this.aesIv,
+        );
         console.log(`   [KSeF] Odszyfrowano ${decryptedData.length} B`);
 
         // 3. Rozpakuj ZIP
@@ -1104,7 +1168,10 @@ export default class KsefService {
         for (const entry of zipEntries) {
             if (entry.entryName.endsWith('.xml')) {
                 const xmlContent = entry.getData().toString('utf-8');
-                const invoice = this.parseInvoiceXmlToListItem(xmlContent, entry.entryName);
+                const invoice = this.parseInvoiceXmlToListItem(
+                    xmlContent,
+                    entry.entryName,
+                );
                 if (invoice) {
                     invoices.push(invoice);
                 }
@@ -1117,7 +1184,10 @@ export default class KsefService {
     /**
      * Pobierz plik z zewnętrznego URL (np. Azure Blob Storage)
      */
-    private async downloadFromUrl(url: string, timeoutMs = 120000): Promise<Buffer> {
+    private async downloadFromUrl(
+        url: string,
+        timeoutMs = 120000,
+    ): Promise<Buffer> {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -1129,7 +1199,9 @@ export default class KsefService {
 
             if (!response.ok) {
                 const text = await response.text().catch(() => '');
-                throw new Error(`Download failed HTTP ${response.status}: ${text}`);
+                throw new Error(
+                    `Download failed HTTP ${response.status}: ${text}`,
+                );
             }
 
             const arrayBuffer = await response.arrayBuffer();
@@ -1155,58 +1227,93 @@ export default class KsefService {
      * Parsuj XML faktury KSeF do PurchaseInvoiceListItem
      * Obsługuje format FA(2) zgodny z KSeF
      */
-    private parseInvoiceXmlToListItem(xml: string, filename: string): PurchaseInvoiceListItem | null {
+    private parseInvoiceXmlToListItem(
+        xml: string,
+        filename: string,
+    ): PurchaseInvoiceListItem | null {
         try {
             // Prosty parser XML bez zewnętrznych bibliotek
             const getValue = (tagName: string): string => {
-                const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
+                const regex = new RegExp(
+                    `<${tagName}[^>]*>([^<]*)</${tagName}>`,
+                    'i',
+                );
                 const match = xml.match(regex);
                 return match ? match[1].trim() : '';
             };
 
-            const getNestedValue = (outerTag: string, innerTag: string): string => {
-                const outerRegex = new RegExp(`<${outerTag}[^>]*>([\\s\\S]*?)</${outerTag}>`, 'i');
+            const getNestedValue = (
+                outerTag: string,
+                innerTag: string,
+            ): string => {
+                const outerRegex = new RegExp(
+                    `<${outerTag}[^>]*>([\\s\\S]*?)</${outerTag}>`,
+                    'i',
+                );
                 const outerMatch = xml.match(outerRegex);
                 if (!outerMatch) return '';
-                const innerRegex = new RegExp(`<${innerTag}[^>]*>([^<]*)</${innerTag}>`, 'i');
+                const innerRegex = new RegExp(
+                    `<${innerTag}[^>]*>([^<]*)</${innerTag}>`,
+                    'i',
+                );
                 const innerMatch = outerMatch[1].match(innerRegex);
                 return innerMatch ? innerMatch[1].trim() : '';
             };
 
             // Numer KSeF z nazwy pliku lub z XML
             let ksefNumber = filename.replace('.xml', '');
-            const ksefRefMatch = xml.match(/<KsefReferenceNumber>([^<]+)<\/KsefReferenceNumber>/i);
+            const ksefRefMatch = xml.match(
+                /<KsefReferenceNumber>([^<]+)<\/KsefReferenceNumber>/i,
+            );
             if (ksefRefMatch) {
                 ksefNumber = ksefRefMatch[1].trim();
             }
 
             // Dane sprzedawcy (Subject1 = dostawca w fakturze zakupowej)
-            const sellerNip = getNestedValue('Podmiot1', 'NIP') || getNestedValue('Sprzedawca', 'NIP') || getValue('NIP');
-            const sellerName = getNestedValue('Podmiot1', 'Nazwa') || 
-                               getNestedValue('Podmiot1', 'NazwaHandlowa') ||
-                               getNestedValue('Sprzedawca', 'Nazwa') || 
-                               getValue('Nazwa');
+            const sellerNip =
+                getNestedValue('Podmiot1', 'NIP') ||
+                getNestedValue('Sprzedawca', 'NIP') ||
+                getValue('NIP');
+            const sellerName =
+                getNestedValue('Podmiot1', 'Nazwa') ||
+                getNestedValue('Podmiot1', 'NazwaHandlowa') ||
+                getNestedValue('Sprzedawca', 'Nazwa') ||
+                getValue('Nazwa');
 
             // Numer faktury
-            const invoiceNumber = getValue('P_2') || getValue('NrFaktury') || getValue('NumerFaktury') || '';
+            const invoiceNumber =
+                getValue('P_2') ||
+                getValue('NrFaktury') ||
+                getValue('NumerFaktury') ||
+                '';
 
             // Data wystawienia
-            const invoicingDate = getValue('P_1') || getValue('DataWystawienia') || '';
+            const invoicingDate =
+                getValue('P_1') || getValue('DataWystawienia') || '';
 
             // Data przyjęcia do KSeF
-            const acquisitionTimestamp = getValue('DataPrzyjecia') || getValue('AcquisitionTimestamp') || '';
+            const acquisitionTimestamp =
+                getValue('DataPrzyjecia') ||
+                getValue('AcquisitionTimestamp') ||
+                '';
 
             // Typ faktury
             const invoiceType = getValue('RodzajFaktury') || 'FA';
 
             // Kwota brutto
-            const grossValueStr = getValue('P_15') || getValue('BruttoPozSumPlatnosc') || getValue('Brutto') || '0';
+            const grossValueStr =
+                getValue('P_15') ||
+                getValue('BruttoPozSumPlatnosc') ||
+                getValue('Brutto') ||
+                '0';
             const grossValue = parseFloat(grossValueStr.replace(',', '.')) || 0;
 
             // Waluta
             const currency = getValue('KodWaluty') || 'PLN';
 
-            console.log(`   [KSeF] Sparsowano fakturę: ${invoiceNumber} od ${sellerName} (${sellerNip}), kwota: ${grossValue} ${currency}`);
+            console.log(
+                `   [KSeF] Sparsowano fakturę: ${invoiceNumber} od ${sellerName} (${sellerNip}), kwota: ${grossValue} ${currency}`,
+            );
 
             return {
                 ksefNumber,
@@ -1230,7 +1337,7 @@ export default class KsefService {
     /**
      * Inicjuj asynchroniczny eksport faktur
      * POST /invoices/exports
-     * 
+     *
      * UWAGA: NIE wymaga sesji interaktywnej, tylko accessToken!
      */
     private async initiateInvoiceExport(
@@ -1268,13 +1375,15 @@ export default class KsefService {
             },
         };
 
-        console.log(`   [KSeF] Inicjowanie eksportu faktur ${subjectType}: ${dateFrom.toISOString().split('T')[0]} - ${dateTo.toISOString().split('T')[0]}`);
+        console.log(
+            `   [KSeF] Inicjowanie eksportu faktur ${subjectType}: ${dateFrom.toISOString().split('T')[0]} - ${dateTo.toISOString().split('T')[0]}`,
+        );
 
         const response = await this.requestJson<{ referenceNumber: string }>(
             'POST',
             '/invoices/exports',
             requestBody,
-            { 
+            {
                 Authorization: `Bearer ${this.accessToken}`,
                 'X-KSeF-Feature': 'include-metadata', // Dołącz metadane do paczki
             },
@@ -1288,7 +1397,10 @@ export default class KsefService {
      * Czekaj na zakończenie eksportu
      * GET /invoices/exports/{referenceNumber}
      */
-    private async waitForExportCompletion(referenceNumber: string, maxWaitMs = 300000): Promise<InvoiceExportStatusResponse> {
+    private async waitForExportCompletion(
+        referenceNumber: string,
+        maxWaitMs = 300000,
+    ): Promise<InvoiceExportStatusResponse> {
         const startTime = Date.now();
         let attemptCount = 0;
 
@@ -1301,27 +1413,48 @@ export default class KsefService {
             );
 
             attemptCount++;
-            
+
             // Loguj pełną odpowiedź przy pierwszym wywołaniu dla debugowania
             if (attemptCount === 1) {
-                console.log(`   [KSeF] Export status response:`, JSON.stringify(response, null, 2));
+                console.log(
+                    `   [KSeF] Export status response:`,
+                    JSON.stringify(response, null, 2),
+                );
             }
 
             // Sprawdź różne możliwe nazwy pól statusu
-            const code = response.processingCode ?? response.status?.code ?? response.statusCode;
-            const description = response.processingDescription ?? response.status?.description ?? response.statusDescription ?? '';
-            const numberOfElements = response.numberOfElements ?? response.invoicesCount ?? 0;
-            
+            const code =
+                response.processingCode ??
+                response.status?.code ??
+                response.statusCode;
+            const description =
+                response.processingDescription ??
+                response.status?.description ??
+                response.statusDescription ??
+                '';
+            const numberOfElements =
+                response.numberOfElements ?? response.invoicesCount ?? 0;
+
             console.log(`   [KSeF] Export status: ${code} - ${description}`);
 
             // 200 = zakończone sukcesem
-            if (code === 200 || code === 'COMPLETED' || response.status === 'COMPLETED') {
-                console.log(`   [KSeF] Export completed: ${numberOfElements} faktur`);
+            if (
+                code === 200 ||
+                code === 'COMPLETED' ||
+                response.status === 'COMPLETED'
+            ) {
+                console.log(
+                    `   [KSeF] Export completed: ${numberOfElements} faktur`,
+                );
                 return response;
             }
 
             // Błąd
-            if ((typeof code === 'number' && code >= 400) || code === 'FAILED' || response.status === 'FAILED') {
+            if (
+                (typeof code === 'number' && code >= 400) ||
+                code === 'FAILED' ||
+                response.status === 'FAILED'
+            ) {
                 throw new Error(`Export failed (${code}): ${description}`);
             }
 
@@ -1329,27 +1462,36 @@ export default class KsefService {
             await this.sleep(3000);
         }
 
-        throw new Error('Export timeout - maksymalny czas oczekiwania przekroczony');
+        throw new Error(
+            'Export timeout - maksymalny czas oczekiwania przekroczony',
+        );
     }
 
     /**
      * Parsuj metadane faktur z odpowiedzi statusu eksportu
      */
-    private parseExportMetadata(status: InvoiceExportStatusResponse): PurchaseInvoiceListItem[] {
+    private parseExportMetadata(
+        status: InvoiceExportStatusResponse,
+    ): PurchaseInvoiceListItem[] {
         if (!status.invoiceList || !Array.isArray(status.invoiceList)) {
             return [];
         }
 
         return status.invoiceList.map((inv: any) => ({
             ksefNumber: inv.ksefReferenceNumber || inv.ksefNumber || '',
-            ksefReferenceNumber: inv.ksefReferenceNumber || inv.ksefNumber || '',
+            ksefReferenceNumber:
+                inv.ksefReferenceNumber || inv.ksefNumber || '',
             subjectNip: inv.subjectNip || inv.sellerNip || '',
             subjectName: inv.subjectName || inv.sellerName || '',
-            invoiceNumber: inv.invoiceNumber || inv.invoiceReferenceNumber || '',
+            invoiceNumber:
+                inv.invoiceNumber || inv.invoiceReferenceNumber || '',
             invoicingDate: inv.invoicingDate || '',
-            acquisitionTimestamp: inv.acquisitionTimestamp || inv.permanentStorageDate || '',
+            acquisitionTimestamp:
+                inv.acquisitionTimestamp || inv.permanentStorageDate || '',
             invoiceType: inv.invoiceType || 'FA',
-            grossValue: inv.grossValue ? parseFloat(String(inv.grossValue)) : undefined,
+            grossValue: inv.grossValue
+                ? parseFloat(String(inv.grossValue))
+                : undefined,
             currency: inv.currency || 'PLN',
         }));
     }
@@ -1380,7 +1522,9 @@ export default class KsefService {
     ): Promise<PurchaseInvoiceListItem[]> {
         // searchPurchaseInvoices zwraca wszystkie faktury za jednym razem (z eksportu)
         const result = await this.searchPurchaseInvoices(dateFrom, dateTo);
-        console.log(`   [KSeF] Pobrano łącznie ${result.invoices.length} faktur zakupowych`);
+        console.log(
+            `   [KSeF] Pobrano łącznie ${result.invoices.length} faktur zakupowych`,
+        );
         return result.invoices;
     }
 

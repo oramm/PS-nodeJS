@@ -295,6 +295,7 @@ export default class Setup {
      *
      * Format w .env:
      *   KSEF_ENVIRONMENT="test"           # test | production
+     *   KSEF_API_BASE_URL="https://..."   # opcjonalny override URL API
      *   KSEF_NIP="1234567890"            # 10 cyfr
      *   KSEF_TOKEN="..."                 # Token z KSeF
      *   KSEF_SELLER_NAME="ENVI Sp. z o.o."
@@ -307,6 +308,8 @@ export default class Setup {
         environment: (process.env.KSEF_ENVIRONMENT || 'test') as
             | 'test'
             | 'production',
+        /** Opcjonalny override URL API KSeF */
+        apiBaseUrl: process.env.KSEF_API_BASE_URL,
         /** NIP firmy (10 cyfr) */
         nip: process.env.KSEF_NIP,
         /** Token autoryzacyjny KSeF */

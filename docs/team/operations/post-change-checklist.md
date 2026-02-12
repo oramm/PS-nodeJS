@@ -46,6 +46,50 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-12 - KSeF sync non-JSON response handling + API base URL override
+
+### 1. Scope
+
+- Added defensive handling for non-JSON responses in `KsefService.requestJson`.
+- Added optional env override `KSEF_API_BASE_URL` used by `KsefService.getApiUrl()`.
+- Improved KSeF error diagnostics with status/content-type/requestUrl/responseUrl/body preview.
+
+### 2. DB impact
+
+- No schema changes.
+- No data migration.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `KSEF_API_BASE_URL` (optional override of default KSeF API URL).
+
+### 4. Heroku impact
+
+- Config vars: optional `KSEF_API_BASE_URL` only if default endpoint does not work in target network.
+- Restart/release steps:
+    - set/unset `KSEF_API_BASE_URL` as needed,
+    - restart app dyno/process after env update.
+
+### 5. Developer actions
+
+- No migration/install actions required.
+- If KSeF returns HTML/redirect, set `KSEF_API_BASE_URL` to the known-working endpoint used by the environment/team.
+
+### 6. Verification
+
+- Trigger `/cost-invoices/sync` and confirm no `Unexpected token '<'` parsing failure.
+- On failure, verify improved diagnostic message includes request/response URLs and content-type.
+
+### 7. Rollback
+
+- Revert this change set and remove `KSEF_API_BASE_URL` from runtime env if needed.
+
+### 8. Owner
+
+- KSeF integration troubleshooting session (Codex + repository owner).
+
 ## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
 
 ### 1. Scope

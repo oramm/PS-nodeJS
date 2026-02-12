@@ -16,7 +16,14 @@
       "Bash(php:*)",
       "Bash(sc query:*)",
       "Bash(yarn add:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(find:*)",
+      "Bash(dir:*)",
+      "Bash(npx jest:*)",
+      "Bash(yarn test:*)",
+      "WebFetch(domain:ksef.podatki.gov.pl)",
+      "Bash(yarn jest:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
