@@ -46,6 +46,54 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-13 - Invoice corrections DB migration (CorrectedInvoiceId, CorrectionReason)
+
+### 1. Scope
+
+- Added missing SQL migration for invoice correction columns used by invoice correction flows.
+- New file: `src/invoices/migrations/001_add_invoice_correction_columns.sql`.
+
+### 2. DB impact
+
+- Schema change in `Invoices`:
+    - added nullable `CorrectedInvoiceId` (`INT`),
+    - added nullable `CorrectionReason` (`TEXT`).
+- No data backfill required.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps:
+    - run migration in target DB before/with deploy,
+    - restart backend process after migration.
+
+### 5. Developer actions
+
+- Execute SQL migration:
+    - `src/invoices/migrations/001_add_invoice_correction_columns.sql`
+- Verify both columns exist in runtime DB.
+
+### 6. Verification
+
+- Run:
+    - `SHOW COLUMNS FROM Invoices LIKE 'CorrectedInvoiceId';`
+    - `SHOW COLUMNS FROM Invoices LIKE 'CorrectionReason';`
+- Verify `POST /invoices` no longer fails with `Unknown column 'Invoices.CorrectedInvoiceId'`.
+
+### 7. Rollback
+
+- If rollback is required, drop added columns from `Invoices` in controlled maintenance window:
+    - `ALTER TABLE Invoices DROP COLUMN CorrectedInvoiceId, DROP COLUMN CorrectionReason;`
+
+### 8. Owner
+
+- Invoice corrections stabilization (Codex + repository owner).
+
 ## 2026-02-12 - KSeF sync non-JSON response handling + API base URL override
 
 ### 1. Scope
