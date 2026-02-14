@@ -308,6 +308,21 @@ export interface PersonProfileExperienceV2Record
     personProfileId: number;
 }
 
+export interface PersonProfileEducationV2Payload {
+    schoolName?: string;
+    degreeName?: string;
+    fieldOfStudy?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sortOrder?: number;
+}
+
+export interface PersonProfileEducationV2Record
+    extends PersonProfileEducationV2Payload {
+    id: number;
+    personProfileId: number;
+}
+
 export interface DocumentTemplateData extends RepositoryDataItem {
     name: string;
     description?: string;

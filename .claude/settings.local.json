@@ -16,7 +16,9 @@
       "Bash(php:*)",
       "Bash(sc query:*)",
       "Bash(yarn add:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(yarn test:*)",
+      "Bash(find:*)"
     ]
   }
 }

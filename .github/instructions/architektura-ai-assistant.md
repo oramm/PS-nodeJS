@@ -5,7 +5,7 @@ description: 'AI Assistant Guidelines - Decision Trees, Pattern Recognition, Err
 
 # Wytyczne dla AI Assistant - Clean Architecture
 
-> 🤖 **Plik specjalnie dla modeli AI** (GPT-4, Claude, Copilot)
+> 🤖 **Plik specjalnie dla modeli AI** (GPT, Claude, Copilot)
 >
 > 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md) | [Audyt](./architektura-refactoring-audit.md)
 
@@ -299,16 +299,16 @@ class LettersController {
 
 Przed zatwierdzeniem kodu sprawdź:
 
--   [ ] ❌ Model **NIE** importuje Controller ani Repository
--   [ ] ❌ Model **NIE** ma metod z `await ToolsDb.` (DB I/O)
--   [ ] ❌ Repository **NIE** ma `if (item.validate())` ani kalkulacji
--   [ ] ❌ Router **NIE** ma `new Model()` ani logiki biznesowej
--   [ ] ❌ Repository **NIE** zarządza transakcjami (`ToolsDb.transaction`)
--   [ ] ✅ Przepływ: Router → Controller.addFromDto() → Controller.add() → Repository → Model
--   [ ] ✅ Controller zarządza transakcjami
--   [ ] ✅ Repository dziedziczy po `BaseRepository<T>`
--   [ ] ✅ Controller dziedziczy po `BaseController<T, R>`
--   [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./architektura-szczegoly.md#7-unikanie-cykli-zależności))
+- [ ] ❌ Model **NIE** importuje Controller ani Repository
+- [ ] ❌ Model **NIE** ma metod z `await ToolsDb.` (DB I/O)
+- [ ] ❌ Repository **NIE** ma `if (item.validate())` ani kalkulacji
+- [ ] ❌ Router **NIE** ma `new Model()` ani logiki biznesowej
+- [ ] ❌ Repository **NIE** zarządza transakcjami (`ToolsDb.transaction`)
+- [ ] ✅ Przepływ: Router → Controller.addFromDto() → Controller.add() → Repository → Model
+- [ ] ✅ Controller zarządza transakcjami
+- [ ] ✅ Repository dziedziczy po `BaseRepository<T>`
+- [ ] ✅ Controller dziedziczy po `BaseController<T, R>`
+- [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./architektura-szczegoly.md#7-unikanie-cykli-zależności))
 
 ---
 
@@ -468,11 +468,11 @@ grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
 
 ## 🔗 Powiązane Dokumenty
 
--   [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference (5 min)
--   [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
--   [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
--   **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
--   [Konfiguracja srodowisk](./srodowiska.instructions.md) - dev/prod, loadEnv, .env files
+- [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference (5 min)
+- [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
+- [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
+- **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
+- [Konfiguracja srodowisk](./srodowiska.instructions.md) - dev/prod, loadEnv, .env files
 
 ---
 

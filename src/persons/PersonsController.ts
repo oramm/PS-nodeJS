@@ -9,6 +9,7 @@ import {
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
+import EducationController from './educations/EducationController';
 
 export type { PersonsSearchParams };
 
@@ -336,11 +337,14 @@ export default class PersonsController extends BaseController<
         const instance = this.getInstance();
         const profile = await instance.repository.getPersonProfileV2(personId);
         if (!profile) return undefined;
-        const profileExperiences =
-            await instance.repository.listPersonProfileExperiencesV2(personId);
+        const [profileExperiences, profileEducations] = await Promise.all([
+            instance.repository.listPersonProfileExperiencesV2(personId),
+            EducationController.find(personId),
+        ]);
         return {
             ...profile,
             profileExperiences,
+            profileEducations,
         };
     }
 
