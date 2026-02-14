@@ -323,6 +323,27 @@ export interface PersonProfileEducationV2Record
     personProfileId: number;
 }
 
+export interface SkillDictionaryPayload {
+    name: string;
+}
+export interface SkillDictionaryRecord extends SkillDictionaryPayload {
+    id: number;
+    nameNormalized: string;
+}
+
+export interface PersonProfileSkillV2Payload {
+    skillId: number;
+    levelCode?: string;
+    yearsOfExperience?: number;
+    sortOrder?: number;
+}
+export interface PersonProfileSkillV2Record
+    extends PersonProfileSkillV2Payload {
+    id: number;
+    personProfileId: number;
+    _skill?: SkillDictionaryRecord;
+}
+
 export interface DocumentTemplateData extends RepositoryDataItem {
     name: string;
     description?: string;

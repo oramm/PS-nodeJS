@@ -12,9 +12,9 @@ Plan reference: `docs/team/operations/hr-module-plan.md`
 
 ## Current Status
 
-- Następna sesja: 2
-- Ostatnia zakończona: 1
-- Overall status: SESSION_1_CLOSED
+- Następna sesja: 3
+- Ostatnia zakończona: 2
+- Overall status: SESSION_2_CLOSED
 
 ## Session Log
 
@@ -61,4 +61,60 @@ Plan reference: `docs/team/operations/hr-module-plan.md`
 
 #### Next
 - Następna sesja: 2 (Skills Dictionary + PersonProfileSkills CRUD)
+- Blokery: brak
+
+### 2026-02-14 - Sesja 2 - Skills Dictionary + PersonProfileSkills CRUD
+
+#### Scope
+- Aktywacja SkillsDictionary jako osobny mini-moduł (Repository, Controller, Router)
+- Aktywacja PersonProfileSkills jako osobny sub-moduł (Model, Repository, Controller, Router)
+- Integracja z getPersonProfileV2()
+- Testy jednostkowe obu modułów
+
+#### Completed
+- Dodano typy `SkillDictionaryPayload`, `SkillDictionaryRecord`, `PersonProfileSkillV2Payload`, `PersonProfileSkillV2Record` w `src/types/types.d.ts`
+- Utworzono repository `src/persons/skills/SkillsDictionaryRepository.ts` z normalizeName(), find (z searchText LIKE), add, edit, delete
+- Utworzono controller `src/persons/skills/SkillsDictionaryController.ts` (Singleton, transakcje)
+- Utworzono router `src/persons/skills/SkillsDictionaryRouters.ts` (4 endpointy REST)
+- Utworzono model `src/persons/profileSkills/PersonProfileSkill.ts` (extends BusinessObject)
+- Utworzono repository `src/persons/profileSkills/ProfileSkillRepository.ts` z JOIN SkillsDictionary, ensurePersonProfileId helper
+- Utworzono controller `src/persons/profileSkills/ProfileSkillController.ts` (Singleton, transakcje)
+- Utworzono router `src/persons/profileSkills/ProfileSkillRouters.ts` (4 endpointy REST)
+- Zarejestrowano oba routery w `src/index.ts`
+- Zaktualizowano `PersonsController.getPersonProfileV2()` aby zwracał `profileSkills` (Promise.all z 3 zapytaniami)
+- Utworzono testy `src/persons/skills/__tests__/SkillsDictionaryController.test.ts` (4 testy)
+- Utworzono testy `src/persons/profileSkills/__tests__/ProfileSkillController.test.ts` (5 testów)
+
+#### Evidence
+- `yarn build` → OK (0 errors)
+- `yarn test` (all) → 10/12 suites passed, 43/46 tests passed. 2 failed suites are pre-existing (ContractsController, OffersController - not related to this session)
+- Nowe pliki:
+    - `src/persons/skills/SkillsDictionaryRepository.ts`
+    - `src/persons/skills/SkillsDictionaryController.ts`
+    - `src/persons/skills/SkillsDictionaryRouters.ts`
+    - `src/persons/skills/__tests__/SkillsDictionaryController.test.ts`
+    - `src/persons/profileSkills/PersonProfileSkill.ts`
+    - `src/persons/profileSkills/ProfileSkillRepository.ts`
+    - `src/persons/profileSkills/ProfileSkillController.ts`
+    - `src/persons/profileSkills/ProfileSkillRouters.ts`
+    - `src/persons/profileSkills/__tests__/ProfileSkillController.test.ts`
+- Zmienione pliki:
+    - `src/types/types.d.ts` (+4 interfejsy)
+    - `src/persons/PersonsController.ts` (+import ProfileSkillController, zmiana getPersonProfileV2 na 3 Promise.all)
+    - `src/index.ts` (+require SkillsDictionaryRouters, ProfileSkillRouters)
+
+#### Endpointy
+| Metoda | Endpoint | Opis | Status |
+|--------|----------|------|--------|
+| GET | `/v2/skills` | Lista skills (query: searchText) | ACTIVE |
+| POST | `/v2/skills` | Dodaj skill | ACTIVE |
+| PUT | `/v2/skills/:skillId` | Edytuj nazwę | ACTIVE |
+| DELETE | `/v2/skills/:skillId` | Usuń (fails if in use) | ACTIVE |
+| GET | `/v2/persons/:personId/profile/skills` | Lista skills osoby | ACTIVE |
+| POST | `/v2/persons/:personId/profile/skills` | Przypisz skill | ACTIVE |
+| PUT | `/v2/persons/:personId/profile/skills/:skillEntryId` | Edytuj przypisanie | ACTIVE |
+| DELETE | `/v2/persons/:personId/profile/skills/:skillEntryId` | Usuń przypisanie | ACTIVE |
+
+#### Next
+- Następna sesja: 3 (Rozszerzone wyszukiwanie + skills na liście osób)
 - Blokery: brak
