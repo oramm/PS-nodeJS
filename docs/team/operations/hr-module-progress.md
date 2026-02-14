@@ -12,9 +12,9 @@ Plan reference: `docs/team/operations/hr-module-plan.md`
 
 ## Current Status
 
-- Następna sesja: 3
-- Ostatnia zakończona: 2
-- Overall status: SESSION_2_CLOSED
+- Następna sesja: DONE
+- Ostatnia zakończona: 3
+- Overall status: SESSION_3_CLOSED
 
 ## Session Log
 
@@ -118,3 +118,44 @@ Plan reference: `docs/team/operations/hr-module-plan.md`
 #### Next
 - Następna sesja: 3 (Rozszerzone wyszukiwanie + skills na liście osób)
 - Blokery: brak
+
+### 2026-02-14 - Sesja 3 - Rozszerzone wyszukiwanie + skills na liście osób
+
+#### Scope
+- Filtrowanie po skillach (`skillIds`) i profilu (`hasProfile`) w PersonsSearchParams
+- Skills w GROUP_CONCAT na liście osób (`_skillNames`)
+- Wyszukiwanie tekstowe po nazwach skilli w `makeSearchTextCondition()`
+- Testy jednostkowe nowych filtrów i mapowania
+
+#### Completed
+- Rozszerzono `PersonsSearchParams` o `skillIds?: number[]` i `hasProfile?: boolean`
+- Rozszerzono `makeAndConditions()` o EXISTS subquery dla `skillIds` (filtrowanie: osoba ma DOWOLNY z podanych skilli) oraz EXISTS dla `hasProfile`
+- Dodano GROUP_CONCAT subquery do `findV2()` i `findLegacy()` zwracającą `SkillNames` (DISTINCT, ORDER BY Name)
+- Dodano pole `_skillNames?: string` do `Person.ts` (model) z mapowaniem w konstruktorze
+- Zaktualizowano `mapRowToModel()` w `PersonRepository.ts` o `_skillNames: row.SkillNames ?? undefined`
+- Rozszerzono `makeSearchTextCondition()` o EXISTS subquery szukającą po `sd.Name LIKE '%word%'` w SkillsDictionary
+- Utworzono testy `src/persons/__tests__/PersonRepository.search.test.ts` (14 testów w 5 grupach)
+
+#### Evidence
+- `yarn build` → OK (0 errors)
+- `yarn test --testPathPatterns=PersonRepository.search` → 14/14 PASS
+- `yarn test` (all) → 11/13 suites passed, 57/63 tests passed. 2 failed suites are pre-existing (OffersController: missing REFRESH_TOKEN, ContractsController: unrelated mock issue - same as Session 2)
+- Nowe pliki:
+    - `src/persons/__tests__/PersonRepository.search.test.ts`
+- Zmienione pliki:
+    - `src/persons/PersonRepository.ts` (PersonsSearchParams +2 pola, makeAndConditions +skillIds/hasProfile, findV2/findLegacy +GROUP_CONCAT, mapRowToModel +_skillNames, makeSearchTextCondition +skill search)
+    - `src/persons/Person.ts` (+_skillNames field)
+
+#### Testy (14 testów)
+| Grupa | Ilość | Opis |
+|-------|-------|------|
+| makeAndConditions – skillIds | 4 | single/multiple skillIds, empty array, undefined |
+| makeAndConditions – hasProfile | 2 | true generates EXISTS, false skips |
+| makeAndConditions – combined | 2 | skillIds+hasProfile, skillIds+searchText |
+| makeSearchTextCondition – skills | 4 | single word, multi-word, original fields preserved, empty |
+| mapRowToModel – _skillNames | 2 | maps SkillNames, null → undefined |
+
+#### Next
+- Następna sesja: DONE (wszystkie 3 sesje backendowe zakończone)
+- Blokery: brak
+- Następny krok: Frontend (ENVI.ProjectSite) - osobny plan
