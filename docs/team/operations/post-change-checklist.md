@@ -46,6 +46,62 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-15 - Kylos runtime migration reconciliation
+
+### 1. Scope
+
+- Verified runtime DB schema state on production target (`envi-konsulting.kylos.pl/envikons_myEnvi`) against all SQL migrations present in repo under:
+    - `src/contractMeetingNotes/migrations/*`
+    - `src/costInvoices/migrations/*`
+    - `src/invoices/migrations/*`
+    - `src/invoices/KSeF/migrations/*`
+    - `src/persons/migrations/*`
+- Applied only missing runtime migrations.
+
+### 2. DB impact
+
+- Runtime schema updated on `kylos`:
+    - applied `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`,
+    - applied `src/invoices/migrations/001_add_invoice_correction_columns.sql`.
+- Already present (no-op) during reconciliation:
+    - `src/costInvoices/migrations/001_create_cost_invoices.sql`,
+    - `src/invoices/KSeF/migrations/001_create_invoice_ksef_metadata.sql`,
+    - `src/persons/migrations/001_create_persons_v2_schema.sql`.
+- Executed idempotent data backfill:
+    - `src/persons/migrations/002_backfill_persons_v2.sql`.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps: none (DB-only reconciliation).
+
+### 5. Developer actions
+
+- Performed schema presence checks (`information_schema.TABLES/COLUMNS`) on production target.
+- Executed missing SQL migrations with `multipleStatements` enabled and re-checked target objects.
+
+### 6. Verification
+
+- Verified final runtime presence of:
+    - `ContractMeetingNotes`,
+    - `CostInvoiceSyncs`, `CostCategories`, `CostInvoices`, `CostInvoiceItems`,
+    - `InvoiceKsefMetadata`,
+    - columns `Invoices.CorrectedInvoiceId`, `Invoices.CorrectionReason`, `Invoices.KsefNumber`, `Invoices.KsefStatus`, `Invoices.KsefSessionId`, `Invoices.KsefUpo`,
+    - `PersonAccounts`, `PersonProfiles`, `PersonProfileExperiences`, `PersonProfileEducations`, `SkillsDictionary`, `PersonProfileSkills`.
+
+### 7. Rollback
+
+- If rollback needed, execute controlled DBA rollback per affected migration scope; for idempotent column additions, drop columns only after dependency review.
+
+### 8. Owner
+
+- Runtime migration reconciliation session (Codex + repository owner).
+
 ## 2026-02-15 - Contract Meeting Notes DB apply gate closure for N5
 
 ### 1. Scope
