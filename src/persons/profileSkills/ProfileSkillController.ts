@@ -31,6 +31,14 @@ export default class ProfileSkillController extends BaseController<
         return instance.repository.find(personId);
     }
 
+    static async findWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileSkill[]> {
+        const instance = this.getInstance();
+        return instance.repository.findWithSearch(personId, searchText);
+    }
+
     static async addFromDto(
         personId: number,
         skillData: PersonProfileSkillV2Payload,

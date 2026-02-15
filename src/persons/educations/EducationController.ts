@@ -31,6 +31,14 @@ export default class EducationController extends BaseController<
         return instance.repository.find(personId);
     }
 
+    static async findWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileEducation[]> {
+        const instance = this.getInstance();
+        return instance.repository.findWithSearch(personId, searchText);
+    }
+
     static async addFromDto(
         personId: number,
         educationData: PersonProfileEducationV2Payload,

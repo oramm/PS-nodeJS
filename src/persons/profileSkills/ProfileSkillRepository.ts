@@ -29,6 +29,18 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
     }
 
     async find(personId: number): Promise<PersonProfileSkill[]> {
+        return this.findWithSearch(personId);
+    }
+
+    async findWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileSkill[]> {
+        let whereExtra = '';
+        if (searchText) {
+            const escaped = mysql.escape(`%${searchText}%`);
+            whereExtra = ` AND sd.Name LIKE ${escaped}`;
+        }
         const sql = mysql.format(
             `SELECT
                 pps.Id,
@@ -42,7 +54,7 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
              FROM PersonProfileSkills pps
              JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
              JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
-             WHERE pp.PersonId = ?
+             WHERE pp.PersonId = ?${whereExtra}
              ORDER BY pps.SortOrder ASC, pps.Id ASC`,
             [personId],
         );

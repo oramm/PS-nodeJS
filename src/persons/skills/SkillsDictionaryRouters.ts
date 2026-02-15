@@ -10,6 +10,26 @@ const parsePositiveInt = (raw: string, fieldName: string): number => {
     return value;
 };
 
+app.post(
+    '/v2/skills/search',
+    async (req: Request, res: Response, next) => {
+        try {
+            const payload = req.parsedBody ?? req.body;
+            const orConditions = payload?.orConditions;
+            const searchText =
+                Array.isArray(orConditions) && orConditions.length > 0
+                    ? orConditions[0].searchText
+                    : undefined;
+            const skills = await SkillsDictionaryController.find(
+                searchText ? { searchText } : undefined,
+            );
+            res.send(skills);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
 app.get(
     '/v2/skills',
     async (req: Request, res: Response, next) => {

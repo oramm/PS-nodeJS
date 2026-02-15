@@ -10,6 +10,28 @@ const parsePositiveInt = (raw: string, fieldName: string): number => {
     return value;
 };
 
+app.post(
+    '/v2/persons/:personId/profile/educations/search',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const payload = req.parsedBody ?? req.body;
+            const orConditions = payload?.orConditions;
+            const searchText =
+                Array.isArray(orConditions) && orConditions.length > 0
+                    ? orConditions[0].searchText
+                    : undefined;
+            const educations = await EducationController.findWithSearch(
+                personId,
+                searchText,
+            );
+            res.send(educations);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
 /**
  * Pobiera listę wykształcenia osoby (v2).
  * Params: personId

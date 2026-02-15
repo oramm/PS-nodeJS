@@ -75,6 +75,41 @@ describe('ProfileSkillController', () => {
         });
     });
 
+    describe('findWithSearch', () => {
+        it('should call repository.findWithSearch with personId and searchText', async () => {
+            const findSpy = jest
+                .spyOn(ProfileSkillRepository.prototype, 'findWithSearch')
+                .mockResolvedValue([sampleRecord]);
+
+            const { default: ProfileSkillController } = await import(
+                '../ProfileSkillController'
+            );
+            const result = await ProfileSkillController.findWithSearch(
+                personId,
+                'TypeScript',
+            );
+
+            expect(findSpy).toHaveBeenCalledWith(personId, 'TypeScript');
+            expect(result).toEqual([sampleRecord]);
+        });
+
+        it('should call repository.findWithSearch without searchText', async () => {
+            const findSpy = jest
+                .spyOn(ProfileSkillRepository.prototype, 'findWithSearch')
+                .mockResolvedValue([sampleRecord]);
+
+            const { default: ProfileSkillController } = await import(
+                '../ProfileSkillController'
+            );
+            const result = await ProfileSkillController.findWithSearch(
+                personId,
+            );
+
+            expect(findSpy).toHaveBeenCalledWith(personId, undefined);
+            expect(result).toEqual([sampleRecord]);
+        });
+    });
+
     describe('addFromDto', () => {
         it('should call repository.addSkillInDb within a transaction', async () => {
             const addSpy = jest

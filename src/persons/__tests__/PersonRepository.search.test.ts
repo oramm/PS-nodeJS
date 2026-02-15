@@ -129,6 +129,46 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         });
     });
 
+    describe('makeAndConditions – experienceText filter', () => {
+        it('generates EXISTS subquery for experienceText', () => {
+            const result = (repository as any).makeAndConditions(
+                { experienceText: 'Envi' },
+                'v2',
+            );
+
+            expect(result).toContain('EXISTS');
+            expect(result).toContain('PersonProfileExperiences');
+            expect(result).toContain("OrganizationName LIKE '%Envi%'");
+            expect(result).toContain("PositionName LIKE '%Envi%'");
+        });
+
+        it('skips experienceText filter when not provided', () => {
+            const result = (repository as any).makeAndConditions({}, 'v2');
+
+            expect(result).not.toContain('PersonProfileExperiences');
+        });
+
+        it('skips experienceText filter when empty string', () => {
+            const result = (repository as any).makeAndConditions(
+                { experienceText: '' },
+                'v2',
+            );
+
+            expect(result).not.toContain('PersonProfileExperiences');
+        });
+
+        it('combines experienceText with skillIds', () => {
+            const result = (repository as any).makeAndConditions(
+                { experienceText: 'Envi', skillIds: [3] },
+                'v2',
+            );
+
+            expect(result).toContain('PersonProfileExperiences');
+            expect(result).toContain('PersonProfileSkills');
+            expect(result).toContain(' AND ');
+        });
+    });
+
     describe('mapRowToModel – _skillNames', () => {
         it('maps SkillNames column to _skillNames property', () => {
             const person = (repository as any).mapRowToModel({

@@ -24,6 +24,7 @@ export interface PersonsSearchParams {
     searchText?: string;
     skillIds?: number[];
     hasProfile?: boolean;
+    experienceText?: string;
 }
 
 export default class PersonRepository extends BaseRepository<Person> {
@@ -161,6 +162,18 @@ export default class PersonRepository extends BaseRepository<Person> {
     async listPersonProfileExperiencesV2(
         personId: number,
     ): Promise<PersonProfileExperienceV2Record[]> {
+        return this.findExperiencesWithSearch(personId);
+    }
+
+    async findExperiencesWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileExperienceV2Record[]> {
+        let whereExtra = '';
+        if (searchText) {
+            const escaped = mysql.escape(`%${searchText}%`);
+            whereExtra = ` AND (ppe.OrganizationName LIKE ${escaped} OR ppe.PositionName LIKE ${escaped})`;
+        }
         const sql = mysql.format(
             `SELECT
                 ppe.Id,
@@ -174,7 +187,7 @@ export default class PersonRepository extends BaseRepository<Person> {
                 ppe.SortOrder
              FROM PersonProfileExperiences ppe
              JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
-             WHERE pp.PersonId = ?
+             WHERE pp.PersonId = ?${whereExtra}
              ORDER BY ppe.SortOrder ASC, ppe.Id ASC`,
             [personId],
         );
@@ -469,6 +482,17 @@ export default class PersonRepository extends BaseRepository<Person> {
         if (searchParams.hasProfile) {
             conditions.push(
                 `EXISTS (SELECT 1 FROM PersonProfiles pp WHERE pp.PersonId = Persons.Id)`,
+            );
+        }
+
+        if (searchParams.experienceText) {
+            const escaped = mysql.escape(`%${searchParams.experienceText}%`);
+            conditions.push(
+                `EXISTS (SELECT 1 FROM PersonProfileExperiences ppe
+                    JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
+                    WHERE pp.PersonId = Persons.Id
+                    AND (ppe.OrganizationName LIKE ${escaped}
+                         OR ppe.PositionName LIKE ${escaped}))`,
             );
         }
 

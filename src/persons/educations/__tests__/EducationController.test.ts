@@ -72,6 +72,39 @@ describe('EducationController', () => {
         });
     });
 
+    describe('findWithSearch', () => {
+        it('should call repository.findWithSearch with personId and searchText', async () => {
+            const findSpy = jest
+                .spyOn(EducationRepository.prototype, 'findWithSearch')
+                .mockResolvedValue([sampleRecord]);
+
+            const { default: EducationController } = await import(
+                '../EducationController'
+            );
+            const result = await EducationController.findWithSearch(
+                personId,
+                'Politechnika',
+            );
+
+            expect(findSpy).toHaveBeenCalledWith(personId, 'Politechnika');
+            expect(result).toEqual([sampleRecord]);
+        });
+
+        it('should call repository.findWithSearch without searchText', async () => {
+            const findSpy = jest
+                .spyOn(EducationRepository.prototype, 'findWithSearch')
+                .mockResolvedValue([sampleRecord]);
+
+            const { default: EducationController } = await import(
+                '../EducationController'
+            );
+            const result = await EducationController.findWithSearch(personId);
+
+            expect(findSpy).toHaveBeenCalledWith(personId, undefined);
+            expect(result).toEqual([sampleRecord]);
+        });
+    });
+
     describe('addFromDto', () => {
         it('should call repository.addEducationInDb within a transaction', async () => {
             const addSpy = jest

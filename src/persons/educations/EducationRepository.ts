@@ -25,6 +25,18 @@ export default class EducationRepository extends BaseRepository<PersonProfileEdu
     }
 
     async find(personId: number): Promise<PersonProfileEducation[]> {
+        return this.findWithSearch(personId);
+    }
+
+    async findWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileEducation[]> {
+        let whereExtra = '';
+        if (searchText) {
+            const escaped = mysql.escape(`%${searchText}%`);
+            whereExtra = ` AND (ppe.SchoolName LIKE ${escaped} OR ppe.DegreeName LIKE ${escaped} OR ppe.FieldOfStudy LIKE ${escaped})`;
+        }
         const sql = mysql.format(
             `SELECT
                 ppe.Id,
@@ -37,7 +49,7 @@ export default class EducationRepository extends BaseRepository<PersonProfileEdu
                 ppe.SortOrder
              FROM PersonProfileEducations ppe
              JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
-             WHERE pp.PersonId = ?
+             WHERE pp.PersonId = ?${whereExtra}
              ORDER BY ppe.SortOrder ASC, ppe.Id ASC`,
             [personId],
         );

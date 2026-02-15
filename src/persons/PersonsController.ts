@@ -370,6 +370,17 @@ export default class PersonsController extends BaseController<
         return instance.repository.listPersonProfileExperiencesV2(personId);
     }
 
+    static async findExperiencesWithSearch(
+        personId: number,
+        searchText?: string,
+    ) {
+        const instance = this.getInstance();
+        return instance.repository.findExperiencesWithSearch(
+            personId,
+            searchText,
+        );
+    }
+
     static async addPersonProfileExperienceV2(
         personId: number,
         experienceData: PersonProfileExperienceV2Payload,
