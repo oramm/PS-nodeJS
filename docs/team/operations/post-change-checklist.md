@@ -46,6 +46,58 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-15 - Contract Meeting Notes N2 data layer bootstrap
+
+### 1. Scope
+
+- Added backend data-layer scaffold for Contract Meeting Notes:
+    - `ContractMeetingNote` model (metadata only),
+    - `ContractMeetingNoteRepository` (`find` via OR groups + SQL mapping),
+    - `ContractMeetingNotesController` (transaction-safe per-contract sequence allocation in Controller).
+- Added initial SQL migration for dedicated metadata table:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`.
+
+### 2. DB impact
+
+- Schema change introduced:
+    - new table `ContractMeetingNotes` with FK to `Contracts` and optional FK to `Persons`.
+    - unique key `(ContractId, SequenceNumber)` to enforce per-contract sequence uniqueness.
+    - indexes for metadata search (`ContractId`, `MeetingDate`, `ProtocolGdId`, `CreatedByPersonId`).
+- Runtime write strategy for numbering:
+    - next sequence is allocated in Controller transaction with `SELECT COALESCE(MAX(...))+1 ... FOR UPDATE`.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps:
+    - apply SQL migration before enabling create/list endpoints for meeting notes.
+
+### 5. Developer actions
+
+- Execute migration in target DB environment.
+- Run TypeScript build verification after merge.
+
+### 6. Verification
+
+- `yarn build` (or `npx tsc --noEmit`) should pass with new module files.
+- Verify SQL object presence:
+    - `ContractMeetingNotes` table exists,
+    - unique key `(ContractId, SequenceNumber)` exists.
+
+### 7. Rollback
+
+- Drop `ContractMeetingNotes` table (after confirming no required data retention).
+- Revert module files under `src/contractMeetingNotes/*`.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
 ## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
 
 ### 1. Scope
