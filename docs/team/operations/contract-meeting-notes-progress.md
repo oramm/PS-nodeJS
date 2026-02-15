@@ -14,10 +14,21 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `2`
-- Last completed checkpoint: `N2-BACKEND-DATA-LAYER`
-- Overall status: `N2_CLOSED`
-- Next checkpoint: `N3-BACKEND-CREATE-ENDPOINT`
+- Active phase: `3`
+- Last completed checkpoint: `N3-BACKEND-CREATE-ENDPOINT`
+- Overall status: `N3_CLOSED`
+- Next checkpoint: `N4-BACKEND-READ-ENDPOINTS`
+
+## Sessions Progress List
+
+- `N0-BOOTSTRAP` -> `DONE`
+- `N1-BACKEND-DISCOVERY` -> `DONE`
+- `N2-BACKEND-DATA-LAYER` -> `DONE`
+- `N3-BACKEND-CREATE-ENDPOINT` -> `DONE`
+- `N4-BACKEND-READ-ENDPOINTS` -> `GOTOWY_DO_ZROBIENIA`
+- `N5-FRONTEND-LIST-CREATE` -> `PENDING`
+- `N6-FRONTEND-SEARCH` -> `PENDING`
+- `N7-STABILIZATION-ROLLOUT` -> `PENDING`
 
 ## Session Log Template
 
@@ -225,6 +236,69 @@ Copy for each session:
 - Add `POST /contractMeetingNote` router + request contract using DTO.
 - Implement create flow with Google Docs template copy and transaction/error handling in Controller.
 - Add targeted tests for create path (including sequence uniqueness and rollback expectations).
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
+## 2026-02-15 - Session 3 - Create endpoint with Google Docs copy flow
+
+### 1. Scope
+
+- Checkpoint ID: `N3-BACKEND-CREATE-ENDPOINT`
+- Planned tasks:
+    - Add `POST /contractMeetingNote` endpoint in Router -> Validator -> Controller flow.
+    - Implement create flow with Google Docs template copy and DB transaction handling.
+    - Close checkpoint with evidence and exact next step for N4.
+
+### 2. Completed
+
+- Added create endpoint wiring:
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts` with `POST /contractMeetingNote`.
+    - `src/index.ts` updated to mount `contractMeetingNotes` router.
+- Added create payload validation layer:
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`.
+- Extended create orchestration in controller:
+    - `ContractMeetingNotesController.addFromDto` now uses `BaseController.withAuth` (no `ToolsGapi` in Router).
+    - `ToolsDb.transaction` remains in Controller.
+    - Google Docs template copy (`ToolsGd.copyFile`) from `Setup.Gd.meetingProtocoTemlateId`.
+    - Automatic folder bootstrap to `Notatki ze spotkan` when contract has no `MeetingProtocolsGdFolderId`, with DB update in transaction.
+    - Rollback path for external side effect: if DB flow fails after copy, created GD file is moved to trash.
+- Extended repository for create context reads/updates used by controller flow:
+    - contract context lock/read (`FOR UPDATE`) and update of `Contracts.MeetingProtocolsGdFolderId`.
+- Required tests for create path were listed for next session:
+    - happy path create (doc copied + DB row persisted),
+    - sequence uniqueness under concurrent creates for same contract,
+    - rollback behavior when DB insert fails after successful GD copy,
+    - folder bootstrap path when `MeetingProtocolsGdFolderId` is missing.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn build` -> pass (`tsc` successful).
+    - `rg -n --hidden -S "contractMeetingNote|ContractMeetingNoteValidator|Notatki ze spotkan|meetingProtocoTemlateId|withAuth|transaction|copyFile" src/contractMeetingNotes src/index.ts` -> confirms router endpoint, validator, auth wrapper, transaction, GD copy flow, and router mount.
+- Tests:
+    - no automated tests added/executed in this checkpoint; compile verification only.
+- Files changed:
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/index.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+
+### 4. Risks/Blockers
+
+- Endpoint behavior relies on Google OAuth runtime configuration (`REFRESH_TOKEN`) and GD permissions to template/folder.
+- Automated tests for create and rollback scenarios are still pending.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N4-BACKEND-READ-ENDPOINTS`
+- Add `POST /contractMeetingNotes` endpoint with request contract `body.orConditions`.
+- Keep search metadata-only in repository and add filters coverage for `contractId`.
+- Implement and run targeted tests listed above (especially concurrency sequence and rollback path).
 
 ### 6. Checkpoint Status
 

@@ -16,6 +16,14 @@ export type ContractMeetingNoteSearchParams = {
     meetingDateTo?: string;
 };
 
+export type ContractMeetingNoteCreateContext = {
+    contractId: number;
+    contractNumber?: string;
+    contractName?: string;
+    meetingProtocolsGdFolderId?: string | null;
+    projectGdFolderId?: string | null;
+};
+
 export default class ContractMeetingNoteRepository extends BaseRepository<ContractMeetingNote> {
     constructor() {
         super('ContractMeetingNotes');
@@ -65,6 +73,57 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
         const typedRows = rows as { NextSequenceNumber?: number }[];
         const nextSequence = typedRows[0]?.NextSequenceNumber ?? 1;
         return Number(nextSequence) || 1;
+    }
+
+    async getCreateContext(
+        contractId: number,
+        conn: mysqlPromise.PoolConnection
+    ): Promise<ContractMeetingNoteCreateContext | null> {
+        const sql = `SELECT
+                Contracts.Id AS ContractId,
+                Contracts.Number AS ContractNumber,
+                Contracts.Name AS ContractName,
+                Contracts.MeetingProtocolsGdFolderId,
+                Projects.GdFolderId AS ProjectGdFolderId
+            FROM Contracts
+            LEFT JOIN Projects ON Projects.OurId = Contracts.ProjectOurId
+            WHERE Contracts.Id = ?
+            FOR UPDATE`;
+        const [rows] = await conn.execute(sql, [contractId]);
+        const typedRows = rows as {
+            ContractId: number;
+            ContractNumber?: string;
+            ContractName?: string;
+            MeetingProtocolsGdFolderId?: string | null;
+            ProjectGdFolderId?: string | null;
+        }[];
+        const row = typedRows[0];
+        if (!row) {
+            return null;
+        }
+
+        return {
+            contractId: row.ContractId,
+            contractNumber: row.ContractNumber
+                ? ToolsDb.sqlToString(row.ContractNumber)
+                : undefined,
+            contractName: row.ContractName
+                ? ToolsDb.sqlToString(row.ContractName)
+                : undefined,
+            meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId ?? null,
+            projectGdFolderId: row.ProjectGdFolderId ?? null,
+        };
+    }
+
+    async updateContractMeetingProtocolsGdFolderId(
+        contractId: number,
+        meetingProtocolsGdFolderId: string,
+        conn: mysqlPromise.PoolConnection
+    ): Promise<void> {
+        const sql = `UPDATE Contracts
+            SET MeetingProtocolsGdFolderId = ?
+            WHERE Id = ?`;
+        await conn.execute(sql, [meetingProtocolsGdFolderId, contractId]);
     }
 
     private makeAndConditions(condition: ContractMeetingNoteSearchParams): string {

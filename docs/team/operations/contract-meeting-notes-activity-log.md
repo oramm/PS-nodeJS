@@ -77,3 +77,22 @@ Use it as quick session memory in addition to detailed progress entries.
 - Notes:
     - Next checkpoint is `N3-BACKEND-CREATE-ENDPOINT`.
 
+## 2026-02-15 10:35 - N3 create endpoint implemented
+
+- Checkpoint: `N3-BACKEND-CREATE-ENDPOINT`
+- Summary:
+    - Added `POST /contractMeetingNote` route with dedicated payload validator and controller call.
+    - Implemented create flow with Google Docs template copy, folder bootstrap (`Notatki ze spotkan`), and DB transaction in Controller.
+    - Added rollback for external side effect (trashed copied GD file when transactional flow fails after copy).
+- Files:
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/index.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+- Impact: `API/Docs`
+- Notes:
+    - Next checkpoint is `N4-BACKEND-READ-ENDPOINTS` (`POST /contractMeetingNotes` with `body.orConditions`).
+

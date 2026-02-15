@@ -1,9 +1,13 @@
-import mysql from 'mysql2/promise';
 import BaseController from '../controllers/BaseController';
+import { OAuth2Client } from 'google-auth-library';
+import mysql from 'mysql2/promise';
+import Setup from '../setup/Setup';
 import ToolsDb from '../tools/ToolsDb';
+import ToolsGd from '../tools/ToolsGd';
 import { ContractMeetingNoteCreatePayload } from '../types/types';
 import ContractMeetingNote from './ContractMeetingNote';
 import ContractMeetingNoteRepository, {
+    ContractMeetingNoteCreateContext,
     ContractMeetingNoteSearchParams,
 } from './ContractMeetingNoteRepository';
 
@@ -35,45 +39,143 @@ export default class ContractMeetingNotesController extends BaseController<
 
     static async addFromDto(
         payload: ContractMeetingNoteCreatePayload,
-        externalConn?: mysql.PoolConnection
+        fallbackCreatedByPersonId?: number
     ): Promise<ContractMeetingNote> {
         const instance = this.getInstance();
+        const normalizedPayload: ContractMeetingNoteCreatePayload = {
+            ...payload,
+            createdByPersonId:
+                payload.createdByPersonId ?? fallbackCreatedByPersonId ?? null,
+        };
 
-        if (externalConn) {
-            return await instance.addWithinTransaction(payload, externalConn);
-        }
-
-        return await ToolsDb.transaction<ContractMeetingNote>(
-            async (conn: mysql.PoolConnection) =>
-                await instance.addWithinTransaction(payload, conn)
-        );
+        return await this.withAuth(async (_, authClient) => {
+            return await instance.addWithAuth(normalizedPayload, authClient);
+        });
     }
 
-    private async addWithinTransaction(
+    private async addWithAuth(
         payload: ContractMeetingNoteCreatePayload,
-        conn: mysql.PoolConnection
+        authClient: OAuth2Client
     ): Promise<ContractMeetingNote> {
-        if (!payload.contractId) {
-            throw new Error('contractId is required');
+        let createdProtocolGdId: string | undefined;
+
+        try {
+            return await ToolsDb.transaction<ContractMeetingNote>(async (conn) => {
+                if (!payload.contractId) {
+                    throw new Error('contractId is required');
+                }
+
+                const createContext = await this.repository.getCreateContext(
+                    payload.contractId,
+                    conn
+                );
+                if (!createContext) {
+                    throw new Error(`Contract ${payload.contractId} was not found`);
+                }
+
+                const protocolFolderId = await this.ensureMeetingProtocolsFolder(
+                    createContext,
+                    authClient,
+                    conn
+                );
+                const nextSequenceNumber =
+                    await this.repository.getNextSequenceNumberForContract(
+                        payload.contractId,
+                        conn
+                    );
+
+                const protocolFileName = this.makeProtocolFileName(
+                    createContext,
+                    nextSequenceNumber,
+                    payload.title
+                );
+
+                const copiedProtocol = await ToolsGd.copyFile(
+                    authClient,
+                    Setup.Gd.meetingProtocoTemlateId,
+                    protocolFolderId,
+                    protocolFileName
+                );
+                createdProtocolGdId = copiedProtocol.data.id || undefined;
+                if (!createdProtocolGdId) {
+                    throw new Error(
+                        'Google Docs template copy did not return file id'
+                    );
+                }
+
+                await ToolsGd.createPermissions(authClient, {
+                    fileId: createdProtocolGdId,
+                });
+
+                const note = new ContractMeetingNote({
+                    contractId: payload.contractId,
+                    sequenceNumber: nextSequenceNumber,
+                    title: payload.title,
+                    description: payload.description ?? null,
+                    meetingDate: payload.meetingDate ?? null,
+                    protocolGdId: createdProtocolGdId,
+                    createdByPersonId: payload.createdByPersonId ?? null,
+                });
+
+                await this.repository.addInDb(note, conn, true);
+                return note;
+            });
+        } catch (error) {
+            if (createdProtocolGdId) {
+                await ToolsGd.trashFileOrFolder(authClient, createdProtocolGdId).catch(
+                    (rollbackError) => {
+                    console.error(
+                        'ContractMeetingNotesController: failed to rollback Google Docs file',
+                        rollbackError
+                    );
+                    }
+                );
+            }
+            throw error;
+        }
+    }
+
+    private async ensureMeetingProtocolsFolder(
+        createContext: ContractMeetingNoteCreateContext,
+        authClient: OAuth2Client,
+        conn: mysql.PoolConnection
+    ): Promise<string> {
+        if (createContext.meetingProtocolsGdFolderId) {
+            return createContext.meetingProtocolsGdFolderId;
+        }
+        if (!createContext.projectGdFolderId) {
+            throw new Error(
+                `Contract ${createContext.contractId} does not have project Google Drive folder`
+            );
         }
 
-        const nextSequenceNumber =
-            await this.repository.getNextSequenceNumberForContract(
-                payload.contractId,
-                conn
-            );
-
-        const note = new ContractMeetingNote({
-            contractId: payload.contractId,
-            sequenceNumber: nextSequenceNumber,
-            title: payload.title,
-            description: payload.description ?? null,
-            meetingDate: payload.meetingDate ?? null,
-            protocolGdId: payload.protocolGdId ?? null,
-            createdByPersonId: payload.createdByPersonId ?? null,
+        const notesFolder = await ToolsGd.setFolder(authClient, {
+            parentId: createContext.projectGdFolderId,
+            name: 'Notatki ze spotkan',
         });
+        const notesFolderId = String(notesFolder.id || '');
+        if (!notesFolderId) {
+            throw new Error('Unable to create or read meeting notes folder id');
+        }
 
-        await this.repository.addInDb(note, conn, true);
-        return note;
+        await this.repository.updateContractMeetingProtocolsGdFolderId(
+            createContext.contractId,
+            notesFolderId,
+            conn
+        );
+        return notesFolderId;
+    }
+
+    private makeProtocolFileName(
+        createContext: ContractMeetingNoteCreateContext,
+        sequenceNumber: number,
+        title: string
+    ): string {
+        const seq = String(sequenceNumber).padStart(2, '0');
+        const contractPart = createContext.contractNumber
+            ? `${createContext.contractNumber} - `
+            : '';
+
+        return `${contractPart}Notatka ze spotkania ${seq}: ${title}`.trim();
     }
 }

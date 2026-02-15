@@ -98,6 +98,58 @@ Copy the block below for each change:
 
 - Contract Meeting Notes backend session (Codex + repository owner).
 
+## 2026-02-15 - Contract Meeting Notes N3 create endpoint flow
+
+### 1. Scope
+
+- Added backend create endpoint flow for contract meeting notes:
+    - `POST /contractMeetingNote` router,
+    - payload validator,
+    - controller orchestration with Google Docs template copy and DB transaction.
+- Added create-context repository methods for contract folder metadata and persisted folder id back to `Contracts.MeetingProtocolsGdFolderId` when missing.
+
+### 2. DB impact
+
+- No schema changes.
+- Runtime data writes added/extended:
+    - insert into `ContractMeetingNotes`,
+    - optional update of `Contracts.MeetingProtocolsGdFolderId` during first create for contract without pre-existing folder id.
+- Transaction scope remains in Controller (`ToolsDb.transaction`).
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - standard backend deploy,
+    - verify OAuth runtime credentials allow GD template copy.
+
+### 5. Developer actions
+
+- Run TypeScript build check.
+- Execute API smoke test for `POST /contractMeetingNote` against environment with valid OAuth and existing contract.
+
+### 6. Verification
+
+- `yarn build` passes.
+- `POST /contractMeetingNote` should:
+    - allocate next sequence per contract,
+    - copy template doc,
+    - persist metadata with returned `protocolGdId`.
+
+### 7. Rollback
+
+- Revert N3 commit(s) to disable create route and create-flow controller logic.
+- If needed, manually remove mistakenly created note rows and GD docs from failed rollout window.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
 ## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
 
 ### 1. Scope
