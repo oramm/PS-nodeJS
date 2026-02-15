@@ -46,6 +46,68 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-15 - Contract Meeting Notes DB apply gate closure for N5
+
+### 1. Scope
+
+- Executed runtime apply of:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`
+- Added migration runner utility for controlled execution in this repo:
+    - `tmp/run-contract-meeting-notes-migration.ts`
+- Verified runtime schema objects required before frontend rollout (N5).
+
+### 2. DB impact
+
+- Runtime schema changed in target DB (`development` -> `localhost/envikons_myEnvi`):
+    - table `ContractMeetingNotes` created,
+    - unique key `uq_contractmeetingnotes_contract_sequence` (`ContractId`, `SequenceNumber`) present,
+    - index `idx_contractmeetingnotes_meetingid` (`MeetingId`) present,
+    - FK `fk_contractmeetingnotes_meeting` (`MeetingId` -> `Meetings(Id)`) present.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - DB gate for Contract Meeting Notes is closed.
+    - Frontend rollout can proceed only after UI integration is completed and integrated smoke is green.
+
+### 5. Developer actions
+
+- Run migration apply script:
+    - `npx ts-node tmp/run-contract-meeting-notes-migration.ts`
+- Verify schema:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts`
+- Re-run minimum backend checks:
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand`
+    - `yarn build`
+
+### 6. Verification
+
+- Before apply:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> `tableExists=false`.
+- Apply:
+    - `npx ts-node tmp/run-contract-meeting-notes-migration.ts` -> `status=ok`.
+- After apply:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> table/index/FK evidence present.
+- Regression:
+    - router/repository test suites pass; build passes.
+
+### 7. Rollback
+
+- If rollback required:
+    - stop N5 rollout immediately,
+    - drop `ContractMeetingNotes` table using controlled DBA procedure (after data retention decision),
+    - keep feature UI/API rollout disabled until corrected schema is re-applied and re-verified.
+
+### 8. Owner
+
+- Contract Meeting Notes session (Codex + repository owner).
+
 ## 2026-02-15 - Contract Meeting Notes N2 data layer bootstrap
 
 ### 1. Scope

@@ -14,9 +14,9 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `BACKEND_READ_ENDPOINTS`
+- Active phase: `FRONTEND_LIST_CREATE`
 - Last completed checkpoint: `N4-BACKEND-READ-ENDPOINTS`
-- Overall status: `N4_CODE_COMPLETE_MIGRATION_PENDING_APPLY`
+- Overall status: `N5_GATE_CLOSED_FRONTEND_INTEGRATION_PENDING`
 - Next checkpoint: `N5-FRONTEND-LIST-CREATE`
 
 ## Sessions Progress List
@@ -30,7 +30,7 @@ Plan reference:
 - `S3-ACTIVITY-LOG-ALIGNMENT` -> `DONE`
 - `S4-OPERATIONS-CHECKLIST-UPDATE` -> `DONE`
 - `N4-BACKEND-READ-ENDPOINTS` -> `DONE`
-- `N5-FRONTEND-LIST-CREATE` -> `PENDING`
+- `N5-FRONTEND-LIST-CREATE` -> `OPEN`
 - `N6-FRONTEND-SEARCH` -> `PENDING`
 - `N7-STABILIZATION-ROLLOUT` -> `PENDING`
 
@@ -434,4 +434,69 @@ Copy for each session:
 ### 6. Checkpoint Status
 
 - `CLOSED`
+
+## 2026-02-15 - Session 6 - DB gate apply + N5 kickoff (frontend pending in this repo)
+
+### 1. Scope
+
+- Checkpoint ID: `N5-FRONTEND-LIST-CREATE` (warunkowo po zamknieciu DB gate)
+- Planned tasks:
+    - Apply migration `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` on runtime DB.
+    - Verify schema evidence (table, unique key, `MeetingId` index, FK to `Meetings(Id)`).
+    - Run minimal backend smoke for `POST /contractMeetingNotes` and `POST /contractMeetingNote`.
+    - Start N5 list/create path based on available code in this repository.
+
+### 2. Completed
+
+- Closed DB apply gate on runtime DB (`development` -> `localhost/envikons_myEnvi`):
+    - migration `001_create_contract_meeting_notes.sql` executed successfully.
+    - `ContractMeetingNotes` table confirmed.
+    - unique index `(ContractId, SequenceNumber)` confirmed.
+    - `MeetingId` index confirmed.
+    - FK `MeetingId -> Meetings(Id)` confirmed.
+- Ran minimum backend smoke/verification:
+    - router tests for `POST /contractMeetingNotes` and `POST /contractMeetingNote` pass.
+    - repository read tests pass.
+    - TypeScript build pass.
+- Started N5 with rollout precondition completed and backend path verified.
+- Identified practical N5 blocker in this repository scope:
+    - no frontend UI source files are present here to implement button/modal/list changes directly.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx ts-node tmp/check-db-env-state.ts` -> env loaded (`development`, `localhost/envikons_myEnvi`).
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` (before apply) -> `tableExists=false`.
+    - `npx ts-node tmp/run-contract-meeting-notes-migration.ts` -> migration apply `status=ok`.
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` (after apply) -> `tableExists=true`, `uq_contractmeetingnotes_contract_sequence`, `idx_contractmeetingnotes_meetingid`, `fk_contractmeetingnotes_meeting`.
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand` -> pass (2 suites, 4 tests).
+    - `yarn build` -> pass.
+- Tests:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts` -> pass.
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts` -> pass.
+- Files changed:
+    - `tmp/run-contract-meeting-notes-migration.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+
+### 4. Risks/Blockers
+
+- Frontend implementation scope for N5 (button/modal/list in contract UI) is not available in this repository; likely separate frontend codebase/runtime is required.
+- Runtime smoke for `POST /contractMeetingNote` against live Google Drive side effects was not executed here (requires valid OAuth runtime context + domain data and should be run in target integrated environment).
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5-FRONTEND-LIST-CREATE`
+- Implement UI integration in the actual frontend codebase:
+    - add "create note" action,
+    - add list view bound to `POST /contractMeetingNotes`,
+    - add create form/modal bound to `POST /contractMeetingNote`.
+- Run integrated smoke in environment with OAuth/session:
+    - create note from UI,
+    - verify list refresh shows created note.
+
+### 6. Checkpoint Status
+
+- `OPEN`
 

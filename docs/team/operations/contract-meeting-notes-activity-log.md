@@ -23,6 +23,23 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-02-15 15:05 - DB gate closed for N5 and backend smoke re-verified
+
+- Checkpoint: `N5-FRONTEND-LIST-CREATE` (kickoff after DB gate)
+- Summary:
+    - Applied runtime migration `001_create_contract_meeting_notes.sql` on `development` (`localhost/envikons_myEnvi`).
+    - Verified schema evidence: table `ContractMeetingNotes`, unique `(ContractId, SequenceNumber)`, index `MeetingId`, FK `MeetingId -> Meetings(Id)`.
+    - Re-ran minimum backend smoke for list/create endpoints (`POST /contractMeetingNotes`, `POST /contractMeetingNote`) and repository read path.
+    - Confirmed N5 frontend UI code is not present in this repository scope (frontend integration pending in target frontend codebase).
+- Files:
+    - `tmp/run-contract-meeting-notes-migration.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+- Impact: `DB/API/Docs`
+- Notes:
+    - DB gate is now CLOSED; next practical action is UI list/create implementation in frontend repository/runtime.
+
 ## 2026-02-14 00:00 - Tracking bootstrap initialized
 
 - Checkpoint: `N0-BOOTSTRAP`
