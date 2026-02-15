@@ -1,6 +1,5 @@
 import { app } from '../../index';
 import ContractMeetingNotesController from '../ContractMeetingNotesController';
-import ContractMeetingNoteValidator from '../ContractMeetingNoteValidator';
 
 jest.mock('../../index', () => ({
     app: {
@@ -12,15 +11,8 @@ jest.mock('../ContractMeetingNotesController', () => ({
     __esModule: true,
     default: {
         find: jest.fn(),
+        findFromDto: jest.fn(),
         addFromDto: jest.fn(),
-    },
-}));
-
-jest.mock('../ContractMeetingNoteValidator', () => ({
-    __esModule: true,
-    default: {
-        validateFindPayload: jest.fn(),
-        validateCreatePayload: jest.fn(),
     },
 }));
 
@@ -33,17 +25,16 @@ describe('ContractMeetingNotesRouters', () => {
         const postMock = app.post as jest.Mock;
 
         readHandler = postMock.mock.calls.find(
-            ([path]: [string]) => path === '/contractMeetingNotes'
+            ([path]: [string]) => path === '/contractMeetingNotes',
         )?.[1];
         createHandler = postMock.mock.calls.find(
-            ([path]: [string]) => path === '/contractMeetingNote'
+            ([path]: [string]) => path === '/contractMeetingNote',
         )?.[1];
     });
 
     beforeEach(() => {
-        (ContractMeetingNoteValidator.validateFindPayload as jest.Mock).mockReset();
-        (ContractMeetingNoteValidator.validateCreatePayload as jest.Mock).mockReset();
         (ContractMeetingNotesController.find as jest.Mock).mockReset();
+        (ContractMeetingNotesController.findFromDto as jest.Mock).mockReset();
         (ContractMeetingNotesController.addFromDto as jest.Mock).mockReset();
     });
 
@@ -56,21 +47,15 @@ describe('ContractMeetingNotesRouters', () => {
         const next = jest.fn();
         const expected = [{ id: 1, contractId: 123 }];
 
-        (ContractMeetingNoteValidator.validateFindPayload as jest.Mock).mockReturnValue(
-            req.parsedBody
-        );
-        (ContractMeetingNotesController.find as jest.Mock).mockResolvedValue(
-            expected
-        );
+        (
+            ContractMeetingNotesController.findFromDto as jest.Mock
+        ).mockResolvedValue(expected);
 
         await readHandler(req, res, next);
 
-        expect(ContractMeetingNoteValidator.validateFindPayload).toHaveBeenCalledWith(
-            req.parsedBody
+        expect(ContractMeetingNotesController.findFromDto).toHaveBeenCalledWith(
+            req.parsedBody,
         );
-        expect(ContractMeetingNotesController.find).toHaveBeenCalledWith([
-            { contractId: 123 },
-        ]);
         expect(res.send).toHaveBeenCalledWith(expected);
         expect(next).not.toHaveBeenCalled();
     });
@@ -93,20 +78,14 @@ describe('ContractMeetingNotesRouters', () => {
         const created = { id: 15, ...createPayload };
 
         (
-            ContractMeetingNoteValidator.validateCreatePayload as jest.Mock
-        ).mockReturnValue(createPayload);
-        (ContractMeetingNotesController.addFromDto as jest.Mock).mockResolvedValue(
-            created
-        );
+            ContractMeetingNotesController.addFromDto as jest.Mock
+        ).mockResolvedValue(created);
 
         await createHandler(req, res, next);
 
-        expect(
-            ContractMeetingNoteValidator.validateCreatePayload
-        ).toHaveBeenCalledWith(createPayload);
         expect(ContractMeetingNotesController.addFromDto).toHaveBeenCalledWith(
             createPayload,
-            77
+            77,
         );
         expect(res.send).toHaveBeenCalledWith(created);
         expect(next).not.toHaveBeenCalled();

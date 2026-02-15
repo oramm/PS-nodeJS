@@ -1,34 +1,24 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
 import ContractMeetingNotesController from './ContractMeetingNotesController';
-import ContractMeetingNoteValidator from './ContractMeetingNoteValidator';
 
-app.post(
-    '/contractMeetingNotes',
-    async (req: Request, res: Response, next) => {
-        try {
-            const payload = ContractMeetingNoteValidator.validateFindPayload(
-                req.parsedBody ?? req.body
-            );
-            const result = await ContractMeetingNotesController.find(
-                payload.orConditions
-            );
-            res.send(result);
-        } catch (error) {
-            next(error);
-        }
+app.post('/contractMeetingNotes', async (req: Request, res: Response, next) => {
+    try {
+        const result = await ContractMeetingNotesController.findFromDto(
+            req.parsedBody ?? req.body,
+        );
+        res.send(result);
+    } catch (error) {
+        next(error);
     }
-);
+});
 
 app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
     try {
-        const payload = ContractMeetingNoteValidator.validateCreatePayload(
-            req.parsedBody ?? req.body
-        );
         const fallbackCreatedByPersonId = req.session.userData?.enviId;
         const item = await ContractMeetingNotesController.addFromDto(
-            payload,
-            fallbackCreatedByPersonId
+            req.parsedBody ?? req.body,
+            fallbackCreatedByPersonId,
         );
 
         res.send(item);

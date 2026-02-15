@@ -23,6 +23,43 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-02-15 18:05 - Backend stabilization hardening + high-risk tests
+
+- Checkpoint: `N5-FRONTEND-LIST-CREATE` (backend-only in PS-NodeJS)
+- Summary:
+    - Re-verified architecture flow for `contractMeetingNotes`: thin Router, DTO validation in Controller, SQL in Repository, DB-free Model.
+    - Confirmed standard folder creation path uses `Notatki ze spotkań`.
+    - Added high-risk backend tests for controller create flow, rollback after DB failure, and validator edge cases.
+    - Executed module test run and full TypeScript build successfully.
+- Files:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteValidator.test.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+- Impact: `API/Docs`
+- Notes:
+    - Frontend handoff remains in `C:/Apache24/htdocs/ENVI.ProjectSite`.
+
+## 2026-02-15 16:20 - Backend hardening: thin router + controller validation
+
+- Checkpoint: `N5-FRONTEND-LIST-CREATE` (backend support in PS-NodeJS)
+- Summary:
+    - Refactored `contractMeetingNotes` routers to delegate raw DTO directly to controller methods.
+    - Moved validation responsibility to controller (`findFromDto`, `addFromDto`) using existing validator class.
+    - Standardized new meeting notes folder creation name to `Notatki ze spotkań`.
+    - Updated router tests and verified with focused `jest` + `yarn build`.
+    - Marked N5/N6 frontend implementation as external scope (`C:/Apache24/htdocs/ENVI.ProjectSite`) in plan.
+- Files:
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `docs/team/operations/contract-meeting-notes-plan.md`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+- Impact: `API/Docs`
+- Notes:
+    - Frontend list/create/search implementation continues in frontend repository.
+
 ## 2026-02-15 15:05 - DB gate closed for N5 and backend smoke re-verified
 
 - Checkpoint: `N5-FRONTEND-LIST-CREATE` (kickoff after DB gate)
@@ -154,4 +191,3 @@ Use it as quick session memory in addition to detailed progress entries.
 - Impact: `DB/API/Docs`
 - Notes:
     - Runtime rollout remains blocked until migration `001` is executed and verified on target DB.
-

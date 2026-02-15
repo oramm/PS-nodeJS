@@ -500,3 +500,120 @@ Copy for each session:
 
 - `OPEN`
 
+## 2026-02-15 - Session 7 - Backend hardening before frontend handoff
+
+### 1. Scope
+
+- Checkpoint ID: `N5-FRONTEND-LIST-CREATE` (backend support/hardening in this repository)
+- Planned tasks:
+    - Move DTO validation from Router to Controller for `contractMeetingNotes` endpoints.
+    - Standardize created folder name to `Notatki ze spotkań`.
+    - Keep `meetingId` lifecycle unchanged (optional at create, filled later).
+    - Re-run focused verification (`jest` + `build`).
+
+### 2. Completed
+
+- Refactored Router to thin delegation only:
+    - `POST /contractMeetingNotes` now calls `ContractMeetingNotesController.findFromDto(...)`.
+    - `POST /contractMeetingNote` now passes raw DTO to `ContractMeetingNotesController.addFromDto(...)`.
+- Moved validation ownership to Controller:
+    - `findFromDto(...)` validates find payload via `ContractMeetingNoteValidator`.
+    - `addFromDto(...)` validates create payload via `ContractMeetingNoteValidator` and then applies fallback `createdByPersonId`.
+- Standardized new folder creation name in create flow to `Notatki ze spotkań`.
+- Updated router tests to match new architecture (no validator mocking in router layer).
+- Clarified in plan that N5/N6 UI implementation is handled in frontend repo `C:/Apache24/htdocs/ENVI.ProjectSite`.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts --runInBand` -> pass (1 suite, 2 tests).
+    - `yarn build` -> pass.
+- Tests:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts` -> pass.
+- Files changed:
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `docs/team/operations/contract-meeting-notes-plan.md`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+
+### 4. Risks/Blockers
+
+- N5/N6 UI scope remains outside this repository and requires continuation in frontend repo.
+- No integrated runtime smoke with Google OAuth side effects was executed in this session.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5-FRONTEND-LIST-CREATE`
+- In frontend repo (`C:/Apache24/htdocs/ENVI.ProjectSite`), implement:
+    - list binding to `POST /contractMeetingNotes`,
+    - create action/form binding to `POST /contractMeetingNote`.
+- Execute integrated UI smoke in target runtime context and confirm end-to-end creation/list refresh.
+
+### 6. Checkpoint Status
+
+- `OPEN`
+
+## 2026-02-15 - Session 8 - Backend stabilization/hardening checkpoint
+
+### 1. Scope
+
+- Checkpoint ID: `N5-FRONTEND-LIST-CREATE` (backend-only stabilization in PS-NodeJS)
+- Planned tasks:
+    - Verify and preserve architecture flow `Router -> Controller -> Repository -> Model`.
+    - Keep DTO validation in Controller (thin router).
+    - Confirm create flow for folder `Notatki ze spotkań`.
+    - Add missing high-risk backend tests (create/find/validation edge cases).
+    - Run module tests and build.
+
+### 2. Completed
+
+- Verified architecture flow remains compliant for `contractMeetingNotes`:
+    - Router delegates to Controller methods only,
+    - Controller keeps DTO validation and orchestrates transaction/auth,
+    - Repository handles SQL/data access,
+    - Model remains without DB I/O.
+- Confirmed create flow standard folder name `Notatki ze spotkań` in controller and added test coverage for it.
+- Added high-risk backend tests:
+    - controller create flow with folder bootstrap + DB persistence assertions,
+    - rollback path when DB insert fails after Google Docs copy,
+    - validator edge cases for create/find payload normalization and guards.
+- Kept API contract unchanged (`POST /contractMeetingNote`, `POST /contractMeetingNotes`).
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn test src/contractMeetingNotes` -> pass (`4` suites, `11` tests).
+    - `yarn build` -> pass (`tsc` successful).
+    - `rg/find checks` equivalent via search:
+        - router endpoints present (`/contractMeetingNotes`, `/contractMeetingNote`),
+        - controller validation calls present (`validateFindPayload`, `validateCreatePayload`),
+        - folder standard present (`Notatki ze spotkań`).
+- Tests:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts` -> pass.
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteValidator.test.ts` -> pass.
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts` -> pass.
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts` -> pass.
+- Files changed:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteValidator.test.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+
+### 4. Risks/Blockers
+
+- End-to-end runtime create smoke with real Google OAuth/Drive side effects was not executed in this checkpoint (unit-level hardening only).
+- Frontend list/create integration remains outside this repository scope.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5-FRONTEND-LIST-CREATE` (frontend handoff)
+- In frontend repository `C:/Apache24/htdocs/ENVI.ProjectSite`:
+    - bind list to `POST /contractMeetingNotes`,
+    - bind create form/action to `POST /contractMeetingNote`,
+    - run integrated UI smoke to verify note creation and list refresh.
+
+### 6. Checkpoint Status
+
+- `OPEN`
