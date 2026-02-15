@@ -159,6 +159,9 @@ require('./setup/Sessions/Gauth2Routers');
 require('./persons/PersonsRouters');
 
 require('./persons/projectRoles/RolesRouters');
+require('./persons/educations/EducationRouters');
+require('./persons/skills/SkillsDictionaryRouters');
+require('./persons/profileSkills/ProfileSkillRouters');
 require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');

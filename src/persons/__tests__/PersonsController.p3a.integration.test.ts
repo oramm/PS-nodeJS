@@ -134,4 +134,45 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
             }),
         );
     });
+
+    it('findExperiencesWithSearch delegates to repository.findExperiencesWithSearch', async () => {
+        const { default: PersonsController } = await import('../PersonsController');
+        const findSpy = jest
+            .spyOn(PersonRepository.prototype, 'findExperiencesWithSearch')
+            .mockResolvedValue([
+                {
+                    id: 801,
+                    personProfileId: 701,
+                    organizationName: 'ENVI',
+                    positionName: 'Backend Developer',
+                    isCurrent: true,
+                    sortOrder: 1,
+                },
+            ]);
+
+        const result = await PersonsController.findExperiencesWithSearch(
+            310003,
+            'ENVI',
+        );
+
+        expect(findSpy).toHaveBeenCalledWith(310003, 'ENVI');
+        expect(result).toEqual([
+            expect.objectContaining({
+                id: 801,
+                organizationName: 'ENVI',
+            }),
+        ]);
+    });
+
+    it('findExperiencesWithSearch works without searchText', async () => {
+        const { default: PersonsController } = await import('../PersonsController');
+        const findSpy = jest
+            .spyOn(PersonRepository.prototype, 'findExperiencesWithSearch')
+            .mockResolvedValue([]);
+
+        const result = await PersonsController.findExperiencesWithSearch(310003);
+
+        expect(findSpy).toHaveBeenCalledWith(310003, undefined);
+        expect(result).toEqual([]);
+    });
 });

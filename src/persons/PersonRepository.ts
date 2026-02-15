@@ -22,6 +22,9 @@ export interface PersonsSearchParams {
     showPrivateData?: boolean;
     _entities?: Entity[];
     searchText?: string;
+    skillIds?: number[];
+    hasProfile?: boolean;
+    experienceText?: string;
 }
 
 export default class PersonRepository extends BaseRepository<Person> {
@@ -94,6 +97,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             systemRoleName: row.SystemRoleName,
             systemRoleId: row.SystemRoleId,
             _entity: { id: row.EntityId, name: row.EntityName },
+            _skillNames: row.SkillNames ?? undefined,
         });
     }
 
@@ -158,6 +162,18 @@ export default class PersonRepository extends BaseRepository<Person> {
     async listPersonProfileExperiencesV2(
         personId: number,
     ): Promise<PersonProfileExperienceV2Record[]> {
+        return this.findExperiencesWithSearch(personId);
+    }
+
+    async findExperiencesWithSearch(
+        personId: number,
+        searchText?: string,
+    ): Promise<PersonProfileExperienceV2Record[]> {
+        let whereExtra = '';
+        if (searchText) {
+            const escaped = mysql.escape(`%${searchText}%`);
+            whereExtra = ` AND (ppe.OrganizationName LIKE ${escaped} OR ppe.PositionName LIKE ${escaped})`;
+        }
         const sql = mysql.format(
             `SELECT
                 ppe.Id,
@@ -171,7 +187,7 @@ export default class PersonRepository extends BaseRepository<Person> {
                 ppe.SortOrder
              FROM PersonProfileExperiences ppe
              JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
-             WHERE pp.PersonId = ?
+             WHERE pp.PersonId = ?${whereExtra}
              ORDER BY ppe.SortOrder ASC, ppe.Id ASC`,
             [personId],
         );
@@ -213,19 +229,24 @@ export default class PersonRepository extends BaseRepository<Person> {
                   )
                 : '1';
 
-        const sql = `SELECT Persons.Id, 
-                            Persons.EntityId, 
-                            Persons.Name, 
-                            Persons.Surname, 
-                            Persons.Position, 
-                            Persons.Email, 
-                            Persons.Cellphone, 
-                            Persons.Phone, 
-                            Persons.Comment, 
+        const sql = `SELECT Persons.Id,
+                            Persons.EntityId,
+                            Persons.Name,
+                            Persons.Surname,
+                            Persons.Position,
+                            Persons.Email,
+                            Persons.Cellphone,
+                            Persons.Phone,
+                            Persons.Comment,
                             Persons.SystemEmail,
                             SystemRoles.Name AS SystemRoleName,
                             SystemRoles.Id AS SystemRoleId,
-                            Entities.Name AS EntityName
+                            Entities.Name AS EntityName,
+                            (SELECT GROUP_CONCAT(DISTINCT sd.Name ORDER BY sd.Name SEPARATOR ', ')
+                             FROM PersonProfileSkills pps
+                             JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
+                             JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
+                             WHERE pp.PersonId = Persons.Id) AS SkillNames
                     FROM Persons
                     JOIN Entities ON Persons.EntityId=Entities.Id
                     LEFT JOIN Roles ON Roles.PersonId = Persons.Id
@@ -248,19 +269,24 @@ export default class PersonRepository extends BaseRepository<Person> {
                   )
                 : '1';
 
-        const sql = `SELECT Persons.Id, 
-                            Persons.EntityId, 
-                            Persons.Name, 
-                            Persons.Surname, 
-                            Persons.Position, 
-                            Persons.Email, 
-                            Persons.Cellphone, 
-                            Persons.Phone, 
-                            Persons.Comment, 
+        const sql = `SELECT Persons.Id,
+                            Persons.EntityId,
+                            Persons.Name,
+                            Persons.Surname,
+                            Persons.Position,
+                            Persons.Email,
+                            Persons.Cellphone,
+                            Persons.Phone,
+                            Persons.Comment,
                             COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail,
                             COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName,
                             COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
-                            Entities.Name AS EntityName
+                            Entities.Name AS EntityName,
+                            (SELECT GROUP_CONCAT(DISTINCT sd.Name ORDER BY sd.Name SEPARATOR ', ')
+                             FROM PersonProfileSkills pps
+                             JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
+                             JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
+                             WHERE pp.PersonId = Persons.Id) AS SkillNames
                     FROM Persons
                     JOIN Entities ON Persons.EntityId=Entities.Id
                     LEFT JOIN Roles ON Roles.PersonId = Persons.Id
@@ -441,6 +467,35 @@ export default class PersonRepository extends BaseRepository<Person> {
             conditions.push(entityCondition);
         }
 
+        if (searchParams.skillIds && searchParams.skillIds.length > 0) {
+            const placeholders = searchParams.skillIds.map(() => '?').join(',');
+            conditions.push(
+                mysql.format(
+                    `EXISTS (SELECT 1 FROM PersonProfileSkills pps
+                        JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
+                        WHERE pp.PersonId = Persons.Id AND pps.SkillId IN (${placeholders}))`,
+                    searchParams.skillIds,
+                ),
+            );
+        }
+
+        if (searchParams.hasProfile) {
+            conditions.push(
+                `EXISTS (SELECT 1 FROM PersonProfiles pp WHERE pp.PersonId = Persons.Id)`,
+            );
+        }
+
+        if (searchParams.experienceText) {
+            const escaped = mysql.escape(`%${searchParams.experienceText}%`);
+            conditions.push(
+                `EXISTS (SELECT 1 FROM PersonProfileExperiences ppe
+                    JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
+                    WHERE pp.PersonId = Persons.Id
+                    AND (ppe.OrganizationName LIKE ${escaped}
+                         OR ppe.PositionName LIKE ${escaped}))`,
+            );
+        }
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText,
         );
@@ -461,7 +516,11 @@ export default class PersonRepository extends BaseRepository<Person> {
                 OR Persons.Surname LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Email LIKE ${mysql.escape(`%${word}%`)}
                 OR Persons.Comment LIKE ${mysql.escape(`%${word}%`)}
-                OR Persons.Position LIKE ${mysql.escape(`%${word}%`)})`,
+                OR Persons.Position LIKE ${mysql.escape(`%${word}%`)}
+                OR EXISTS (SELECT 1 FROM PersonProfileSkills pps
+                           JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
+                           JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
+                           WHERE pp.PersonId = Persons.Id AND sd.Name LIKE ${mysql.escape(`%${word}%`)}))`,
             ),
         );
         return conditions.join(' AND ');

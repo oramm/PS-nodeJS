@@ -200,6 +200,29 @@ app.put(
     },
 );
 
+app.post(
+    '/v2/persons/:personId/profile/experiences/search',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const payload = req.parsedBody ?? req.body;
+            const orConditions = payload?.orConditions;
+            const searchText =
+                Array.isArray(orConditions) && orConditions.length > 0
+                    ? orConditions[0].searchText
+                    : undefined;
+            const experiences =
+                await PersonsController.findExperiencesWithSearch(
+                    personId,
+                    searchText,
+                );
+            res.send(experiences);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
 /**
  * Pobiera listę doświadczeń zawodowych osoby (v2).
  * Params: personId

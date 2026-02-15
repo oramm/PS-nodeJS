@@ -16,6 +16,7 @@ export default class Person extends BusinessObject implements PersonData {
     _alias: string;
     _entity: EntityData;
     _nameSurnameEmail: string;
+    _skillNames?: string;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Persons' });
@@ -38,5 +39,6 @@ export default class Person extends BusinessObject implements PersonData {
         if (this.name && this.surname)
             this._alias =
                 this.name.substring(0, 1) + this.surname.substring(0, 3);
+        this._skillNames = initParamObject._skillNames;
     }
 }

@@ -9,6 +9,8 @@ import {
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
+import EducationController from './educations/EducationController';
+import ProfileSkillController from './profileSkills/ProfileSkillController';
 
 export type { PersonsSearchParams };
 
@@ -336,11 +338,17 @@ export default class PersonsController extends BaseController<
         const instance = this.getInstance();
         const profile = await instance.repository.getPersonProfileV2(personId);
         if (!profile) return undefined;
-        const profileExperiences =
-            await instance.repository.listPersonProfileExperiencesV2(personId);
+        const [profileExperiences, profileEducations, profileSkills] =
+            await Promise.all([
+                instance.repository.listPersonProfileExperiencesV2(personId),
+                EducationController.find(personId),
+                ProfileSkillController.find(personId),
+            ]);
         return {
             ...profile,
             profileExperiences,
+            profileEducations,
+            profileSkills,
         };
     }
 
@@ -360,6 +368,17 @@ export default class PersonsController extends BaseController<
     static async listPersonProfileExperiencesV2(personId: number) {
         const instance = this.getInstance();
         return instance.repository.listPersonProfileExperiencesV2(personId);
+    }
+
+    static async findExperiencesWithSearch(
+        personId: number,
+        searchText?: string,
+    ) {
+        const instance = this.getInstance();
+        return instance.repository.findExperiencesWithSearch(
+            personId,
+            searchText,
+        );
     }
 
     static async addPersonProfileExperienceV2(
