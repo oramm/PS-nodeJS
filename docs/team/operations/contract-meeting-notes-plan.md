@@ -21,12 +21,13 @@ Every new session must start with:
 - Router -> Controller -> Repository -> Model
 - transactions in Controller
 - no DB I/O in Model
-2. Folder name remains `Notatki ze spotkan`.
-3. "Nie uzywac" removal is backend scope only.
-4. Find/search uses project pattern: POST + `body.orConditions`.
-5. Search is metadata-only (DB), no Google Docs full-text in this stage.
-6. Numbering is sequence per contract and must be transaction-safe.
-7. For DB/env/deploy-impacting changes:
+2. Folder name standard is `Notatki ze spotkań`.
+3. Legacy runtime naming (`Notatki ze spotkan`) can exist, but new writes should use the standard above.
+4. "Nie uzywac" removal is backend scope only.
+5. Find/search uses project pattern: POST + `body.orConditions`.
+6. Search is metadata-only (DB), no Google Docs full-text in this stage.
+7. Numbering is sequence per contract and must be transaction-safe.
+8. For DB/env/deploy-impacting changes:
 - update `docs/team/operations/post-change-checklist.md`
 - update `.env.example` when env keys change
 - complete `.github/PULL_REQUEST_TEMPLATE.md` checklist
@@ -49,7 +50,11 @@ Every new session must start with:
 - `ContractMeetingNoteData`
 - `ContractMeetingNoteCreatePayload`
 - `ContractMeetingNoteSearchParams`
-4. Find/list/search request payload:
+4. Target field alignment for next code session:
+- `ContractMeetingNoteData`: `meetingId?: number | null`
+- `ContractMeetingNoteSearchParams`: `meetingId?: number`
+- `ContractMeetingNoteCreatePayload`: no `meetingId` (backend-owned)
+5. Find/list/search request payload:
 ```json
 {
   "orConditions": [
@@ -59,6 +64,24 @@ Every new session must start with:
   ]
 }
 ```
+
+## Session Split (doc-first correction before next code checkpoints)
+
+1. `S1-PLAN-CORRECTION` - align plan with current architecture direction.
+Acceptance criteria:
+- Plan explicitly states linkage `ContractMeetingNotes -> Meetings` via `meetingId`.
+- Plan states `MeetingArrangements` are target structure for arrangements per case.
+- Plan states staged delivery: data-layer alignment now, parser/UI later.
+2. `S2-PROGRESS-FACTUAL-CORRECTION` - add factual correction entry without rewriting history.
+Acceptance criteria:
+- Progress explicitly states migration `001` has not been executed yet.
+- Status is corrected to "code complete / migration pending".
+3. `S3-ACTIVITY-LOG-ALIGNMENT` - add architecture-decision and staging entries.
+Acceptance criteria:
+- Activity log captures why direction is corrected and what changes next.
+4. `S4-OPERATIONS-CHECKLIST-UPDATE` - add explicit DB apply gate.
+Acceptance criteria:
+- Checklist states SQL is not applied yet and defines preconditions before N4/N5.
 
 ## Checkpoints
 
@@ -71,6 +94,7 @@ Acceptance criteria:
 3. `N2-BACKEND-DATA-LAYER` - migration (if needed), model, repository, numbering logic.
 Acceptance criteria:
 - Data model + repository contract finalized for metadata-only search.
+- Model/repository alignment includes `meetingId` linkage to `Meetings`.
 - `ContractMeetingNoteSearchParams` is mapped to SQL condition strategy.
 - Numbering per contract is specified as transaction-safe in Controller flow.
 4. `N3-BACKEND-CREATE-ENDPOINT` - create endpoint with Google Docs copy flow.
@@ -90,11 +114,12 @@ Acceptance criteria:
 ## Definition of Done (overall)
 
 1. Notes can be created from Google Docs template and linked to contract.
-2. Metadata is persisted and searchable.
-3. Contract-scoped notes list works in UI.
-4. API contract follows project pattern for find/search (`POST` + `orConditions`).
-5. Session continuity docs are complete and up to date.
-6. Work is aligned with mandatory `.github/instructions/*` references.
+2. Notes metadata is linked to `Meetings` (`meetingId`) for future arrangements integration.
+3. Metadata is persisted and searchable.
+4. Contract-scoped notes list works in UI.
+5. API contract follows project pattern for find/search (`POST` + `orConditions`).
+6. Session continuity docs are complete and up to date.
+7. Work is aligned with mandatory `.github/instructions/*` references.
 
 ## Prompt For Next Session (clean context, copy 1:1)
 

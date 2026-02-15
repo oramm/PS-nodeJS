@@ -5,6 +5,7 @@ import ToolsGd from '../tools/ToolsGd';
 export type ContractMeetingNoteModelData = {
     id?: number;
     contractId: number;
+    meetingId?: number | null;
     sequenceNumber: number;
     title: string;
     description?: string | null;
@@ -28,6 +29,7 @@ export type ContractMeetingNoteModelData = {
 export default class ContractMeetingNote {
     id?: number;
     contractId: number;
+    meetingId?: number | null;
     sequenceNumber: number;
     title: string;
     description: string | null;
@@ -51,6 +53,7 @@ export default class ContractMeetingNote {
     constructor(initParamObject: ContractMeetingNoteModelData) {
         this.id = initParamObject.id;
         this.contractId = initParamObject.contractId;
+        this.meetingId = initParamObject.meetingId ?? null;
         this.sequenceNumber = initParamObject.sequenceNumber;
         this.title = initParamObject.title;
         this.description = initParamObject.description ?? null;

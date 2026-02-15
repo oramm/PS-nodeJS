@@ -8,6 +8,7 @@ import ToolsDate from '../tools/ToolsDate';
 export type ContractMeetingNoteSearchParams = {
     id?: number;
     contractId?: number;
+    meetingId?: number;
     sequenceNumber?: number;
     title?: string;
     protocolGdId?: string;
@@ -35,6 +36,7 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
         const sql = `SELECT
                 ContractMeetingNotes.Id,
                 ContractMeetingNotes.ContractId,
+                ContractMeetingNotes.MeetingId,
                 ContractMeetingNotes.SequenceNumber,
                 ContractMeetingNotes.Title,
                 ContractMeetingNotes.Description,
@@ -141,6 +143,13 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
                 ])
             );
         }
+        if (condition.meetingId) {
+            conditions.push(
+                mysql.format('ContractMeetingNotes.MeetingId = ?', [
+                    condition.meetingId,
+                ])
+            );
+        }
         if (condition.sequenceNumber) {
             conditions.push(
                 mysql.format('ContractMeetingNotes.SequenceNumber = ?', [
@@ -191,6 +200,7 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
         return new ContractMeetingNote({
             id: row.Id,
             contractId: row.ContractId,
+            meetingId: row.MeetingId ?? null,
             sequenceNumber: row.SequenceNumber,
             title: ToolsDb.sqlToString(row.Title),
             description: row.Description

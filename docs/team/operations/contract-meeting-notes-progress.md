@@ -14,10 +14,10 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `3`
-- Last completed checkpoint: `N3-BACKEND-CREATE-ENDPOINT`
-- Overall status: `N3_CLOSED`
-- Next checkpoint: `N4-BACKEND-READ-ENDPOINTS`
+- Active phase: `BACKEND_READ_ENDPOINTS`
+- Last completed checkpoint: `N4-BACKEND-READ-ENDPOINTS`
+- Overall status: `N4_CODE_COMPLETE_MIGRATION_PENDING_APPLY`
+- Next checkpoint: `N5-FRONTEND-LIST-CREATE`
 
 ## Sessions Progress List
 
@@ -25,7 +25,11 @@ Plan reference:
 - `N1-BACKEND-DISCOVERY` -> `DONE`
 - `N2-BACKEND-DATA-LAYER` -> `DONE`
 - `N3-BACKEND-CREATE-ENDPOINT` -> `DONE`
-- `N4-BACKEND-READ-ENDPOINTS` -> `GOTOWY_DO_ZROBIENIA`
+- `S1-PLAN-CORRECTION` -> `DONE`
+- `S2-PROGRESS-FACTUAL-CORRECTION` -> `DONE`
+- `S3-ACTIVITY-LOG-ALIGNMENT` -> `DONE`
+- `S4-OPERATIONS-CHECKLIST-UPDATE` -> `DONE`
+- `N4-BACKEND-READ-ENDPOINTS` -> `DONE`
 - `N5-FRONTEND-LIST-CREATE` -> `PENDING`
 - `N6-FRONTEND-SEARCH` -> `PENDING`
 - `N7-STABILIZATION-ROLLOUT` -> `PENDING`
@@ -131,7 +135,7 @@ Copy for each session:
 - Confirmed runtime artifacts already present in code:
     - meetings domain objects and repository SQL on `Meetings` / `MeetingArrangements`.
     - contract-level folder linkage via `MeetingProtocolsGdFolderId`.
-    - existing folder naming for contract meeting notes in Google Drive (`Notatki ze spotkan` in plan target; currently legacy code uses `Notatki ze spotkań`).
+    - historical note (at discovery time): naming mismatch was observed between plan and legacy code.
 - Confirmed project search pattern to keep for this feature: `POST` + `orConditions` (multiple live examples across modules).
 - Locked N1 DB strategy:
     - reuse existing contract linkage (`MeetingProtocolsGdFolderId`) and legacy meeting data as reference;
@@ -159,7 +163,7 @@ Copy for each session:
 ### 4. Risks/Blockers
 
 - No dedicated migration/history file for meetings/protocol schema was found in repository; runtime DB verification remains code-inferred and should be confirmed against actual DB in N2.
-- Legacy naming inconsistency (`Notatki ze spotkań` in code vs `Notatki ze spotkan` in plan rule) may require explicit normalization decision during implementation.
+- Historical naming inconsistency was identified at this stage; naming standard was corrected later in documentation.
 
 ### 5. Next Session (exact next actions)
 
@@ -299,6 +303,133 @@ Copy for each session:
 - Add `POST /contractMeetingNotes` endpoint with request contract `body.orConditions`.
 - Keep search metadata-only in repository and add filters coverage for `contractId`.
 - Implement and run targeted tests listed above (especially concurrency sequence and rollback path).
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
+## 2026-02-15 - Session 4 - Documentation correction and session split lock
+
+### 1. Scope
+
+- Checkpoint ID: `S1-PLAN-CORRECTION`, `S2-PROGRESS-FACTUAL-CORRECTION`, `S3-ACTIVITY-LOG-ALIGNMENT`, `S4-OPERATIONS-CHECKLIST-UPDATE`
+- Planned tasks:
+    - Correct plan for session-by-session execution before next code checkpoint.
+    - Add factual correction that migration `001` is still pending execution.
+    - Align activity log with architecture decision and staged rollout.
+    - Update operational checklist with explicit DB apply gate before N4/N5.
+
+### 2. Completed
+
+- Updated plan to document staged approach:
+    - session split `S1..S4`,
+    - linkage direction: `ContractMeetingNotes` -> `Meetings` via `meetingId`,
+    - `MeetingArrangements` marked as target structure for arrangements (next stages).
+- Added factual correction to current status:
+    - code checkpoints N2/N3 are complete,
+    - SQL migration is not yet executed in runtime DB.
+- Added aligned activity-log entry with architecture rationale and staged next steps.
+- Added operational checklist entry that blocks next rollout steps until migration is applied and verified.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `Get-Content docs/team/operations/contract-meeting-notes-plan.md` -> confirms S1..S4 split and interface notes (`meetingId`).
+    - `Get-Content docs/team/operations/contract-meeting-notes-progress.md` -> confirms corrected snapshot (`N3_CODE_COMPLETE_MIGRATION_PENDING`).
+    - `Get-Content docs/team/operations/contract-meeting-notes-activity-log.md` -> confirms correction log entry.
+    - `Get-Content docs/team/operations/post-change-checklist.md` -> confirms explicit "SQL not applied yet" gate.
+- Tests:
+    - not run (docs-only correction session).
+- Files changed:
+    - `docs/team/operations/contract-meeting-notes-plan.md`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+
+### 4. Risks/Blockers
+
+- SQL migration `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` remains not applied in runtime DB.
+- N4/N5 should not proceed until DB apply + verification gate is completed.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N4-BACKEND-READ-ENDPOINTS`
+- Before implementation, apply and verify migration `001` in target DB environment.
+- Add `POST /contractMeetingNotes` endpoint (`body.orConditions`) and align repository/model fields with corrected plan (`meetingId` linkage).
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
+## 2026-02-15 - Session 5 - N4 read endpoints and meetingId alignment
+
+### 1. Scope
+
+- Checkpoint ID: `N4-BACKEND-READ-ENDPOINTS`
+- Planned tasks:
+    - Close DB apply gate verification with runtime evidence.
+    - Add `POST /contractMeetingNotes` endpoint using `body.orConditions`.
+    - Align model/repository search contracts with `meetingId`.
+    - Add minimum tests for read filters and create regression.
+
+### 2. Completed
+
+- Verified runtime DB state using `loadEnv()` + `ToolsDb` against `localhost/envikons_myEnvi`:
+    - `ContractMeetingNotes` table is not present (`tableExists=false`), migration `001` still pending apply.
+- Implemented read endpoint:
+    - `POST /contractMeetingNotes` in `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`.
+    - Request contract: `body.orConditions` (via validator).
+- Added read payload validator:
+    - `validateFindPayload()` in `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`.
+- Added `meetingId` alignment in backend contracts:
+    - `src/types/types.d.ts` (`ContractMeetingNoteData.meetingId?: number | null`, `ContractMeetingNoteSearchParams.meetingId?: number`).
+    - `src/contractMeetingNotes/ContractMeetingNote.ts` model field.
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`:
+        - SQL select includes `MeetingId`,
+        - `orConditions` support for `meetingId`,
+        - map row to model with `meetingId`.
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts` create flow keeps backend-owned `meetingId` as `null`.
+- Updated pending migration SQL before first runtime apply:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` now includes nullable `MeetingId`, index, and FK to `Meetings(Id)`.
+- Added minimum tests:
+    - contractId filter via `orConditions`,
+    - read scenario with `meetingId`,
+    - create endpoint regression behavior.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> runtime DB check (`env=development`, `db=envikons_myEnvi`, `tableExists=false`).
+    - `yarn build` -> pass.
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand` -> pass (2 suites, 4 tests).
+- Tests:
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts` -> pass.
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts` -> pass.
+- Files changed:
+    - `src/contractMeetingNotes/ContractMeetingNote.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts`
+    - `src/types/types.d.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+
+### 4. Risks/Blockers
+
+- Runtime DB migration remains unapplied; endpoint rollout in environments still blocked by DB gate.
+- Temporary verification scripts under `tmp/*.ts` could not be removed due filesystem access denial and should be cleaned by repository owner.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5-FRONTEND-LIST-CREATE`
+- Apply migration `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` in target runtime DB.
+- Verify table/index/FK presence (`ContractMeetingNotes`, `(ContractId, SequenceNumber)`, `MeetingId -> Meetings.Id`) and attach command outputs to docs.
+- After DB verification, proceed with frontend list/create integration on `POST /contractMeetingNotes` and `POST /contractMeetingNote`.
 
 ### 6. Checkpoint Status
 

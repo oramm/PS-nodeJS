@@ -1,6 +1,20 @@
 import { ContractMeetingNoteCreatePayload } from '../types/types';
+import { ContractMeetingNoteSearchParams } from './ContractMeetingNoteRepository';
 
 export default class ContractMeetingNoteValidator {
+    static validateFindPayload(payload: {
+        orConditions?: ContractMeetingNoteSearchParams[];
+    }): { orConditions: ContractMeetingNoteSearchParams[] } {
+        if (!payload || typeof payload !== 'object') {
+            return { orConditions: [] };
+        }
+        const orConditions = Array.isArray(payload.orConditions)
+            ? payload.orConditions
+            : [];
+
+        return { orConditions };
+    }
+
     static validateCreatePayload(
         payload: ContractMeetingNoteCreatePayload
     ): ContractMeetingNoteCreatePayload {

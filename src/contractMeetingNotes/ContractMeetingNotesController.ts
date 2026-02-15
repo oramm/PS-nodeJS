@@ -109,6 +109,7 @@ export default class ContractMeetingNotesController extends BaseController<
 
                 const note = new ContractMeetingNote({
                     contractId: payload.contractId,
+                    meetingId: null,
                     sequenceNumber: nextSequenceNumber,
                     title: payload.title,
                     description: payload.description ?? null,

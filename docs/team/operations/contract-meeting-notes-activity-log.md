@@ -96,3 +96,45 @@ Use it as quick session memory in addition to detailed progress entries.
 - Notes:
     - Next checkpoint is `N4-BACKEND-READ-ENDPOINTS` (`POST /contractMeetingNotes` with `body.orConditions`).
 
+## 2026-02-15 12:10 - Doc correction: session split and architecture alignment
+
+- Checkpoint: `S1-PLAN-CORRECTION`, `S2-PROGRESS-FACTUAL-CORRECTION`, `S3-ACTIVITY-LOG-ALIGNMENT`, `S4-OPERATIONS-CHECKLIST-UPDATE`
+- Summary:
+    - Corrected execution docs to a doc-first, session-by-session flow before next code checkpoint.
+    - Added architecture direction: `ContractMeetingNotes` should be linked to `Meetings` (`meetingId`), with `MeetingArrangements` as target structure for case arrangements in next stages.
+    - Added factual status correction: migration `001_create_contract_meeting_notes.sql` exists in repo but is not yet applied in runtime DB.
+    - Added explicit operational gate: DB migration apply/verification required before continuing N4/N5 rollout.
+- Files:
+    - `docs/team/operations/contract-meeting-notes-plan.md`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+- Impact: `Docs/DB`
+- Notes:
+    - Next code session should start from migration apply verification, then continue with `N4-BACKEND-READ-ENDPOINTS`.
+
+## 2026-02-15 14:05 - N4 read endpoints implemented with meetingId alignment
+
+- Checkpoint: `N4-BACKEND-READ-ENDPOINTS`
+- Summary:
+    - Verified DB apply gate on runtime target (`development` -> `localhost/envikons_myEnvi`): `ContractMeetingNotes` table not found, migration `001` still pending.
+    - Added `POST /contractMeetingNotes` route with contract `body.orConditions` and dedicated read payload validation.
+    - Added `meetingId` alignment in model/repository/search types and in migration `001` (new nullable `MeetingId` + index + FK to `Meetings`).
+    - Added minimum tests: contractId filter via `orConditions`, read with `meetingId`, and create route regression.
+- Files:
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNote.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts`
+    - `src/types/types.d.ts`
+    - `docs/team/operations/contract-meeting-notes-progress.md`
+    - `docs/team/operations/contract-meeting-notes-activity-log.md`
+    - `docs/team/operations/post-change-checklist.md`
+- Impact: `DB/API/Docs`
+- Notes:
+    - Runtime rollout remains blocked until migration `001` is executed and verified on target DB.
+

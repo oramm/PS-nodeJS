@@ -3,6 +3,23 @@ import { app } from '../index';
 import ContractMeetingNotesController from './ContractMeetingNotesController';
 import ContractMeetingNoteValidator from './ContractMeetingNoteValidator';
 
+app.post(
+    '/contractMeetingNotes',
+    async (req: Request, res: Response, next) => {
+        try {
+            const payload = ContractMeetingNoteValidator.validateFindPayload(
+                req.parsedBody ?? req.body
+            );
+            const result = await ContractMeetingNotesController.find(
+                payload.orConditions
+            );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
     try {
         const payload = ContractMeetingNoteValidator.validateCreatePayload(

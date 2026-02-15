@@ -74,6 +74,7 @@ export interface OtherContractData extends ContractData {
 
 export interface ContractMeetingNoteData extends RepositoryDataItem {
     contractId: number;
+    meetingId?: number | null;
     sequenceNumber: number;
     title: string;
     description?: string | null;
@@ -98,6 +99,7 @@ export interface ContractMeetingNoteCreatePayload {
 export interface ContractMeetingNoteSearchParams {
     id?: number;
     contractId?: number;
+    meetingId?: number;
     sequenceNumber?: number;
     title?: string;
     protocolGdId?: string;

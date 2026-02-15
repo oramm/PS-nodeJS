@@ -150,6 +150,125 @@ Copy the block below for each change:
 
 - Contract Meeting Notes backend session (Codex + repository owner).
 
+## 2026-02-15 - Contract Meeting Notes correction gate (DB apply pending)
+
+### 1. Scope
+
+- Corrected operational state after documentation alignment sessions (`S1..S4`).
+- Locked explicit rollout gate for Contract Meeting Notes before N4/N5 implementation/activation.
+
+### 2. DB impact
+
+- Schema file exists but migration execution is pending:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` is **not applied yet** in runtime DB.
+- No additional schema files were added in this correction entry.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - do not proceed with N4/N5 rollout steps until migration `001` is applied and verified.
+
+### 5. Developer actions
+
+- Apply `001_create_contract_meeting_notes.sql` in target DB environment.
+- Verify:
+    - `ContractMeetingNotes` table exists,
+    - unique key `(ContractId, SequenceNumber)` exists,
+    - required indexes/FKs exist.
+- After DB verification, continue next code checkpoint (`N4-BACKEND-READ-ENDPOINTS`).
+
+### 6. Verification
+
+- Store execution evidence in progress/activity logs for the next session:
+    - migration command/result,
+    - schema verification queries/results.
+
+### 7. Rollback
+
+- If migration causes issues:
+    - stop N4/N5 rollout,
+    - rollback DB change according to controlled DBA procedure,
+    - keep feature endpoints disabled until corrected migration is verified.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes N4 read endpoints + meetingId alignment
+
+### 1. Scope
+
+- Added read/list endpoint for meeting notes:
+    - `POST /contractMeetingNotes` with request contract `body.orConditions`.
+- Added read payload validator and repository filter coverage for:
+    - `contractId`,
+    - `meetingId`.
+- Aligned backend contracts with plan direction (`ContractMeetingNotes -> Meetings`):
+    - `meetingId` field in model/search types/repository mapping.
+- Updated pending migration file before first runtime apply:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` now includes:
+        - nullable `MeetingId`,
+        - index `idx_contractmeetingnotes_meetingid`,
+        - FK `MeetingId -> Meetings(Id)`.
+
+### 2. DB impact
+
+- Schema definition changed in migration file `001` (not applied yet in runtime DB).
+- Runtime verification result in development target:
+    - `ContractMeetingNotes` table does not exist (`tableExists=false`).
+- DB apply gate remains OPEN until migration is executed and verified.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - apply migration `001` before exposing read/create endpoints in production rollout.
+
+### 5. Developer actions
+
+- Execute migration in target DB:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`.
+- Verify schema after apply:
+    - table `ContractMeetingNotes` exists,
+    - unique key `(ContractId, SequenceNumber)` exists,
+    - `MeetingId` index exists,
+    - FK `MeetingId -> Meetings(Id)` exists.
+- Run compile/tests:
+    - `yarn build`,
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand`.
+
+### 6. Verification
+
+- DB gate evidence command:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> `tableExists=false` on `localhost/envikons_myEnvi`.
+- Build/test evidence:
+    - `yarn build` -> pass.
+    - targeted jest command above -> pass (2 suites, 4 tests).
+
+### 7. Rollback
+
+- If migration apply fails:
+    - stop rollout and keep feature endpoints disabled,
+    - fix SQL migration and re-run controlled apply,
+    - do not proceed to frontend activation until DB verification passes.
+- If code rollback needed:
+    - revert N4 endpoint + meetingId alignment commit(s) while keeping DB plan documentation.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
 ## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
 
 ### 1. Scope
