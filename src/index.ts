@@ -171,6 +171,7 @@ require('./costInvoices/CostInvoicesRouter');
 require('./projects/ProjectsRouters');
 
 require('./contracts/ContractsRouters');
+require('./contractMeetingNotes/ContractMeetingNotesRouters');
 require('./contracts/contractTypes/ContractTypesRouters');
 require('./contracts/milestones/MilestonesRouters');
 require('./contracts/milestones/milestoneTypes/MilestoneTypesRouters');

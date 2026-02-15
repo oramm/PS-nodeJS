@@ -46,6 +46,88 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-15 - Contract Meeting Notes DB apply gate closure for N5
+
+### 1. Scope
+
+- Executed runtime apply of:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`
+- Added migration runner utility for controlled execution in this repo:
+    - `tmp/run-contract-meeting-notes-migration.ts`
+- Verified runtime schema objects required before frontend rollout (N5).
+
+### 2. DB impact
+
+- Runtime schema changed in target DB (`development` -> `localhost/envikons_myEnvi`):
+    - table `ContractMeetingNotes` created,
+    - unique key `uq_contractmeetingnotes_contract_sequence` (`ContractId`, `SequenceNumber`) present,
+    - index `idx_contractmeetingnotes_meetingid` (`MeetingId`) present,
+    - FK `fk_contractmeetingnotes_meeting` (`MeetingId` -> `Meetings(Id)`) present.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - DB gate for Contract Meeting Notes is closed.
+    - Frontend rollout can proceed only after UI integration is completed and integrated smoke is green.
+
+### 5. Developer actions
+
+- Run migration apply script:
+    - `npx ts-node tmp/run-contract-meeting-notes-migration.ts`
+- Verify schema:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts`
+- Re-run minimum backend checks:
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand`
+    - `yarn build`
+
+### 6. Verification
+
+- Before apply:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> `tableExists=false`.
+- Apply:
+    - `npx ts-node tmp/run-contract-meeting-notes-migration.ts` -> `status=ok`.
+- After apply:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> table/index/FK evidence present.
+- Regression:
+    - router/repository test suites pass; build passes.
+
+### 7. Rollback
+
+- If rollback required:
+    - stop N5 rollout immediately,
+    - drop `ContractMeetingNotes` table using controlled DBA procedure (after data retention decision),
+    - keep feature UI/API rollout disabled until corrected schema is re-applied and re-verified.
+
+### 8. Owner
+
+- Contract Meeting Notes session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes N2 data layer bootstrap
+
+### 1. Scope
+
+- Added backend data-layer scaffold for Contract Meeting Notes:
+    - `ContractMeetingNote` model (metadata only),
+    - `ContractMeetingNoteRepository` (`find` via OR groups + SQL mapping),
+    - `ContractMeetingNotesController` (transaction-safe per-contract sequence allocation in Controller).
+- Added initial SQL migration for dedicated metadata table:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`.
+
+### 2. DB impact
+
+- Schema change introduced:
+    - new table `ContractMeetingNotes` with FK to `Contracts` and optional FK to `Persons`.
+    - unique key `(ContractId, SequenceNumber)` to enforce per-contract sequence uniqueness.
+    - indexes for metadata search (`ContractId`, `MeetingDate`, `ProtocolGdId`, `CreatedByPersonId`).
+- Runtime write strategy for numbering:
+    - next sequence is allocated in Controller transaction with `SELECT COALESCE(MAX(...))+1 ... FOR UPDATE`.
+
 ## 2026-02-13 - Invoice corrections DB migration (CorrectedInvoiceId, CorrectionReason)
 
 ### 1. Scope
@@ -102,6 +184,48 @@ Copy the block below for each change:
 - Added optional env override `KSEF_API_BASE_URL` used by `KsefService.getApiUrl()`.
 - Improved KSeF error diagnostics with status/content-type/requestUrl/responseUrl/body preview.
 
+### 3. ENV impact (contract meeting notes N2 continued)
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps:
+    - apply SQL migration before enabling create/list endpoints for meeting notes.
+
+### 5. Developer actions
+
+- Execute migration in target DB environment.
+- Run TypeScript build verification after merge.
+
+### 6. Verification
+
+- `yarn build` (or `npx tsc --noEmit`) should pass with new module files.
+- Verify SQL object presence:
+    - `ContractMeetingNotes` table exists,
+    - unique key `(ContractId, SequenceNumber)` exists.
+
+### 7. Rollback
+
+- Drop `ContractMeetingNotes` table (after confirming no required data retention).
+- Revert module files under `src/contractMeetingNotes/*`.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes N3 create endpoint flow
+
+### 1. Scope
+
+- Added backend create endpoint flow for contract meeting notes:
+    - `POST /contractMeetingNote` router,
+    - payload validator,
+    - controller orchestration with Google Docs template copy and DB transaction.
+- Added create-context repository methods for contract folder metadata and persisted folder id back to `Contracts.MeetingProtocolsGdFolderId` when missing.
+
 ### 2. DB impact
 
 - No schema changes.
@@ -137,6 +261,166 @@ Copy the block below for each change:
 ### 8. Owner
 
 - KSeF integration troubleshooting session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes N3 create endpoint flow (continued)
+
+- Runtime data writes added/extended:
+    - insert into `ContractMeetingNotes`,
+    - optional update of `Contracts.MeetingProtocolsGdFolderId` during first create for contract without pre-existing folder id.
+- Transaction scope remains in Controller (`ToolsDb.transaction`).
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - standard backend deploy,
+    - verify OAuth runtime credentials allow GD template copy.
+
+### 5. Developer actions
+
+- Run TypeScript build check.
+- Execute API smoke test for `POST /contractMeetingNote` against environment with valid OAuth and existing contract.
+
+### 6. Verification
+
+- `yarn build` passes.
+- `POST /contractMeetingNote` should:
+    - allocate next sequence per contract,
+    - copy template doc,
+    - persist metadata with returned `protocolGdId`.
+
+### 7. Rollback
+
+- Revert N3 commit(s) to disable create route and create-flow controller logic.
+- If needed, manually remove mistakenly created note rows and GD docs from failed rollout window.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes correction gate (DB apply pending)
+
+### 1. Scope
+
+- Corrected operational state after documentation alignment sessions (`S1..S4`).
+- Locked explicit rollout gate for Contract Meeting Notes before N4/N5 implementation/activation.
+
+### 2. DB impact
+
+- Schema file exists but migration execution is pending:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` is **not applied yet** in runtime DB.
+- No additional schema files were added in this correction entry.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - do not proceed with N4/N5 rollout steps until migration `001` is applied and verified.
+
+### 5. Developer actions
+
+- Apply `001_create_contract_meeting_notes.sql` in target DB environment.
+- Verify:
+    - `ContractMeetingNotes` table exists,
+    - unique key `(ContractId, SequenceNumber)` exists,
+    - required indexes/FKs exist.
+- After DB verification, continue next code checkpoint (`N4-BACKEND-READ-ENDPOINTS`).
+
+### 6. Verification
+
+- Store execution evidence in progress/activity logs for the next session:
+    - migration command/result,
+    - schema verification queries/results.
+
+### 7. Rollback
+
+- If migration causes issues:
+    - stop N4/N5 rollout,
+    - rollback DB change according to controlled DBA procedure,
+    - keep feature endpoints disabled until corrected migration is verified.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
+
+## 2026-02-15 - Contract Meeting Notes N4 read endpoints + meetingId alignment
+
+### 1. Scope
+
+- Added read/list endpoint for meeting notes:
+    - `POST /contractMeetingNotes` with request contract `body.orConditions`.
+- Added read payload validator and repository filter coverage for:
+    - `contractId`,
+    - `meetingId`.
+- Aligned backend contracts with plan direction (`ContractMeetingNotes -> Meetings`):
+    - `meetingId` field in model/search types/repository mapping.
+- Updated pending migration file before first runtime apply:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql` now includes:
+        - nullable `MeetingId`,
+        - index `idx_contractmeetingnotes_meetingid`,
+        - FK `MeetingId -> Meetings(Id)`.
+
+### 2. DB impact
+
+- Schema definition changed in migration file `001` (not applied yet in runtime DB).
+- Runtime verification result in development target:
+    - `ContractMeetingNotes` table does not exist (`tableExists=false`).
+- DB apply gate remains OPEN until migration is executed and verified.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: no new vars required.
+- Restart/release steps:
+    - apply migration `001` before exposing read/create endpoints in production rollout.
+
+### 5. Developer actions
+
+- Execute migration in target DB:
+    - `src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql`.
+- Verify schema after apply:
+    - table `ContractMeetingNotes` exists,
+    - unique key `(ContractId, SequenceNumber)` exists,
+    - `MeetingId` index exists,
+    - FK `MeetingId -> Meetings(Id)` exists.
+- Run compile/tests:
+    - `yarn build`,
+    - `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts --runInBand`.
+
+### 6. Verification
+
+- DB gate evidence command:
+    - `npx ts-node tmp/verify-contract-meeting-notes-migration.ts` -> `tableExists=false` on `localhost/envikons_myEnvi`.
+- Build/test evidence:
+    - `yarn build` -> pass.
+    - targeted jest command above -> pass (2 suites, 4 tests).
+
+### 7. Rollback
+
+- If migration apply fails:
+    - stop rollout and keep feature endpoints disabled,
+    - fix SQL migration and re-run controlled apply,
+    - do not proceed to frontend activation until DB verification passes.
+- If code rollback needed:
+    - revert N4 endpoint + meetingId alignment commit(s) while keeping DB plan documentation.
+
+### 8. Owner
+
+- Contract Meeting Notes backend session (Codex + repository owner).
 
 ## 2026-02-12 - Persons V2 P4-C remove dual-write compatibility layer
 

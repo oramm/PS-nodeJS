@@ -72,6 +72,42 @@ export interface OtherContractData extends ContractData {
     materialCardsGdFolderId?: string;
 }
 
+export interface ContractMeetingNoteData extends RepositoryDataItem {
+    contractId: number;
+    meetingId?: number | null;
+    sequenceNumber: number;
+    title: string;
+    description?: string | null;
+    meetingDate?: string | null;
+    protocolGdId?: string | null;
+    createdByPersonId?: number | null;
+    _documentEditUrl?: string;
+    _contract?: ContractData;
+    _createdBy?: PersonData;
+    _lastUpdated?: string;
+}
+
+export interface ContractMeetingNoteCreatePayload {
+    contractId: number;
+    title: string;
+    description?: string | null;
+    meetingDate?: string | null;
+    protocolGdId?: string | null;
+    createdByPersonId?: number | null;
+}
+
+export interface ContractMeetingNoteSearchParams {
+    id?: number;
+    contractId?: number;
+    meetingId?: number;
+    sequenceNumber?: number;
+    title?: string;
+    protocolGdId?: string;
+    createdByPersonId?: number;
+    meetingDateFrom?: string;
+    meetingDateTo?: string;
+}
+
 export interface ContractRangeData {
     id: number;
     name: string;
