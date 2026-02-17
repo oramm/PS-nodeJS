@@ -19,7 +19,11 @@
       "Bash(node -e:*)",
       "Bash(git merge:*)",
       "Bash(yarn test:*)",
-      "Bash(yarn test:persons:*)"
+      "Bash(yarn test:persons:*)",
+      "Bash(yarn ts-node:*)",
+      "Bash(heroku apps:*)",
+      "Bash(heroku config:*)",
+      "Bash(heroku releases:*)"
     ]
   }
 }

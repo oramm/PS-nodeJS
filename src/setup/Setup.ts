@@ -293,6 +293,10 @@ export default class Setup {
      * Konfiguracja KSeF - tylko surowe wartości z .env
      * Logika walidacji i budowania URL jest w KsefService
      *
+     * GETTER zamiast statycznej właściwości — wartości env muszą być
+     * odczytywane lazily, po loadEnv(), a nie w momencie ładowania modułu
+     * (CommonJS hoistuje require() przed wywołaniem loadEnv()).
+     *
      * Format w .env:
      *   KSEF_ENVIRONMENT="test"           # test | production
      *   KSEF_API_BASE_URL="https://..."   # opcjonalny override URL API
@@ -303,25 +307,27 @@ export default class Setup {
      *   KSEF_SELLER_CITY="Warszawa"
      *   KSEF_SELLER_POSTAL_CODE="00-001"
      */
-    static KSeF = {
-        /** Środowisko: 'test' | 'production' */
-        environment: (process.env.KSEF_ENVIRONMENT || 'test') as
-            | 'test'
-            | 'production',
-        /** Opcjonalny override URL API KSeF */
-        apiBaseUrl: process.env.KSEF_API_BASE_URL,
-        /** NIP firmy (10 cyfr) */
-        nip: process.env.KSEF_NIP,
-        /** Token autoryzacyjny KSeF */
-        token: process.env.KSEF_TOKEN,
-        /** Dane sprzedawcy - WYMAGANE w .env */
-        seller: {
-            name: process.env.KSEF_SELLER_NAME,
-            street: process.env.KSEF_SELLER_STREET,
-            city: process.env.KSEF_SELLER_CITY,
-            postalCode: process.env.KSEF_SELLER_POSTAL_CODE,
-        },
-    };
+    static get KSeF() {
+        return {
+            /** Środowisko: 'test' | 'production' */
+            environment: (process.env.KSEF_ENVIRONMENT || 'test') as
+                | 'test'
+                | 'production',
+            /** Opcjonalny override URL API KSeF */
+            apiBaseUrl: process.env.KSEF_API_BASE_URL,
+            /** NIP firmy (10 cyfr) */
+            nip: process.env.KSEF_NIP,
+            /** Token autoryzacyjny KSeF */
+            token: process.env.KSEF_TOKEN,
+            /** Dane sprzedawcy - WYMAGANE w .env */
+            seller: {
+                name: process.env.KSEF_SELLER_NAME,
+                street: process.env.KSEF_SELLER_STREET,
+                city: process.env.KSEF_SELLER_CITY,
+                postalCode: process.env.KSEF_SELLER_POSTAL_CODE,
+            },
+        };
+    }
 
     static x: 'sss' | 'ddd';
 }
