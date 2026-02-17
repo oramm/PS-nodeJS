@@ -23,7 +23,10 @@
       "Bash(yarn ts-node:*)",
       "Bash(heroku apps:*)",
       "Bash(heroku config:*)",
-      "Bash(heroku releases:*)"
+      "Bash(heroku releases:*)",
+      "WebFetch(domain:ksef.podatki.gov.pl)",
+      "WebFetch(domain:pomoc.saldeosmart.pl)",
+      "WebFetch(domain:akademialtca.pl)"
     ]
   }
 }
