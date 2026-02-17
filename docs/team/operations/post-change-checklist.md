@@ -46,6 +46,85 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-17 - OpenAI API key env baseline
+
+### 1. Scope
+
+- Added OpenAI API key variable in primary API env section for upcoming multi-LLM integrations.
+
+### 2. DB impact
+
+- none.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `OPENAI_API_KEY` (base key for OpenAI integration; intended API section for future LLM keys).
+
+### 4. Heroku impact
+
+- Config vars: set `OPENAI_API_KEY` when enabling OpenAI features.
+- Restart/release steps: restart application process after config var change.
+
+### 5. Developer actions
+
+- Add `OPENAI_API_KEY` to local `.env` / `.env.development` before running OpenAI-backed features.
+
+### 6. Verification
+
+- Confirm `OPENAI_API_KEY` exists in `.env.example` and active `.env` file.
+
+### 7. Rollback
+
+- Remove `OPENAI_API_KEY` from env files and runtime config vars.
+
+### 8. Owner
+
+- Codex + repository owner.
+
+## 2026-02-17 - Local KSeF production token selection
+
+### 1. Scope
+
+- Added optional local production token selection for KSeF in env loader.
+- Added startup log line with KSeF token source (without printing secrets).
+
+### 2. DB impact
+
+- none.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `KSEF_TOKEN_PRODUCTION` (optional token preferred when `KSEF_ENVIRONMENT=production`; loader falls back to `KSEF_TOKEN` only when missing).
+
+### 4. Heroku impact
+
+- Config vars: optional (`KSEF_TOKEN_PRODUCTION` can be set, but not required if `KSEF_TOKEN` is managed directly).
+- Restart/release steps: restart application process after env change.
+
+### 5. Developer actions
+
+- Add `KSEF_TOKEN_PRODUCTION` to local `.env.development` if you want quick local switch to production KSeF.
+- Keep `KSEF_TOKEN` for test usage.
+
+### 6. Verification
+
+- Start app with `KSEF_ENVIRONMENT=production` and empty `KSEF_TOKEN`.
+- Confirm logs include:
+    - `[ENV] KSeF environment: production`
+    - `[ENV] KSeF token source: KSEF_TOKEN_PRODUCTION`
+
+### 7. Rollback
+
+- Remove `KSEF_TOKEN_PRODUCTION` from env files and rely only on `KSEF_TOKEN`.
+
+### 8. Owner
+
+- Codex + repository owner.
+
 ## 2026-02-15 - Kylos runtime migration reconciliation
 
 ### 1. Scope

@@ -35,6 +35,29 @@ Do not use direct `dotenv.config()` in new code.
 - `yarn debug`: `NODE_ENV=development`, local DB
 - `yarn start:prod`: production DB target
 
+## KSeF visibility in logs
+
+At startup, `loadEnv()` prints active KSeF runtime configuration:
+
+- `KSEF_ENVIRONMENT` (`test` or `production`)
+- Effective KSeF API base URL
+- Marker `(override)` when `KSEF_API_BASE_URL` is set
+
+Secrets are never printed (for example `KSEF_TOKEN`).
+
+## Local helper for production KSeF
+
+For local runs with production KSeF, you can keep test token in `KSEF_TOKEN`
+and store production token in `KSEF_TOKEN_PRODUCTION`.
+
+Runtime behavior:
+
+- when `KSEF_ENVIRONMENT=production`
+- loader uses `KSEF_TOKEN_PRODUCTION` when present
+- if `KSEF_TOKEN_PRODUCTION` is missing, loader uses `KSEF_TOKEN`
+
+This allows one-command local switch to production KSeF without pasting token each run.
+
 ## Database baseline
 
 - Production: MariaDB 10.6.x on `envi-konsulting.kylos.pl`
