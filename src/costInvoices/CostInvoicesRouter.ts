@@ -415,8 +415,10 @@ app.get(
                 summary.totalVat += Number(inv.vatAmount) || 0;
                 summary.totalGross += Number(inv.grossAmount) || 0;
 
-                summary.bookableNet += Number(inv.bookableNetAmount) || 0;
-                summary.deductibleVat += Number(inv.deductibleVatAmount) || 0;
+                if (inv.status === 'BOOKED') {
+                    summary.bookableNet += Number(inv.bookableNetAmount) || 0;
+                    summary.deductibleVat += Number(inv.deductibleVatAmount) || 0;
+                }
 
                 const categoryName = inv._category?.name || 'Bez kategorii';
                 if (!summary.byCategory[categoryName]) {
