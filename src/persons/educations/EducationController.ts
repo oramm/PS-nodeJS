@@ -4,7 +4,9 @@ import {
     PersonProfileEducationV2Record,
 } from '../../types/types';
 import PersonProfileEducation from './PersonProfileEducation';
-import EducationRepository from './EducationRepository';
+import EducationRepository, {
+    EducationSearchParams,
+} from './EducationRepository';
 import BaseController from '../../controllers/BaseController';
 
 export default class EducationController extends BaseController<
@@ -26,17 +28,10 @@ export default class EducationController extends BaseController<
 
     static async find(
         personId: number,
+        orConditions: EducationSearchParams[] = [],
     ): Promise<PersonProfileEducation[]> {
         const instance = this.getInstance();
-        return instance.repository.find(personId);
-    }
-
-    static async findWithSearch(
-        personId: number,
-        searchText?: string,
-    ): Promise<PersonProfileEducation[]> {
-        const instance = this.getInstance();
-        return instance.repository.findWithSearch(personId, searchText);
+        return instance.repository.find(personId, orConditions);
     }
 
     static async addFromDto(

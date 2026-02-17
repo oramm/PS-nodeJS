@@ -46,7 +46,7 @@ describe('ProfileSkillController', () => {
     });
 
     describe('find', () => {
-        it('should call repository.find with personId and return records', async () => {
+        it('should call repository.find with personId and empty orConditions by default', async () => {
             const findSpy = jest
                 .spyOn(ProfileSkillRepository.prototype, 'find')
                 .mockResolvedValue([sampleRecord]);
@@ -56,7 +56,7 @@ describe('ProfileSkillController', () => {
             );
             const result = await ProfileSkillController.find(personId);
 
-            expect(findSpy).toHaveBeenCalledWith(personId);
+            expect(findSpy).toHaveBeenCalledWith(personId, []);
             expect(result).toEqual([sampleRecord]);
         });
 
@@ -70,42 +70,25 @@ describe('ProfileSkillController', () => {
             );
             const result = await ProfileSkillController.find(personId);
 
-            expect(findSpy).toHaveBeenCalledWith(personId);
+            expect(findSpy).toHaveBeenCalledWith(personId, []);
             expect(result).toEqual([]);
         });
-    });
 
-    describe('findWithSearch', () => {
-        it('should call repository.findWithSearch with personId and searchText', async () => {
+        it('should pass orConditions to repository.find', async () => {
+            const orConditions = [{ searchText: 'TypeScript' }];
             const findSpy = jest
-                .spyOn(ProfileSkillRepository.prototype, 'findWithSearch')
+                .spyOn(ProfileSkillRepository.prototype, 'find')
                 .mockResolvedValue([sampleRecord]);
 
             const { default: ProfileSkillController } = await import(
                 '../ProfileSkillController'
             );
-            const result = await ProfileSkillController.findWithSearch(
+            const result = await ProfileSkillController.find(
                 personId,
-                'TypeScript',
+                orConditions,
             );
 
-            expect(findSpy).toHaveBeenCalledWith(personId, 'TypeScript');
-            expect(result).toEqual([sampleRecord]);
-        });
-
-        it('should call repository.findWithSearch without searchText', async () => {
-            const findSpy = jest
-                .spyOn(ProfileSkillRepository.prototype, 'findWithSearch')
-                .mockResolvedValue([sampleRecord]);
-
-            const { default: ProfileSkillController } = await import(
-                '../ProfileSkillController'
-            );
-            const result = await ProfileSkillController.findWithSearch(
-                personId,
-            );
-
-            expect(findSpy).toHaveBeenCalledWith(personId, undefined);
+            expect(findSpy).toHaveBeenCalledWith(personId, orConditions);
             expect(result).toEqual([sampleRecord]);
         });
     });

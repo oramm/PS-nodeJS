@@ -43,7 +43,7 @@ describe('EducationController', () => {
     });
 
     describe('find', () => {
-        it('should call repository.find with personId and return records', async () => {
+        it('should call repository.find with personId and orConditions and return records', async () => {
             const findSpy = jest
                 .spyOn(EducationRepository.prototype, 'find')
                 .mockResolvedValue([sampleRecord]);
@@ -51,9 +51,13 @@ describe('EducationController', () => {
             const { default: EducationController } = await import(
                 '../EducationController'
             );
-            const result = await EducationController.find(personId);
+            const orConditions = [{ searchText: 'Politechnika' }];
+            const result = await EducationController.find(
+                personId,
+                orConditions,
+            );
 
-            expect(findSpy).toHaveBeenCalledWith(personId);
+            expect(findSpy).toHaveBeenCalledWith(personId, orConditions);
             expect(result).toEqual([sampleRecord]);
         });
 
@@ -65,42 +69,23 @@ describe('EducationController', () => {
             const { default: EducationController } = await import(
                 '../EducationController'
             );
-            const result = await EducationController.find(personId);
+            const result = await EducationController.find(personId, []);
 
-            expect(findSpy).toHaveBeenCalledWith(personId);
+            expect(findSpy).toHaveBeenCalledWith(personId, []);
             expect(result).toEqual([]);
         });
-    });
 
-    describe('findWithSearch', () => {
-        it('should call repository.findWithSearch with personId and searchText', async () => {
+        it('should call repository.find with empty orConditions by default', async () => {
             const findSpy = jest
-                .spyOn(EducationRepository.prototype, 'findWithSearch')
+                .spyOn(EducationRepository.prototype, 'find')
                 .mockResolvedValue([sampleRecord]);
 
             const { default: EducationController } = await import(
                 '../EducationController'
             );
-            const result = await EducationController.findWithSearch(
-                personId,
-                'Politechnika',
-            );
+            const result = await EducationController.find(personId);
 
-            expect(findSpy).toHaveBeenCalledWith(personId, 'Politechnika');
-            expect(result).toEqual([sampleRecord]);
-        });
-
-        it('should call repository.findWithSearch without searchText', async () => {
-            const findSpy = jest
-                .spyOn(EducationRepository.prototype, 'findWithSearch')
-                .mockResolvedValue([sampleRecord]);
-
-            const { default: EducationController } = await import(
-                '../EducationController'
-            );
-            const result = await EducationController.findWithSearch(personId);
-
-            expect(findSpy).toHaveBeenCalledWith(personId, undefined);
+            expect(findSpy).toHaveBeenCalledWith(personId, []);
             expect(result).toEqual([sampleRecord]);
         });
     });

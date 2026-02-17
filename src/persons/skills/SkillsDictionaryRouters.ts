@@ -30,21 +30,6 @@ app.post(
     },
 );
 
-app.get(
-    '/v2/skills',
-    async (req: Request, res: Response, next) => {
-        try {
-            const searchText = req.query.searchText as string | undefined;
-            const skills = await SkillsDictionaryController.find(
-                searchText ? { searchText } : undefined,
-            );
-            res.send(skills);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
 app.post(
     '/v2/skills',
     async (req: Request, res: Response, next) => {

@@ -16,33 +16,13 @@ app.post(
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');
             const payload = req.parsedBody ?? req.body;
-            const orConditions = payload?.orConditions;
-            const searchText =
-                Array.isArray(orConditions) && orConditions.length > 0
-                    ? orConditions[0].searchText
-                    : undefined;
-            const educations = await EducationController.findWithSearch(
+            const orConditions = Array.isArray(payload?.orConditions)
+                ? payload.orConditions
+                : [];
+            const educations = await EducationController.find(
                 personId,
-                searchText,
+                orConditions,
             );
-            res.send(educations);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * Pobiera listę wykształcenia osoby (v2).
- * Params: personId
- * Returns: PersonProfileEducationV2Record[]
- */
-app.get(
-    '/v2/persons/:personId/profile/educations',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const educations = await EducationController.find(personId);
             res.send(educations);
         } catch (error) {
             next(error);

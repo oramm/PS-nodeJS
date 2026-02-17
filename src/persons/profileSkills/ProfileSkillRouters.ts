@@ -16,28 +16,13 @@ app.post(
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');
             const payload = req.parsedBody ?? req.body;
-            const orConditions = payload?.orConditions;
-            const searchText =
-                Array.isArray(orConditions) && orConditions.length > 0
-                    ? orConditions[0].searchText
-                    : undefined;
-            const skills = await ProfileSkillController.findWithSearch(
+            const orConditions = Array.isArray(payload?.orConditions)
+                ? payload.orConditions
+                : [];
+            const skills = await ProfileSkillController.find(
                 personId,
-                searchText,
+                orConditions,
             );
-            res.send(skills);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-app.get(
-    '/v2/persons/:personId/profile/skills',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const skills = await ProfileSkillController.find(personId);
             res.send(skills);
         } catch (error) {
             next(error);

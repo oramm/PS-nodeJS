@@ -157,9 +157,9 @@ app.put(
 );
 
 /**
- * Pobiera profil użytkownika wraz z doświadczeniami (v2).
+ * Pobiera metadane profilu użytkownika (v2).
  * Params: personId
- * Returns: PersonProfileV2Payload & { profileExperiences } | null
+ * Returns: PersonProfileV2Record | null
  */
 app.get(
     '/v2/persons/:personId/profile',
@@ -194,142 +194,6 @@ app.put(
                 profileIsVisible: payload?.profileIsVisible,
             });
             res.send(profile);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-app.post(
-    '/v2/persons/:personId/profile/experiences/search',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const payload = req.parsedBody ?? req.body;
-            const orConditions = payload?.orConditions;
-            const searchText =
-                Array.isArray(orConditions) && orConditions.length > 0
-                    ? orConditions[0].searchText
-                    : undefined;
-            const experiences =
-                await PersonsController.findExperiencesWithSearch(
-                    personId,
-                    searchText,
-                );
-            res.send(experiences);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * Pobiera listę doświadczeń zawodowych osoby (v2).
- * Params: personId
- * Returns: PersonProfileExperienceV2Payload[]
- */
-app.get(
-    '/v2/persons/:personId/profile/experiences',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const experiences =
-                await PersonsController.listPersonProfileExperiencesV2(
-                    personId,
-                );
-            res.send(experiences);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * Dodaje nowe doświadczenie zawodowe do profilu (v2).
- * Params: personId
- * Body: PersonProfileExperienceV2Payload (organizationName?, positionName?, description?, dateFrom?, dateTo?, isCurrent?, sortOrder?)
- * Returns: PersonProfileExperienceV2Payload
- */
-app.post(
-    '/v2/persons/:personId/profile/experiences',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const payload = req.parsedBody ?? req.body;
-            const experience =
-                await PersonsController.addPersonProfileExperienceV2(personId, {
-                    organizationName: payload?.organizationName,
-                    positionName: payload?.positionName,
-                    description: payload?.description,
-                    dateFrom: payload?.dateFrom,
-                    dateTo: payload?.dateTo,
-                    isCurrent: payload?.isCurrent,
-                    sortOrder: payload?.sortOrder,
-                });
-            res.send(experience);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * Aktualizuje doświadczenie zawodowe w profilu (v2).
- * Params: personId, experienceId
- * Body: PersonProfileExperienceV2Payload (organizationName?, positionName?, description?, dateFrom?, dateTo?, isCurrent?, sortOrder?)
- * Returns: PersonProfileExperienceV2Payload
- */
-app.put(
-    '/v2/persons/:personId/profile/experiences/:experienceId',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const experienceId = parsePositiveInt(
-                req.params.experienceId,
-                'experienceId',
-            );
-            const payload = req.parsedBody ?? req.body;
-            const experience =
-                await PersonsController.editPersonProfileExperienceV2(
-                    personId,
-                    experienceId,
-                    {
-                        organizationName: payload?.organizationName,
-                        positionName: payload?.positionName,
-                        description: payload?.description,
-                        dateFrom: payload?.dateFrom,
-                        dateTo: payload?.dateTo,
-                        isCurrent: payload?.isCurrent,
-                        sortOrder: payload?.sortOrder,
-                    },
-                );
-            res.send(experience);
-        } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * Usuwa doświadczenie zawodowe z profilu (v2).
- * Params: personId, experienceId
- * Returns: { id }
- */
-app.delete(
-    '/v2/persons/:personId/profile/experiences/:experienceId',
-    async (req: Request, res: Response, next) => {
-        try {
-            const personId = parsePositiveInt(req.params.personId, 'personId');
-            const experienceId = parsePositiveInt(
-                req.params.experienceId,
-                'experienceId',
-            );
-            const result =
-                await PersonsController.deletePersonProfileExperienceV2(
-                    personId,
-                    experienceId,
-                );
-            res.send(result);
         } catch (error) {
             next(error);
         }

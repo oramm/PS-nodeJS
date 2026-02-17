@@ -4,7 +4,9 @@ import {
     PersonProfileSkillV2Record,
 } from '../../types/types';
 import PersonProfileSkill from './PersonProfileSkill';
-import ProfileSkillRepository from './ProfileSkillRepository';
+import ProfileSkillRepository, {
+    ProfileSkillSearchParams,
+} from './ProfileSkillRepository';
 import BaseController from '../../controllers/BaseController';
 
 export default class ProfileSkillController extends BaseController<
@@ -26,17 +28,10 @@ export default class ProfileSkillController extends BaseController<
 
     static async find(
         personId: number,
+        orConditions: ProfileSkillSearchParams[] = [],
     ): Promise<PersonProfileSkill[]> {
         const instance = this.getInstance();
-        return instance.repository.find(personId);
-    }
-
-    static async findWithSearch(
-        personId: number,
-        searchText?: string,
-    ): Promise<PersonProfileSkill[]> {
-        const instance = this.getInstance();
-        return instance.repository.findWithSearch(personId, searchText);
+        return instance.repository.find(personId, orConditions);
     }
 
     static async addFromDto(

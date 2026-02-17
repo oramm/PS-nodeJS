@@ -157,6 +157,7 @@ app.use((req, res, next) => {
 
 require('./setup/Sessions/Gauth2Routers');
 require('./persons/PersonsRouters');
+require('./persons/experiences/ExperienceRouters');
 
 require('./persons/projectRoles/RolesRouters');
 require('./persons/educations/EducationRouters');

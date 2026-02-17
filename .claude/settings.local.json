@@ -17,7 +17,9 @@
       "Bash(sc query:*)",
       "Bash(yarn add:*)",
       "Bash(node -e:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(yarn test:*)",
+      "Bash(yarn test:persons:*)"
     ]
   }
 }

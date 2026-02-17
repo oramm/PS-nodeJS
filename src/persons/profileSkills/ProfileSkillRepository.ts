@@ -1,7 +1,13 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
+import ToolsDb from '../../tools/ToolsDb';
 import PersonProfileSkill from './PersonProfileSkill';
 import { PersonProfileSkillV2Payload, PersonProfileSkillV2Record } from '../../types/types';
+
+export interface ProfileSkillSearchParams {
+    searchText?: string;
+    personId?: number;
+}
 
 export default class ProfileSkillRepository extends BaseRepository<PersonProfileSkill> {
     constructor() {
@@ -28,19 +34,18 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
         });
     }
 
-    async find(personId: number): Promise<PersonProfileSkill[]> {
-        return this.findWithSearch(personId);
-    }
-
-    async findWithSearch(
+    async find(
         personId: number,
-        searchText?: string,
+        orConditions: ProfileSkillSearchParams[] = [],
     ): Promise<PersonProfileSkill[]> {
-        let whereExtra = '';
-        if (searchText) {
-            const escaped = mysql.escape(`%${searchText}%`);
-            whereExtra = ` AND sd.Name LIKE ${escaped}`;
-        }
+        const orWhere =
+            orConditions.length > 0
+                ? ToolsDb.makeOrGroupsConditions(
+                      orConditions,
+                      this.makeAndConditionsSkill.bind(this),
+                  )
+                : '1';
+
         const sql = mysql.format(
             `SELECT
                 pps.Id,
@@ -54,12 +59,25 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
              FROM PersonProfileSkills pps
              JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
              JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
-             WHERE pp.PersonId = ?${whereExtra}
+             WHERE pp.PersonId = ? AND (${orWhere})
              ORDER BY pps.SortOrder ASC, pps.Id ASC`,
             [personId],
         );
         const rows = await this.executeQuery(sql);
         return rows.map((row) => this.mapRowToModel(row));
+    }
+
+    private makeAndConditionsSkill(
+        searchParams: ProfileSkillSearchParams,
+    ): string {
+        const conditions: string[] = [];
+
+        if (searchParams.searchText) {
+            const escaped = mysql.escape(`%${searchParams.searchText}%`);
+            conditions.push(`sd.Name LIKE ${escaped}`);
+        }
+
+        return conditions.length ? conditions.join(' AND ') : '1';
     }
 
     async addSkillInDb(

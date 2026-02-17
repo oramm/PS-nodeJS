@@ -15,7 +15,7 @@ jest.mock('../../index', () => ({
 }));
 
 describe('PersonsRouters P3-D transition validation', () => {
-    it('keeps legacy routes registered while dedicated v2 routes are available', async () => {
+    it('keeps legacy routes and v2 account/profile metadata routes', async () => {
         await import('../PersonsRouters');
 
         const postRoutes = postMock.mock.calls.map((call) => call[0]);
@@ -23,6 +23,7 @@ describe('PersonsRouters P3-D transition validation', () => {
         const getRoutes = getMock.mock.calls.map((call) => call[0]);
         const deleteRoutes = deleteMock.mock.calls.map((call) => call[0]);
 
+        // Legacy person routes
         expect(postRoutes).toEqual(
             expect.arrayContaining(['/persons', '/person', '/systemUser']),
         );
@@ -31,27 +32,24 @@ describe('PersonsRouters P3-D transition validation', () => {
         );
         expect(deleteRoutes).toEqual(expect.arrayContaining(['/person/:id']));
 
+        // V2 routes (account and profile metadata only - experiences moved to ExperienceRouters)
         expect(getRoutes).toEqual(
             expect.arrayContaining([
                 '/v2/persons/:personId/account',
-                '/v2/persons/:personId/profile',
-                '/v2/persons/:personId/profile/experiences',
             ]),
         );
         expect(putRoutes).toEqual(
             expect.arrayContaining([
                 '/v2/persons/:personId/account',
                 '/v2/persons/:personId/profile',
-                '/v2/persons/:personId/profile/experiences/:experienceId',
             ]),
         );
-        expect(postRoutes).toEqual(
-            expect.arrayContaining(['/v2/persons/:personId/profile/experiences']),
-        );
-        expect(deleteRoutes).toEqual(
-            expect.arrayContaining([
-                '/v2/persons/:personId/profile/experiences/:experienceId',
-            ]),
-        );
+
+        // Verify removed routes (GET /profile aggregation endpoint and all experience endpoints)
+        expect(getRoutes).not.toContain('/v2/persons/:personId/profile');
+        expect(getRoutes).not.toContain('/v2/persons/:personId/profile/experiences');
+        expect(postRoutes).not.toContain('/v2/persons/:personId/profile/experiences');
+        expect(putRoutes).not.toContain('/v2/persons/:personId/profile/experiences/:experienceId');
+        expect(deleteRoutes).not.toContain('/v2/persons/:personId/profile/experiences/:experienceId');
     });
 });

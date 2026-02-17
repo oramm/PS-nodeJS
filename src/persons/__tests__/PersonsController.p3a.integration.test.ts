@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
 import PersonRepository from '../PersonRepository';
+import ExperienceRepository from '../experiences/ExperienceRepository';
 
 jest.mock('../../tools/ToolsDb');
 
@@ -94,9 +95,9 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
     });
 
     it('creates experience via dedicated v2 path', async () => {
-        const { default: PersonsController } = await import('../PersonsController');
+        const { default: ExperienceController } = await import('../experiences/ExperienceController');
         const addExperienceSpy = jest
-            .spyOn(PersonRepository.prototype, 'addPersonProfileExperienceInDb')
+            .spyOn(ExperienceRepository.prototype, 'addExperienceInDb')
             .mockResolvedValue({
                 id: 801,
                 personProfileId: 701,
@@ -106,7 +107,7 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
                 isCurrent: true,
             });
 
-        const result = await PersonsController.addPersonProfileExperienceV2(
+        const result = await ExperienceController.addFromDto(
             310003,
             {
                 organizationName: 'ENVI',
@@ -135,10 +136,10 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
         );
     });
 
-    it('findExperiencesWithSearch delegates to repository.findExperiencesWithSearch', async () => {
-        const { default: PersonsController } = await import('../PersonsController');
+    it('findExperiences delegates to ExperienceRepository.find with orConditions', async () => {
+        const { default: ExperienceController } = await import('../experiences/ExperienceController');
         const findSpy = jest
-            .spyOn(PersonRepository.prototype, 'findExperiencesWithSearch')
+            .spyOn(ExperienceRepository.prototype, 'find')
             .mockResolvedValue([
                 {
                     id: 801,
@@ -147,15 +148,15 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
                     positionName: 'Backend Developer',
                     isCurrent: true,
                     sortOrder: 1,
-                },
+                } as any,
             ]);
 
-        const result = await PersonsController.findExperiencesWithSearch(
+        const result = await ExperienceController.find(
             310003,
-            'ENVI',
+            [{ searchText: 'ENVI' }],
         );
 
-        expect(findSpy).toHaveBeenCalledWith(310003, 'ENVI');
+        expect(findSpy).toHaveBeenCalledWith(310003, [{ searchText: 'ENVI' }]);
         expect(result).toEqual([
             expect.objectContaining({
                 id: 801,
@@ -164,15 +165,15 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
         ]);
     });
 
-    it('findExperiencesWithSearch works without searchText', async () => {
-        const { default: PersonsController } = await import('../PersonsController');
+    it('findExperiences works with empty orConditions', async () => {
+        const { default: ExperienceController } = await import('../experiences/ExperienceController');
         const findSpy = jest
-            .spyOn(PersonRepository.prototype, 'findExperiencesWithSearch')
+            .spyOn(ExperienceRepository.prototype, 'find')
             .mockResolvedValue([]);
 
-        const result = await PersonsController.findExperiencesWithSearch(310003);
+        const result = await ExperienceController.find(310003, []);
 
-        expect(findSpy).toHaveBeenCalledWith(310003, undefined);
+        expect(findSpy).toHaveBeenCalledWith(310003, []);
         expect(result).toEqual([]);
     });
 });

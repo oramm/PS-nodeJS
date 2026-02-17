@@ -3,14 +3,11 @@ import { UserData } from '../types/sessionTypes';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import {
     PersonAccountV2Payload,
-    PersonProfileExperienceV2Payload,
     PersonProfileV2Payload,
 } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
-import EducationController from './educations/EducationController';
-import ProfileSkillController from './profileSkills/ProfileSkillController';
 
 export type { PersonsSearchParams };
 
@@ -334,22 +331,11 @@ export default class PersonsController extends BaseController<
         return account;
     }
 
-    static async getPersonProfileV2(personId: number) {
+    static async getPersonProfileV2(
+        personId: number,
+    ) {
         const instance = this.getInstance();
-        const profile = await instance.repository.getPersonProfileV2(personId);
-        if (!profile) return undefined;
-        const [profileExperiences, profileEducations, profileSkills] =
-            await Promise.all([
-                instance.repository.listPersonProfileExperiencesV2(personId),
-                EducationController.find(personId),
-                ProfileSkillController.find(personId),
-            ]);
-        return {
-            ...profile,
-            profileExperiences,
-            profileEducations,
-            profileSkills,
-        };
+        return instance.repository.getPersonProfileV2(personId);
     }
 
     static async upsertPersonProfileV2(profileData: PersonProfileV2Payload) {
@@ -363,67 +349,6 @@ export default class PersonsController extends BaseController<
                 conn,
             );
         });
-    }
-
-    static async listPersonProfileExperiencesV2(personId: number) {
-        const instance = this.getInstance();
-        return instance.repository.listPersonProfileExperiencesV2(personId);
-    }
-
-    static async findExperiencesWithSearch(
-        personId: number,
-        searchText?: string,
-    ) {
-        const instance = this.getInstance();
-        return instance.repository.findExperiencesWithSearch(
-            personId,
-            searchText,
-        );
-    }
-
-    static async addPersonProfileExperienceV2(
-        personId: number,
-        experienceData: PersonProfileExperienceV2Payload,
-    ) {
-        const instance = this.getInstance();
-        return await ToolsDb.transaction(async (conn) => {
-            return instance.repository.addPersonProfileExperienceInDb(
-                personId,
-                experienceData,
-                conn,
-            );
-        });
-    }
-
-    static async editPersonProfileExperienceV2(
-        personId: number,
-        experienceId: number,
-        experienceData: PersonProfileExperienceV2Payload,
-    ) {
-        const instance = this.getInstance();
-        return await ToolsDb.transaction(async (conn) => {
-            return instance.repository.editPersonProfileExperienceInDb(
-                personId,
-                experienceId,
-                experienceData,
-                conn,
-            );
-        });
-    }
-
-    static async deletePersonProfileExperienceV2(
-        personId: number,
-        experienceId: number,
-    ): Promise<{ id: number }> {
-        const instance = this.getInstance();
-        await ToolsDb.transaction(async (conn) => {
-            await instance.repository.deletePersonProfileExperienceInDb(
-                personId,
-                experienceId,
-                conn,
-            );
-        });
-        return { id: experienceId };
     }
 
     /**

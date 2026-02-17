@@ -1,10 +1,22 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
+import ToolsDb from '../../tools/ToolsDb';
 import PersonProfileEducation from './PersonProfileEducation';
 import {
     PersonProfileEducationV2Payload,
     PersonProfileEducationV2Record,
 } from '../../types/types';
+
+export interface EducationSearchParams {
+    searchText?: string;
+    schoolName?: string;
+    degreeName?: string;
+    fieldOfStudy?: string;
+    dateFromAfter?: string;
+    dateFromBefore?: string;
+    dateToAfter?: string;
+    dateToBefore?: string;
+}
 
 export default class EducationRepository extends BaseRepository<PersonProfileEducation> {
     constructor() {
@@ -24,19 +36,18 @@ export default class EducationRepository extends BaseRepository<PersonProfileEdu
         });
     }
 
-    async find(personId: number): Promise<PersonProfileEducation[]> {
-        return this.findWithSearch(personId);
-    }
-
-    async findWithSearch(
+    async find(
         personId: number,
-        searchText?: string,
+        orConditions: EducationSearchParams[] = [],
     ): Promise<PersonProfileEducation[]> {
-        let whereExtra = '';
-        if (searchText) {
-            const escaped = mysql.escape(`%${searchText}%`);
-            whereExtra = ` AND (ppe.SchoolName LIKE ${escaped} OR ppe.DegreeName LIKE ${escaped} OR ppe.FieldOfStudy LIKE ${escaped})`;
-        }
+        const conditions =
+            orConditions.length > 0
+                ? ToolsDb.makeOrGroupsConditions(
+                      orConditions,
+                      this.makeAndConditions.bind(this),
+                  )
+                : '1';
+
         const sql = mysql.format(
             `SELECT
                 ppe.Id,
@@ -49,12 +60,66 @@ export default class EducationRepository extends BaseRepository<PersonProfileEdu
                 ppe.SortOrder
              FROM PersonProfileEducations ppe
              JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
-             WHERE pp.PersonId = ?${whereExtra}
+             WHERE pp.PersonId = ? AND (${conditions})
              ORDER BY ppe.SortOrder ASC, ppe.Id ASC`,
             [personId],
         );
         const rows = await this.executeQuery(sql);
         return rows.map((row) => this.mapRowToModel(row));
+    }
+
+    private makeAndConditions(searchParams: EducationSearchParams): string {
+        const conditions: string[] = [];
+
+        if (searchParams.schoolName) {
+            conditions.push(
+                mysql.format(`ppe.SchoolName = ?`, [searchParams.schoolName]),
+            );
+        }
+        if (searchParams.degreeName) {
+            conditions.push(
+                mysql.format(`ppe.DegreeName = ?`, [searchParams.degreeName]),
+            );
+        }
+        if (searchParams.fieldOfStudy) {
+            conditions.push(
+                mysql.format(`ppe.FieldOfStudy = ?`, [
+                    searchParams.fieldOfStudy,
+                ]),
+            );
+        }
+        if (searchParams.dateFromAfter) {
+            conditions.push(
+                mysql.format(`ppe.DateFrom >= ?`, [
+                    searchParams.dateFromAfter,
+                ]),
+            );
+        }
+        if (searchParams.dateFromBefore) {
+            conditions.push(
+                mysql.format(`ppe.DateFrom <= ?`, [
+                    searchParams.dateFromBefore,
+                ]),
+            );
+        }
+        if (searchParams.dateToAfter) {
+            conditions.push(
+                mysql.format(`ppe.DateTo >= ?`, [searchParams.dateToAfter]),
+            );
+        }
+        if (searchParams.dateToBefore) {
+            conditions.push(
+                mysql.format(`ppe.DateTo <= ?`, [searchParams.dateToBefore]),
+            );
+        }
+        if (searchParams.searchText) {
+            const escaped = mysql.escape(`%${searchParams.searchText}%`);
+            conditions.push(
+                `(ppe.SchoolName LIKE ${escaped} OR ppe.DegreeName LIKE ${escaped} OR ppe.FieldOfStudy LIKE ${escaped})`,
+            );
+        }
+
+        return conditions.length ? conditions.join(' AND ') : '1';
     }
 
     async addEducationInDb(
