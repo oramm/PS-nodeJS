@@ -394,21 +394,23 @@ app.get(
             });
 
             const bookedInvoices = invoices.filter((inv) => inv.status === 'BOOKED');
+            const summaryInvoices = format === 'json' ? invoices : bookedInvoices;
 
             // Podsumowanie
             const summary = {
                 year,
                 month,
-                totalInvoices: bookedInvoices.length,
+                totalInvoices: summaryInvoices.length,
                 totalNet: 0,
                 totalVat: 0,
                 totalGross: 0,
                 bookableNet: 0,
                 deductibleVat: 0,
                 byCategory: {} as Record<string, { count: number; net: number; vat: number }>,
+                byStatus: {} as Record<string, number>,
             };
 
-            for (const inv of bookedInvoices) {
+            for (const inv of summaryInvoices) {
                 summary.totalNet += Number(inv.netAmount) || 0;
                 summary.totalVat += Number(inv.vatAmount) || 0;
                 summary.totalGross += Number(inv.grossAmount) || 0;
@@ -423,6 +425,8 @@ app.get(
                 summary.byCategory[categoryName].count++;
                 summary.byCategory[categoryName].net += Number(inv.netAmount) || 0;
                 summary.byCategory[categoryName].vat += Number(inv.vatAmount) || 0;
+
+                summary.byStatus[inv.status] = (summary.byStatus[inv.status] || 0) + 1;
             }
 
             // Format odpowiedzi
@@ -506,9 +510,9 @@ app.get(
                 success: true,
                 data: {
                     summary,
-                    invoices: bookedInvoices.map((inv) => {
+                    invoices: summaryInvoices.map((inv) => {
                         const json = inv.toJson();
-                        delete json.status;
+                        //delete json.status;
                         return json;
                     }),
                 },
