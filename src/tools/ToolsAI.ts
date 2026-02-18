@@ -9,6 +9,35 @@ const execFile = promisify(execFileCb);
 
 export type AiAnalyzeResult = any;
 
+export type AiExperience = {
+    organizationName?: string;
+    positionName?: string;
+    description?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    isCurrent?: boolean;
+};
+export type AiEducation = {
+    schoolName?: string;
+    degreeName?: string;
+    fieldOfStudy?: string;
+    dateFrom?: string;
+    dateTo?: string;
+};
+export type AiSkill = {
+    skillName: string;
+    levelCode?: string;
+    yearsOfExperience?: number;
+};
+export type AiPersonProfileResult = {
+    experiences: AiExperience[];
+    educations: AiEducation[];
+    skills: AiSkill[];
+    text: string;
+    _model?: string;
+    _usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+};
+
 export default class ToolsAI {
     /**
      * Extract plain text from file buffer (PDF or DOCX)
@@ -266,5 +295,111 @@ export default class ToolsAI {
 
         const aiResult = JSON.parse(responseContent);
         return { aiResult, text };
+    }
+
+    /**
+     * Analyze a CV file (PDF/DOCX) and return structured profile data
+     */
+    static async analyzePersonProfile(
+        file: Express.Multer.File,
+        hint?: string,
+    ): Promise<AiPersonProfileResult> {
+        const text = await this.extractTextFromFile(file);
+        if (text.trim().length < 1) throw new Error('Empty document after extraction');
+
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+        const prompt = `
+Analizujesz CV i zwracasz JSON z trzema kluczami: experiences, educations, skills.
+Daty w formacie YYYY-MM. Jeśli nie znaleziono danych — zwróć puste tablice.
+Nie wymyślaj danych.${hint ? `\nWskazówka od użytkownika: ${hint}` : ''}
+
+Struktura:
+- experiences: tablica obiektów { organizationName, positionName, description, dateFrom (YYYY-MM), dateTo (YYYY-MM lub null), isCurrent (bool) }
+- educations: tablica obiektów { schoolName, degreeName, fieldOfStudy, dateFrom (YYYY-MM), dateTo (YYYY-MM lub null) }
+- skills: tablica obiektów { skillName, levelCode (np. "basic"/"intermediate"/"advanced" lub null), yearsOfExperience (liczba lub null) }
+
+Tekst CV:
+---
+${text.substring(0, 6000)}
+---
+        `.trim();
+
+        const payload = {
+            model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+            messages: [
+                {
+                    role: 'system' as const,
+                    content:
+                        'Zwracaj tylko i wyłącznie poprawny obiekt JSON, bez dodatkowego tekstu.',
+                },
+                { role: 'user' as const, content: prompt },
+            ],
+            temperature: 0,
+            response_format: { type: 'json_object' as const },
+        };
+
+        const completion = await this.callOpenAiWithRetry(openai, payload, 3);
+        const responseContent = completion.choices?.[0]?.message?.content;
+        if (!responseContent) throw new Error('OpenAI returned empty response');
+
+        const parsed = JSON.parse(responseContent);
+
+        const normalizeDate = (d: unknown): string | undefined => {
+            if (!d || typeof d !== 'string') return undefined;
+            if (/^\d{4}-\d{2}$/.test(d)) return `${d}-01`;
+            return d;
+        };
+
+        const experiences: AiExperience[] = Array.isArray(parsed.experiences)
+            ? parsed.experiences.map((e: any) => ({
+                  organizationName: e.organizationName ?? undefined,
+                  positionName: e.positionName ?? undefined,
+                  description: e.description ?? undefined,
+                  dateFrom: normalizeDate(e.dateFrom),
+                  dateTo: normalizeDate(e.dateTo),
+                  isCurrent: typeof e.isCurrent === 'boolean' ? e.isCurrent : undefined,
+              }))
+            : [];
+
+        const educations: AiEducation[] = Array.isArray(parsed.educations)
+            ? parsed.educations.map((e: any) => ({
+                  schoolName: e.schoolName ?? undefined,
+                  degreeName: e.degreeName ?? undefined,
+                  fieldOfStudy: e.fieldOfStudy ?? undefined,
+                  dateFrom: normalizeDate(e.dateFrom),
+                  dateTo: normalizeDate(e.dateTo),
+              }))
+            : [];
+
+        const skills: AiSkill[] = Array.isArray(parsed.skills)
+            ? parsed.skills
+                  .filter((s: any) => s?.skillName)
+                  .map((s: any) => ({
+                      skillName: s.skillName,
+                      levelCode: s.levelCode ?? undefined,
+                      yearsOfExperience:
+                          s.yearsOfExperience != null
+                              ? Number(s.yearsOfExperience)
+                              : undefined,
+                  }))
+            : [];
+
+        const usage = completion.usage;
+
+        return {
+            experiences,
+            educations,
+            skills,
+            text,
+            _model: completion.model,
+            _usage: usage
+                ? {
+                      promptTokens: usage.prompt_tokens,
+                      completionTokens: usage.completion_tokens,
+                      totalTokens: usage.total_tokens,
+                  }
+                : undefined,
+        };
     }
 }

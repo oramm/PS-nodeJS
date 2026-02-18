@@ -3,6 +3,7 @@ import {
     PersonProfileEducationV2Payload,
     PersonProfileEducationV2Record,
 } from '../../types/types';
+import { AiEducation } from '../../tools/ToolsAI';
 import PersonProfileEducation from './PersonProfileEducation';
 import EducationRepository, {
     EducationSearchParams,
@@ -62,6 +63,51 @@ export default class EducationController extends BaseController<
                 conn,
             );
         });
+    }
+
+    static async importFromDto(
+        personId: number,
+        items: AiEducation[],
+    ): Promise<{
+        added: PersonProfileEducationV2Record[];
+        skipped: AiEducation[];
+        warnings: string[];
+    }> {
+        const instance = this.getInstance();
+        const added: PersonProfileEducationV2Record[] = [];
+        const skipped: AiEducation[] = [];
+        const warnings: string[] = [];
+
+        await ToolsDb.transaction(async (conn) => {
+            for (const item of items) {
+                if (item.schoolName || item.dateFrom) {
+                    const duplicate = await instance.repository.findBySchoolAndDate(
+                        personId,
+                        item.schoolName ?? '',
+                        item.dateFrom,
+                        conn,
+                    );
+                    console.log('[educations import] findBySchoolAndDate result:', duplicate, 'for:', item.schoolName, item.dateFrom);
+                    if (duplicate) {
+                        skipped.push(item);
+                        continue;
+                    }
+                }
+                if (!item.dateFrom) {
+                    warnings.push(
+                        `Brak daty: ${item.schoolName ?? item.degreeName ?? '?'}`,
+                    );
+                }
+                const record = await instance.repository.addEducationInDb(
+                    personId,
+                    item,
+                    conn,
+                );
+                added.push(record);
+            }
+        });
+
+        return { added, skipped, warnings };
     }
 
     static async deleteFromDto(

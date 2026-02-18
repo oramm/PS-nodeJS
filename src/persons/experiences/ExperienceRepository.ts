@@ -122,6 +122,22 @@ export default class ExperienceRepository extends BaseRepository<PersonProfileEx
         return conditions.join(' AND ');
     }
 
+    async findByPeriod(
+        personId: number,
+        dateFrom: string | null | undefined,
+        dateTo: string | null | undefined,
+        conn: mysql.PoolConnection,
+    ): Promise<{ id: number } | undefined> {
+        const [rows] = await conn.query<any[]>(
+            `SELECT ppe.Id FROM PersonProfileExperiences ppe
+             JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
+             WHERE pp.PersonId = ? AND ppe.DateFrom <=> ? AND ppe.DateTo <=> ?
+             LIMIT 1`,
+            [personId, dateFrom ?? null, dateTo ?? null],
+        );
+        return rows[0] ? { id: rows[0].Id } : undefined;
+    }
+
     async addExperienceInDb(
         personId: number,
         experience: PersonProfileExperienceV2Payload,

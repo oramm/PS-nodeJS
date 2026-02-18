@@ -79,6 +79,25 @@ app.put(
     },
 );
 
+app.post(
+    '/v2/persons/:personId/profile/skills/import-confirm',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const payload = req.parsedBody ?? req.body;
+            console.log('[import-confirm skills] body:', JSON.stringify(req.body));
+            console.log('[import-confirm skills] parsedBody:', JSON.stringify(req.parsedBody));
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            console.log('[import-confirm skills] items count:', items.length);
+            console.log('[skills import] received items:', JSON.stringify(items));
+            const result = await ProfileSkillController.importFromDto(personId, items);
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
 app.delete(
     '/v2/persons/:personId/profile/skills/:skillEntryId',
     async (req: Request, res: Response, next) => {

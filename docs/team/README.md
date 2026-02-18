@@ -21,6 +21,9 @@
 - `docs/team/operations/post-change-checklist.md`
 - `docs/team/operations/persons-v2-refactor-plan.md`
 - `docs/team/operations/persons-v2-refactor-progress.md`
+- `docs/team/operations/hr-module-plan.md`
+- `docs/team/operations/hr-module-progress.md`
+- `docs/team/operations/profile-import-progress.md`
 
 ## Change policy
 

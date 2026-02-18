@@ -163,6 +163,7 @@ require('./persons/projectRoles/RolesRouters');
 require('./persons/educations/EducationRouters');
 require('./persons/skills/SkillsDictionaryRouters');
 require('./persons/profileSkills/ProfileSkillRouters');
+require('./persons/profileImport/PersonProfileImportRouters');
 require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');

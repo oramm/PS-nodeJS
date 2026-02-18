@@ -94,6 +94,24 @@ app.put(
     },
 );
 
+app.post(
+    '/v2/persons/:personId/profile/experiences/import-confirm',
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = parsePositiveInt(req.params.personId, 'personId');
+            const payload = req.parsedBody ?? req.body;
+            console.log('[import-confirm experiences] body:', JSON.stringify(req.body));
+            console.log('[import-confirm experiences] parsedBody:', JSON.stringify(req.parsedBody));
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            console.log('[import-confirm experiences] items count:', items.length);
+            const result = await ExperienceController.importFromDto(personId, items);
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
 app.delete(
     '/v2/persons/:personId/profile/experiences/:experienceId',
     async (req: Request, res: Response, next) => {

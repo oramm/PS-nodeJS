@@ -37,7 +37,10 @@
       "Bash(cmd /c \"rmdir /S /Q \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" && echo ok\")",
       "Bash(cmd /c \"if exist \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" \\(echo ISTNIEJE\\) else \\(echo USUNIETY\\)\")",
       "Bash(dir:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\\\\Import\"\" 2>&1\")",
+      "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\"\"\")",
+      "Bash(cmd /c \"dir C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\")"
     ]
   }
 }

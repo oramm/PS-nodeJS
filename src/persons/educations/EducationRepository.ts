@@ -122,6 +122,22 @@ export default class EducationRepository extends BaseRepository<PersonProfileEdu
         return conditions.length ? conditions.join(' AND ') : '1';
     }
 
+    async findBySchoolAndDate(
+        personId: number,
+        schoolName: string,
+        dateFrom: string | null | undefined,
+        conn: mysql.PoolConnection,
+    ): Promise<{ id: number } | undefined> {
+        const [rows] = await conn.query<any[]>(
+            `SELECT ppe.Id FROM PersonProfileEducations ppe
+             JOIN PersonProfiles pp ON pp.Id = ppe.PersonProfileId
+             WHERE pp.PersonId = ? AND LOWER(ppe.SchoolName) = LOWER(?) AND ppe.DateFrom <=> ?
+             LIMIT 1`,
+            [personId, schoolName, dateFrom ?? null],
+        );
+        return rows[0] ? { id: rows[0].Id } : undefined;
+    }
+
     async addEducationInDb(
         personId: number,
         education: PersonProfileEducationV2Payload,

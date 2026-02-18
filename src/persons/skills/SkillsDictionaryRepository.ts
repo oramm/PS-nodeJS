@@ -58,6 +58,19 @@ export default class SkillsDictionaryRepository extends BaseRepository<SkillDict
         return rows.map((row) => this.mapRowToModel(row));
     }
 
+    async findByNormalizedName(name: string): Promise<SkillDictionary | undefined> {
+        const normalized = SkillsDictionaryRepository.normalizeName(name);
+        const rows = await this.executeQuery(
+            mysql.format(
+                'SELECT Id, Name, NameNormalized, Description FROM SkillsDictionary WHERE NameNormalized = ? LIMIT 1',
+                [normalized],
+            ),
+        );
+        const row = rows[0];
+        if (!row) return undefined;
+        return this.mapRowToModel(row);
+    }
+
     async addSkillInDb(
         payload: SkillDictionaryPayload,
         conn: mysql.PoolConnection,

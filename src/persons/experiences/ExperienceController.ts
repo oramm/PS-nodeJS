@@ -3,6 +3,7 @@ import {
     PersonProfileExperienceV2Payload,
     PersonProfileExperienceV2Record,
 } from '../../types/types';
+import { AiExperience } from '../../tools/ToolsAI';
 import PersonProfileExperience from './PersonProfileExperience';
 import ExperienceRepository, {
     ExperienceSearchParams,
@@ -62,6 +63,51 @@ export default class ExperienceController extends BaseController<
                 conn,
             );
         });
+    }
+
+    static async importFromDto(
+        personId: number,
+        items: AiExperience[],
+    ): Promise<{
+        added: PersonProfileExperienceV2Record[];
+        skipped: AiExperience[];
+        warnings: string[];
+    }> {
+        const instance = this.getInstance();
+        const added: PersonProfileExperienceV2Record[] = [];
+        const skipped: AiExperience[] = [];
+        const warnings: string[] = [];
+
+        await ToolsDb.transaction(async (conn) => {
+            for (const item of items) {
+                if (item.dateFrom) {
+                    const duplicate = await instance.repository.findByPeriod(
+                        personId,
+                        item.dateFrom,
+                        item.dateTo,
+                        conn,
+                    );
+                    console.log('[experiences import] findByPeriod result:', duplicate, 'for:', item.dateFrom, item.dateTo);
+                    if (duplicate) {
+                        skipped.push(item);
+                        continue;
+                    }
+                } else {
+                    warnings.push(
+                        `Brak daty: ${item.organizationName ?? item.positionName ?? '?'}`,
+                    );
+                }
+                const record = await instance.repository.addExperienceInDb(
+                    personId,
+                    item,
+                    conn,
+                );
+                console.log('[experiences import] added record id:', record.id);
+                added.push(record);
+            }
+        });
+
+        return { added, skipped, warnings };
     }
 
     static async deleteFromDto(
