@@ -35,7 +35,9 @@
       "Bash(del \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\src\\\\scripts\\\\debugXmlStructure.ts\" \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\build\\\\scripts\\\\debugXmlStructure.js\")",
       "Bash(cmd /c \"rmdir /S /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1 && del /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_samples.zip && echo ok\")",
       "Bash(cmd /c \"rmdir /S /Q \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" && echo ok\")",
-      "Bash(cmd /c \"if exist \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" \\(echo ISTNIEJE\\) else \\(echo USUNIETY\\)\")"
+      "Bash(cmd /c \"if exist \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" \\(echo ISTNIEJE\\) else \\(echo USUNIETY\\)\")",
+      "Bash(dir:*)",
+      "Bash(findstr:*)"
     ]
   }
 }
