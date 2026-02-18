@@ -338,8 +338,7 @@ export interface PersonProfileExperienceV2Payload {
     sortOrder?: number;
 }
 
-export interface PersonProfileExperienceV2Record
-    extends PersonProfileExperienceV2Payload {
+export interface PersonProfileExperienceV2Record extends PersonProfileExperienceV2Payload {
     id: number;
     personProfileId: number;
 }
@@ -353,14 +352,14 @@ export interface PersonProfileEducationV2Payload {
     sortOrder?: number;
 }
 
-export interface PersonProfileEducationV2Record
-    extends PersonProfileEducationV2Payload {
+export interface PersonProfileEducationV2Record extends PersonProfileEducationV2Payload {
     id: number;
     personProfileId: number;
 }
 
 export interface SkillDictionaryPayload {
     name: string;
+    description?: string | null;
 }
 export interface SkillDictionaryRecord extends SkillDictionaryPayload {
     id: number;
@@ -373,8 +372,7 @@ export interface PersonProfileSkillV2Payload {
     yearsOfExperience?: number;
     sortOrder?: number;
 }
-export interface PersonProfileSkillV2Record
-    extends PersonProfileSkillV2Payload {
+export interface PersonProfileSkillV2Record extends PersonProfileSkillV2Payload {
     id: number;
     personProfileId: number;
     _skill?: SkillDictionaryRecord;

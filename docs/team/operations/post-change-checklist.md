@@ -46,6 +46,103 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-18 - Persons V2 skills dictionary description + M-C-R alignment
+
+### 1. Scope
+
+- Skills dictionary module aligned to Model-Controller-Repository standard in persons V2.
+- Added dedicated domain model `SkillDictionary` and refactored controller/repository to model-centric flow.
+- Extended skills API payloads/responses with optional `description`.
+- Extended profile skills JOIN mapping to expose `_skill.description`.
+
+### 2. DB impact
+
+- Schema change in persons V2 migrations:
+    - `src/persons/migrations/003_add_skillsdictionary_description.sql`
+    - `ALTER TABLE SkillsDictionary ADD COLUMN IF NOT EXISTS Description TEXT NULL AFTER NameNormalized;`
+- No data backfill required; existing rows keep `Description = NULL`.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps: apply DB migration before deploying code that writes/reads `Description`.
+
+### 5. Developer actions
+
+- Apply migration `src/persons/migrations/003_add_skillsdictionary_description.sql` in target environment.
+- Run targeted tests for skills/profileSkills module after migration.
+
+### 6. Verification
+
+- Confirm column exists:
+    - `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME='SkillsDictionary' AND COLUMN_NAME='Description';`
+- API checks:
+    - `POST /v2/skills` with only `name` returns `description: null`.
+    - `POST/PUT` with `description` persists value.
+    - whitespace-only `description` is normalized to `null`.
+    - profile skills responses include `_skill.description`.
+
+### 7. Rollback
+
+- Rollback code to previous commit.
+- Optional DB rollback only if safe for dependent code paths:
+    - `ALTER TABLE SkillsDictionary DROP COLUMN Description;`
+
+### 8. Owner
+
+- Persons V2 skills refactor session (Codex + repository owner).
+
+## 2026-02-18 - KSeF FA(3): naprawa SaleDate/DueDate + backfill
+
+### 1. Scope
+
+- Naprawa parsera XML FA(3): `SaleDate` czytane z `Fa.P_6` (+ fallback `FaWiersz[].P_6A`), `DueDate` z `Fa.Platnosc.TerminPlatnosci[].Termin`.
+- Ekstrakcja logiki parsowania do `src/costInvoices/costInvoiceXmlHelpers.ts` (testowalne, czyste funkcje).
+- Skrypt backfill `src/scripts/backfillSaleAndDueDateFromXml.ts` uzupełniający NULL w istniejących rekordach.
+
+### 2. DB impact
+
+- Dane — backfill uzupełnia `SaleDate` i/lub `DueDate` w `CostInvoices` tam, gdzie są NULL.
+- Brak zmian schematu.
+- Idempotentny: `WHERE SaleDate IS NULL OR DueDate IS NULL` — ponowne uruchomienie nie nadpisuje uzupełnionych dat.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps: none (zmiana kodu parsera + jednorazowy backfill).
+
+### 5. Developer actions
+
+- `yarn build` — kompilacja skryptu backfill.
+- `node build/scripts/backfillSaleAndDueDateFromXml.js --dry-run` — weryfikacja (log: `updatedSale > 0`, `errors = 0`).
+- `node build/scripts/backfillSaleAndDueDateFromXml.js` — faktyczna aktualizacja.
+
+### 6. Verification
+
+- `yarn test src/costInvoices` — 6 testów jednostkowych przechodzi.
+- `yarn build` — brak błędów TypeScript.
+- Dry-run log: `updatedSale > 0`, `errors = 0`.
+- Spot-check: `SELECT Id, SaleDate, DueDate FROM CostInvoices WHERE XmlContent IS NOT NULL LIMIT 10` — daty niepuste.
+
+### 7. Rollback
+
+- Brak (zmiana wyłącznie uzupełnia NULL — nie nadpisuje istniejących dat).
+- Cofnięcie parsera: przywróć poprzednie wiersze w `CostInvoiceController.parseInvoiceXml` i usuń import helpera.
+
+### 8. Owner
+
+- KSeF FA(3) fix session (Codex + repository owner).
+
 ## 2026-02-17 - OpenAI API key env baseline
 
 ### 1. Scope

@@ -12,13 +12,16 @@ describe('SkillsDictionaryController', () => {
 
     const samplePayload: SkillDictionaryPayload = {
         name: 'TypeScript',
+        description: 'Frontend language',
     };
 
     const sampleRecord = {
         id: skillId,
+        _dbTableName: 'SkillsDictionary',
         name: 'TypeScript',
         nameNormalized: 'typescript',
-    };
+        description: 'Frontend language',
+    } as any;
 
     beforeEach(async () => {
         jest.clearAllMocks();
@@ -29,9 +32,8 @@ describe('SkillsDictionaryController', () => {
             },
         );
 
-        const { default: SkillsDictionaryController } = await import(
-            '../SkillsDictionaryController'
-        );
+        const { default: SkillsDictionaryController } =
+            await import('../SkillsDictionaryController');
         (SkillsDictionaryController as any).instance = undefined;
     });
 
@@ -39,11 +41,10 @@ describe('SkillsDictionaryController', () => {
         it('should return all skills when no search params', async () => {
             const findSpy = jest
                 .spyOn(SkillsDictionaryRepository.prototype, 'find')
-                .mockResolvedValue([sampleRecord]);
+                .mockResolvedValue([sampleRecord] as any);
 
-            const { default: SkillsDictionaryController } = await import(
-                '../SkillsDictionaryController'
-            );
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
             const result = await SkillsDictionaryController.find();
 
             expect(findSpy).toHaveBeenCalledWith(undefined);
@@ -53,11 +54,10 @@ describe('SkillsDictionaryController', () => {
         it('should pass searchText to repository', async () => {
             const findSpy = jest
                 .spyOn(SkillsDictionaryRepository.prototype, 'find')
-                .mockResolvedValue([sampleRecord]);
+                .mockResolvedValue([sampleRecord] as any);
 
-            const { default: SkillsDictionaryController } = await import(
-                '../SkillsDictionaryController'
-            );
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
             const result = await SkillsDictionaryController.find({
                 searchText: 'Type',
             });
@@ -65,20 +65,36 @@ describe('SkillsDictionaryController', () => {
             expect(findSpy).toHaveBeenCalledWith({ searchText: 'Type' });
             expect(result).toEqual([sampleRecord]);
         });
+
+        it('should include description in find results', async () => {
+            const findSpy = jest
+                .spyOn(SkillsDictionaryRepository.prototype, 'find')
+                .mockResolvedValue([
+                    {
+                        ...sampleRecord,
+                        description: null,
+                    } as any,
+                ]);
+
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
+            const result = await SkillsDictionaryController.find();
+
+            expect(findSpy).toHaveBeenCalledWith(undefined);
+            expect(result[0]).toMatchObject({ description: null });
+        });
     });
 
     describe('addFromDto', () => {
         it('should call repository.addSkillInDb within a transaction', async () => {
             const addSpy = jest
                 .spyOn(SkillsDictionaryRepository.prototype, 'addSkillInDb')
-                .mockResolvedValue(sampleRecord);
+                .mockResolvedValue(sampleRecord as any);
 
-            const { default: SkillsDictionaryController } = await import(
-                '../SkillsDictionaryController'
-            );
-            const result = await SkillsDictionaryController.addFromDto(
-                samplePayload,
-            );
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
+            const result =
+                await SkillsDictionaryController.addFromDto(samplePayload);
 
             expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
             expect(addSpy).toHaveBeenCalledWith(samplePayload, mockConn);
@@ -90,11 +106,10 @@ describe('SkillsDictionaryController', () => {
         it('should call repository.editSkillInDb within a transaction', async () => {
             const editSpy = jest
                 .spyOn(SkillsDictionaryRepository.prototype, 'editSkillInDb')
-                .mockResolvedValue(sampleRecord);
+                .mockResolvedValue(sampleRecord as any);
 
-            const { default: SkillsDictionaryController } = await import(
-                '../SkillsDictionaryController'
-            );
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
             const result = await SkillsDictionaryController.editFromDto(
                 skillId,
                 samplePayload,
@@ -108,6 +123,29 @@ describe('SkillsDictionaryController', () => {
             );
             expect(result).toEqual(sampleRecord);
         });
+
+        it('should pass nullable description to repository', async () => {
+            const editSpy = jest
+                .spyOn(SkillsDictionaryRepository.prototype, 'editSkillInDb')
+                .mockResolvedValue({
+                    ...sampleRecord,
+                    description: null,
+                } as any);
+
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
+            const payload = {
+                name: 'TypeScript',
+                description: null,
+            };
+            const result = await SkillsDictionaryController.editFromDto(
+                skillId,
+                payload,
+            );
+
+            expect(editSpy).toHaveBeenCalledWith(skillId, payload, mockConn);
+            expect(result).toMatchObject({ description: null });
+        });
     });
 
     describe('delete', () => {
@@ -119,9 +157,8 @@ describe('SkillsDictionaryController', () => {
                 )
                 .mockResolvedValue(undefined);
 
-            const { default: SkillsDictionaryController } = await import(
-                '../SkillsDictionaryController'
-            );
+            const { default: SkillsDictionaryController } =
+                await import('../SkillsDictionaryController');
             const result = await SkillsDictionaryController.delete(skillId);
 
             expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);

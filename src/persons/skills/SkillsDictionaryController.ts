@@ -1,10 +1,14 @@
 import ToolsDb from '../../tools/ToolsDb';
-import { SkillDictionaryPayload, SkillDictionaryRecord } from '../../types/types';
+import {
+    SkillDictionaryPayload,
+    SkillDictionaryRecord,
+} from '../../types/types';
 import SkillsDictionaryRepository from './SkillsDictionaryRepository';
 import BaseController from '../../controllers/BaseController';
+import SkillDictionary from './SkillDictionary';
 
 export default class SkillsDictionaryController extends BaseController<
-    SkillDictionaryRecord,
+    SkillDictionary,
     SkillsDictionaryRepository
 > {
     private static instance: SkillsDictionaryController;
@@ -20,9 +24,9 @@ export default class SkillsDictionaryController extends BaseController<
         return this.instance;
     }
 
-    static async find(
-        searchParams?: { searchText?: string },
-    ): Promise<SkillDictionaryRecord[]> {
+    static async find(searchParams?: {
+        searchText?: string;
+    }): Promise<SkillDictionaryRecord[]> {
         const instance = this.getInstance();
         return instance.repository.find(searchParams);
     }

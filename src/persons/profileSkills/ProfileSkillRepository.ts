@@ -2,7 +2,10 @@ import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
 import ToolsDb from '../../tools/ToolsDb';
 import PersonProfileSkill from './PersonProfileSkill';
-import { PersonProfileSkillV2Payload, PersonProfileSkillV2Record } from '../../types/types';
+import {
+    PersonProfileSkillV2Payload,
+    PersonProfileSkillV2Record,
+} from '../../types/types';
 
 export interface ProfileSkillSearchParams {
     searchText?: string;
@@ -20,15 +23,17 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
             personProfileId: row.PersonProfileId,
             skillId: row.SkillId,
             levelCode: row.LevelCode ?? undefined,
-            yearsOfExperience: row.YearsOfExperience != null
-                ? Number(row.YearsOfExperience)
-                : undefined,
+            yearsOfExperience:
+                row.YearsOfExperience != null
+                    ? Number(row.YearsOfExperience)
+                    : undefined,
             sortOrder: row.SortOrder ?? undefined,
             _skill: row.SkillName
                 ? {
                       id: row.SkillId,
                       name: row.SkillName,
                       nameNormalized: row.SkillNameNormalized,
+                      description: row.SkillDescription ?? null,
                   }
                 : undefined,
         });
@@ -55,7 +60,8 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
                 pps.YearsOfExperience,
                 pps.SortOrder,
                 sd.Name AS SkillName,
-                sd.NameNormalized AS SkillNameNormalized
+                     sd.NameNormalized AS SkillNameNormalized,
+                     sd.Description AS SkillDescription
              FROM PersonProfileSkills pps
              JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
              JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
@@ -85,7 +91,10 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
         skill: PersonProfileSkillV2Payload,
         conn: mysql.PoolConnection,
     ): Promise<PersonProfileSkillV2Record> {
-        const personProfileId = await this.ensurePersonProfileId(conn, personId);
+        const personProfileId = await this.ensurePersonProfileId(
+            conn,
+            personId,
+        );
         const columns = ['PersonProfileId', 'SkillId'];
         const placeholders = ['?', '?'];
         const values: any[] = [personProfileId, skill.skillId];
@@ -190,15 +199,17 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
             personProfileId: row.PersonProfileId,
             skillId: row.SkillId,
             levelCode: row.LevelCode ?? undefined,
-            yearsOfExperience: row.YearsOfExperience != null
-                ? Number(row.YearsOfExperience)
-                : undefined,
+            yearsOfExperience:
+                row.YearsOfExperience != null
+                    ? Number(row.YearsOfExperience)
+                    : undefined,
             sortOrder: row.SortOrder ?? undefined,
             _skill: row.SkillName
                 ? {
                       id: row.SkillId,
                       name: row.SkillName,
                       nameNormalized: row.SkillNameNormalized,
+                      description: row.SkillDescription ?? null,
                   }
                 : undefined,
         };
@@ -218,7 +229,8 @@ export default class ProfileSkillRepository extends BaseRepository<PersonProfile
                 pps.YearsOfExperience,
                 pps.SortOrder,
                 sd.Name AS SkillName,
-                sd.NameNormalized AS SkillNameNormalized
+                     sd.NameNormalized AS SkillNameNormalized,
+                     sd.Description AS SkillDescription
              FROM PersonProfileSkills pps
              JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
              JOIN SkillsDictionary sd ON sd.Id = pps.SkillId

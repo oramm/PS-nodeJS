@@ -26,7 +26,16 @@
       "Bash(heroku releases:*)",
       "WebFetch(domain:ksef.podatki.gov.pl)",
       "WebFetch(domain:pomoc.saldeosmart.pl)",
-      "WebFetch(domain:akademialtca.pl)"
+      "WebFetch(domain:akademialtca.pl)",
+      "Bash(test:*)",
+      "Bash(git -C \"C:/Apache24/htdocs/PS-nodeJS\" status --short)",
+      "Bash(powershell -Command:*)",
+      "Bash(node build/scripts/backfillSaleAndDueDateFromXml.js:*)",
+      "Bash(node:*)",
+      "Bash(del \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\src\\\\scripts\\\\debugXmlStructure.ts\" \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\build\\\\scripts\\\\debugXmlStructure.js\")",
+      "Bash(cmd /c \"rmdir /S /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1 && del /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_samples.zip && echo ok\")",
+      "Bash(cmd /c \"rmdir /S /Q \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" && echo ok\")",
+      "Bash(cmd /c \"if exist \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" \\(echo ISTNIEJE\\) else \\(echo USUNIETY\\)\")"
     ]
   }
 }

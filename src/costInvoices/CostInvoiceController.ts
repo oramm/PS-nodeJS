@@ -2,6 +2,7 @@ import CostInvoiceRepository from './CostInvoiceRepository';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostInvoiceStatus } from './CostInvoice';
 import KsefService, { PurchaseInvoiceListItem } from '../invoices/KSeF/KsefService';
 import { XMLParser } from 'fast-xml-parser';
+import { extractSaleDateFromFa, extractDueDateFromFa } from './costInvoiceXmlHelpers';
 
 export class CostInvoiceError extends Error {
     statusCode: number;
@@ -200,11 +201,10 @@ export default class CostInvoiceController {
         const supplierAddress = this.extractAddress(podmiot);
 
         // Daty
-        const issueDate = new Date(naglowek.DataWystawienia || invoiceInfo.invoicingDate);
-        const saleDate = naglowek.DataSprzedazy ? new Date(naglowek.DataSprzedazy) : undefined;
-        const dueDate = fa.TerminPlatnosci?.TerminPlatnosci 
-            ? new Date(fa.TerminPlatnosci.TerminPlatnosci) 
-            : undefined;
+        // FA(3): data wystawienia jest w fa.P_1; naglowek.DataWystawienia to starszy wariant
+        const issueDate = new Date(fa.P_1 || naglowek.DataWystawienia || invoiceInfo.invoicingDate);
+        const saleDate = extractSaleDateFromFa(fa, naglowek);
+        const dueDate = extractDueDateFromFa(fa);
 
         // Kwoty
         const podsumowanie = fa.Podsumowanie || {};

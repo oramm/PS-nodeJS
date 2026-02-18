@@ -9,11 +9,13 @@
         "build": "tsc",
         "debug": "cross-env NODE_ENV=development nodemon --inspect-brk ts-node src/index.ts",
         "send-milestone-report": "node build/scripts/send-milestone-report.js",
+        "backfill:sale-due-dates": "node build/scripts/backfillSaleAndDueDateFromXml.js --dry-run",
         "check:cycles": "madge --circular --extensions ts,tsx src",
         "test": "jest",
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
-        "test:offers": "jest src/offers"
+        "test:offers": "jest src/offers",
+        "kill": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -State Listen).OwningProcess -Force\""
     },
     "keywords": [],
     "author": "Marek Gazda",

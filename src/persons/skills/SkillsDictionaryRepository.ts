@@ -1,30 +1,47 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
-import { SkillDictionaryRecord, SkillDictionaryPayload } from '../../types/types';
+import {
+    SkillDictionaryRecord,
+    SkillDictionaryPayload,
+} from '../../types/types';
+import SkillDictionary from './SkillDictionary';
 
 interface SkillsSearchParams {
     searchText?: string;
 }
 
-export default class SkillsDictionaryRepository extends BaseRepository<SkillDictionaryRecord> {
+export default class SkillsDictionaryRepository extends BaseRepository<SkillDictionary> {
     constructor() {
         super('SkillsDictionary');
     }
 
-    protected mapRowToModel(row: any): SkillDictionaryRecord {
-        return {
+    protected mapRowToModel(row: any): SkillDictionary {
+        return new SkillDictionary({
             id: row.Id,
             name: row.Name,
             nameNormalized: row.NameNormalized,
-        };
+            description: row.Description ?? null,
+        });
     }
 
     static normalizeName(name: string): string {
         return name.toLowerCase().trim().replace(/\s+/g, ' ');
     }
 
-    async find(searchParams?: SkillsSearchParams): Promise<SkillDictionaryRecord[]> {
-        let sql = 'SELECT Id, Name, NameNormalized FROM SkillsDictionary';
+    private static normalizeDescription(
+        description: string | null | undefined,
+    ): string | null {
+        if (description == null) {
+            return null;
+        }
+
+        const trimmed = description.trim();
+        return trimmed.length > 0 ? trimmed : null;
+    }
+
+    async find(searchParams?: SkillsSearchParams): Promise<SkillDictionary[]> {
+        let sql =
+            'SELECT Id, Name, NameNormalized, Description FROM SkillsDictionary';
         const conditions: string[] = [];
 
         if (searchParams?.searchText) {
@@ -45,11 +62,16 @@ export default class SkillsDictionaryRepository extends BaseRepository<SkillDict
         payload: SkillDictionaryPayload,
         conn: mysql.PoolConnection,
     ): Promise<SkillDictionaryRecord> {
-        const nameNormalized = SkillsDictionaryRepository.normalizeName(payload.name);
+        const nameNormalized = SkillsDictionaryRepository.normalizeName(
+            payload.name,
+        );
+        const description = SkillsDictionaryRepository.normalizeDescription(
+            payload.description,
+        );
 
         const [result]: any = await conn.execute(
-            'INSERT INTO SkillsDictionary (Name, NameNormalized) VALUES (?, ?)',
-            [payload.name.trim(), nameNormalized],
+            'INSERT INTO SkillsDictionary (Name, NameNormalized, Description) VALUES (?, ?, ?)',
+            [payload.name.trim(), nameNormalized, description],
         );
         const insertedId = Number(result?.insertId);
         const created = await this.getByIdInConn(conn, insertedId);
@@ -69,10 +91,15 @@ export default class SkillsDictionaryRepository extends BaseRepository<SkillDict
             throw new Error(`Skill Id=${skillId} not found`);
         }
 
-        const nameNormalized = SkillsDictionaryRepository.normalizeName(payload.name);
+        const nameNormalized = SkillsDictionaryRepository.normalizeName(
+            payload.name,
+        );
+        const description = SkillsDictionaryRepository.normalizeDescription(
+            payload.description,
+        );
         await conn.execute(
-            'UPDATE SkillsDictionary SET Name = ?, NameNormalized = ? WHERE Id = ?',
-            [payload.name.trim(), nameNormalized, skillId],
+            'UPDATE SkillsDictionary SET Name = ?, NameNormalized = ?, Description = ? WHERE Id = ?',
+            [payload.name.trim(), nameNormalized, description, skillId],
         );
 
         const updated = await this.getByIdInConn(conn, skillId);
@@ -98,9 +125,9 @@ export default class SkillsDictionaryRepository extends BaseRepository<SkillDict
     private async getByIdInConn(
         conn: mysql.PoolConnection,
         skillId: number,
-    ): Promise<SkillDictionaryRecord | undefined> {
+    ): Promise<SkillDictionary | undefined> {
         const [rows] = await conn.query<any[]>(
-            'SELECT Id, Name, NameNormalized FROM SkillsDictionary WHERE Id = ? LIMIT 1',
+            'SELECT Id, Name, NameNormalized, Description FROM SkillsDictionary WHERE Id = ? LIMIT 1',
             [skillId],
         );
         const row = rows[0];
