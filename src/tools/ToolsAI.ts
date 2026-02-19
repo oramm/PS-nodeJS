@@ -185,6 +185,25 @@ export default class ToolsAI {
     }
 
     /**
+     * Extract _model and _usage metadata from an OpenAI completion response
+     */
+    private static extractCompletionMeta(completion: any): {
+        _model?: string;
+        _usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    } {
+        const _model: string | undefined = completion?.model;
+        const rawUsage = completion?.usage;
+        const _usage = rawUsage
+            ? {
+                  promptTokens: rawUsage.prompt_tokens as number,
+                  completionTokens: rawUsage.completion_tokens as number,
+                  totalTokens: rawUsage.total_tokens as number,
+              }
+            : undefined;
+        return { _model, _usage };
+    }
+
+    /**
      * Call OpenAI chat completion with retry on rate limits
      */
     static async callOpenAiWithRetry(
@@ -213,7 +232,7 @@ export default class ToolsAI {
      */
     static async analyzeDocument(
         file: Express.Multer.File
-    ): Promise<{ aiResult: AiAnalyzeResult; text: string }> {
+    ): Promise<{ aiResult: AiAnalyzeResult; text: string; _model?: string; _usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
         const text = await this.extractTextFromFile(file);
         //console.log('Zawartość przesłanego pliku :', text);
         if (text.trim().length < 1)
@@ -294,7 +313,8 @@ export default class ToolsAI {
         if (!responseContent) throw new Error('OpenAI returned empty response');
 
         const aiResult = JSON.parse(responseContent);
-        return { aiResult, text };
+        const { _model, _usage } = this.extractCompletionMeta(completion);
+        return { aiResult, text, _model, _usage };
     }
 
     /**
@@ -385,21 +405,15 @@ ${text.substring(0, 6000)}
                   }))
             : [];
 
-        const usage = completion.usage;
+        const { _model, _usage } = this.extractCompletionMeta(completion);
 
         return {
             experiences,
             educations,
             skills,
             text,
-            _model: completion.model,
-            _usage: usage
-                ? {
-                      promptTokens: usage.prompt_tokens,
-                      completionTokens: usage.completion_tokens,
-                      totalTokens: usage.total_tokens,
-                  }
-                : undefined,
+            _model,
+            _usage,
         };
     }
 }

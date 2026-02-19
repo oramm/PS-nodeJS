@@ -867,7 +867,7 @@ export default class LettersController extends BaseController<
      * @returns obiekt z polami { value, confidence } dla każdego rozpoznanego pola
      */
     static async analyzeDocument(file: Express.Multer.File): Promise<any> {
-        const { aiResult, text } = await ToolsAI.analyzeDocument(file);
+        const { aiResult, text, _model, _usage } = await ToolsAI.analyzeDocument(file);
 
         // Normalize AI output into frontend-friendly schema:
         const normalizeValue = (v: any) => {
@@ -915,6 +915,8 @@ export default class LettersController extends BaseController<
             _extractedText: text,
             _aiRaw: aiResult,
             _analyzedFile: analyzedFile,
+            _model,
+            _usage,
         };
     }
 }
