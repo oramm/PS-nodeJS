@@ -347,3 +347,18 @@ Po napisaniu lub zmodyfikowaniu kodu źródłowego:
 5. WYJĄTKI (można pominąć review):
    - Zmiany TYLKO w plikach *.md (dokumentacja)
    - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
+
+## Factory: Cross-Tool Adapter
+
+Gdy pracujesz w trybie Dark Factory, stosuj wspolny adapter procesu:
+- `factory/TOOL-ADAPTERS.md` (kanoniczny workflow multi-tool)
+- `factory/adapters/codex.md` (skrot dla Codex)
+- `factory/adapters/claude-code.md` (skrot dla Claude Code)
+- `factory/adapters/copilot-vscode.md` (skrot dla Copilot w VS Code)
+
+Context Gate v1 (Low-Context First):
+- Start sesji tylko z Warstwa A:
+  - `factory/CONCEPT.md`
+  - `factory/TOOL-ADAPTERS.md`
+  - `factory/prompts/reviewer.md`
+- Warstwy B/C doladowuj selektywnie, nie domyslnie.

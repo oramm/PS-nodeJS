@@ -1,0 +1,34 @@
+# Task Plan Context Template (Context Gate v1)
+
+task_id: ""
+task_name: ""
+task_type: "feature|refactor|mixed|architecture|ops"
+
+acceptance_criteria:
+  - ""
+
+# Required context only (max 5-8 files)
+required_context_files:
+  - "factory/CONCEPT.md"
+  - "factory/TOOL-ADAPTERS.md"
+  - "factory/prompts/reviewer.md"
+
+# Optional context loaded only if needed
+optional_context_files:
+  - ""
+
+# Soft limit: 12000-20000
+context_budget_tokens: 12000
+
+context_gate_layer_b:
+  architecture_backend: false
+  testing: false
+  api_contract: false
+  env_deploy_db: false
+
+layer_c_justification: ""
+
+delivery_balance:
+  feature_task_in_iteration: true
+  refactor_task_in_iteration: true
+  notes: ""

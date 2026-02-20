@@ -1,79 +1,79 @@
 # Factory Build Status
 
-## Stan: Warstwa 1 — Reviewer Agent DONE
+## Stan: Warstwa 1 - Reviewer Agent DONE
 ## Data: 2026-02-20
 
-## Architektura systemu:
-- SERWER: PS-nodeJS — Express.js/TypeScript backend z Clean Architecture, MariaDB, integracja Google APIs/KSeF
-- KLIENT: ENVI.ProjectSite — React 18 + Bootstrap 5 + react-hook-form, Webpack, Vitest, GitHub Pages
+## Architektura systemu
+- SERWER: PS-nodeJS - Express.js/TypeScript backend z Clean Architecture, MariaDB, integracje Google APIs/KSeF.
+- KLIENT: ENVI.ProjectSite - React 18 + Bootstrap 5 + react-hook-form, Webpack, Vitest, GitHub Pages.
 
-## Co zrobiono:
-- [x] Audyt struktury serwerowej (332 pliki TS, ~7600 LOC, 253 endpointy)
-- [x] Analiza CLAUDE.md (327 linii, 15+ sekcji, dobrze zorganizowany)
-- [x] Dokumentacja wzorców kodu serwera (Singleton Controller, BaseRepository, Validator, withAuth)
-- [x] Inwentaryzacja narzędzi jakości serwera (Jest 22 testy, Prettier, TSC strict, brak ESLint/CI/CD)
-- [x] Mapa API (253 endpointów REST, JSON, express-session + Google OAuth2)
-- [x] Analiza git (19 branchy, mieszany format commitów PL/EN)
-- [x] Audyt klienta (272 pliki TS/TSX, ~25800 LOC, React 18 + Bootstrap 5)
+## Co zrobiono
+- [x] Audyt struktury serwerowej (332 pliki TS, ok. 7600 LOC, 253 endpointy)
+- [x] Analiza `CLAUDE.md` (327 linii, 15+ sekcji)
+- [x] Dokumentacja wzorcow kodu serwera (Singleton Controller, BaseRepository, Validator, withAuth)
+- [x] Inwentaryzacja narzedzi jakosci serwera (Jest, Prettier, TSC strict)
+- [x] Mapa API serwera
+- [x] Analiza git (branching + konwencje commitow)
+- [x] Audyt klienta (272 pliki TS/TSX, ok. 25800 LOC)
 - [x] Analiza stack klienta (Webpack 5, Vitest, react-hook-form + yup, HashRouter)
-- [x] Dokumentacja wzorców klienta (RepositoryReact, GeneralModal, FilterableTable, *Api.ts)
-- [x] Inwentaryzacja testów klienta (6 plików, ~2% pokrycia, brak ESLint/Prettier/CI)
-- [x] Mapa systemu serwer↔klient (endpointy, typy, auth flow, data flow)
+- [x] Dokumentacja wzorcow klienta (RepositoryReact, GeneralModal, FilterableTable, `*Api.ts`)
+- [x] Inwentaryzacja testow klienta
+- [x] Mapa systemu serwer <-> klient (`factory/SYSTEM-MAP.md`)
 - [x] Reviewer agent (warstwa 1)
+- [x] Koncepcja Dark Factory (`factory/CONCEPT.md`)
+- [x] Diagramy koncepcji (`factory/CONCEPT-DIAGRAMS.md`)
+- [x] Aktualizacja mapy S.O.T. (`factory/DOCS-MAP.md`)
+- [x] Cross-tool adaptery (`factory/TOOL-ADAPTERS.md`, `factory/adapters/*`, `.github/copilot-instructions.md`)
+- [x] Context Gate v1 (Low-Context First) + budget kontekstu
+- [x] Szablon planowania kontekstu taska (`factory/templates/task-plan-context.yaml`)
 - [ ] Test pipeline (warstwa 2)
 - [ ] Planner (warstwa 3)
 - [ ] Auto-docs (warstwa 4)
 
-## Warstwa 1 — Reviewer Agent
+## Warstwa 1 - Reviewer Agent
 
-### Co powstało:
-1. `factory/prompts/reviewer.md` — prompt reviewera (152 LOC), konkretny dla ENVI stack
-2. `factory/DOCS-MAP.md` — mapa źródeł prawdy (9 kategorii, S.O.T. per kategoria)
-3. `CLAUDE.md` — sekcja "Factory: Review Process" (żelazna zasada review)
+### Co powstalo
+1. `factory/prompts/reviewer.md` - prompt reviewera (konkretny dla ENVI stack)
+2. `factory/DOCS-MAP.md` - mapa zrodel prawdy (S.O.T.)
+3. `CLAUDE.md` - sekcja "Factory: Review Process"
 
-### Test review loop (healthCheck na ToolsDb.ts):
-- **VERDICT: APPROVE** (z uwagami MEDIUM + LOW)
-- **Co złapał:**
-  - [MEDIUM] Kruche internal API (`pool.pool.config.connectionLimit`) — nie publiczne API mysql2
-  - [LOW] Cichy catch bez logowania — niespójne z resztą klasy
-- **Co pochwalił:**
-  - Poprawne try/finally z conn.release()
-  - Użycie istniejącego getPoolConnectionWithTimeout()
-  - Spójność stylu z resztą klasy
-- **Zmiana testowa cofnięta** (git checkout)
+### Test review loop (healthCheck na `ToolsDb.ts`)
+- VERDICT: `APPROVE` (z uwagami MEDIUM + LOW)
+- Wykryte:
+  - [MEDIUM] kruche internal API (`pool.pool.config.connectionLimit`)
+  - [LOW] cichy catch bez logowania
+- Pozytywy:
+  - poprawne `try/finally` z `conn.release()`
+  - uzycie istniejacego helpera polaczenia
+  - spojnosc ze stylem klasy
 
-### Obserwacje do kalibracji:
-- Reviewer dobrze rozumie kontekst projektu (zauważył spójność z istniejącymi wzorcami)
-- Trafnie identyfikuje kruche API i ciche błędy
-- Nie zgłaszał false positives (nie narzucał obcego stylu)
-- Format odpowiedzi zgodny z promptem
-- Czas review: ~25s (akceptowalny)
-- Potencjalna kalibracja: reviewer mógłby być bardziej rygorystyczny wobec `any` typów
+## Update tej iteracji: Koncepcja i lekki audyt spojnosci
 
-## Kluczowe obserwacje:
+Zakres wykonany:
+- Uzupelniono `factory/CONCEPT.md` jako kanoniczny opis procesu Dark Factory.
+- Dodano `factory/CONCEPT-DIAGRAMS.md` (Mermaid, wersja human-friendly).
+- Zachowano role `factory/DOCS-MAP.md` jako mapy S.O.T.
+- Spieto cross-linki miedzy `CONCEPT`, `STATUS`, `DOCS-MAP`.
+- Potwierdzono brak konfliktu koncepcji z `factory/prompts/reviewer.md`.
+- Dodano adaptery procesu dla Codex/Claude/Copilot.
+- Dodano Context Gate v1 (Warstwa A/B/C) i soft budget kontekstu.
+- Dodano interfejs planowania taska: `required_context_files`, `optional_context_files`, `context_budget_tokens`.
+- Hooki/skrypty oznaczone jako etap opcjonalny po 2-3 sesjach pilota.
+
+## Kluczowe obserwacje (stan bazowy)
 
 ### Serwer
-- Architektura Clean Architecture jest DOBRZE UDOKUMENTOWANA (~3300 LOC instrukcji AI)
-- Brak ESLint, CI/CD, pre-commit hooks — duża przestrzeń na automatyzację
-- Testy istnieją (22 pliki), ale pokrycie nierówne — contractMeetingNotes najlepiej
-- Dokumentacja obszerna (~9200 LOC MD), ale rozrzucona — teraz zmapowana w DOCS-MAP.md
-- Session secret prawdopodobnie hardcoded — potencjalny problem bezpieczeństwa
+- Clean Architecture jest dobrze opisana i wdrazana.
+- Najwieksza przestrzen automatyzacji: CI/CD, lintery, pre-commit.
 
 ### Klient
-- BussinesObjectSelectors.tsx (1,626 LOC) — God Component, kandydat do rozbicia
-- Brak ESLint/Prettier/CI — zero automatyzacji jakości
-- Dwa wzorce API (legacy RepositoryReact + nowe *Api.ts) — migracja w toku
-- Typy utrzymywane ręcznie osobno od serwera — ryzyko dryfu
-- ErrorBoundary nie jest prawdziwym React error boundary (window.error listener)
-- Bundle ~7MB, brak code splitting
-- Hardcoded production URL w kodzie
+- Widoczne miejsca ryzyka utrzymaniowego (duze komponenty, niespojny styl API).
+- Niski poziom automatyzacji jakosci.
 
 ### Cross-system
-- Konwencja `_` prefix spójna po obu stronach
-- Brak centralnego auth middleware na serwerze (klient zabezpiecza trasy client-side)
-- REST konwencje spójne (POST/find, POST/add, PUT/edit, DELETE)
-- Cookie session działa poprawnie (credentials: "include" ↔ connect.sid)
+- Konwencja `_` prefix jest spojna po obu stronach.
+- Typy klient/serwer utrzymywane recznie (ryzyko dryfu).
 
-## Następny krok:
-Sesja 2 — Test Pipeline
-Prompt: patrz factory/PROMPTS-SESSIONS.md
+## Nastepny krok
+Sesja 2 - Test Pipeline  
+Prompt: `factory/PROMPTS-SESSIONS.md`
