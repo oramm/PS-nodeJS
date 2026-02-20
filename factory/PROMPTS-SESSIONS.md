@@ -1,86 +1,65 @@
 # Prompty na kolejne sesje fabryki
 
-## Sesja 0b: Audyt Klienta
+## Sesja 0b: Audyt Klienta ✅ DONE
+
+```
+[wykonano — wyniki w factory/AUDIT-CLIENT.md i factory/SYSTEM-MAP.md]
+```
+
+## Sesja 1: Reviewer Agent
 
 ```
 Kontynuuję wdrażanie "Dark Code Factory".
 Metoda: warstwowa ("na cebulkę") — jedna warstwa na raz.
 
 KONTEKST:
-- SERWER (PS-nodeJS) został już zaudytowany → przeczytaj factory/AUDIT-SERVER.md
-- Teraz audytujemy KLIENTA (frontend)
-- Klient: C:\Apache24\htdocs\ENVI.ProjectSite
-
-WAŻNE: Przeczytaj NAJPIERW plik C:\Apache24\htdocs\PS-nodeJS\factory\AUDIT-SERVER.md
-żeby znać kontekst serwera (API, formaty danych, auth).
+- Serwer zaudytowany → factory/AUDIT-SERVER.md
+- Klient zaudytowany → factory/AUDIT-CLIENT.md
+- Mapa systemu → factory/SYSTEM-MAP.md
+- Status → factory/STATUS.md
 
 ═══════════════════════════════════════════════════════
-WARSTWA 0b: AUDYT KLIENTA
+WARSTWA 1: REVIEWER AGENT
 ═══════════════════════════════════════════════════════
 
-WYKONAJ PO KOLEI:
+Przeczytaj NAJPIERW wszystkie pliki factory/*.md żeby znać pełny kontekst.
 
-1. STRUKTURA PROJEKTU KLIENTA
-   - Wylistuj główne katalogi (drzewo 2 poziomy)
-   - Policz pliki źródłowe, szacunkowe LOC
-   - Zidentyfikuj: framework UI, bundler, state management, routing
+CEL: Stworzyć agenta-reviewera, który automatycznie sprawdza kod
+pod kątem spójności z architekturą i konwencjami projektu.
 
-2. STACK TECHNOLOGICZNY
-   - package.json: zależności, scripts
-   - Konfiguracja TS/JS
-   - Bundler config (webpack/vite/inne)
-   - Formatter/linter
+ZAKRES REVIEWERA:
 
-3. WZORCE KODU KLIENTA
-   Przejrzyj 5-8 różnych plików.
-   Zanotuj:
-   - Struktura komponentów (jak zorganizowane?)
-   - Jak wywoływane API serwera?
-   - State management
-   - Routing
-   - Nazewnictwo (konwencje)
-   - Error handling po stronie klienta
+1. SERWER (PS-nodeJS) — Clean Architecture compliance:
+   - Flow: Router → Validator → Controller → Repository → Model
+   - Singleton pattern w Controllerach
+   - Brak logiki biznesowej w Repository
+   - Brak I/O w Model
+   - Standardowe nazwy CRUD (find, addFromDto, add, editFromDto, edit, delete)
+   - Konwencja _ prefix dla pól relacyjnych
 
-4. POŁĄCZENIE SERWER ↔ KLIENT
-   Na podstawie OBIE stron:
-   - Jak klient wywołuje endpointy serwera?
-   - Czy jest wspólna definicja typów?
-   - Jak obsługiwana sesja/auth po stronie klienta?
-   - Jak obsługiwane pliki/upload?
-   - Czy są jakieś niespójności w konwencjach?
+2. KLIENT (ENVI.ProjectSite) — wzorce i jakość:
+   - God Components (pliki > 500 LOC)
+   - Spójność wzorca API (RepositoryReact vs *Api.ts)
+   - Poprawność typów w bussinesTypes.d.ts (duplikaty, unused imports)
+   - Error handling (fetchWithRetry wszędzie?)
+   - Poprawność ErrorBoundary
 
-5. TESTY I JAKOŚĆ (KLIENT)
-   - Czy są testy? Gdzie?
-   - Linter? Formatter?
-   - Build pipeline?
+3. CROSS-SYSTEM — spójność klient↔serwer:
+   - Drift typów (interfejsy klienta vs model serwera)
+   - Matchowanie tras (actionRoutes klienta vs endpointy serwera)
+   - Konwencje nazewnictwa pól
 
-6. ZAPIS WYNIKÓW
-   a) Stwórz C:\Apache24\htdocs\PS-nodeJS\factory\AUDIT-CLIENT.md
-      (pełne wyniki, analogicznie do AUDIT-SERVER.md)
+DELIVERABLES:
+a) Skrypt/agent który wykonuje powyższe sprawdzenia
+b) Raport z wynikami
+c) Aktualizacja factory/STATUS.md
 
-   b) Stwórz C:\Apache24\htdocs\PS-nodeJS\factory\SYSTEM-MAP.md
-      Mapa połączeń serwer ↔ klient:
-      - Które endpointy serwera używane przez klienta
-      - Wspólne typy/interfejsy
-      - Flow autentykacji end-to-end
-      - Diagram przepływu danych
-
-   c) Zaktualizuj factory/STATUS.md
-      (odznacz kroki 0b, dodaj rekomendacje)
-
-   d) Uzupełnij prompt na sesję 1 w PROMPTS-SESSIONS.md
-
-7. NIE MODYFIKUJ istniejącego kodu.
-   Tylko CZYTAJ i DOKUMENTUJ.
-
-8. COMMIT: "docs(factory): warstwa 0b — audyt klienta"
+NIE MODYFIKUJ istniejącego kodu aplikacji.
+COMMIT: "feat(factory): warstwa 1 — reviewer agent"
 ```
 
-## Sesja 1: Reviewer Agent
-[placeholder — uzupełnimy po audycie klienta, gdy będziemy mieć pełny obraz systemu]
-
 ## Sesja 2: Test Pipeline
-[placeholder]
+[placeholder — uzupełnimy po reviewer agent]
 
 ## Sesja 3: Planner
 [placeholder]
