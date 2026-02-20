@@ -1,6 +1,6 @@
 # Factory Build Status
 
-## Stan: Warstwa 0b — Audyt Klienta DONE
+## Stan: Warstwa 1 — Reviewer Agent DONE
 ## Data: 2026-02-20
 
 ## Architektura systemu:
@@ -19,10 +19,36 @@
 - [x] Dokumentacja wzorców klienta (RepositoryReact, GeneralModal, FilterableTable, *Api.ts)
 - [x] Inwentaryzacja testów klienta (6 plików, ~2% pokrycia, brak ESLint/Prettier/CI)
 - [x] Mapa systemu serwer↔klient (endpointy, typy, auth flow, data flow)
-- [ ] Reviewer agent (warstwa 1)
+- [x] Reviewer agent (warstwa 1)
 - [ ] Test pipeline (warstwa 2)
 - [ ] Planner (warstwa 3)
 - [ ] Auto-docs (warstwa 4)
+
+## Warstwa 1 — Reviewer Agent
+
+### Co powstało:
+1. `factory/prompts/reviewer.md` — prompt reviewera (152 LOC), konkretny dla ENVI stack
+2. `factory/DOCS-MAP.md` — mapa źródeł prawdy (9 kategorii, S.O.T. per kategoria)
+3. `CLAUDE.md` — sekcja "Factory: Review Process" (żelazna zasada review)
+
+### Test review loop (healthCheck na ToolsDb.ts):
+- **VERDICT: APPROVE** (z uwagami MEDIUM + LOW)
+- **Co złapał:**
+  - [MEDIUM] Kruche internal API (`pool.pool.config.connectionLimit`) — nie publiczne API mysql2
+  - [LOW] Cichy catch bez logowania — niespójne z resztą klasy
+- **Co pochwalił:**
+  - Poprawne try/finally z conn.release()
+  - Użycie istniejącego getPoolConnectionWithTimeout()
+  - Spójność stylu z resztą klasy
+- **Zmiana testowa cofnięta** (git checkout)
+
+### Obserwacje do kalibracji:
+- Reviewer dobrze rozumie kontekst projektu (zauważył spójność z istniejącymi wzorcami)
+- Trafnie identyfikuje kruche API i ciche błędy
+- Nie zgłaszał false positives (nie narzucał obcego stylu)
+- Format odpowiedzi zgodny z promptem
+- Czas review: ~25s (akceptowalny)
+- Potencjalna kalibracja: reviewer mógłby być bardziej rygorystyczny wobec `any` typów
 
 ## Kluczowe obserwacje:
 
@@ -30,7 +56,7 @@
 - Architektura Clean Architecture jest DOBRZE UDOKUMENTOWANA (~3300 LOC instrukcji AI)
 - Brak ESLint, CI/CD, pre-commit hooks — duża przestrzeń na automatyzację
 - Testy istnieją (22 pliki), ale pokrycie nierówne — contractMeetingNotes najlepiej
-- Dokumentacja obszerna (~9200 LOC MD), ale rozrzucona (root MD, docs/team, .github/instructions)
+- Dokumentacja obszerna (~9200 LOC MD), ale rozrzucona — teraz zmapowana w DOCS-MAP.md
 - Session secret prawdopodobnie hardcoded — potencjalny problem bezpieczeństwa
 
 ### Klient
@@ -48,14 +74,6 @@
 - REST konwencje spójne (POST/find, POST/add, PUT/edit, DELETE)
 - Cookie session działa poprawnie (credentials: "include" ↔ connect.sid)
 
-## Rekomendacja dla sesji 1 (Reviewer Agent):
-Agent powinien skupić się na:
-1. Spójność typów klient↔serwer (wykrywanie dryfu)
-2. Wzorce Clean Architecture na serwerze (łamanie reguł)
-3. God Components na kliencie (ponad 500 LOC)
-4. Brak auth guard na serwerze
-5. Delete bez retry na kliencie
-
 ## Następny krok:
-Sesja 1 — Reviewer Agent
+Sesja 2 — Test Pipeline
 Prompt: patrz factory/PROMPTS-SESSIONS.md

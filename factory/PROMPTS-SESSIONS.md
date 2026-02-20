@@ -6,9 +6,18 @@
 [wykonano — wyniki w factory/AUDIT-CLIENT.md i factory/SYSTEM-MAP.md]
 ```
 
-## Sesja 1: Reviewer Agent
+## Sesja 1: Reviewer Agent ✅ DONE
 
-```
+**Podsumowanie:**
+- Stworzono `factory/prompts/reviewer.md` — prompt reviewera (152 LOC, konkretny dla ENVI stack)
+- Stworzono `factory/DOCS-MAP.md` — mapa źródeł prawdy (9 kategorii)
+- Dodano sekcję "Factory: Review Process" do `CLAUDE.md`
+- Test na żywo: healthCheck() na ToolsDb.ts → APPROVE z 2 uwagami (MEDIUM: kruche internal API, LOW: cichy catch)
+- Reviewer poprawnie rozumie kontekst projektu, nie generuje false positives
+
+## Sesja 2: Test Pipeline
+
+````
 Kontynuuję wdrażanie "Dark Code Factory".
 Metoda: warstwowa ("na cebulkę") — jedna warstwa na raz.
 
@@ -16,53 +25,28 @@ KONTEKST:
 - Serwer zaudytowany → factory/AUDIT-SERVER.md
 - Klient zaudytowany → factory/AUDIT-CLIENT.md
 - Mapa systemu → factory/SYSTEM-MAP.md
+- Mapa dokumentacji → factory/DOCS-MAP.md
 - Status → factory/STATUS.md
+- Reviewer → factory/prompts/reviewer.md
+
+Przeczytaj factory/STATUS.md i factory/DOCS-MAP.md
+żeby znać aktualny stan.
 
 ═══════════════════════════════════════════════════════
-WARSTWA 1: REVIEWER AGENT
+WARSTWA 2: TEST PIPELINE
 ═══════════════════════════════════════════════════════
 
-Przeczytaj NAJPIERW wszystkie pliki factory/*.md żeby znać pełny kontekst.
+Cel: Każda zmiana w kodzie jest automatycznie testowana
+PRZED review. Subagent reviewer dostaje wynik testów
+jako dodatkowy kontekst.
 
-CEL: Stworzyć agenta-reviewera, który automatycznie sprawdza kod
-pod kątem spójności z architekturą i konwencjami projektu.
-
-ZAKRES REVIEWERA:
-
-1. SERWER (PS-nodeJS) — Clean Architecture compliance:
-   - Flow: Router → Validator → Controller → Repository → Model
-   - Singleton pattern w Controllerach
-   - Brak logiki biznesowej w Repository
-   - Brak I/O w Model
-   - Standardowe nazwy CRUD (find, addFromDto, add, editFromDto, edit, delete)
-   - Konwencja _ prefix dla pól relacyjnych
-
-2. KLIENT (ENVI.ProjectSite) — wzorce i jakość:
-   - God Components (pliki > 500 LOC)
-   - Spójność wzorca API (RepositoryReact vs *Api.ts)
-   - Poprawność typów w bussinesTypes.d.ts (duplikaty, unused imports)
-   - Error handling (fetchWithRetry wszędzie?)
-   - Poprawność ErrorBoundary
-
-3. CROSS-SYSTEM — spójność klient↔serwer:
-   - Drift typów (interfejsy klienta vs model serwera)
-   - Matchowanie tras (actionRoutes klienta vs endpointy serwera)
-   - Konwencje nazewnictwa pól
-
-DELIVERABLES:
-a) Skrypt/agent który wykonuje powyższe sprawdzenia
-b) Raport z wynikami
-c) Aktualizacja factory/STATUS.md
-
-NIE MODYFIKUJ istniejącego kodu aplikacji.
-COMMIT: "feat(factory): warstwa 1 — reviewer agent"
-```
-
-## Sesja 2: Test Pipeline
-[placeholder — uzupełnimy po reviewer agent]
+[do uzupełnienia po zatwierdzeniu kierunku warstwy 2]
+````
 
 ## Sesja 3: Planner
+
 [placeholder]
 
 ## Sesja 4: Auto-docs
+
 [placeholder]

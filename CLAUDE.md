@@ -325,3 +325,25 @@ Detailed database architecture guidelines are in `docs/team/operations/db-change
 - Memory storage configured globally
 - Route-level middleware for multipart/form-data parsing
 - 10MB limit for JSON and file uploads
+
+## Factory: Review Process
+
+Mapa źródeł prawdy: `factory/DOCS-MAP.md` — sprawdź ZANIM szukasz informacji o projekcie.
+
+**ŻELAZNA ZASADA: Nie kończ zadania bez review.**
+
+Po napisaniu lub zmodyfikowaniu kodu źródłowego:
+
+1. Uruchom SUBAGENTA z promptem z `factory/prompts/reviewer.md`
+2. Przekaż mu TYLKO zmienione pliki (git diff)
+3. Subagent pracuje w IZOLOWANYM kontekście (fresh eyes)
+4. Czekaj na VERDICT:
+   - APPROVE → kontynuuj (commit / następny krok)
+   - REQUEST_CHANGES →
+     a) Napraw KAŻDY CRITICAL i HIGH
+     b) Rozważ MEDIUM
+     c) Ponów review
+     d) Max 3 rundy → jeśli nadal CHANGES → zapytaj człowieka
+5. WYJĄTKI (można pominąć review):
+   - Zmiany TYLKO w plikach *.md (dokumentacja)
+   - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
