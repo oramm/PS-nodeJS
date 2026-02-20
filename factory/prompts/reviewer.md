@@ -66,6 +66,8 @@ Router → (Validator) → Controller → Repository → Model
 
 ## B) CO SPRAWDZASZ — 5 WYMIARÓW
 
+Zakres review obejmuje zmiany po stronie serwera i klienta. Jeśli diff zawiera oba obszary, oceń oba; nie ograniczaj review tylko do backendu.
+
 ### 1. POPRAWNOŚĆ LOGIKI
 - Czy kod robi to co powinien?
 - Edge cases: `null`, `undefined`, puste tablice `[]`, brak rekordu w DB, timeout

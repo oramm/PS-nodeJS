@@ -46,6 +46,189 @@ Copy the block below for each change:
 
 ## Entries
 
+
+## 2026-02-20 - Public Profile Submission configurable link recovery cooldown
+
+### 1. Scope
+
+- Replaced hardcoded link recovery cooldown with environment-based configuration in public profile submission flow.
+- Kept safe fallback behavior: invalid or missing env value defaults to `60` seconds.
+
+### 2. DB impact
+
+- none.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `PUBLIC_PROFILE_SUBMISSION_LINK_RECOVERY_COOLDOWN_SECONDS`
+
+### 4. Heroku impact
+
+- Config vars: required only if different value than default is needed.
+- Restart/release steps:
+    - set `PUBLIC_PROFILE_SUBMISSION_LINK_RECOVERY_COOLDOWN_SECONDS` if needed,
+    - restart backend process to apply env change.
+
+### 5. Developer actions
+
+- Pull latest code.
+- Run `yarn build`.
+- Optionally set cooldown to lower value locally for faster manual testing.
+
+### 6. Verification
+
+- `POST /v2/persons/:personId/public-profile-submissions/link` returns `429` when retried before cooldown elapsed.
+- After configured cooldown passes, endpoint returns a fresh link response.
+
+### 7. Rollback
+
+- Roll back code changes in:
+    - `src/persons/publicProfileSubmission/PublicProfileSubmissionController.ts`
+    - `.env.example`
+    - `docs/team/operations/post-change-checklist.md`
+
+### 8. Owner
+
+- Public Profile Submission follow-up session (Codex + repository owner).
+
+## 2026-02-20 - Public Profile Submission link resend + last event metadata
+
+### 1. Scope
+
+- Extended internal link-create flow for public profile submission to optionally send link email immediately (`sendNow`) and accept explicit recipient (`recipientEmail`).
+- Persisted and exposed last link event metadata in submission payloads (who/when/to whom/status of last action).
+- Kept simple process model: no new audit table, only last known event snapshot.
+
+### 2. DB impact
+
+- New schema migration:
+    - `src/persons/migrations/005_add_public_profile_submission_last_link_event.sql`
+- Altered table:
+    - `PublicProfileSubmissions`
+- Added columns:
+    - `LastLinkRecipientEmail` (`VARCHAR(255) NULL`)
+    - `LastLinkEventAt` (`DATETIME NULL`)
+    - `LastLinkEventType` (`VARCHAR(32) NULL`)
+    - `LastLinkEventByPersonId` (`INT NULL`, FK to `Persons.Id`)
+- Added indexes for last link event lookup/by-person.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps:
+    - apply DB migration `005_add_public_profile_submission_last_link_event.sql` before deploying backend code that reads new columns,
+    - ensure SMTP config is present for `sendNow` path.
+
+### 5. Developer actions
+
+- Apply migration in target DB environment.
+- Run `yarn build`.
+- Run targeted verification for persons public-profile-submission endpoints.
+
+### 6. Verification
+
+- Internal endpoint `POST /v2/persons/:personId/public-profile-submissions/link`:
+    - with `sendNow=false` still returns generated URL,
+    - with `sendNow=true` sends mail to provided/fallback recipient,
+    - response includes dispatch status and recipient.
+- Internal search/details endpoints expose:
+    - `lastLinkRecipientEmail`,
+    - `lastLinkEventAt`,
+    - `lastLinkEventType`,
+    - `lastLinkEventByPersonId`.
+
+### 7. Rollback
+
+- Roll back code changes in:
+    - `src/persons/publicProfileSubmission/*`
+    - `src/types/types.d.ts`
+- DB rollback (if safe):
+    - drop FK/indexes and remove `LastLink*` columns from `PublicProfileSubmissions`.
+
+### 8. Owner
+
+- Public Profile Submission follow-up session (Codex + repository owner).
+
+## 2026-02-19 - Public Profile Submission V1 (backend)
+
+### 1. Scope
+
+- Added backend module for public profile submission flow with tokenized link, email verification code, public draft, public analyze-file, submit, and internal per-item review.
+- Added internal endpoints for staff: link generation, submission search/detail, item review, optional close.
+- Added public endpoints: token resolve, verify request/confirm, draft read/write, analyze-file, submit.
+
+### 2. DB impact
+
+- New schema migration:
+    - `src/persons/migrations/004_create_public_profile_submission_v1.sql`
+- Added tables:
+    - `PublicProfileSubmissionLinks`
+    - `PublicProfileSubmissions`
+    - `PublicProfileSubmissionItems`
+    - `PublicProfileSubmissionVerifyChallenges`
+    - `PublicProfileSubmissionSessions`
+- Added indexes/constraints for token hash uniqueness, person+status lookups, expiry queries, submission+item status queries.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `PUBLIC_PROFILE_SUBMISSION_BASE_URL`
+    - `PUBLIC_PROFILE_SUBMISSION_LINK_TTL_DAYS`
+    - `PUBLIC_PROFILE_SUBMISSION_VERIFY_CODE_TTL_MINUTES`
+    - `PUBLIC_PROFILE_SUBMISSION_VERIFY_CODE_MAX_ATTEMPTS`
+    - `PUBLIC_PROFILE_SUBMISSION_SESSION_TTL_HOURS`
+
+### 4. Heroku impact
+
+- Config vars: set new `PUBLIC_PROFILE_SUBMISSION_*` vars as needed (defaults are in code).
+- Restart/release steps:
+    - apply DB migration `004_create_public_profile_submission_v1.sql` before enabling frontend flow,
+    - ensure SMTP vars are configured for verify email delivery,
+    - restart backend dyno/process after env changes.
+
+### 5. Developer actions
+
+- Apply migration in target DB environment.
+- Run `yarn build`.
+- Run targeted tests:
+    - `yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand`
+
+### 6. Verification
+
+- Contract smoke:
+    - internal link create returns token/url/expiresAt,
+    - verify-code request sends email and stores challenge,
+    - verify-code confirm returns `publicSessionToken`,
+    - draft GET/PUT requires bearer token and persists items,
+    - analyze-file endpoint returns shape compatible with existing profile import preview,
+    - review `ACCEPT/REJECT` updates item status and auto-closes submission when no pending items.
+- Build/test:
+    - `yarn build` passes,
+    - targeted module test passes.
+
+### 7. Rollback
+
+- Revert backend module files under:
+    - `src/persons/publicProfileSubmission/*`
+    - `src/persons/migrations/004_create_public_profile_submission_v1.sql`
+    - `src/index.ts` router registration
+    - `.env.example` added vars
+    - `src/types/types.d.ts` new DTO/types
+- DB rollback (if needed and safe):
+    - drop new `PublicProfileSubmission*` tables in dependency order.
+
+### 8. Owner
+
+- Public Profile Submission backend session (Codex + repository owner).
+
 ## 2026-02-18 - Persons V2 skills dictionary description + M-C-R alignment
 
 ### 1. Scope

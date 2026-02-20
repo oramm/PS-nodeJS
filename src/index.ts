@@ -164,6 +164,7 @@ require('./persons/educations/EducationRouters');
 require('./persons/skills/SkillsDictionaryRouters');
 require('./persons/profileSkills/ProfileSkillRouters');
 require('./persons/profileImport/PersonProfileImportRouters');
+require('./persons/publicProfileSubmission/PublicProfileSubmissionRouters');
 require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');
@@ -173,6 +174,8 @@ require('./costInvoices/CostInvoicesRouter');
 require('./projects/ProjectsRouters');
 
 require('./contracts/ContractsRouters');
+require('./meetings/MeetingsRouters');
+require('./meetings/meetingArrangements/MeetingArrangementsRouters');
 require('./contractMeetingNotes/ContractMeetingNotesRouters');
 require('./contracts/contractTypes/ContractTypesRouters');
 require('./contracts/milestones/MilestonesRouters');

@@ -40,7 +40,13 @@
       "Bash(findstr:*)",
       "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\\\\Import\"\" 2>&1\")",
       "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\"\"\")",
-      "Bash(cmd /c \"dir C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\")"
+      "Bash(cmd /c \"dir C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\")",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git status:*)"
     ]
   }
 }

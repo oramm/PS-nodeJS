@@ -16,9 +16,16 @@
 - `docs/team/onboarding/access-and-secrets.md`
 - `docs/team/runbooks/dev-login.md`
 - `docs/team/runbooks/testing.md`
+- `docs/team/runbooks/public-profile-submission-link-recovery.md`
 - `docs/team/operations/db-changes.md`
 - `docs/team/operations/deployment-heroku.md`
 - `docs/team/operations/post-change-checklist.md`
+- `docs/team/operations/public-profile-submission/plan.md`
+- `docs/team/operations/public-profile-submission/progress.md`
+- `docs/team/operations/public-profile-submission/activity-log.md`
+- `docs/team/operations/contract-meeting-notes/plan.md`
+- `docs/team/operations/contract-meeting-notes/progress.md`
+- `docs/team/operations/contract-meeting-notes/activity-log.md`
 - `docs/team/operations/persons-v2-refactor-plan.md`
 - `docs/team/operations/persons-v2-refactor-progress.md`
 - `docs/team/operations/hr-module-plan.md`

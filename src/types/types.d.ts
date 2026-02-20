@@ -80,7 +80,10 @@ export interface ContractMeetingNoteData extends RepositoryDataItem {
     description?: string | null;
     meetingDate?: string | null;
     protocolGdId?: string | null;
+    gdDocumentId?: string | null;
+    gdDocumentUrl?: string;
     createdByPersonId?: number | null;
+    createdAt?: string;
     _documentEditUrl?: string;
     _contract?: ContractData;
     _createdBy?: PersonData;
@@ -376,6 +379,70 @@ export interface PersonProfileSkillV2Record extends PersonProfileSkillV2Payload 
     id: number;
     personProfileId: number;
     _skill?: SkillDictionaryRecord;
+}
+
+export type PublicProfileSubmissionStatus =
+    | 'DRAFT'
+    | 'SUBMITTED'
+    | 'CLOSED'
+    | 'EXPIRED';
+
+export type PublicProfileItemType = 'EXPERIENCE' | 'EDUCATION' | 'SKILL';
+export type PublicProfileItemStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface PublicSubmissionItemDto {
+    id: number;
+    itemType: PublicProfileItemType;
+    itemStatus: PublicProfileItemStatus;
+    payload?: any;
+    acceptedTargetId?: number;
+    reviewedByPersonId?: number;
+    reviewedAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface PublicSubmissionDraftPayload {
+    experiences?: Array<
+        PersonProfileExperienceV2Payload & {
+            id?: number;
+            status?: PublicProfileItemStatus;
+        }
+    >;
+    educations?: Array<
+        PersonProfileEducationV2Payload & {
+            id?: number;
+            status?: PublicProfileItemStatus;
+        }
+    >;
+    skills?: Array<{
+        skillName?: string;
+        levelCode?: string;
+        yearsOfExperience?: number;
+        id?: number;
+        status?: PublicProfileItemStatus;
+    }>;
+}
+
+export interface PublicSubmissionViewDto {
+    id: number;
+    linkId: number;
+    personId: number;
+    email?: string;
+    status: PublicProfileSubmissionStatus;
+    lastLinkRecipientEmail?: string;
+    lastLinkEventAt?: string;
+    lastLinkEventType?: 'LINK_GENERATED' | 'LINK_SENT' | 'LINK_SEND_FAILED';
+    lastLinkEventByPersonId?: number;
+    submittedAt?: string;
+    closedAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    items: PublicSubmissionItemDto[];
+}
+
+export interface PublicReviewDecisionPayload {
+    decision: 'ACCEPT' | 'REJECT';
 }
 
 export interface DocumentTemplateData extends RepositoryDataItem {

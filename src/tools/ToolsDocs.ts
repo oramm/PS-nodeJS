@@ -1,6 +1,5 @@
-import { auth, OAuth2Client } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import { docs_v1, google } from 'googleapis';
-import { start } from 'repl';
 import Tools from './Tools';
 
 export default class ToolsDocs {
@@ -13,7 +12,7 @@ export default class ToolsDocs {
      */
     static async initNamedRangesFromTags(
         auth: OAuth2Client,
-        documentId: string
+        documentId: string,
     ) {
         const document = (await this.getDocument(auth, documentId)).data;
         const tags = this.getTagsForNamedRanges(document);
@@ -22,7 +21,7 @@ export default class ToolsDocs {
         await this.clearNamedRanges(auth, documentId);
         const namedRangesCreated = await this.refreshNamedRangesFromTags(
             auth,
-            documentId
+            documentId,
         );
         return namedRangesCreated;
     }
@@ -32,7 +31,7 @@ export default class ToolsDocs {
      */
     static async refreshNamedRangesFromTags(
         auth: OAuth2Client,
-        documentId: string
+        documentId: string,
     ) {
         console.group('---refreshNamedRangesFromTags::');
         const document = (await this.getDocument(auth, documentId)).data;
@@ -46,13 +45,13 @@ export default class ToolsDocs {
         paragraphs.forEach((element) => {
             if (element.paragraph) {
                 const request = this.createNameRangeRequestFromTextRun(
-                    element.paragraph
+                    element.paragraph,
                 );
                 const name = request?.createNamedRange?.name;
                 let namedRange;
                 if (request && name) {
                     console.log(
-                        `RangeName:: ${name}, s-e: ${request.createNamedRange?.range?.startIndex}-${request.createNamedRange?.range?.endIndex}`
+                        `RangeName:: ${name}, s-e: ${request.createNamedRange?.range?.startIndex}-${request.createNamedRange?.range?.endIndex}`,
                     );
                     namedRange = this.getNamedRangeByName(document, name);
                     if (!namedRange) requests.push(request);
@@ -68,7 +67,7 @@ export default class ToolsDocs {
     }
 
     private static createNameRangeRequestFromTextRun(
-        paragraph: docs_v1.Schema$Paragraph
+        paragraph: docs_v1.Schema$Paragraph,
     ): docs_v1.Schema$Request | undefined {
         const textElements = paragraph.elements;
         const requests = [];
@@ -98,7 +97,7 @@ export default class ToolsDocs {
     static async updateTextRunsInNamedRanges(
         auth: OAuth2Client,
         documentId: string,
-        newData: { rangeName: string; newText: string }[]
+        newData: { rangeName: string; newText: string }[],
     ) {
         const notMatchedData = [...newData];
         const document = (await this.getDocument(auth, documentId)).data;
@@ -106,7 +105,7 @@ export default class ToolsDocs {
         if (document.namedRanges) {
             //this.sortNamedRangesDescending() zwraca nową tablicę posortowaną
             const namedRangesSorted = this.sortNamedRangesDescending(
-                document.namedRanges
+                document.namedRanges,
             );
             console.log(`updateTextRunsInNamedRanges:: sortedNamedRanges:`);
             for (const sharingNameNamedRanges of namedRangesSorted) {
@@ -117,22 +116,22 @@ export default class ToolsDocs {
                         sharingNameNamedRanges.namedRanges
                     ) {
                         const index = notMatchedData.findIndex(
-                            (obj) => obj.rangeName === dataElement.rangeName
+                            (obj) => obj.rangeName === dataElement.rangeName,
                         );
                         notMatchedData.splice(index, 1);
                         console.log(
-                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText})`
+                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText})`,
                         );
                         console.group();
                         await this.updateTextRunInNamedRange(
                             auth,
                             document,
                             sharingNameNamedRanges.namedRanges[0],
-                            dataElement.newText
+                            dataElement.newText,
                         );
                         console.groupEnd();
                         console.log(
-                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText}) DONE`
+                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText}) DONE`,
                         );
                         continue;
                     }
@@ -141,7 +140,7 @@ export default class ToolsDocs {
             if (notMatchedData.length > 0)
                 console.log(
                     'Some tags did not match any of namedRanges %o:',
-                    notMatchedData
+                    notMatchedData,
                 );
         }
     }
@@ -152,11 +151,11 @@ export default class ToolsDocs {
         document: docs_v1.Schema$Document,
         namedRange: docs_v1.Schema$NamedRange,
         newText: string,
-        style?: docs_v1.Schema$TextStyle
+        style?: docs_v1.Schema$TextStyle,
     ) {
         if (!document.body?.content)
             throw new Error(
-                `Document ${document.title} has no content: ${namedRange.name}`
+                `Document ${document.title} has no content: ${namedRange.name}`,
             );
         if (
             !namedRange.ranges ||
@@ -164,27 +163,27 @@ export default class ToolsDocs {
             !namedRange.ranges[0].endIndex
         )
             throw new Error(
-                `NamedRange ${namedRange.name} is not attached to document`
+                `NamedRange ${namedRange.name} is not attached to document`,
             );
         const startIndex = namedRange.ranges[0].startIndex;
         const endIndex = namedRange.ranges[0].endIndex;
         const allParagraphs = this.getAllParagraphElementsFromDocument(
-            document.body.content
+            document.body.content,
         );
         const textRunAndParenElement = this.getTextRunsAndParagraphElement(
             allParagraphs,
             startIndex,
-            endIndex
+            endIndex,
         );
         const textRunElements = textRunAndParenElement?.textRunElements;
         if (!textRunElements) {
             console.log(
                 'textRunAndParenElement?.parentElement %o',
-                textRunAndParenElement?.parentElements
+                textRunAndParenElement?.parentElements,
             );
             console.log('namedRange %o', namedRange);
             throw new Error(
-                `No textRun found for namedRange: ${namedRange.name}`
+                `No textRun found for namedRange: ${namedRange.name}`,
             );
         }
 
@@ -192,26 +191,26 @@ export default class ToolsDocs {
             textRunAndParenElement.parentElements,
             textRunElements,
             startIndex,
-            endIndex
+            endIndex,
         );
 
         this.LogInConsoleParagraphsAndTextruns(
             requestIndexes,
-            textRunAndParenElement
+            textRunAndParenElement,
         );
 
         const requests = this.makeTextRunUpdateRequests(
             requestIndexes,
             newText,
             <string>namedRange.name,
-            style
+            style,
         );
         try {
             // Wprowadź tekst i style
             await this.batchUpdateDocument(
                 auth,
                 requests,
-                <string>document.documentId
+                <string>document.documentId,
             );
         } catch (error) {
             console.log(JSON.stringify(requests));
@@ -229,7 +228,7 @@ export default class ToolsDocs {
         textRunAndParenElement: {
             textRunElements: docs_v1.Schema$ParagraphElement[];
             parentElements: docs_v1.Schema$StructuralElement[];
-        }
+        },
     ) {
         const paragraphs: any = {};
         for (let i = 0; i < textRunAndParenElement.parentElements.length; i++) {
@@ -241,7 +240,7 @@ export default class ToolsDocs {
                         textRunAndParenElement.parentElements[i].startIndex,
                     endIndex: textRunAndParenElement.parentElements[i].endIndex,
                     content: paragraph.elements?.map(
-                        (element) => `[${element.textRun?.content}] `
+                        (element) => `[${element.textRun?.content}] `,
                     ),
                 };
             }
@@ -264,7 +263,7 @@ export default class ToolsDocs {
         parentParagraphs: docs_v1.Schema$StructuralElement[],
         affectedTextRunElements: docs_v1.Schema$ParagraphElement[],
         namedRangeStartIndex: number,
-        namedRangeEndIndex: number
+        namedRangeEndIndex: number,
     ) {
         const indexes = {
             namedRangeStartIndex,
@@ -278,13 +277,13 @@ export default class ToolsDocs {
             if (paragraphElement?.paragraph?.elements)
                 allParentParagraphsTextRuns =
                     allParentParagraphsTextRuns.concat(
-                        paragraphElement?.paragraph?.elements
+                        paragraphElement?.paragraph?.elements,
                     );
         });
 
         if (!allParentParagraphsTextRuns) throw new Error('Paragraph is empty');
         allParentParagraphsTextRuns = allParentParagraphsTextRuns.filter(
-            (element) => element.textRun
+            (element) => element.textRun,
         );
 
         const paragraphMergedContent: string = allParentParagraphsTextRuns
@@ -302,7 +301,7 @@ export default class ToolsDocs {
         const paragraphOutsideMergedCOntent = Tools.getRemainingString(
             startRelative,
             endRelative,
-            paragraphMergedContent
+            paragraphMergedContent,
         );
 
         const lastCharInParagraph =
@@ -323,7 +322,7 @@ export default class ToolsDocs {
         },
         newText: string,
         rangeName: string,
-        style: docs_v1.Schema$TextStyle | undefined
+        style: docs_v1.Schema$TextStyle | undefined,
     ) {
         const requests: docs_v1.Schema$Request[] = [];
         requests.push({
@@ -398,7 +397,7 @@ export default class ToolsDocs {
             await this.batchUpdateDocument(
                 auth,
                 requests,
-                <string>document.documentId
+                <string>document.documentId,
             );
         return document.namedRanges;
     }
@@ -429,7 +428,7 @@ export default class ToolsDocs {
     }
     /**@deprecated */
     private static getlastTwoTextRunsFromTableCell(
-        cell: docs_v1.Schema$TableCell
+        cell: docs_v1.Schema$TableCell,
     ) {
         let penultimateParagraph;
         let lastParagraph;
@@ -466,7 +465,7 @@ export default class ToolsDocs {
             | docs_v1.Schema$StructuralElement[]
             | docs_v1.Schema$StructuralElement
             | any,
-        endIndex: number
+        endIndex: number,
     ) {
         //console.group('-------------isParagraphInTableCell------------')
         if (Array.isArray(obj)) {
@@ -510,7 +509,7 @@ export default class ToolsDocs {
 
     static getNamedRangeByName(
         document: docs_v1.Schema$Document,
-        name: string
+        name: string,
     ) {
         if (!document.namedRanges || !document.namedRanges[name])
             return undefined;
@@ -535,14 +534,14 @@ export default class ToolsDocs {
         obj:
             | docs_v1.Schema$StructuralElement[]
             | docs_v1.Schema$StructuralElement
-            | any
+            | any,
     ): docs_v1.Schema$StructuralElement[] {
         let paragraphElements: docs_v1.Schema$StructuralElement[] = [];
 
         if (Array.isArray(obj)) {
             for (const item of obj)
                 paragraphElements = paragraphElements.concat(
-                    this.getAllParagraphElementsFromDocument(item)
+                    this.getAllParagraphElementsFromDocument(item),
                 );
         } else if (typeof obj === 'object' && obj !== null) {
             if (obj.paragraph) {
@@ -550,7 +549,7 @@ export default class ToolsDocs {
             } else {
                 for (const key in obj)
                     paragraphElements = paragraphElements.concat(
-                        this.getAllParagraphElementsFromDocument(obj[key])
+                        this.getAllParagraphElementsFromDocument(obj[key]),
                     );
             }
         }
@@ -559,7 +558,7 @@ export default class ToolsDocs {
 
     static paragraphContainsText(
         paragraph: docs_v1.Schema$Paragraph,
-        textRunContentRegexp: RegExp | string
+        textRunContentRegexp: RegExp | string,
     ) {
         if (paragraph.elements)
             for (const element of paragraph.elements)
@@ -577,7 +576,7 @@ export default class ToolsDocs {
     private static getTextRunsAndParagraphElement(
         paragraphElements: docs_v1.Schema$StructuralElement[],
         startIndex: number,
-        endIndex: number
+        endIndex: number,
     ) {
         const affectedParagraphs: docs_v1.Schema$StructuralElement[] = [];
         let affectedTextRunElements: docs_v1.Schema$ParagraphElement[] = [];
@@ -587,7 +586,7 @@ export default class ToolsDocs {
                 element.paragraph?.elements?.length === 0
             ) {
                 throw new Error(
-                    'Function getTextRunElementByIndexes cannot be used for empty Pragraphs'
+                    'Function getTextRunElementByIndexes cannot be used for empty Pragraphs',
                 );
             }
             if (!element.startIndex || !element.endIndex) continue;
@@ -614,7 +613,7 @@ export default class ToolsDocs {
                             element.endIndex > startIndex ||
                             element.startIndex < endIndex
                         );
-                    }
+                    },
                 );
 
                 affectedTextRunElements.push(...foundElements);
@@ -635,7 +634,7 @@ export default class ToolsDocs {
 
     private static getTextRunByStartIndex(
         paragraph: docs_v1.Schema$Paragraph,
-        startIndex: number
+        startIndex: number,
     ) {
         if (!paragraph || !paragraph.elements) return;
         for (const element of paragraph.elements)
@@ -644,7 +643,7 @@ export default class ToolsDocs {
     }
 
     private static sortNamedRangesDescending(
-        namedRanges: docs_v1.Schema$NamedRanges
+        namedRanges: docs_v1.Schema$NamedRanges,
     ): docs_v1.Schema$NamedRanges[] {
         return Object.values(namedRanges).sort((a, b) => {
             return (
@@ -657,7 +656,7 @@ export default class ToolsDocs {
     static async batchUpdateDocument(
         auth: OAuth2Client,
         batchUpdateRequests: docs_v1.Schema$Request[],
-        documentId: string
+        documentId: string,
     ) {
         const docs = google.docs({ version: 'v1', auth });
         return await docs.documents.batchUpdate({

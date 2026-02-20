@@ -37,6 +37,14 @@ Always include planning fields:
 - Fix all critical/high issues before proceeding.
 - Max 3 failed iterations, then escalate to human.
 
+## Cross-repo scope (PS-nodeJS + ENVI.ProjectSite)
+- If task/review scope includes frontend, include `C:\Apache24\htdocs\ENVI.ProjectSite` in scope explicitly.
+- If your `search` tool is workspace-limited, use direct file reads/commands against absolute paths instead of claiming full-text scan.
+- If external path access is blocked, state it explicitly and request frontend diff/files; do not pretend review is complete.
+- Final review summary must state what was checked in:
+  - `C:\Apache24\htdocs\PS-nodeJS`
+  - `C:\Apache24\htdocs\ENVI.ProjectSite` (or explicitly mark as blocked/unavailable)
+
 ## Repository policy
 - Keep tool-specific instructions thin and mapped to canonical docs.
 - Do not duplicate long operational content here.
