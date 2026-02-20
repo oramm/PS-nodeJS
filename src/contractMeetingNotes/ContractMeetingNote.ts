@@ -23,6 +23,7 @@ export type ContractMeetingNoteModelData = {
         surname?: string;
         email?: string;
     };
+    createdAt?: string;
     _lastUpdated?: string;
 };
 
@@ -35,7 +36,10 @@ export default class ContractMeetingNote {
     description: string | null;
     meetingDate?: string;
     protocolGdId?: string | null;
+    gdDocumentId?: string | null;
+    gdDocumentUrl?: string;
     _documentEditUrl?: string;
+    createdAt?: string;
     createdByPersonId?: number | null;
     _contract?: {
         id?: number;
@@ -64,12 +68,18 @@ export default class ContractMeetingNote {
         this._contract = initParamObject._contract;
         this._createdBy = initParamObject._createdBy;
         this._lastUpdated = initParamObject._lastUpdated;
+        this.createdAt =
+            initParamObject.createdAt ?? initParamObject._lastUpdated;
 
         this.setProtocolGdId(initParamObject.protocolGdId ?? null);
     }
 
     setProtocolGdId(protocolGdId: string | null) {
         this.protocolGdId = protocolGdId;
+        this.gdDocumentId = protocolGdId;
+        this.gdDocumentUrl = protocolGdId
+            ? ToolsGd.createDocumentEditUrl(ToolsDb.sqlToString(protocolGdId))
+            : undefined;
         this._documentEditUrl = protocolGdId
             ? ToolsGd.createDocumentEditUrl(ToolsDb.sqlToString(protocolGdId))
             : undefined;
