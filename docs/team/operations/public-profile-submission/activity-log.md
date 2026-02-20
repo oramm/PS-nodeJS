@@ -1,28 +1,36 @@
-# Public Profile Submission Activity Log
+# Experience Update - Activity Log
 
-## 2026-02-20 13:05 - Link resend MVP + last event metadata
+## 2026-02-20 14:10 - Doc-first Gate kickoff (server + client)
 
 - Scope:
-    - rozszerzenie create-link (`recipientEmail`, `sendNow`),
-    - zapis ostatniego zdarzenia linku,
-    - ekspozycja danych do UI.
-- Files:
+    - rozpoczecie obowiazkowej fazy dokumentacyjnej przed implementacja,
+    - synchronizacja nazewnictwa na `experience-updates` i `experience-update`,
+    - zapisanie finalnych decyzji procesu: `1 profil = 1 aktywny link`, hard cut API, review `uzupelnij braki`.
+- Files (server):
+    - `docs/team/operations/public-profile-submission/plan.md`
+    - `docs/team/operations/public-profile-submission/progress.md`
+    - `docs/team/operations/public-profile-submission/activity-log.md`
+    - `docs/team/runbooks/public-profile-submission-link-recovery.md`
+    - `docs/team/operations/post-change-checklist.md`
+- Impact: `Docs/Process`
+
+## 2026-02-20 16:20 - Hard cut implementation (server + client)
+
+- Scope:
+    - hard-cut endpointow na `experience-updates`/`experience-update`,
+    - single active process per person,
+    - `copyLink` + `lastDispatch` w DTO staff,
+    - `REJECT` wymaga komentarza + feedback na itemach,
+    - FE switch na nowe endpointy i pojedynczy stan procesu.
+- Files (server):
     - `src/persons/publicProfileSubmission/PublicProfileSubmissionRouters.ts`
     - `src/persons/publicProfileSubmission/PublicProfileSubmissionController.ts`
     - `src/persons/publicProfileSubmission/PublicProfileSubmissionRepository.ts`
+    - `src/persons/publicProfileSubmission/PublicProfileSubmissionErrors.ts`
+    - `src/persons/migrations/006_experience_update_hard_cut.sql`
+    - `.env.example`
     - `src/types/types.d.ts`
-    - `src/persons/migrations/005_add_public_profile_submission_last_link_event.sql`
-    - `docs/team/operations/post-change-checklist.md`
-- Impact: `DB/API/Docs`
+- Impact: `API/DB/Env/Docs`
 - Verification:
-    - `yarn build` pass,
-    - `jest` modułu auth pass,
-    - reviewer subagent verdict `APPROVE`.
-
-## 2026-02-19 18:20 - Public Profile Submission V1 bootstrap
-
-- Scope:
-    - pierwsze wdrożenie backend flow dla public profile submission.
-- Impact: `DB/API`
-- Notes:
-    - szczegóły i rollout w `docs/team/operations/post-change-checklist.md`.
+    - `PS-nodeJS`: `yarn build` pass, `yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand` pass,
+    - `ENVI.ProjectSite`: `yarn tsc --noEmit` pass, `yarn build` pass.

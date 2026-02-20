@@ -1,41 +1,41 @@
-# Public Profile Submission Link Recovery Runbook
+# Experience Update Link Recovery Runbook
 
 ## Purpose
 
-Operacyjny runbook dla sytuacji, gdy link do publicznego uzupe³nienia profilu:
+Runbook dla sytuacji, gdy link do `Aktualizacji doswiadczenia`:
 
-- nie dotar³ mailem,
-- zosta³ zgubiony,
-- by³ wys³any na b³êdny adres.
+- nie dotarl mailem,
+- zostal zgubiony,
+- zostal wyslany na zly adres.
 
-Celem jest szybkie odblokowanie procesu bez rêcznej ingerencji w bazê danych.
+Celem jest odblokowanie procesu bez recznej ingerencji w DB.
 
 ## Scope
 
-Dotyczy backend flow w module:
+Dotyczy modulu backend:
 
-- `src/persons/publicProfileSubmission/*`
+- `src/persons/publicProfileSubmission/*` (po rename kontraktu na experience-updates)
 
 Endpointy:
 
-- `POST /v2/persons/:personId/public-profile-submissions/link`
-- `POST /v2/persons/:personId/public-profile-submissions/search`
-- `GET /v2/persons/:personId/public-profile-submissions/:submissionId`
+- `POST /v2/persons/:personId/experience-updates/link`
+- `POST /v2/persons/:personId/experience-updates/search`
+- `GET /v2/persons/:personId/experience-updates/:submissionId`
 
 ## Preconditions
 
-1. Operator ma uprawnienia staff (sesja backendowa).
-2. W œrodowisku dzia³a SMTP (jeœli u¿ywamy `sendNow=true`).
-3. Migracja `005_add_public_profile_submission_last_link_event.sql` jest zastosowana.
+1. Operator ma role staff.
+2. SMTP dziala, jesli `sendNow=true`.
+3. Migracje dla experience update sa zastosowane.
 
-## Quick Recovery (recommended)
+## Quick Recovery
 
-### Scenario A: u¿ytkownik zgubi³ link lub mail nie dotar³
+### Scenario A - zgubiony link / brak maila
 
-1. Wygeneruj nowy link i od razu wyœlij mail:
+1. Wygeneruj nowy link i wyslij:
 
 ```http
-POST /v2/persons/:personId/public-profile-submissions/link
+POST /v2/persons/:personId/experience-updates/link
 Content-Type: application/json
 
 {
@@ -44,79 +44,62 @@ Content-Type: application/json
 }
 ```
 
-2. PotwierdŸ w odpowiedzi:
+2. Zweryfikuj `dispatch.status`:
 
-- `dispatch.status`:
-    - `LINK_SENT` (wysy³ka OK), albo
-    - `LINK_SEND_FAILED` (wysy³ka nieudana  proces nadal ma nowy link).
+- `LINK_SENT`, albo
+- `LINK_SEND_FAILED` (proces ma nowy link, ale mail nie wyszedl).
 
-3. Jeœli `LINK_SEND_FAILED`, skopiuj `url` z odpowiedzi i przeka¿ u¿ytkownikowi innym kana³em.
+3. Przy `LINK_SEND_FAILED` skopiuj `copyLink.url` i przekaz innym kanalem.
 
-### Scenario B: literówka w pierwotnym adresie
+### Scenario B - literowka w adresie
 
-1. Powtórz wywo³anie create-link z poprawnym `recipientEmail`.
-2. U¿yj `sendNow=true`, aby wys³aæ nowy link od razu.
+1. Powtorz create-link z poprawnym `recipientEmail` i `sendNow=true`.
 
-### Scenario C: nie znamy poprawnego adresu e-mail
+### Scenario C - brak pewnego adresu
 
-1. Wywo³aj create-link z `sendNow=false` (zwróci sam URL):
-
-```http
-POST /v2/persons/:personId/public-profile-submissions/link
-Content-Type: application/json
-
-{
-  "sendNow": false
-}
-```
-
-2. Przeka¿ link u¿ytkownikowi rêcznie (np. telefon/komunikator).
+1. Uzyj `sendNow=false`.
+2. Przekaz `copyLink.url` recznie.
 
 ## Verification
 
-Po akcji recovery sprawdŸ status submission:
+Po akcji recovery sprawdz:
 
 ```http
-POST /v2/persons/:personId/public-profile-submissions/search
-Content-Type: application/json
-
-{}
+POST /v2/persons/:personId/experience-updates/search
 ```
 
-lub szczegó³y konkretnego submission:
+lub
 
 ```http
-GET /v2/persons/:personId/public-profile-submissions/:submissionId
+GET /v2/persons/:personId/experience-updates/:submissionId
 ```
 
-SprawdŸ pola:
+Sprawdz pola:
 
-- `lastLinkRecipientEmail`
-- `lastLinkEventAt`
-- `lastLinkEventType` (`LINK_GENERATED` / `LINK_SENT` / `LINK_SEND_FAILED`)
-- `lastLinkEventByPersonId`
+- `copyLink.url` (tylko gdy `now < expiresAt`),
+- `copyLink.expiresAt`,
+- `lastDispatch.recipientEmail`,
+- `lastDispatch.eventAt`,
+- `lastDispatch.status`,
+- `lastDispatch.eventByPersonId`.
 
 ## Error handling
 
-- `INVALID_EMAIL`:
-    - przekazany `recipientEmail` ma niepoprawny format.
-- `RECIPIENT_EMAIL_REQUIRED`:
-    - u¿yto `sendNow=true`, ale brak adresu docelowego (ani w payload, ani fallback z `Persons`).
-- `LINK_RECOVERY_RATE_LIMITED`:
-    - create-link zosta³ wywo³any zbyt szybko po poprzedniej akcji; odczekaj kilka sekund i ponów.
-- `FORBIDDEN`:
-    - brak uprawnieñ staff.
+- `INVALID_EMAIL` - niepoprawny `recipientEmail`.
+- `RECIPIENT_EMAIL_REQUIRED` - `sendNow=true` bez adresu docelowego.
+- `LINK_RECOVERY_RATE_LIMITED` - za szybka ponowna proba.
+- `FORBIDDEN` - brak roli staff.
 
 ## Operational notes
 
-1. System nie odzyskuje starego linku  generuje nowy i uniewa¿nia poprzedni aktywny.
-2. Przechowujemy ostatnie zdarzenie linku (MVP), bez pe³nego audytu historii prób.
-3. W razie awarii SMTP proces i tak mo¿e byæ odblokowany przez rêczne przekazanie `url`.
+1. System generuje nowy link i uniewaznia poprzedni aktywny.
+2. Staff dostaje tylko ostatni wazny link (`copyLink`) i metadata ostatniej wysylki.
+3. Po wygaœnieciu link znika z `copyLink`.
 
 ## Escalation
 
-Eskaluj do zespo³u backend, gdy:
+Eskaluj do backend team gdy:
 
-- `LINK_SEND_FAILED` powtarza siê mimo poprawnej konfiguracji SMTP,
-- endpoint create-link zwraca b³êdy 5xx,
-- pola `lastLink*` nie s¹ zwracane mimo wdro¿onej migracji.
+- wielokrotne `LINK_SEND_FAILED` przy poprawnej konfiguracji SMTP,
+- endpointy zwracaja 5xx,
+- `copyLink` lub `lastDispatch` nie sa zwracane zgodnie z kontraktem.

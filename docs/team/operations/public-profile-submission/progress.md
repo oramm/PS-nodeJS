@@ -1,54 +1,45 @@
-# Public Profile Submission Progress
+# Experience Update - Progress
 
-## Current Status Snapshot
+Data bazowa: 2026-02-20
+Owner: Backend + Frontend
+Status ogolny: IN_PROGRESS
 
-- Active phase: `LINK_RESEND_MVP`
-- Last completed checkpoint: `PPS-2-LAST-LINK-EVENT-METADATA`
-- Overall status: `BACKEND_READY_UI_WIRING_PENDING`
-- Next checkpoint: `PPS-3-UI-VISIBILITY-AND-RESEND`
+## Checkpointy
 
-## Checkpoints
+- F0-DOC-FIRST-GATE: DONE
+- F1-BACKEND-HARD-CUT: DONE
+- F2-FRONTEND-HARD-CUT: DONE
+- F3-REVIEW-AND-RELEASE-GATE: IN_PROGRESS
 
-- `PPS-1-V1-BACKEND-FLOW` -> `DONE`
-- `PPS-2-LAST-LINK-EVENT-METADATA` -> `DONE`
-- `PPS-3-UI-VISIBILITY-AND-RESEND` -> `OPEN`
+## Biezacy stan
 
-## Session Entries
+### DONE
 
-## 2026-02-19 - Session 1 - V1 backend flow
+- Dokumentacja server + client zsynchronizowana (Doc-first Gate).
+- Backend przepiety na endpointy `experience-updates`/`experience-update`.
+- Model procesu uproszczony do pojedynczego aktywnego procesu per osoba.
+- Dodano utrwalenie i ekspozycje `copyLink` + `lastDispatch`.
+- Dodano wymagalny komentarz dla `REJECT` oraz feedback na itemie.
+- Frontend przepiety na nowe endpointy i trasy hash (`/public/experience-update/:token`).
+- Frontend panel operacyjny uproszczony do pojedynczego aktywnego stanu.
 
-### Completed
+### IN_PROGRESS
 
-- Wdrożono moduł public profile submission (link/token, verify email code, draft, submit, review).
-- Dodano endpointy staff i public.
-- Dodano migrację `004_create_public_profile_submission_v1.sql`.
+- Finalny review loop do `APPROVE` i domkniecie release gate.
 
-### Evidence
+## Sesje
 
-- Build/test modułu przechodziły w sesji wdrożeniowej.
-- Szczegóły operacyjne: `docs/team/operations/post-change-checklist.md`.
+### 2026-02-20 - Session DOC-GATE-1
 
-## 2026-02-20 - Session 2 - Link resend MVP + last event metadata
+Checkpoint: `F0-DOC-FIRST-GATE`
+Status: `DONE`
 
-### Completed
+### 2026-02-20 - Session IMPLEMENTATION-1
 
-- Rozszerzono create-link o `recipientEmail` i `sendNow`.
-- Dodano wysyłkę maila linku oraz fallback na e-mail osoby.
-- Dodano zapis i ekspozycję `lastLink*` w search/details.
-- Dodano migrację `005_add_public_profile_submission_last_link_event.sql`.
-- Uzupełniono wpis w `post-change-checklist`.
+Checkpoint: `F1-BACKEND-HARD-CUT` + `F2-FRONTEND-HARD-CUT`
+Status: `DONE`
 
-### Evidence
+Evidence:
 
-- `yarn build` -> pass.
-- `yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand` -> pass.
-- Mandatory reviewer subagent -> `APPROVE`.
-
-### Risks / Notes
-
-- UI nadal musi pokazać operatorowi „do kogo i kiedy poszło ostatnio”.
-- Brak pełnej historii prób jest decyzją świadomą (MVP uproszczone).
-
-### Next
-
-- Dodać widok i akcję resend po stronie UI (`PPS-3`).
+- `PS-nodeJS`: `yarn build` pass, `jest PublicProfileSubmissionAuth` pass.
+- `ENVI.ProjectSite`: `yarn tsc --noEmit` pass, `yarn build` pass.

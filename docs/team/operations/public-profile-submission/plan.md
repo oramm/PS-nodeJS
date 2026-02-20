@@ -1,49 +1,57 @@
-# Public Profile Submission Plan
+# Experience Update - Delivery Plan
 
-## Purpose
+Data startu: 2026-02-20
+Status dokumentu: ACTIVE
+Zakres: Backend (`PS-nodeJS`) + Frontend (`ENVI.ProjectSite`)
 
-Utrzymanie jednego, prostego i operacyjnie bezpiecznego procesu udostępniania publicznego linku do uzupełnienia profilu osoby.
+## Cel
 
-## Scope
+Uproszczenie procesu do modelu `1 profil = 1 aktywny link` oraz przejscie na nowy kontrakt endpointow `experience-updates` bez kompatybilnosci wstecznej.
 
-Moduł backendowy `src/persons/publicProfileSubmission/*` obejmuje:
+## Zasady docelowe (zamrozone)
 
-- generowanie linku publicznego,
-- walidację e-mail (kod),
-- zapis draftu i submit,
-- wewnętrzny review elementów,
-- operacje staff dla linku i statusu procesu.
+1. Hard cut API: usuwamy `public-profile-submissions`, zostaje tylko `experience-updates`.
+2. Operacyjnie widzimy pojedynczy aktywny proces, bez listy historycznych draftow.
+3. Staff zawsze widzi ostatni wazny link do kopiowania (tylko do `expiresAt`).
+4. Tryb review: `uzupelnij braki`; `REJECT` wymaga komentarza i ten komentarz wraca do kandydata.
+5. Start implementacji jest blokowany do czasu zamkniecia fazy dokumentacyjnej po obu repo.
 
-## Current product decisions (frozen)
+## Fazy
 
-1. Przy utracie linku używamy prostego mechanizmu: generacja nowego linku (bez odzyskiwania starego URL).
-2. System przechowuje i pokazuje ostatnie zdarzenie linku, bez pełnej tabeli audytu.
-3. Endpoint staff create-link obsługuje:
-    - `recipientEmail` (opcjonalny),
-    - `sendNow` (opcjonalny; wysyłka maila od razu).
-4. Dla `sendNow=true` i braku `recipientEmail` system próbuje fallback na e-mail osoby z `Persons`.
-5. Jeżeli brak odbiorcy dla `sendNow`, request kończy się kontrolowanym `400` bez modyfikacji stanu procesu.
+### F0 - Doc-first Gate (MUST)
 
-## Data model (active)
+- Zsynchronizowac plan/progress/activity + checklisty po stronie server i client.
+- Zsynchronizowac `Flow` i `api-contract` klienta z finalnym nazewnictwem `experience-updates`.
+- Potwierdzic reguly retencji linku oraz fallback operacyjny.
 
-`PublicProfileSubmissions` przechowuje ostatni znany stan wysyłki:
+Warunek przejscia:
 
-- `LastLinkRecipientEmail`
-- `LastLinkEventAt`
-- `LastLinkEventType` (`LINK_GENERATED` | `LINK_SENT` | `LINK_SEND_FAILED`)
-- `LastLinkEventByPersonId`
+- server plan/checklist i client plan/checklist maja ten sam zakres i date `2026-02-20`.
+- Brak otwartych konfliktow nazewnictwa endpointow.
 
-## API contract highlights
+### F1 - Backend (PS-nodeJS)
 
-- `POST /v2/persons/:personId/public-profile-submissions/link`
-    - request: `{ recipientEmail?: string, sendNow?: boolean }`
-    - response: zawiera `token`, `url`, `expiresAt`, `submissionId` oraz sekcję `dispatch`.
-- `POST /v2/persons/:personId/public-profile-submissions/search` i
-  `GET /v2/persons/:personId/public-profile-submissions/:submissionId`
-    - zwracają pola `lastLink*` do UI.
+- Przebudowac model na pojedynczy aktywny rekord procesu per osoba.
+- Utrwalic i zwracac staffowi ostatni wazny link do kopiowania (do czasu wyga�niecia).
+- Dla review `REJECT` wymagac komentarza i zapisac feedback.
+- Wdrozyc hard-cut endpointow:
+  - `/v2/persons/:personId/experience-updates/*`
+  - `/v2/public/experience-update/*`
+- Dostarczyc migracje konsolidujace dane do modelu `1 profil = 1 link`.
 
-## Next steps
+### F2 - Frontend (ENVI.ProjectSite)
 
-1. Dodać testy jednostkowe dla nowych ścieżek `createOrRefreshLink` (`sendNow`, fallback, fail-path).
-2. Po stronie UI wyświetlić: ostatni e-mail, datę ostatniej akcji i status ostatniej wysyłki.
-3. Dodać akcję „Wyślij ponownie” opartą o ten sam endpoint create-link z `sendNow=true`.
+- Zmienic nazewnictwo UI na `Aktualizacja doswiadczenia`.
+- Usunac liste wielu draftow; pokazac pojedynczy stan procesu.
+- Pokazac zawsze: ostatni wazny link, date zdarzenia, odbiorce, status wysylki.
+- Przelaczyc FE na hard-cut endpointow `experience-updates`.
+- Pokazac feedback do odrzuconych elementow i mozliwosc poprawy tylko brakujacych/odrzuconych.
+
+## Kryteria akceptacji
+
+1. Wielokrotne generowanie linku nie tworzy wielu aktywnych rekordow procesu.
+2. Poprzedni link jest uniewazniany po odswiezeniu; nowy dziala.
+3. Po `expiresAt` link nie jest zwracany do kopiowania.
+4. `REJECT` bez komentarza zwraca blad walidacji.
+5. Kandydat widzi komentarz i poprawia tylko wymagane elementy.
+6. FE nie korzysta z aliasow `public-profile-submissions`.

@@ -37,7 +37,7 @@ const handleError = (error: unknown, res: Response, next: Function) => {
 };
 
 app.post(
-    '/v2/persons/:personId/public-profile-submissions/link',
+    '/v2/persons/:personId/experience-updates/link',
     async (req: Request, res: Response, next) => {
         try {
             const requesterPersonId = ensureStaffAccess(req);
@@ -65,7 +65,7 @@ app.post(
 );
 
 app.post(
-    '/v2/persons/:personId/public-profile-submissions/search',
+    '/v2/persons/:personId/experience-updates/search',
     async (req: Request, res: Response, next) => {
         try {
             ensureStaffAccess(req);
@@ -88,7 +88,7 @@ app.post(
 );
 
 app.get(
-    '/v2/persons/:personId/public-profile-submissions/:submissionId',
+    '/v2/persons/:personId/experience-updates/:submissionId',
     async (req: Request, res: Response, next) => {
         try {
             ensureStaffAccess(req);
@@ -110,7 +110,7 @@ app.get(
 );
 
 app.post(
-    '/v2/persons/:personId/public-profile-submissions/:submissionId/items/:itemId/review',
+    '/v2/persons/:personId/experience-updates/:submissionId/items/:itemId/review',
     async (req: Request, res: Response, next) => {
         try {
             const reviewerPersonId = ensureStaffAccess(req);
@@ -122,10 +122,21 @@ app.post(
             const itemId = parsePositiveInt(req.params.itemId, 'itemId');
             const payload = req.parsedBody ?? req.body;
             const decision = payload?.decision;
+            const comment =
+                typeof payload?.comment === 'string'
+                    ? payload.comment.trim()
+                    : undefined;
             if (decision !== 'ACCEPT' && decision !== 'REJECT') {
                 throw new PublicProfileSubmissionError(
                     'Decision must be ACCEPT or REJECT',
                     'INVALID_REVIEW_DECISION',
+                    400,
+                );
+            }
+            if (decision === 'REJECT' && !comment) {
+                throw new PublicProfileSubmissionError(
+                    'Comment is required for REJECT',
+                    'REVIEW_COMMENT_REQUIRED',
                     400,
                 );
             }
@@ -135,6 +146,7 @@ app.post(
                 itemId,
                 decision,
                 reviewerPersonId,
+                comment,
             );
             res.send(result);
         } catch (error) {
@@ -144,7 +156,7 @@ app.post(
 );
 
 app.post(
-    '/v2/persons/:personId/public-profile-submissions/:submissionId/close',
+    '/v2/persons/:personId/experience-updates/:submissionId/close',
     async (req: Request, res: Response, next) => {
         try {
             ensureStaffAccess(req);
@@ -166,7 +178,7 @@ app.post(
 );
 
 app.get(
-    '/v2/public/profile-submission/:token',
+    '/v2/public/experience-update/:token',
     async (req: Request, res: Response, next) => {
         try {
             const result =
@@ -181,7 +193,7 @@ app.get(
 );
 
 app.post(
-    '/v2/public/profile-submission/:token/verify-email/request-code',
+    '/v2/public/experience-update/:token/verify-email/request-code',
     async (req: Request, res: Response, next) => {
         try {
             const payload = req.parsedBody ?? req.body;
@@ -198,7 +210,7 @@ app.post(
 );
 
 app.post(
-    '/v2/public/profile-submission/:token/verify-email/confirm-code',
+    '/v2/public/experience-update/:token/verify-email/confirm-code',
     async (req: Request, res: Response, next) => {
         try {
             const payload = req.parsedBody ?? req.body;
@@ -216,7 +228,7 @@ app.post(
 );
 
 app.get(
-    '/v2/public/profile-submission/:token/draft',
+    '/v2/public/experience-update/:token/draft',
     async (req: Request, res: Response, next) => {
         try {
             const result = await PublicProfileSubmissionController.getDraft(
@@ -231,7 +243,7 @@ app.get(
 );
 
 app.put(
-    '/v2/public/profile-submission/:token/draft',
+    '/v2/public/experience-update/:token/draft',
     async (req: Request, res: Response, next) => {
         try {
             const payload = req.parsedBody ?? req.body;
@@ -248,7 +260,7 @@ app.put(
 );
 
 app.post(
-    '/v2/public/profile-submission/:token/analyze-file',
+    '/v2/public/experience-update/:token/analyze-file',
     upload.single('file'),
     async (req: Request, res: Response, next) => {
         try {
@@ -277,7 +289,7 @@ app.post(
 );
 
 app.post(
-    '/v2/public/profile-submission/:token/submit',
+    '/v2/public/experience-update/:token/submit',
     async (req: Request, res: Response, next) => {
         try {
             const result = await PublicProfileSubmissionController.submit(

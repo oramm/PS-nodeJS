@@ -1319,3 +1319,99 @@ Copy the block below for each change:
 ### 8. Owner
 
 - Platform/docs maintainers.
+
+## 2026-02-20 - Experience Update hard-cut (Doc-first Gate)
+
+### 1. Scope
+
+- Doc-first synchronization before implementation across server/client for Experience Update flow.
+- Locked final contract naming: experience-updates (staff) and experience-update (public).
+- Locked process rules: single active process per person, visible last valid copy link, required reviewer comment for REJECT.
+
+### 2. DB impact
+
+- pending (implementation phase F1 will define migration set).
+
+### 3. ENV impact
+
+- .env.example: pending (no new key in doc gate).
+- New/changed variables: pending.
+
+### 4. Heroku impact
+
+- Config vars: pending.
+- Restart/release steps: pending.
+
+### 5. Developer actions
+
+- Complete F0 docs on both repos before touching implementation code.
+- Continue with F1/F2 using hard-cut endpoint naming only.
+
+### 6. Verification
+
+- docs/team/operations/public-profile-submission/* updated with same date/scope as client docs.
+- docs/team/runbooks/public-profile-submission-link-recovery.md switched to new endpoint names.
+
+### 7. Rollback
+
+- Restore previous doc revisions if rollout scope changes before implementation starts.
+
+### 8. Owner
+
+- Experience Update migration session (Codex + repository owner).
+
+
+## 2026-02-20 - Experience Update hard-cut implementation
+
+### 1. Scope
+
+- Hard-cut API rename from public-profile-submissions to experience-updates (staff) and experience-update (public).
+- Enforced single active process per person and staff-visible copyLink + lastDispatch.
+- Added required comment for REJECT review decision and feedback persistence on item.
+
+### 2. DB impact
+
+- New migration:
+  - src/persons/migrations/006_experience_update_hard_cut.sql`r
+- Schema changes:
+  - PublicProfileSubmissions.LastActiveLinkUrl (VARCHAR(2048) NULL)
+  - PublicProfileSubmissions.LastActiveLinkExpiresAt (DATETIME NULL)
+  - PublicProfileSubmissionItems.ReviewComment (TEXT NULL)
+- Data consolidation:
+  - closes older active submissions per person, keeps latest active row.
+
+### 3. ENV impact
+
+- .env.example: updated.
+- New/changed variables:
+  - PUBLIC_PROFILE_SUBMISSION_BASE_URL example path updated to /public/experience-update.
+
+### 4. Heroku impact
+
+- Config vars: keep existing PUBLIC_PROFILE_SUBMISSION_*; no new keys.
+- Restart/release steps:
+  - apply migration  06_experience_update_hard_cut.sql before deploy,
+  - deploy backend + frontend hard-cut together (no backward compatibility),
+  - restart backend process after env/config refresh.
+
+### 5. Developer actions
+
+- Apply migration 006 in target DB.
+- Deploy PS-nodeJS + ENVI.ProjectSite in one release window.
+
+### 6. Verification
+
+- PS-nodeJS: yarn build pass.
+- PS-nodeJS: yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand pass.
+- ENVI.ProjectSite: yarn tsc --noEmit pass.
+- ENVI.ProjectSite: yarn build pass.
+
+### 7. Rollback
+
+- Roll back backend and frontend commits together (hard-cut release).
+- DB rollback (if needed and safe): remove columns added in migration 006 and restore previous routes from rollback commit.
+
+### 8. Owner
+
+- Experience Update migration session (Codex + repository owner).
+

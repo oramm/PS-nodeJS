@@ -398,6 +398,7 @@ export interface PublicSubmissionItemDto {
     acceptedTargetId?: number;
     reviewedByPersonId?: number;
     reviewedAt?: string;
+    reviewComment?: string;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -430,10 +431,17 @@ export interface PublicSubmissionViewDto {
     personId: number;
     email?: string;
     status: PublicProfileSubmissionStatus;
-    lastLinkRecipientEmail?: string;
-    lastLinkEventAt?: string;
-    lastLinkEventType?: 'LINK_GENERATED' | 'LINK_SENT' | 'LINK_SEND_FAILED';
-    lastLinkEventByPersonId?: number;
+    copyLink?: {
+        url: string;
+        expiresAt: string;
+    };
+    lastDispatch?: {
+        recipientEmail?: string;
+        status?: 'LINK_GENERATED' | 'LINK_SENT' | 'LINK_SEND_FAILED';
+        eventAt: string;
+        eventByPersonId?: number;
+        sendNowRequested?: boolean;
+    };
     submittedAt?: string;
     closedAt?: string;
     createdAt?: string;
@@ -443,6 +451,7 @@ export interface PublicSubmissionViewDto {
 
 export interface PublicReviewDecisionPayload {
     decision: 'ACCEPT' | 'REJECT';
+    comment?: string;
 }
 
 export interface DocumentTemplateData extends RepositoryDataItem {

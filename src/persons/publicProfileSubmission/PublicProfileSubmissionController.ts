@@ -112,20 +112,20 @@ const normalizeEmail = (value) => {
 const resolvePublicSubmissionBaseUrl = () => {
     const configuredBaseUrl = (
         process.env.PUBLIC_PROFILE_SUBMISSION_BASE_URL ||
-        'https://ps.envi.com.pl/#/public/profile-submission'
+        'https://ps.envi.com.pl/#/public/experience-update'
     ).trim();
     const baseUrl = configuredBaseUrl
         .replace(/\/React(?=\/#\/)/i, '')
         .replace(/\/+$/, '');
-    if (!baseUrl) return 'https://ps.envi.com.pl/#/public/profile-submission';
-    if (/#[/]?public\/profile-submission$/i.test(baseUrl)) return baseUrl;
-    if (/\/public\/profile-submission$/i.test(baseUrl))
+    if (!baseUrl) return 'https://ps.envi.com.pl/#/public/experience-update';
+    if (/#[/]?public\/experience-update$/i.test(baseUrl)) return baseUrl;
+    if (/\/public\/experience-update$/i.test(baseUrl))
         return baseUrl.replace(
-            /\/public\/profile-submission$/i,
-            '/#/public/profile-submission',
+            /\/public\/experience-update$/i,
+            '/#/public/experience-update',
         );
-    if (baseUrl.includes('#/')) return `${baseUrl}/public/profile-submission`;
-    return `${baseUrl}/#/public/profile-submission`;
+    if (baseUrl.includes('#/')) return `${baseUrl}/public/experience-update`;
+    return `${baseUrl}/#/public/experience-update`;
 };
 class PublicProfileSubmissionController {
     constructor() {
@@ -181,6 +181,9 @@ class PublicProfileSubmissionController {
             const expiresAt = new Date(
                 Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000,
             );
+            const baseUrl = resolvePublicSubmissionBaseUrl();
+            const url = `${baseUrl}/${token}`;
+            const linkExpiresAt = toIsoDate(expiresAt);
             const submissionId = yield ToolsDb_1.default.transaction((conn) =>
                 __awaiter(this, void 0, void 0, function* () {
                     yield instance.repository.revokeActiveLinksForPerson(
@@ -191,28 +194,43 @@ class PublicProfileSubmissionController {
                         {
                             personId,
                             tokenHash,
-                            expiresAt: toIsoDate(expiresAt),
+                            expiresAt: linkExpiresAt,
                             createdByPersonId,
                         },
                         conn,
                     );
-                    const createdSubmissionId =
-                        yield instance.repository.createSubmission(
-                            { linkId, personId },
+                    const activeSubmission =
+                        yield instance.repository.findLatestActiveSubmissionForPerson(
+                            personId,
                             conn,
                         );
+                    let resolvedSubmissionId;
+                    if (activeSubmission) {
+                        resolvedSubmissionId = activeSubmission.id;
+                        yield instance.repository.reassignSubmissionLink({
+                            submissionId: resolvedSubmissionId,
+                            linkId,
+                            conn,
+                        });
+                    } else {
+                        resolvedSubmissionId =
+                            yield instance.repository.createSubmission(
+                                { linkId, personId, status: 'DRAFT' },
+                                conn,
+                            );
+                    }
                     yield instance.repository.updateSubmissionLastLinkEvent({
-                        submissionId: createdSubmissionId,
+                        submissionId: resolvedSubmissionId,
                         recipientEmail: resolvedRecipientEmail,
                         eventType: 'LINK_GENERATED',
                         eventByPersonId: createdByPersonId,
+                        linkUrl: url,
+                        linkExpiresAt,
                         conn,
                     });
-                    return createdSubmissionId;
+                    return resolvedSubmissionId;
                 }),
             );
-            const baseUrl = resolvePublicSubmissionBaseUrl();
-            const url = `${baseUrl}/${token}`;
             let dispatchStatus = 'LINK_GENERATED';
             if (sendNowRequested) {
                 const recipientForSend = resolvedRecipientEmail;
@@ -239,6 +257,8 @@ class PublicProfileSubmissionController {
                                     recipientEmail: recipientForSend,
                                     eventType: dispatchStatus,
                                     eventByPersonId: createdByPersonId,
+                                    linkUrl: url,
+                                    linkExpiresAt,
                                     conn,
                                 },
                             );
@@ -253,14 +273,16 @@ class PublicProfileSubmissionController {
             }
             return {
                 personId,
-                token,
-                url,
-                expiresAt: expiresAt.toISOString(),
                 submissionId,
-                dispatch: {
+                copyLink: {
+                    url,
+                    expiresAt: expiresAt.toISOString(),
+                },
+                lastDispatch: {
                     recipientEmail: resolvedRecipientEmail,
                     status: dispatchStatus,
                     eventAt: new Date().toISOString(),
+                    eventByPersonId: createdByPersonId,
                     sendNowRequested,
                 },
             };
@@ -561,9 +583,13 @@ class PublicProfileSubmissionController {
     static searchSubmissions(personId, status) {
         return __awaiter(this, void 0, void 0, function* () {
             const instance = this.getInstance();
-            return instance.repository.searchSubmissionsForPerson(
-                personId,
-                status,
+            const submissions =
+                yield instance.repository.searchSubmissionsForPerson(
+                    personId,
+                    status,
+                );
+            return submissions.map((submission) =>
+                instance.buildSubmissionSummary(submission),
             );
         });
     }
@@ -597,6 +623,7 @@ class PublicProfileSubmissionController {
         itemId,
         decision,
         reviewerPersonId,
+        reviewComment,
     ) {
         return __awaiter(this, void 0, void 0, function* () {
             const instance = this.getInstance();
@@ -654,6 +681,7 @@ class PublicProfileSubmissionController {
                             {
                                 itemId: item.id,
                                 reviewedByPersonId: reviewerPersonId,
+                                reviewComment,
                             },
                             conn,
                         );
@@ -662,7 +690,13 @@ class PublicProfileSubmissionController {
                         submission.id,
                         conn,
                     );
-                    if (pending === 0) {
+                    const rejected =
+                        yield instance.repository.countRejectedItems(
+                            submission.id,
+                            conn,
+                        );
+                    const shouldAutoClose = pending === 0 && rejected === 0;
+                    if (shouldAutoClose) {
                         yield instance.repository.markSubmissionClosed(
                             submission.id,
                             conn,
@@ -673,7 +707,9 @@ class PublicProfileSubmissionController {
                         itemId: item.id,
                         decision,
                         acceptedTargetId,
-                        autoClosed: pending === 0,
+                        reviewComment:
+                            decision === 'REJECT' ? reviewComment : undefined,
+                        autoClosed: shouldAutoClose,
                     };
                 }),
             );
@@ -923,7 +959,11 @@ class PublicProfileSubmissionController {
                 .filter((item) => item.itemType === 'EXPERIENCE')
                 .map((item) =>
                     Object.assign(
-                        { id: item.id, status: item.itemStatus },
+                        {
+                            id: item.id,
+                            status: item.itemStatus,
+                            reviewComment: item.reviewComment,
+                        },
                         item.payload,
                     ),
                 ),
@@ -931,7 +971,11 @@ class PublicProfileSubmissionController {
                 .filter((item) => item.itemType === 'EDUCATION')
                 .map((item) =>
                     Object.assign(
-                        { id: item.id, status: item.itemStatus },
+                        {
+                            id: item.id,
+                            status: item.itemStatus,
+                            reviewComment: item.reviewComment,
+                        },
                         item.payload,
                     ),
                 ),
@@ -939,23 +983,48 @@ class PublicProfileSubmissionController {
                 .filter((item) => item.itemType === 'SKILL')
                 .map((item) =>
                     Object.assign(
-                        { id: item.id, status: item.itemStatus },
+                        {
+                            id: item.id,
+                            status: item.itemStatus,
+                            reviewComment: item.reviewComment,
+                        },
                         item.payload,
                     ),
                 ),
         };
     }
     buildSubmissionView(linkId, submission, items) {
+        const activeLinkExpiresAtMs = submission.lastActiveLinkExpiresAt
+            ? new Date(submission.lastActiveLinkExpiresAt).getTime()
+            : NaN;
+        const hasValidCopyLink =
+            Boolean(submission.lastActiveLinkUrl) &&
+            Number.isFinite(activeLinkExpiresAtMs) &&
+            activeLinkExpiresAtMs > Date.now();
         return {
             id: submission.id,
             linkId,
             personId: submission.personId,
             email: submission.email,
             status: submission.status,
-            lastLinkRecipientEmail: submission.lastLinkRecipientEmail,
-            lastLinkEventAt: submission.lastLinkEventAt,
-            lastLinkEventType: submission.lastLinkEventType,
-            lastLinkEventByPersonId: submission.lastLinkEventByPersonId,
+            copyLink: hasValidCopyLink
+                ? {
+                      url: submission.lastActiveLinkUrl,
+                      expiresAt: new Date(
+                          activeLinkExpiresAtMs,
+                      ).toISOString(),
+                  }
+                : undefined,
+            lastDispatch: submission.lastLinkEventAt
+                ? {
+                      recipientEmail: submission.lastLinkRecipientEmail,
+                      status: submission.lastLinkEventType,
+                      eventAt: new Date(
+                          submission.lastLinkEventAt,
+                      ).toISOString(),
+                      eventByPersonId: submission.lastLinkEventByPersonId,
+                  }
+                : undefined,
             submittedAt: submission.submittedAt,
             closedAt: submission.closedAt,
             createdAt: submission.createdAt,
@@ -968,9 +1037,48 @@ class PublicProfileSubmissionController {
                 acceptedTargetId: item.acceptedTargetId,
                 reviewedByPersonId: item.reviewedByPersonId,
                 reviewedAt: item.reviewedAt,
+                reviewComment: item.reviewComment,
                 createdAt: item.createdAt,
                 updatedAt: item.updatedAt,
             })),
+        };
+    }
+    buildSubmissionSummary(submission) {
+        const activeLinkExpiresAtMs = submission.lastActiveLinkExpiresAt
+            ? new Date(submission.lastActiveLinkExpiresAt).getTime()
+            : NaN;
+        const hasValidCopyLink =
+            Boolean(submission.lastActiveLinkUrl) &&
+            Number.isFinite(activeLinkExpiresAtMs) &&
+            activeLinkExpiresAtMs > Date.now();
+        return {
+            id: submission.id,
+            linkId: submission.linkId,
+            personId: submission.personId,
+            email: submission.email,
+            status: submission.status,
+            copyLink: hasValidCopyLink
+                ? {
+                      url: submission.lastActiveLinkUrl,
+                      expiresAt: new Date(
+                          activeLinkExpiresAtMs,
+                      ).toISOString(),
+                  }
+                : undefined,
+            lastDispatch: submission.lastLinkEventAt
+                ? {
+                      recipientEmail: submission.lastLinkRecipientEmail,
+                      status: submission.lastLinkEventType,
+                      eventAt: new Date(
+                          submission.lastLinkEventAt,
+                      ).toISOString(),
+                      eventByPersonId: submission.lastLinkEventByPersonId,
+                  }
+                : undefined,
+            submittedAt: submission.submittedAt,
+            closedAt: submission.closedAt,
+            createdAt: submission.createdAt,
+            updatedAt: submission.updatedAt,
         };
     }
     sendSubmissionLinkMail(email, url, expiresAt) {
