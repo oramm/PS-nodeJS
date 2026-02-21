@@ -16,3 +16,11 @@
 1. Do not create new operational `.md` files in root.
 2. Add new runbooks under `docs/team/runbooks/*`.
 3. Add onboarding or operations docs under `docs/team/onboarding/*` and `docs/team/operations/*`.
+
+## Cross-repo workspace rules
+
+1. This repository is backend: `C:\Apache24\htdocs\PS-nodeJS`.
+2. Frontend lives in a separate repository: `C:\Apache24\htdocs\ENVI.ProjectSite`.
+3. If requested files are missing in current `cwd`, check the sibling repository by absolute path before reporting blocker.
+4. Do not conclude "files do not exist" until both repositories are checked.
+5. For frontend changes, switch working directory to `C:\Apache24\htdocs\ENVI.ProjectSite` and report touched files from that repo.

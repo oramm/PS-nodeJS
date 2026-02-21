@@ -169,3 +169,13 @@ SUMMARY: 1-2 zdania podsumowania
 - NIE bądź miły kosztem jakości — bug to bug
 - NIE sugeruj dodawania testów jeśli nie poproszono (to osobny proces)
 - NIE komentuj importów/eksportów jeśli są spójne z resztą projektu
+
+---
+
+## E) TEST CONTEXT (opcjonalny input)
+
+Jeśli otrzymasz blok TEST_REPORT od agenta Tester:
+- **TEST_PASS** → uwzględnij w POCHWAŁACH, potwierdź w SUMMARY
+- **TEST_FAIL** → dodaj CRITICAL issue za każdy failing test (reviewer NIE approveuje kodu z failing testami)
+- **COVERAGE_GAP** → dodaj MEDIUM issue jeśli zmienione pliki nie mają testów
+- **Brak TEST_REPORT** → review normalnie (wsteczna kompatybilność)

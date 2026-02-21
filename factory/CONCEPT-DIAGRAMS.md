@@ -22,11 +22,12 @@ flowchart LR
     O --> M[Committer]
 
     P --> O
-    C --> R
-    R -->|APPROVE| T
+    C --> T
+    T -->|PASS| R
+    T -->|FAIL| F
+    R -->|APPROVE| D
     R -->|REQUEST_CHANGES| F
-    F --> R
-    T --> D
+    F --> T
     D --> M
     M --> H
 
@@ -41,9 +42,11 @@ Jak czytac:
 
 ```mermaid
 flowchart TD
-    A[Coder: kod v1] --> B[Reviewer]
-    B -->|APPROVE| C[Przekaz do Tester]
-    B -->|REQUEST_CHANGES| D[Fixer]
+    A[Coder: kod v1] --> B[Tester]
+    B -->|PASS| C[Reviewer]
+    B -->|FAIL| D[Fixer]
+    C -->|APPROVE| G[Przekaz do Docs]
+    C -->|REQUEST_CHANGES| D
     D --> E{Iteracje < 3?}
     E -->|Tak| B
     E -->|Nie| F[Eskalacja do czlowieka]
@@ -67,11 +70,11 @@ flowchart TD
     CP2 -->|Zmiany| A
 
     L --> C[Coder]
-    C --> R[Reviewer]
+    C --> T[Tester]
+    T --> R[Reviewer]
     R --> F[Fixer]
-    R --> T[Tester]
-    F --> R
-    T --> D[Docs]
+    F --> T
+    R --> D[Docs]
     D --> G[Commit/PR]
     G --> N{Kolejny task?}
     N -->|Tak| L

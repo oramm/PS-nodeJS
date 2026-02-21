@@ -360,5 +360,6 @@ Context Gate v1 (Low-Context First):
 - Start sesji tylko z Warstwa A:
   - `factory/CONCEPT.md`
   - `factory/TOOL-ADAPTERS.md`
+  - `factory/prompts/tester.md`
   - `factory/prompts/reviewer.md`
 - Warstwy B/C doladowuj selektywnie, nie domyslnie.

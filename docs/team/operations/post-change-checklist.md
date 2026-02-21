@@ -46,6 +46,60 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-21 - Local dev orchestration for backend + frontend
+
+### 1. Scope
+
+- Added local orchestration scripts in backend repo to manage both dev servers (backend and frontend) with one command set.
+- Added CLI entry points:
+  - `yarn dev:up`
+  - `yarn dev:down`
+  - `yarn dev:status`
+  - `yarn dev:logs`
+- Added runbook: `docs/team/runbooks/local-dev-orchestration.md`.
+
+### 2. DB impact
+
+- none.
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps: none (local-only dev tooling).
+
+### 5. Developer actions
+
+- Use `yarn dev:up` to start both local services.
+- Use `yarn dev:status` and `yarn dev:logs` for diagnostics.
+- Use `yarn dev:down` to stop services.
+
+### 6. Verification
+
+- `yarn dev:down` leaves ports `3000` and `9000` free.
+- `yarn dev:up` starts both services and reports healthy status.
+- `yarn dev:status` exits `0` when both are running.
+- Frontend URL `http://localhost:9000/docs/` returns `200`.
+
+### 7. Rollback
+
+- Remove files:
+  - `scripts/dev-runtime-common.ps1`
+  - `scripts/dev-up.ps1`
+  - `scripts/dev-down.ps1`
+  - `scripts/dev-status.ps1`
+  - `scripts/dev-logs.ps1`
+  - `docs/team/runbooks/local-dev-orchestration.md`
+- Revert `package.json`, `.gitignore`, and this checklist entry.
+
+### 8. Owner
+
+- Local developer tooling session (Codex + repository owner).
+
 
 ## 2026-02-20 - Public Profile Submission configurable link recovery cooldown
 
@@ -1415,3 +1469,41 @@ Copy the block below for each change:
 
 - Experience Update migration session (Codex + repository owner).
 
+
+## 2026-02-21 - Kylos: Public Profile Submission migrations 004/005/006
+
+### What changed
+
+- Executed SQL migrations on runtime target `envi-konsulting.kylos.pl/envikons_myEnvi`:
+    - `src/persons/migrations/004_create_public_profile_submission_v1.sql` (dependency gate; base tables were missing)
+    - `src/persons/migrations/005_add_public_profile_submission_last_link_event.sql`
+    - `src/persons/migrations/006_experience_update_hard_cut.sql`
+
+### Why
+
+- Requested remote rollout of `005` and `006`; runtime DB had no `PublicProfileSubmission*` tables, so `004` had to be applied first.
+
+### Verification
+
+- Confirmed presence of base tables:
+    - `PublicProfileSubmissionLinks`
+    - `PublicProfileSubmissions`
+    - `PublicProfileSubmissionItems`
+    - `PublicProfileSubmissionVerifyChallenges`
+    - `PublicProfileSubmissionSessions`
+- Confirmed `005` columns on `PublicProfileSubmissions`:
+    - `LastLinkRecipientEmail`
+    - `LastLinkEventAt`
+    - `LastLinkEventType`
+    - `LastLinkEventByPersonId`
+- Confirmed `006` columns/index:
+    - `PublicProfileSubmissions.LastActiveLinkUrl`
+    - `PublicProfileSubmissions.LastActiveLinkExpiresAt`
+    - `PublicProfileSubmissionItems.ReviewComment`
+    - `idx_publicprofilesubmissions_last_active_link_expires`
+
+### Rollback
+
+- If rollback is required, execute controlled DBA rollback:
+    - drop newly added columns/indexes only after dependency review,
+    - preserve data consistency for submissions/links lifecycle fields.

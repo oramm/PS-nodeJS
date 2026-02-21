@@ -5,19 +5,19 @@
 ### Codex
 
 ```text
-Pracuj wg AGENTS.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Review loop -> Test -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie koncz taska bez APPROVE.
+Pracuj wg AGENTS.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie koncz taska bez APPROVE.
 ```
 
 ### Claude Code
 
 ```text
-Pracuj wg CLAUDE.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Review loop -> Test -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Po 3 nieudanych iteracjach eskaluj do czlowieka.
+Pracuj wg CLAUDE.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Po 3 nieudanych iteracjach eskaluj do czlowieka.
 ```
 
 ### Copilot VS Code
 
 ```text
-Pracuj wg .github/copilot-instructions.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Review loop -> Test -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie zamykaj taska bez APPROVE.
+Pracuj wg .github/copilot-instructions.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie zamykaj taska bez APPROVE.
 ```
 
 ---
@@ -37,32 +37,16 @@ Podsumowanie:
 - Test na zywo: healthCheck() na ToolsDb.ts -> APPROVE z 2 uwagami (MEDIUM: kruche internal API, LOW: cichy catch)
 - Reviewer poprawnie rozumie kontekst projektu, nie generuje false positives
 
-## Sesja 2: Test Pipeline
+## Sesja 2: Test Pipeline DONE
 
-```text
-Kontynuuje wdrazanie "Dark Code Factory".
-Metoda: warstwowa ("na cebulke") - jedna warstwa na raz.
-
-KONTEKST:
-- Serwer zaudytowany -> factory/AUDIT-SERVER.md
-- Klient zaudytowany -> factory/AUDIT-CLIENT.md
-- Mapa systemu -> factory/SYSTEM-MAP.md
-- Mapa dokumentacji -> factory/DOCS-MAP.md
-- Koncepcja i adaptery -> factory/CONCEPT.md, factory/TOOL-ADAPTERS.md
-- Status -> factory/STATUS.md
-- Reviewer -> factory/prompts/reviewer.md
-
-Przeczytaj factory/STATUS.md i factory/DOCS-MAP.md,
-zeby znac aktualny stan.
-
-WARSTWA 2: TEST PIPELINE
-
-Cel: kazda zmiana w kodzie jest automatycznie testowana
-PRZED review. Subagent reviewer dostaje wynik testow
-jako dodatkowy kontekst.
-
-[do uzupelnienia po zatwierdzeniu kierunku warstwy 2]
-```
+Podsumowanie:
+- Stworzono `factory/prompts/tester.md` — prompt agenta testujacego (TEST_VERDICT: TEST_PASS | TEST_FAIL)
+- Rozszerzono `factory/prompts/reviewer.md` o sekcje E) TEST CONTEXT (wstecznie kompatybilna)
+- Odwrocono pipeline we wszystkich dokumentach: `Test -> Review` (zamiast `Review -> Test`)
+- Zaktualizowano diagramy w `factory/CONCEPT-DIAGRAMS.md`
+- Zaktualizowano adaptery: `factory/TOOL-ADAPTERS.md`, `factory/adapters/claude-code.md`, `factory/adapters/codex.md`, `factory/adapters/copilot-vscode.md`
+- Dodano `factory/prompts/tester.md` do Context Gate Warstwa A we wszystkich dokumentach
+- Zaktualizowano one-linery w Quick Start
 
 ## Pilot Low-Context First (2-3 sesje)
 

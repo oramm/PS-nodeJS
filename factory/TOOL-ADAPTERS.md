@@ -10,8 +10,8 @@
 Kazde zadanie przechodzi sekwencje:
 1. Plan i kryteria akceptacji.
 2. Implementacja taska.
-3. Review loop (`APPROVE` albo `REQUEST_CHANGES`, max 3 iteracje).
-4. Testy lokalne.
+3. Testy wg `factory/prompts/tester.md` (TEST_VERDICT: TEST_PASS | TEST_FAIL).
+4. Review loop (`APPROVE` albo `REQUEST_CHANGES`, max 3 iteracje) — reviewer dostaje TEST_REPORT.
 5. Aktualizacja docs (jesli dotyczy).
 6. Commit po approve.
 
@@ -26,6 +26,7 @@ Hard rules:
 ### Warstwa A (always-on)
 - `factory/CONCEPT.md`
 - `factory/TOOL-ADAPTERS.md`
+- `factory/prompts/tester.md`
 - `factory/prompts/reviewer.md`
 
 ### Warstwa B (task-scoped)
@@ -65,7 +66,7 @@ Start tylko z Warstwa A:
 - factory/TOOL-ADAPTERS.md
 - factory/prompts/reviewer.md
 Warstwe B/C doladuj tylko gdy task tego wymaga.
-Wymus workflow: Plan -> Implementacja -> Review loop -> Test -> Docs -> Commit.
+Wymus workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Nie koncz zadania bez review APPROVE.
 ```
 

@@ -1,6 +1,6 @@
 # Factory Build Status
 
-## Stan: Warstwa 1 - Reviewer Agent DONE
+## Stan: Warstwa 2 - Test Pipeline DONE
 ## Data: 2026-02-20
 
 ## Architektura systemu
@@ -26,7 +26,7 @@
 - [x] Cross-tool adaptery (`factory/TOOL-ADAPTERS.md`, `factory/adapters/*`, `.github/copilot-instructions.md`)
 - [x] Context Gate v1 (Low-Context First) + budget kontekstu
 - [x] Szablon planowania kontekstu taska (`factory/templates/task-plan-context.yaml`)
-- [ ] Test pipeline (warstwa 2)
+- [x] Test pipeline (warstwa 2)
 - [ ] Planner (warstwa 3)
 - [ ] Auto-docs (warstwa 4)
 
@@ -74,6 +74,14 @@ Zakres wykonany:
 - Konwencja `_` prefix jest spojna po obu stronach.
 - Typy klient/serwer utrzymywane recznie (ryzyko dryfu).
 
+## Warstwa 2 - Test Pipeline
+
+### Co powstalo
+1. `factory/prompts/tester.md` — prompt agenta testujacego (TEST_VERDICT: TEST_PASS | TEST_FAIL)
+2. Sekcja E) TEST CONTEXT w `factory/prompts/reviewer.md` (wstecznie kompatybilna)
+3. Pipeline odwrocony na `Test -> Review` we wszystkich dokumentach i adapterach
+4. `tester.md` dodany do Context Gate Warstwa A
+
 ## Nastepny krok
-Sesja 2 - Test Pipeline  
+Sesja 3 - Planner
 Prompt: `factory/PROMPTS-SESSIONS.md`

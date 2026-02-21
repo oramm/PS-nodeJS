@@ -5,8 +5,8 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 1. Wklej prompt startowy w Copilot Chat.
 2. Startuj tylko z Warstwa A, warstwy B/C doladuj warunkowo.
 3. Dziel prace na male taski.
-4. Po kazdym tasku uruchom review wg `factory/prompts/reviewer.md`.
-5. Przed commitem uruchom testy lokalne i popraw bledy.
+4. Po implementacji uruchom testy wg `factory/prompts/tester.md`.
+5. Wynik TEST_REPORT przekaz do review wg `factory/prompts/reviewer.md`.
 6. Przy planie taska uzupelnij:
    - `required_context_files`
    - `optional_context_files`
@@ -23,8 +23,9 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 Pracuj wg .github/copilot-instructions.md oraz factory/TOOL-ADAPTERS.md (Low-Context First).
 Start tylko z Warstwa A.
 Workflow:
-Plan -> Implementacja -> Review loop -> Test -> Docs -> Commit.
-Po kazdej zmianie wykonaj review promptem z factory/prompts/reviewer.md.
+Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Po implementacji uruchom testy wg factory/prompts/tester.md.
+Wynik TEST_REPORT przekaz do review wg factory/prompts/reviewer.md.
 Warstwe B/C doladuj tylko gdy task tego wymaga.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens.
 Nie koncz taska bez review APPROVE.
@@ -35,5 +36,6 @@ Jesli brak dostepu do ENVI.ProjectSite, zglos to jawnie jako blocker.
 ## Wzorzec rozmowy na task
 1. "Przygotuj plan taska i acceptance criteria."
 2. "Zaimplementuj task zgodnie z planem."
-3. "Wykonaj review wg factory/prompts/reviewer.md i wypisz issues."
-4. "Napraw issues, potem podaj finalny diff i checklist testow."
+3. "Uruchom testy wg factory/prompts/tester.md."
+4. "Wykonaj review wg factory/prompts/reviewer.md (przekaz TEST_REPORT) i wypisz issues."
+5. "Napraw issues, potem podaj finalny diff."

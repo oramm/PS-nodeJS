@@ -8,7 +8,7 @@
 
 Dark Factory w tym projekcie to proces, w ktorym czlowiek definiuje cel i kryteria akceptacji, a agenty AI realizuja kolejne etapy produkcji kodu w kontrolowanym pipeline:
 
-`Plan -> Implementacja -> Review -> Test -> Docs -> Commit`.
+`Plan -> Implementacja -> Test -> Review -> Docs -> Commit`.
 
 Model pracy:
 - Human-in-the-loop na checkpointach decyzyjnych.
@@ -68,16 +68,17 @@ Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 2. Implementacja:
 - coder realizuje pojedynczy task z kontekstem tylko potrzebnych plikow.
 
-3. Review loop:
-- reviewer ocenia zmiany,
+3. Test:
+- uruchom testy wg `factory/prompts/tester.md`,
+- wygeneruj TEST_REPORT (`TEST_VERDICT: TEST_PASS | TEST_FAIL`),
+- fail -> fixer -> retest (max 3 iteracje),
+- kolejne niepowodzenia -> eskalacja.
+
+4. Review loop:
+- reviewer ocenia zmiany + TEST_REPORT (jesli dostepny),
 - verdict: `APPROVE` albo `REQUEST_CHANGES`,
 - fixer poprawia i wraca do review (max 3 iteracje),
 - po 3 nieudanych iteracjach: eskalacja.
-
-4. Test:
-- lint, typecheck, unit/integration, security checks (wg warstwy 2),
-- fail -> fixer -> retest,
-- kolejne niepowodzenia -> eskalacja.
 
 5. Docs:
 - aktualizacja README/API/architektury/changelog (zakres zalezy od zmiany),
@@ -93,6 +94,7 @@ Na starcie kazdego taska agent laduje tylko Warstwe A. Warstwy B/C sa dolaczane 
 Warstwa A (always-on, zawsze):
 - `factory/CONCEPT.md`
 - `factory/TOOL-ADAPTERS.md`
+- `factory/prompts/tester.md`
 - `factory/prompts/reviewer.md`
 
 Warstwa B (task-scoped, zalezne od typu taska):
@@ -165,6 +167,7 @@ Priorytet delivery:
 
 - Status i postep: `factory/STATUS.md`
 - Sesje i prompty operacyjne: `factory/PROMPTS-SESSIONS.md`
+- Prompt testera (warstwa 2): `factory/prompts/tester.md`
 - Prompt reviewera (warstwa 1): `factory/prompts/reviewer.md`
 - Mapa zrodel prawdy: `factory/DOCS-MAP.md`
 - Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
