@@ -6,6 +6,11 @@
     "scripts": {
         "start": "cross-env NODE_ENV=development nodemon --exec ts-node src/index.ts",
         "start:prod": "nodemon --exec ts-node src/index.ts",
+        "dev:up": "powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1",
+        "dev:down": "powershell -ExecutionPolicy Bypass -File scripts/dev-down.ps1",
+        "dev:status": "powershell -ExecutionPolicy Bypass -File scripts/dev-status.ps1",
+        "dev:logs": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1",
+        "dev:logs:follow": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1 -Follow",
         "build": "tsc",
         "debug": "cross-env NODE_ENV=development nodemon --inspect-brk ts-node src/index.ts",
         "send-milestone-report": "node build/scripts/send-milestone-report.js",
