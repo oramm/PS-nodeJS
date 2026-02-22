@@ -35,6 +35,17 @@ async function main() {
         [dbName, table]
     )) as any[];
 
+    const columnRows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT COLUMN_NAME
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+         ORDER BY ORDINAL_POSITION`,
+        undefined,
+        [dbName, table]
+    )) as { COLUMN_NAME: string }[];
+
+    const columnSet = new Set(columnRows.map((row) => row.COLUMN_NAME));
+
     console.log(
         JSON.stringify(
             {
@@ -42,6 +53,12 @@ async function main() {
                 dbHost: process.env.DB_HOST,
                 dbName,
                 tableExists: tableRows.length > 0,
+                requiredColumns: {
+                    ProtocolGdId: columnSet.has('ProtocolGdId'),
+                    GdDocumentId: columnSet.has('GdDocumentId'),
+                    GdDocumentUrl: columnSet.has('GdDocumentUrl'),
+                },
+                columns: columnRows,
                 indexes: indexRows,
                 foreignKeys: fkRows,
             },

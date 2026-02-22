@@ -6,11 +6,16 @@ import { loadEnv } from '../src/setup/loadEnv';
 async function main() {
     loadEnv();
 
-    const migrationPath = path.resolve(
-        process.cwd(),
-        'src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql'
-    );
-    const sql = await readFile(migrationPath, 'utf8');
+    const migrationPaths = [
+        path.resolve(
+            process.cwd(),
+            'src/contractMeetingNotes/migrations/001_create_contract_meeting_notes.sql'
+        ),
+        path.resolve(
+            process.cwd(),
+            'src/contractMeetingNotes/migrations/002_add_contract_meeting_notes_gd_document_columns.sql'
+        ),
+    ];
 
     const host = process.env.DB_HOST;
     const user = process.env.DB_USER;
@@ -32,12 +37,17 @@ async function main() {
     });
 
     try {
-        await conn.query(sql);
+        for (const migrationPath of migrationPaths) {
+            const sql = await readFile(migrationPath, 'utf8');
+            await conn.query(sql);
+        }
         console.log(
             JSON.stringify(
                 {
                     status: 'ok',
-                    migration: '001_create_contract_meeting_notes.sql',
+                    migrations: migrationPaths.map((migrationPath) =>
+                        path.basename(migrationPath)
+                    ),
                     dbHost: host,
                     dbName: database,
                 },

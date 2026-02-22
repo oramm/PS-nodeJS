@@ -46,6 +46,69 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-02-22 - Contract Meeting Notes missing GdDocument columns (local dev fix)
+
+### 1. Scope
+
+- Diagnosed `ER_BAD_FIELD_ERROR` during `INSERT INTO ContractMeetingNotes` caused by missing DB columns used by backend model.
+- Added migration:
+    - `src/contractMeetingNotes/migrations/002_add_contract_meeting_notes_gd_document_columns.sql`
+- Updated migration tooling:
+    - `tmp/run-contract-meeting-notes-migration.ts` now applies `001` + `002` sequentially.
+    - `tmp/verify-contract-meeting-notes-migration.ts` now verifies required columns including `GdDocumentId` and `GdDocumentUrl`.
+
+### 2. DB impact
+
+- Target executed: `development` -> `localhost/envikons_myEnvi`.
+- Altered table: `ContractMeetingNotes`.
+- Added columns:
+    - `GdDocumentId` (`VARCHAR(255) NULL`)
+    - `GdDocumentUrl` (`VARCHAR(1024) NULL`)
+- Added index:
+    - `idx_contractmeetingnotes_gddocumentid` (`GdDocumentId`)
+
+### 3. ENV impact
+
+- `.env.example`: not needed.
+- New/changed variables: none.
+
+### 4. Heroku impact
+
+- Config vars: not required.
+- Restart/release steps:
+    - apply migration `002_add_contract_meeting_notes_gd_document_columns.sql` on target DB before deploying code path writing these columns.
+
+### 5. Developer actions
+
+- `NODE_ENV=development npx ts-node tmp/check-db-env-state.ts`
+- `NODE_ENV=development npx ts-node tmp/verify-contract-meeting-notes-migration.ts` (pre-check: missing columns).
+- `NODE_ENV=development npx ts-node tmp/run-contract-meeting-notes-migration.ts`
+- `NODE_ENV=development npx ts-node tmp/verify-contract-meeting-notes-migration.ts` (post-check: columns present).
+- `yarn jest src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteValidator.test.ts --runInBand`
+
+### 6. Verification
+
+- Pre-check evidence:
+    - `requiredColumns.GdDocumentId = false`
+    - `requiredColumns.GdDocumentUrl = false`
+- Post-check evidence:
+    - `requiredColumns.GdDocumentId = true`
+    - `requiredColumns.GdDocumentUrl = true`
+    - index `idx_contractmeetingnotes_gddocumentid` present.
+- Targeted tests:
+    - 4/4 suites passed, 11/11 tests passed.
+
+### 7. Rollback
+
+- If rollback required:
+    - `ALTER TABLE ContractMeetingNotes DROP INDEX idx_contractmeetingnotes_gddocumentid;`
+    - `ALTER TABLE ContractMeetingNotes DROP COLUMN GdDocumentUrl, DROP COLUMN GdDocumentId;`
+- Roll back related script updates in `tmp/run-contract-meeting-notes-migration.ts` and `tmp/verify-contract-meeting-notes-migration.ts`.
+
+### 8. Owner
+
+- Contract Meeting Notes migration fix session (Codex + repository owner).
+
 ## 2026-02-21 - Local dev orchestration for backend + frontend
 
 ### 1. Scope
