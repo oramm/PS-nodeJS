@@ -138,6 +138,8 @@ Uwaga:
 | `factory/SYSTEM-MAP.md` | Mapa serwer-klient |
 | `factory/DOCS-MAP.md` | Ten plik (mapa S.O.T.) |
 | `factory/prompts/reviewer.md` | Prompt reviewera AI |
+| `factory/prompts/planner.md` | S.O.T. dla fazy inicjalizacji taska (Warstwa 3 — Planner) |
+| `factory/FACTORY-FLOW.md` | Czytelny diagram przepływu fabryki (ASCII, stan obecny) |
 
 ---
 

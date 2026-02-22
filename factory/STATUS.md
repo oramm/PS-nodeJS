@@ -1,7 +1,7 @@
 # Factory Build Status
 
-## Stan: Warstwa 2 - Test Pipeline DONE
-## Data: 2026-02-20
+## Stan: Warstwa 3 - Planner DONE
+## Data: 2026-02-22
 
 ## Architektura systemu
 - SERWER: PS-nodeJS - Express.js/TypeScript backend z Clean Architecture, MariaDB, integracje Google APIs/KSeF.
@@ -27,7 +27,7 @@
 - [x] Context Gate v1 (Low-Context First) + budget kontekstu
 - [x] Szablon planowania kontekstu taska (`factory/templates/task-plan-context.yaml`)
 - [x] Test pipeline (warstwa 2)
-- [ ] Planner (warstwa 3)
+- [x] Planner (warstwa 3)
 - [ ] Auto-docs (warstwa 4)
 
 ## Warstwa 1 - Reviewer Agent
@@ -82,6 +82,22 @@ Zakres wykonany:
 3. Pipeline odwrocony na `Test -> Review` we wszystkich dokumentach i adapterach
 4. `tester.md` dodany do Context Gate Warstwa A
 
+## Warstwa 3 - Planner
+
+### Co powstalo
+1. `factory/prompts/planner.md` — prompt Planner Agenta (Architekt-Strateg, YAML kontrakt)
+2. Sekcje Planner w adapterach: `claude-code.md` (Plan Mode, subagenty, worktrees), `codex.md` (interactive + headless), `copilot-vscode.md` (Copilot Edits agent mode, #file pinning)
+3. Rozszerzenie `factory/templates/task-plan-context.yaml` o pola: `technical_objectives`, `verification_criteria`, `escalation_triggers`, `context_budget`, `plan_deviation`
+4. Sekcja "Lekka Orkiestracja" w `factory/TOOL-ADAPTERS.md`
+5. `planner.md` dodany do Context Gate Warstwa A (CLAUDE.md + copilot-instructions.md)
+6. Wpis `planner.md` w `factory/DOCS-MAP.md` (sekcja 9)
+
+### Kluczowe decyzje
+- Planner = Architekt-Strateg (definiuje CO i granice), Coder = fachowiec (decyduje JAK)
+- Output Plannera: YAML kontrakt + human checkpoint (PLAN_APPROVED / PLAN_REJECTED)
+- PLAN_DEVIATION_REPORT: Coder moze odrzucic plan przy blokerze; max 2 rundy poprawek
+- Anty-mikrozarzadzanie: brak listy krokow implementacji — tylko cele i constraints
+
 ## Nastepny krok
-Sesja 3 - Planner
+Sesja 4 - Auto-docs
 Prompt: `factory/PROMPTS-SESSIONS.md`

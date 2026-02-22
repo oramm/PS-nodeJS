@@ -100,6 +100,17 @@ W praktyce:
 - rozpoczynaj chat od promptu bootstrap,
 - prowadz review i testy jawnie (Copilot nie zrobi orkiestracji sam).
 
+## 5a. Lekka Orkiestracja (Anty-mikrozarządzanie)
+
+Planner definiuje **cele i granice** (technical_objectives + constraints).
+Coder (fachowiec) decyduje o narzędziach i kolejności — nie dostaje listy kroków.
+
+Subagenci przy delegowaniu zawsze otrzymują skrócony opis Warstwy A (CONCEPT.md summary).
+Izolowany kontekst subagenta nie dziedziczy zasad automatycznie.
+
+PLAN_DEVIATION_REPORT: Coder może odrzucić plan jeśli odkryje przeszkodę.
+Max 2 rundy poprawki — człowiek jest arbitrem zmiany scope.
+
 ## 6. Escalacja i decyzje
 
 Agent ma pytac czlowieka, gdy:

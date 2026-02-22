@@ -33,6 +33,39 @@ Jesli scope obejmuje frontend, sprawdz takze C:\Apache24\htdocs\ENVI.ProjectSite
 Jesli brak dostepu do ENVI.ProjectSite, zglos to jawnie jako blocker.
 ```
 
+## Planner (Warstwa 3)
+
+### Plan agent (Copilot Edits — tryb agenta)
+
+Użyj **Copilot Edits w trybie agenta** do fazy planowania.
+`@workspace` indeksuje repozytorium — nie wskazuj plików ręcznie, chyba że są to krytyczne S.O.T.
+
+**Pinowanie S.O.T. przez `#file` (tylko dla plików krytycznych):**
+- `#file:factory/prompts/planner.md` — zasady Plannera
+- `#file:factory/CONCEPT.md` — fundament Dark Factory
+- `#file:.github/instructions/architektura.instructions.md` — gdy task dotyka architektury
+
+> Uwaga: `@workspace` indeksuje repo, ale nie zawsze jest pełnym snapshotem. Dla plików krytycznych (kontrakt API, typy) użyj `#file` jako gwarancji świeżości danych.
+
+### Workflow planowania
+
+1. Otwórz Copilot Edits (agent mode).
+2. Opisz task i dodaj: "Przygotuj plan wg `#file:factory/prompts/planner.md`."
+3. Copilot z @workspace analizuje i proponuje YAML kontrakt.
+4. Ty zatwierdzasz lub odrzucasz plan.
+5. Po PLAN_APPROVED: **nowa sesja Edits** z YAML kontraktem jako kontekstem startowym.
+
+### Cross-repo scope
+
+Gdy task obejmuje frontend: jawnie dodaj `#file` z `C:\Apache24\htdocs\ENVI.ProjectSite`
+dla kluczowych plików (typów, komponentów). @workspace może nie indeksować drugiego repo.
+
+### PLAN_DEVIATION_REPORT
+
+Coder zgłasza przez wiadomość: "PLAN_DEVIATION_REPORT: [opis]".
+Wróć do sesji Plan agent z DEVIATION jako kontekstem — popraw kontrakt.
+Max 2 rundy. Człowiek jest ostatecznym arbitrem zmiany scope.
+
 ## Wzorzec rozmowy na task
 1. "Przygotuj plan taska i acceptance criteria."
 2. "Zaimplementuj task zgodnie z planem."

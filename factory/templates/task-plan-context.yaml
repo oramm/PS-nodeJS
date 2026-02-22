@@ -32,3 +32,21 @@ delivery_balance:
   feature_task_in_iteration: true
   refactor_task_in_iteration: true
   notes: ""
+
+# --- Warstwa 3: Planner fields ---
+technical_objectives:
+  - objective: ""        # Stan końcowy systemu (co ma działać)
+    constraints: ""      # Czego nie wolno ruszyć
+
+verification_criteria:
+  hard: []               # Twarde — blokują APPROVE (np. testy)
+  soft: []               # Miękkie — ostrzeżenia dla Reviewera
+
+escalation_triggers: []  # Mierzalne progi → STOP → człowiek
+
+context_budget:
+  max_files_for_coder: 8
+  estimated_tokens: 15000
+  subagent_scope: ""     # Wąski zakres dla subagentów Codera
+
+plan_deviation: null     # Wypełnia Coder jeśli odkryje przeszkodę

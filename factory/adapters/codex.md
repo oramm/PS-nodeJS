@@ -15,6 +15,45 @@
    - `optional_context_files`
    - `context_budget_tokens`
 
+## Planner (Warstwa 3)
+
+### Tryby pracy Plannera w Codex
+
+**Interactive (CLI/TUI):**
+- Uruchom Codex w trybie interaktywnym.
+- Opisz task i zlec: "Wygeneruj plan wg factory/prompts/planner.md. NIE implementuj."
+- Codex generuje YAML i wyświetla w CLI z oczekiwaniem na zatwierdzenie.
+- Zatwierdź (`PLAN_APPROVED`) lub odrzuć (`PLAN_REJECTED: powód`) bezpośrednio w CLI.
+
+**Headless — polityka projektowa Dark Factory (Team Policy):**
+
+Rozdzielenie sesji na planowanie i implementację to **polityka projektowa**, nie ograniczenie techniczne. Cel: pełny audit trail dla CI/CD.
+
+```bash
+# Wywołanie 1: tylko planowanie
+codex exec "Wygeneruj plan taska X wg factory/prompts/planner.md. Zapisz do factory/plans/{task-id}.yaml. NIE implementuj."
+
+# Po human review: dodaj PLAN_APPROVED: true do YAML
+
+# Wywołanie 2: implementacja (tylko po PLAN_APPROVED: true w pliku)
+codex exec "Zaimplementuj task wg factory/plans/{task-id}.yaml (status: PLAN_APPROVED)."
+```
+
+Skrót: `codex e "..."` (alias dla `codex exec`).
+
+AGENTS.md musi zawierać regułę:
+`"Nie implementuj bez jawnego PLAN_APPROVED od człowieka lub pola PLAN_APPROVED: true w pliku planu."`
+
+### PLAN_DEVIATION_REPORT w headless
+
+Coder dopisuje do pliku planu:
+```yaml
+plan_deviation:
+  discovered: "..."
+  proposal: "..."
+```
+CI/CD wykrywa `plan_deviation` i pauzuje — człowiek arbiter. Max 2 iteracje poprawki.
+
 ## Prompt startowy (copy/paste)
 
 ```text

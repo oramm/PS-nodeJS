@@ -15,6 +15,45 @@
    - `optional_context_files`
    - `context_budget_tokens`
 
+## Planner (Warstwa 3)
+
+### Plan Mode — uruchomienie
+
+Uruchom Plan Mode **przed** eksploracją (bezpieczna eksploracja bez zmian w plikach).
+
+Dwie metody:
+- W sesji interaktywnej: **Shift+Tab** dwukrotnie (Normal → Auto-Accept → Plan Mode)
+- Nowa sesja od razu w Plan Mode:
+  ```bash
+  claude --permission-mode plan
+  ```
+
+> Uwaga: skróty i flagi zależą od wersji Claude Code — weryfikuj w `/help` aktualnej instalacji.
+
+Po fazie planowania i uzyskaniu PLAN_APPROVED:
+**Otwórz nową sesję bez `--permission-mode plan`** — Coder startuje z czystym kontekstem skupionym wyłącznie na implementacji.
+
+### Subagenty do eksploracji (izolacja kontekstu)
+
+Użyj Task tool (subagent Explore) do wąskiej eksploracji modułów.
+Subagent chroni główny kontekst — czyta pliki i zwraca tylko wnioski, nie pełne pliki.
+Zawsze przekazuj subagentowi: "Pracujesz w projekcie ENVI. Zasady: factory/CONCEPT.md."
+Zakres subagenta = `context_budget.subagent_scope` z YAML kontraktu.
+
+### Worktrees (opcjonalnie)
+
+Gdy task dotyka >2 modułów lub istnieje ryzyko konfliktu z bieżącą pracą, użyj worktree:
+```bash
+claude --worktree {task-name}
+```
+Coder pracuje w izolowanym worktree. Merge po APPROVE.
+
+### PLAN_DEVIATION_REPORT
+
+Jeśli Coder odkryje przeszkodę: wraca do Plan Mode (nowa sesja `--permission-mode plan`).
+Planner generuje poprawiony kontrakt → nowy human checkpoint.
+Max 2 rundy — po 2 bez rozwiązania → eskalacja do człowieka.
+
 ## Prompt startowy (copy/paste)
 
 ```text

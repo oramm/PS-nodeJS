@@ -66,9 +66,19 @@ Decyzja po pilocie:
 - jesli metryki sa stabilne, rozwaz automatyzacje hookami;
 - jesli nie, kalibruj trigger dla Warstwy C i budzet kontekstu.
 
-## Sesja 3: Planner
+## Sesja 3: Planner DONE
 
-[placeholder]
+Podsumowanie:
+- Stworzono `factory/prompts/planner.md` — prompt agenta Planner (Architekt-Strateg, YAML kontrakt)
+- Dodano sekcje Planner (Warstwa 3) do adapterów: `claude-code.md`, `codex.md`, `copilot-vscode.md`
+- Rozszerzono `factory/templates/task-plan-context.yaml` o pola Plannera: `technical_objectives`, `verification_criteria`, `escalation_triggers`, `context_budget`, `plan_deviation`
+- Dodano sekcję "Lekka Orkiestracja" do `factory/TOOL-ADAPTERS.md`
+- Dodano wpis `planner.md` do sekcji 9 w `factory/DOCS-MAP.md`
+- Zaktualizowano `factory/STATUS.md` → [x] Planner (warstwa 3)
+- Dodano `planner.md` do Warstwy A w `CLAUDE.md` i `.github/copilot-instructions.md`
+- Pipeline: Plan (Planner) → Implementacja → Test → Review → Docs → Commit
+- Human checkpoint: Planner czeka na jawne PLAN_APPROVED przed przekazaniem do Codera
+- PLAN_DEVIATION_REPORT: Coder może odrzucić plan przy blokerze; max 2 rundy poprawek
 
 ## Sesja 4: Auto-docs
 
