@@ -1,92 +1,66 @@
-# Dark Factory — Flow (stan na 2026-02-22)
+﻿# Dark Factory — Flow (stan na 2026-02-22)
 
 ## Jak to działa teraz
 
 ```
-CZŁOWIEK                    PLANNER                     CODER                    TESTER                   REVIEWER
-(orchestrator)              (planner.md)                (nowa sesja)             (tester.md)              (reviewer.md)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  ┌─────────────────┐
-  │ Cel biznesowy    │
-  │ + ograniczenia   │
-  └────────┬────────┘
-           │
-           ▼
-           ├──────────────► ┌──────────────────────┐
-           │                │ Eksploracja kodu      │
-           │                │ (Context Gate v1)     │
-           │                │                      │
-           │                │ Generuje YAML:       │
-           │                │  • cele techniczne   │
-           │                │  • kryteria testów   │
-           │                │  • pliki kontekstu   │
-           │                │  • budżet tokenów    │
-           │                └──────────┬───────────┘
-           │                           │
-           │                           ▼
-  ┌────────┴────────┐       ┌──────────────────────┐
-  │  CHECKPOINT      │◄──────│ YAML kontrakt        │
-  │                  │       │ (task-plan-context)   │
-  │  PLAN_APPROVED?  │       └──────────────────────┘
-  │  PLAN_REJECTED?  │
-  └────────┬────────┘
-           │
-           │ APPROVED
-           ▼
-           ├─────────────────────────────► ┌──────────────────────┐
-           │                               │ Pisze kod            │
-           │                               │ (ma YAML + pliki)    │
-           │                               └──────────┬───────────┘
-           │                                          │
-           │                                          │ git diff
-           │                                          ▼
-           │                                          ├──────────────────────► ┌──────────────────────┐
-           │                                          │                       │ yarn test            │
-           │                                          │                       │                      │
-           │                                          │                       │ TEST_VERDICT:        │
-           │                                          │                       │  TEST_PASS           │
-           │                                          │                       │  TEST_FAIL           │
-           │                                          │                       └──────────┬───────────┘
-           │                                          │                                  │
-           │                                          │               ┌──────────────────┤
-           │                                          │               │                  │
-           │                                          │          TEST_FAIL           TEST_PASS
-           │                                          │               │            + TEST_REPORT
-           │                                          │               ▼                  │
-           │                                          │     ┌─────────────────┐          │
-           │                                          │◄────│ Fix + retest    │          │
-           │                                          │     │ (max 3x)       │          │
-           │                                          │     └─────────────────┘          │
-           │                                          │                                  ▼
-           │                                          │                       ┌──────────────────────┐
-           │                                          │                       │ Review zmian         │
-           │                                          │                       │ + TEST_REPORT        │
-           │                                          │                       │                      │
-           │                                          │                       │ VERDICT:             │
-           │                                          │                       │  APPROVE             │
-           │                                          │                       │  REQUEST_CHANGES     │
-           │                                          │                       └──────────┬───────────┘
-           │                                          │                                  │
-           │                                          │                    ┌─────────────┤
-           │                                          │                    │             │
-           │                                          │             REQUEST_CHANGES   APPROVE
-           │                                          │                    │             │
-           │                                          │                    ▼             │
-           │                                          │          ┌─────────────────┐    │
-           │                                          │◄─────────│ Fix + retest    │    │
-           │                                          │          │ (max 3x)       │    │
-           │                                          │          └─────────────────┘    │
-           │                                          │                                 │
-           │                                          │         3x fail = ESKALACJA     │
-           │                                          │              │                  │
-  ┌────────┴────────┐                                 │              │                  │
-  │                  │◄──────────────────────────────────────────────┘                  │
-  │  Commit + docs   │◄────────────────────────────────────────────────────────────────┘
-  │  (ręcznie)       │
-  └──────────────────┘
+┌───────────────┬───────────────┬───────────────┬───────────────┬───────────────┬───────────────┐
+│   CZŁOWIEK    │   PLANNER     │   CODER       │   TESTER      │   REVIEWER    │ DOCUMENTARIAN │
+├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│               │               │               │               │               │               │
+│ [1] Cel biz.  │               │               │               │               │               │
+│ + ograniczenia│               │               │               │               │               │
+│   ═══════════>│               │               │               │               │               │
+│               │ [2] YAML      │               │               │               │               │
+│               │ kontrakt +    │               │               │               │               │
+│               │ CHECKPOINT    │               │               │               │               │
+│   <═══════════│               │               │               │               │               │
+│  PLAN_REJECTED│ → korekta     │               │               │               │               │
+│  → ponowny    │   planu       │               │               │               │               │
+│    CHECKPOINT │               │               │               │               │               │
+│               │               │               │               │               │               │
+├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│               │               │               │               │               │               │
+│ [3] APPROVED  │               │               │               │               │               │
+│   ═══════════════════════════>│               │               │               │               │
+│               │               │ [4] Implement.│               │               │               │
+│               │               │ + git diff    │               │               │               │
+│               │               │   ═══════════>│               │               │               │
+│               │               │               │               │               │               │
+├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│               │               │               │               │               │               │
+│               │               │               │ [5] TEST_FAIL │               │               │
+│               │               │   <═══════════│ → fix + retest│               │               │
+│               │               │  (naprawia)   │   (max 3x)   │               │               │
+│               │               │   ═══════════>│               │               │               │
+│               │               │               │ [5] TEST_PASS │               │               │
+│               │               │               │ + TEST_REPORT │               │               │
+│               │               │               │   ═══════════>│               │               │
+│               │               │               │               │               │               │
+├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│               │               │               │               │               │               │
+│               │               │               │               │ [6] REQUEST_  │               │
+│               │               │               │               │ CHANGES       │               │
+│               │               │   <═══════════════════════════│ → fix + retest│               │
+│               │               │  (naprawia → retest → re-review, max 3x)     │               │
+│               │               │   ═══════════>│  ═══════════>│               │               │
+│               │               │               │               │ [6] APPROVE   │               │
+│               │               │               │               │   ═══════════>│               │
+│               │               │               │               │               │               │
+├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│               │               │               │               │               │               │
+│               │               │               │               │               │ [7] Auto-docs │
+│               │               │               │               │               │ (Warstwa      │
+│               │               │               │               │               │  B/D/V)       │
+│   <═══════════════════════════════════════════════════════════════════════════│ [7] DONE      │
+│ [8] Commit    │               │               │               │               │               │
+│ (ręcznie)     │               │               │               │               │               │
+│               │               │               │               │               │               │
+├───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────┤
+│                                                                                               │
+│  Reguła eskalacji: 3× FAIL w pętli test/review → eskalacja do CZŁOWIEKA                      │
+│                                                                                               │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-
 
 ## Kto ma jakie skille
 
@@ -97,7 +71,7 @@ CZŁOWIEK                    PLANNER                     CODER                  
 │  ├── Definiuje cel i ograniczenia                                               │
 │  ├── Zatwierdza plan (PLAN_APPROVED / PLAN_REJECTED)                            │
 │  ├── Rozstrzyga eskalacje (3x fail, ryzyko bezpieczeństwa, niejasne wymagania) │
-│  ├── Commituje i aktualizuje docs (Warstwa 4 jeszcze nie wdrożona)             │
+│  ├── Commituje po zakończeniu Auto-docs                                         │
 │  └── Wybiera narzędzie: Claude Code / Codex / Copilot VS Code                  │
 │                                                                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -137,9 +111,16 @@ CZŁOWIEK                    PLANNER                     CODER                  
 │  ├── ≠ Coder (świeże spojrzenie, izolowany kontekst)                            │
 │  └── Przy REQUEST_CHANGES → Coder naprawia → retest → re-review (max 3x)       │
 │                                                                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  DOCUMENTARIAN  (factory/prompts/documentarian.md)                              │
+│  ├── Uruchamia się po VERDICT: APPROVE                                          │
+│  ├── Aktualizuje Warstwę B (progress.md, activity-log.md)                       │
+│  ├── Weryfikuje Warstwę D (alerty cross-repo przy zmianach API)                 │
+│  └── Aktualizuje Warstwę V (diagramy Mermaid.js)                                │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
-
 
 ## Context Gate — co się ładuje
 
@@ -164,9 +145,9 @@ Start sesji
 │  WARSTWA B — selektywnie                            │
 │                                                     │
 │  Backend arch  → architektura.instructions.md       │
-│  Testy         → architektura-testowanie.md         │
-│  API / typy    → SYSTEM-MAP.md + types.d.ts         │
-│  DB / env      → docs/team/operations/*             │
+│  Testy         → documentation/team/architecture/testing-per-layer.md │
+│  API / typy    → documentation/team/architecture/system-map.md + src/types/types.d.ts │
+│  DB / env      → documentation/team/operations/*                               │
 └────────────────────────┬────────────────────────────┘
                          │
                    bloker / brak danych?
@@ -175,11 +156,10 @@ Start sesji
 ┌─────────────────────────────────────────────────────┐
 │  WARSTWA C — tylko z uzasadnieniem                   │
 │                                                     │
-│  AUDIT-SERVER.md / AUDIT-CLIENT.md                  │
-│  architektura-szczegoly.md                          │
+│  documentation/team/architecture/refactoring-audit.md                         │
+│  documentation/team/architecture/clean-architecture-details.md                │
 └─────────────────────────────────────────────────────┘
 ```
-
 
 ## Co jest, czego nie ma
 
@@ -187,7 +167,7 @@ Start sesji
   Reviewer Agent ·········· ✅ wdrożony     prompt + review loop + severity levels
   Test Pipeline ··········· ✅ wdrożony     prompt + TEST_VERDICT + przekazanie do reviewera
   Planner ················· ✅ wdrożony     prompt + YAML kontrakt + human checkpoint
-  Auto-docs ··············· ❌ następny     aktualizacja docs w cyklu ze zmianą kodu
+  Auto-docs ··············· ✅ wdrożony     prompt documentarian.md + 5 warstw dokumentacji
   Committer ··············· ❌ przyszłość   standaryzacja commitów / PR
   Orchestrator (agent) ···· ❌ przyszłość   agent zamiast człowieka jako koordynator
 ```

@@ -26,4 +26,4 @@ Write-Host "  yarn test              - Run all tests" -ForegroundColor White
 Write-Host "  yarn test:watch        - Run tests in watch mode" -ForegroundColor White
 Write-Host "  yarn test:coverage     - Run tests with coverage report" -ForegroundColor White
 Write-Host "  yarn test:offers       - Run only Offers module tests" -ForegroundColor White
-Write-Host "`n📖 See TESTING.md for more information" -ForegroundColor Cyan
+Write-Host "`n📖 See documentation/team/runbooks/testing.md for more information" -ForegroundColor Cyan

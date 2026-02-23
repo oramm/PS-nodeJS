@@ -5,56 +5,52 @@
 ### Codex
 
 ```text
-Pracuj wg AGENTS.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie koncz taska bez APPROVE.
+Pracuj wg AGENTS.md i factory/TOOL-ADAPTERS.md (Low-Context First).
+Wybierz tylko potrzebne warstwy dokumentacji:
+- backend: Canonical -> Adaptery -> Factory
+- klient: Canonical -> Adaptery
+Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
+documentation_layers i documentation_selection_justification.
+Nie koncz taska bez APPROVE.
 ```
 
 ### Claude Code
 
 ```text
-Pracuj wg CLAUDE.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Po 3 nieudanych iteracjach eskaluj do czlowieka.
+Pracuj wg CLAUDE.md i factory/TOOL-ADAPTERS.md (Low-Context First).
+Wybierz tylko potrzebne warstwy dokumentacji:
+- backend: Canonical -> Adaptery -> Factory
+- klient: Canonical -> Adaptery
+Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
+documentation_layers i documentation_selection_justification.
+Po 3 nieudanych iteracjach eskaluj do czlowieka.
 ```
 
 ### Copilot VS Code
 
 ```text
-Pracuj wg .github/copilot-instructions.md i Low-Context First. Start tylko z Warstwa A: factory/CONCEPT.md, factory/TOOL-ADAPTERS.md, factory/prompts/tester.md, factory/prompts/reviewer.md. Warstwe B/C doladuj tylko gdy task tego wymaga. Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit. Uzupelnij required_context_files, optional_context_files, context_budget_tokens. Nie zamykaj taska bez APPROVE.
+Pracuj wg .github/copilot-instructions.md i factory/TOOL-ADAPTERS.md (Low-Context First).
+Wybierz tylko potrzebne warstwy dokumentacji:
+- backend: Canonical -> Adaptery -> Factory
+- klient: Canonical -> Adaptery
+Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
+documentation_layers i documentation_selection_justification.
+Nie zamykaj taska bez APPROVE.
 ```
 
 ---
 
-## Sesja 0b: Audyt Klienta DONE
-
-```text
-[wykonano - wyniki w factory/AUDIT-CLIENT.md i factory/SYSTEM-MAP.md]
-```
-
-## Sesja 1: Reviewer Agent DONE
-
-Podsumowanie:
-- Stworzono `factory/prompts/reviewer.md` - prompt reviewera (konkretny dla ENVI stack)
-- Stworzono `factory/DOCS-MAP.md` - mapa zrodel prawdy (S.O.T.)
-- Dodano sekcje "Factory: Review Process" do `CLAUDE.md`
-- Test na zywo: healthCheck() na ToolsDb.ts -> APPROVE z 2 uwagami (MEDIUM: kruche internal API, LOW: cichy catch)
-- Reviewer poprawnie rozumie kontekst projektu, nie generuje false positives
-
-## Sesja 2: Test Pipeline DONE
-
-Podsumowanie:
-- Stworzono `factory/prompts/tester.md` — prompt agenta testujacego (TEST_VERDICT: TEST_PASS | TEST_FAIL)
-- Rozszerzono `factory/prompts/reviewer.md` o sekcje E) TEST CONTEXT (wstecznie kompatybilna)
-- Odwrocono pipeline we wszystkich dokumentach: `Test -> Review` (zamiast `Review -> Test`)
-- Zaktualizowano diagramy w `factory/CONCEPT-DIAGRAMS.md`
-- Zaktualizowano adaptery: `factory/TOOL-ADAPTERS.md`, `factory/adapters/claude-code.md`, `factory/adapters/codex.md`, `factory/adapters/copilot-vscode.md`
-- Dodano `factory/prompts/tester.md` do Context Gate Warstwa A we wszystkich dokumentach
-- Zaktualizowano one-linery w Quick Start
-
 ## Pilot Low-Context First (2-3 sesje)
 
 Checklist pilota:
-- [ ] Kazdy task startuje od Warstwy A.
-- [ ] Warstwa B doladowana tylko gdy task tego wymaga.
-- [ ] Warstwa C doladowana tylko po triggerze "missing detail".
-- [ ] Uzupelnione pola: required_context_files, optional_context_files, context_budget_tokens.
+- [ ] Kazdy task wybiera tylko potrzebne warstwy dokumentacji.
+- [ ] Dla backendu model 3-warstwowy jest stosowany konsekwentnie.
+- [ ] Dla klienta model 2-warstwowy jest stosowany konsekwentnie.
+- [ ] Dla frontend/cross-repo kontrakt API jest weryfikowany po stronie backendu.
+- [ ] Uzupelnione pola: required_context_files, optional_context_files, context_budget_tokens, documentation_layers, documentation_selection_justification.
 
 Metryki do zebrania:
 - liczba iteracji review na task,
@@ -64,21 +60,16 @@ Metryki do zebrania:
 
 Decyzja po pilocie:
 - jesli metryki sa stabilne, rozwaz automatyzacje hookami;
-- jesli nie, kalibruj trigger dla Warstwy C i budzet kontekstu.
+- jesli nie, kalibruj budzet kontekstu i zasady selekcji warstw.
 
 ## Sesja 3: Planner DONE
 
 Podsumowanie:
-- Stworzono `factory/prompts/planner.md` — prompt agenta Planner (Architekt-Strateg, YAML kontrakt)
-- Dodano sekcje Planner (Warstwa 3) do adapterów: `claude-code.md`, `codex.md`, `copilot-vscode.md`
-- Rozszerzono `factory/templates/task-plan-context.yaml` o pola Plannera: `technical_objectives`, `verification_criteria`, `escalation_triggers`, `context_budget`, `plan_deviation`
-- Dodano sekcję "Lekka Orkiestracja" do `factory/TOOL-ADAPTERS.md`
-- Dodano wpis `planner.md` do sekcji 9 w `factory/DOCS-MAP.md`
-- Zaktualizowano `factory/STATUS.md` → [x] Planner (warstwa 3)
-- Dodano `planner.md` do Warstwy A w `CLAUDE.md` i `.github/copilot-instructions.md`
-- Pipeline: Plan (Planner) → Implementacja → Test → Review → Docs → Commit
-- Human checkpoint: Planner czeka na jawne PLAN_APPROVED przed przekazaniem do Codera
-- PLAN_DEVIATION_REPORT: Coder może odrzucić plan przy blokerze; max 2 rundy poprawek
+- `factory/prompts/planner.md` jest S.O.T. dla planowania taska.
+- Kontrakt YAML korzysta z `documentation_layers` i `documentation_selection_justification`.
+- Pipeline: Plan (Planner) -> Implementacja -> Test -> Review -> Docs -> Commit.
+- Human checkpoint: Planner czeka na jawne `PLAN_APPROVED` przed przekazaniem do Codera.
+- `PLAN_DEVIATION_REPORT`: Coder moze odrzucic plan przy blokerze; max 2 rundy poprawek.
 
 ## Sesja 4: Auto-docs
 

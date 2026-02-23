@@ -9,15 +9,15 @@ tools: ["read", "search", "execute", "edit"]
 
 Source of truth:
 
-- `docs/team/runbooks/db-migration-execution.md`
-- `docs/team/operations/db-changes.md`
+- `documentation/team/runbooks/db-migration-execution.md`
+- `documentation/team/operations/db-changes.md`
 
 Scope:
 
 1. Confirm exact target DB from env before apply.
 2. Verify schema state before and after migration.
 3. Apply only required migrations in dependency order.
-4. Update `docs/team/operations/post-change-checklist.md` with evidence.
+4. Update `documentation/team/operations/post-change-checklist.md` with evidence.
 
 Guardrails:
 

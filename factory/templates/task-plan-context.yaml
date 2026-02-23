@@ -1,8 +1,10 @@
-# Task Plan Context Template (Context Gate v1)
+# Task Plan Context Template (Documentation Layers v2)
 
 task_id: ""
 task_name: ""
 task_type: "feature|refactor|mixed|architecture|ops"
+operations_feature_slug: ""   # e.g. persons-v2-refactor
+operations_docs_path: ""      # e.g. documentation/team/operations/persons-v2-refactor/
 
 acceptance_criteria:
   - ""
@@ -20,33 +22,37 @@ optional_context_files:
 # Soft limit: 12000-20000
 context_budget_tokens: 12000
 
-context_gate_layer_b:
-  architecture_backend: false
-  testing: false
-  api_contract: false
-  env_deploy_db: false
+documentation_layers:
+  backend:
+    canonical: true
+    adapters: false
+    factory: false
+  client:
+    canonical: false
+    adapters: false
 
-layer_c_justification: ""
+documentation_selection_justification:
+  - ""
 
 delivery_balance:
   feature_task_in_iteration: true
   refactor_task_in_iteration: true
   notes: ""
 
-# --- Warstwa 3: Planner fields ---
+# --- Layer 3: Planner fields ---
 technical_objectives:
-  - objective: ""        # Stan końcowy systemu (co ma działać)
-    constraints: ""      # Czego nie wolno ruszyć
+  - objective: ""        # End-state of the system (what must work)
+    constraints: ""      # What must not be changed
 
 verification_criteria:
-  hard: []               # Twarde — blokują APPROVE (np. testy)
-  soft: []               # Miękkie — ostrzeżenia dla Reviewera
+  hard: []               # Blocking for APPROVE (e.g. tests)
+  soft: []               # Warnings for Reviewer
 
-escalation_triggers: []  # Mierzalne progi → STOP → człowiek
+escalation_triggers: []  # Measurable thresholds -> STOP -> human
 
 context_budget:
   max_files_for_coder: 8
   estimated_tokens: 15000
-  subagent_scope: ""     # Wąski zakres dla subagentów Codera
+  subagent_scope: ""     # Narrow scope for coder subagents
 
-plan_deviation: null     # Wypełnia Coder jeśli odkryje przeszkodę
+plan_deviation: null     # Filled by Coder when an unexpected blocker appears

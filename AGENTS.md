@@ -2,20 +2,20 @@
 
 ## Canonical docs
 
-1. `docs/team/*` is the canonical source for operational knowledge.
+1. `documentation/team/*` is the canonical source for operational knowledge.
 2. Tool-specific instructions (for example `.github/instructions/*`, Claude/Copilot configs) must map to canonical docs and not duplicate long operational content.
 
 ## Mandatory updates for DB/env/deploy changes
 
-1. Update `docs/team/operations/post-change-checklist.md`.
+1. Update `documentation/team/operations/post-change-checklist.md`.
 2. Update `.env.example` when env keys are added/changed.
 3. Ensure PR checklist in `.github/PULL_REQUEST_TEMPLATE.md` is completed.
 
 ## Repository hygiene
 
 1. Do not create new operational `.md` files in root.
-2. Add new runbooks under `docs/team/runbooks/*`.
-3. Add onboarding or operations docs under `docs/team/onboarding/*` and `docs/team/operations/*`.
+2. Add new runbooks under `documentation/team/runbooks/*`.
+3. Add onboarding or operations docs under `documentation/team/onboarding/*` and `documentation/team/operations/*`.
 
 ## Cross-repo workspace rules
 

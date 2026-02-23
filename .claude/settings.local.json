@@ -46,7 +46,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git checkout:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)"
     ]
   }
 }

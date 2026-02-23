@@ -6,10 +6,10 @@ description: 'Environment adapter: technical rules + canonical source mapping | 
 # Konfiguracja srodowisk (adapter)
 
 Source of truth:
-`docs/team/onboarding/environment.md`
+`documentation/team/onboarding/environment.md`
 
 Ten plik jest adapterem Copilot i zawiera tylko reguly techniczne.
-Pelna dokumentacja operacyjna musi byc utrzymywana w `docs/team/*`.
+Pelna dokumentacja operacyjna musi byc utrzymywana w `documentation/team/*`.
 
 ## Twarde reguly techniczne
 
@@ -18,11 +18,11 @@ Pelna dokumentacja operacyjna musi byc utrzymywana w `docs/team/*`.
 3. Traktuj brak `NODE_ENV` jako `production`.
 4. Zmiany env wymagaja aktualizacji `.env.example`.
 5. Zmiany DB/env/deploy wymagaja wpisu w:
-   `docs/team/operations/post-change-checklist.md`.
+   `documentation/team/operations/post-change-checklist.md`.
 
 ## Szybka mapa
 
-- Onboarding setup: `docs/team/onboarding/local-setup.md`
-- Environment source: `docs/team/onboarding/environment.md`
-- Access/secrets: `docs/team/onboarding/access-and-secrets.md`
-- Deployment: `docs/team/operations/deployment-heroku.md`
+- Onboarding setup: `documentation/team/onboarding/local-setup.md`
+- Environment source: `documentation/team/onboarding/environment.md`
+- Access/secrets: `documentation/team/onboarding/access-and-secrets.md`
+- Deployment: `documentation/team/operations/deployment-heroku.md`

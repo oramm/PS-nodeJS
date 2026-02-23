@@ -59,6 +59,6 @@ Co najmniej te obszary:
 
 ## Uwagi operacyjne
 - Przy zmianach DB/env/deploy zaktualizuj:
-- `docs/team/operations/post-change-checklist.md`,
+- `documentation/team/operations/post-change-checklist.md`,
 - `.env.example` (jeśli pojawiły się nowe zmienne),
 - checklistę w `.github/PULL_REQUEST_TEMPLATE.md`.

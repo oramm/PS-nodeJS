@@ -6,15 +6,11 @@ This repository uses a Dark Factory workflow.
 - `factory/CONCEPT.md`
 - `factory/TOOL-ADAPTERS.md`
 - `factory/prompts/reviewer.md`
-- `factory/DOCS-MAP.md`
+- `documentation/team/operations/docs-map.md`
 
 ## Context Gate v1 (Low-Context First)
-- Start only with Layer A:
-  - `factory/CONCEPT.md`
-  - `factory/TOOL-ADAPTERS.md`
-  - `factory/prompts/reviewer.md`
-- Load Layer B only when task scope requires it.
-- Load Layer C only on explicit blocker/missing-detail trigger.
+- Start with Factory layer: `factory/CONCEPT.md`, `factory/TOOL-ADAPTERS.md`, `factory/prompts/reviewer.md`, `factory/prompts/planner.md`
+- Load Canonical docs (`documentation/team/architecture/`, `documentation/team/runbooks/`, `documentation/team/operations/`) selectively when task scope requires it.
 - Keep task context compact: typically 5-8 files.
 - Use soft budget: `context_budget_tokens` 12000-20000.
 

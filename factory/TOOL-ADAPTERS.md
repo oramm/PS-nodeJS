@@ -3,15 +3,15 @@
 > Cel: ten sam workflow Dark Factory niezaleznie od narzedzia.
 > Zrodlo prawdy koncepcji: `factory/CONCEPT.md`
 > Diagramy: `factory/CONCEPT-DIAGRAMS.md`
-> Mapa S.O.T.: `factory/DOCS-MAP.md`
+> Mapa S.O.T.: `documentation/team/operations/docs-map.md`
 
 ## 1. Wspolny protokol (obowiazuje wszedzie)
 
 Kazde zadanie przechodzi sekwencje:
 1. Plan i kryteria akceptacji.
 2. Implementacja taska.
-3. Testy wg `factory/prompts/tester.md` (TEST_VERDICT: TEST_PASS | TEST_FAIL).
-4. Review loop (`APPROVE` albo `REQUEST_CHANGES`, max 3 iteracje) — reviewer dostaje TEST_REPORT.
+3. Testy wg `factory/prompts/tester.md` (`TEST_VERDICT: TEST_PASS | TEST_FAIL`).
+4. Review loop (`APPROVE` albo `REQUEST_CHANGES`, max 3 iteracje) - reviewer dostaje `TEST_REPORT`.
 5. Aktualizacja docs (jesli dotyczy).
 6. Commit po approve.
 
@@ -21,30 +21,23 @@ Hard rules:
 - Checkpoint czlowieka przy decyzjach architektonicznych i finalnym merge.
 - Balans iteracji: 50/50 (1 task funkcjonalny + 1 task techniczny/refactor, o ile ma sens).
 
-## 1a. Context Gate v1 (obowiazkowy)
+## 1a. Documentation Layer Selection (obowiazkowe)
 
-### Warstwa A (always-on)
-- `factory/CONCEPT.md`
-- `factory/TOOL-ADAPTERS.md`
-- `factory/prompts/tester.md`
-- `factory/prompts/reviewer.md`
+### Backend (PS-nodeJS) - 3 warstwy
+- `Canonical`: `documentation/team/`
+- `Adaptery`: `.github/instructions/`, `CLAUDE.md`, `AGENTS.md`, `.claude/`
+- `Factory`: `factory/`
 
-### Warstwa B (task-scoped)
-- Architektura backend: `.github/instructions/architektura.instructions.md`
-- Testy: `.github/instructions/architektura-testowanie.md`
-- API i kontrakty: `factory/SYSTEM-MAP.md`, `src/types/types.d.ts`
-- Operacje env/deploy/db: `docs/team/onboarding/*`, `docs/team/operations/*`
-
-### Warstwa C (deep-dive fallback)
-- `factory/AUDIT-SERVER.md`
-- `factory/AUDIT-CLIENT.md`
-- `.github/instructions/architektura-szczegoly.md`
-- `.github/instructions/architektura-ai-assistant.md`
+### Klient (ENVI.ProjectSite) - 2 warstwy
+- `Canonical`: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\` + `C:\Apache24\htdocs\ENVI.ProjectSite\documentation\operations\`
+- `Adaptery`: `C:\Apache24\htdocs\ENVI.ProjectSite\CLAUDE.md`, `C:\Apache24\htdocs\ENVI.ProjectSite\.github\copilot-instructions.md`, `C:\Apache24\htdocs\ENVI.ProjectSite\AGENTS.md`
 
 Reguly ladowania:
-- Start zawsze od Warstwy A.
-- Warstwa B tylko pod konkretny typ taska.
-- Warstwa C tylko po triggerze "missing detail" lub blockerze review.
+- Wybieraj tylko warstwy potrzebne do taska.
+- Priorytet czytania: `Canonical` -> `Adaptery` -> `Factory` (tylko meta-narzedzia).
+- Dla frontend/cross-repo obowiazkowo weryfikuj kontrakt API po stronie backend:
+  - `documentation/team/architecture/system-map.md`
+  - `src/types/types.d.ts`
 - Zakaz ladowania calego audytu bez uzasadnienia.
 
 Budzet:
@@ -61,11 +54,10 @@ Na poczatku sesji podaj agentowi:
 
 ```text
 Pracuj w trybie Dark Factory (Low-Context First).
-Start tylko z Warstwa A:
-- factory/CONCEPT.md
-- factory/TOOL-ADAPTERS.md
-- factory/prompts/reviewer.md
-Warstwe B/C doladuj tylko gdy task tego wymaga.
+Stosuj model dokumentacji:
+- backend: Canonical -> Adaptery -> Factory
+- klient: Canonical -> Adaptery
+Laduj tylko warstwy potrzebne do taska.
 Wymus workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Nie koncz zadania bez review APPROVE.
 ```
@@ -100,16 +92,19 @@ W praktyce:
 - rozpoczynaj chat od promptu bootstrap,
 - prowadz review i testy jawnie (Copilot nie zrobi orkiestracji sam).
 
-## 5a. Lekka Orkiestracja (Anty-mikrozarządzanie)
+## 5a. Lekka orkiestracja (anty-mikrozarzadzanie)
 
-Planner definiuje **cele i granice** (technical_objectives + constraints).
-Coder (fachowiec) decyduje o narzędziach i kolejności — nie dostaje listy kroków.
+Planner definiuje **cele i granice** (`technical_objectives` + `constraints`).
+Coder (fachowiec) decyduje o narzedziach i kolejnosci - nie dostaje listy krokow.
 
-Subagenci przy delegowaniu zawsze otrzymują skrócony opis Warstwy A (CONCEPT.md summary).
+Subagenci przy delegowaniu zawsze otrzymuja:
+- wybrane warstwy dokumentacji dla taska,
+- skrocony opis zasad Dark Factory.
+
 Izolowany kontekst subagenta nie dziedziczy zasad automatycznie.
 
-PLAN_DEVIATION_REPORT: Coder może odrzucić plan jeśli odkryje przeszkodę.
-Max 2 rundy poprawki — człowiek jest arbitrem zmiany scope.
+`PLAN_DEVIATION_REPORT`: Coder moze odrzucic plan jesli odkryje przeszkode.
+Max 2 rundy poprawki - czlowiek jest arbitrem zmiany scope.
 
 ## 6. Escalacja i decyzje
 
@@ -123,8 +118,12 @@ Agent ma pytac czlowieka, gdy:
 
 Po kazdej wiekszej iteracji:
 - aktualizuj `factory/STATUS.md`,
-- dla kolejnej sesji dopisz prompt w `factory/PROMPTS-SESSIONS.md`.
+- dla kolejnej sesji dopisz prompt w `factory/PROMPTS-SESSIONS.md`,
 - przy planie taska uzupelnij pola:
   - `required_context_files`
   - `optional_context_files`
   - `context_budget_tokens`
+  - `documentation_layers`
+  - `documentation_selection_justification`
+  - `operations_feature_slug` (jesli task mapuje sie do `documentation/team/operations/*`)
+  - `operations_docs_path` (pelna sciezka katalogu docs dla Documentarian)

@@ -98,16 +98,16 @@ Warstwa A (always-on, zawsze):
 - `factory/prompts/reviewer.md`
 
 Warstwa B (task-scoped, zalezne od typu taska):
-- Architektura backend: `.github/instructions/architektura.instructions.md`
-- Testy: `.github/instructions/architektura-testowanie.md`
-- API/kontrakty: `factory/SYSTEM-MAP.md` + `src/types/types.d.ts`
-- Env/deploy/db: `docs/team/onboarding/*` + `docs/team/operations/*`
+- Architektura backend: `documentation/team/architecture/clean-architecture.md`
+- Testy: `documentation/team/architecture/testing-per-layer.md`
+- API/kontrakty: `documentation/team/architecture/system-map.md` + `src/types/types.d.ts`
+- Env/deploy/db: `documentation/team/onboarding/*` + `documentation/team/operations/*`
 
 Warstwa C (fallback/deep dive, tylko z uzasadnieniem):
-- `factory/AUDIT-SERVER.md`
-- `factory/AUDIT-CLIENT.md`
-- `.github/instructions/architektura-szczegoly.md`
-- `.github/instructions/architektura-ai-assistant.md`
+- `documentation/team/architecture/conventions/coding-server.md`
+- `documentation/team/architecture/conventions/coding-client.md`
+- `documentation/team/architecture/clean-architecture-details.md`
+- `documentation/team/architecture/ai-decision-trees.md`
 
 Regula:
 - Zakaz ladowania Warstwy C "na dzien dobry".
@@ -169,7 +169,7 @@ Priorytet delivery:
 - Sesje i prompty operacyjne: `factory/PROMPTS-SESSIONS.md`
 - Prompt testera (warstwa 2): `factory/prompts/tester.md`
 - Prompt reviewera (warstwa 1): `factory/prompts/reviewer.md`
-- Mapa zrodel prawdy: `factory/DOCS-MAP.md`
+- Mapa zrodel prawdy: `documentation/team/operations/docs-map.md`
 - Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
 
 ## 10. Lekki audyt spojnosci (2026-02-20)

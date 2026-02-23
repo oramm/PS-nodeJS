@@ -55,61 +55,13 @@ yarn send-milestone-report
 
 ## Architecture: Clean Architecture (Critical)
 
-This project follows **Clean Architecture** with strict layer separation. The architectural rules are **NON-NEGOTIABLE** and documented in `.github/instructions/architektura.instructions.md`.
+Layer flow: `Router â†’ (Validator) â†’ Controller â†’ Repository â†’ Model`.
+Controller manages DB transactions (NOT Repository). Validator is always a separate class.
+Model MUST NOT import Controller/Repository or perform DB I/O. Repository MUST NOT contain business logic.
+Standard CRUD: `find()`, `addFromDto()`, `add()`, `editFromDto()`, `edit()`, `delete()`
+Base classes: `src/controllers/BaseController.ts` (Singleton, static methods, `withAuth()`), `src/repositories/BaseRepository.ts` (CRUD, `makeAndConditions()`)
 
-### Layer Flow (Mandatory)
-```
-Router → (Validator) → Controller → Repository → Model
-                                           ↓
-                                    ToolsDb/ToolsGd/ToolsEmail
-```
-
-### Critical Rules
-
-**MUST**:
-1. Flow: Router → (Validator) → Controller → Repository → Model
-2. Controller manages database transactions (NOT Repository)
-3. Validator MUST be a separate class (if needed)
-4. Use standard CRUD method names: `find()`, `addFromDto()`, `add()`, `editFromDto()`, `edit()`, `delete()`
-
-**MUST NOT**:
-1. Model MUST NOT import Controller or Repository
-2. Model MUST NOT perform database I/O operations
-3. Repository MUST NOT contain business logic
-4. Router MUST NOT create Model instances or call Repository directly
-5. Validator MUST NOT be inside Router, Controller, Repository, or Model
-
-### Base Classes
-
-#### BaseController<T, R>
-- Located: `src/controllers/BaseController.ts`
-- Pattern: Singleton with static public methods
-- `getInstance()` is ALWAYS private
-- Controllers expose static methods: `add()`, `edit()`, `delete()`, `find()`
-- Use `withAuth()` helper for Google API operations requiring OAuth2Client
-
-#### BaseRepository<T>
-- Located: `src/repositories/BaseRepository.ts`
-- Implements CRUD: `addInDb()`, `editInDb()`, `deleteFromDb()`, `find()`
-- Abstract methods: `mapRowToModel()`, `find()`
-- Use `makeAndConditions()` pattern for building SQL WHERE clauses
-- Use `makeOrGroupsConditions()` for OR conditions
-
-### Validator Pattern
-
-Required for:
-- Entities with polymorphism (Letters, Offers, Invoices)
-- Entities with complex DTOs (>10 fields, inter-field dependencies)
-- Entities requiring contextual validation
-
-Validators:
-- MUST be separate classes (e.g., `LetterValidator`, `InvoiceValidator`)
-- Located alongside Model in domain layer
-- Called ONLY by Controller (in `addFromDto`/`editFromDto`)
-- MUST throw errors on invalid data (fail-fast)
-- Use TypeResolver pattern for type determination logic
-
-Example validators: `src/invoices/InvoiceValidator.ts`, `src/letters/LetterValidator.ts`
+Full rules: `documentation/team/architecture/clean-architecture.md`
 
 ## Environment Configuration
 
@@ -139,11 +91,8 @@ Example validators: `src/invoices/InvoiceValidator.ts`, `src/letters/LetterValid
 - Configured in `src/index.ts`
 
 ### Quick Start for New Developers
-1. Install MariaDB 10.6.x (NOT 11.x or 12.x)
-2. Create database: `CREATE DATABASE envikons_myEnvi CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
-3. Import data: `mysql -u root -p envikons_myEnvi < full_dump.sql`
-4. Copy `.env.example` to `.env.development` and fill `DB_PASSWORD`
-5. Run `yarn start` - logs should show `[ENV] DB target: localhost/envikons_myEnvi`
+Copy `.env.example` â†’ `.env.development`, fill `DB_PASSWORD`, run `yarn start`.
+Full setup: `documentation/team/onboarding/local-setup.md`
 
 ## Key Technologies
 
@@ -160,41 +109,41 @@ Example validators: `src/invoices/InvoiceValidator.ts`, `src/letters/LetterValid
 
 ```
 src/
-├── index.ts                      # Application entry point
-├── setup/
-│   ├── loadEnv.ts               # Environment variable loading (MUST use in entry points)
-│   └── Sessions/
-│       ├── ToolsGapi.ts         # Google API authentication helper
-│       └── Gauth2Routers.ts     # OAuth2 routes
-├── controllers/
-│   └── BaseController.ts        # Base controller with Singleton pattern
-├── repositories/
-│   └── BaseRepository.ts        # Base repository with CRUD operations
-├── tools/
-│   ├── ToolsDb.ts              # Database connection and query helpers
-│   ├── ToolsGd.ts              # Google Drive operations
-│   ├── ToolsEmail.ts           # Email operations
-│   ├── ToolsDocs.ts            # Google Docs operations
-│   └── ToolsSheets.ts          # Google Sheets operations
-├── Admin/
-│   ├── Cities/                 # City entity (simple CRUD example)
-│   └── ContractRanges/         # Contract ranges management
-├── contracts/                   # Contract management with milestones, cases, tasks
-├── invoices/                    # Invoice management with KSeF integration
-├── letters/                     # Letter management (polymorphic: Our/Incoming, Contract/Offer)
-├── offers/                      # Offer management with Google Drive integration
-├── projects/                    # Project management
-├── entities/                    # Business entity management
-├── persons/                     # Person and role management
-├── financialAidProgrammes/     # Financial aid programs, focus areas, application calls
-├── documentTemplates/          # Document template management
-└── types/                      # TypeScript type definitions
+â”śâ”€â”€ index.ts                      # Application entry point
+â”śâ”€â”€ setup/
+â”‚   â”śâ”€â”€ loadEnv.ts               # Environment variable loading (MUST use in entry points)
+â”‚   â””â”€â”€ Sessions/
+â”‚       â”śâ”€â”€ ToolsGapi.ts         # Google API authentication helper
+â”‚       â””â”€â”€ Gauth2Routers.ts     # OAuth2 routes
+â”śâ”€â”€ controllers/
+â”‚   â””â”€â”€ BaseController.ts        # Base controller with Singleton pattern
+â”śâ”€â”€ repositories/
+â”‚   â””â”€â”€ BaseRepository.ts        # Base repository with CRUD operations
+â”śâ”€â”€ tools/
+â”‚   â”śâ”€â”€ ToolsDb.ts              # Database connection and query helpers
+â”‚   â”śâ”€â”€ ToolsGd.ts              # Google Drive operations
+â”‚   â”śâ”€â”€ ToolsEmail.ts           # Email operations
+â”‚   â”śâ”€â”€ ToolsDocs.ts            # Google Docs operations
+â”‚   â””â”€â”€ ToolsSheets.ts          # Google Sheets operations
+â”śâ”€â”€ Admin/
+â”‚   â”śâ”€â”€ Cities/                 # City entity (simple CRUD example)
+â”‚   â””â”€â”€ ContractRanges/         # Contract ranges management
+â”śâ”€â”€ contracts/                   # Contract management with milestones, cases, tasks
+â”śâ”€â”€ invoices/                    # Invoice management with KSeF integration
+â”śâ”€â”€ letters/                     # Letter management (polymorphic: Our/Incoming, Contract/Offer)
+â”śâ”€â”€ offers/                      # Offer management with Google Drive integration
+â”śâ”€â”€ projects/                    # Project management
+â”śâ”€â”€ entities/                    # Business entity management
+â”śâ”€â”€ persons/                     # Person and role management
+â”śâ”€â”€ financialAidProgrammes/     # Financial aid programs, focus areas, application calls
+â”śâ”€â”€ documentTemplates/          # Document template management
+â””â”€â”€ types/                      # TypeScript type definitions
 ```
 
 ## Domain Modules
 
 ### Letters (Polymorphic Example)
-- Hierarchy: `Letter` → `OurLetter`/`IncomingLetter` → `OurLetterContract`/`OurLetterOffer`/`IncomingLetterContract`/`IncomingLetterOffer`
+- Hierarchy: `Letter` â†’ `OurLetter`/`IncomingLetter` â†’ `OurLetterContract`/`OurLetterOffer`/`IncomingLetterContract`/`IncomingLetterOffer`
 - Uses: `LetterValidator` and `LetterTypeResolver` for type determination
 - Google Drive integration for document storage
 
@@ -245,26 +194,14 @@ static async add(item: T, auth?: OAuth2Client): Promise<T> {
 
 ## Testing
 
-### Test Structure
-- Tests located in `__tests__/` directories within each module
-- Global test setup: `src/__tests__/setup.ts`
-- Configuration: `jest.config.js`
-
-### Testing Philosophy
-- **Unit tests**: Fast, isolated, mock all external dependencies
-- Always mock: Database, External APIs, Other Controllers, File system
-- Never mock: Business logic methods, Pure functions, Simple transformations
-
-### Example
-See `src/offers/__tests__/` for reference implementation.
+Tests in `__tests__/` per module, config: `jest.config.js`, setup: `src/__tests__/setup.ts`.
+Unit tests: mock DB/APIs/Controllers, never mock business logic. Example: `src/offers/__tests__/`.
+Full guide: `documentation/team/runbooks/testing.md`
 
 ## Database Guidelines
 
-Detailed database architecture guidelines are in `docs/team/operations/db-changes.md`:
-- Use read-only connections for schema analysis
-- Check FK consistency, indexes, naming conventions
-- MariaDB 10.6.x compatibility required
-- Always verify connected database via logs before operations
+MariaDB 10.6.x. Always verify `[ENV] DB target:` in logs before operations.
+Full guide: `documentation/team/operations/db-changes.md`
 
 ## Code Style
 
@@ -283,27 +220,30 @@ Detailed database architecture guidelines are in `docs/team/operations/db-change
 - Type resolvers: `{Entity}TypeResolver` (e.g., `LetterTypeResolver`)
 
 ### Deprecated Patterns
-- ❌ `addNew()` → use `addFromDto()` or `add()`
-- ❌ `getList()` → use `find()`
-- ❌ `new Model(req.body)` in Router → use `Controller.addFromDto(dto)`
-- ❌ `instance.create()`, `instance.edit()`, `instance.delete()` → use `instance.repository.*InDb()`
+- âťŚ `addNew()` â†’ use `addFromDto()` or `add()`
+- âťŚ `getList()` â†’ use `find()`
+- âťŚ `new Model(req.body)` in Router â†’ use `Controller.addFromDto(dto)`
+- âťŚ `instance.create()`, `instance.edit()`, `instance.delete()` â†’ use `instance.repository.*InDb()`
 
 ## Critical Files
 
-**Architecture (AI instructions - .github/instructions/):**
-- `architektura.instructions.md` - Clean Architecture rules (MUST READ)
-- `architektura-ai-assistant.md` - Decision trees and pattern recognition for AI
-- `architektura-szczegoly.md` - Detailed architecture examples
-- `architektura-testowanie.md` - Testing guidelines per layer
-- `architektura-refactoring-audit.md` - Post-refactor audit checklist
-- `refactoring-auth-pattern.md` - OAuth2 withAuth migration guide
+**Architecture (canonical - documentation/team/architecture/):**
+- `clean-architecture.md` - Clean Architecture rules (MUST READ)
+- `ai-decision-trees.md` - Decision trees and pattern recognition for AI
+- `clean-architecture-details.md` - Detailed architecture examples
+- `testing-per-layer.md` - Testing guidelines per layer
+- `refactoring-audit.md` - Post-refactor audit checklist
+- `auth-migration.md` - OAuth2 withAuth migration guide
+- `conventions/coding-server.md` - Server coding conventions
+- `conventions/coding-client.md` - Client coding conventions
+- `system-map.md` - Server-client system map
 
-**Operational (canonical docs - docs/team/):**
-- `docs/team/README.md` - Documentation structure and change policy
-- `docs/team/onboarding/environment.md` - Environment configuration (canonical)
-- `docs/team/runbooks/testing.md` - Testing framework (canonical)
-- `docs/team/operations/db-changes.md` - Database changes workflow (canonical)
-- `docs/team/operations/post-change-checklist.md` - Required checks for DB/env/deploy
+**Operational (canonical docs - documentation/team/):**
+- `documentation/team/README.md` - Documentation structure and change policy
+- `documentation/team/onboarding/environment.md` - Environment configuration (canonical)
+- `documentation/team/runbooks/testing.md` - Testing framework (canonical)
+- `documentation/team/operations/db-changes.md` - Database changes workflow (canonical)
+- `documentation/team/operations/post-change-checklist.md` - Required checks for DB/env/deploy
 
 ## Important Notes
 
@@ -328,25 +268,25 @@ Detailed database architecture guidelines are in `docs/team/operations/db-change
 
 ## Factory: Review Process
 
-Mapa źródeł prawdy: `factory/DOCS-MAP.md` — sprawdź ZANIM szukasz informacji o projekcie.
+Mapa ĹşrĂłdeĹ‚ prawdy: `documentation/team/operations/docs-map.md` â€” sprawdĹş ZANIM szukasz informacji o projekcie.
 
-**ŻELAZNA ZASADA: Nie kończ zadania bez review.**
+**Ĺ»ELAZNA ZASADA: Nie koĹ„cz zadania bez review.**
 
-Po napisaniu lub zmodyfikowaniu kodu źródłowego:
+Po napisaniu lub zmodyfikowaniu kodu ĹşrĂłdĹ‚owego:
 
 1. Uruchom SUBAGENTA z promptem z `factory/prompts/reviewer.md`
-2. Przekaż mu TYLKO zmienione pliki (git diff)
-3. Subagent pracuje w IZOLOWANYM kontekście (fresh eyes)
+2. PrzekaĹĽ mu TYLKO zmienione pliki (git diff)
+3. Subagent pracuje w IZOLOWANYM kontekĹ›cie (fresh eyes)
 4. Czekaj na VERDICT:
-   - APPROVE → kontynuuj (commit / następny krok)
-   - REQUEST_CHANGES →
-     a) Napraw KAŻDY CRITICAL i HIGH
-     b) Rozważ MEDIUM
-     c) Ponów review
-     d) Max 3 rundy → jeśli nadal CHANGES → zapytaj człowieka
-5. WYJĄTKI (można pominąć review):
+   - APPROVE â†’ kontynuuj (commit / nastÄ™pny krok)
+   - REQUEST_CHANGES â†’
+     a) Napraw KAĹ»DY CRITICAL i HIGH
+     b) RozwaĹĽ MEDIUM
+     c) PonĂłw review
+     d) Max 3 rundy â†’ jeĹ›li nadal CHANGES â†’ zapytaj czĹ‚owieka
+5. WYJÄ„TKI (moĹĽna pominÄ…Ä‡ review):
    - Zmiany TYLKO w plikach *.md (dokumentacja)
-   - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
+   - Zmiany TYLKO w factory/ (meta-narzÄ™dzia fabryki)
 
 ## Factory: Cross-Tool Adapter
 
@@ -357,9 +297,5 @@ Gdy pracujesz w trybie Dark Factory, stosuj wspolny adapter procesu:
 - `factory/adapters/copilot-vscode.md` (skrot dla Copilot w VS Code)
 
 Context Gate v1 (Low-Context First):
-- Start sesji tylko z Warstwa A:
-  - `factory/CONCEPT.md`
-  - `factory/TOOL-ADAPTERS.md`
-  - `factory/prompts/tester.md`
-  - `factory/prompts/reviewer.md`
-- Warstwy B/C doladowuj selektywnie, nie domyslnie.
+- Start sesji z: `factory/CONCEPT.md`, `factory/TOOL-ADAPTERS.md`, `factory/prompts/reviewer.md`, `factory/prompts/planner.md`
+- Canonical docs (`documentation/team/architecture/`, `documentation/team/runbooks/`, `documentation/team/operations/`) doladowuj selektywnie, nie domyslnie.
