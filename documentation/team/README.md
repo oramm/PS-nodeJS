@@ -31,24 +31,15 @@
 - `documentation/team/operations/deployment-heroku.md`
 - `documentation/team/operations/post-change-checklist.md`
 - `documentation/team/operations/docs-map.md`
-- `documentation/team/operations/public-profile-submission/plan.md`
-- `documentation/team/operations/public-profile-submission/progress.md`
-- `documentation/team/operations/public-profile-submission/activity-log.md`
-- `documentation/team/operations/contract-meeting-notes/plan.md`
-- `documentation/team/operations/contract-meeting-notes/progress.md`
-- `documentation/team/operations/contract-meeting-notes/activity-log.md`
-- `documentation/team/operations/persons-v2-refactor/plan.md`
-- `documentation/team/operations/persons-v2-refactor/progress.md`
-- `documentation/team/operations/persons-v2-refactor/activity-log.md`
-- `documentation/team/operations/hr-module/plan.md`
-- `documentation/team/operations/hr-module/progress.md`
-- `documentation/team/operations/hr-module/activity-log.md`
-- `documentation/team/operations/profile-import/plan.md`
-- `documentation/team/operations/profile-import/progress.md`
-- `documentation/team/operations/profile-import/activity-log.md`
-- `documentation/team/operations/documentation-migration/plan.md`
-- `documentation/team/operations/documentation-migration/progress.md`
-- `documentation/team/operations/documentation-migration/activity-log.md`
+- `documentation/team/operations/<active-feature>/plan.md` (temporary, active tasks only)
+- `documentation/team/operations/<active-feature>/progress.md` (temporary, active tasks only)
+- `documentation/team/operations/<active-feature>/activity-log.md` (temporary, active tasks only)
+
+Closed tasks policy:
+
+1. Update canonical docs in `documentation/team/*` to the latest system state.
+2. Add/maintain operational rollout facts in `documentation/team/operations/post-change-checklist.md` when DB/env/deploy is affected.
+3. Remove temporary `plan/progress/activity-log` for closed tasks (history remains in git).
 
 ## Change policy
 

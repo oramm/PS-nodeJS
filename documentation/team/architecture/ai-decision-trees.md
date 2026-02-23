@@ -7,7 +7,16 @@ description: 'AI Assistant Guidelines - Decision Trees, Pattern Recognition, Err
 
 > 🤖 **Plik specjalnie dla modeli AI** (GPT, Claude, Copilot)
 >
-> 📚 **Pełne wytyczne:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [Testowanie](./architektura-testowanie.md) | [Audyt](./architektura-refactoring-audit.md)
+> 📚 **Pełne wytyczne:** [Podstawy](./clean-architecture.md) | [Szczegóły](./clean-architecture-details.md) | [Testowanie](./testing-per-layer.md) | [Audyt](./refactoring-audit.md)
+
+---
+
+## Polityka target vs legacy (dla AI)
+
+- Dla nowego kodu i migrowanych fragmentow obowiazuje wyłącznie target pattern.
+- Legacy jest tolerowane tylko w istniejacym kodzie i nie moze byc kopiowane.
+- Jesli wykryjesz blocker (`new Model` w Router, DB I/O w Model, transakcje w Repository), traktuj to jako `REQUEST_CHANGES`.
+- Zrodlo polityki: [clean-architecture.md#polityka-wzorca-target-vs-legacy](./clean-architecture.md#polityka-wzorca-target-vs-legacy).
 
 ---
 
@@ -308,7 +317,7 @@ Przed zatwierdzeniem kodu sprawdź:
 - [ ] ✅ Controller zarządza transakcjami
 - [ ] ✅ Repository dziedziczy po `BaseRepository<T>`
 - [ ] ✅ Controller dziedziczy po `BaseController<T, R>`
-- [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./architektura-szczegoly.md#7-unikanie-cykli-zależności))
+- [ ] ✅ Brak cykli zależności (→ [sekcja o cyklach](./clean-architecture-details.md#7-unikanie-cykli-zależności))
 
 ---
 
@@ -458,7 +467,7 @@ grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
 
 ### **Pełny Audyt:**
 
-📋 **[Szczegółowa checklist audytu refaktoryzacji](./architektura-refactoring-audit.md)**
+📋 **[Szczegółowa checklist audytu refaktoryzacji](./refactoring-audit.md)**
 
 **KIEDY:** Po każdej refaktoryzacji warstw (Model → Controller → Repository)
 **CZAS:** ~15-30 min
@@ -468,11 +477,11 @@ grep "\.oldMethod\(" src/  // Stare wywołania powinny być zrefaktoryzowane
 
 ## 🔗 Powiązane Dokumenty
 
-- [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference (5 min)
-- [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady (30 min)
-- [Wytyczne testowania](./architektura-testowanie.md) - Testing patterns
-- **[Audyt refaktoryzacji](./architektura-refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
-- [Konfiguracja srodowisk](./srodowiska.instructions.md) - dev/prod, loadEnv, .env files
+- [Podstawowe wytyczne](./clean-architecture.md) - Quick reference (5 min)
+- [Szczegółowy przewodnik](./clean-architecture-details.md) - Implementacje + przykłady (30 min)
+- [Wytyczne testowania](./testing-per-layer.md) - Testing patterns
+- **[Audyt refaktoryzacji](./refactoring-audit.md) - Quality assurance po refaktoryzacji** ⭐
+- [Konfiguracja srodowisk](../onboarding/environment.md) - dev/prod, loadEnv, .env files
 
 ---
 

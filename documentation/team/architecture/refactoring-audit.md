@@ -7,7 +7,7 @@ description: 'Refactoring Audit Checklist - Quality Assurance Post-Refactoring |
 
 > 📋 **Cel:** Upewnić się, że refaktoryzacja nie utraciła funkcjonalności, danych ani logiki biznesowej
 >
-> 🏛️ **Powiązane:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md)
+> 🏛️ **Powiązane:** [Podstawy](./clean-architecture.md) | [Szczegóły](./clean-architecture-details.md) | [AI Assistant](./ai-decision-trees.md)
 
 ---
 
@@ -570,11 +570,11 @@ Jeśli audyt wykryje poniższe problemy - **STOP** i napraw przed kontynuacją:
 
 ## 📚 Powiązane Dokumenty
 
--   [Podstawowe wytyczne](./architektura.instructions.md) - Quick reference
--   [Szczegółowy przewodnik](./architektura-szczegoly.md) - Implementacje + przykłady
--   [AI Assistant](./architektura-ai-assistant.md) - Drzewa decyzyjne
--   [Testowanie](./architektura-testowanie.md) - Testy po refaktoryzacji
--   [OAuth Refactoring](./refactoring-auth-pattern.md) - Wzorzec OAuth
+-   [Podstawowe wytyczne](./clean-architecture.md) - Quick reference
+-   [Szczegółowy przewodnik](./clean-architecture-details.md) - Implementacje + przykłady
+-   [AI Assistant](./ai-decision-trees.md) - Drzewa decyzyjne
+-   [Testowanie](./testing-per-layer.md) - Testy po refaktoryzacji
+-   [OAuth Refactoring](./auth-migration.md) - Wzorzec OAuth
 
 ---
 

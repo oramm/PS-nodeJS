@@ -8,7 +8,7 @@ NIE implementujesz kodu. NIE uruchamiasz testow. NIE wykonujesz review.
 Twoj output = YAML kontrakt (cele + granice) + human checkpoint.
 Coder (fachowiec) decyduje JAK osiagnac cele - Ty definiujesz CO i czego NIE ruszac.
 
-Pipeline: **Plan (TY) -> Implementacja -> Test -> Review -> Docs -> Commit**
+Pipeline: **Plan (TY) -> Implementacja -> Test -> Review -> Docs Sync -> Close&Purge -> Commit**
 
 ---
 
@@ -20,6 +20,8 @@ Przed eksploracja ustal:
 - Scope: serwer (PS-nodeJS) | klient (ENVI.ProjectSite) | oba?
 - Typ: feature | refactor | mixed | architecture | ops
 - Doc target dla operacji: `operations_feature_slug` + `operations_docs_path` (jesli task ma aktualizowac `plan/progress/activity-log`)
+- Doc sync target: `docs_sync_targets` (kanoniczne pliki, ktore musza odzwierciedlic finalny stan kodu)
+- Closure policy: `closure_policy` + `closure_gate` (kiedy wolno zamknac i usunac artefakty planu)
 - Ograniczenia: co jest zakazane, od czego zalezy task
 
 Przy niejednoznacznym wymaganiu - **STOP, zapytaj czlowieka** przed eksploracja.
@@ -106,6 +108,14 @@ documentation_selection_justification:
 
 operations_feature_slug: "persons-v2-refactor"
 operations_docs_path: "documentation/team/operations/persons-v2-refactor/"
+docs_sync_targets:
+  - "documentation/team/architecture/system-map.md"
+  - "documentation/team/runbooks/public-profile-submission-link-recovery.md"
+closure_policy: "replace_docs_and_purge_plan"
+closure_gate:
+  require_test_pass: true
+  require_review_approve: true
+  require_docs_sync_done: true
 
 escalation_triggers:
   - "Zmiana dotyka >5 plikow naraz -> STOP -> wezwij czlowieka"
@@ -155,6 +165,8 @@ Przy delegowaniu zadan do subagentow (Task tool, @workspace, agent mode):
 
 - Po PLAN_APPROVED -> przekaz YAML + `required_context_files` do Codera.
 - YAML musi zawierac `operations_feature_slug` i `operations_docs_path` (gdy task obejmuje aktualizacje docs operacyjnych), aby Documentarian nie zgadywal `[Feature]`.
+- YAML musi zawierac `docs_sync_targets`, `closure_policy` i `closure_gate`.
+- Domyslna polityka zamkniecia: `replace_docs_and_purge_plan` (po `TEST_PASS + REVIEW_APPROVE + DOCS_SYNC_DONE`).
 - Po PLAN_REJECTED -> popraw zgodnie z feedbackiem (max 2 rundy, potem eskalacja).
 - Coder NIE startuje bez PLAN_APPROVED.
 

@@ -5,16 +5,49 @@ description: 'Clean Architecture guidelines - PRIORITY: CRITICAL | ENFORCE: STRI
 
 # Wytyczne Architektoniczne - Clean Architecture
 
-> 📖 **Więcej:** [Szczegółowy przewodnik](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md) | [Testowanie](./architektura-testowanie.md) | [Audyt Refaktoryzacji](./architektura-refactoring-audit.md)
+> 📖 **Więcej:** [Szczegółowy przewodnik](./clean-architecture-details.md) | [AI Assistant](./ai-decision-trees.md) | [Testowanie](./testing-per-layer.md) | [Audyt Refaktoryzacji](./refactoring-audit.md)
 
 ## 🎯 Filozofia
 
 **Separation of Concerns** - każda warstwa ma jedno, dobrze zdefiniowane zadanie.
 System oparty na **Clean Architecture** z jednokierunkowym przepływem zależności.
 
-## 🚨 ZASADY OBOWIĄZKOWE (MUST)
+## Polityka wzorca: target vs legacy
 
-AI: Te reguły są **nie negocjowalne** - zawsze enforce przy generowaniu/review kodu:
+### Target pattern (reguly docelowe dla nowego kodu)
+
+- Dotyczy calego nowego kodu i nowych endpointow.
+- Dotyczy tez refaktoryzowanych fragmentow w istniejacych plikach.
+- Wymagany przeplyw: `Router -> (Validator) -> Controller -> Repository -> Model`.
+- Brak zgodnosci z target pattern blokuje merge.
+
+### Legacy tolerated (tymczasowo dopuszczone w kodzie istniejacym)
+
+- Dopuszczone tylko w kodzie juz istniejacym przed 2026-02-23 i tylko do czasu migracji.
+- Przejsciowo tolerowane sa m.in.:
+- Router tworzacy `new Model(...)` i przekazujacy obiekt do `Controller.add(...)`.
+- Istniejace wywolania deprecated (`addNew`, `getList`, itp.), jezeli nie sa rozszerzane.
+- Istniejace miejsca z historyczna struktura zaleznosci, o ile zmiana nie obejmuje tego obszaru.
+- Legacy nie moze byc kopiowane do nowego kodu ani nowych endpointow.
+
+### Migration policy (jak wygaszamy legacy)
+
+- Zasada `touch-and-migrate`: gdy modyfikujesz endpoint lub warstwe, migrujesz ten fragment do target pattern w tym samym PR.
+- Dla zmian wysokiego ryzyka, ktorych nie da sie domknac w jednym PR: wymagany jest wpis na backlogu z zakresem i ownerem.
+- Priorytet migracji: `Router new Model` -> `Model importuje Controller/Repository` -> pozostale deprecated wywolania.
+- Koniec tolerancji legacy nastapi po zamknieciu pozycji Critical/High w audycie architecture docs.
+
+### Blockers for new code (bezwzglednie zabronione od teraz)
+
+- Dodawanie `new Model(...)` w Router.
+- Bezposrednie wywolanie Repository z Router.
+- Dodawanie importow `Controller`/`Repository` w Model.
+- Dodawanie operacji DB I/O w Model (`ToolsDb`, zapytania SQL).
+- Dodawanie transakcji w Repository (`ToolsDb.transaction`).
+
+## Target pattern - ZASADY OBOWIĄZKOWE (MUST)
+
+AI: Te reguly sa **nie negocjowalne** dla nowego kodu i migrowanych fragmentow:
 
 1. ❌ Model **NIE MOŻE** importować Controller ani Repository
 2. ❌ Model **NIE MOŻE** wykonywać operacji I/O do **bazy danych**
@@ -280,7 +313,7 @@ Model **MOŻE** mieć operacje na Google Drive / Email, jeśli:
 2. ✅ Model otrzymuje `auth: OAuth2Client` jako **parametr** (nie pobiera sam)
 3. ✅ Model importuje tylko `ToolsGd`/`ToolsEmail` (nie Controllery!)
 
-Zobacz [szczegóły](./architektura-szczegoly.md#model-io).
+Zobacz [szczegóły](./clean-architecture-details.md#model-io).
 
 ## 🔧 Wzorce Implementacyjne
 
@@ -432,7 +465,7 @@ async find(params) {
 
 > ⚠️ **DEPRECATED:** Metody `instance.create()`, `instance.edit()`, `instance.delete()` są **@deprecated**.
 > W nowym kodzie używaj bezpośrednio `instance.repository.addInDb()`, `instance.repository.editInDb()`, `instance.repository.deleteFromDb()`.
-> Szczegóły: [refactoring-auth-pattern.md](./refactoring-auth-pattern.md)
+> Szczegóły: [auth-migration.md](./auth-migration.md)
 
 ```typescript
 abstract class BaseController<T, R extends BaseRepository<T>> {
@@ -516,10 +549,10 @@ await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
 1. **Oznacz @deprecated** - nie usuwaj od razu
 2. **Stwórz nową implementację** w odpowiedniej warstwie
 3. **Migruj stopniowo** - Router → inne komponenty
-4. **Przeprowadź audyt** - [szczegółowa checklist](./architektura-refactoring-audit.md)
+4. **Przeprowadź audyt** - [szczegółowa checklist](./refactoring-audit.md)
 5. **Usuń deprecated** po weryfikacji (grep/search)
 
-> 📋 **Audyt Refaktoryzacji:** Po każdej refaktoryzacji CRUD/Repository/Model użyj [przewodnika audytu](./architektura-refactoring-audit.md) aby zweryfikować, że nie utracono funkcjonalności.
+> 📋 **Audyt Refaktoryzacji:** Po każdej refaktoryzacji CRUD/Repository/Model użyj [przewodnika audytu](./refactoring-audit.md) aby zweryfikować, że nie utracono funkcjonalności.
 
 ## ✅ Checklist Przed Commitem
 
@@ -533,4 +566,4 @@ await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
 
 ---
 
-📚 **Więcej:** [Szczegółowy przewodnik z przykładami](./architektura-szczegoly.md)
+📚 **Więcej:** [Szczegółowy przewodnik z przykładami](./clean-architecture-details.md)

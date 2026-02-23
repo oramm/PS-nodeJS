@@ -1,7 +1,7 @@
 # Mapa Dokumentacji - Zrodla Prawdy (S.O.T.)
 
 > Dla kazdej kategorii wskazane jest zrodlo prawdy (S.O.T.) oraz pliki pomocnicze.
-> Aktualizacja: 2026-02-22
+> Aktualizacja: 2026-02-23
 > Koncepcja fabryki: `factory/CONCEPT.md`
 > Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
 > Konwencja sciezek: backend (`PS-nodeJS`) jako sciezki repo-relative, frontend (`ENVI.ProjectSite`) jako sciezki absolutne Windows.
@@ -120,21 +120,25 @@ Historyczne aliasy root-level usuniete (2026-02-23):
 
 ---
 
-## 8. Dokumentacja projektowa (plan/progress/log)
+## 8. Dokumentacja projektowa (plan/progress/log) - tylko aktywne taski
 
-| Modul                   | Plan                                                   | Postep                                                     | Activity log                                                   |
-| ----------------------- | ------------------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| Contract Meeting Notes  | `documentation/team/operations/contract-meeting-notes/plan.md`  | `documentation/team/operations/contract-meeting-notes/progress.md`  | `documentation/team/operations/contract-meeting-notes/activity-log.md`  |
-| Persons v2 refactor     | `documentation/team/operations/persons-v2-refactor/plan.md`     | `documentation/team/operations/persons-v2-refactor/progress.md`     | `documentation/team/operations/persons-v2-refactor/activity-log.md`     |
-| HR module               | `documentation/team/operations/hr-module/plan.md`               | `documentation/team/operations/hr-module/progress.md`               | `documentation/team/operations/hr-module/activity-log.md`               |
-| Profile import          | `documentation/team/operations/profile-import/plan.md`          | `documentation/team/operations/profile-import/progress.md`          | `documentation/team/operations/profile-import/activity-log.md`          |
-| Documentation migration | `documentation/team/operations/documentation-migration/plan.md` | `documentation/team/operations/documentation-migration/progress.md` | `documentation/team/operations/documentation-migration/activity-log.md` |
-| Public profile submission | `documentation/team/operations/public-profile-submission/plan.md` | `documentation/team/operations/public-profile-submission/progress.md` | `documentation/team/operations/public-profile-submission/activity-log.md` |
+`plan.md`, `progress.md`, `activity-log.md` sa artefaktami tymczasowymi i istnieja tylko dla OPEN/IN_PROGRESS.
+
+| Modul                      | Plan | Postep | Activity log |
+| -------------------------- | ---- | ------ | ------------ |
+| Contract Meeting Notes     | `documentation/team/operations/contract-meeting-notes/plan.md` | `documentation/team/operations/contract-meeting-notes/progress.md` | `documentation/team/operations/contract-meeting-notes/activity-log.md` |
+| Persons v2 refactor        | `documentation/team/operations/persons-v2-refactor/plan.md` | `documentation/team/operations/persons-v2-refactor/progress.md` | `documentation/team/operations/persons-v2-refactor/activity-log.md` |
+| Public profile submission  | `documentation/team/operations/public-profile-submission/plan.md` | `documentation/team/operations/public-profile-submission/progress.md` | `documentation/team/operations/public-profile-submission/activity-log.md` |
+
+Lifecycle zamknietego taska:
+
+1. Przenies finalny stan do kanonicznych plikow `documentation/team/*` (podmiana starego stanu nowym).
+2. Dodaj wpis do `documentation/team/operations/post-change-checklist.md` jesli zmiana dotyczy DB/env/deploy.
+3. Usun `plan.md`, `progress.md`, `activity-log.md` dla zamknietego taska (historia zostaje w Git).
 
 Uwaga:
 
-- W module Contract Meeting Notes preferowane sa nowe pliki w katalogu `contract-meeting-notes/`.
-- Agent dokumentacyjny musi mapowac `[Feature]` tylko do istniejacych katalogow `documentation/team/operations/*`.
+- Agent dokumentacyjny mapuje `[Feature]` tylko do istniejacych katalogow `documentation/team/operations/*`.
 
 ### 8a. Resolver `[Feature]` dla Documentarian
 
@@ -165,10 +169,10 @@ Jesli nie da sie jednoznacznie wyznaczyc katalogu:
 | `factory/adapters/claude-code.md`          | Adapter sesji dla Claude Code                             |
 | `factory/adapters/copilot-vscode.md`       | Adapter sesji dla Copilot VS Code                         |
 | `factory/PROMPTS-SESSIONS.md`              | Prompty na kolejne sesje                                  |
-| `factory/FACTORY-FLOW.md`                  | Czytelny diagram przeplywu fabryki (ASCII, stan obecny)   |
+| `factory/FACTORY-FLOW.md`                  | Opis przeplywu fabryki i lifecycle zamkniecia taskow      |
 | `factory/prompts/reviewer.md`              | Prompt reviewera AI                                       |
 | `factory/prompts/planner.md`               | S.O.T. dla fazy inicjalizacji taska (Planner)             |
-| `factory/prompts/documentarian.md`         | Prompt Agenta Dokumentacyjnego (Auto-docs)                |
+| `factory/prompts/documentarian.md`         | Prompt Agenta Dokumentacyjnego (Auto-docs + Close&Purge)  |
 
 Uwaga: Pliki `factory/AUDIT-SERVER.md` i `factory/AUDIT-CLIENT.md` zostaly przeniesione odpowiednio do:
 `documentation/team/architecture/conventions/coding-server.md`,

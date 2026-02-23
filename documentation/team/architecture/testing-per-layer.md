@@ -7,7 +7,7 @@ description: 'Testing Guidelines - Clean Architecture | Status: ACTIVE | Version
 
 > 📅 **Status:** AKTYWNE - Framework wdrożony (Jest + ts-jest)
 >
-> 🏛️ **Architektura:** [Podstawy](./architektura.instructions.md) | [Szczegóły](./architektura-szczegoly.md) | [AI Assistant](./architektura-ai-assistant.md)
+> 🏛️ **Architektura:** [Podstawy](./clean-architecture.md) | [Szczegóły](./clean-architecture-details.md) | [AI Assistant](./ai-decision-trees.md)
 
 ---
 

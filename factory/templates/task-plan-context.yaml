@@ -5,6 +5,13 @@ task_name: ""
 task_type: "feature|refactor|mixed|architecture|ops"
 operations_feature_slug: ""   # e.g. persons-v2-refactor
 operations_docs_path: ""      # e.g. documentation/team/operations/persons-v2-refactor/
+docs_sync_targets:            # canonical docs updated at closure
+  - ""                        # e.g. documentation/team/architecture/system-map.md
+closure_policy: "replace_docs_and_purge_plan"  # replace_docs_and_purge_plan | keep_plan_open
+closure_gate:
+  require_test_pass: true
+  require_review_approve: true
+  require_docs_sync_done: true
 
 acceptance_criteria:
   - ""

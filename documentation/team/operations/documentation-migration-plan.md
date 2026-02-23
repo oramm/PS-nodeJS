@@ -1,9 +1,11 @@
 ﻿# Documentation Migration (legacy pointer)
 
-Ten plik jest wskaźnikiem historycznym.
+Ten plik jest wskaznikiem historycznym.
 
-Kanoniczna dokumentacja tego strumienia znajduje się w:
+Artefakty wykonawcze (`plan/progress/activity-log`) dla zamknietego taska
+`documentation-migration` zostaly usuniete zgodnie z polityka lifecycle.
 
-- `documentation/team/operations/documentation-migration/plan.md`
-- `documentation/team/operations/documentation-migration/progress.md`
-- `documentation/team/operations/documentation-migration/activity-log.md`
+Aktualne zrodla prawdy:
+
+- `documentation/team/README.md`
+- `documentation/team/operations/docs-map.md`

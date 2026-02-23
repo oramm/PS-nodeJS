@@ -1,7 +1,7 @@
 # Factory Build Status
 
-## Stan: Warstwa 4 - Auto-docs DONE
-## Data: 2026-02-22
+## Stan: Warstwa 4 - Auto-docs + Close&Purge DONE
+## Data: 2026-02-23
 
 ## Architektura systemu
 - SERWER: PS-nodeJS - Express.js/TypeScript backend z Clean Architecture, MariaDB, integracje Google APIs/KSeF.
@@ -28,7 +28,7 @@
 - [x] Szablon planowania kontekstu taska (`factory/templates/task-plan-context.yaml`)
 - [x] Test pipeline (warstwa 2)
 - [x] Planner (warstwa 3)
-- [x] Auto-docs (warstwa 4)
+- [x] Auto-docs + Close&Purge (warstwa 4)
 
 ## Warstwa 1 - Reviewer Agent
 
@@ -87,7 +87,7 @@ Zakres wykonany:
 ### Co powstalo
 1. `factory/prompts/planner.md` â€” prompt Planner Agenta (Architekt-Strateg, YAML kontrakt)
 2. Sekcje Planner w adapterach: `claude-code.md` (Plan Mode, subagenty, worktrees), `codex.md` (interactive + headless), `copilot-vscode.md` (Copilot Edits agent mode, #file pinning)
-3. Rozszerzenie `factory/templates/task-plan-context.yaml` o pola: `technical_objectives`, `verification_criteria`, `escalation_triggers`, `context_budget`, `plan_deviation`
+3. Rozszerzenie `factory/templates/task-plan-context.yaml` o pola: `technical_objectives`, `verification_criteria`, `escalation_triggers`, `context_budget`, `plan_deviation`, `docs_sync_targets`, `closure_policy`, `closure_gate`
 4. Sekcja "Lekka Orkiestracja" w `factory/TOOL-ADAPTERS.md`
 5. `planner.md` dodany do Context Gate Warstwa A (CLAUDE.md + copilot-instructions.md)
 6. Wpis `planner.md` w `documentation/team/operations/docs-map.md` (sekcja 9)

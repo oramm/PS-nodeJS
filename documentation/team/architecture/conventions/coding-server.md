@@ -647,17 +647,17 @@ f6d1232 Add migration runner and document DB gate closure
 | `operations/documentation-migration/progress.md`     | 0     | PostÄ™p migracji dokumentacji            |
 | `operations/documentation-migration/activity-log.md` | 0     | Log aktywnoĹ›ci migracji dokumentacji    |
 
-### .github/instructions/ (instrukcje AI)
+### documentation/team/architecture/ (canonical)
 
-| Plik                                | Linii | Opis                                  |
-| ----------------------------------- | ----- | ------------------------------------- |
-| `architektura.instructions.md`      | 536   | ReguĹ‚y Clean Architecture (KRYTYCZNY) |
-| `architektura-ai-assistant.md`      | 481   | Drzewa decyzyjne dla AI               |
-| `architektura-szczegoly.md`         | 805   | SzczegĂłĹ‚owe przykĹ‚ady                 |
-| `architektura-testowanie.md`        | 363   | Wytyczne testowe per warstwa          |
-| `architektura-refactoring-audit.md` | 583   | Checklista audytu refaktoru           |
-| `refactoring-auth-pattern.md`       | 492   | Migracja wzorca OAuth2 withAuth       |
-| `srodowiska.instructions.md`        | 28    | Instrukcje Ĺ›rodowiskowe               |
+| Plik canonical                                                | Status | Opis                                 |
+| ------------------------------------------------------------- | ------ | ------------------------------------ |
+| `documentation/team/architecture/clean-architecture.md`       | ACTIVE | Reguly Clean Architecture (KRYTYCZNY) |
+| `documentation/team/architecture/ai-decision-trees.md`        | ACTIVE | Drzewa decyzyjne dla AI               |
+| `documentation/team/architecture/clean-architecture-details.md` | ACTIVE | Szczegolowe przyklady                 |
+| `documentation/team/architecture/testing-per-layer.md`        | ACTIVE | Wytyczne testowe per warstwa          |
+| `documentation/team/architecture/refactoring-audit.md`        | ACTIVE | Checklista audytu refaktoru           |
+| `documentation/team/architecture/auth-migration.md`           | ACTIVE | Migracja wzorca OAuth2 withAuth       |
+| `documentation/team/onboarding/environment.md`                | ACTIVE | Instrukcje srodowiskowe               |
 
 ### .agents/skills/
 

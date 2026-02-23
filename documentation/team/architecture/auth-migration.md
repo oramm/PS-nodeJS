@@ -226,7 +226,7 @@ app.delete('/x/:id', async (req, res, next) => {
 > **NOWY KOD NIE MOŻE tworzyć takich zależności!**
 > Model importujący Controller tworzy **cykl zależności** - jest to zabronione.
 >
-> Szczegóły: [architektura-szczegoly.md - Unikanie Cykli Zależności](./architektura-szczegoly.md#7-unikanie-cykli-zależności)
+> Szczegóły: [clean-architecture-details.md - Unikanie Cykli Zależności](./clean-architecture-details.md#7-unikanie-cykli-zależności)
 >
 > **Dozwolone rozwiązania dla nowego kodu:**
 >
@@ -485,7 +485,7 @@ yarn build
 
 -   **Wzorzec referencyjny:** `src/financialAidProgrammes/FinancialAidProgrammesController.ts`
 -   **BaseController:** `src/controllers/BaseController.ts`
--   **Wytyczne Clean Architecture:** `.github/instructions/architektura.instructions.md`
+-   **Wytyczne Clean Architecture (canonical):** `documentation/team/architecture/clean-architecture.md`
 
 ---
 

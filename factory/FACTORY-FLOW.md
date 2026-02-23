@@ -1,4 +1,4 @@
-﻿# Dark Factory — Flow (stan na 2026-02-22)
+﻿# Dark Factory — Flow (stan na 2026-02-23)
 
 ## Jak to działa teraz
 
@@ -30,7 +30,7 @@
 │               │               │               │               │               │               │
 │               │               │               │ [5] TEST_FAIL │               │               │
 │               │               │   <═══════════│ → fix + retest│               │               │
-│               │               │  (naprawia)   │   (max 3x)   │               │               │
+│               │               │  (naprawia)   │   (max 3x)    │               │               │
 │               │               │   ═══════════>│               │               │               │
 │               │               │               │ [5] TEST_PASS │               │               │
 │               │               │               │ + TEST_REPORT │               │               │
@@ -49,10 +49,14 @@
 ├───────────────┼───────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
 │               │               │               │               │               │               │
 │               │               │               │               │               │ [7] Auto-docs │
-│               │               │               │               │               │ (Warstwa      │
-│               │               │               │               │               │  B/D/V)       │
+│               │               │               │               │               │ + Docs Sync   │
+│               │               │               │               │               │  (B/D/V)      │
 │   <═══════════════════════════════════════════════════════════════════════════│ [7] DONE      │
-│ [8] Commit    │               │               │               │               │               │
+│               │               │               │               │               │ [8] Close&    │
+│               │               │               │               │               │ Purge plan/   │
+│               │               │               │               │               │ progress/log  │
+│   <═══════════════════════════════════════════════════════════════════════════│ [8] DONE      │
+│ [9] Commit    │               │               │               │               │               │
 │ (ręcznie)     │               │               │               │               │               │
 │               │               │               │               │               │               │
 ├───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────┤
@@ -62,7 +66,7 @@
 └───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Kto ma jakie skille
+## Kto ma jakie role
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -71,7 +75,7 @@
 │  ├── Definiuje cel i ograniczenia                                               │
 │  ├── Zatwierdza plan (PLAN_APPROVED / PLAN_REJECTED)                            │
 │  ├── Rozstrzyga eskalacje (3x fail, ryzyko bezpieczeństwa, niejasne wymagania) │
-│  ├── Commituje po zakończeniu Auto-docs                                         │
+│  ├── Commituje po zakończeniu Auto-docs + Close&Purge                           │
 │  └── Wybiera narzędzie: Claude Code / Codex / Copilot VS Code                  │
 │                                                                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -115,9 +119,10 @@
 │                                                                                 │
 │  DOCUMENTARIAN  (factory/prompts/documentarian.md)                              │
 │  ├── Uruchamia się po VERDICT: APPROVE                                          │
-│  ├── Aktualizuje Warstwę B (progress.md, activity-log.md)                       │
+│  ├── Synchronizuje canonical docs (stary stan -> nowy stan)                     │
 │  ├── Weryfikuje Warstwę D (alerty cross-repo przy zmianach API)                 │
-│  └── Aktualizuje Warstwę V (diagramy Mermaid.js)                                │
+│  ├── Aktualizuje Warstwę V (diagramy Mermaid.js)                                │
+│  └── Po spełnieniu gate zamyka feature i usuwa plan/progress/log                │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -154,7 +159,7 @@ Start sesji
                          │
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│  WARSTWA C — tylko z uzasadnieniem                   │
+│  WARSTWA C — tylko z uzasadnieniem                  │
 │                                                     │
 │  documentation/team/architecture/refactoring-audit.md                         │
 │  documentation/team/architecture/clean-architecture-details.md                │
@@ -167,7 +172,7 @@ Start sesji
   Reviewer Agent ·········· ✅ wdrożony     prompt + review loop + severity levels
   Test Pipeline ··········· ✅ wdrożony     prompt + TEST_VERDICT + przekazanie do reviewera
   Planner ················· ✅ wdrożony     prompt + YAML kontrakt + human checkpoint
-  Auto-docs ··············· ✅ wdrożony     prompt documentarian.md + 5 warstw dokumentacji
+  Auto-docs + Close&Purge · ✅ wdrożony     sync canonical docs + cleanup plan artifacts
   Committer ··············· ❌ przyszłość   standaryzacja commitów / PR
   Orchestrator (agent) ···· ❌ przyszłość   agent zamiast człowieka jako koordynator
 ```

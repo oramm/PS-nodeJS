@@ -1,6 +1,8 @@
 # Wytyczne Architektoniczne - Przewodnik Szczegółowy
 
-> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./architektura.instructions.md) | **🤖 Dla AI:** [AI Assistant](./architektura-ai-assistant.md) | **🧪 Testowanie:** [Testing Guide](./architektura-testowanie.md) | **📋 Audyt:** [Refactoring Audit](./architektura-refactoring-audit.md)
+> 🏛️ **Skrócona wersja:** [Podstawowe wytyczne](./clean-architecture.md) | **🤖 Dla AI:** [AI Assistant](./ai-decision-trees.md) | **🧪 Testowanie:** [Testing Guide](./testing-per-layer.md) | **📋 Audyt:** [Refactoring Audit](./refactoring-audit.md)
+
+> Polityka egzekwowania target vs legacy: [clean-architecture.md#polityka-wzorca-target-vs-legacy](./clean-architecture.md#polityka-wzorca-target-vs-legacy)
 
 ## Spis Treści
 
@@ -802,4 +804,4 @@ Przed dodaniem `import X from './X'` sprawdź:
 
 ---
 
-⬅️ **Powrót:** [Podstawowe wytyczne](./architektura.instructions.md)
+⬅️ **Powrót:** [Podstawowe wytyczne](./clean-architecture.md)
