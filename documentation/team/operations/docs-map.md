@@ -116,6 +116,7 @@ Historyczne aliasy root-level usuniete (2026-02-23):
 | DB architect agent | `.github/agents/DB architect.agent.md`                   |
 | Skills             | `.agents/skills/*.md`                                    |
 | Review process     | `factory/prompts/reviewer.md`                            |
+| Commit process     | `factory/prompts/committer.md`                           |
 | Koncepcja fabryki  | `factory/CONCEPT.md`                                     |
 
 ---
@@ -173,6 +174,7 @@ Jesli nie da sie jednoznacznie wyznaczyc katalogu:
 | `factory/prompts/reviewer.md`              | Prompt reviewera AI                                       |
 | `factory/prompts/planner.md`               | S.O.T. dla fazy inicjalizacji taska (Planner)             |
 | `factory/prompts/documentarian.md`         | Prompt Agenta Dokumentacyjnego (Auto-docs + Close&Purge)  |
+| `factory/prompts/committer.md`             | Prompt Agenta Committer (`COMMIT_APPROVED`, commit only)  |
 
 Uwaga: Pliki `factory/AUDIT-SERVER.md` i `factory/AUDIT-CLIENT.md` zostaly przeniesione odpowiednio do:
 `documentation/team/architecture/conventions/coding-server.md`,

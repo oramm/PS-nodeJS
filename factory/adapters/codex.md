@@ -13,8 +13,9 @@
 3. Po implementacji uruchom testy wg `factory/prompts/tester.md`.
 4. Wynik `TEST_REPORT` przekaz do review wg `factory/prompts/reviewer.md`.
 5. Po udanym review (`APPROVE`), zaktualizuj dokumentacje wg `factory/prompts/documentarian.md` i przekaz `operations_feature_slug` + `operations_docs_path` z planu.
-6. Commit dopiero po `APPROVE`.
-7. Przy planie taska uzupelnij:
+6. Przygotuj `COMMIT_REQUEST` (w V1 przygotowuje go czlowiek-orchestrator).
+7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
+8. Przy planie taska uzupelnij:
     - `required_context_files`
     - `optional_context_files`
     - `context_budget_tokens`
@@ -76,6 +77,7 @@ Zastosuj workflow Dark Factory:
 Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Testy wykonaj wg factory/prompts/tester.md.
 Review wykonaj promptem factory/prompts/reviewer.md (przekaz TEST_REPORT).
+Commit wykonaj promptem factory/prompts/committer.md i tylko po COMMIT_APPROVED.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers, documentation_selection_justification,
 operations_feature_slug i operations_docs_path.

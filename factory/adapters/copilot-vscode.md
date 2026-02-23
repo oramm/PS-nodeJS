@@ -11,7 +11,9 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 3. Dziel prace na male taski.
 4. Po implementacji uruchom testy wg `factory/prompts/tester.md`.
 5. Wynik `TEST_REPORT` przekaz do review wg `factory/prompts/reviewer.md`.
-6. Przy planie taska uzupelnij:
+6. Po docs przygotuj `COMMIT_REQUEST` (V1: czlowiek-orchestrator).
+7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
+8. Przy planie taska uzupelnij:
     - `required_context_files`
     - `optional_context_files`
     - `context_budget_tokens`
@@ -19,11 +21,11 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
     - `documentation_selection_justification`
     - `operations_feature_slug`
     - `operations_docs_path`
-7. Gdy scope obejmuje frontend, jawnie pracuj na obu repo:
+9. Gdy scope obejmuje frontend, jawnie pracuj na obu repo:
     - `C:\Apache24\htdocs\PS-nodeJS`
     - `C:\Apache24\htdocs\ENVI.ProjectSite`
-8. Jesli wyszukiwarka jest ograniczona do workspace, czytaj pliki klienta po sciezkach bezwzglednych.
-9. Jesli dostep do repo klienta jest zablokowany, zglos blocker i popros o diff/pliki; nie oznaczaj review jako pelnego.
+10. Jesli wyszukiwarka jest ograniczona do workspace, czytaj pliki klienta po sciezkach bezwzglednych.
+11. Jesli dostep do repo klienta jest zablokowany, zglos blocker i popros o diff/pliki; nie oznaczaj review jako pelnego.
 
 ## Prompt startowy (copy/paste)
 
@@ -36,6 +38,7 @@ Workflow:
 Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Po implementacji uruchom testy wg factory/prompts/tester.md.
 Wynik TEST_REPORT przekaz do review wg factory/prompts/reviewer.md.
+Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers, documentation_selection_justification,
 operations_feature_slug i operations_docs_path.
@@ -86,3 +89,4 @@ Max 2 rundy. Czlowiek jest ostatecznym arbitrem zmiany scope.
 4. "Wykonaj review wg factory/prompts/reviewer.md (przekaz TEST_REPORT) i wypisz issues."
 5. "Napraw issues, potem podaj finalny diff."
 6. "Zaktualizuj dokumentacje wg factory/prompts/documentarian.md."
+7. "Przygotuj COMMIT_REQUEST i wykonaj commit przez factory/prompts/committer.md po COMMIT_APPROVED."

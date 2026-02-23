@@ -2,7 +2,7 @@
 
 > Kanoniczny opis koncepcji Dark Factory dla tego repo.
 > Status dokumentu: aktywny
-> Data aktualizacji: 2026-02-20
+> Data aktualizacji: 2026-02-23
 
 ## 1. Cel i definicja
 
@@ -22,10 +22,11 @@ Model pracy:
 - Spisanie pelnej koncepcji i workflow dla kolejnych warstw.
 - Ustalenie checkpointow, metryk i kryteriow przejsc miedzy warstwami.
 - Powiazanie koncepcji z aktualnymi artefaktami w `factory/`.
+- Warstwa 5: Committer v1 (`COMMIT_APPROVED`, commit only, bez push/PR).
 
 ### Poza zakresem (na teraz)
 - Pelna orkiestracja wieloagentowa end-to-end.
-- Automatyczny commit/push/PR jako twardy standard dla wszystkich zmian.
+- Automatyczny push/PR jako twardy standard dla wszystkich zmian.
 - Refaktoryzacja calego zestawu dokumentow `factory/*`.
 
 ## 3. Architektura agentowa (stan docelowy, wdrazana warstwowo)
@@ -38,7 +39,7 @@ Role agentow:
 - `Fixer`: poprawki po review i po testach.
 - `Tester`: uruchamia i uzupelnia testy.
 - `Docs`: utrzymuje dokumentacje i spojnosc docs <-> kod.
-- `Committer` (opcjonalnie): standaryzuje komunikaty i material PR.
+- `Committer` (wdrozony v1): wykonuje bezpieczny commit po `COMMIT_APPROVED`.
 
 Kluczowa zasada: `Reviewer != Coder` (inna perspektywa, mniejszy bias).
 
@@ -85,7 +86,9 @@ Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 - sprawdzenie spojnosci docs z kodem.
 
 6. Commit:
-- standard komunikatow i powiazanie z taskiem.
+- wykonywany przez Committer po `COMMIT_APPROVED`,
+- v1: gate'y test/review/docs sa deklarowane przez orchestratora (`COMMIT_REQUEST`),
+- v1: bezpieczny staging (bez `git add .` i `git add -A`).
 
 ### Context Gate v1 (Low-Context First)
 
@@ -153,9 +156,11 @@ Po przekroczeniu limitu:
 ## 8. Roadmapa iteracyjna (zgodna z `factory/STATUS.md`)
 
 - Warstwa 1 (DONE): Reviewer Agent.
-- Warstwa 2 (NEXT): Test Pipeline.
-- Warstwa 3: Planner (top-down decomposition + dependency graph).
-- Warstwa 4: Auto-docs i consistency checks.
+- Warstwa 2 (DONE): Test Pipeline.
+- Warstwa 3 (DONE): Planner (top-down decomposition + dependency graph).
+- Warstwa 4 (DONE): Auto-docs i consistency checks.
+- Warstwa 5 (DONE): Committer v1.
+- Warstwa 6 (NEXT): Stateful orchestration gate + orchestrator agent.
 
 Strategia: wdrozenie warstwowe "na cebulke", bez przeskakiwania fundamentow.
 
@@ -169,6 +174,7 @@ Priorytet delivery:
 - Sesje i prompty operacyjne: `factory/PROMPTS-SESSIONS.md`
 - Prompt testera (warstwa 2): `factory/prompts/tester.md`
 - Prompt reviewera (warstwa 1): `factory/prompts/reviewer.md`
+- Prompt committera (warstwa 5): `factory/prompts/committer.md`
 - Mapa zrodel prawdy: `documentation/team/operations/docs-map.md`
 - Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
 

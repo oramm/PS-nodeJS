@@ -1,6 +1,6 @@
 # Factory Build Status
 
-## Stan: Warstwa 4 - Auto-docs + Close&Purge DONE
+## Stan: Warstwa 5 - Committer v1 DONE
 ## Data: 2026-02-23
 
 ## Architektura systemu
@@ -29,6 +29,7 @@
 - [x] Test pipeline (warstwa 2)
 - [x] Planner (warstwa 3)
 - [x] Auto-docs + Close&Purge (warstwa 4)
+- [x] Committer v1 (warstwa 5)
 
 ## Warstwa 1 - Reviewer Agent
 
@@ -98,6 +99,31 @@ Zakres wykonany:
 - PLAN_DEVIATION_REPORT: Coder moze odrzucic plan przy blokerze; max 2 rundy poprawek
 - Anty-mikrozarzadzanie: brak listy krokow implementacji â€” tylko cele i constraints
 
+## Warstwa 5 - Committer v1
+
+### Co powstalo
+1. `factory/prompts/committer.md` - prompt Committer Agenta (gate `COMMIT_APPROVED`, `COMMIT_REQUEST`, `COMMIT_REPORT`)
+2. Integracja etapu Committer w adapterach:
+   - `factory/adapters/codex.md`
+   - `factory/adapters/claude-code.md`
+   - `factory/adapters/copilot-vscode.md`
+   - `.github/copilot-instructions.md`
+3. Aktualizacja flow i koncepcji:
+   - `factory/FACTORY-FLOW.md`
+   - `factory/TOOL-ADAPTERS.md`
+   - `factory/CONCEPT.md`
+4. Aktualizacja mapy S.O.T.:
+   - `documentation/team/operations/docs-map.md`
+5. Aktualizacja wejscia Claude:
+   - `CLAUDE.md` (wzmianka o etapie Committer)
+
+### Kluczowe decyzje
+- V1: orchestrator = czlowiek.
+- Commit tylko po jawnym `COMMIT_APPROVED`.
+- V1 trust model: `TEST_PASS`, `REVIEW_APPROVE`, `DOCS_SYNC_DONE` sa deklarowane w `COMMIT_REQUEST`.
+- Bezpieczenstwo: zakaz `git add .` i `git add -A`; staging tylko `files_changed` lub staged-only.
+- Zakres v1: commit only (bez push/PR).
+
 ## Nastepny krok
-Sesja 5 - Committer (standaryzacja commitow/PR)
+Sesja 6 - Stateful orchestration gate (plan/YAML jako source of truth)
 Prompt: `factory/PROMPTS-SESSIONS.md`

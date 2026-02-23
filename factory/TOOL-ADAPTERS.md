@@ -13,13 +13,16 @@ Kazde zadanie przechodzi sekwencje:
 3. Testy wg `factory/prompts/tester.md` (`TEST_VERDICT: TEST_PASS | TEST_FAIL`).
 4. Review loop (`APPROVE` albo `REQUEST_CHANGES`, max 3 iteracje) - reviewer dostaje `TEST_REPORT`.
 5. Aktualizacja docs (jesli dotyczy).
-6. Commit po approve.
+6. Commit request od orchestratora (`COMMIT_REQUEST` + `COMMIT_APPROVED`).
+7. Commit przez `factory/prompts/committer.md`.
 
 Hard rules:
 - `Reviewer != Coder` (swieze spojrzenie).
 - Escalacja do czlowieka po 3 nieudanych iteracjach review/test.
 - Checkpoint czlowieka przy decyzjach architektonicznych i finalnym merge.
 - Balans iteracji: 50/50 (1 task funkcjonalny + 1 task techniczny/refactor, o ile ma sens).
+- Committer NIE wykonuje `git add .` ani `git add -A`; staging tylko z `files_changed` lub staged-only.
+- W V1 gate `TEST_PASS/APPROVE/DOCS_SYNC_DONE` sa deklarowane przez orchestratora w `COMMIT_REQUEST` (state-store planowany w V2).
 
 ## 1a. Documentation Layer Selection (obowiazkowe)
 
@@ -60,6 +63,7 @@ Stosuj model dokumentacji:
 Laduj tylko warstwy potrzebne do taska.
 Wymus workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Nie koncz zadania bez review APPROVE.
+Commit uruchamiaj przez Committer dopiero po jawnym `COMMIT_APPROVED`.
 ```
 
 ## 3. Adapter: Codex
@@ -67,30 +71,36 @@ Nie koncz zadania bez review APPROVE.
 Uzyj:
 - `AGENTS.md` (reguly repo dla Codex)
 - `factory/adapters/codex.md` (checklista sesji)
+- `factory/prompts/committer.md` (gate + bezpieczny commit)
 
 W praktyce:
 - przypomnij workflow w pierwszej wiadomosci,
 - po kazdej zmianie uruchom review wg `factory/prompts/reviewer.md`.
+- commit wykonuj przez `factory/prompts/committer.md` po `COMMIT_APPROVED`.
 
 ## 4. Adapter: Claude Code
 
 Uzyj:
 - `CLAUDE.md` (instrukcje dla Claude Code)
 - `factory/adapters/claude-code.md` (checklista sesji)
+- `factory/prompts/committer.md`
 
 W praktyce:
 - zacznij od polecenia "przeczytaj CLAUDE.md + adapter",
 - egzekwuj review loop i limity iteracji.
+- po docs uruchom commit tylko przez Committer (`COMMIT_APPROVED`).
 
 ## 5. Adapter: Copilot (VS Code)
 
 Uzyj:
 - `.github/copilot-instructions.md`
 - `factory/adapters/copilot-vscode.md`
+- `factory/prompts/committer.md`
 
 W praktyce:
 - rozpoczynaj chat od promptu bootstrap,
 - prowadz review i testy jawnie (Copilot nie zrobi orkiestracji sam).
+- commit wykonuj tylko po `COMMIT_APPROVED` i przez prompt Committera.
 
 ## 5a. Lekka orkiestracja (anty-mikrozarzadzanie)
 

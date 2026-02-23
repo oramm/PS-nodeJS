@@ -13,6 +13,7 @@ Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers i documentation_selection_justification.
 Nie koncz taska bez APPROVE.
+Commit wykonaj przez factory/prompts/committer.md dopiero po COMMIT_APPROVED.
 ```
 
 ### Claude Code
@@ -26,6 +27,7 @@ Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers i documentation_selection_justification.
 Po 3 nieudanych iteracjach eskaluj do czlowieka.
+Commit wykonaj przez factory/prompts/committer.md dopiero po COMMIT_APPROVED.
 ```
 
 ### Copilot VS Code
@@ -39,6 +41,7 @@ Workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers i documentation_selection_justification.
 Nie zamykaj taska bez APPROVE.
+Commit wykonaj przez factory/prompts/committer.md dopiero po COMMIT_APPROVED.
 ```
 
 ---
@@ -71,6 +74,17 @@ Podsumowanie:
 - Human checkpoint: Planner czeka na jawne `PLAN_APPROVED` przed przekazaniem do Codera.
 - `PLAN_DEVIATION_REPORT`: Coder moze odrzucic plan przy blokerze; max 2 rundy poprawek.
 
-## Sesja 4: Auto-docs
+## Sesja 4: Auto-docs DONE
 
-[placeholder]
+Podsumowanie:
+- `factory/prompts/documentarian.md` domyka docs-sync i close&purge.
+- Pipeline ma gate: `TEST_PASS` + `REVIEW_APPROVE` + `DOCS_SYNC_DONE`.
+
+## Sesja 5: Committer DONE
+
+Podsumowanie:
+- Dodano `factory/prompts/committer.md`.
+- Commit wymaga `COMMIT_REQUEST` + jawnego `COMMIT_APPROVED`.
+- V1: orchestrator-czlowiek deklaruje gate'y jakosci w `COMMIT_REQUEST`.
+- Bezpieczenstwo stagingu: zakaz `git add .`/`git add -A`; tylko `files_changed` lub staged-only.
+- Zakres v1: commit only (bez push/PR).

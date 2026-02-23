@@ -56,8 +56,9 @@
 │               │               │               │               │               │ Purge plan/   │
 │               │               │               │               │               │ progress/log  │
 │   <═══════════════════════════════════════════════════════════════════════════│ [8] DONE      │
-│ [9] Commit    │               │               │               │               │               │
-│ (ręcznie)     │               │               │               │               │               │
+│ [9] COMMIT_   │               │               │               │               │               │
+│ APPROVED      │               │               │               │               │               │
+│ [10] Committer│               │               │               │               │               │
 │               │               │               │               │               │               │
 ├───────────────┴───────────────┴───────────────┴───────────────┴───────────────┴───────────────┤
 │                                                                                               │
@@ -75,7 +76,8 @@
 │  ├── Definiuje cel i ograniczenia                                               │
 │  ├── Zatwierdza plan (PLAN_APPROVED / PLAN_REJECTED)                            │
 │  ├── Rozstrzyga eskalacje (3x fail, ryzyko bezpieczeństwa, niejasne wymagania) │
-│  ├── Commituje po zakończeniu Auto-docs + Close&Purge                           │
+│  ├── Zatwierdza commit tokenem COMMIT_APPROVED                                  │
+│  ├── Inicjuje COMMIT_REQUEST dla Committera (V1: model deklaratywny)            │
 │  └── Wybiera narzędzie: Claude Code / Codex / Copilot VS Code                  │
 │                                                                                 │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -173,6 +175,14 @@ Start sesji
   Test Pipeline ··········· ✅ wdrożony     prompt + TEST_VERDICT + przekazanie do reviewera
   Planner ················· ✅ wdrożony     prompt + YAML kontrakt + human checkpoint
   Auto-docs + Close&Purge · ✅ wdrożony     sync canonical docs + cleanup plan artifacts
-  Committer ··············· ❌ przyszłość   standaryzacja commitów / PR
+  Committer ··············· ✅ wdrozony v1  commit only po COMMIT_APPROVED
   Orchestrator (agent) ···· ❌ przyszłość   agent zamiast człowieka jako koordynator
 ```
+
+## Aktualizacja sesji 5 (Committer v1)
+
+- Wejscie do etapu commita: `COMMIT_REQUEST` + jawne `COMMIT_APPROVED`.
+- Committer dziala wg `factory/prompts/committer.md`.
+- V1: `TEST_PASS`, `REVIEW_APPROVE`, `DOCS_SYNC_DONE` sa deklaracjami orchestratora.
+- Bezpieczenstwo stagingu: zakaz `git add .` i `git add -A`; tylko `files_changed` lub staged-only.
+- Zakres: commit only (bez push/PR).

@@ -94,6 +94,8 @@ Po napisaniu lub zmodyfikowaniu kodu źródłowego:
    - Zmiany TYLKO w plikach *.md (dokumentacja)
    - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
 
+Commit po review/docs realizuj przez `factory/prompts/committer.md` i dopiero po jawnym `COMMIT_APPROVED` od orchestratora.
+
 ## Factory: Cross-Tool Adapter
 
 Gdy pracujesz w trybie Dark Factory, stosuj wspolny adapter procesu:
