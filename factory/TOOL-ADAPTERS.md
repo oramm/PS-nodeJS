@@ -20,6 +20,8 @@ Hard rules:
 - `Reviewer != Coder` (swieze spojrzenie).
 - Escalacja do czlowieka po 3 nieudanych iteracjach review/test.
 - Checkpoint czlowieka przy decyzjach architektonicznych i finalnym merge.
+- Zmiana workflow/polityki w Factory musi miec `cross-tool parity`:
+  - obowiazkowe odwzorowanie w `factory/adapters/codex.md`, `factory/adapters/claude-code.md`, `factory/adapters/copilot-vscode.md`.
 - Balans iteracji: 50/50 (1 task funkcjonalny + 1 task techniczny/refactor, o ile ma sens).
 - Committer NIE wykonuje `git add .` ani `git add -A`; staging tylko z `files_changed` lub staged-only.
 - W V1 gate `TEST_PASS/APPROVE/DOCS_SYNC_DONE` sa deklarowane przez orchestratora w `COMMIT_REQUEST` (state-store planowany w V2).
@@ -115,6 +117,24 @@ Izolowany kontekst subagenta nie dziedziczy zasad automatycznie.
 
 `PLAN_DEVIATION_REPORT`: Coder moze odrzucic plan jesli odkryje przeszkode.
 Max 2 rundy poprawki - czlowiek jest arbitrem zmiany scope.
+
+### Planner Gate (kiedy pominac / kiedy wymagany)
+
+- Dla zmian `low-risk` Planner moze byc pominiety:
+  - 1-2 pliki,
+  - brak zmian DB/env/deploy,
+  - brak zmian kontraktu API/public interface,
+  - brak decyzji architektonicznych.
+- Przy pominieciu Plannera Coder MUSI zapisac krotkie uzasadnienie w raporcie sesji (`planner_skipped_reason`).
+- Niezaleznie od decyzji o Plannerze zawsze obowiazuje: `Test -> Review (Reviewer != Coder) -> APPROVE`.
+- Planner jest wymagany, gdy zachodzi przynajmniej jeden warunek:
+  - zmiany architektury lub publicznego API,
+  - zmiany DB/env/deploy,
+  - task wieloetapowy lub cross-repo o podwyzszonym ryzyku.
+- Dla taskow seed-stage o wysokiej niepewnosci uruchom `DISCOVERY_MODE`:
+  - iteracyjny dialog z czlowiekiem,
+  - analiza as-is przed finalnym YAML,
+  - gate: `DISCOVERY_APPROVED` przed `PLAN_APPROVED`.
 
 ## 6. Escalacja i decyzje
 

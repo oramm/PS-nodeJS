@@ -12,7 +12,9 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 4. Po implementacji uruchom testy wg `factory/prompts/tester.md`.
 5. Wynik `TEST_REPORT` przekaz do review wg `factory/prompts/reviewer.md`.
 6. Po docs przygotuj `COMMIT_REQUEST` (V1: czlowiek-orchestrator).
+   - przekaz `ai_lead_model` (model prowadzacy glowny watek) oraz opcjonalnie `ai_coauthor_email`.
 7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
+   - commit musi zawierac `Dark-Factory: yes` oraz trailer `Co-authored-by` dla AI.
 8. Przy planie taska uzupelnij:
     - `required_context_files`
     - `optional_context_files`
@@ -39,6 +41,8 @@ Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Po implementacji uruchom testy wg factory/prompts/tester.md.
 Wynik TEST_REPORT przekaz do review wg factory/prompts/reviewer.md.
 Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
+W COMMIT_REQUEST przekaz ai_lead_model (i opcjonalnie ai_coauthor_email).
+Wymagaj w commit message: Dark-Factory: yes + Co-authored-by dla AI.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers, documentation_selection_justification,
 operations_feature_slug i operations_docs_path.
@@ -69,6 +73,11 @@ Uzyj **Copilot Edits w trybie agenta** do fazy planowania.
 3. Copilot z `@workspace` analizuje i proponuje YAML kontrakt.
 4. Ty zatwierdzasz lub odrzucasz plan.
 5. Po `PLAN_APPROVED`: **nowa sesja Edits** z YAML kontraktem jako kontekstem startowym.
+
+Gdy task jest seed-stage lub ma wysoka niepewnosc:
+1. Wymus `DISCOVERY_MODE` w Plannerze.
+2. Najpierw zatwierdz discovery (`DISCOVERY_APPROVED`).
+3. Dopiero potem zatwierdz finalny plan (`PLAN_APPROVED`).
 
 ### Cross-repo scope
 

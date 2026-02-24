@@ -19,6 +19,8 @@ Pola opcjonalne (deklaracyjne w V1):
 - `operations_feature_slug`
 - `proposed_commit_type` (`feat|fix|refactor|chore|docs|test|perf|ci|build`)
 - `proposed_commit_subject`
+- `ai_lead_model` (np. `gpt-5-codex`)
+- `ai_coauthor_email` (fallback: `ai@dark-factory.local`)
 
 ## Model gate (V1)
 
@@ -56,6 +58,12 @@ Pola opcjonalne (deklaracyjne w V1):
 5. Zbuduj commit message:
 - preferuj `<type>: <subject>`
 - fallback: `chore: update files for <change_scope>`
+- commit message MUSI zawierac adnotacje o pochodzeniu z Dark Factory, np. w body:
+  - `Dark-Factory: yes`
+- commit message MUSI zawierac trailer `Co-authored-by` dla AI prowadzacego glowny watek:
+  - `Co-authored-by: AI (<ai_lead_model>) <ai_coauthor_email>`
+  - jesli `ai_lead_model` nie podano, uzyj `model-unknown`
+  - jesli `ai_coauthor_email` nie podano, uzyj `ai@dark-factory.local`
 6. Wykonaj commit.
 7. Zwroc raport.
 

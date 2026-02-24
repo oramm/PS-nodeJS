@@ -14,7 +14,9 @@
 4. Wynik `TEST_REPORT` przekaz do review wg `factory/prompts/reviewer.md`.
 5. Po udanym review (`APPROVE`), zaktualizuj dokumentacje wg `factory/prompts/documentarian.md` i przekaz `operations_feature_slug` + `operations_docs_path` z planu.
 6. Przygotuj `COMMIT_REQUEST` (V1: orchestrator-czlowiek).
+   - przekaz `ai_lead_model` (model prowadzacy glowny watek) oraz opcjonalnie `ai_coauthor_email`.
 7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
+   - commit musi zawierac `Dark-Factory: yes` oraz trailer `Co-authored-by` dla AI.
 8. Gdy 3x z rzedu `REQUEST_CHANGES` lub fail testow -> eskaluj do czlowieka.
 9. Przy planie taska uzupelnij:
     - `required_context_files`
@@ -43,6 +45,11 @@ Dwie metody:
 
 Po fazie planowania i uzyskaniu `PLAN_APPROVED`:
 **otworz nowa sesje bez `--permission-mode plan`** - Coder startuje z czystym kontekstem skupionym na implementacji.
+
+Gdy task jest seed-stage lub ma wysoka niepewnosc:
+- uruchom Planner w `DISCOVERY_MODE`,
+- najpierw uzyskaj `DISCOVERY_APPROVED`,
+- dopiero potem finalny YAML i `PLAN_APPROVED`.
 
 ### Subagenty do eksploracji (izolacja kontekstu)
 
@@ -79,6 +86,8 @@ Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
 Do testow uzyj factory/prompts/tester.md.
 Do review uzyj factory/prompts/reviewer.md (przekaz TEST_REPORT).
 Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
+W COMMIT_REQUEST przekaz ai_lead_model (i opcjonalnie ai_coauthor_email).
+Wymagaj w commit message: Dark-Factory: yes + Co-authored-by dla AI.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
 documentation_layers, documentation_selection_justification,
 operations_feature_slug i operations_docs_path.

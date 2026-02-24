@@ -3,6 +3,8 @@
 task_id: ""
 task_name: ""
 task_type: "feature|refactor|mixed|architecture|ops"
+discovery_mode: false         # true for seed-stage / high-uncertainty tasks
+discovery_gate: "none"        # none | pending | DISCOVERY_APPROVED | DISCOVERY_REJECTED
 operations_feature_slug: ""   # e.g. persons-v2-refactor
 operations_docs_path: ""      # e.g. documentation/team/operations/persons-v2-refactor/
 docs_sync_targets:            # canonical docs updated at closure
@@ -15,6 +17,21 @@ closure_gate:
 
 acceptance_criteria:
   - ""
+
+discovery_context:
+  open_questions: []
+  future_assumptions: []
+  ui_flow_notes: []
+  as_is_map: []
+  solution_options: []
+  flow_diagram: ""            # text/mermaid
+  impact_matrix:              # summarize expected impact by layer
+    ui: ""
+    api: ""
+    db: ""
+    docs: ""
+    tests: ""
+    risks: ""
 
 # Required context only (max 5-8 files)
 required_context_files:

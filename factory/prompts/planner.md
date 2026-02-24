@@ -12,6 +12,20 @@ Pipeline: **Plan (TY) -> Implementacja -> Test -> Review -> Docs Sync -> Close&P
 
 ---
 
+## A1) TRYBY PLANOWANIA
+
+- `NORMAL_MODE` (domyslny): standardowy plan taska, gdy wymagania sa stabilne.
+- `DISCOVERY_MODE` (dla seed-stage): iteracyjny dialog + analiza as-is przed finalnym planem.
+
+`DISCOVERY_MODE` uruchamiaj, gdy czlowiek sygnalizuje:
+- pomysl w zalazku,
+- duzy feature/refactor,
+- wysoka niepewnosc wymagan lub UI flow.
+
+W `DISCOVERY_MODE` najpierw uzyskaj `DISCOVERY_APPROVED`, dopiero potem przygotuj finalny YAML do `PLAN_APPROVED`.
+
+---
+
 ## B) PROCEDURA (5 krokow)
 
 ### Krok 1: Zbierz wymagania
@@ -25,6 +39,11 @@ Przed eksploracja ustal:
 - Ograniczenia: co jest zakazane, od czego zalezy task
 
 Przy niejednoznacznym wymaganiu - **STOP, zapytaj czlowieka** przed eksploracja.
+
+Jesli aktywny jest `DISCOVERY_MODE`, Krok 1 obejmuje dodatkowo:
+- zebranie przyszlych zalozen produktowych, ktore moga zmienic decyzje implementacyjne,
+- dopytanie o szczegoly UI i flow ekran po ekranie,
+- zdefiniowanie listy pytan otwartych i ryzyk przed analiza kodu.
 
 ### Krok 2: Eksploracja (Documentation Layer Selection)
 
@@ -58,8 +77,22 @@ Reguly selekcji:
 Wypelnij template `factory/templates/task-plan-context.yaml`.
 Kluczowe pola - patrz sekcja C.
 
+W `DISCOVERY_MODE` wygeneruj najpierw artefakt discovery (bez przekazania do Codera):
+- mapa stanu obecnego (`as_is_map`),
+- warianty rozwiazania + trade-offy,
+- proponowany flow (diagram tekstowy lub Mermaid),
+- impact matrix: UI, API, DB, docs, testy, ryzyka.
+
+Po akceptacji discovery przez czlowieka (`DISCOVERY_APPROVED`) dopiero finalny YAML planu.
+
 ### Krok 5: Human checkpoint
-Przedstaw plan czlowiekowi. **CZEKAJ na jawne PLAN_APPROVED**.
+W `DISCOVERY_MODE`:
+- najpierw czekaj na `DISCOVERY_APPROVED`,
+- potem przedstaw finalny plan i czekaj na `PLAN_APPROVED`.
+
+W `NORMAL_MODE`:
+- przedstaw plan czlowiekowi i **CZEKAJ na jawne PLAN_APPROVED**.
+
 Nie przekazuj Coderowi bez zatwierdzenia.
 
 ---
@@ -130,6 +163,7 @@ context_budget:
 ### Verdict (wypelnia czlowiek)
 
 ```text
+DISCOVERY_VERDICT: DISCOVERY_APPROVED | DISCOVERY_REJECTED   # tylko gdy discovery_mode=true
 PLAN_VERDICT: PLAN_APPROVED | PLAN_REJECTED
 ```
 
@@ -164,6 +198,7 @@ Przy delegowaniu zadan do subagentow (Task tool, @workspace, agent mode):
 ## F) REGULY PIPELINE
 
 - Po PLAN_APPROVED -> przekaz YAML + `required_context_files` do Codera.
+- Gdy `discovery_mode=true`, Coder startuje dopiero po `DISCOVERY_APPROVED` i `PLAN_APPROVED`.
 - YAML musi zawierac `operations_feature_slug` i `operations_docs_path` (gdy task obejmuje aktualizacje docs operacyjnych), aby Documentarian nie zgadywal `[Feature]`.
 - YAML musi zawierac `docs_sync_targets`, `closure_policy` i `closure_gate`.
 - Domyslna polityka zamkniecia: `replace_docs_and_purge_plan` (po `TEST_PASS + REVIEW_APPROVE + DOCS_SYNC_DONE`).
