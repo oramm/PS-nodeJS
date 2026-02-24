@@ -43,7 +43,8 @@ Przy niejednoznacznym wymaganiu - **STOP, zapytaj czlowieka** przed eksploracja.
 Jesli aktywny jest `DISCOVERY_MODE`, Krok 1 obejmuje dodatkowo:
 - zebranie przyszlych zalozen produktowych, ktore moga zmienic decyzje implementacyjne,
 - dopytanie o szczegoly UI i flow ekran po ekranie,
-- zdefiniowanie listy pytan otwartych i ryzyk przed analiza kodu.
+- zdefiniowanie listy pytan otwartych przed analiza kodu - checklist: edge cases, error handling, integration points, scope boundaries, backward compatibility, performance,
+- jesli uzytkownik mowi "jak uwazasz" - podaj rekomendacje i czekaj na jawne potwierdzenie (nie zakladaj zgody).
 
 ### Krok 2: Eksploracja (Documentation Layer Selection)
 
@@ -65,6 +66,10 @@ Reguly selekcji:
   - `documentation/team/architecture/system-map.md`
 - **ZAKAZ czytania plikow "na wszelki wypadek"** - scope narrowly.
 - Max 5-8 plikow w `required_context_files`. Budzet: 12k-20k tokenow.
+
+W `DISCOVERY_MODE` dodatkowo:
+- Odpal 2-3 subagenty eksploracyjne rownolegle z roznym fokusem (np. podobne featuresy w codebase, architektura modulu, punkty rozszerzenia / UI patterns).
+- Po powrocie subagentow przeczytaj kluczowe pliki przez nie wskazane przed przejsciem do Kroku 3.
 
 ### Krok 3: Analiza architektury
 - Ktore warstwy Clean Architecture sa dotkniete? (Router/Validator/Controller/Repository/Model)
