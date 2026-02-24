@@ -58,14 +58,14 @@ export default class InvoiceValidator {
             this.invoice._totalNetValue = 0;
         }
         if (
-            this.invoice._totalNetValue >=
+            this.invoice._totalNetValue >
             contractSettlementData.remainingRegisteredValue
         ) {
             const contractValue = this.contract.value as number;
             throw new Error(
                 `Nie można dodać nowej faktury, ponieważ suma wartości wcześniejszych faktur i tej faktury (${this.invoice._totalNetValue} zł) ` +
-                    `przekracza lub równa się wartości umowy (${Tools.formatNumber(
-                        contractSettlementData.remainingRegisteredValue
+                    `przekracza wartość umowy (${Tools.formatNumber(
+                        contractValue
                     )} zł). \n` +
                     `Wartość umowy: ${Tools.formatNumber(
                         contractValue
