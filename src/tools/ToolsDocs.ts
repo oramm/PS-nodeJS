@@ -653,6 +653,89 @@ export default class ToolsDocs {
         });
     }
 
+    /**
+     * Wstawia strukturę agendy w miejsce NamedRange AGENDA_SECTION.
+     * Każdy punkt agendy -> Heading2 (nazwa) + pusty paragraf (Normal).
+     * Nie modyfikuje istniejących publicznych metod.
+     */
+    static async insertAgendaStructure(
+        auth: OAuth2Client,
+        documentId: string,
+        agendaItems: { heading: string; body: string }[],
+    ) {
+        if (!agendaItems.length) return;
+
+        const document = (await this.getDocument(auth, documentId)).data;
+        const agendaRange = this.getNamedRangeByName(document, 'AGENDA_SECTION');
+        if (!agendaRange?.ranges?.[0]?.startIndex || !agendaRange.ranges[0].endIndex)
+            return;
+
+        const startIndex = agendaRange.ranges[0].startIndex;
+        const endIndex = agendaRange.ranges[0].endIndex;
+
+        // Delete the placeholder text first
+        const requests: docs_v1.Schema$Request[] = [];
+        requests.push({
+            deleteContentRange: {
+                range: { startIndex, endIndex: endIndex - 1 }, // keep trailing \n
+            },
+        });
+        requests.push({
+            deleteNamedRange: { name: 'AGENDA_SECTION' },
+        });
+
+        // Build agenda text: insert at startIndex (after delete, indexes shift)
+        // We build the full text and then apply paragraph styles
+        let agendaText = '';
+        const styleRanges: { start: number; end: number; style: string }[] = [];
+        let offset = startIndex;
+
+        for (const item of agendaItems) {
+            const headingText = item.heading + '\n';
+            styleRanges.push({
+                start: offset,
+                end: offset + headingText.length,
+                style: 'HEADING_2',
+            });
+            agendaText += headingText;
+            offset += headingText.length;
+
+            const bodyText = (item.body || ' ') + '\n';
+            styleRanges.push({
+                start: offset,
+                end: offset + bodyText.length,
+                style: 'NORMAL_TEXT',
+            });
+            agendaText += bodyText;
+            offset += bodyText.length;
+        }
+
+        requests.push({
+            insertText: {
+                text: agendaText,
+                location: { index: startIndex },
+            },
+        });
+
+        // Apply paragraph styles
+        for (const range of styleRanges) {
+            requests.push({
+                updateParagraphStyle: {
+                    range: {
+                        startIndex: range.start,
+                        endIndex: range.end,
+                    },
+                    paragraphStyle: {
+                        namedStyleType: range.style,
+                    },
+                    fields: 'namedStyleType',
+                },
+            });
+        }
+
+        await this.batchUpdateDocument(auth, requests, documentId);
+    }
+
     static async batchUpdateDocument(
         auth: OAuth2Client,
         batchUpdateRequests: docs_v1.Schema$Request[],

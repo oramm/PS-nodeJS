@@ -23,6 +23,30 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-02-25 - N5B+N5C+N5D implementation complete
+
+- Checkpoint: `N5B-BACKEND-NOTE-GEN`, `N5C-FRONTEND-AGENDA`, `N5D-FRONTEND-NOTES-EDIT`
+- Summary:
+    - N5B: ToolsDocs.insertAgendaStructure added. Controller populates GD template with metadata + agenda after copy.
+    - N5B: Migration 002 (Status column) applied on development DB.
+    - N5C: MeetingData + MeetingArrangementData types, repositories, "Spotkania" tab with master-detail, agenda panel, CaseSelectMenuElement, status buttons, "Generuj notatkę" button.
+    - N5D: MeetingNoteEditModalButton + isDeletable=true on MeetingNotes FilterableTable.
+- Files (server):
+    - `src/tools/ToolsDocs.ts` (insertAgendaStructure)
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts` (populateNoteDocument, getPersonName)
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts` (ToolsDocs mocks)
+- Files (client):
+    - `Typings/bussinesTypes.d.ts` (MeetingData, MeetingArrangementData)
+    - `src/Contracts/ContractsList/ContractsController.ts` (meetingsRepository, meetingArrangementsRepository)
+    - `src/Contracts/ContractsList/ContractDetails/ContractMainViewTabs.tsx` (Spotkania tab)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/` (NEW: 8 files)
+    - `src/Contracts/ContractsList/ContractDetails/MeetingNotes/MeetingNotes.tsx` (EditButton + isDeletable)
+    - `src/Contracts/ContractsList/ContractDetails/MeetingNotes/Modals/MeetingNoteEditModalButton.tsx` (NEW)
+- Impact: DB, API, UI
+- Notes:
+    - Review: APPROVE (backend + frontend). MEDIUM issues (alert on errors) addressed.
+    - yarn build pass, yarn test pass (4 suites, 11 tests), tsc --noEmit pass (client).
+
 ## 2026-02-25 00:00 - N5A-BACKEND-GAPS implementation complete
 
 - Checkpoint: `N5A-BACKEND-GAPS`

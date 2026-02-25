@@ -14,10 +14,10 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `N5A_DONE`
-- Last completed checkpoint: `N5A-BACKEND-GAPS`
-- Overall status: `N5A_COMPLETE_READY_FOR_N5B`
-- Next checkpoints: `N5B-BACKEND-NOTE-GEN` (OPEN), `N5C` + `N5D` (PENDING po N5B)
+- Active phase: `N5D_DONE`
+- Last completed checkpoint: `N5D-FRONTEND-NOTES-EDIT`
+- Overall status: `N5B_N5C_N5D_COMPLETE_READY_FOR_N6`
+- Next checkpoints: `N6-FRONTEND-SEARCH` (PENDING)
 
 ## Sessions Progress List
 
@@ -32,9 +32,9 @@ Plan reference:
 - `N4-BACKEND-READ-ENDPOINTS` -> `DONE`
 - `N5-FRONTEND-LIST-CREATE` -> `SPLIT` (rozbity na N5A/N5B/N5C/N5D)
 - `N5A-BACKEND-GAPS` -> `DONE`
-- `N5B-BACKEND-NOTE-GEN` -> `OPEN`
-- `N5C-FRONTEND-AGENDA` -> `PENDING` (po N5A + N5B)
-- `N5D-FRONTEND-NOTES-EDIT` -> `PENDING` (po N5A, równolegle z N5C)
+- `N5B-BACKEND-NOTE-GEN` -> `DONE`
+- `N5C-FRONTEND-AGENDA` -> `DONE`
+- `N5D-FRONTEND-NOTES-EDIT` -> `DONE`
 - `N6-FRONTEND-SEARCH` -> `PENDING`
 - `N7-STABILIZATION-ROLLOUT` -> `PENDING`
 
@@ -80,6 +80,70 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-25 - Session 12 - N5B+N5C+N5D implementation
+
+### 1. Scope
+
+- Checkpoint IDs: `N5B-BACKEND-NOTE-GEN`, `N5C-FRONTEND-AGENDA`, `N5D-FRONTEND-NOTES-EDIT`
+- Planned tasks:
+    - Apply migration 002 on development DB.
+    - N5B: ToolsDocs integration in ContractMeetingNotesController (named ranges + agenda insertion).
+    - N5C: Types, repositories, "Spotkania" tab, agenda panel, CaseSelectMenuElement, status buttons, "Generuj notatkę".
+    - N5D: EditButtonComponent + isDeletable for MeetingNotes.
+
+### 2. Completed
+
+- Applied migration 002 on `localhost/envikons_myEnvi` — Status column confirmed.
+- N5B: Added `ToolsDocs.insertAgendaStructure` (Heading2 + Normal per arrangement via batchUpdate).
+- N5B: Added `populateNoteDocument` and `getPersonName` to ContractMeetingNotesController.
+- N5B: Controller now calls initNamedRangesFromTags + updateTextRunsInNamedRanges (metadata) + insertAgendaStructure (agenda) after GD file copy.
+- N5C: Added `MeetingData`, `MeetingArrangementStatus`, `MeetingArrangementData` to `bussinesTypes.d.ts`.
+- N5C: Added `meetingsRepository`, `meetingArrangementsRepository` to `ContractsController.ts`.
+- N5C: Created "Spotkania" tab in `ContractMainViewTabs.tsx`.
+- N5C: Created `Meetings.tsx` (master-detail with onRowClick), `MeetingAgendaPanel.tsx` (arrangements table + status buttons + generate note button).
+- N5C: Created meeting/arrangement modals (body, buttons, validation schemas), arrangement modal uses `CaseSelectMenuElement` with `_contract` from context.
+- N5D: Created `MeetingNoteEditModalButton.tsx`, added `EditButtonComponent` + `isDeletable=true` to MeetingNotes FilterableTable.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn build` -> pass (backend).
+    - `yarn jest src/contractMeetingNotes src/meetings --runInBand` -> pass (4 suites, 11 tests).
+    - `tsc --noEmit` -> pass (client).
+- Files changed (server):
+    - `src/tools/ToolsDocs.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+- Files changed (client):
+    - `Typings/bussinesTypes.d.ts`
+    - `src/Contracts/ContractsList/ContractsController.ts`
+    - `src/Contracts/ContractsList/ContractDetails/ContractMainViewTabs.tsx`
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Meetings.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/MeetingAgendaPanel.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingModalBody.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingModalButtons.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingValidationSchema.ts` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingArrangementModalBody.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingArrangementModalButtons.tsx` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/Meetings/Modals/MeetingArrangementValidationSchema.ts` (NEW)
+    - `src/Contracts/ContractsList/ContractDetails/MeetingNotes/MeetingNotes.tsx`
+    - `src/Contracts/ContractsList/ContractDetails/MeetingNotes/Modals/MeetingNoteEditModalButton.tsx` (NEW)
+
+### 4. Risks/Blockers
+
+- No integrated runtime smoke with real Google OAuth/Drive — unit-level mocks only.
+- Status transition PUT uses raw fetch (not RepositoryReact) — acceptable per project convention.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N6-FRONTEND-SEARCH`
+- Implement search/filter for meeting notes and meetings.
+- Run integrated UI smoke in target environment.
+
+### 6. Checkpoint Status
+
+- `CLOSED`
 
 ## 2026-02-25 - Session 11 - N5A-BACKEND-GAPS implementation
 

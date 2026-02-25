@@ -1,6 +1,7 @@
 import ContractMeetingNotesController from '../ContractMeetingNotesController';
 import ContractMeetingNoteRepository from '../ContractMeetingNoteRepository';
 import ToolsDb from '../../tools/ToolsDb';
+import ToolsDocs from '../../tools/ToolsDocs';
 import ToolsGd from '../../tools/ToolsGd';
 
 describe('ContractMeetingNotesController', () => {
@@ -32,6 +33,20 @@ describe('ContractMeetingNotesController', () => {
         } as any);
         jest.spyOn(ToolsGd, 'createPermissions').mockResolvedValue({} as any);
         jest.spyOn(ToolsGd, 'trashFileOrFolder').mockResolvedValue({} as any);
+
+        jest.spyOn(ToolsDocs, 'initNamedRangesFromTags').mockResolvedValue(
+            undefined as any,
+        );
+        jest.spyOn(
+            ToolsDocs,
+            'updateTextRunsInNamedRanges',
+        ).mockResolvedValue(undefined as any);
+        jest.spyOn(ToolsDocs, 'insertAgendaStructure').mockResolvedValue(
+            undefined as any,
+        );
+        jest.spyOn(ToolsDb, 'getQueryCallbackAsync').mockResolvedValue(
+            [] as any,
+        );
     });
 
     it('creates notes folder with standard name and persists note', async () => {

@@ -3,7 +3,10 @@ import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
 import ToolsDb from '../tools/ToolsDb';
+import ToolsDocs from '../tools/ToolsDocs';
 import ToolsGd from '../tools/ToolsGd';
+import MeetingArrangementRepository from '../meetings/meetingArrangements/MeetingArrangementRepository';
+import MeetingRepository from '../meetings/MeetingRepository';
 import { ContractMeetingNoteCreatePayload } from '../types/types';
 import ContractMeetingNote from './ContractMeetingNote';
 import ContractMeetingNoteValidator from './ContractMeetingNoteValidator';
@@ -155,6 +158,13 @@ export default class ContractMeetingNotesController extends BaseController<
                         fileId: createdProtocolGdId,
                     });
 
+                    await this.populateNoteDocument(
+                        authClient,
+                        createdProtocolGdId,
+                        payload,
+                        createContext,
+                    );
+
                     const note = new ContractMeetingNote({
                         contractId: payload.contractId,
                         meetingId: payload.meetingId ?? null,
@@ -215,6 +225,103 @@ export default class ContractMeetingNotesController extends BaseController<
             conn,
         );
         return notesFolderId;
+    }
+
+    private async populateNoteDocument(
+        authClient: OAuth2Client,
+        documentId: string,
+        payload: ContractMeetingNoteCreatePayload,
+        createContext: ContractMeetingNoteCreateContext,
+    ): Promise<void> {
+        await ToolsDocs.initNamedRangesFromTags(authClient, documentId);
+
+        // Prepare metadata for named ranges
+        const metadataRanges: { rangeName: string; newText: string }[] = [
+            { rangeName: 'MEETING_TITLE', newText: payload.title || '' },
+            {
+                rangeName: 'MEETING_DATE',
+                newText: payload.meetingDate || '',
+            },
+            {
+                rangeName: 'CONTRACT_NUMBER',
+                newText: createContext.contractNumber || '',
+            },
+        ];
+
+        // Fetch meeting data for location if meetingId provided
+        if (payload.meetingId) {
+            const meetingRepo = new MeetingRepository();
+            const meetings = await meetingRepo.find([
+                { id: payload.meetingId },
+            ]);
+            if (meetings.length > 0) {
+                metadataRanges.push({
+                    rangeName: 'MEETING_LOCATION',
+                    newText: meetings[0].location || '',
+                });
+            }
+        }
+        if (!metadataRanges.find((r) => r.rangeName === 'MEETING_LOCATION')) {
+            metadataRanges.push({
+                rangeName: 'MEETING_LOCATION',
+                newText: '',
+            });
+        }
+
+        // Fetch created-by person name
+        if (payload.createdByPersonId) {
+            const personName = await this.getPersonName(
+                payload.createdByPersonId,
+            );
+            metadataRanges.push({
+                rangeName: 'CREATED_BY',
+                newText: personName,
+            });
+        } else {
+            metadataRanges.push({ rangeName: 'CREATED_BY', newText: '' });
+        }
+
+        await ToolsDocs.updateTextRunsInNamedRanges(
+            authClient,
+            documentId,
+            metadataRanges,
+        );
+
+        // Fetch arrangements and insert agenda structure
+        if (payload.meetingId) {
+            const arrangementRepo = new MeetingArrangementRepository();
+            const arrangements = await arrangementRepo.find({
+                meetingId: payload.meetingId,
+            });
+
+            if (arrangements.length > 0) {
+                const agendaItems = arrangements.map((arr) => ({
+                    heading: arr._case?.name
+                        ? `${arr._case._type?.folderNumber || ''} ${arr._case.name}`.trim()
+                        : arr.name || 'Punkt agendy',
+                    body: arr.description || ' ',
+                }));
+
+                await ToolsDocs.insertAgendaStructure(
+                    authClient,
+                    documentId,
+                    agendaItems,
+                );
+            }
+        }
+    }
+
+    private async getPersonName(personId: number): Promise<string> {
+        const sql = `SELECT Name, Surname FROM Persons WHERE Id = ?`;
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            sql,
+            undefined,
+            [personId],
+        )) as { Name?: string; Surname?: string }[];
+        if (rows.length > 0) {
+            return `${rows[0].Name || ''} ${rows[0].Surname || ''}`.trim();
+        }
+        return '';
     }
 
     private makeProtocolFileName(
