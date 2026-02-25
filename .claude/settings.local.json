@@ -50,7 +50,8 @@
       "Bash(cd:*)",
       "Bash(grep:*)",
       "Bash(\"/c/Users/oram/AppData/Local/Programs/Microsoft VS Code/bin/code\":*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(popd:*)"
     ]
   }
 }
