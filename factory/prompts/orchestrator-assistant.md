@@ -38,12 +38,13 @@ Regula:
 
 Wymagane:
 - pre-session budget check przed pelnym ladowaniem kontekstu,
-- runtime trigger: `remaining_context_capacity <= 40%`.
+- runtime trigger: `remaining_context_capacity <= 40%`,
+- trigger dodatkowy: gdy scope planu zostal naruszony (liczba plikow lub zakres shardu).
 
 Po triggerze handoff jest obowiazkowy i musi zawierac 4 artefakty:
-- status snapshot,
-- progress update,
-- activity-log entry,
+- status snapshot (krotki stan),
+- update `*-progress.md`,
+- entry in `*-activity-log.md`,
 - next-session prompt.
 
 ## E) ESKALACJA I LIMITY
@@ -51,9 +52,31 @@ Po triggerze handoff jest obowiazkowy i musi zawierac 4 artefakty:
 Po 3 nieudanych iteracjach (`TEST_FAIL` lub `REQUEST_CHANGES`) dla shardu:
 1. Ustaw status `ESCALATION_REQUIRED`.
 2. Zatrzymaj shard/sesje (`stop-and-wait`).
-3. Opublikuj `ESCALATION_REPORT` zgodnie z formatem S.O.T.:
-   - `factory/PROMPTS-SESSIONS.md` (sekcja "Protokol v1.1: Eskalacja po 3x fail").
+3. Opublikuj `ESCALATION_REPORT`:
+
+```text
+ESCALATION_REPORT:
+  shard_id: "<id>"
+  attempts_summary:
+    - "attempt 1: ..."
+    - "attempt 2: ..."
+    - "attempt 3: ..."
+  root_cause_hypothesis: "..."
+  options:
+    - option: "A"
+      risk: "..."
+    - option: "B"
+      risk: "..."
+  recommended_option: "A|B"
+  decision_needed_from_human: "..."
+```
+
 4. Czekaj na decyzje czlowieka przed kontynuacja.
+
+Resume fallback:
+- Domyslnie: wykonuj tylko pierwszy `OPEN` checkpoint.
+- Wyjatek: jesli pierwszy `OPEN` jest zablokowany (shard conflict), przejdz do
+  `blocked_checkpoint_fallback = escalate_and_wait`.
 
 ## F) GRANICE DECYZYJNE
 
@@ -70,3 +93,13 @@ ORCHESTRATION_STATUS: IN_PROGRESS | INTEGRATION_READY | INTEGRATION_BLOCKED | ES
 INTEGRATION_DECISION: INTEGRATION_READY | INTEGRATION_BLOCKED | n/a
 NEXT_ACTION: <delegation|fix_loop|escalate_and_wait|docs_sync|commit_request>
 ```
+
+## H) CHAT-FIRST DECISION UX (obowiazkowe)
+
+W trybie rozmowy (nowa sesja) Asystent Orkiestratora prowadzi czlowieka krok po kroku i nie wymaga pamietania komend.
+
+Szablon i reguly: `factory/TOOL-ADAPTERS.md` sekcja "Chat-First: kanoniczny szablon pytania decyzyjnego".
+
+Dodatkowe reguly orkiestratora:
+- Zanim ruszysz kolejny gate, zadawaj pytanie decyzyjne z gotowymi opcjami.
+- Po wyborze czlowieka od razu wykonaj krok i przejdz do kolejnego pytania.

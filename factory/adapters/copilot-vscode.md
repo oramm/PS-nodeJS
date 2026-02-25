@@ -3,6 +3,8 @@
 ## Uzycie
 
 Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
+Szybki start bez CLI helperow (`new chat`, chat-first): wklej "Prompt startowy (copy/paste)" i od razu opisz task.
+Asystent Orkiestratora ma prowadzic gate'y pytaniami z opcjami `1/2/3` (latwy wybor bez pamietania komend).
 
 1. Wklej prompt startowy w Copilot Chat.
 2. Wybierz tylko potrzebne warstwy dokumentacji:
@@ -40,31 +42,8 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 
 ## Prompt startowy (copy/paste)
 
-```text
-Pracuj wg .github/copilot-instructions.md oraz factory/TOOL-ADAPTERS.md (Low-Context First).
-Wybierz tylko potrzebne warstwy dokumentacji:
-- backend: Canonical -> Adaptery -> Factory
-- klient: Canonical -> Adaptery
-Workflow:
-Plan -> Sharding -> Implementacja per shard -> Test -> Review loop -> Integrator Gate -> Docs -> Commit.
-Rola: Asystent Orkiestratora (NIE implementuj kodu bezposrednio).
-Koordynacje i Integrator Gate prowadz wg factory/prompts/orchestrator-assistant.md.
-Implementacje shardow deleguj wg factory/prompts/coder.md.
-Wykonaj pre-session context budget check przed pelnym ladowaniem plikow.
-Po implementacji uruchom testy wg factory/prompts/tester.md.
-Wynik TEST_REPORT przekaz do review wg factory/prompts/reviewer.md.
-Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
-W COMMIT_REQUEST przekaz ai_lead_model (i opcjonalnie ai_coauthor_email).
-Wymagaj w commit message: Dark-Factory: yes + Co-authored-by dla AI.
-Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
-execution_model, main_agent_policy.can_edit_code, parallelization, integration_gate,
-context_rollover, session_resume_contract,
-documentation_layers, documentation_selection_justification,
-operations_feature_slug i operations_docs_path.
-Nie koncz taska bez review APPROVE.
-Jesli scope obejmuje frontend, sprawdz takze C:\Apache24\htdocs\ENVI.ProjectSite.
-Jesli brak dostepu do ENVI.ProjectSite, zglos to jawnie jako blocker.
-```
+Kanoniczny prompt startowy dla Copilot VS Code jest utrzymywany w `factory/PROMPTS-SESSIONS.md` (sekcja `### Copilot VS Code`).
+Wklej prompt z tego pliku na starcie sesji zamiast utrzymywac lokalna kopie w adapterze.
 
 ## Planner (Warstwa 3)
 

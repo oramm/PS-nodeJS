@@ -70,20 +70,30 @@ Hooks/skrypty:
 
 ## 2. Start sesji (prompt bootstrap)
 
-Na poczatku sesji podaj agentowi:
+Kanoniczne zrodlo promptow startowych (copy/paste): `factory/PROMPTS-SESSIONS.md`.
+W sekcji Quick Start wybierz prompt dla narzedzia (`Codex`, `Claude Code`, `Copilot VS Code`) i wklej go na poczatku nowej sesji.
+
+Tryb preferowany: `chat-first` - zacznij od nowej rozmowy (nowa sesja w narzedziu).
+Po bootstrapie Asystent Orkiestratora ma prowadzic Cie przez workflow pytaniami decyzyjnymi z opcjami `1/2/3`,
+zamiast wymagac recznego wpisywania komend etapow.
+
+### Chat-First: kanoniczny szablon pytania decyzyjnego
 
 ```text
-Pracuj w trybie Dark Factory (Low-Context First).
-Stosuj model dokumentacji:
-- backend: Canonical -> Adaptery -> Factory
-- klient: Canonical -> Adaptery
-Laduj tylko warstwy potrzebne do taska.
-Wymus workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
-Koordynacje i Integrator Gate prowadz wg `factory/prompts/orchestrator-assistant.md`.
-Implementacje shardow deleguj i rozliczaj wg `factory/prompts/coder.md`.
-Nie koncz zadania bez review APPROVE.
-Commit uruchamiaj przez Committer dopiero po jawnym `COMMIT_APPROVED`.
+DECISION_REQUIRED:
+- question: "<krotkie pytanie>"
+- options:
+  1) "<opcja A>" (recommended)
+  2) "<opcja B>"
+  3) "<opcja C>"
+- reply_with: "1 | 2 | 3"
 ```
+
+Reguly (obowiazuja wszystkie adaptery):
+- Maks 3 opcje, jasna rekomendacja.
+- Odpowiedz czlowieka: numer (`1`, `2`, `3`) lub krotki tekst.
+- Fallback przy niejednoznacznej odpowiedzi: ponow pytanie raz, potem popros o numer.
+- Gdy gate jest pomijany: `GATE SKIPPED: <nazwa> - <krotki powod>.` przed przejsciem dalej.
 
 ## 3. Adapter: Codex
 

@@ -2,6 +2,9 @@
 
 ## Uzycie
 
+Szybki start (chat-first): wklej "Prompt startowy (copy/paste)" i od razu opisz task.
+Asystent Orkiestratora ma prowadzic gate'y pytaniami z opcjami `1/2/3` (latwy wybor bez pamietania komend).
+
 1. Na starcie sesji:
     - przeczytaj `CLAUDE.md`,
     - przeczytaj `factory/TOOL-ADAPTERS.md`,
@@ -110,26 +113,5 @@ ESCALATION_REPORT:
 
 ## Prompt startowy (copy/paste)
 
-```text
-Pracuj wg CLAUDE.md i factory/TOOL-ADAPTERS.md (Low-Context First).
-Wybierz tylko potrzebne warstwy dokumentacji:
-- backend: Canonical -> Adaptery -> Factory
-- klient: Canonical -> Adaptery
-Wymusz workflow Dark Factory:
-Plan -> Sharding -> Implementacja per shard -> Test -> Review loop -> Integrator Gate -> Docs -> Commit.
-Rola: Asystent Orkiestratora (NIE implementuj kodu bezposrednio).
-Koordynacje i Integrator Gate prowadz wg factory/prompts/orchestrator-assistant.md.
-Implementacje shardow deleguj wg factory/prompts/coder.md.
-Wykonaj pre-session context budget check przed pelnym ladowaniem plikow.
-Do testow uzyj factory/prompts/tester.md.
-Do review uzyj factory/prompts/reviewer.md (przekaz TEST_REPORT).
-Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
-W COMMIT_REQUEST przekaz ai_lead_model (i opcjonalnie ai_coauthor_email).
-Wymagaj w commit message: Dark-Factory: yes + Co-authored-by dla AI.
-Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
-execution_model, main_agent_policy.can_edit_code, parallelization, integration_gate,
-context_rollover, session_resume_contract,
-documentation_layers, documentation_selection_justification,
-operations_feature_slug i operations_docs_path.
-Po 3 nieudanych iteracjach eskaluj do czlowieka.
-```
+Kanoniczny prompt startowy dla Claude Code jest utrzymywany w `factory/PROMPTS-SESSIONS.md` (sekcja `### Claude Code`).
+Wklej prompt z tego pliku na starcie sesji zamiast utrzymywac lokalna kopie w adapterze.
