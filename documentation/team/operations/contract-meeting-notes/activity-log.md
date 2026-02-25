@@ -23,6 +23,33 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-02-25 - N6+N6B+N7 implementation + runtime fixes
+
+- Checkpoint: `N6-FRONTEND-SEARCH`, `N6B-UI-MERGE`, `N7-STABILIZATION-ROLLOUT`
+- Summary:
+    - N6: FilterBody components for Meetings and MeetingNotes (searchText, date range).
+    - N6B: Merged tabs — removed separate "Notatki ze spotkan" tab, notatka wbudowana w panel spotkania via MeetingNoteSection.
+    - N7: CaseEventRepository LEFT JOIN ContractMeetingNotes, _noteDocumentUrl mapping, 4 status transition tests, agenda structure test.
+    - Runtime fixes: FormContext import, _case object extraction (caseId + name), graceful GD template tag handling.
+    - Migration 002 applied on development DB.
+- Files (server):
+    - `src/contracts/milestones/cases/caseEvents/CaseEventRepository.ts`
+    - `src/contracts/milestones/cases/caseEvents/CaseEventsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsController.ts`
+    - `src/meetings/meetingArrangements/__tests__/MeetingArrangementsController.test.ts` (NEW)
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+- Files (client):
+    - `src/.../Meetings/MeetingsFilterBody.tsx` (NEW)
+    - `src/.../MeetingNotes/MeetingNotesFilterBody.tsx` (NEW)
+    - `src/.../Meetings/MeetingNoteSection.tsx` (NEW)
+    - `src/.../ContractMainViewTabs.tsx`, `Meetings.tsx`, `MeetingNotes.tsx`, `MeetingAgendaPanel.tsx`
+    - `src/.../Meetings/Modals/MeetingModalBody.tsx`, `MeetingArrangementModalBody.tsx`
+- Impact: API, UI, Tests
+- Notes:
+    - All tests pass (5 suites, 16 tests). Build pass (server + client).
+    - GD template needs manual #ENVI# tags for metadata population.
+
 ## 2026-02-25 - N5B+N5C+N5D implementation complete
 
 - Checkpoint: `N5B-BACKEND-NOTE-GEN`, `N5C-FRONTEND-AGENDA`, `N5D-FRONTEND-NOTES-EDIT`

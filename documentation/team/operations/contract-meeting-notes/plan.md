@@ -195,24 +195,104 @@ technical_objectives:
       isDeletable=true — usuwa rekord (nie plik GD).
 ```
 
-## Flow UI (master-detail)
+### N6-FRONTEND-SEARCH
+
+```yaml
+task_id: N6-FRONTEND-SEARCH
+scope: client
+arch_layers_touched: [UI-Components]
+
+technical_objectives:
+  - objective: "MeetingsFilterBody component for Meetings FilterableTable"
+    constraints: |
+      Pattern: follow TasksFilterBody.tsx (useFormContext + register, Row/Col/Form.Group).
+      Fields: searchText (text input).
+      contractId auto-injected — no filter field needed.
+      Meetings.tsx: add FilterBodyComponent={MeetingsFilterBody}.
+  - objective: "MeetingNotesFilterBody component for MeetingNotes FilterableTable"
+    constraints: |
+      Pattern: follow TasksFilterBody.tsx.
+      Fields: searchText (title), meetingDateFrom, meetingDateTo.
+      MeetingNotes.tsx: add FilterBodyComponent={MeetingNotesFilterBody}.
+
+verification_criteria:
+  hard:
+    - "FilterBody renders inside both FilterableTables"
+    - "Date filters send correct params to backend POST"
+    - "Frontend build passes (tsc --noEmit)"
+  soft:
+    - "Polish labels consistent with existing UI"
+```
+
+### N6B-UI-MERGE (zmiana scope — decyzja usera)
+
+```yaml
+task_id: N6B-UI-MERGE
+scope: client
+arch_layers_touched: [UI-Components]
+
+technical_objectives:
+  - objective: "Merge tabs: usunac osobny tab 'Notatki ze spotkan', notatka wbudowana w panel spotkania"
+    constraints: |
+      ContractMainViewTabs.tsx: usunac tab 'Notatki ze spotkan'.
+      MeetingAgendaPanel.tsx: dodac MeetingNoteSection pod przyciskiem 'Generuj notatke'.
+      MeetingNoteSection.tsx (NEW): fetch notatki po meetingId, link GD, edit/delete.
+      Backend bez zmian.
+
+verification_criteria:
+  hard:
+    - "Jeden tab 'Spotkania' z master-detail: lista spotkan -> agenda + notatka"
+    - "tsc --noEmit pass"
+```
+
+### N7-STABILIZATION-ROLLOUT
+
+```yaml
+task_id: N7-STABILIZATION-ROLLOUT
+scope: server + client
+arch_layers_touched: [Repository, Controller, Tests]
+
+technical_objectives:
+  - objective: "Extend CaseEventRepository SQL to LEFT JOIN ContractMeetingNotes"
+    constraints: |
+      New SELECT cols: NoteProtocolGdId, NoteTitle.
+      CaseEventsController: attach _noteDocumentUrl on MeetingArrangement items.
+      No new tables, no migrations.
+  - objective: "Regression tests for status transitions"
+    constraints: |
+      PLANNED->DISCUSSED: 200, DISCUSSED->CLOSED: 200.
+      DISCUSSED->PLANNED: 400, CLOSED->DISCUSSED: 400.
+  - objective: "Regression tests for note generation + case events"
+  - objective: "Runtime bugfixes"
+    constraints: |
+      FormContext import fix (MeetingModalBody, MeetingArrangementModalBody).
+      _case object extraction in MeetingArrangementsController (caseId, name from _case).
+      Graceful handling of missing #ENVI# tags in GD template.
+
+verification_criteria:
+  hard:
+    - "yarn build + yarn test pass (server)"
+    - "tsc --noEmit pass (client)"
+    - "CaseEvents return _noteDocumentUrl on MeetingArrangement events"
+    - "Backwards status transitions return 400"
+  soft:
+    - "progress.md + activity-log.md updated"
+```
+
+## Flow UI (master-detail) — zaktualizowany
 
 ```
 CONTRACT DETAILS
-└── Tab: "Spotkania" (NOWY)
-    ├── FilterableTable<MeetingData> — CRUD
-    │     + Dodaj | ✏️ Edit | 🗑️ Delete (action menu)
-    └── [onRowClick -> selectedMeeting state]
+└── Tab: "Spotkania"
+    ├── FilterableTable<MeetingData> — CRUD + MeetingsFilterBody
+    └── [onRowClick -> selectedMeeting]
           ▼ Panel: "Spotkanie: {nazwa} ({data})"
           ├── FilterableTable<MeetingArrangementData> — CRUD
-          │     kolumny: sprawa, status
+          │     kolumny: sprawa (z _typeFolderNumber_TypeName_Number_Name), opis, status
           │     + Dodaj punkt (modal: CaseSelectMenuElement + opis)
           │     ✏️ Edit | ▶ Status | 🗑️ Delete (action menu)
-          └── [disabled gdy brak arrangements]
-                Przycisk: "Generuj notatkę ze spotkania"
-
-Tab: "Notatki ze spotkań" (istniejący — rozszerzyć)
-  -> dodać EditButtonComponent + isDeletable=true
+          ├── Przycisk: "Generuj notatkę ze spotkania" (disabled gdy brak arrangements)
+          └── MeetingNoteSection (link GD, edit/delete metadanych)
 ```
 
 ## Session Contract (clean context workflow)

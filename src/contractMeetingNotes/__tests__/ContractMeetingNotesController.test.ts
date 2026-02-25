@@ -1,5 +1,7 @@
 import ContractMeetingNotesController from '../ContractMeetingNotesController';
 import ContractMeetingNoteRepository from '../ContractMeetingNoteRepository';
+import MeetingArrangementRepository from '../../meetings/meetingArrangements/MeetingArrangementRepository';
+import MeetingRepository from '../../meetings/MeetingRepository';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsDocs from '../../tools/ToolsDocs';
 import ToolsGd from '../../tools/ToolsGd';
@@ -141,6 +143,60 @@ describe('ContractMeetingNotesController', () => {
         expect(ToolsGd.trashFileOrFolder).toHaveBeenCalledWith(
             mockAuth,
             'doc-1',
+        );
+    });
+
+    it('addFromDto with meetingId fetches arrangements and inserts agenda structure', async () => {
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getCreateContext',
+        ).mockResolvedValue({
+            contractId: 99,
+            contractNumber: 'C-99',
+            meetingProtocolsGdFolderId: 'existing-folder-99',
+            projectGdFolderId: 'project-folder-99',
+        });
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getNextSequenceNumberForContract',
+        ).mockResolvedValue(1);
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'addInDb',
+        ).mockResolvedValue(undefined as any);
+        jest.spyOn(MeetingRepository.prototype, 'find').mockResolvedValue([
+            { location: 'Room A' } as any,
+        ]);
+
+        const arrangementFindSpy = jest
+            .spyOn(MeetingArrangementRepository.prototype, 'find')
+            .mockResolvedValue([
+                {
+                    name: 'Punkt 1',
+                    description: 'Opis punktu',
+                    _case: {
+                        name: 'Sprawa testowa',
+                        _type: { folderNumber: '01' },
+                    },
+                } as any,
+            ]);
+
+        await ContractMeetingNotesController.addFromDto({
+            contractId: 99,
+            title: 'Meeting with agenda',
+            meetingId: 50,
+        });
+
+        expect(arrangementFindSpy).toHaveBeenCalledWith({ meetingId: 50 });
+        expect(ToolsDocs.insertAgendaStructure).toHaveBeenCalledWith(
+            mockAuth,
+            'doc-1',
+            [
+                {
+                    heading: '01 Sprawa testowa',
+                    body: 'Opis punktu',
+                },
+            ],
         );
     });
 });

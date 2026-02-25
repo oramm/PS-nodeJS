@@ -14,10 +14,10 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `N5D_DONE`
-- Last completed checkpoint: `N5D-FRONTEND-NOTES-EDIT`
-- Overall status: `N5B_N5C_N5D_COMPLETE_READY_FOR_N6`
-- Next checkpoints: `N6-FRONTEND-SEARCH` (PENDING)
+- Active phase: `N7_DONE`
+- Last completed checkpoint: `N7-STABILIZATION-ROLLOUT`
+- Overall status: `ALL_CHECKPOINTS_COMPLETE`
+- Next checkpoints: none (feature complete, pending GD template tags setup)
 
 ## Sessions Progress List
 
@@ -35,8 +35,9 @@ Plan reference:
 - `N5B-BACKEND-NOTE-GEN` -> `DONE`
 - `N5C-FRONTEND-AGENDA` -> `DONE`
 - `N5D-FRONTEND-NOTES-EDIT` -> `DONE`
-- `N6-FRONTEND-SEARCH` -> `PENDING`
-- `N7-STABILIZATION-ROLLOUT` -> `PENDING`
+- `N6-FRONTEND-SEARCH` -> `DONE`
+- `N6B-UI-MERGE` -> `DONE`
+- `N7-STABILIZATION-ROLLOUT` -> `DONE`
 
 ## Session Log Template
 
@@ -80,6 +81,73 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-25 - Session 13 - N6+N6B+N7 implementation + runtime fixes
+
+### 1. Scope
+
+- Checkpoint IDs: `N6-FRONTEND-SEARCH`, `N6B-UI-MERGE`, `N7-STABILIZATION-ROLLOUT`
+- Planned tasks:
+    - N6: FilterBody components for Meetings and MeetingNotes.
+    - N6B: Merge tabs — notatki wbudowane w panel spotkania (decyzja usera).
+    - N7: CaseEvents LEFT JOIN ContractMeetingNotes, regression tests, runtime bugfixes.
+
+### 2. Completed
+
+- N6: Created `MeetingsFilterBody.tsx` (searchText), `MeetingNotesFilterBody.tsx` (searchText, meetingDateFrom/To).
+- N6: Added `FilterBodyComponent` prop to Meetings.tsx and MeetingNotes.tsx.
+- N6B: Removed separate "Notatki ze spotkan" tab from ContractMainViewTabs.tsx.
+- N6B: Created `MeetingNoteSection.tsx` — fetches note by meetingId, shows GD link + edit/delete.
+- N6B: Integrated MeetingNoteSection into MeetingAgendaPanel below "Generuj notatke" button.
+- N7: Extended CaseEventRepository SQL with LEFT JOIN ContractMeetingNotes (NoteProtocolGdId, NoteTitle).
+- N7: Extended CaseEventsController to map _noteDocumentUrl and _noteTitle on MeetingArrangement items.
+- N7: Created MeetingArrangementsController.test.ts (4 status transition tests).
+- N7: Extended ContractMeetingNotesController.test.ts (agenda structure test).
+- Runtime fix: FormContext import in MeetingModalBody.tsx and MeetingArrangementModalBody.tsx (was react-hook-form, should be project FormContext).
+- Runtime fix: MeetingArrangementsController.addFromDto/editFromDto — extract caseId and name from _case object sent by UI.
+- Runtime fix: populateNoteDocument graceful handling when GD template has no #ENVI# tags (warns instead of crashing).
+- Runtime fix: Applied migration 002 (Status column) on development DB.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn build` -> pass
+    - `yarn test --testPathPatterns="(meetingArrangements|contractMeetingNotes)"` -> 5 suites, 16 tests pass
+    - `tsc --noEmit` (ENVI.ProjectSite) -> pass
+- Tests:
+    - Status transitions: PLANNED->DISCUSSED (200), DISCUSSED->CLOSED (200), backwards (400) — all pass
+    - Note generation with agenda structure — pass
+- Files changed (server):
+    - `src/contracts/milestones/cases/caseEvents/CaseEventRepository.ts`
+    - `src/contracts/milestones/cases/caseEvents/CaseEventsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsController.ts`
+    - `src/meetings/meetingArrangements/__tests__/MeetingArrangementsController.test.ts` (NEW)
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts` (extended)
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+- Files changed (client):
+    - `src/.../Meetings/MeetingsFilterBody.tsx` (NEW)
+    - `src/.../MeetingNotes/MeetingNotesFilterBody.tsx` (NEW)
+    - `src/.../Meetings/MeetingNoteSection.tsx` (NEW)
+    - `src/.../Meetings/Meetings.tsx`
+    - `src/.../MeetingNotes/MeetingNotes.tsx`
+    - `src/.../ContractMainViewTabs.tsx`
+    - `src/.../Meetings/Modals/MeetingModalBody.tsx`
+    - `src/.../Meetings/Modals/MeetingArrangementModalBody.tsx`
+    - `src/.../Meetings/MeetingAgendaPanel.tsx`
+
+### 4. Risks/Blockers
+
+- GD template (`meetingProtocoTemlateId`) still needs #ENVI# tags added manually for metadata population.
+- LEFT JOIN ContractMeetingNotes may duplicate rows if multiple notes per meeting (currently 1:1 assumed).
+
+### 5. Next Session (exact next actions)
+
+- Add #ENVI# tags to Google Docs template.
+- Manual E2E verification of full flow: meeting -> agenda -> note generation -> case events.
+
+### 6. Checkpoint Status
+
+- CLOSED
 
 ## 2026-02-25 - Session 12 - N5B+N5C+N5D implementation
 

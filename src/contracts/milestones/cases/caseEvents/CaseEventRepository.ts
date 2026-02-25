@@ -23,6 +23,8 @@ export interface CaseEventRawData {
     MeetingId: number | null;
     Name: string | null;
     EventDeadline: string | null;
+    NoteProtocolGdId: string | null;
+    NoteTitle: string | null;
 }
 
 export default class CaseEventRepository {
@@ -62,7 +64,9 @@ export default class CaseEventRepository {
             'Persons.Surname AS EventOwnerSurname, \n \t' +
             'NULL AS MeetingId, \n \t' +
             'NULL AS Name, \n \t' +
-            'NULL AS EventDeadline \n' +
+            'NULL AS EventDeadline, \n \t' +
+            'NULL AS NoteProtocolGdId, \n \t' +
+            'NULL AS NoteTitle \n' +
             'FROM Letters \n' +
             'JOIN Letters_Cases ON Letters_Cases.LetterId=Letters.Id \n' +
             'JOIN Cases ON Letters_Cases.CaseId=Cases.Id \n' +
@@ -91,9 +95,12 @@ export default class CaseEventRepository {
             'Persons.Surname AS OwnerSurname, \n \t' +
             'MeetingArrangements.MeetingId, \n \t' +
             'MeetingArrangements.Name, \n \t' +
-            'MeetingArrangements.Deadline AS EventDeadline \n' +
+            'MeetingArrangements.Deadline AS EventDeadline, \n \t' +
+            'ContractMeetingNotes.ProtocolGdId AS NoteProtocolGdId, \n \t' +
+            'ContractMeetingNotes.Title AS NoteTitle \n' +
             'FROM MeetingArrangements \n' +
             'JOIN Meetings ON MeetingArrangements.MeetingId=Meetings.Id \n' +
+            'LEFT JOIN ContractMeetingNotes ON ContractMeetingNotes.MeetingId=MeetingArrangements.MeetingId \n' +
             'JOIN Cases ON MeetingArrangements.CaseId=Cases.Id \n' +
             'JOIN Milestones ON Cases.MilestoneId=Milestones.Id \n' +
             'JOIN Contracts ON Milestones.ContractId=Contracts.Id \n' +

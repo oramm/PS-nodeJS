@@ -129,6 +129,10 @@ export default class CaseEventsController {
                 });
                 item._eventType = 'MEETING_ARRENGEMENT';
                 item._documentEditUrl = item._parent._documentEditUrl;
+                if (row.NoteProtocolGdId) {
+                    item._noteDocumentUrl = `https://docs.google.com/document/d/${row.NoteProtocolGdId}/edit`;
+                    item._noteTitle = row.NoteTitle;
+                }
             }
             item._case = { id: row.CaseId };
 

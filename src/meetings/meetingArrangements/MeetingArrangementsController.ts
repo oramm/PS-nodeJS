@@ -51,6 +51,18 @@ export default class MeetingArrangementsController {
         payload: MeetingArrangementCreatePayload,
     ): Promise<MeetingArrangement> {
         const instance = this.getInstance();
+        // UI sends _case object; extract caseId and derive name from case label
+        const uiCase = (payload as any)._case;
+        if (!payload.caseId && uiCase?.id) {
+            payload.caseId = uiCase.id;
+        }
+        if (!payload.name && uiCase) {
+            payload.name =
+                uiCase._typeFolderNumber_TypeName_Number_Name ||
+                uiCase._folderName ||
+                uiCase.name ||
+                '';
+        }
         const validated =
             MeetingArrangementValidator.validateCreatePayload(payload);
         const item = new MeetingArrangement({
@@ -71,6 +83,9 @@ export default class MeetingArrangementsController {
         payload: Partial<MeetingArrangementCreatePayload> & { id: number },
     ): Promise<MeetingArrangement> {
         const instance = this.getInstance();
+        if (!payload.caseId && (payload as any)._case?.id) {
+            payload.caseId = (payload as any)._case.id;
+        }
         if (!Number.isInteger(payload.id) || payload.id <= 0) {
             throw new Error('id must be a positive integer');
         }

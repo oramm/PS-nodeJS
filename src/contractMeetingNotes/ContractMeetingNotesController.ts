@@ -158,12 +158,13 @@ export default class ContractMeetingNotesController extends BaseController<
                         fileId: createdProtocolGdId,
                     });
 
-                    await this.populateNoteDocument(
-                        authClient,
-                        createdProtocolGdId,
-                        payload,
-                        createContext,
-                    );
+                    const populateWarnings =
+                        await this.populateNoteDocument(
+                            authClient,
+                            createdProtocolGdId,
+                            payload,
+                            createContext,
+                        );
 
                     const note = new ContractMeetingNote({
                         contractId: payload.contractId,
@@ -177,6 +178,9 @@ export default class ContractMeetingNotesController extends BaseController<
                     });
 
                     await this.repository.addInDb(note, conn, true);
+                    if (populateWarnings.length > 0) {
+                        (note as any)._warnings = populateWarnings;
+                    }
                     return note;
                 },
             );
@@ -232,60 +236,86 @@ export default class ContractMeetingNotesController extends BaseController<
         documentId: string,
         payload: ContractMeetingNoteCreatePayload,
         createContext: ContractMeetingNoteCreateContext,
-    ): Promise<void> {
-        await ToolsDocs.initNamedRangesFromTags(authClient, documentId);
-
-        // Prepare metadata for named ranges
-        const metadataRanges: { rangeName: string; newText: string }[] = [
-            { rangeName: 'MEETING_TITLE', newText: payload.title || '' },
-            {
-                rangeName: 'MEETING_DATE',
-                newText: payload.meetingDate || '',
-            },
-            {
-                rangeName: 'CONTRACT_NUMBER',
-                newText: createContext.contractNumber || '',
-            },
-        ];
-
-        // Fetch meeting data for location if meetingId provided
-        if (payload.meetingId) {
-            const meetingRepo = new MeetingRepository();
-            const meetings = await meetingRepo.find([
-                { id: payload.meetingId },
-            ]);
-            if (meetings.length > 0) {
-                metadataRanges.push({
-                    rangeName: 'MEETING_LOCATION',
-                    newText: meetings[0].location || '',
-                });
+    ): Promise<string[]> {
+        const warnings: string[] = [];
+        // Populate template tags if present; skip gracefully if template has no #ENVI# tags
+        let hasNamedRanges = false;
+        try {
+            await ToolsDocs.initNamedRangesFromTags(authClient, documentId);
+            hasNamedRanges = true;
+        } catch (e: any) {
+            if (e?.message?.includes('No tags for namedRanges found')) {
+                const msg =
+                    'Szablon Google Docs nie zawiera tagów #ENVI#...# — metadane nie zostały uzupełnione w dokumencie.';
+                console.warn(
+                    'ContractMeetingNotesController: ' + msg,
+                );
+                warnings.push(msg);
+            } else {
+                throw e;
             }
         }
-        if (!metadataRanges.find((r) => r.rangeName === 'MEETING_LOCATION')) {
-            metadataRanges.push({
-                rangeName: 'MEETING_LOCATION',
-                newText: '',
-            });
-        }
 
-        // Fetch created-by person name
-        if (payload.createdByPersonId) {
-            const personName = await this.getPersonName(
-                payload.createdByPersonId,
+        if (hasNamedRanges) {
+            // Prepare metadata for named ranges
+            const metadataRanges: { rangeName: string; newText: string }[] = [
+                { rangeName: 'MEETING_TITLE', newText: payload.title || '' },
+                {
+                    rangeName: 'MEETING_DATE',
+                    newText: payload.meetingDate || '',
+                },
+                {
+                    rangeName: 'CONTRACT_NUMBER',
+                    newText: createContext.contractNumber || '',
+                },
+            ];
+
+            // Fetch meeting data for location if meetingId provided
+            if (payload.meetingId) {
+                const meetingRepo = new MeetingRepository();
+                const meetings = await meetingRepo.find([
+                    { id: payload.meetingId },
+                ]);
+                if (meetings.length > 0) {
+                    metadataRanges.push({
+                        rangeName: 'MEETING_LOCATION',
+                        newText: meetings[0].location || '',
+                    });
+                }
+            }
+            if (
+                !metadataRanges.find(
+                    (r) => r.rangeName === 'MEETING_LOCATION',
+                )
+            ) {
+                metadataRanges.push({
+                    rangeName: 'MEETING_LOCATION',
+                    newText: '',
+                });
+            }
+
+            // Fetch created-by person name
+            if (payload.createdByPersonId) {
+                const personName = await this.getPersonName(
+                    payload.createdByPersonId,
+                );
+                metadataRanges.push({
+                    rangeName: 'CREATED_BY',
+                    newText: personName,
+                });
+            } else {
+                metadataRanges.push({
+                    rangeName: 'CREATED_BY',
+                    newText: '',
+                });
+            }
+
+            await ToolsDocs.updateTextRunsInNamedRanges(
+                authClient,
+                documentId,
+                metadataRanges,
             );
-            metadataRanges.push({
-                rangeName: 'CREATED_BY',
-                newText: personName,
-            });
-        } else {
-            metadataRanges.push({ rangeName: 'CREATED_BY', newText: '' });
         }
-
-        await ToolsDocs.updateTextRunsInNamedRanges(
-            authClient,
-            documentId,
-            metadataRanges,
-        );
 
         // Fetch arrangements and insert agenda structure
         if (payload.meetingId) {
@@ -309,6 +339,7 @@ export default class ContractMeetingNotesController extends BaseController<
                 );
             }
         }
+        return warnings;
     }
 
     private async getPersonName(personId: number): Promise<string> {
