@@ -31,6 +31,7 @@ export default class ContractMeetingNoteValidator {
         const normalizedPayload: ContractMeetingNoteCreatePayload = {
             ...payload,
             contractId: payload.contractId,
+            meetingId: payload.meetingId ?? null,
             title: payload.title.trim(),
             description:
                 payload.description === undefined
@@ -46,5 +47,22 @@ export default class ContractMeetingNoteValidator {
         }
 
         return normalizedPayload;
+    }
+
+    static validateEditPayload(
+        payload: Partial<ContractMeetingNoteCreatePayload> & { id: number },
+    ): void {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Payload is required');
+        }
+        if (!Number.isInteger(payload.id) || payload.id <= 0) {
+            throw new Error('id must be a positive integer');
+        }
+        if (
+            payload.title !== undefined &&
+            (typeof payload.title !== 'string' || !payload.title.trim())
+        ) {
+            throw new Error('title cannot be empty');
+        }
     }
 }

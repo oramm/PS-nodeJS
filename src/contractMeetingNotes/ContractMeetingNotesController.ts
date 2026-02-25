@@ -66,6 +66,36 @@ export default class ContractMeetingNotesController extends BaseController<
         });
     }
 
+    static async editFromDto(
+        payload: Partial<ContractMeetingNoteCreatePayload> & { id: number },
+    ): Promise<ContractMeetingNote> {
+        const instance = this.getInstance();
+        ContractMeetingNoteValidator.validateEditPayload(payload);
+        const note = new ContractMeetingNote({
+            id: payload.id,
+            contractId: payload.contractId ?? 0,
+            meetingId: payload.meetingId,
+            sequenceNumber: 0,
+            title: payload.title ?? '',
+            description: payload.description,
+            meetingDate: payload.meetingDate,
+        });
+        await instance.repository.editInDb(note);
+        return note;
+    }
+
+    static async deleteById(id: number): Promise<void> {
+        if (!Number.isInteger(id) || id <= 0) {
+            throw new Error('id must be a positive integer');
+        }
+        const instance = this.getInstance();
+        const items = await instance.repository.find([{ id }]);
+        if (items.length === 0) {
+            throw new Error(`ContractMeetingNote with id=${id} not found`);
+        }
+        await instance.repository.deleteFromDb(items[0]);
+    }
+
     private async addWithAuth(
         payload: ContractMeetingNoteCreatePayload,
         authClient: OAuth2Client,
@@ -127,7 +157,7 @@ export default class ContractMeetingNotesController extends BaseController<
 
                     const note = new ContractMeetingNote({
                         contractId: payload.contractId,
-                        meetingId: null,
+                        meetingId: payload.meetingId ?? null,
                         sequenceNumber: nextSequenceNumber,
                         title: payload.title,
                         description: payload.description ?? null,

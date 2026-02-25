@@ -14,10 +14,10 @@ Plan reference:
 
 ## Current Status Snapshot
 
-- Active phase: `FRONTEND_LIST_CREATE`
-- Last completed checkpoint: `N4-BACKEND-READ-ENDPOINTS`
-- Overall status: `N5_GATE_CLOSED_FRONTEND_INTEGRATION_PENDING`
-- Next checkpoint: `N5-FRONTEND-LIST-CREATE`
+- Active phase: `N5A_DONE`
+- Last completed checkpoint: `N5A-BACKEND-GAPS`
+- Overall status: `N5A_COMPLETE_READY_FOR_N5B`
+- Next checkpoints: `N5B-BACKEND-NOTE-GEN` (OPEN), `N5C` + `N5D` (PENDING po N5B)
 
 ## Sessions Progress List
 
@@ -30,7 +30,11 @@ Plan reference:
 - `S3-ACTIVITY-LOG-ALIGNMENT` -> `DONE`
 - `S4-OPERATIONS-CHECKLIST-UPDATE` -> `DONE`
 - `N4-BACKEND-READ-ENDPOINTS` -> `DONE`
-- `N5-FRONTEND-LIST-CREATE` -> `OPEN`
+- `N5-FRONTEND-LIST-CREATE` -> `SPLIT` (rozbity na N5A/N5B/N5C/N5D)
+- `N5A-BACKEND-GAPS` -> `DONE`
+- `N5B-BACKEND-NOTE-GEN` -> `OPEN`
+- `N5C-FRONTEND-AGENDA` -> `PENDING` (po N5A + N5B)
+- `N5D-FRONTEND-NOTES-EDIT` -> `PENDING` (po N5A, równolegle z N5C)
 - `N6-FRONTEND-SEARCH` -> `PENDING`
 - `N7-STABILIZATION-ROLLOUT` -> `PENDING`
 
@@ -76,6 +80,124 @@ Copy for each session:
 ```
 
 ## Session Entries
+
+## 2026-02-25 - Session 11 - N5A-BACKEND-GAPS implementation
+
+### 1. Scope
+
+- Checkpoint ID: `N5A-BACKEND-GAPS`
+- Planned tasks:
+    - Migration 002: Status column in MeetingArrangements.
+    - POST /meetings + POST /meeting (create/edit/delete) with MeetingValidator.
+    - POST /meetingArrangements + POST /meetingArrangement (CRUD + status transition).
+    - ContractMeetingNote: meetingId in create DTO, PUT + DELETE endpoints.
+
+### 2. Completed
+
+- Created migration `002_add_status_to_meeting_arrangements.sql` (VARCHAR(20), NOT NULL, DEFAULT 'PLANNED').
+- Rewrote `MeetingsRouters.ts` to POST pattern with `orConditions` + create/edit/delete endpoints.
+- Created `MeetingValidator.ts` (find/create/edit payload validation).
+- Extended `MeetingsController.ts` with `findFromDto`, `addFromDto`, `editFromDto`, `deleteById`.
+- Rewrote `MeetingArrangementsRouters.ts` to POST pattern + CRUD + dedicated status endpoint (`PUT /:id/status`).
+- Created `MeetingArrangementValidator.ts` with status transition validation (one-step forward only: PLANNED->DISCUSSED->CLOSED).
+- Extended `MeetingArrangementsController.ts` with `findFromDto`, `addFromDto`, `editFromDto`, `updateStatus`, `deleteById`.
+- Added `status` field to `MeetingArrangement` model and `MeetingArrangementRepository` (SELECT + mapRowToModel).
+- Added `PUT /contractMeetingNote/:id` and `DELETE /contractMeetingNote/:id` to routers.
+- Added `editFromDto` and `deleteById` to `ContractMeetingNotesController`.
+- Added `validateEditPayload` to `ContractMeetingNoteValidator`.
+- Added `meetingId` to `ContractMeetingNoteCreatePayload` and create flow.
+- Added types to `types.d.ts`: `MeetingArrangementStatus`, `MeetingData`, `MeetingCreatePayload`, `MeetingSearchParams`, `MeetingArrangementData`, `MeetingArrangementCreatePayload`, `MeetingArrangementSearchParams`.
+- Fixed test mock to include `put`/`delete` on app mock.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `yarn build` -> pass.
+    - `yarn jest src/contractMeetingNotes src/meetings --runInBand` -> pass (4 suites, 11 tests).
+- Files changed:
+    - `src/meetings/meetingArrangements/migrations/002_add_status_to_meeting_arrangements.sql` (NEW)
+    - `src/meetings/MeetingValidator.ts` (NEW)
+    - `src/meetings/meetingArrangements/MeetingArrangementValidator.ts` (NEW)
+    - `src/meetings/MeetingsRouters.ts`
+    - `src/meetings/MeetingsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsRouters.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangement.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `src/types/types.d.ts`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `documentation/team/operations/contract-meeting-notes/activity-log.md`
+
+### 4. Risks/Blockers
+
+- Migration 002 not yet applied on runtime DB.
+- Meeting model does not extend BusinessObject — `addInDb`/`editInDb`/`deleteFromDb` work via BaseRepository passing tableName, but `_dbTableName` field is not set on Meeting instances.
+- No dedicated tests for new Meetings/MeetingArrangements endpoints (only existing contractMeetingNotes tests updated).
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5B-BACKEND-NOTE-GEN`
+- Apply migration 002 on runtime DB.
+- Implement ToolsDocs integration in ContractMeetingNotesController (copy + named ranges + agenda insertion).
+- Add tests for note generation flow.
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
+## 2026-02-24 - Session 10 - Discovery session: N5 split + YAML contracts
+
+### 1. Scope
+
+- Checkpoint ID: `N5A-BACKEND-GAPS` (planowanie)
+- Planned tasks:
+    - AS-IS map: backend gaps (meetings/arrangements/contractMeetingNotes) i frontend stan.
+    - Zamrożenie decyzji UI (P1–P5).
+    - Rozbicie N5 na 4 wyspecjalizowane checkpointy: N5A/N5B/N5C/N5D.
+    - Zapis kontraktów YAML do planu.
+
+### 2. Completed
+
+- Zidentyfikowane luki backend:
+    - `MeetingArrangements` brak kolumny `Status` w DB.
+    - `Meetings` i `MeetingArrangements` — brak POST endpointów (create/edit/delete).
+    - `ContractMeetingNote.addFromDto` ustawia `meetingId=null`, brak edit/delete endpointów.
+    - `ContractMeetingNotesController` nie wywołuje `ToolsDocs` (czysty szablon bez danych).
+- Zamrożone decyzje UI P1–P5 (case wymagany, blokada przy pustej agendzie, dedykowany button statusu, przycisk pod agendą, CaseSelectMenuElement).
+- YAML kontrakty N5A/N5B/N5C/N5D zapisane do `plan.md`.
+- Progress snapshot zaktualizowany.
+
+### 3. Evidence
+
+- Pliki przeczytane (context gate): MeetingsRouters, MeetingsController, MeetingArrangementsRouters, MeetingArrangementsController, MeetingArrangement, ContractMeetingNotesRouters, ContractMeetingNotesController, ContractMeetingNoteValidator, types.d.ts.
+- Brak wykonanych testów (sesja plannerska).
+- Files changed:
+    - `documentation/team/operations/contract-meeting-notes/plan.md`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `documentation/team/operations/contract-meeting-notes/activity-log.md`
+
+### 4. Risks/Blockers
+
+- Bug krytyczny GD: `ToolsDocs.initNamedRangesFromTags` i `updateTextRunsInNamedRanges` NIE są wywoływane — agenda NIE jest wstawiana do dokumentu (adresowane w N5B).
+- `MeetingArrangements` brak `Status` w DB — blokuje N5A migration 002.
+
+### 5. Next Session (exact next actions)
+
+- Next checkpoint ID: `N5A-BACKEND-GAPS`
+- Przeczytać: `src/meetings/` + `src/contractMeetingNotes/` (context budget: max 9 plików).
+- Napisać migration `002_add_status_to_meeting_arrangements.sql`.
+- Dodać POST /meetings + POST /meeting (create/edit/delete) z MeetingValidator.
+- Dodać POST /meetingArrangements + POST /meetingArrangement z walidacją statusu i caseId.
+- Dodać PUT /contractMeetingNote + DELETE /contractMeetingNote/:id + meetingId do DTO.
+- Uruchomić: `yarn test src/meetings src/contractMeetingNotes` + `yarn build`.
+
+### 6. Checkpoint Status
+
+- `OPEN` (N5A gotowe do implementacji)
 
 ## 2026-02-20 - Session 9 - Documentation consolidation to single source
 

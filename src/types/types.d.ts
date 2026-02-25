@@ -81,7 +81,7 @@ export interface ContractMeetingNoteData extends RepositoryDataItem {
     meetingDate?: string | null;
     protocolGdId?: string | null;
     gdDocumentId?: string | null;
-    gdDocumentUrl?: string;
+    _documentOpenUrl?: string;
     createdByPersonId?: number | null;
     createdAt?: string;
     _documentEditUrl?: string;
@@ -92,11 +92,71 @@ export interface ContractMeetingNoteData extends RepositoryDataItem {
 
 export interface ContractMeetingNoteCreatePayload {
     contractId: number;
+    meetingId?: number | null;
     title: string;
     description?: string | null;
     meetingDate?: string | null;
     protocolGdId?: string | null;
     createdByPersonId?: number | null;
+}
+
+export type MeetingArrangementStatus = 'PLANNED' | 'DISCUSSED' | 'CLOSED';
+
+export interface MeetingData extends RepositoryDataItem {
+    name: string;
+    description?: string;
+    date?: string;
+    location?: string;
+    contractId?: number;
+    protocolGdId?: string;
+    _documentEditUrl?: string;
+    _contract?: ContractData;
+    _lastUpdated?: string;
+}
+
+export interface MeetingCreatePayload {
+    contractId: number;
+    name: string;
+    description?: string | null;
+    date?: string | null;
+    location?: string | null;
+}
+
+export interface MeetingSearchParams {
+    id?: number;
+    projectId?: string;
+    contractId?: number;
+}
+
+export interface MeetingArrangementData extends RepositoryDataItem {
+    name?: string;
+    description?: string;
+    deadline?: string | null;
+    status?: MeetingArrangementStatus;
+    meetingId?: number;
+    caseId?: number;
+    ownerId?: number;
+    _owner?: PersonData;
+    _case?: any;
+    _parent?: { id?: number };
+    _lastUpdated?: string;
+}
+
+export interface MeetingArrangementCreatePayload {
+    meetingId: number;
+    caseId: number;
+    name?: string | null;
+    description?: string | null;
+    deadline?: string | null;
+    ownerId?: number | null;
+}
+
+export interface MeetingArrangementSearchParams {
+    id?: number;
+    projectOurId?: string;
+    contractId?: number;
+    meetingId?: number;
+    caseId?: number;
 }
 
 export interface ContractMeetingNoteSearchParams {

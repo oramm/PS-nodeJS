@@ -23,6 +23,53 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-02-25 00:00 - N5A-BACKEND-GAPS implementation complete
+
+- Checkpoint: `N5A-BACKEND-GAPS`
+- Summary:
+    - Migration 002: Status column (PLANNED/DISCUSSED/CLOSED) added to MeetingArrangements.
+    - Meetings CRUD: POST /meetings (find via orConditions), POST/PUT/DELETE /meeting with MeetingValidator.
+    - MeetingArrangements CRUD: POST /meetingArrangements (find), POST/PUT/DELETE /meetingArrangement + PUT /:id/status with one-step-forward validation.
+    - ContractMeetingNote: meetingId accepted in create DTO, PUT /contractMeetingNote/:id + DELETE /contractMeetingNote/:id added.
+    - New types in types.d.ts: MeetingArrangementStatus, MeetingData, MeetingCreatePayload, MeetingSearchParams, MeetingArrangementData, MeetingArrangementCreatePayload, MeetingArrangementSearchParams.
+- Files:
+    - `src/meetings/meetingArrangements/migrations/002_add_status_to_meeting_arrangements.sql` (NEW)
+    - `src/meetings/MeetingValidator.ts` (NEW)
+    - `src/meetings/meetingArrangements/MeetingArrangementValidator.ts` (NEW)
+    - `src/meetings/MeetingsRouters.ts`
+    - `src/meetings/MeetingsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsRouters.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementsController.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangement.ts`
+    - `src/meetings/meetingArrangements/MeetingArrangementRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesRouters.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteValidator.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesRouters.test.ts`
+    - `src/types/types.d.ts`
+- Impact: `DB/API/Docs`
+- Notes:
+    - Migration 002 not yet applied on runtime DB.
+    - Next: N5B-BACKEND-NOTE-GEN (ToolsDocs integration).
+
+## 2026-02-24 18:00 - Discovery session: N5 split + YAML contracts + UI decisions
+
+- Checkpoint: `N5A-BACKEND-GAPS` (planowanie)
+- Summary:
+    - AS-IS map: zidentyfikowane luki w Meetings/MeetingArrangements/ContractMeetingNotes (brak Status w DB, brak CRUD endpointów, bug GD generowania).
+    - Zamrożone decyzje UI P1–P5: case wymagany, blokada UI przy pustej agendzie, dedykowany button statusu, przycisk "Generuj" pod agendą, CaseSelectMenuElement reuse.
+    - N5 rozbity na 4 checkpointy: N5A (backend gaps), N5B (GD note gen), N5C (frontend agenda), N5D (notes edit).
+    - YAML kontrakty implementacyjne zapisane w plan.md.
+    - Flow UI master-detail udokumentowany w plan.md.
+- Files:
+    - `documentation/team/operations/contract-meeting-notes/plan.md`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `documentation/team/operations/contract-meeting-notes/activity-log.md`
+- Impact: `Docs`
+- Notes:
+    - Bug krytyczny GD: ToolsDocs nie wywoływane w addWithAuth — agenda NIE trafia do dokumentu. Adresowane w N5B.
+    - Następna sesja: implementacja N5A-BACKEND-GAPS.
+
 ## 2026-02-20 10:30 - Documentation consolidation to single canonical set
 
 - Checkpoint: `N5-FRONTEND-LIST-CREATE` (documentation governance)

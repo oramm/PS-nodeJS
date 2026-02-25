@@ -4,6 +4,8 @@ import ContractMeetingNotesController from '../ContractMeetingNotesController';
 jest.mock('../../index', () => ({
     app: {
         post: jest.fn(),
+        put: jest.fn(),
+        delete: jest.fn(),
     },
 }));
 
@@ -13,6 +15,8 @@ jest.mock('../ContractMeetingNotesController', () => ({
         find: jest.fn(),
         findFromDto: jest.fn(),
         addFromDto: jest.fn(),
+        editFromDto: jest.fn(),
+        deleteById: jest.fn(),
     },
 }));
 

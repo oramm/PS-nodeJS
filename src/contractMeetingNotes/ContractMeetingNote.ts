@@ -37,7 +37,7 @@ export default class ContractMeetingNote {
     meetingDate?: string;
     protocolGdId?: string | null;
     gdDocumentId?: string | null;
-    gdDocumentUrl?: string;
+    _documentOpenUrl?: string;
     _documentEditUrl?: string;
     createdAt?: string;
     createdByPersonId?: number | null;
@@ -77,8 +77,8 @@ export default class ContractMeetingNote {
     setProtocolGdId(protocolGdId: string | null) {
         this.protocolGdId = protocolGdId;
         this.gdDocumentId = protocolGdId;
-        this.gdDocumentUrl = protocolGdId
-            ? ToolsGd.createDocumentEditUrl(ToolsDb.sqlToString(protocolGdId))
+        this._documentOpenUrl = protocolGdId
+            ? ToolsGd.createDocumentOpenUrl(ToolsDb.sqlToString(protocolGdId))
             : undefined;
         this._documentEditUrl = protocolGdId
             ? ToolsGd.createDocumentEditUrl(ToolsDb.sqlToString(protocolGdId))

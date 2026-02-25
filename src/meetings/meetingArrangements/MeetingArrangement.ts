@@ -1,11 +1,13 @@
 import BusinessObject from '../../BussinesObject';
 import ToolsDate from '../../tools/ToolsDate';
+import { MeetingArrangementStatus } from '../../types/types';
 
 export interface MeetingArrangementData {
     id?: number;
     name?: string;
     description?: string;
     deadline?: string | null;
+    status?: MeetingArrangementStatus;
     _owner?: {
         id?: number;
         name?: string;
@@ -45,6 +47,7 @@ export default class MeetingArrangement
     name?: string;
     description?: string;
     deadline?: string | null;
+    status: MeetingArrangementStatus;
     _owner?: {
         id?: number;
         name?: string;
@@ -66,6 +69,7 @@ export default class MeetingArrangement
 
         this.name = initParamObject.name;
         this.description = initParamObject.description;
+        this.status = initParamObject.status ?? 'PLANNED';
 
         this.deadline = initParamObject.deadline
             ? ToolsDate.dateJsToSql(initParamObject.deadline)

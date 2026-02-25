@@ -42,6 +42,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
                 MeetingArrangements.Name,
                 MeetingArrangements.Description,
                 MeetingArrangements.Deadline,
+                MeetingArrangements.Status,
                 MeetingArrangements.LastUpdated,
                 Cases.Id AS CaseId,
                 Cases.Name AS CaseName,
@@ -79,6 +80,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
             name: row.Name,
             description: row.Description,
             deadline: row.Deadline,
+            status: row.Status,
             _lastUpdated: row.LastUpdated,
             _owner: {
                 id: row.OwnerId,
