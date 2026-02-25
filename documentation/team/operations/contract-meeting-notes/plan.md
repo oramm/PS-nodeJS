@@ -40,6 +40,14 @@ Target user flow is:
 12. Find/search pattern: `POST` + `body.orConditions`.
 13. Search is metadata-only DB in current scope.
 
+### Zamrożone decyzje UI (P1–P5) — sesja plannerska 2026-02-24
+
+- P1: Case w punkcie agendy: **wymagany** (hard constraint).
+- P2: Pusta agenda: **UI blokuje** przycisk "Generuj notatkę" (backend nie waliduje).
+- P3: Zmiana statusu MeetingArrangement: **dedykowany button** w action menu (nie w edit modal).
+- P4: Przycisk "Generuj notatkę": **pod tabelą agendy** w panelu spotkania.
+- P5: CaseSelector: **użyj istniejącego** `CaseSelectMenuElement` z `BussinesObjectSelectors.tsx` z `_contract` prop.
+
 ## Plan implementacji serwer + klient (bez fazowania)
 
 1. Stabilize backend contracts for meetings, arrangements, and meeting notes with explicit `meetingId` linkage.
@@ -69,6 +77,143 @@ Target user flow is:
 5. Generated note document contains agenda data from arrangements.
 6. Case event payload exposes meeting-discussion context and note reference metadata.
 7. Build/tests pass for touched backend and frontend modules.
+
+## YAML Kontrakty implementacyjne
+
+### N5A-BACKEND-GAPS
+
+```yaml
+task_id: N5A-BACKEND-GAPS
+scope: server
+arch_layers_touched: [Router, Validator, Controller, Repository, Model, DB-migration]
+
+technical_objectives:
+  - objective: "DB migration 002 — kolumna Status (PLANNED/DISCUSSED/CLOSED) w MeetingArrangements"
+    constraints: "ENUM lub VARCHAR CHECK. Default=PLANNED. Nullable=false. Nie zmieniaj innych kolumn."
+  - objective: "POST /meetings (find wg orConditions) + POST /meeting (create/edit/delete)"
+    constraints: |
+      Pattern: POST + orConditions jak contractMeetingNotes.
+      Validator wymagany (MeetingValidator).
+      contractId wymagany przy create.
+      Thin router — walidacja w Controller.
+  - objective: "POST /meetingArrangements (find) + POST /meetingArrangement (create/edit/delete)"
+    constraints: |
+      Pattern POST + orConditions.
+      Validator wymagany (MeetingArrangementValidator).
+      Status transitions: tylko do przodu (PLANNED->DISCUSSED->CLOSED).
+      Controller waliduje kierunek zmiany statusu — błąd 400 przy cofaniu.
+      caseId wymagany przy create (hard constraint).
+  - objective: "ContractMeetingNote: meetingId w create DTO + edit + delete endpoints"
+    constraints: |
+      meetingId opcjonalny przy create (UI przekazuje, backend przyjmuje).
+      Validator zaktualizowany o meetingId.
+      edit i delete w router (PUT /contractMeetingNote, DELETE /contractMeetingNote/:id).
+
+verification_criteria:
+  hard:
+    - "yarn build przechodzi"
+    - "yarn test src/meetings src/contractMeetingNotes przechodzi"
+    - "Migracja 002: kolumna Status z domyślną wartością PLANNED"
+    - "PUT /meetingArrangement z Status=PLANNED gdy current=DISCUSSED -> 400"
+    - "POST /meetingArrangement bez caseId -> 400"
+    - "DELETE /contractMeetingNote/:id -> 200 i usunięty rekord"
+  soft:
+    - "src/types/types.d.ts zaktualizowane dla Status i nowych DTO"
+```
+
+### N5B-BACKEND-NOTE-GEN
+
+```yaml
+task_id: N5B-BACKEND-NOTE-GEN
+scope: server
+arch_layers_touched: [Controller, ToolsDocs-extension]
+
+technical_objectives:
+  - objective: "Szablon GD (meetingProtocoTemlateId) używa znaczników #ENVI#NAZWA#"
+    constraints: |
+      Wymagane zmienne w szablonie:
+        #ENVI#MEETING_TITLE#, #ENVI#MEETING_DATE#, #ENVI#MEETING_LOCATION#,
+        #ENVI#CONTRACT_NUMBER#, #ENVI#CREATED_BY#, #ENVI#AGENDA_SECTION#
+  - objective: "ContractMeetingNotesController wywołuje ToolsDocs po skopiowaniu pliku"
+    constraints: |
+      Flow: copyFile -> initNamedRangesFromTags -> updateTextRunsInNamedRanges (metadane)
+            -> insertAgendaStructure (H2 + paragraf Normal per arrangement)
+      Rollback (trash GD file) przy błędzie DB.
+  - objective: "Wstawienie agendy jako Heading2 + paragraf Normal w dokumencie GD"
+    constraints: |
+      Każdy MeetingArrangement -> Heading2(nazwa/opis) + pusty Paragraph (Normal style).
+      Implementacja przez Google Docs batchUpdate.
+      NIE modyfikuj istniejących publicznych metod ToolsDocs.
+  - objective: "Controller pobiera MeetingArrangements dla meetingId przed generowaniem dokumentu"
+    constraints: |
+      Pobieranie przez MeetingArrangementRepository.find({ meetingId }).
+      Sortowanie po kolejności dodania (id ASC).
+      meetingId może być NULL -> wtedy bez agendy (pusta lista).
+```
+
+### N5C-FRONTEND-AGENDA
+
+```yaml
+task_id: N5C-FRONTEND-AGENDA
+scope: client
+arch_layers_touched: [UI-Components, Repository, TypeDefinitions]
+
+technical_objectives:
+  - objective: "Typy MeetingData i MeetingArrangementData (ze Status) w bussinesTypes.d.ts"
+    constraints: "Status: 'PLANNED' | 'DISCUSSED' | 'CLOSED'."
+  - objective: "meetingsRepository i meetingArrangementsRepository w ContractsController.ts"
+    constraints: "Pattern identyczny jak meetingNotesRepository."
+  - objective: "Tab 'Spotkania' z FilterableTable<MeetingData> — CRUD"
+    constraints: |
+      Nowy tab w ContractMainViewTabs.
+      contractId z ContractDetailsContext.
+      Formularz (add/edit modal): nazwa, data, lokalizacja.
+  - objective: "MeetingAgendaPanel — FilterableTable<MeetingArrangementData> + CRUD + zmiana statusu"
+    constraints: |
+      Renders warunkowo gdy selectedMeeting jest ustawione.
+      Add modal: CaseSelectMenuElement z _contract z kontekstu + opis (optional).
+      Status change: dedykowany button w action menu (nie w edit modal).
+      Transitions: tylko do przodu PLANNED->DISCUSSED->CLOSED.
+  - objective: "Przycisk 'Generuj notatkę' — disabled gdy arrangements=0"
+    constraints: |
+      POST /contractMeetingNote z { meetingId, contractId, title }.
+      Po sukcesie: link do GD dokumentu widoczny przy spotkaniu.
+```
+
+### N5D-FRONTEND-NOTES-EDIT
+
+```yaml
+task_id: N5D-FRONTEND-NOTES-EDIT
+scope: client
+arch_layers_touched: [UI-Components]
+
+technical_objectives:
+  - objective: "FilterableTable MeetingNotes: dodać EditButtonComponent + isDeletable=true"
+    constraints: |
+      Analogicznie do Tasks.tsx.
+      Edit modal: title, meetingDate.
+      isDeletable=true — usuwa rekord (nie plik GD).
+```
+
+## Flow UI (master-detail)
+
+```
+CONTRACT DETAILS
+└── Tab: "Spotkania" (NOWY)
+    ├── FilterableTable<MeetingData> — CRUD
+    │     + Dodaj | ✏️ Edit | 🗑️ Delete (action menu)
+    └── [onRowClick -> selectedMeeting state]
+          ▼ Panel: "Spotkanie: {nazwa} ({data})"
+          ├── FilterableTable<MeetingArrangementData> — CRUD
+          │     kolumny: sprawa, status
+          │     + Dodaj punkt (modal: CaseSelectMenuElement + opis)
+          │     ✏️ Edit | ▶ Status | 🗑️ Delete (action menu)
+          └── [disabled gdy brak arrangements]
+                Przycisk: "Generuj notatkę ze spotkania"
+
+Tab: "Notatki ze spotkań" (istniejący — rozszerzyć)
+  -> dodać EditButtonComponent + isDeletable=true
+```
 
 ## Session Contract (clean context workflow)
 
