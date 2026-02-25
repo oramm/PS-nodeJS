@@ -1,7 +1,7 @@
 # Factory Build Status
 
-## Stan: Warstwa 5 - Committer v1 DONE
-## Data: 2026-02-23
+## Stan: Warstwa 5 DONE + V1.1 Orchestrator Assistant Protocol DONE
+## Data: 2026-02-25
 
 ## Architektura systemu
 - SERWER: PS-nodeJS - Express.js/TypeScript backend z Clean Architecture, MariaDB, integracje Google APIs/KSeF.
@@ -127,3 +127,50 @@ Zakres wykonany:
 ## Nastepny krok
 Sesja 6 - Stateful orchestration gate (plan/YAML jako source of truth)
 Prompt: `factory/PROMPTS-SESSIONS.md`
+
+## Update v1.1 - Asystent Orkiestratora + sharding + context rollover
+
+### Co powstalo
+1. Formalizacja roli `Asystent Orkiestratora` (no-edit policy) w:
+   - `factory/CONCEPT.md`
+   - `factory/TOOL-ADAPTERS.md`
+   - `factory/FACTORY-FLOW.md`
+2. Definicja `Integrator Gate` (owner: Asystent Orkiestratora, bez implementacji kodu).
+3. Definicja shardowania (`parallel` vs `sequential`) i kryteriow no-shard.
+4. Context Rollover Protocol:
+   - pre-session budget check (Krok 0),
+   - runtime trigger `remaining_context_capacity <= 40%`,
+   - 4 obowiazkowe artefakty handoff.
+5. Szablon eskalacji po 3x fail (`ESCALATION_REPORT`) i fallback resume.
+6. Rozszerzenie YAML kontraktu (`factory/templates/task-plan-context.yaml`) o:
+   - `execution_model: orchestrator_v1`,
+   - `main_agent_policy`,
+   - `parallelization`,
+   - `integration_gate`,
+   - `context_rollover`,
+   - `session_resume_contract`.
+7. Cross-tool parity (conceptual parity) odwzorowane w adapterach:
+   - `factory/adapters/codex.md`
+   - `factory/adapters/claude-code.md`
+   - `factory/adapters/copilot-vscode.md`
+
+### Kluczowe decyzje v1.1
+- Integrator owner: Asystent Orkiestratora.
+- Parity: konceptualna (role, gate'y, artefakty, statusy), nie identyczne komendy.
+- `execution_model`: `orchestrator_v1`.
+- Hard rule: Asystent Orkiestratora nie implementuje kodu bezposrednio.
+
+## Update v1.1 parity-fix - Prompt entries for Orchestrator Assistant and Coder
+
+### Data
+- 2026-02-25
+
+### Co powstalo
+- Dodano `factory/prompts/orchestrator-assistant.md` (rola operacyjna + Integrator Gate, no-code hard rule).
+- Dodano `factory/prompts/coder.md` (implementacja shardu, ownership boundaries, retry limits).
+- Ujednolicono referencje cross-tool w:
+  - `factory/TOOL-ADAPTERS.md`
+  - `factory/adapters/codex.md`
+  - `factory/adapters/claude-code.md`
+  - `factory/adapters/copilot-vscode.md`
+- Zaktualizowano mapowanie S.O.T. w `documentation/team/operations/docs-map.md`.

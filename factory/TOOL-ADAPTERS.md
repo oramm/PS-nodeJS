@@ -16,12 +16,27 @@ Kazde zadanie przechodzi sekwencje:
 6. Commit request od orchestratora (`COMMIT_REQUEST` + `COMMIT_APPROVED`).
 7. Commit przez `factory/prompts/committer.md`.
 
+Role prompt parity (V1.1):
+- `factory/prompts/planner.md`
+- `factory/prompts/orchestrator-assistant.md`
+- `factory/prompts/coder.md`
+- `factory/prompts/tester.md`
+- `factory/prompts/reviewer.md`
+- `factory/prompts/documentarian.md`
+- `factory/prompts/committer.md`
+
 Hard rules:
 - `Reviewer != Coder` (swieze spojrzenie).
+- `Asystent Orkiestratora MUST NOT implement code directly`.
 - Escalacja do czlowieka po 3 nieudanych iteracjach review/test.
 - Checkpoint czlowieka przy decyzjach architektonicznych i finalnym merge.
 - Zmiana workflow/polityki w Factory musi miec `cross-tool parity`:
   - obowiazkowe odwzorowanie w `factory/adapters/codex.md`, `factory/adapters/claude-code.md`, `factory/adapters/copilot-vscode.md`.
+- `cross-tool parity` w V1.1 oznacza `conceptual parity`:
+  - te same role,
+  - te same gate'y i statusy,
+  - te same wymagane artefakty,
+  - bez wymogu identycznych komend narzedziowych.
 - Balans iteracji: 50/50 (1 task funkcjonalny + 1 task techniczny/refactor, o ile ma sens).
 - Committer NIE wykonuje `git add .` ani `git add -A`; staging tylko z `files_changed` lub staged-only.
 - W V1 gate `TEST_PASS/APPROVE/DOCS_SYNC_DONE` sa deklarowane przez orchestratora w `COMMIT_REQUEST` (state-store planowany w V2).
@@ -64,6 +79,8 @@ Stosuj model dokumentacji:
 - klient: Canonical -> Adaptery
 Laduj tylko warstwy potrzebne do taska.
 Wymus workflow: Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Koordynacje i Integrator Gate prowadz wg `factory/prompts/orchestrator-assistant.md`.
+Implementacje shardow deleguj i rozliczaj wg `factory/prompts/coder.md`.
 Nie koncz zadania bez review APPROVE.
 Commit uruchamiaj przez Committer dopiero po jawnym `COMMIT_APPROVED`.
 ```
@@ -73,6 +90,8 @@ Commit uruchamiaj przez Committer dopiero po jawnym `COMMIT_APPROVED`.
 Uzyj:
 - `AGENTS.md` (reguly repo dla Codex)
 - `factory/adapters/codex.md` (checklista sesji)
+- `factory/prompts/orchestrator-assistant.md` (koordynacja + Integrator Gate)
+- `factory/prompts/coder.md` (implementacja shardu)
 - `factory/prompts/committer.md` (gate + bezpieczny commit)
 
 W praktyce:
@@ -85,6 +104,8 @@ W praktyce:
 Uzyj:
 - `CLAUDE.md` (instrukcje dla Claude Code)
 - `factory/adapters/claude-code.md` (checklista sesji)
+- `factory/prompts/orchestrator-assistant.md` (koordynacja + Integrator Gate)
+- `factory/prompts/coder.md` (implementacja shardu)
 - `factory/prompts/committer.md`
 
 W praktyce:
@@ -97,6 +118,8 @@ W praktyce:
 Uzyj:
 - `.github/copilot-instructions.md`
 - `factory/adapters/copilot-vscode.md`
+- `factory/prompts/orchestrator-assistant.md` (koordynacja + Integrator Gate)
+- `factory/prompts/coder.md` (implementacja shardu)
 - `factory/prompts/committer.md`
 
 W praktyce:
@@ -108,6 +131,7 @@ W praktyce:
 
 Planner definiuje **cele i granice** (`technical_objectives` + `constraints`).
 Coder (fachowiec) decyduje o narzedziach i kolejnosci - nie dostaje listy krokow.
+Asystent Orkiestratora zarzadza przebiegiem i integracja shardow, ale nie koduje.
 
 Subagenci przy delegowaniu zawsze otrzymuja:
 - wybrane warstwy dokumentacji dla taska,
@@ -117,6 +141,26 @@ Izolowany kontekst subagenta nie dziedziczy zasad automatycznie.
 
 `PLAN_DEVIATION_REPORT`: Coder moze odrzucic plan jesli odkryje przeszkode.
 Max 2 rundy poprawki - czlowiek jest arbitrem zmiany scope.
+
+### Integrator Gate (v1.1)
+
+- Integrator = `Asystent Orkiestratora`.
+- Integrator jest odpowiedzialny za:
+  - walidacje kompletu artefaktow per shard (`diff`, `TEST_REPORT`, `REVIEW_VERDICT`, `open_risks`),
+  - status `INTEGRATION_READY | INTEGRATION_BLOCKED`,
+  - decyzje o fix-loop tylko dla shardow dotknietych problemem.
+- Integrator NIE wykonuje implementacji kodu.
+
+### Sharding Decision (v1.1)
+
+- `parallel` (shardy), gdy:
+  - rozlaczne `owned_paths`,
+  - brak wspoldzielonego public API modyfikowanego przez >=2 shardy rownolegle,
+  - brak zaleznosci wymuszajacej czesciowy merge.
+- `sequential`, gdy:
+  - zmiana dotyka >=2 warstw architektury w sposob sprzezony,
+  - zmiana public API wspoldzielonego przez >=2 moduly,
+  - zmiana DB/env/deploy zalezna od kolejnosci.
 
 ### Planner Gate (kiedy pominac / kiedy wymagany)
 
@@ -144,15 +188,33 @@ Agent ma pytac czlowieka, gdy:
 - wymaganie jest niejednoznaczne,
 - wykryto ryzyko bezpieczenstwa.
 
+Po 3x fail agent publikuje `ESCALATION_REPORT` i zatrzymuje dany shard/sesje do czasu decyzji czlowieka.
+
+## 6a. Context Rollover (v1.1)
+
+- Krok 0 (pre-session): przed pelnym ladowaniem kontekstu oszacuj budzet (`required_context_files` vs `context_budget`).
+- Runtime trigger: `remaining_context_capacity <= 40%` lub przekroczenie planowanego scope.
+- Po triggerze sesja przechodzi w handoff:
+  - status snapshot,
+  - update progress,
+  - activity-log entry,
+  - next-session prompt.
+
 ## 7. Artefakty sesji
 
 Po kazdej wiekszej iteracji:
 - aktualizuj `factory/STATUS.md`,
 - dla kolejnej sesji dopisz prompt w `factory/PROMPTS-SESSIONS.md`,
 - przy planie taska uzupelnij pola:
+  - `execution_model` (`orchestrator_v1`)
+  - `main_agent_policy.can_edit_code` (`false`)
   - `required_context_files`
   - `optional_context_files`
   - `context_budget_tokens`
+  - `parallelization` (`max_parallel_coders`, `sharding_mode`, `shards`)
+  - `integration_gate`
+  - `context_rollover`
+  - `session_resume_contract`
   - `documentation_layers`
   - `documentation_selection_justification`
   - `operations_feature_slug` (jesli task mapuje sie do `documentation/team/operations/*`)

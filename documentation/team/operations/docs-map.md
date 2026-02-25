@@ -1,7 +1,7 @@
 # Mapa Dokumentacji - Zrodla Prawdy (S.O.T.)
 
 > Dla kazdej kategorii wskazane jest zrodlo prawdy (S.O.T.) oraz pliki pomocnicze.
-> Aktualizacja: 2026-02-23
+> Aktualizacja: 2026-02-25
 > Koncepcja fabryki: `factory/CONCEPT.md`
 > Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
 > Konwencja sciezek: backend (`PS-nodeJS`) jako sciezki repo-relative, frontend (`ENVI.ProjectSite`) jako sciezki absolutne Windows.
@@ -116,6 +116,8 @@ Historyczne aliasy root-level usuniete (2026-02-23):
 | DB architect agent | `.github/agents/DB architect.agent.md`                   |
 | Skills             | `.agents/skills/*.md`                                    |
 | Review process     | `factory/prompts/reviewer.md`                            |
+| Orchestration process | `factory/prompts/orchestrator-assistant.md`           |
+| Implementation process | `factory/prompts/coder.md`                            |
 | Commit process     | `factory/prompts/committer.md`                           |
 | Koncepcja fabryki  | `factory/CONCEPT.md`                                     |
 
@@ -172,6 +174,8 @@ Jesli nie da sie jednoznacznie wyznaczyc katalogu:
 | `factory/PROMPTS-SESSIONS.md`              | Prompty na kolejne sesje                                  |
 | `factory/FACTORY-FLOW.md`                  | Opis przeplywu fabryki i lifecycle zamkniecia taskow      |
 | `factory/prompts/reviewer.md`              | Prompt reviewera AI                                       |
+| `factory/prompts/orchestrator-assistant.md`| Prompt Asystenta Orkiestratora (koordynacja + integracja) |
+| `factory/prompts/coder.md`                 | Prompt Codera (implementacja shardu + ownership)          |
 | `factory/prompts/planner.md`               | S.O.T. dla fazy inicjalizacji taska (Planner)             |
 | `factory/prompts/documentarian.md`         | Prompt Agenta Dokumentacyjnego (Auto-docs + Close&Purge)  |
 | `factory/prompts/committer.md`             | Prompt Agenta Committer (`COMMIT_APPROVED`, commit only)  |

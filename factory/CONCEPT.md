@@ -2,7 +2,7 @@
 
 > Kanoniczny opis koncepcji Dark Factory dla tego repo.
 > Status dokumentu: aktywny
-> Data aktualizacji: 2026-02-23
+> Data aktualizacji: 2026-02-25
 
 ## 1. Cel i definicja
 
@@ -32,7 +32,8 @@ Model pracy:
 ## 3. Architektura agentowa (stan docelowy, wdrazana warstwowo)
 
 Role agentow:
-- `Orchestrator`: prowadzi pipeline, pilnuje kolejnosci i checkpointow.
+- `Czlowiek-Orchestrator`: prowadzi decyzje gate'ow i approval.
+- `Asystent Orkiestratora`: prowadzi pipeline operacyjny, deleguje subagentow, pilnuje kolejnosci i checkpointow.
 - `Planner`: rozbija cel na taski, zaleznosci i acceptance criteria.
 - `Coder`: implementuje task na podstawie kontekstu.
 - `Reviewer`: niezalezny audit kodu i ryzyk.
@@ -41,21 +42,32 @@ Role agentow:
 - `Docs`: utrzymuje dokumentacje i spojnosc docs <-> kod.
 - `Committer` (wdrozony v1): wykonuje bezpieczny commit po `COMMIT_APPROVED`.
 
+Prompt entry points (V1.1):
+- Asystent Orkiestratora: `factory/prompts/orchestrator-assistant.md`
+- Coder: `factory/prompts/coder.md`
+- Planner: `factory/prompts/planner.md`
+- Tester: `factory/prompts/tester.md`
+- Reviewer: `factory/prompts/reviewer.md`
+- Docs: `factory/prompts/documentarian.md`
+- Committer: `factory/prompts/committer.md`
+
 Kluczowa zasada: `Reviewer != Coder` (inna perspektywa, mniejszy bias).
+Kluczowa zasada v1.1: `Asystent Orkiestratora MUST NOT implement code directly`.
 
 ## 4. RACI per etap
 
-| Etap | Czlowiek | Orchestrator | Subagenty |
+| Etap | Czlowiek | Asystent Orkiestratora | Subagenty |
 |---|---|---|---|
 | Planowanie | **A** (approve/zmiany) | **R** | Planner (**C**) |
 | Architektura | **A** | **R** | Planner/Architect (**C**) |
-| Implementacja taska | **I** | **A** | Coder (**R**) |
+| Implementacja taska | **I** | **A** (delegacja) | Coder[1..N] (**R**) |
+| Integrator gate | **I** | **R/A** | Coder/Tester/Reviewer (**C**) |
 | Review | **I** | **A** | Reviewer (**R**) |
 | Fix loop | **C** przy problemach | **A** | Fixer (**R**) |
 | Testowanie | **I** / **C** przy failach | **A** | Tester (**R**) |
 | Dokumentacja | **I** | **A** | Docs (**R**) |
 | Commit/PR | **A** dla merge gate | **R** | Committer (**C**) |
-| Eskalacja | **A/R** | **R** (trigger) | dowolny agent (**C**) |
+| Eskalacja | **A/R** | **R** (trigger + report) | dowolny agent (**C**) |
 
 Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 
@@ -67,7 +79,12 @@ Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 - checkpoint: approval czlowieka.
 
 2. Implementacja:
-- coder realizuje pojedynczy task z kontekstem tylko potrzebnych plikow.
+- planner wybiera tryb `parallel` (shardy) albo `sequential`.
+- asystent deleguje do `Coder[1..N]` (domyslnie max 3) z rozlacznym ownership plikow.
+
+Definicja sharda:
+- `Shard allowed`, gdy: rozlaczne `owned_paths`, brak wspoldzielonego public API modyfikowanego przez >=2 shardy, brak wymagan czesciowego merge.
+- `Sequence required`, gdy: zmiana obejmuje >=2 warstwy architektury w sposob sprzezony, public API wspoldzielone przez >=2 moduly, albo DB/env/deploy zalezne od kolejnosci.
 
 3. Test:
 - uruchom testy wg `factory/prompts/tester.md`,
@@ -81,6 +98,12 @@ Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 - fixer poprawia i wraca do review (max 3 iteracje),
 - po 3 nieudanych iteracjach: eskalacja.
 
+4a. Integrator gate:
+- integrator = Asystent Orkiestratora (rola procesowa, bez pisania kodu),
+- status: `INTEGRATION_READY` lub `INTEGRATION_BLOCKED`,
+- przejscie tylko gdy wszystkie shardy maja `TEST_PASS` i `REVIEW_APPROVE`,
+- fail jednego sharda blokuje finalna integracje, ale nie resetuje shardow z `PASS/APPROVE`.
+
 5. Docs:
 - aktualizacja README/API/architektury/changelog (zakres zalezy od zmiany),
 - sprawdzenie spojnosci docs z kodem.
@@ -93,6 +116,10 @@ Legenda: `R` = Responsible, `A` = Accountable, `C` = Consulted, `I` = Informed.
 ### Context Gate v1 (Low-Context First)
 
 Na starcie kazdego taska agent laduje tylko Warstwe A. Warstwy B/C sa dolaczane selektywnie.
+
+Pre-session check v1.1:
+- przed ladowaniem pelnego kontekstu wykonaj ocene budzetu (`required_context_files` vs `context_budget`).
+- jesli przekroczenie jest prawdopodobne: nie startuj implementacji, uruchom rollover/replan.
 
 Warstwa A (always-on, zawsze):
 - `factory/CONCEPT.md`
@@ -115,6 +142,7 @@ Warstwa C (fallback/deep dive, tylko z uzasadnieniem):
 Regula:
 - Zakaz ladowania Warstwy C "na dzien dobry".
 - Wejscie do Warstwy C wymaga triggera: brak danych do decyzji, konflikt kontraktu, review blocker.
+- runtime rollover: gdy `remaining_context_capacity <= 40%`, sesja przechodzi w handoff.
 
 ## 6. Checkpointy i eskalacja
 
@@ -127,6 +155,11 @@ Eskalacja obowiazkowa, gdy:
 - decyzja zmienia architekture lub interfejs publiczny,
 - review/test failuja po 3 iteracjach,
 - pojawia sie ryzyko bezpieczenstwa lub niejednoznaczne wymaganie.
+
+Praktyka eskalacji v1.1:
+- asystent zatrzymuje dany shard/sesje,
+- publikuje `ESCALATION_REPORT` (shard_id, proby, hipoteza przyczyny, opcje A/B, rekomendacja, decyzja wymagana od czlowieka),
+- czeka na decyzje czlowieka przed wznowieniem.
 
 ## 7. Metryki jakosci i kryteria przejsc miedzy warstwami
 
@@ -172,6 +205,8 @@ Priorytet delivery:
 
 - Status i postep: `factory/STATUS.md`
 - Sesje i prompty operacyjne: `factory/PROMPTS-SESSIONS.md`
+- Prompt Asystenta Orkiestratora (v1.1): `factory/prompts/orchestrator-assistant.md`
+- Prompt Codera (v1.1): `factory/prompts/coder.md`
 - Prompt testera (warstwa 2): `factory/prompts/tester.md`
 - Prompt reviewera (warstwa 1): `factory/prompts/reviewer.md`
 - Prompt committera (warstwa 5): `factory/prompts/committer.md`
@@ -197,6 +232,9 @@ Drobne rekomendacje:
 Kazdy plan taska musi zawierac:
 
 ```yaml
+execution_model: orchestrator_v1
+main_agent_policy:
+  can_edit_code: false
 required_context_files: []
 optional_context_files: []
 context_budget_tokens: 0

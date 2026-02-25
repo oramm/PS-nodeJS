@@ -3,6 +3,9 @@
 task_id: ""
 task_name: ""
 task_type: "feature|refactor|mixed|architecture|ops"
+execution_model: "orchestrator_v1"
+main_agent_policy:
+  can_edit_code: false
 discovery_mode: false         # true for seed-stage / high-uncertainty tasks
 discovery_gate: "none"        # none | pending | DISCOVERY_APPROVED | DISCOVERY_REJECTED
 operations_feature_slug: ""   # e.g. persons-v2-refactor
@@ -78,5 +81,41 @@ context_budget:
   max_files_for_coder: 8
   estimated_tokens: 15000
   subagent_scope: ""     # Narrow scope for coder subagents
+
+parallelization:
+  max_parallel_coders: 3
+  sharding_mode: "parallel|sequential"
+  sharding_decision_reason: ""
+  shards:
+    - id: ""
+      objective: ""
+      owned_paths: []
+      excluded_paths: []
+      dependencies: []
+
+integration_gate:
+  require_all_shards_test_pass: true
+  require_all_shards_review_approve: true
+  conflict_policy: "escalate_or_replan"
+  status: "INTEGRATION_READY|INTEGRATION_BLOCKED"
+
+context_rollover:
+  pre_session_budget_check: true
+  remaining_capacity_threshold_pct: 40
+  enforce_plan_scope_limits: true
+  handoff_artifacts_required:
+    - "status_snapshot"
+    - "progress_update"
+    - "activity_log_entry"
+    - "next_session_prompt"
+
+session_resume_contract:
+  mandatory_read_order:
+    - "plan"
+    - "progress"
+    - "activity-log"
+    - "project-instructions"
+  execute_only_first_open_checkpoint: true
+  blocked_checkpoint_fallback: "escalate_and_wait"
 
 plan_deviation: null     # Filled by Coder when an unexpected blocker appears

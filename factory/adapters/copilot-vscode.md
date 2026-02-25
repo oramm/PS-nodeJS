@@ -8,7 +8,10 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 2. Wybierz tylko potrzebne warstwy dokumentacji:
     - backend: `Canonical -> Adaptery -> Factory`
     - klient: `Canonical -> Adaptery`
-3. Dziel prace na male taski.
+3. Dziel prace na male taski i shardy.
+4. Rola glowna: `Asystent Orkiestratora` (bez bezposredniej implementacji kodu).
+   - koordynacja/integracja wg `factory/prompts/orchestrator-assistant.md`, implementacja shardu wg `factory/prompts/coder.md`.
+5. Krok 0 (obowiazkowy): wykonaj pre-session context budget check przed pelnym ladowaniem plikow.
 4. Po implementacji uruchom testy wg `factory/prompts/tester.md`.
 5. Wynik `TEST_REPORT` przekaz do review wg `factory/prompts/reviewer.md`.
 6. Po docs przygotuj `COMMIT_REQUEST` (V1: czlowiek-orchestrator).
@@ -16,9 +19,15 @@ Copilot nie prowadzi sam pelnej orkiestracji, wiec prowadz sesje jawnie:
 7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
    - commit musi zawierac `Dark-Factory: yes` oraz trailer `Co-authored-by` dla AI.
 8. Przy planie taska uzupelnij:
+    - `execution_model` (`orchestrator_v1`)
+    - `main_agent_policy.can_edit_code` (`false`)
     - `required_context_files`
     - `optional_context_files`
     - `context_budget_tokens`
+    - `parallelization`
+    - `integration_gate`
+    - `context_rollover`
+    - `session_resume_contract`
     - `documentation_layers`
     - `documentation_selection_justification`
     - `operations_feature_slug`
@@ -37,13 +46,19 @@ Wybierz tylko potrzebne warstwy dokumentacji:
 - backend: Canonical -> Adaptery -> Factory
 - klient: Canonical -> Adaptery
 Workflow:
-Plan -> Implementacja -> Test -> Review loop -> Docs -> Commit.
+Plan -> Sharding -> Implementacja per shard -> Test -> Review loop -> Integrator Gate -> Docs -> Commit.
+Rola: Asystent Orkiestratora (NIE implementuj kodu bezposrednio).
+Koordynacje i Integrator Gate prowadz wg factory/prompts/orchestrator-assistant.md.
+Implementacje shardow deleguj wg factory/prompts/coder.md.
+Wykonaj pre-session context budget check przed pelnym ladowaniem plikow.
 Po implementacji uruchom testy wg factory/prompts/tester.md.
 Wynik TEST_REPORT przekaz do review wg factory/prompts/reviewer.md.
 Commit wykonaj przez factory/prompts/committer.md po COMMIT_APPROVED.
 W COMMIT_REQUEST przekaz ai_lead_model (i opcjonalnie ai_coauthor_email).
 Wymagaj w commit message: Dark-Factory: yes + Co-authored-by dla AI.
 Uzupelnij required_context_files, optional_context_files, context_budget_tokens,
+execution_model, main_agent_policy.can_edit_code, parallelization, integration_gate,
+context_rollover, session_resume_contract,
 documentation_layers, documentation_selection_justification,
 operations_feature_slug i operations_docs_path.
 Nie koncz taska bez review APPROVE.
@@ -89,6 +104,31 @@ dla kluczowych plikow (typow, komponentow). `@workspace` moze nie indeksowac dru
 Coder zglasza przez wiadomosc: "PLAN_DEVIATION_REPORT: [opis]".
 Wroc do sesji Plan agent z DEVIATION jako kontekstem - popraw kontrakt.
 Max 2 rundy. Czlowiek jest ostatecznym arbitrem zmiany scope.
+
+## Integrator + rollover (v1.1)
+
+- Integrator = `Asystent Orkiestratora` i nie implementuje kodu.
+- Integrator status: `INTEGRATION_READY | INTEGRATION_BLOCKED`.
+- Runtime trigger rollover: `remaining_context_capacity <= 40%`.
+- Po rolloverze przygotuj 4 artefakty:
+  - status snapshot,
+  - progress update,
+  - activity-log entry,
+  - next-session prompt.
+
+## Escalation report (v1.1)
+
+Po 3x fail test/review publikuj:
+
+```text
+ESCALATION_REPORT:
+  shard_id: "<id>"
+  attempts_summary: ["...", "...", "..."]
+  root_cause_hypothesis: "..."
+  options: [{ option: "A", risk: "..." }, { option: "B", risk: "..." }]
+  recommended_option: "A|B"
+  decision_needed_from_human: "..."
+```
 
 ## Wzorzec rozmowy na task
 

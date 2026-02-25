@@ -77,6 +77,18 @@ W `DISCOVERY_MODE` dodatkowo:
 - Czy zmiana dotyka API contract? -> drift check klienta wymagany
 - Czy transakcja DB jest potrzebna? -> zarzadza Controller, NIE Repository
 - Czy istnieje dlug techniczny blokujacy implementacje? -> odnotuj w escalation_triggers
+- Ustal `sharding_mode`: `parallel` albo `sequential`.
+- Ustal definicje shardow (`owned_paths`, `excluded_paths`, `dependencies`) lub uzasadnij brak shardowania.
+
+Reguly `sharding_mode`:
+- Wybierz `parallel`, gdy:
+  - `owned_paths` sa rozlaczne,
+  - brak wspoldzielonego public API modyfikowanego przez >=2 shardy,
+  - brak twardej zaleznosci kolejnosci merge.
+- Wybierz `sequential`, gdy:
+  - zmiana obejmuje >=2 warstwy architektury w sposob sprzezony,
+  - zmiana public API wspoldzielonego przez >=2 moduly,
+  - zmiana DB/env/deploy zalezna od kolejnosci.
 
 ### Krok 4: Generuj YAML kontrakt
 Wypelnij template `factory/templates/task-plan-context.yaml`.
@@ -118,6 +130,10 @@ DOC_SELECTION_NOTES: [krotkie uzasadnienie doboru warstw i plikow]
 ### Kluczowe pola YAML
 
 ```yaml
+execution_model: orchestrator_v1
+main_agent_policy:
+  can_edit_code: false
+
 technical_objectives:
   - objective: "Stan koncowy 1 - co system ma umiec"
     constraints: "Nie zmieniaj publicznego API w X.ts"
@@ -159,10 +175,39 @@ escalation_triggers:
   - "Zmiana dotyka >5 plikow naraz -> STOP -> wezwij czlowieka"
   - "Odkryty dlug techniczny blokujacy implementacje -> PLAN_DEVIATION_REPORT"
 
+parallelization:
+  max_parallel_coders: 3
+  sharding_mode: "parallel|sequential"
+  sharding_decision_reason: ""
+  shards:
+    - id: "S1"
+      objective: ""
+      owned_paths: []
+      excluded_paths: []
+      dependencies: []
+
+integration_gate:
+  require_all_shards_test_pass: true
+  require_all_shards_review_approve: true
+  status: "INTEGRATION_READY|INTEGRATION_BLOCKED"
+
 context_budget:
   max_files_for_coder: 8
   estimated_tokens: 15000
   subagent_scope: "Tylko modul X - nie skanuj calego src/"
+
+context_rollover:
+  pre_session_budget_check: true
+  remaining_capacity_threshold_pct: 40
+  handoff_artifacts_required:
+    - "status_snapshot"
+    - "progress_update"
+    - "activity_log_entry"
+    - "next_session_prompt"
+
+session_resume_contract:
+  execute_only_first_open_checkpoint: true
+  blocked_checkpoint_fallback: "escalate_and_wait"
 ```
 
 ### Verdict (wypelnia czlowiek)
@@ -203,12 +248,14 @@ Przy delegowaniu zadan do subagentow (Task tool, @workspace, agent mode):
 ## F) REGULY PIPELINE
 
 - Po PLAN_APPROVED -> przekaz YAML + `required_context_files` do Codera.
+- Wymagaj pre-session budget check przed startem implementacji.
 - Gdy `discovery_mode=true`, Coder startuje dopiero po `DISCOVERY_APPROVED` i `PLAN_APPROVED`.
 - YAML musi zawierac `operations_feature_slug` i `operations_docs_path` (gdy task obejmuje aktualizacje docs operacyjnych), aby Documentarian nie zgadywal `[Feature]`.
 - YAML musi zawierac `docs_sync_targets`, `closure_policy` i `closure_gate`.
 - Domyslna polityka zamkniecia: `replace_docs_and_purge_plan` (po `TEST_PASS + REVIEW_APPROVE + DOCS_SYNC_DONE`).
 - Po PLAN_REJECTED -> popraw zgodnie z feedbackiem (max 2 rundy, potem eskalacja).
 - Coder NIE startuje bez PLAN_APPROVED.
+- Asystent Orkiestratora NIE implementuje kodu bezposrednio.
 
 ---
 
