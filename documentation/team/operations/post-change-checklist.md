@@ -1570,3 +1570,75 @@ Copy the block below for each change:
 - If rollback is required, execute controlled DBA rollback:
     - drop newly added columns/indexes only after dependency review,
     - preserve data consistency for submissions/links lifecycle fields.
+
+## 2026-02-26 - Local: CostInvoices migration 002 (payment + bank fields)
+
+### What changed
+
+- Executed migration for local runtime target `localhost/envikons_myEnvi`:
+  - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
+
+### Pre-check (information_schema)
+
+- `CostInvoices.SupplierBankAccount`: missing
+- `CostInvoices.PaymentStatus`: missing
+- `CostInvoices.PaidAmount`: missing
+- `idx_payment_status`: missing
+
+### Applied steps
+
+- `ALTER TABLE CostInvoices ADD COLUMN SupplierBankAccount VARCHAR(50) NULL AFTER SupplierAddress`
+- `ALTER TABLE CostInvoices ADD COLUMN PaymentStatus VARCHAR(20) NOT NULL DEFAULT 'UNPAID' AFTER Status`
+- `ALTER TABLE CostInvoices ADD COLUMN PaidAmount DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER PaymentStatus`
+- `CREATE INDEX idx_payment_status ON CostInvoices (PaymentStatus)`
+
+### Verification
+
+- Confirmed columns on `CostInvoices`:
+  - `SupplierBankAccount` (`varchar(50)`, nullable)
+  - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
+  - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
+- Confirmed index:
+  - `idx_payment_status` on `CostInvoices(PaymentStatus)`
+
+### Rollback
+
+- If rollback is required, execute:
+  - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
+- Rollback removes index `idx_payment_status` and columns `PaidAmount`, `PaymentStatus`, `SupplierBankAccount`.
+
+## 2026-02-26 - Kylos: CostInvoices migration 002 (payment + bank fields)
+
+### What changed
+
+- Executed migration on runtime target `envi-konsulting.kylos.pl/envikons_myEnvi`:
+  - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
+
+### Pre-check (information_schema)
+
+- `CostInvoices.SupplierBankAccount`: missing
+- `CostInvoices.PaymentStatus`: missing
+- `CostInvoices.PaidAmount`: missing
+- `idx_payment_status`: missing
+
+### Applied steps
+
+- `ALTER TABLE CostInvoices ADD COLUMN SupplierBankAccount VARCHAR(50) NULL AFTER SupplierAddress`
+- `ALTER TABLE CostInvoices ADD COLUMN PaymentStatus VARCHAR(20) NOT NULL DEFAULT 'UNPAID' AFTER Status`
+- `ALTER TABLE CostInvoices ADD COLUMN PaidAmount DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER PaymentStatus`
+- `CREATE INDEX idx_payment_status ON CostInvoices (PaymentStatus)`
+
+### Verification
+
+- Confirmed columns on `CostInvoices`:
+  - `SupplierBankAccount` (`varchar(50)`, nullable)
+  - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
+  - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
+- Confirmed index:
+  - `idx_payment_status` on `CostInvoices(PaymentStatus)`
+
+### Rollback
+
+- If rollback is required, execute:
+  - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
+- Rollback removes index `idx_payment_status` and columns `PaidAmount`, `PaymentStatus`, `SupplierBankAccount`.
