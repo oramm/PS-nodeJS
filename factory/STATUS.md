@@ -128,6 +128,45 @@ Zakres wykonany:
 Sesja 6 - Stateful orchestration gate (plan/YAML jako source of truth)
 Prompt: `factory/PROMPTS-SESSIONS.md`
 
+---
+
+## Task: faktury-kosztowe-platnosci (sesja 2026-02-26)
+
+### Status: IN_PROGRESS — oczekuje na REVIEW_VERDICT + commit
+
+### Zakres
+Cross-repo feature: faktury kosztowe — status płatności + numer rachunku bankowego dostawcy.
+
+**Repo backend**: `oramm/PS-nodeJS`, branch `claude/dark-factory-pattern-ohLLZ`
+**Repo frontend**: `oramm/ENVI.ProjectSite`, branch `claude/dark-factory-pattern-ohLLZ`
+(frontend sklonowany lokalnie: `/home/user/ENVI.ProjectSite`)
+
+### Pliki zmienione
+
+**PS-nodeJS (4 pliki):**
+- `src/costInvoices/migrations/002_add_payment_and_bank.sql` (NEW)
+- `src/costInvoices/CostInvoice.ts` (+PaymentStatus type, +supplierBankAccount, +paymentStatus, +paidAmount)
+- `src/costInvoices/CostInvoiceRepository.ts` (+mapowanie, +create, +update)
+- `src/costInvoices/CostInvoicesRouter.ts` (+walidacja paymentStatus w PATCH)
+
+**ENVI.ProjectSite (5 plików):**
+- `Typings/bussinesTypes.d.ts` (+3 pola w CostInvoice)
+- `src/Erp/CostInvoicesList/CostInvoicesController.ts` (+PaymentStatuses const, +PaymentStatus type, +updateCostInvoice sig)
+- `src/Erp/CostInvoicesList/CostInvoicesBadges.tsx` (+PaymentStatusBadge)
+- `src/Erp/CostInvoicesList/CostInvoicesSearch.tsx` (+PaymentStatusBadge w __status-wrap)
+- `src/Erp/CostInvoicesList/CostInvoiceDetails.tsx` (+supplierBankAccount display, +paymentStatus UI, +paidAmount input)
+
+### Gate status
+- [x] DISCOVERY_APPROVED (opcja 1: osobne paymentStatus + paidAmount)
+- [x] UI design zatwierdzony przez człowieka
+- [x] Implementacja wykonana (9 plików)
+- [ ] REVIEW_VERDICT: pending
+- [ ] COMMIT_APPROVED: pending
+
+### Następna sesja — prompt w PROMPTS-SESSIONS.md sekcja "faktury-kosztowe-platnosci"
+
+---
+
 ## Update v1.1 - Asystent Orkiestratora + sharding + context rollover
 
 ### Co powstalo

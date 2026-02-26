@@ -20,6 +20,7 @@ export default class CostInvoice {
     supplierNip?: string;
     supplierName: string;
     supplierAddress?: string;
+    supplierBankAccount?: string;
     
     // Dane faktury
     invoiceNumber: string;
@@ -38,6 +39,10 @@ export default class CostInvoice {
     
     // Status księgowania
     status: CostInvoiceStatus;
+
+    // Status płatności
+    paymentStatus: PaymentStatus;
+    paidAmount: number;
     
     // Ustawienia księgowania
     bookingPercentage: number;
@@ -75,6 +80,7 @@ export default class CostInvoice {
         this.supplierNip = data.supplierNip;
         this.supplierName = data.supplierName || '';
         this.supplierAddress = data.supplierAddress;
+        this.supplierBankAccount = data.supplierBankAccount;
         
         this.invoiceNumber = data.invoiceNumber || '';
         this.issueDate = data.issueDate ? new Date(data.issueDate) : new Date();
@@ -89,6 +95,8 @@ export default class CostInvoice {
         this.xmlContent = data.xmlContent;
         
         this.status = data.status || 'NEW';
+        this.paymentStatus = data.paymentStatus || 'UNPAID';
+        this.paidAmount = parseDecimal(data.paidAmount, 0);
         this.bookingPercentage = parseDecimal(data.bookingPercentage, 100);
         this.vatDeductionPercentage = parseDecimal(data.vatDeductionPercentage, 100);
         
@@ -156,6 +164,7 @@ export default class CostInvoice {
             supplierNip: this.supplierNip,
             supplierName: this.supplierName,
             supplierAddress: this.supplierAddress,
+            supplierBankAccount: this.supplierBankAccount,
             invoiceNumber: this.invoiceNumber,
             issueDate: formatDate(this.issueDate),
             saleDate: formatDate(this.saleDate),
@@ -165,6 +174,8 @@ export default class CostInvoice {
             grossAmount: this.grossAmount,
             currency: this.currency,
             status: this.status,
+            paymentStatus: this.paymentStatus,
+            paidAmount: this.paidAmount,
             bookingPercentage: this.bookingPercentage,
             vatDeductionPercentage: this.vatDeductionPercentage,
             bookableNetAmount: this.bookableNetAmount,
@@ -208,6 +219,14 @@ export default class CostInvoice {
  * EXCLUDED - wykluczona
  */
 export type CostInvoiceStatus = 'NEW' | 'EXCLUDED' | 'BOOKED';
+
+/**
+ * Status płatności faktury kosztowej
+ * UNPAID - niezapłacona
+ * PARTIALLY_PAID - częściowo zapłacona
+ * PAID - zapłacona
+ */
+export type PaymentStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
 
 /**
  * Model pozycji faktury kosztowej

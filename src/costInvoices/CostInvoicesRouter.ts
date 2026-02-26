@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { app } from '../index';
 import CostInvoiceController from './CostInvoiceController';
 import { SystemRoleName } from '../types/sessionTypes';
+import { CostInvoiceValidator } from './CostInvoiceValidator';
 
 const controller = new CostInvoiceController();
 
@@ -258,6 +259,11 @@ app.patch(
 
             if (status && !['NEW', 'EXCLUDED', 'BOOKED'].includes(status)) {
                 return res.status(400).json({ error: `Nieprawidłowy status: ${status}` });
+            }
+
+            const paymentValidationError = CostInvoiceValidator.validatePaymentUpdate(req.body ?? {});
+            if (paymentValidationError) {
+                return res.status(400).json({ error: paymentValidationError });
             }
 
             let bookedBy: number | undefined;

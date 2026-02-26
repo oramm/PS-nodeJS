@@ -1,6 +1,7 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostCategory } from './CostInvoice';
+import { toPaymentStatus } from './CostInvoiceValidator';
 
 /**
  * Repository dla faktur kosztowych
@@ -116,12 +117,13 @@ export default class CostInvoiceRepository {
         const sql = mysql.format(`
             INSERT INTO CostInvoices (
                 KsefNumber, KsefAcquisitionDate, SyncId,
-                SupplierNip, SupplierName, SupplierAddress,
+                SupplierNip, SupplierName, SupplierAddress, SupplierBankAccount,
                 InvoiceNumber, IssueDate, SaleDate, DueDate,
                 NetAmount, VatAmount, GrossAmount, Currency,
-                XmlContent, Status, BookingPercentage, VatDeductionPercentage,
+                XmlContent, Status, PaymentStatus, PaidAmount,
+                BookingPercentage, VatDeductionPercentage,
                 CategoryId, Notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             invoice.ksefNumber,
             invoice.ksefAcquisitionDate || null,
@@ -129,6 +131,7 @@ export default class CostInvoiceRepository {
             invoice.supplierNip || null,
             invoice.supplierName,
             invoice.supplierAddress || null,
+            invoice.supplierBankAccount || null,
             invoice.invoiceNumber,
             invoice.issueDate,
             invoice.saleDate || null,
@@ -139,6 +142,8 @@ export default class CostInvoiceRepository {
             invoice.currency,
             invoice.xmlContent || null,
             invoice.status,
+            invoice.paymentStatus,
+            invoice.paidAmount,
             invoice.bookingPercentage,
             invoice.vatDeductionPercentage,
             invoice.categoryId || null,
@@ -160,6 +165,8 @@ export default class CostInvoiceRepository {
 
         const fieldMap: Record<string, any> = {
             status: invoice.status,
+            paymentStatus: invoice.paymentStatus,
+            paidAmount: invoice.paidAmount,
             bookingPercentage: invoice.bookingPercentage,
             vatDeductionPercentage: invoice.vatDeductionPercentage,
             categoryId: invoice.categoryId,
@@ -199,6 +206,7 @@ export default class CostInvoiceRepository {
             supplierNip: row.SupplierNip,
             supplierName: row.SupplierName,
             supplierAddress: row.SupplierAddress,
+            supplierBankAccount: row.SupplierBankAccount,
             invoiceNumber: row.InvoiceNumber,
             issueDate: row.IssueDate,
             saleDate: row.SaleDate,
@@ -209,6 +217,8 @@ export default class CostInvoiceRepository {
             currency: row.Currency,
             xmlContent: row.XmlContent,
             status: row.Status,
+            paymentStatus: toPaymentStatus(row.PaymentStatus),
+            paidAmount: row.PaidAmount,
             bookingPercentage: row.BookingPercentage,
             vatDeductionPercentage: row.VatDeductionPercentage,
             categoryId: row.CategoryId,

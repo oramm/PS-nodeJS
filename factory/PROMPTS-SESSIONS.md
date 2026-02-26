@@ -55,3 +55,40 @@ documentation_layers i documentation_selection_justification.
 Nie zamykaj taska bez APPROVE.
 Commit wykonaj przez factory/prompts/committer.md dopiero po COMMIT_APPROVED.
 ```
+
+---
+
+## Task resume: faktury-kosztowe-platnosci
+
+### Kontekst
+Sesja z 2026-02-26. Implementacja cross-repo ukończona, poprawki po review zastosowane.
+Szczegółowy status: `factory/STATUS.md` sekcja "Task: faktury-kosztowe-platnosci".
+
+### Stan na koniec sesji
+- Implementacja: DONE (9 plików zmienionych w 2 repozytoriach)
+- Review runda 1: REQUEST_CHANGES (2 HIGH naprawione)
+- Review runda 2: DO WYKONANIA
+- Commit: PENDING
+
+### Co zrobić w następnej sesji
+
+1. Przeczytaj `factory/STATUS.md` sekcję "faktury-kosztowe-platnosci"
+2. Uruchom review subagent (factory/prompts/reviewer.md) na diff obu repozytoriów
+3. Przy APPROVE: uruchom Committer dla PS-nodeJS (`git -C /home/user/PS-nodeJS`)
+4. Następnie: push ENVI.ProjectSite z `/home/user/ENVI.ProjectSite` na branch `claude/dark-factory-pattern-ohLLZ`
+
+### Pliki do przekazania do review (diff)
+**PS-nodeJS** (branch claude/dark-factory-pattern-ohLLZ):
+- migrations/002_add_payment_and_bank.sql (NEW)
+- migrations/002_add_payment_and_bank_down.sql (NEW)
+- CostInvoice.ts
+- CostInvoiceRepository.ts
+- CostInvoiceValidator.ts (NEW)
+- CostInvoicesRouter.ts
+
+**ENVI.ProjectSite** (branch claude/dark-factory-pattern-ohLLZ, lokalizacja /home/user/ENVI.ProjectSite):
+- Typings/bussinesTypes.d.ts
+- CostInvoicesController.ts
+- CostInvoicesBadges.tsx
+- CostInvoicesSearch.tsx
+- CostInvoiceDetails.tsx
