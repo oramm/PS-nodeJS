@@ -60,13 +60,20 @@ export default class KsefXmlBuilder {
         const sellerStreet = seller.street || process.env.KSEF_SELLER_STREET || 'ul. Lubicz 25';
         const sellerCity = seller.city || process.env.KSEF_SELLER_CITY || 'Kraków';
 
+        const sellerPostalCode = (seller.postalCode || '').trim();
+        const sellerCityWithPostalCode = sellerPostalCode
+            ? `${sellerPostalCode} ${sellerCity}`
+            : sellerCity;
+
         // Dane nabywcy z faktury korygującej
         const buyerName = this.escapeXml(invoice._entity?.name || '');
-        const buyerNip = invoice._entity?.taxNumber || '';
+        const buyerNip = this.normalizeNip(invoice._entity?.taxNumber || '');
         const buyerAddress = this.escapeXml(invoice._entity?.address || '');
 
         // Data i numer faktury korygującej
-        const issueDate = this.formatDate(invoice.issueDate);
+        const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
+        const saleDateXml = this.buildSaleDateXml(invoice.issueDate);
+        const paymentXml = this.buildPaymentXml(invoice, issueDate);
         const invoiceNumber = invoice.number || `FV-K/${invoice.id}/${new Date().getFullYear()}`;
         const creationDateTime = this.formatDateTime(new Date());
 
@@ -93,7 +100,6 @@ export default class KsefXmlBuilder {
             <NrKSeFFaKorygowanej>${originalKsefNumber}</NrKSeFFaKorygowanej>
         </DaneFaKorygowanej>`;
 
-        // Generuj XML faktury korygującej zgodny ze schematem FA(3)
         return `<?xml version="1.0" encoding="UTF-8"?>
 <Faktura xmlns="${this.NAMESPACE}"
          xmlns:etd="${this.ETD_NAMESPACE}"
@@ -112,7 +118,7 @@ export default class KsefXmlBuilder {
         <Adres>
             <KodKraju>PL</KodKraju>
             <AdresL1>${this.escapeXml(sellerStreet)}</AdresL1>
-            <AdresL2>${this.escapeXml(sellerCity)}</AdresL2>
+            <AdresL2>${this.escapeXml(sellerCityWithPostalCode)}</AdresL2>
         </Adres>
     </Podmiot1>
     <Podmiot2>
@@ -131,7 +137,8 @@ export default class KsefXmlBuilder {
     <Fa>
         <KodWaluty>PLN</KodWaluty>
         <P_1>${issueDate}</P_1>
-        <P_2>${this.escapeXml(invoiceNumber)}</P_2>${vatSections}
+        <P_2>${this.escapeXml(invoiceNumber)}</P_2>
+        ${saleDateXml}${vatSections}
         <P_15>${this.formatAmount(totalGross)}</P_15>
         <Adnotacje>
             <P_16>2</P_16>
@@ -149,7 +156,7 @@ export default class KsefXmlBuilder {
                 <P_PMarzyN>1</P_PMarzyN>
             </PMarzy>
         </Adnotacje>
-        <RodzajFaktury>KOR</RodzajFaktury>${correctionSection}${itemsXml}
+        <RodzajFaktury>KOR</RodzajFaktury>${correctionSection}${itemsXml}${paymentXml}
     </Fa>
 </Faktura>`;
     }
@@ -163,14 +170,20 @@ export default class KsefXmlBuilder {
         const sellerName = seller.name!;
         const sellerStreet = seller.street!;
         const sellerCity = seller.city!;
+        const sellerPostalCode = (seller.postalCode || '').trim();
+        const sellerCityWithPostalCode = sellerPostalCode
+            ? `${sellerPostalCode} ${sellerCity}`
+            : sellerCity;
 
         // Dane nabywcy z faktury
         const buyerName = this.escapeXml(invoice._entity?.name || '');
-        const buyerNip = invoice._entity?.taxNumber || '';
+        const buyerNip = this.normalizeNip(invoice._entity?.taxNumber || '');
         const buyerAddress = this.escapeXml(invoice._entity?.address || '');
 
         // Data i numer faktury
-        const issueDate = this.formatDate(invoice.issueDate);
+        const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
+        const saleDateXml = this.buildSaleDateXml(invoice.issueDate);
+        const paymentXml = this.buildPaymentXml(invoice, issueDate);
         const invoiceNumber =
             invoice.number || `FV/${invoice.id}/${new Date().getFullYear()}`;
         const creationDateTime = this.formatDateTime(new Date());
@@ -201,7 +214,7 @@ export default class KsefXmlBuilder {
         <Adres>
             <KodKraju>PL</KodKraju>
             <AdresL1>${this.escapeXml(sellerStreet)}</AdresL1>
-            <AdresL2>${this.escapeXml(sellerCity)}</AdresL2>
+            <AdresL2>${this.escapeXml(sellerCityWithPostalCode)}</AdresL2>
         </Adres>
     </Podmiot1>
     <Podmiot2>
@@ -228,7 +241,8 @@ export default class KsefXmlBuilder {
     <Fa>
         <KodWaluty>PLN</KodWaluty>
         <P_1>${issueDate}</P_1>
-        <P_2>${this.escapeXml(invoiceNumber)}</P_2>${vatSections}
+        <P_2>${this.escapeXml(invoiceNumber)}</P_2>
+        ${saleDateXml}${vatSections}
         <P_15>${this.formatAmount(totalGross)}</P_15>
         <Adnotacje>
             <P_16>2</P_16>
@@ -246,7 +260,7 @@ export default class KsefXmlBuilder {
                 <P_PMarzyN>1</P_PMarzyN>
             </PMarzy>
         </Adnotacje>
-        <RodzajFaktury>VAT</RodzajFaktury>${itemsXml}
+        <RodzajFaktury>VAT</RodzajFaktury>${itemsXml}${paymentXml}
     </Fa>
 </Faktura>`;
     }
@@ -398,6 +412,69 @@ export default class KsefXmlBuilder {
         }
         
         return 23;
+    }
+
+    private static buildSaleDateXml(issueDate: string): string {
+        return `<P_6>${this.formatDate(issueDate)}</P_6>`;
+    }
+
+    private static buildPaymentXml(invoice: Invoice, issueDate: string): string {
+        const deadline = this.resolvePaymentDeadline(invoice, issueDate);
+        const bankAccount = this.normalizeBankAccount(Setup.KSeF.seller.bankAccount || '');
+        const bankName = Setup.KSeF.seller.bankName || '';
+
+        const sections: string[] = [];
+        if (deadline) {
+            sections.push(`
+            <TerminPlatnosci>
+                <Termin>${deadline}</Termin>
+            </TerminPlatnosci>`);
+        }
+
+        if (bankAccount) {
+            sections.push(`
+            <RachunekBankowy>
+                <NrRB>${this.escapeXml(bankAccount)}</NrRB>${bankName ? `
+                <NazwaBanku>${this.escapeXml(bankName)}</NazwaBanku>` : ''}
+            </RachunekBankowy>`);
+        }
+
+        if (sections.length === 0) {
+            return '';
+        }
+
+        return `<Platnosc>${sections.join('')}
+        </Platnosc>`;
+    }
+
+    private static resolvePaymentDeadline(invoice: Invoice, issueDate: string): string | null {
+        const daysToPay = Number(invoice.daysToPay || 0);
+        if (!Number.isFinite(daysToPay) || daysToPay < 0) {
+            return null;
+        }
+        return this.addDaysToDate(issueDate, daysToPay);
+    }
+
+    private static addDaysToDate(dateStr: string, days: number): string {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        date.setUTCDate(date.getUTCDate() + days);
+        return date.toISOString().split('T')[0];
+    }
+
+    private static normalizeBankAccount(account: string): string {
+        const normalized = account.replace(/\s+/g, '');
+        if (!normalized) {
+            return '';
+        }
+        if (normalized.length < 10 || normalized.length > 34) {
+            throw new Error('KSEF_SELLER_BANK_ACCOUNT must be 10..34 characters');
+        }
+        return normalized;
+    }
+
+    private static normalizeNip(nip: string): string {
+        return (nip || '').replace(/\D+/g, '');
     }
 
     /**

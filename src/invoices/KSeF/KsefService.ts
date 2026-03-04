@@ -1291,6 +1291,19 @@ export default class KsefService {
             const invoicingDate =
                 getValue('P_1') || getValue('DataWystawienia') || '';
 
+            // Data sprzedaży (FA(3): P_6, fallback P_1)
+            const saleDate = getValue('P_6') || invoicingDate;
+
+            // Termin płatności (FA(3): Fa/Platnosc/TerminPlatnosci/Termin)
+            const dueDate =
+                getNestedValue('TerminPlatnosci', 'Termin') ||
+                getNestedValue('Platnosc', 'Termin') ||
+                '';
+
+            // Numer rachunku bankowego (FA(3): Fa/Platnosc/RachunekBankowy/NrRB)
+            const bankAccount =
+                getNestedValue('RachunekBankowy', 'NrRB') || '';
+
             // Data przyjęcia do KSeF
             const acquisitionTimestamp =
                 getValue('DataPrzyjecia') ||
@@ -1322,6 +1335,9 @@ export default class KsefService {
                 subjectName: sellerName,
                 invoiceNumber,
                 invoicingDate,
+                saleDate,
+                dueDate,
+                bankAccount,
                 acquisitionTimestamp,
                 invoiceType,
                 grossValue,
@@ -1486,6 +1502,9 @@ export default class KsefService {
             invoiceNumber:
                 inv.invoiceNumber || inv.invoiceReferenceNumber || '',
             invoicingDate: inv.invoicingDate || '',
+            saleDate: inv.saleDate || inv.invoicingDate || '',
+            dueDate: inv.dueDate || '',
+            bankAccount: inv.bankAccount || '',
             acquisitionTimestamp:
                 inv.acquisitionTimestamp || inv.permanentStorageDate || '',
             invoiceType: inv.invoiceType || 'FA',
@@ -1590,6 +1609,7 @@ interface InvoiceExportMetadata {
     subjectName?: string;
     sellerName?: string;
     invoiceType?: string;
+    bankAccount?: string;
     netValue?: string;
     vatValue?: string;
     grossValue?: string;
@@ -1604,6 +1624,9 @@ export interface PurchaseInvoiceListItem {
     subjectName: string;
     invoiceNumber: string;
     invoicingDate: string;
+    saleDate?: string;
+    dueDate?: string;
+    bankAccount?: string;
     acquisitionTimestamp: string;
     invoiceType: string;
     grossValue?: number;

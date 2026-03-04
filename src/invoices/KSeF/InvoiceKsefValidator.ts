@@ -22,13 +22,35 @@ export default class InvoiceKsefValidator {
             );
         if (!seller.city)
             errors.push('Seller city required (ustaw KSEF_SELLER_CITY w .env)');
+        const bankAccount = seller.bankAccount?.replace(/\s+/g, '') || '';
+        if (!bankAccount) {
+            errors.push(
+                'Seller bank account required (ustaw KSEF_SELLER_BANK_ACCOUNT w .env)',
+            );
+        } else if (bankAccount.length < 10 || bankAccount.length > 34) {
+            errors.push('Seller bank account must be 10..34 chars (FA(3) NrRB)');
+        }
 
         // Buyer info comes from _entity.taxNumber
-        if (!invoiceDto._entity || !invoiceDto._entity.taxNumber) {
+        const buyerNipRaw = invoiceDto._entity?.taxNumber || '';
+        const buyerNipNormalized = String(buyerNipRaw).replace(/\D+/g, '');
+
+        if (!buyerNipRaw) {
             errors.push('Buyer NIP required (_entity.taxNumber)');
+        } else if (!/^\d{10}$/.test(buyerNipNormalized)) {
+            errors.push(
+                'Buyer NIP must contain 10 digits (accepted formats: 1111111111, 111-111-11-11, 111 111 11 11)',
+            );
         }
 
         if (!invoiceDto.issueDate) errors.push('Issue date required');
+        if (!invoiceDto.sentDate) errors.push('Sent date required (P_1 for KSeF)');
+
+        const daysToPay = Number(invoiceDto.daysToPay);
+        const hasValidDaysToPay = Number.isFinite(daysToPay) && daysToPay >= 0;
+        if (!hasValidDaysToPay) {
+            errors.push('Valid non-negative daysToPay required');
+        }
 
         // Total is _totalNetValue
         const total = invoiceDto._totalNetValue;

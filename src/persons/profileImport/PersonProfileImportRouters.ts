@@ -12,7 +12,7 @@ const parsePositiveInt = (raw: string, fieldName: string): number => {
 
 app.post(
     '/v2/persons/:personId/profile/analyze-file',
-    upload.single('file'),
+    upload.single('file') as any,
     async (req: Request, res: Response, next) => {
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');

@@ -6,11 +6,14 @@ jest.mock('../../../setup/Setup', () => ({
             nip: '1234567890',
             token: 'test-token',
             apiBaseUrl: undefined,
-            sellerName: 'Test Sp. z o.o.',
-            sellerStreet: 'Testowa 1',
-            sellerCity: 'Warszawa',
-            sellerPostalCode: '00-001',
-            sellerCountry: 'PL',
+            seller: {
+                name: 'Test Sp. z o.o.',
+                street: 'Testowa 1',
+                city: 'Warszawa',
+                postalCode: '00-001',
+                bankAccount: 'PL61109010140000071219812874',
+                bankName: 'Test Bank',
+            },
         },
     },
 }));
@@ -157,5 +160,63 @@ describe('KsefService.getApiUrl', () => {
     it('zwraca URL testowy domyślnie', () => {
         const url = KsefService.getApiUrl();
         expect(url).toBe('https://api-test.ksef.mf.gov.pl/v2');
+    });
+});
+
+describe('KsefService.parseInvoiceXmlToListItem', () => {
+    it('parsuje saleDate (P_6) i dueDate (Platnosc/TerminPlatnosci/Termin)', () => {
+        const service = new KsefService();
+        const xml = `
+            <Faktura>
+                <Podmiot1>
+                    <DaneIdentyfikacyjne>
+                        <NIP>1234567890</NIP>
+                        <Nazwa>Dostawca Test</Nazwa>
+                    </DaneIdentyfikacyjne>
+                </Podmiot1>
+                <Fa>
+                    <P_1>2026-03-01</P_1>
+                    <P_6>2026-02-28</P_6>
+                    <P_2>FV/3/2026</P_2>
+                    <P_15>123.45</P_15>
+                    <KodWaluty>PLN</KodWaluty>
+                    <Platnosc>
+                        <TerminPlatnosci>
+                            <Termin>2026-03-15</Termin>
+                        </TerminPlatnosci>
+                        <RachunekBankowy>
+                            <NrRB>PL61109010140000071219812874</NrRB>
+                        </RachunekBankowy>
+                    </Platnosc>
+                </Fa>
+            </Faktura>
+        `;
+
+        const item = (service as any).parseInvoiceXmlToListItem(xml, 'test.xml');
+
+        expect(item).toBeTruthy();
+        expect(item.saleDate).toBe('2026-02-28');
+        expect(item.dueDate).toBe('2026-03-15');
+        expect(item.bankAccount).toBe('PL61109010140000071219812874');
+        expect(item.invoicingDate).toBe('2026-03-01');
+    });
+
+    it('fallback saleDate do P_1 gdy brak P_6', () => {
+        const service = new KsefService();
+        const xml = `
+            <Faktura>
+                <Fa>
+                    <P_1>2026-03-02</P_1>
+                    <P_2>FV/4/2026</P_2>
+                </Fa>
+            </Faktura>
+        `;
+
+        const item = (service as any).parseInvoiceXmlToListItem(xml, 'test2.xml');
+
+        expect(item).toBeTruthy();
+        expect(item.saleDate).toBe('2026-03-02');
+        expect(item.dueDate).toBe('');
+        expect(item.bankAccount).toBe('');
     });
 });

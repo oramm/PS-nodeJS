@@ -121,8 +121,10 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     ) {
         if (initParamObject.sentDate) {
             this.sentDate = ToolsDate.dateJsToSql(initParamObject.sentDate);
-            this.paymentDeadline = this.countPaymentDeadline();
         }
+        this.paymentDeadline = initParamObject.paymentDeadline
+            ? ToolsDate.dateJsToSql(initParamObject.paymentDeadline)
+            : this.countPaymentDeadline();
         this.number = initParamObject.number;
         this.gdId = initParamObject.gdId;
 

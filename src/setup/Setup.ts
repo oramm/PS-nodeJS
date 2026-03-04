@@ -306,6 +306,8 @@ export default class Setup {
      *   KSEF_SELLER_STREET="ul. Testowa 10"
      *   KSEF_SELLER_CITY="Warszawa"
      *   KSEF_SELLER_POSTAL_CODE="00-001"
+     *   KSEF_SELLER_BANK_ACCOUNT="PL61109010140000071219812874"
+     *   KSEF_SELLER_BANK_NAME="Santander Bank Polska S.A."
      */
     static get KSeF() {
         return {
@@ -325,6 +327,8 @@ export default class Setup {
                 street: process.env.KSEF_SELLER_STREET,
                 city: process.env.KSEF_SELLER_CITY,
                 postalCode: process.env.KSEF_SELLER_POSTAL_CODE,
+                bankAccount: process.env.KSEF_SELLER_BANK_ACCOUNT,
+                bankName: process.env.KSEF_SELLER_BANK_NAME,
             },
         };
     }

@@ -61,8 +61,11 @@ app.post(
 
             res.json({
                 success: true,
-                message: `Synchronizacja zakończona: ${result.imported} zaimportowanych, ${result.skipped} pominięte`,
-                data: result,
+                message: `Synchronizacja zakończona: ${result.imported} zaimportowanych, ${result.alreadyAdded} już dodane${result.failedCount > 0 ? `, ${result.failedCount} błędne` : ''}`,
+                data: {
+                    ...result,
+                    errorDetails: result.errors,
+                },
             });
         } catch (error) {
             next(error);
@@ -322,41 +325,6 @@ app.patch(
                 message: 'Pozycja zaktualizowana',
             });
         } catch (error) {
-            next(error);
-        }
-    },
-);
-
-/**
- * POST /cost-invoices/:id/book
- * 
- * Oznacz fakturę jako zaksięgowaną
- */
-app.post(
-    '/cost-invoices/:id/book',
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const id = parseInt(req.params.id, 10);
-            const userId = ensureBookingPermission(req, res);
-            if (!userId) return;
-
-            const invoice = await controller.updateBookingSettings(id, {
-                status: 'BOOKED',
-                bookedBy: userId,
-            });
-
-            res.json({
-                success: true,
-                message: 'Faktura zaksięgowana',
-                data: invoice.toJson(),
-            });
-        } catch (error: any) {
-            if (error?.statusCode) {
-                return res.status(error.statusCode).json({
-                    error: error.message,
-                    details: error.details,
-                });
-            }
             next(error);
         }
     },

@@ -95,7 +95,7 @@ export default class CostInvoiceController {
 
         const errors: string[] = [];
         let imported = 0;
-        let skipped = 0;
+        let alreadyAdded = 0;
 
         // KsefService - będziemy go zamykać w finally
         const ksefService = new KsefService();
@@ -107,7 +107,13 @@ export default class CostInvoiceController {
             if (invoicesList.length === 0) {
                 console.log('[CostInvoice] Brak nowych faktur w podanym okresie');
                 await this.repository.completeSync(sync.id!, 'COMPLETED', 0, 0, []);
-                return { imported: 0, skipped: 0, errors: [], syncId: sync.id! };
+                return {
+                    imported: 0,
+                    alreadyAdded: 0,
+                    failedCount: 0,
+                    errors: [],
+                    syncId: sync.id!,
+                };
             }
 
             // 3. Sprawdź które faktury już istnieją (deduplikacja)
@@ -119,7 +125,7 @@ export default class CostInvoiceController {
             // 4. Importuj nowe faktury
             for (const invoiceInfo of invoicesList) {
                 if (existingNumbers.has(invoiceInfo.ksefNumber)) {
-                    skipped++;
+                    alreadyAdded++;
                     continue;
                 }
 
@@ -142,24 +148,34 @@ export default class CostInvoiceController {
                     imported++;
                     console.log(`[CostInvoice] ✅ Zaimportowano: ${invoiceInfo.invoiceNumber} (${invoiceInfo.ksefNumber})`);
                 } catch (err: any) {
-                    const errorMsg = `Błąd importu ${invoiceInfo.ksefNumber}: ${err.message}`;
+                    const rawMessage = err?.message || 'Nieznany błąd';
+                    const unknownColumnHint = /Unknown column/i.test(rawMessage)
+                        ? ' [Wskazówka: błąd schematu DB - sprawdź migracje i mapowanie kolumn/modelu]'
+                        : '';
+                    const errorMsg = `Błąd importu ${invoiceInfo.ksefNumber}: ${rawMessage}${unknownColumnHint}`;
                     console.error(`[CostInvoice] ❌ ${errorMsg}`);
                     errors.push(errorMsg);
                 }
             }
 
             // 5. Zakończ synchronizację
-            await this.repository.completeSync(sync.id!, 'COMPLETED', imported, skipped, errors);
+            await this.repository.completeSync(sync.id!, 'COMPLETED', imported, alreadyAdded, errors);
 
-            console.log(`[CostInvoice] Sync zakończona: ${imported} zaimportowanych, ${skipped} pominięte, ${errors.length} błędów`);
+            console.log(`[CostInvoice] Sync zakończona: ${imported} zaimportowanych, ${alreadyAdded} już dodane, ${errors.length} błędów`);
 
-            return { imported, skipped, errors, syncId: sync.id! };
+            return {
+                imported,
+                alreadyAdded,
+                failedCount: errors.length,
+                errors,
+                syncId: sync.id!,
+            };
         } catch (err: any) {
             const errorMsg = `Sync failed: ${err.message}`;
             console.error(`[CostInvoice] ❌ ${errorMsg}`);
             errors.push(errorMsg);
 
-            await this.repository.completeSync(sync.id!, 'FAILED', imported, skipped, errors);
+            await this.repository.completeSync(sync.id!, 'FAILED', imported, alreadyAdded, errors);
 
             throw err;
         }
@@ -203,8 +219,14 @@ export default class CostInvoiceController {
         // Daty
         // FA(3): data wystawienia jest w fa.P_1; naglowek.DataWystawienia to starszy wariant
         const issueDate = new Date(fa.P_1 || naglowek.DataWystawienia || invoiceInfo.invoicingDate);
-        const saleDate = extractSaleDateFromFa(fa, naglowek);
-        const dueDate = extractDueDateFromFa(fa);
+        const saleDate =
+            extractSaleDateFromFa(fa, naglowek) ||
+            (invoiceInfo.saleDate ? new Date(invoiceInfo.saleDate) : undefined);
+        const dueDate =
+            extractDueDateFromFa(fa) ||
+            (invoiceInfo.dueDate ? new Date(invoiceInfo.dueDate) : undefined);
+        const supplierBankAccount =
+            this.extractSupplierBankAccount(fa) || invoiceInfo.bankAccount;
 
         // Kwoty
         const podsumowanie = fa.Podsumowanie || {};
@@ -229,6 +251,7 @@ export default class CostInvoiceController {
             supplierNip,
             supplierName,
             supplierAddress,
+            supplierBankAccount,
             invoiceNumber: invoiceInfo.invoiceNumber || naglowek.NrFaktury,
             issueDate,
             saleDate,
@@ -327,6 +350,26 @@ export default class CostInvoiceController {
         ].filter(Boolean);
 
         return parts.join(' ').trim() || '';
+    }
+
+    /**
+     * Wyciągnij numer rachunku bankowego z sekcji płatności FA(3)
+     */
+    private extractSupplierBankAccount(fa: any): string | undefined {
+        const rachunekBankowy = fa?.Platnosc?.RachunekBankowy;
+        if (!rachunekBankowy) {
+            return undefined;
+        }
+
+        const nrRb = Array.isArray(rachunekBankowy)
+            ? rachunekBankowy[0]?.NrRB
+            : rachunekBankowy.NrRB;
+
+        if (!nrRb) {
+            return undefined;
+        }
+
+        return String(nrRb).replace(/\s+/g, '').trim() || undefined;
     }
 
     // =====================================================
@@ -595,7 +638,8 @@ export default class CostInvoiceController {
 
 export interface SyncResult {
     imported: number;
-    skipped: number;
+    alreadyAdded: number;
+    failedCount: number;
     errors: string[];
     syncId: number;
 }

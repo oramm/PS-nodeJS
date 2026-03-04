@@ -9,6 +9,11 @@ import { toPaymentStatus } from './CostInvoiceValidator';
  * Odpowiada za operacje bazodanowe na fakturach kosztowych.
  */
 export default class CostInvoiceRepository {
+    private optionalColumnsCache: {
+        supplierBankAccount: boolean;
+        paymentStatus: boolean;
+        paidAmount: boolean;
+    } | null = null;
     
     // =====================================================
     // FAKTURY KOSZTOWE
@@ -114,24 +119,46 @@ export default class CostInvoiceRepository {
      * Zapisz nową fakturę
      */
     async create(invoice: CostInvoice): Promise<number> {
-        const sql = mysql.format(`
-            INSERT INTO CostInvoices (
-                KsefNumber, KsefAcquisitionDate, SyncId,
-                SupplierNip, SupplierName, SupplierAddress, SupplierBankAccount,
-                InvoiceNumber, IssueDate, SaleDate, DueDate,
-                NetAmount, VatAmount, GrossAmount, Currency,
-                XmlContent, Status, PaymentStatus, PaidAmount,
-                BookingPercentage, VatDeductionPercentage,
-                CategoryId, Notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
+        const optionalColumns = await this.getOptionalColumnsAvailability();
+
+        const fields = [
+            'KsefNumber',
+            'KsefAcquisitionDate',
+            'SyncId',
+            'SupplierNip',
+            'SupplierName',
+            'SupplierAddress',
+            ...(optionalColumns.supplierBankAccount
+                ? ['SupplierBankAccount']
+                : []),
+            'InvoiceNumber',
+            'IssueDate',
+            'SaleDate',
+            'DueDate',
+            'NetAmount',
+            'VatAmount',
+            'GrossAmount',
+            'Currency',
+            'XmlContent',
+            'Status',
+            ...(optionalColumns.paymentStatus ? ['PaymentStatus'] : []),
+            ...(optionalColumns.paidAmount ? ['PaidAmount'] : []),
+            'BookingPercentage',
+            'VatDeductionPercentage',
+            'CategoryId',
+            'Notes',
+        ];
+
+        const values = [
             invoice.ksefNumber,
             invoice.ksefAcquisitionDate || null,
             invoice.syncId || null,
             invoice.supplierNip || null,
             invoice.supplierName,
             invoice.supplierAddress || null,
-            invoice.supplierBankAccount || null,
+            ...(optionalColumns.supplierBankAccount
+                ? [invoice.supplierBankAccount || null]
+                : []),
             invoice.invoiceNumber,
             invoice.issueDate,
             invoice.saleDate || null,
@@ -142,16 +169,56 @@ export default class CostInvoiceRepository {
             invoice.currency,
             invoice.xmlContent || null,
             invoice.status,
-            invoice.paymentStatus,
-            invoice.paidAmount,
+            ...(optionalColumns.paymentStatus ? [invoice.paymentStatus] : []),
+            ...(optionalColumns.paidAmount ? [invoice.paidAmount] : []),
             invoice.bookingPercentage,
             invoice.vatDeductionPercentage,
             invoice.categoryId || null,
             invoice.notes || null,
-        ]);
+        ];
+
+        const placeholders = new Array(fields.length).fill('?').join(', ');
+        const sql = mysql.format(
+            `INSERT INTO CostInvoices (${fields.join(', ')}) VALUES (${placeholders})`,
+            values,
+        );
 
         const result = await ToolsDb.executeSQL(sql);
         return result.insertId;
+    }
+
+    private async getOptionalColumnsAvailability(): Promise<{
+        supplierBankAccount: boolean;
+        paymentStatus: boolean;
+        paidAmount: boolean;
+    }> {
+        if (this.optionalColumnsCache) {
+            return this.optionalColumnsCache;
+        }
+
+        const sql = mysql.format(
+            `
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'CostInvoices'
+                    AND COLUMN_NAME IN ('SupplierBankAccount', 'PaymentStatus', 'PaidAmount')
+            `,
+            [],
+        );
+
+        const result = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+        const columnNames = new Set(
+            result.map((row: any) => String(row.COLUMN_NAME || '')),
+        );
+
+        this.optionalColumnsCache = {
+            supplierBankAccount: columnNames.has('SupplierBankAccount'),
+            paymentStatus: columnNames.has('PaymentStatus'),
+            paidAmount: columnNames.has('PaidAmount'),
+        };
+
+        return this.optionalColumnsCache;
     }
 
     /**

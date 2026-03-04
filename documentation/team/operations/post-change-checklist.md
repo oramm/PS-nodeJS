@@ -46,6 +46,60 @@ Copy the block below for each change:
 
 ## Entries
 
+## 2026-03-04 - KSeF FA(3): sentDate/issueDate mapping, payment term and seller bank account
+
+### 1. Scope
+
+- Extended sales invoice KSeF XML mapping to include:
+    - `Fa/P_1` from invoice `sentDate` (data wystawienia w payloadzie KSeF),
+    - `Fa/P_6` from invoice `issueDate` (data sprzedaży),
+    - `Fa/Platnosc/TerminPlatnosci/Termin`,
+    - `Fa/Platnosc/RachunekBankowy/NrRB` and optional `NazwaBanku`.
+- Extended KSeF purchase-invoice list parsing to expose `saleDate` and `dueDate` early in sync flow.
+- Improved cost-invoice sync response: `alreadyAdded` (zamiast „pominięte”), liczba błędnych faktur i szczegóły błędów.
+
+### 2. DB impact
+
+- none.
+
+### 3. ENV impact
+
+- `.env.example`: updated.
+- New/changed variables:
+    - `KSEF_SELLER_BANK_ACCOUNT`
+    - `KSEF_SELLER_BANK_NAME`
+
+### 4. Heroku impact
+
+- Config vars: required for KSeF sales XML generation.
+- Restart/release steps:
+    - set new KSeF seller bank config vars,
+    - restart backend dyno/process.
+
+### 5. Developer actions
+
+- Set local env vars in `.env.development` / runtime env.
+- Run targeted tests and `yarn build`.
+
+### 6. Verification
+
+- Generated sales invoice XML contains:
+    - `P_1` z `sentDate`,
+    - `P_6` z `issueDate`,
+    - `Platnosc/TerminPlatnosci/Termin`,
+    - `RachunekBankowy/NrRB` (+ optional `NazwaBanku`).
+- Cost invoice sync/list includes parsed `saleDate` and `dueDate`.
+- Sync response includes count of failed invoices and `errorDetails`.
+
+### 7. Rollback
+
+- Revert code changes in KSeF XML builder/parser and invoice model.
+- Roll back env keys from deployment config.
+
+### 8. Owner
+
+- KSeF FA(3) mapping session (Codex).
+
 ## 2026-02-22 - Contract Meeting Notes missing GdDocument columns (local dev fix)
 
 ### 1. Scope
@@ -115,10 +169,10 @@ Copy the block below for each change:
 
 - Added local orchestration scripts in backend repo to manage both dev servers (backend and frontend) with one command set.
 - Added CLI entry points:
-  - `yarn dev:up`
-  - `yarn dev:down`
-  - `yarn dev:status`
-  - `yarn dev:logs`
+    - `yarn dev:up`
+    - `yarn dev:down`
+    - `yarn dev:status`
+    - `yarn dev:logs`
 - Added runbook: `documentation/team/runbooks/local-dev-orchestration.md`.
 
 ### 2. DB impact
@@ -151,18 +205,17 @@ Copy the block below for each change:
 ### 7. Rollback
 
 - Remove files:
-  - `scripts/dev-runtime-common.ps1`
-  - `scripts/dev-up.ps1`
-  - `scripts/dev-down.ps1`
-  - `scripts/dev-status.ps1`
-  - `scripts/dev-logs.ps1`
-  - `documentation/team/runbooks/local-dev-orchestration.md`
+    - `scripts/dev-runtime-common.ps1`
+    - `scripts/dev-up.ps1`
+    - `scripts/dev-down.ps1`
+    - `scripts/dev-status.ps1`
+    - `scripts/dev-logs.ps1`
+    - `documentation/team/runbooks/local-dev-orchestration.md`
 - Revert `package.json`, `.gitignore`, and this checklist entry.
 
 ### 8. Owner
 
 - Local developer tooling session (Codex + repository owner).
-
 
 ## 2026-02-20 - Public Profile Submission configurable link recovery cooldown
 
@@ -1466,7 +1519,7 @@ Copy the block below for each change:
 
 ### 6. Verification
 
-- documentation/team/operations/public-profile-submission/* updated with same date/scope as client docs.
+- documentation/team/operations/public-profile-submission/\* updated with same date/scope as client docs.
 - documentation/team/runbooks/public-profile-submission-link-recovery.md switched to new endpoint names.
 
 ### 7. Rollback
@@ -1476,7 +1529,6 @@ Copy the block below for each change:
 ### 8. Owner
 
 - Experience Update migration session (Codex + repository owner).
-
 
 ## 2026-02-20 - Experience Update hard-cut implementation
 
@@ -1489,27 +1541,27 @@ Copy the block below for each change:
 ### 2. DB impact
 
 - New migration:
-  - src/persons/migrations/006_experience_update_hard_cut.sql`r
+    - src/persons/migrations/006_experience_update_hard_cut.sql`r
 - Schema changes:
-  - PublicProfileSubmissions.LastActiveLinkUrl (VARCHAR(2048) NULL)
-  - PublicProfileSubmissions.LastActiveLinkExpiresAt (DATETIME NULL)
-  - PublicProfileSubmissionItems.ReviewComment (TEXT NULL)
+    - PublicProfileSubmissions.LastActiveLinkUrl (VARCHAR(2048) NULL)
+    - PublicProfileSubmissions.LastActiveLinkExpiresAt (DATETIME NULL)
+    - PublicProfileSubmissionItems.ReviewComment (TEXT NULL)
 - Data consolidation:
-  - closes older active submissions per person, keeps latest active row.
+    - closes older active submissions per person, keeps latest active row.
 
 ### 3. ENV impact
 
 - .env.example: updated.
 - New/changed variables:
-  - PUBLIC_PROFILE_SUBMISSION_BASE_URL example path updated to /public/experience-update.
+    - PUBLIC_PROFILE_SUBMISSION_BASE_URL example path updated to /public/experience-update.
 
 ### 4. Heroku impact
 
-- Config vars: keep existing PUBLIC_PROFILE_SUBMISSION_*; no new keys.
+- Config vars: keep existing PUBLIC*PROFILE_SUBMISSION*\*; no new keys.
 - Restart/release steps:
-  - apply migration  06_experience_update_hard_cut.sql before deploy,
-  - deploy backend + frontend hard-cut together (no backward compatibility),
-  - restart backend process after env/config refresh.
+    - apply migration  06_experience_update_hard_cut.sql before deploy,
+    - deploy backend + frontend hard-cut together (no backward compatibility),
+    - restart backend process after env/config refresh.
 
 ### 5. Developer actions
 
@@ -1519,7 +1571,7 @@ Copy the block below for each change:
 ### 6. Verification
 
 - PS-nodeJS: yarn build pass.
-- PS-nodeJS: yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand pass.
+- PS-nodeJS: yarn jest src/persons/publicProfileSubmission/**tests**/PublicProfileSubmissionAuth.test.ts --runInBand pass.
 - ENVI.ProjectSite: yarn tsc --noEmit pass.
 - ENVI.ProjectSite: yarn build pass.
 
@@ -1531,7 +1583,6 @@ Copy the block below for each change:
 ### 8. Owner
 
 - Experience Update migration session (Codex + repository owner).
-
 
 ## 2026-02-21 - Kylos: Public Profile Submission migrations 004/005/006
 
@@ -1576,7 +1627,7 @@ Copy the block below for each change:
 ### What changed
 
 - Executed migration for local runtime target `localhost/envikons_myEnvi`:
-  - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
+    - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
 
 ### Pre-check (information_schema)
 
@@ -1595,16 +1646,16 @@ Copy the block below for each change:
 ### Verification
 
 - Confirmed columns on `CostInvoices`:
-  - `SupplierBankAccount` (`varchar(50)`, nullable)
-  - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
-  - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
+    - `SupplierBankAccount` (`varchar(50)`, nullable)
+    - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
+    - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
 - Confirmed index:
-  - `idx_payment_status` on `CostInvoices(PaymentStatus)`
+    - `idx_payment_status` on `CostInvoices(PaymentStatus)`
 
 ### Rollback
 
 - If rollback is required, execute:
-  - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
+    - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
 - Rollback removes index `idx_payment_status` and columns `PaidAmount`, `PaymentStatus`, `SupplierBankAccount`.
 
 ## 2026-02-26 - Kylos: CostInvoices migration 002 (payment + bank fields)
@@ -1612,7 +1663,7 @@ Copy the block below for each change:
 ### What changed
 
 - Executed migration on runtime target `envi-konsulting.kylos.pl/envikons_myEnvi`:
-  - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
+    - `src/costInvoices/migrations/002_add_payment_and_bank.sql`
 
 ### Pre-check (information_schema)
 
@@ -1631,14 +1682,14 @@ Copy the block below for each change:
 ### Verification
 
 - Confirmed columns on `CostInvoices`:
-  - `SupplierBankAccount` (`varchar(50)`, nullable)
-  - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
-  - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
+    - `SupplierBankAccount` (`varchar(50)`, nullable)
+    - `PaymentStatus` (`varchar(20)`, not null, default `UNPAID`)
+    - `PaidAmount` (`decimal(15,2)`, not null, default `0.00`)
 - Confirmed index:
-  - `idx_payment_status` on `CostInvoices(PaymentStatus)`
+    - `idx_payment_status` on `CostInvoices(PaymentStatus)`
 
 ### Rollback
 
 - If rollback is required, execute:
-  - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
+    - `src/costInvoices/migrations/002_add_payment_and_bank_down.sql`
 - Rollback removes index `idx_payment_status` and columns `PaidAmount`, `PaymentStatus`, `SupplierBankAccount`.

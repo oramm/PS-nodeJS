@@ -261,7 +261,7 @@ app.put(
 
 app.post(
     '/v2/public/experience-update/:token/analyze-file',
-    upload.single('file'),
+    upload.single('file') as any,
     async (req: Request, res: Response, next) => {
         try {
             if (!req.file) {

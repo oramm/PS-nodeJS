@@ -45,6 +45,11 @@ At startup, `loadEnv()` prints active KSeF runtime configuration:
 
 Secrets are never printed (for example `KSEF_TOKEN`).
 
+Required seller payment fields for FA(3) XML generation:
+
+- `KSEF_SELLER_BANK_ACCOUNT` (bank account number, 10..34 chars after trimming spaces)
+- `KSEF_SELLER_BANK_NAME` (optional bank name mapped to `NazwaBanku`)
+
 ## Local helper for production KSeF
 
 For local runs with production KSeF, you can keep test token in `KSEF_TOKEN`
