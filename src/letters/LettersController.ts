@@ -398,21 +398,13 @@ export default class LettersController extends BaseController<
                 const shortcutCreationPromises = letter._cases.map(
                     async (caseItem) => {
                         if (caseItem.gdFolderId) {
-                            const lettersSubfolder = await ToolsGd.setFolder(
-                                auth,
-                                {
-                                    parentId: caseItem.gdFolderId,
-                                    name: 'Pisma',
-                                }
-                            );
-
                             const targetId = letter.gdDocumentId
                                 ? letter.gdDocumentId
                                 : letter.gdFolderId;
 
                             await ToolsGd.createShortcut(auth, {
                                 targetId: targetId!,
-                                parentId: lettersSubfolder.id!,
+                                parentId: caseItem.gdFolderId,
                                 name: `${letter.number} ${letter.description}`,
                             });
                         }
@@ -504,18 +496,13 @@ export default class LettersController extends BaseController<
             ) {
                 const shortcutPromises = letter._cases.map(async (caseItem) => {
                     if (caseItem.gdFolderId) {
-                        const lettersSubfolder = await ToolsGd.setFolder(auth, {
-                            parentId: caseItem.gdFolderId,
-                            name: 'Pisma',
-                        });
-
                         const targetId = letter.gdDocumentId
                             ? letter.gdDocumentId
                             : letter.gdFolderId;
 
                         await ToolsGd.createShortcut(auth, {
                             targetId: targetId!,
-                            parentId: lettersSubfolder.id!,
+                            parentId: caseItem.gdFolderId,
                             name: `${letter.number} ${letter.description}`,
                         });
                     }

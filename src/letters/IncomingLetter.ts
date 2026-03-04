@@ -113,13 +113,9 @@ export default abstract class IncomingLetter
                 if (targetId && this._cases && this._cases.length > 0) {
                     const shortcutPromises = this._cases.map(async (caseItem) => {
                         if (caseItem.gdFolderId) {
-                            const lettersSubfolder = await ToolsGd.setFolder(auth, {
-                                parentId: caseItem.gdFolderId,
-                                name: 'Pisma',
-                            });
                             await ToolsGd.createShortcut(auth, {
                                 targetId: targetId!,
-                                parentId: lettersSubfolder.id!,
+                                parentId: caseItem.gdFolderId,
                                 name: `${this.number} ${this.description}`,
                             });
                         }
