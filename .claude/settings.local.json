@@ -1,57 +1,14 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(yarn build)",
-      "Bash(npx tsc:*)",
-      "Bash(npx ts-node src/invoices/KSeF/test-service-changes.ts)",
-      "Bash(npx ts-node:*)",
-      "WebSearch",
-      "WebFetch(domain:ksef-test.mf.gov.pl)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:api-test.ksef.mf.gov.pl)",
-      "Bash(ls:*)",
-      "Bash(git stash:*)",
-      "Bash(git check-ignore:*)",
-      "Bash(where:*)",
-      "Bash(php:*)",
-      "Bash(sc query:*)",
-      "Bash(yarn add:*)",
-      "Bash(node -e:*)",
-      "Bash(git merge:*)",
-      "Bash(yarn test:*)",
-      "Bash(yarn test:persons:*)",
-      "Bash(yarn ts-node:*)",
-      "Bash(heroku apps:*)",
-      "Bash(heroku config:*)",
-      "Bash(heroku releases:*)",
-      "WebFetch(domain:ksef.podatki.gov.pl)",
-      "WebFetch(domain:pomoc.saldeosmart.pl)",
-      "WebFetch(domain:akademialtca.pl)",
-      "Bash(test:*)",
-      "Bash(git -C \"C:/Apache24/htdocs/PS-nodeJS\" status --short)",
-      "Bash(powershell -Command:*)",
-      "Bash(node build/scripts/backfillSaleAndDueDateFromXml.js:*)",
-      "Bash(node:*)",
-      "Bash(del \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\src\\\\scripts\\\\debugXmlStructure.ts\" \"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\build\\\\scripts\\\\debugXmlStructure.js\")",
-      "Bash(cmd /c \"rmdir /S /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1 && del /Q C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_samples.zip && echo ok\")",
-      "Bash(cmd /c \"rmdir /S /Q \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" && echo ok\")",
-      "Bash(cmd /c \"if exist \"\"C:\\\\Apache24\\\\htdocs\\\\PS-nodeJS\\\\tmp_ksef_fa3_1\"\" \\(echo ISTNIEJE\\) else \\(echo USUNIETY\\)\")",
-      "Bash(dir:*)",
-      "Bash(findstr:*)",
-      "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\\\\Import\"\" 2>&1\")",
-      "Bash(cmd /c \"dir \"\"C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\"\"\")",
-      "Bash(cmd /c \"dir C:\\\\Apache24\\\\htdocs\\\\ENVI.ProjectSite\\\\src\\\\Persons\\\\PersonProfile\")",
-      "Bash(find:*)",
-      "Bash(wc:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git checkout:*)",
-      "Bash(git status:*)",
-      "Bash(cd:*)",
-      "Bash(grep:*)",
-      "Bash(\"/c/Users/oram/AppData/Local/Programs/Microsoft VS Code/bin/code\":*)",
-      "Bash(tail:*)",
-      "Bash(popd:*)"
-    ]
-  }
+﻿{
+    "permissions": {
+        "allow": ["Bash(*)", "WebSearch", "WebFetch(*)"],
+        "deny": [
+            "Bash(git push --force*)",
+            "Bash(git reset --hard*)",
+            "Bash(rm -rf*)",
+            "Bash(rmdir /S*)",
+            "Bash(cmd /c rmdir*)",
+            "Bash(DROP TABLE*)",
+            "Bash(TRUNCATE TABLE*)"
+        ]
+    }
 }

@@ -12,6 +12,27 @@ import { simpleParser } from 'mailparser';
 import { Request } from 'express';
 
 export default class ToolsMail {
+    private static shouldSkipServerErrorReport(error: unknown, req?: Request) {
+        if (req) return false;
+
+        if (error instanceof Error) {
+            const errorCode = (error as NodeJS.ErrnoException).code;
+            const normalizedText = `${error.name}\n${error.message}\n${error.stack || ''}`;
+
+            if (errorCode === 'EADDRINUSE') return true;
+
+            return [
+                'TSError',
+                'Unable to compile TypeScript',
+                'Unable to compile',
+                'TypeScript compilation',
+                'ts-node',
+            ].some((fragment) => normalizedText.includes(fragment));
+        }
+
+        return false;
+    }
+
     // Tworzenie wspólnego transportera dla Nodemailer
     static createTransporter() {
         if (
@@ -20,7 +41,7 @@ export default class ToolsMail {
             !process.env.SMTP_PASSWORD
         ) {
             throw new Error(
-                'Brak wymaganego ustawienia SMTP w zmiennych środowiskowych'
+                'Brak wymaganego ustawienia SMTP w zmiennych środowiskowych',
             );
         }
         return nodemailer.createTransport({
@@ -39,7 +60,7 @@ export default class ToolsMail {
             text?: string;
             html?: string;
             footer?: string;
-        }
+        },
     ) {
         let { to, cc, subject, text, html, attachments, footer } = params;
         const transporter = this.createTransporter();
@@ -70,7 +91,7 @@ export default class ToolsMail {
     private static makeHtmlBody(
         text: string = '',
         html: string = '',
-        footer?: string
+        footer?: string,
     ) {
         if (!html && !text) throw new Error('Brak treści maila');
 
@@ -120,16 +141,16 @@ export default class ToolsMail {
             text?: string;
             html?: string;
             footer: string;
-        }
+        },
     ) {
         const { to, cc, subject, text, html, footer } = params;
         console.log(
             'pobieranie plików z Google Drive na potstawie id:',
-            gdFilesBasicData
+            gdFilesBasicData,
         );
         const filesData = await ToolsGd.getFileStreamWithMetaDataFromGd(
             gdFilesBasicData,
-            auth
+            auth,
         );
 
         return this.sendMail({
@@ -138,9 +159,8 @@ export default class ToolsMail {
             subject,
             html,
             text,
-            attachments: await this.convertGdFilesDataToMailAttachments(
-                filesData
-            ),
+            attachments:
+                await this.convertGdFilesDataToMailAttachments(filesData),
             footer,
         });
     }
@@ -149,7 +169,7 @@ export default class ToolsMail {
         filesData: {
             stream: Readable;
             metadata: drive_v3.Schema$File;
-        }[]
+        }[],
     ) {
         const attachments: Mail.Attachment[] = [];
         for (const fileData of filesData) {
@@ -206,7 +226,7 @@ export default class ToolsMail {
 
     static async searchEmails(
         conditions: MailsSearchParams,
-        searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all'
+        searchFields: 'subject' | 'body' | 'from' | 'to' | 'all' = 'all',
     ) {
         let { searchText, incomingDateFrom, incomingDateTo } = conditions;
 
@@ -222,12 +242,12 @@ export default class ToolsMail {
                 '',
                 searchFields,
                 incomingDateFrom,
-                incomingDateTo
+                incomingDateTo,
             );
 
             if (Object.keys(criteria).length === 0) {
                 console.error(
-                    'Brak kryteriów wyszukiwania. Kryteria nie zostały ustawione.'
+                    'Brak kryteriów wyszukiwania. Kryteria nie zostały ustawione.',
                 );
                 return emails;
             }
@@ -259,7 +279,7 @@ export default class ToolsMail {
                                   .join(', ') || '(bez odbiorcy)'
                             : '(bez odbiorcy)',
                         date: this.parseDate(
-                            message.envelope?.date || new Date()
+                            message.envelope?.date || new Date(),
                         ),
                     });
                 }
@@ -294,7 +314,7 @@ export default class ToolsMail {
         searchText: string | undefined,
         searchFields: string,
         incomingDateFrom: string | undefined,
-        incomingDateTo: string | undefined
+        incomingDateTo: string | undefined,
     ) {
         let criteria: SearchObject = {};
 
@@ -359,7 +379,7 @@ export default class ToolsMail {
     }
 
     static async fuzzySearchEmails(
-        orConditions: MailsSearchParams
+        orConditions: MailsSearchParams,
     ): Promise<MailData[]> {
         const emails: MailData[] = await this.searchEmails(orConditions, 'all');
         if (!emails || emails.length === 0) return [];
@@ -413,17 +433,24 @@ export default class ToolsMail {
     }
 
     static async sendServerErrorReport(error: unknown, req?: Request) {
+        if (this.shouldSkipServerErrorReport(error, req)) {
+            console.info(
+                'Pomijam mailowy raport błędu serwera dla błędu startowego/developerskiego.',
+            );
+            return;
+        }
+
         const recipients = [
             process.env.PS_ADMIN_MAIL!,
-            'michal.kotala@envi.com.pl'
-        ];        
+            'michal.kotala@envi.com.pl',
+        ];
         const now = new Date().toISOString();
         const errorText =
             typeof error === 'string'
                 ? this.escapeHtml(error)
                 : error instanceof Error
-                ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
-                : this.escapeHtml(JSON.stringify(error, null, 2));
+                  ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
+                  : this.escapeHtml(JSON.stringify(error, null, 2));
 
         const subject = `[ERP ENVI] Błąd serwera${
             req ? ` ${req.method} ${req.originalUrl}` : ''
@@ -432,13 +459,13 @@ export default class ToolsMail {
         let requestInfoHtml = '';
         if (req) {
             const sessionJson = this.escapeHtml(
-                JSON.stringify(req.session, null, 2)
+                JSON.stringify(req.session, null, 2),
             );
             const bodyJson = this.escapeHtml(
-                JSON.stringify(req.parsedBody ?? req.body, null, 2)
+                JSON.stringify(req.parsedBody ?? req.body, null, 2),
             );
             const queryJson = this.escapeHtml(
-                JSON.stringify(req.parsedQuery ?? req.query, null, 2)
+                JSON.stringify(req.parsedQuery ?? req.query, null, 2),
             );
             requestInfoHtml = `
             <h5>Informacje o żądaniu:</h5>
@@ -473,26 +500,30 @@ export default class ToolsMail {
                 html,
                 footer: this.makeENVIFooter(),
             });
-            console.log('Raport błędu serwera został wysłany na adresy:', recipients.join(', '));
+            console.log(
+                'Raport błędu serwera został wysłany na adresy:',
+                recipients.join(', '),
+            );
         } catch (mailError) {
             console.error(
                 'Nie udało się wysłać raportu błędu przez e-mail:',
-                mailError
+                mailError,
             );
         }
     }
     static async sendClientErrorReport(req: Request) {
         const recipients = [
             process.env.PS_ADMIN_MAIL!,
-            'michal.kotala@envi.com.pl' 
-        ];        const now = new Date().toISOString();
+            'michal.kotala@envi.com.pl',
+        ];
+        const now = new Date().toISOString();
         const error = req.body.error;
         const errorText =
             typeof error === 'string'
                 ? this.escapeHtml(error)
                 : error instanceof Error
-                ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
-                : this.escapeHtml(JSON.stringify(error, null, 2));
+                  ? this.escapeHtml(`${error.message}\n\n${error.stack}`)
+                  : this.escapeHtml(JSON.stringify(error, null, 2));
 
         // Pobierz userData z sesji, jeśli dostępne
         const userData = req.session?.userData;
@@ -535,11 +566,14 @@ export default class ToolsMail {
                 html,
                 footer: this.makeENVIFooter(),
             });
-            console.log('Raport błędu klienta został wysłany na adresy:', recipients.join(', '));
+            console.log(
+                'Raport błędu klienta został wysłany na adresy:',
+                recipients.join(', '),
+            );
         } catch (mailError) {
             console.error(
                 'Nie udało się wysłać raportu błędu klienta przez e-mail:',
-                mailError
+                mailError,
             );
         }
     }

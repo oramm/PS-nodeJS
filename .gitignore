@@ -13,3 +13,6 @@ coverage/
 # Jest cache
 .jest/
 tmp/dev-runtime/
+
+# Claude Code worktrees (tworzone automatycznie, nie commitować)
+.claude/worktrees/
