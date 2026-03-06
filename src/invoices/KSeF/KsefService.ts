@@ -1531,6 +1531,9 @@ export default class KsefService {
     /**
      * Pobierz wszystkie faktury zakupowe z danego okresu
      * NIE wymaga sesji interaktywnej!
+     * 
+     * UWAGA: KSeF ogranicza zakresy dat do maksymalnie 3 miesięcy (interpretowane jako 89 dni dla bezpieczeństwa).
+     * Ta metoda automatycznie dzieli dłuższe okresy na chunki.
      *
      * @param dateFrom Data początkowa
      * @param dateTo Data końcowa
@@ -1539,12 +1542,73 @@ export default class KsefService {
         dateFrom: Date,
         dateTo: Date,
     ): Promise<PurchaseInvoiceListItem[]> {
-        // searchPurchaseInvoices zwraca wszystkie faktury za jednym razem (z eksportu)
-        const result = await this.searchPurchaseInvoices(dateFrom, dateTo);
+        // Podziel zakres na chunki po 89 dni (bezpieczny limit < 90 dni = ~3 miesiące)
+        const chunks = this.splitDateRangeIntoDayChunks(dateFrom, dateTo, 89);
+        
+        console.log(`   [KSeF] Data range podzielona na ${chunks.length} chunk(ów) (limit: 89 dni)`);
+        
+        const allInvoices: PurchaseInvoiceListItem[] = [];
+        
+        for (let i = 0; i < chunks.length; i++) {
+            const { from, to } = chunks[i];
+            console.log(`   [KSeF] Chunk ${i + 1}/${chunks.length}: ${from.toISOString().split('T')[0]} → ${to.toISOString().split('T')[0]}`);
+            
+            const result = await this.searchPurchaseInvoices(from, to);
+            allInvoices.push(...result.invoices);
+            
+            // Rate limiting: czekaj między chunkkami (KSeF limit: 16 żądań/minutę)
+            if (i < chunks.length - 1) {
+                await this.delay(1000); // 1 sekunda między chunkkami
+            }
+        }
+        
         console.log(
-            `   [KSeF] Pobrano łącznie ${result.invoices.length} faktur zakupowych`,
+            `   [KSeF] Pobrano łącznie ${allInvoices.length} faktur zakupowych`,
         );
-        return result.invoices;
+        return allInvoices;
+    }
+    
+    /**
+     * Podziel zakres dat na chunki o maksymalnie N dni
+     * (bezpieczniejsze niż liczenie miesięcy z powodu zmiennej długości miesięcy)
+     */
+    private splitDateRangeIntoDayChunks(
+        dateFrom: Date,
+        dateTo: Date,
+        daysPerChunk: number,
+    ): Array<{ from: Date; to: Date }> {
+        const chunks: Array<{ from: Date; to: Date }> = [];
+        let currentFrom = new Date(dateFrom);
+        const finalTo = new Date(dateTo);
+        
+        while (currentFrom < finalTo) {
+            let currentTo = new Date(currentFrom);
+            // Dodaj N dni (bezpieczne, bez problemów z setMonth())
+            currentTo.setDate(currentTo.getDate() + daysPerChunk);
+            
+            // Nie wolno przekroczyć dateTo
+            if (currentTo > finalTo) {
+                currentTo = new Date(finalTo);
+            }
+            
+            chunks.push({
+                from: new Date(currentFrom),
+                to: new Date(currentTo),
+            });
+            
+            // Następny chunk zaczyna się dzień po zakończeniu poprzedniego
+            currentFrom = new Date(currentTo);
+            currentFrom.setDate(currentFrom.getDate() + 1);
+        }
+        
+        return chunks;
+    }
+    
+    /**
+     * Czekaj N milisekund (rate limiting helper)
+     */
+    private delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**

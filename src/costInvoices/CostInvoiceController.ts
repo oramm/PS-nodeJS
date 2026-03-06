@@ -1,8 +1,9 @@
 import CostInvoiceRepository from './CostInvoiceRepository';
-import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostInvoiceStatus } from './CostInvoice';
+import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostInvoiceStatus, PaymentStatus } from './CostInvoice';
 import KsefService, { PurchaseInvoiceListItem } from '../invoices/KSeF/KsefService';
 import { XMLParser } from 'fast-xml-parser';
 import { extractSaleDateFromFa, extractDueDateFromFa } from './costInvoiceXmlHelpers';
+import { CostInvoiceValidator } from './CostInvoiceValidator';
 
 export class CostInvoiceError extends Error {
     statusCode: number;
@@ -123,13 +124,20 @@ export default class CostInvoiceController {
             console.log(`[CostInvoice] Znaleziono ${invoicesList.length} faktur, ${existingNumbers.size} już istnieje`);
 
             // 4. Importuj nowe faktury
-            for (const invoiceInfo of invoicesList) {
+            for (let idx = 0; idx < invoicesList.length; idx++) {
+                const invoiceInfo = invoicesList[idx];
                 if (existingNumbers.has(invoiceInfo.ksefNumber)) {
                     alreadyAdded++;
                     continue;
                 }
 
                 try {
+                    // Rate limiting: KSeF limit = 16 żądań/minutę (~4 sekundy na żądanie)
+                    // Opóźnienie co 3 żądania
+                    if (idx > 0 && idx % 3 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 4000));
+                    }
+                    
                     // Pobierz XML faktury
                     const xml = await ksefService.getInvoiceXml(invoiceInfo.ksefNumber);
 
@@ -201,6 +209,13 @@ export default class CostInvoiceController {
             ignoreAttributes: false,
             attributeNamePrefix: '@_',
             removeNSPrefix: true,
+            tagValueProcessor: (tagName, tagValue, jPath) => {
+                // NrRB (rachunek bankowy) zawsze jako string - zapobiega konwersji na notację naukową
+                if (tagName === 'NrRB' && typeof tagValue === 'string') {
+                    return tagValue;
+                }
+                return tagValue;
+            },
         });
 
         const parsed = parser.parse(xml);
@@ -369,7 +384,17 @@ export default class CostInvoiceController {
             return undefined;
         }
 
-        return String(nrRb).replace(/\s+/g, '').trim() || undefined;
+        // Wyciągnij same cyfry (usuń spacje, myślniki, etc.)
+        const digits = String(nrRb).replace(/[^\d]/g, '');
+
+        // Waliduj: polski rachunek = 26 cyfr
+        if (digits.length !== 26) {
+            console.warn(`[CostInvoice] Invalid bank account length (${digits.length}): ${nrRb}`);
+            return undefined;
+        }
+
+        // Formatuj: XX XXXX XXXX XXXX XXXX XXXX XXXX
+        return digits.replace(/(\d{2})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})/, '$1 $2 $3 $4 $5 $6 $7');
     }
 
     // =====================================================
@@ -439,6 +464,8 @@ export default class CostInvoiceController {
             vatDeductionPercentage?: number | string;
             categoryId?: number | string;
             notes?: string;
+            paymentStatus?: PaymentStatus | string;
+            paidAmount?: number | string;
             bookedBy?: number;
         },
     ): Promise<CostInvoice> {
@@ -450,6 +477,20 @@ export default class CostInvoiceController {
 
         if (settings.status && !invoice.isEditable) {
             throw new CostInvoiceError(400, `Nie można edytować faktury w statusie ${invoice.status}`);
+        }
+
+        // Walidacja płatności z kontekstem grossAmount
+        if (settings.paymentStatus !== undefined || settings.paidAmount !== undefined) {
+            const validationError = CostInvoiceValidator.validatePaymentUpdate(
+                {
+                    paymentStatus: settings.paymentStatus,
+                    paidAmount: settings.paidAmount,
+                },
+                invoice.grossAmount
+            );
+            if (validationError) {
+                throw new CostInvoiceError(400, validationError);
+            }
         }
 
         const fields: string[] = [];
@@ -471,6 +512,30 @@ export default class CostInvoiceController {
         if (settings.notes !== undefined) {
             invoice.notes = settings.notes;
             fields.push('notes');
+        }
+
+        // Obsługa płatności - normalizacja i zapis
+        if (settings.paymentStatus !== undefined) {
+            const paymentStatus = settings.paymentStatus as PaymentStatus;
+            invoice.paymentStatus = paymentStatus;
+            fields.push('paymentStatus');
+
+            // Automatyczna normalizacja paidAmount na podstawie statusu
+            if (paymentStatus === 'UNPAID') {
+                invoice.paidAmount = 0;
+                fields.push('paidAmount');
+            } else if (paymentStatus === 'PAID') {
+                invoice.paidAmount = invoice.grossAmount;
+                fields.push('paidAmount');
+            }
+        }
+
+        if (settings.paidAmount !== undefined) {
+            const paidAmount = this.parseDecimal(settings.paidAmount, 'paidAmount');
+            invoice.paidAmount = paidAmount;
+            if (!fields.includes('paidAmount')) {
+                fields.push('paidAmount');
+            }
         }
 
         if (settings.status === 'BOOKED') {
@@ -564,6 +629,14 @@ export default class CostInvoiceController {
         const parsed = typeof value === 'string' ? Number.parseFloat(value) : value;
         if (typeof parsed !== 'number' || Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
             throw new CostInvoiceError(400, `Nieprawidłowa wartość ${fieldName} (0-100)`);
+        }
+        return parsed;
+    }
+
+    private parseDecimal(value: number | string, fieldName: string): number {
+        const parsed = typeof value === 'string' ? Number.parseFloat(value.replace(',', '.')) : value;
+        if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
+            throw new CostInvoiceError(400, `Nieprawidłowa wartość ${fieldName}`);
         }
         return parsed;
     }
