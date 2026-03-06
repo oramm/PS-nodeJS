@@ -124,13 +124,20 @@ export default class CostInvoiceController {
             console.log(`[CostInvoice] Znaleziono ${invoicesList.length} faktur, ${existingNumbers.size} już istnieje`);
 
             // 4. Importuj nowe faktury
-            for (const invoiceInfo of invoicesList) {
+            for (let idx = 0; idx < invoicesList.length; idx++) {
+                const invoiceInfo = invoicesList[idx];
                 if (existingNumbers.has(invoiceInfo.ksefNumber)) {
                     alreadyAdded++;
                     continue;
                 }
 
                 try {
+                    // Rate limiting: KSeF limit = 16 żądań/minutę (~4 sekundy na żądanie)
+                    // Opóźnienie co 3 żądania
+                    if (idx > 0 && idx % 3 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 4000));
+                    }
+                    
                     // Pobierz XML faktury
                     const xml = await ksefService.getInvoiceXml(invoiceInfo.ksefNumber);
 
