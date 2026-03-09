@@ -11,15 +11,16 @@ Repozytorium klienta: `C:\Apache24\htdocs\ENVI.ProjectSite`
 ## Obowiązkowe pliki — przeczytaj oba na starcie:
 
 1. **CLAUDE.md klienta** — `C:\Apache24\htdocs\ENVI.ProjectSite\CLAUDE.md`
-   - Tech stack, architektura, komendy, routing, RepositoryReact core rules
+    - Tech stack, architektura, komendy, routing, RepositoryReact core rules
 2. **AI_GUIDELINES.md** — `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\AI_GUIDELINES.md`
-   - Szczegółowe wzorce: CRUD flow, FilterableTable, selektory, immutability, typowe błędy
+    - Szczegółowe wzorce: CRUD flow, FilterableTable, selektory, immutability, typowe błędy
 
 ## Opcjonalne pliki — doładuj wg potrzeby zadania:
 
 - Selektory → `instructions/selectors-architecture.md` + `instructions/business-object-selectors.md`
 - FilterableTable → `instructions/filterable-table-data-flow.md`
 - CRUD moduł → `instructions/crud-module-guide.md`
+- Weryfikacja wizualna UI → `instructions/ui-browser-loop.md`
 
 Ścieżki względem `C:\Apache24\htdocs\ENVI.ProjectSite\`.
 

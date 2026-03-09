@@ -17,6 +17,10 @@
 2. Add new runbooks under `documentation/team/runbooks/*`.
 3. Add onboarding or operations docs under `documentation/team/onboarding/*` and `documentation/team/operations/*`.
 
+## Package manager rule
+
+1. Always use `yarn` commands for install, build, test, and scripts (never npm/pnpm in this repo).
+
 ## Cross-repo workspace rules
 
 1. This repository is backend: `C:\Apache24\htdocs\PS-nodeJS`.
@@ -24,3 +28,4 @@
 3. If requested files are missing in current `cwd`, check the sibling repository by absolute path before reporting blocker.
 4. Do not conclude "files do not exist" until both repositories are checked.
 5. For frontend changes, switch working directory to `C:\Apache24\htdocs\ENVI.ProjectSite` and report touched files from that repo.
+6. For frontend UI verification tasks, refer to `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\ui-browser-loop.md`.

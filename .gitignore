@@ -16,3 +16,6 @@ tmp/dev-runtime/
 
 # Claude Code worktrees (tworzone automatycznie, nie commitować)
 .claude/worktrees/
+
+# Playwright MCP logs (tymczasowe artefakty lokalne)
+.playwright-mcp/

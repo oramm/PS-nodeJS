@@ -28,6 +28,7 @@ Base classes: `src/controllers/BaseController.ts` (Singleton, static methods, `w
 Full rules: `documentation/team/architecture/clean-architecture.md`
 
 ### Deprecated Patterns (MUST NOT use in new code)
+
 - ❌ `addNew()` → use `addFromDto()` or `add()`
 - ❌ `getList()` → use `find()`
 - ❌ `new Model(req.body)` in Router → use `Controller.addFromDto(dto)`
@@ -55,6 +56,7 @@ Full guide: `documentation/team/runbooks/testing.md`
 ## Canonical Docs (read on demand, not by default)
 
 **Architecture** (`documentation/team/architecture/`):
+
 - `clean-architecture.md` — rules (MUST READ for any code task)
 - `ai-decision-trees.md` — decision trees for AI
 - `clean-architecture-details.md` — detailed examples
@@ -66,6 +68,7 @@ Full guide: `documentation/team/runbooks/testing.md`
 - `system-map.md` — server-client system map
 
 **Operational** (`documentation/team/`):
+
 - `README.md` — doc structure and change policy
 - `onboarding/environment.md` — environment setup
 - `runbooks/testing.md` — testing framework
@@ -84,26 +87,28 @@ Po napisaniu lub zmodyfikowaniu kodu źródłowego:
 2. Przekaż mu TYLKO zmienione pliki (git diff)
 3. Subagent pracuje w IZOLOWANYM kontekście (fresh eyes)
 4. Czekaj na VERDICT:
-   - APPROVE → kontynuuj (commit / następny krok)
-   - REQUEST_CHANGES →
-     a) Napraw KAŻDY CRITICAL i HIGH
-     b) Rozważ MEDIUM
-     c) Ponów review
-     d) Max 3 rundy → jeśli nadal CHANGES → zapytaj człowieka
+    - APPROVE → kontynuuj (commit / następny krok)
+    - REQUEST_CHANGES →
+      a) Napraw KAŻDY CRITICAL i HIGH
+      b) Rozważ MEDIUM
+      c) Ponów review
+      d) Max 3 rundy → jeśli nadal CHANGES → zapytaj człowieka
 5. WYJĄTKI (można pominąć review):
-   - Zmiany TYLKO w plikach *.md (dokumentacja)
-   - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
+    - Zmiany TYLKO w plikach \*.md (dokumentacja)
+    - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
 
 Commit po review/docs realizuj przez `factory/prompts/committer.md` i dopiero po jawnym `COMMIT_APPROVED` od orchestratora.
 
 ## Factory: Cross-Tool Adapter
 
 Gdy pracujesz w trybie Dark Factory, stosuj wspolny adapter procesu:
+
 - `factory/TOOL-ADAPTERS.md` (kanoniczny workflow multi-tool)
 - `factory/adapters/codex.md` (skrot dla Codex)
 - `factory/adapters/claude-code.md` (skrot dla Claude Code)
 - `factory/adapters/copilot-vscode.md` (skrot dla Copilot w VS Code)
 
 Context Gate v1 (Low-Context First):
+
 - Start sesji z: `factory/CONCEPT.md`, `factory/TOOL-ADAPTERS.md`, `factory/prompts/reviewer.md`, `factory/prompts/planner.md`
 - Canonical docs doładowuj selektywnie, nie domyślnie.
