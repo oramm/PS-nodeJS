@@ -43,6 +43,20 @@ describe('ContractMeetingNotesController', () => {
             ToolsDocs,
             'updateTextRunsInNamedRanges',
         ).mockResolvedValue(undefined as any);
+        jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
+            data: {
+                namedRanges: {
+                    AGENDA_SECTION: {
+                        namedRanges: [
+                            {
+                                name: 'AGENDA_SECTION',
+                                ranges: [{ startIndex: 10, endIndex: 20 }],
+                            },
+                        ],
+                    },
+                },
+            },
+        } as any);
         jest.spyOn(ToolsDocs, 'insertAgendaStructure').mockResolvedValue(
             undefined as any,
         );
@@ -197,6 +211,50 @@ describe('ContractMeetingNotesController', () => {
                     body: 'Opis punktu',
                 },
             ],
+        );
+    });
+
+    it('stores warning when agenda placeholder is missing in template', async () => {
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getCreateContext',
+        ).mockResolvedValue({
+            contractId: 101,
+            contractNumber: 'C-101',
+            meetingProtocolsGdFolderId: 'existing-folder-101',
+            projectGdFolderId: 'project-folder-101',
+        });
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getNextSequenceNumberForContract',
+        ).mockResolvedValue(3);
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'addInDb',
+        ).mockResolvedValue(undefined as any);
+        jest.spyOn(MeetingArrangementRepository.prototype, 'find').mockResolvedValue([
+            {
+                name: 'Punkt 1',
+                description: 'Opis punktu',
+            } as any,
+        ]);
+        jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
+            data: { namedRanges: {} },
+        } as any);
+
+        const result = await ContractMeetingNotesController.addFromDto({
+            contractId: 101,
+            title: 'Meeting without placeholder',
+            meetingId: 51,
+        });
+
+        expect((result as any)._warnings).toContain(
+            'Szablon Google Docs nie zawiera znacznika #ENVI#AGENDA_SECTION# — punkty agendy nie zostały wstawione. Dodaj ten znacznik do szablonu protokołu.',
+        );
+        expect(ToolsDocs.insertAgendaStructure).toHaveBeenCalledWith(
+            mockAuth,
+            'doc-1',
+            [{ heading: 'Punkt 1', body: 'Opis punktu' }],
         );
     });
 });

@@ -158,13 +158,12 @@ export default class ContractMeetingNotesController extends BaseController<
                         fileId: createdProtocolGdId,
                     });
 
-                    const populateWarnings =
-                        await this.populateNoteDocument(
-                            authClient,
-                            createdProtocolGdId,
-                            payload,
-                            createContext,
-                        );
+                    const populateWarnings = await this.populateNoteDocument(
+                        authClient,
+                        createdProtocolGdId,
+                        payload,
+                        createContext,
+                    );
 
                     const note = new ContractMeetingNote({
                         contractId: payload.contractId,
@@ -246,10 +245,8 @@ export default class ContractMeetingNotesController extends BaseController<
         } catch (e: any) {
             if (e?.message?.includes('No tags for namedRanges found')) {
                 const msg =
-                    'Szablon Google Docs nie zawiera tagów #ENVI#...# — metadane nie zostały uzupełnione w dokumencie.';
-                console.warn(
-                    'ContractMeetingNotesController: ' + msg,
-                );
+                    'Szablon Google Docs nie zawiera tagów #ENVI#...# — metadane i agenda nie zostały uzupełnione. Dodaj do szablonu: #ENVI#MEETING_TITLE#, #ENVI#MEETING_DATE#, #ENVI#MEETING_LOCATION#, #ENVI#CONTRACT_NUMBER#, #ENVI#CREATED_BY#, #ENVI#AGENDA_SECTION#';
+                console.warn('ContractMeetingNotesController: ' + msg);
                 warnings.push(msg);
             } else {
                 throw e;
@@ -284,9 +281,7 @@ export default class ContractMeetingNotesController extends BaseController<
                 }
             }
             if (
-                !metadataRanges.find(
-                    (r) => r.rangeName === 'MEETING_LOCATION',
-                )
+                !metadataRanges.find((r) => r.rangeName === 'MEETING_LOCATION')
             ) {
                 metadataRanges.push({
                     rangeName: 'MEETING_LOCATION',
@@ -332,6 +327,24 @@ export default class ContractMeetingNotesController extends BaseController<
                     body: arr.description || ' ',
                 }));
 
+                if (hasNamedRanges) {
+                    const docForCheck = (
+                        await ToolsDocs.getDocument(authClient, documentId)
+                    ).data;
+                    const agendaRange = ToolsDocs.getNamedRangeByName(
+                        docForCheck,
+                        'AGENDA_SECTION',
+                    );
+                    if (!agendaRange) {
+                        const agendaMsg =
+                            'Szablon Google Docs nie zawiera znacznika #ENVI#AGENDA_SECTION# — punkty agendy nie zostały wstawione. Dodaj ten znacznik do szablonu protokołu.';
+                        console.warn(
+                            'ContractMeetingNotesController: ' + agendaMsg,
+                        );
+                        warnings.push(agendaMsg);
+                    }
+                }
+
                 await ToolsDocs.insertAgendaStructure(
                     authClient,
                     documentId,
@@ -344,11 +357,9 @@ export default class ContractMeetingNotesController extends BaseController<
 
     private async getPersonName(personId: number): Promise<string> {
         const sql = `SELECT Name, Surname FROM Persons WHERE Id = ?`;
-        const rows = (await ToolsDb.getQueryCallbackAsync(
-            sql,
-            undefined,
-            [personId],
-        )) as { Name?: string; Surname?: string }[];
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
+            personId,
+        ])) as { Name?: string; Surname?: string }[];
         if (rows.length > 0) {
             return `${rows[0].Name || ''} ${rows[0].Surname || ''}`.trim();
         }
