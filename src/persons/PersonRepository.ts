@@ -76,7 +76,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
     private isV2ReadEnabled(): boolean {
         return (
-            (process.env.PERSONS_MODEL_V2_READ_ENABLED || '').toLowerCase() ===
+            (process.env.PERSONS_MODEL_V2_LEGACY_READ || '').toLowerCase() !==
             'true'
         );
     }

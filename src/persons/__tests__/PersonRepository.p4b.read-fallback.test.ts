@@ -2,15 +2,15 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import PersonRepository from '../PersonRepository';
 
 describe('PersonRepository P4-B remove read fallback', () => {
-    const originalReadFlag = process.env.PERSONS_MODEL_V2_READ_ENABLED;
+    const originalReadFlag = process.env.PERSONS_MODEL_V2_LEGACY_READ;
 
     afterEach(() => {
-        process.env.PERSONS_MODEL_V2_READ_ENABLED = originalReadFlag;
+        process.env.PERSONS_MODEL_V2_LEGACY_READ = originalReadFlag;
         jest.restoreAllMocks();
     });
 
     it('does not fallback to legacy find path when v2 find fails', async () => {
-        process.env.PERSONS_MODEL_V2_READ_ENABLED = 'true';
+        delete process.env.PERSONS_MODEL_V2_LEGACY_READ; // V2 is default when flag is unset
         const repository = new PersonRepository();
         const v2Error = new Error('p4b-v2-find-failure');
 
@@ -30,7 +30,7 @@ describe('PersonRepository P4-B remove read fallback', () => {
     });
 
     it('does not fallback to legacy getSystemRole path when v2 getSystemRole returns undefined', async () => {
-        process.env.PERSONS_MODEL_V2_READ_ENABLED = 'true';
+        delete process.env.PERSONS_MODEL_V2_LEGACY_READ; // V2 is default when flag is unset
         const repository = new PersonRepository();
 
         const getSystemRoleV2Spy = jest
