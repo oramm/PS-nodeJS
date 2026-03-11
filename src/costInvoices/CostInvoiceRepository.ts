@@ -13,6 +13,9 @@ export default class CostInvoiceRepository {
         supplierBankAccount: boolean;
         paymentStatus: boolean;
         paidAmount: boolean;
+        paymentMethod: boolean;
+        invoiceType: boolean;
+        paymentDate: boolean;
     } | null = null;
     
     // =====================================================
@@ -135,6 +138,9 @@ export default class CostInvoiceRepository {
             'IssueDate',
             'SaleDate',
             'DueDate',
+            ...(optionalColumns.paymentMethod ? ['PaymentMethod'] : []),
+            ...(optionalColumns.invoiceType ? ['InvoiceType'] : []),
+            ...(optionalColumns.paymentDate ? ['PaymentDate'] : []),
             'NetAmount',
             'VatAmount',
             'GrossAmount',
@@ -163,6 +169,9 @@ export default class CostInvoiceRepository {
             invoice.issueDate,
             invoice.saleDate || null,
             invoice.dueDate || null,
+            ...(optionalColumns.paymentMethod ? [invoice.paymentMethod || null] : []),
+            ...(optionalColumns.invoiceType ? [invoice.invoiceType || null] : []),
+            ...(optionalColumns.paymentDate ? [invoice.paymentDate || null] : []),
             invoice.netAmount,
             invoice.vatAmount,
             invoice.grossAmount,
@@ -191,6 +200,9 @@ export default class CostInvoiceRepository {
         supplierBankAccount: boolean;
         paymentStatus: boolean;
         paidAmount: boolean;
+        paymentMethod: boolean;
+        invoiceType: boolean;
+        paymentDate: boolean;
     }> {
         if (this.optionalColumnsCache) {
             return this.optionalColumnsCache;
@@ -202,7 +214,7 @@ export default class CostInvoiceRepository {
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                     AND TABLE_NAME = 'CostInvoices'
-                    AND COLUMN_NAME IN ('SupplierBankAccount', 'PaymentStatus', 'PaidAmount')
+                    AND COLUMN_NAME IN ('SupplierBankAccount', 'PaymentStatus', 'PaidAmount', 'PaymentMethod', 'InvoiceType', 'PaymentDate')
             `,
             [],
         );
@@ -216,6 +228,9 @@ export default class CostInvoiceRepository {
             supplierBankAccount: columnNames.has('SupplierBankAccount'),
             paymentStatus: columnNames.has('PaymentStatus'),
             paidAmount: columnNames.has('PaidAmount'),
+            paymentMethod: columnNames.has('PaymentMethod'),
+            invoiceType: columnNames.has('InvoiceType'),
+            paymentDate: columnNames.has('PaymentDate'),
         };
 
         return this.optionalColumnsCache;
@@ -262,6 +277,58 @@ export default class CostInvoiceRepository {
     }
 
     /**
+     * Zaktualizuj pola wyprowadzane z XML (używane przez reparse).
+     * Nie resetuje ręcznie edytowanych pól (status, kategoria, notatki).
+     */
+    async updateParsedFields(
+        id: number,
+        data: {
+            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+            paidAmount: number;
+            paymentDate?: Date;
+            paymentMethod?: string;
+            invoiceType?: string;
+        },
+    ): Promise<void> {
+        const optionalColumns = await this.getOptionalColumnsAvailability();
+
+        const setClauses: string[] = [];
+        const params: any[] = [];
+
+        if (optionalColumns.paymentStatus) {
+            setClauses.push('PaymentStatus = ?');
+            params.push(data.paymentStatus);
+        }
+        if (optionalColumns.paidAmount) {
+            setClauses.push('PaidAmount = ?');
+            params.push(data.paidAmount);
+        }
+        if (optionalColumns.paymentMethod) {
+            setClauses.push('PaymentMethod = ?');
+            params.push(data.paymentMethod ?? null);
+        }
+        if (optionalColumns.invoiceType) {
+            setClauses.push('InvoiceType = ?');
+            params.push(data.invoiceType ?? null);
+        }
+        if (optionalColumns.paymentDate) {
+            setClauses.push('PaymentDate = ?');
+            params.push(data.paymentDate ?? null);
+        }
+
+        if (setClauses.length === 0) return;
+
+        setClauses.push('UpdatedAt = NOW()');
+        params.push(id);
+
+        const sql = mysql.format(
+            `UPDATE CostInvoices SET ${setClauses.join(', ')} WHERE Id = ?`,
+            params,
+        );
+        await ToolsDb.executeSQL(sql);
+    }
+
+    /**
      * Mapuj wiersz bazy na obiekt
      */
     private mapRowToInvoice(row: any): CostInvoice {
@@ -278,6 +345,9 @@ export default class CostInvoiceRepository {
             issueDate: row.IssueDate,
             saleDate: row.SaleDate,
             dueDate: row.DueDate,
+            paymentMethod: row.PaymentMethod ?? undefined,
+            invoiceType: row.InvoiceType ?? undefined,
+            paymentDate: row.PaymentDate ?? undefined,
             netAmount: row.NetAmount,
             vatAmount: row.VatAmount,
             grossAmount: row.GrossAmount,

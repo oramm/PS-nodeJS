@@ -24,9 +24,12 @@ export default class CostInvoice {
     
     // Dane faktury
     invoiceNumber: string;
+    invoiceType?: string;
     issueDate: Date;
     saleDate?: Date;
     dueDate?: Date;
+    paymentMethod?: string;
+    paymentDate?: Date;
     
     // Kwoty
     netAmount: number;
@@ -83,9 +86,12 @@ export default class CostInvoice {
         this.supplierBankAccount = data.supplierBankAccount;
         
         this.invoiceNumber = data.invoiceNumber || '';
+        this.invoiceType = data.invoiceType;
         this.issueDate = data.issueDate ? new Date(data.issueDate) : new Date();
         this.saleDate = data.saleDate ? new Date(data.saleDate) : undefined;
         this.dueDate = data.dueDate ? new Date(data.dueDate) : undefined;
+        this.paymentMethod = data.paymentMethod;
+        this.paymentDate = data.paymentDate ? new Date(data.paymentDate) : undefined;
         
         this.netAmount = parseDecimal(data.netAmount, 0);
         this.vatAmount = parseDecimal(data.vatAmount, 0);
@@ -166,9 +172,12 @@ export default class CostInvoice {
             supplierAddress: this.supplierAddress,
             supplierBankAccount: this.supplierBankAccount,
             invoiceNumber: this.invoiceNumber,
+            invoiceType: this.invoiceType,
             issueDate: formatDate(this.issueDate),
             saleDate: formatDate(this.saleDate),
             dueDate: formatDate(this.dueDate),
+            paymentMethod: this.paymentMethod,
+            paymentDate: formatDate(this.paymentDate),
             netAmount: this.netAmount,
             vatAmount: this.vatAmount,
             grossAmount: this.grossAmount,

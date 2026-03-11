@@ -76,6 +76,70 @@ app.post(
 // LISTA I SZCZEGÓŁY FAKTUR
 // =====================================================
 
+// =====================================================
+// RE-PARSE XML
+// =====================================================
+
+/**
+ * POST /cost-invoices/reparse-all
+ *
+ * Ponownie parsuje XML ze wszystkich faktur w bazie i aktualizuje pola
+ * wyprowadzane z XML: paymentStatus, paidAmount, paymentDate, paymentMethod, invoiceType.
+ * Używane do naprawienia faktur zaimportowanych przed wprowadzeniem nowych pól.
+ */
+app.post(
+    '/cost-invoices/reparse-all',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = ensureBookingPermission(req, res);
+            if (userId === null) return;
+
+            const result = await controller.reparseAllFromXml();
+
+            res.json({
+                success: true,
+                message: `Reparse zakończony: ${result.updated} zaktualizowanych, ${result.errors.length} błędów`,
+                data: result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+/**
+ * POST /cost-invoices/:id/reparse
+ *
+ * Ponownie parsuje XML wskazanej faktury.
+ */
+app.post(
+    '/cost-invoices/:id/reparse',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = ensureBookingPermission(req, res);
+            if (userId === null) return;
+
+            const rawId = String(req.params.id ?? '').trim();
+            if (!/^[1-9]\d*$/.test(rawId)) {
+                return res.status(400).json({ error: 'Nieprawidłowe id faktury' });
+            }
+            const id = parseInt(rawId, 10);
+            const invoice = await controller.reparseFromXml(id);
+
+            res.json({
+                success: true,
+                message: `Faktura ${id} przeparsowana pomyślnie`,
+                data: invoice.toJson(),
+            });
+        } catch (error: any) {
+            if (error?.statusCode) {
+                return res.status(error.statusCode).json({ error: error.message });
+            }
+            next(error);
+        }
+    },
+);
+
 /**
  * POST /cost-invoices
  * 

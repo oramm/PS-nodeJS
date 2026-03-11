@@ -2,7 +2,7 @@ import CostInvoiceRepository from './CostInvoiceRepository';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostInvoiceStatus, PaymentStatus } from './CostInvoice';
 import KsefService, { PurchaseInvoiceListItem } from '../invoices/KSeF/KsefService';
 import { XMLParser } from 'fast-xml-parser';
-import { extractSaleDateFromFa, extractDueDateFromFa } from './costInvoiceXmlHelpers';
+import { extractSaleDateFromFa, extractDueDateFromFa, extractPaymentMethodFromFa, extractPaymentInfoFromFa, extractInvoiceTypeFromFa } from './costInvoiceXmlHelpers';
 import { CostInvoiceValidator } from './CostInvoiceValidator';
 
 export class CostInvoiceError extends Error {
@@ -243,6 +243,12 @@ export default class CostInvoiceController {
         const supplierBankAccount =
             this.extractSupplierBankAccount(fa) || invoiceInfo.bankAccount;
 
+        // Forma płatności z XML
+        const paymentMethod = extractPaymentMethodFromFa(fa);
+
+        // Rodzaj faktury z XML (FA(3): Fa.RodzajFaktury)
+        const invoiceType = extractInvoiceTypeFromFa(fa);
+
         // Kwoty
         const podsumowanie = fa.Podsumowanie || {};
         let netAmount = parseDecimal(podsumowanie.WartoscNetto || podsumowanie.WartoscNetto_Faktura);
@@ -256,6 +262,9 @@ export default class CostInvoiceController {
 
         const currency = fa.KodWaluty || naglowek.KodWaluty || 'PLN';
 
+        // Status płatności z XML — obsługujemy zarówno Zaplacono=1, jak i wpłaty częściowe.
+        const { paymentStatus, paidAmount, paymentDate } = extractPaymentInfoFromFa(fa, grossAmount, netAmount);
+
         // Pozycje faktury
         const items = this.parseInvoiceItems(fa);
 
@@ -268,15 +277,20 @@ export default class CostInvoiceController {
             supplierAddress,
             supplierBankAccount,
             invoiceNumber: invoiceInfo.invoiceNumber || naglowek.NrFaktury,
+            invoiceType,
             issueDate,
             saleDate,
             dueDate,
+            paymentMethod,
             netAmount,
             vatAmount,
             grossAmount,
             currency,
             xmlContent: xml,
             status: 'NEW' as CostInvoiceStatus,
+            paymentStatus,
+            paidAmount,
+            paymentDate,
             bookingPercentage: 100,
             vatDeductionPercentage: 100,
         });
@@ -430,6 +444,111 @@ export default class CostInvoiceController {
             invoice._items = await this.repository.findItemsByInvoiceId(invoice.id!);
         }
         return invoice;
+    }
+
+    /**
+     * Ponownie sparsuj XML z bazy danych i zaktualizuj pola wyprowadzane z XML.
+     * Używane do naprawienia faktur zaimportowanych przed wprowadzeniem nowych pól
+     * (paymentStatus, paymentMethod, invoiceType, paymentDate).
+     */
+    async reparseFromXml(id: number): Promise<CostInvoice> {
+        const invoice = await this.repository.findById(id);
+        if (!invoice) throw new CostInvoiceError(404, `Faktura ${id} nie istnieje`);
+        if (!invoice.xmlContent) throw new CostInvoiceError(400, `Faktura ${id} nie ma zapisanego XML`);
+
+        const reparsed = this.extractParsedFieldsFromXml(invoice.xmlContent, invoice.grossAmount);
+        const protectedData = this.protectAlreadyPaidPaymentData(invoice, reparsed);
+        await this.repository.updateParsedFields(id, protectedData);
+
+        const updated = await this.repository.findById(id);
+        return updated!;
+    }
+
+    /**
+     * Ponownie sparsuj XML dla WSZYSTKICH faktur w bazie.
+     * Zwraca liczbę zaktualizowanych rekordów i listę błędów.
+     */
+    async reparseAllFromXml(): Promise<{ updated: number; errors: string[] }> {
+        const all = await this.repository.findAll();
+        const errors: string[] = [];
+        let updated = 0;
+
+        for (const invoice of all) {
+            if (!invoice.xmlContent) continue;
+            try {
+                const reparsed = this.extractParsedFieldsFromXml(invoice.xmlContent, invoice.grossAmount);
+                const protectedData = this.protectAlreadyPaidPaymentData(invoice, reparsed);
+                await this.repository.updateParsedFields(invoice.id!, protectedData);
+                updated++;
+            } catch (err: any) {
+                errors.push(`Faktura ${invoice.id} (${invoice.ksefNumber}): ${err.message}`);
+            }
+        }
+
+        console.log(`[CostInvoice] Reparse zakończony: ${updated} zaktualizowanych, ${errors.length} błędów`);
+        return { updated, errors };
+    }
+
+    /**
+     * Wyciąga pola parsowalne z XML (bez tworzenia pełnego obiektu CostInvoice)
+     */
+    private extractParsedFieldsFromXml(
+        xml: string,
+        grossAmount: number,
+    ): {
+        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+        paidAmount: number;
+        paymentDate?: Date;
+        paymentMethod?: string;
+        invoiceType?: string;
+    } {
+        const parser = new XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: '@_',
+            removeNSPrefix: true,
+        });
+
+        const parsed = parser.parse(xml);
+        const faktura = parsed.Faktura || parsed['tns:Faktura'] || {};
+        const fa = faktura.Fa || {};
+
+        const { paymentStatus, paidAmount, paymentDate } = extractPaymentInfoFromFa(fa, grossAmount);
+        const paymentMethod = extractPaymentMethodFromFa(fa);
+        const invoiceType = extractInvoiceTypeFromFa(fa);
+
+        return { paymentStatus, paidAmount, paymentDate, paymentMethod, invoiceType };
+    }
+
+    /**
+     * Nie nadpisuj danych płatności dla rekordów już oznaczonych jako PAID w bazie.
+     * Chroni ręcznie utrwalony status przed cofnięciem podczas reparse.
+     */
+    private protectAlreadyPaidPaymentData(
+        currentInvoice: CostInvoice,
+        reparsed: {
+            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+            paidAmount: number;
+            paymentDate?: Date;
+            paymentMethod?: string;
+            invoiceType?: string;
+        },
+    ): {
+        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+        paidAmount: number;
+        paymentDate?: Date;
+        paymentMethod?: string;
+        invoiceType?: string;
+    } {
+        if (currentInvoice.paymentStatus !== 'PAID') {
+            return reparsed;
+        }
+
+        return {
+            ...reparsed,
+            paymentStatus: 'PAID',
+            paidAmount: currentInvoice.paidAmount,
+            paymentDate: currentInvoice.paymentDate ?? reparsed.paymentDate,
+        };
     }
 
     /**
