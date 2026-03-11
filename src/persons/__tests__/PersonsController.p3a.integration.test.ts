@@ -17,12 +17,14 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
             },
         );
 
-        const { default: PersonsController } = await import('../PersonsController');
+        const { default: PersonsController } =
+            await import('../PersonsController');
         (PersonsController as any).instance = undefined;
     });
 
     it('upserts account via dedicated v2 path', async () => {
-        const { default: PersonsController } = await import('../PersonsController');
+        const { default: PersonsController } =
+            await import('../PersonsController');
         const upsertSpy = jest
             .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
             .mockResolvedValue(undefined);
@@ -57,8 +59,73 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
         );
     });
 
+    it('treats undefined account fields as not provided in v2 upsert', async () => {
+        const { default: PersonsController } =
+            await import('../PersonsController');
+        const upsertSpy = jest
+            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
+            .mockResolvedValue(undefined);
+        const getAccountSpy = jest
+            .spyOn(PersonRepository.prototype, 'getPersonAccountV2')
+            .mockResolvedValue(undefined);
+
+        await expect(
+            PersonsController.upsertPersonAccountV2({
+                personId: 310010,
+                systemRoleId: undefined,
+                systemEmail: undefined,
+                googleId: undefined,
+                googleRefreshToken: undefined,
+                microsoftId: undefined,
+                microsoftRefreshToken: undefined,
+                isActive: undefined,
+            }),
+        ).rejects.toThrow('No account fields provided for v2 account upsert');
+
+        expect(ToolsDb.transaction).not.toHaveBeenCalled();
+        expect(upsertSpy).not.toHaveBeenCalled();
+        expect(getAccountSpy).not.toHaveBeenCalled();
+    });
+
+    it('preserves null account values as explicit clears in v2 upsert', async () => {
+        const { default: PersonsController } =
+            await import('../PersonsController');
+        const upsertSpy = jest
+            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
+            .mockResolvedValue(undefined);
+        const getAccountSpy = jest
+            .spyOn(PersonRepository.prototype, 'getPersonAccountV2')
+            .mockResolvedValue({
+                personId: 310011,
+                systemEmail: undefined,
+                isActive: true,
+            });
+
+        const result = await PersonsController.upsertPersonAccountV2({
+            personId: 310011,
+            systemEmail: null as any,
+        });
+
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(upsertSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 310011,
+                systemEmail: null,
+            }),
+            mockConn,
+            ['systemEmail'],
+        );
+        expect(getAccountSpy).toHaveBeenCalledWith(310011);
+        expect(result).toEqual(
+            expect.objectContaining({
+                personId: 310011,
+            }),
+        );
+    });
+
     it('upserts profile via dedicated v2 path', async () => {
-        const { default: PersonsController } = await import('../PersonsController');
+        const { default: PersonsController } =
+            await import('../PersonsController');
         const upsertProfileSpy = jest
             .spyOn(PersonRepository.prototype, 'upsertPersonProfileInDb')
             .mockResolvedValue({
@@ -95,7 +162,8 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
     });
 
     it('creates experience via dedicated v2 path', async () => {
-        const { default: ExperienceController } = await import('../experiences/ExperienceController');
+        const { default: ExperienceController } =
+            await import('../experiences/ExperienceController');
         const addExperienceSpy = jest
             .spyOn(ExperienceRepository.prototype, 'addExperienceInDb')
             .mockResolvedValue({
@@ -107,15 +175,12 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
                 isCurrent: true,
             });
 
-        const result = await ExperienceController.addFromDto(
-            310003,
-            {
-                organizationName: 'ENVI',
-                positionName: 'Backend Developer',
-                isCurrent: true,
-                sortOrder: 1,
-            },
-        );
+        const result = await ExperienceController.addFromDto(310003, {
+            organizationName: 'ENVI',
+            positionName: 'Backend Developer',
+            isCurrent: true,
+            sortOrder: 1,
+        });
 
         expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
         expect(addExperienceSpy).toHaveBeenCalledWith(
@@ -137,7 +202,8 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
     });
 
     it('findExperiences delegates to ExperienceRepository.find with orConditions', async () => {
-        const { default: ExperienceController } = await import('../experiences/ExperienceController');
+        const { default: ExperienceController } =
+            await import('../experiences/ExperienceController');
         const findSpy = jest
             .spyOn(ExperienceRepository.prototype, 'find')
             .mockResolvedValue([
@@ -151,10 +217,9 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
                 } as any,
             ]);
 
-        const result = await ExperienceController.find(
-            310003,
-            [{ searchText: 'ENVI' }],
-        );
+        const result = await ExperienceController.find(310003, [
+            { searchText: 'ENVI' },
+        ]);
 
         expect(findSpy).toHaveBeenCalledWith(310003, [{ searchText: 'ENVI' }]);
         expect(result).toEqual([
@@ -166,7 +231,8 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
     });
 
     it('findExperiences works with empty orConditions', async () => {
-        const { default: ExperienceController } = await import('../experiences/ExperienceController');
+        const { default: ExperienceController } =
+            await import('../experiences/ExperienceController');
         const findSpy = jest
             .spyOn(ExperienceRepository.prototype, 'find')
             .mockResolvedValue([]);

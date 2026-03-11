@@ -1,10 +1,7 @@
 import Person from './Person';
 import { UserData } from '../types/sessionTypes';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
-import {
-    PersonAccountV2Payload,
-    PersonProfileV2Payload,
-} from '../types/types';
+import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
@@ -297,8 +294,14 @@ export default class PersonsController extends BaseController<
             throw new Error('personId is required');
         }
 
+        const providedAccountFields = Object.entries(accountData)
+            .filter(
+                ([fieldName, fieldValue]) =>
+                    fieldName !== 'personId' && fieldValue !== undefined,
+            )
+            .map(([fieldName]) => fieldName);
         const fieldsToSync = instance.repository.getAccountWriteFields(
-            Object.keys(accountData).filter((key) => key !== 'personId'),
+            providedAccountFields,
         );
         if (fieldsToSync.length === 0) {
             throw new Error('No account fields provided for v2 account upsert');
@@ -331,9 +334,7 @@ export default class PersonsController extends BaseController<
         return account;
     }
 
-    static async getPersonProfileV2(
-        personId: number,
-    ) {
+    static async getPersonProfileV2(personId: number) {
         const instance = this.getInstance();
         return instance.repository.getPersonProfileV2(personId);
     }
