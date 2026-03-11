@@ -2,12 +2,28 @@ import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
 
+const ACCOUNT_UPSERT_WRITE_FIELDS = [
+    'systemRoleId',
+    'systemEmail',
+    'googleId',
+    'googleRefreshToken',
+    'microsoftId',
+    'microsoftRefreshToken',
+    'isActive',
+] as const;
+
 const parsePositiveInt = (raw: string, fieldName: string): number => {
     const value = Number(raw);
     if (!Number.isInteger(value) || value <= 0) {
         throw new Error(`${fieldName} must be a positive integer`);
     }
     return value;
+};
+
+const hasAccountUpsertWriteField = (payload: any): boolean => {
+    return ACCOUNT_UPSERT_WRITE_FIELDS.some(
+        (fieldName) => payload?.[fieldName] !== undefined,
+    );
 };
 
 /**
@@ -139,6 +155,11 @@ app.put(
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');
             const payload = req.parsedBody ?? req.body;
+            if (!hasAccountUpsertWriteField(payload)) {
+                return res.status(400).json({
+                    error: 'Brak danych konta do aktualizacji. Przekaż co najmniej jedno pole konta.',
+                });
+            }
             const account = await PersonsController.upsertPersonAccountV2({
                 personId,
                 systemRoleId: payload?.systemRoleId,

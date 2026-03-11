@@ -317,6 +317,7 @@ export default class PersonsController extends BaseController<
                     googleRefreshToken: accountData.googleRefreshToken,
                     microsoftId: accountData.microsoftId,
                     microsoftRefreshToken: accountData.microsoftRefreshToken,
+                    isActive: accountData.isActive,
                 },
                 conn,
                 fieldsToSync,

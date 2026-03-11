@@ -123,6 +123,42 @@ describe('PersonsController P3-A v2 dedicated endpoints', () => {
         );
     });
 
+    it('supports isActive-only account updates in v2 upsert', async () => {
+        const { default: PersonsController } =
+            await import('../PersonsController');
+        const upsertSpy = jest
+            .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
+            .mockResolvedValue(undefined);
+        const getAccountSpy = jest
+            .spyOn(PersonRepository.prototype, 'getPersonAccountV2')
+            .mockResolvedValue({
+                personId: 310012,
+                isActive: false,
+            });
+
+        const result = await PersonsController.upsertPersonAccountV2({
+            personId: 310012,
+            isActive: false,
+        });
+
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(upsertSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 310012,
+                isActive: false,
+            }),
+            mockConn,
+            ['isActive'],
+        );
+        expect(getAccountSpy).toHaveBeenCalledWith(310012);
+        expect(result).toEqual(
+            expect.objectContaining({
+                personId: 310012,
+                isActive: false,
+            }),
+        );
+    });
+
     it('upserts profile via dedicated v2 path', async () => {
         const { default: PersonsController } =
             await import('../PersonsController');

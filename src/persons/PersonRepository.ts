@@ -33,6 +33,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         'googleRefreshToken',
         'microsoftId',
         'microsoftRefreshToken',
+        'isActive',
     ] as const;
 
     static readonly PROFILE_FIELDS = [
@@ -501,6 +502,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             googleRefreshToken?: string;
             microsoftId?: string;
             microsoftRefreshToken?: string;
+            isActive?: boolean;
         },
         conn: mysql.PoolConnection,
         fieldsToSync: Array<
@@ -510,6 +512,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'googleRefreshToken'
             | 'microsoftId'
             | 'microsoftRefreshToken'
+            | 'isActive'
         > = [
             'systemRoleId',
             'systemEmail',
@@ -517,6 +520,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             'googleRefreshToken',
             'microsoftId',
             'microsoftRefreshToken',
+            'isActive',
         ],
     ): Promise<void> {
         if (!person.id)
@@ -541,6 +545,9 @@ export default class PersonRepository extends BaseRepository<Person> {
             microsoftRefreshToken:
                 fieldsToSync.includes('microsoftRefreshToken') &&
                 person.microsoftRefreshToken !== undefined,
+            isActive:
+                fieldsToSync.includes('isActive') &&
+                person.isActive !== undefined,
         };
 
         if (!Object.values(syncFieldMap).some(Boolean)) return;
@@ -591,6 +598,10 @@ export default class PersonRepository extends BaseRepository<Person> {
                     setParts.push('MicrosoftRefreshToken = ?');
                     updateValues.push(person.microsoftRefreshToken ?? null);
                 }
+                if (syncFieldMap.isActive) {
+                    setParts.push('IsActive = ?');
+                    updateValues.push(person.isActive ? 1 : 0);
+                }
 
                 updateValues.push(person.id);
                 await conn.execute(
@@ -631,6 +642,11 @@ export default class PersonRepository extends BaseRepository<Person> {
                     columns.push('MicrosoftRefreshToken');
                     placeholders.push('?');
                     insertValues.push(person.microsoftRefreshToken ?? null);
+                }
+                if (syncFieldMap.isActive) {
+                    columns.push('IsActive');
+                    placeholders.push('?');
+                    insertValues.push(person.isActive ? 1 : 0);
                 }
 
                 await conn.execute(
@@ -748,6 +764,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         | 'googleRefreshToken'
         | 'microsoftId'
         | 'microsoftRefreshToken'
+        | 'isActive'
     > {
         const accountFields = new Set<string>([
             ...PersonRepository.ACCOUNT_FIELDS,
@@ -761,6 +778,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'googleRefreshToken'
             | 'microsoftId'
             | 'microsoftRefreshToken'
+            | 'isActive'
         >;
     }
 
