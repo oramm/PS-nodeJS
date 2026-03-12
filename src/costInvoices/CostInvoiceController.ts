@@ -424,6 +424,8 @@ export default class CostInvoiceController {
         dateTo?: Date;
         supplierNip?: string;
         categoryId?: number;
+        paymentStatus?: string;
+        paymentMethod?: string;
     }): Promise<CostInvoice[]> {
         const invoices = await this.repository.findAll(filters);
 

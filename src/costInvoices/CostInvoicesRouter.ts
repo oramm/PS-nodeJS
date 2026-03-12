@@ -2,8 +2,36 @@ import { Request, Response, NextFunction } from 'express';
 import { app } from '../index';
 import CostInvoiceController from './CostInvoiceController';
 import { SystemRoleName } from '../types/sessionTypes';
+import { VALID_PAYMENT_STATUSES } from './CostInvoiceValidator';
+import { PaymentMethodFilterValues } from './costInvoicePaymentMethodFilters';
 
 const controller = new CostInvoiceController();
+const allowedPaymentStatuses = new Set<string>(VALID_PAYMENT_STATUSES);
+const allowedPaymentMethods = new Set<string>(Object.values(PaymentMethodFilterValues));
+
+function assignPaymentFilters(
+    source: any,
+    filters: { paymentStatus?: string; paymentMethod?: string },
+    res: Response,
+): boolean {
+    if (source.paymentStatus) {
+        if (!allowedPaymentStatuses.has(source.paymentStatus)) {
+            res.status(400).json({ error: 'Nieprawidłowy paymentStatus' });
+            return false;
+        }
+        filters.paymentStatus = source.paymentStatus;
+    }
+
+    if (source.paymentMethod) {
+        if (!allowedPaymentMethods.has(source.paymentMethod)) {
+            res.status(400).json({ error: 'Nieprawidłowy paymentMethod' });
+            return false;
+        }
+        filters.paymentMethod = source.paymentMethod;
+    }
+
+    return true;
+}
 
 function ensureBookingPermission(req: Request, res: Response): number | null {
     const userData = (req.session as any)?.userData;
@@ -146,12 +174,14 @@ app.post(
  * Pobierz listę faktur kosztowych z filtrami w body (standard projektu)
  * 
  * Body:
- * - orConditions?: Array<{ status?, dateFrom?, dateTo?, supplierNip?, categoryId? }>
+ * - orConditions?: Array<{ status?, dateFrom?, dateTo?, supplierNip?, categoryId?, paymentStatus?, paymentMethod? }>
  * - status?: 'NEW' | 'EXCLUDED' | 'BOOKED'
  * - dateFrom?: string (ISO date)
  * - dateTo?: string (ISO date)
  * - supplierNip?: string
  * - categoryId?: number
+ * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+ * - paymentMethod?: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'MOBILE' | 'VOUCHER' | 'CHECK' | 'CREDIT' | 'OTHER_OR_EMPTY'
  */
 app.post(
     '/cost-invoices',
@@ -168,6 +198,7 @@ app.post(
                 if (cond.dateTo) filters.dateTo = new Date(cond.dateTo);
                 if (cond.supplierNip) filters.supplierNip = cond.supplierNip;
                 if (cond.categoryId) filters.categoryId = parseInt(cond.categoryId, 10);
+                if (!assignPaymentFilters(cond, filters, res)) return;
             } else {
                 // Bezpośrednie filtry w body
                 if (body.status) filters.status = body.status;
@@ -175,6 +206,7 @@ app.post(
                 if (body.dateTo) filters.dateTo = new Date(body.dateTo);
                 if (body.supplierNip) filters.supplierNip = body.supplierNip;
                 if (body.categoryId) filters.categoryId = parseInt(body.categoryId, 10);
+                if (!assignPaymentFilters(body, filters, res)) return;
             }
 
             const invoices = await controller.findAll(filters);
@@ -198,6 +230,8 @@ app.post(
  * - dateTo?: string (ISO date)
  * - supplierNip?: string
  * - categoryId?: number
+ * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+ * - paymentMethod?: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'MOBILE' | 'VOUCHER' | 'CHECK' | 'CREDIT' | 'OTHER_OR_EMPTY'
  */
 app.get(
     '/cost-invoices',
@@ -210,6 +244,7 @@ app.get(
             if (req.query.dateTo) filters.dateTo = new Date(req.query.dateTo as string);
             if (req.query.supplierNip) filters.supplierNip = req.query.supplierNip as string;
             if (req.query.categoryId) filters.categoryId = parseInt(req.query.categoryId as string, 10);
+            if (!assignPaymentFilters(req.query, filters, res)) return;
 
             const invoices = await controller.findAll(filters);
 

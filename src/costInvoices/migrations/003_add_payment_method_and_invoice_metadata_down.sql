@@ -1,0 +1,10 @@
+-- =====================================================
+-- Rollback migracji 003
+-- =====================================================
+--
+-- Celowo brak automatycznego DROP COLUMN.
+-- Po wdrozeniu i zapisaniu danych w PaymentMethod / InvoiceType / PaymentDate
+-- rollback przez usuwanie kolumn prowadzilby do utraty danych.
+--
+-- Jesli potrzebne jest wycofanie zmiany, nalezy wykonac to recznie
+-- po ocenie danych i planie ich zachowania / migracji.

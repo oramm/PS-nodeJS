@@ -2,6 +2,7 @@ import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostCategory } from './CostInvoice';
 import { toPaymentStatus } from './CostInvoiceValidator';
+import { buildPaymentMethodFilterSql } from './costInvoicePaymentMethodFilters';
 
 /**
  * Repository dla faktur kosztowych
@@ -65,6 +66,8 @@ export default class CostInvoiceRepository {
         dateTo?: Date;
         supplierNip?: string;
         categoryId?: number;
+        paymentStatus?: string;
+        paymentMethod?: string;
     }): Promise<CostInvoice[]> {
         const conditions: string[] = ['1=1'];
         const params: any[] = [];
@@ -88,6 +91,28 @@ export default class CostInvoiceRepository {
         if (filters?.categoryId) {
             conditions.push('ci.CategoryId = ?');
             params.push(filters.categoryId);
+        }
+        if (filters?.paymentStatus || filters?.paymentMethod) {
+            const optionalColumns = await this.getOptionalColumnsAvailability();
+            if (filters.paymentStatus) {
+                if (!optionalColumns.paymentStatus) {
+                    throw new Error(
+                        'Filtrowanie po statusie płatności wymaga kolumny PaymentStatus w tabeli CostInvoices.',
+                    );
+                }
+                conditions.push('ci.PaymentStatus = ?');
+                params.push(filters.paymentStatus);
+            }
+            if (filters.paymentMethod) {
+                if (!optionalColumns.paymentMethod) {
+                    throw new Error(
+                        'Filtrowanie po formie płatności wymaga kolumny PaymentMethod w tabeli CostInvoices.',
+                    );
+                }
+                const paymentMethodFilter = buildPaymentMethodFilterSql(filters.paymentMethod);
+                conditions.push(paymentMethodFilter.condition);
+                params.push(...paymentMethodFilter.params);
+            }
         }
 
         const sql = mysql.format(`

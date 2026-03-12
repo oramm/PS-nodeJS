@@ -1,6 +1,6 @@
 import { PaymentStatus } from './CostInvoice';
 
-const VALID_PAYMENT_STATUSES: PaymentStatus[] = ['UNPAID', 'PARTIALLY_PAID', 'PAID'];
+export const VALID_PAYMENT_STATUSES: PaymentStatus[] = ['UNPAID', 'PARTIALLY_PAID', 'PAID'];
 
 /**
  * Walidator dla operacji na fakturach kosztowych
