@@ -143,6 +143,45 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             expect(result.paidAmount).toBe(1230);
         });
 
+        it('POSITIVE: Should auto-normalize paidAmount=0 when paymentStatus=NOT_APPLICABLE', async () => {
+            const invoiceId = 1;
+            const mockInvoice = new CostInvoice({
+                id: invoiceId,
+                ksefNumber: 'TEST-003A',
+                supplierName: 'Test Supplier',
+                invoiceNumber: 'FK/2024/03A',
+                issueDate: new Date('2024-01-01'),
+                netAmount: -120.33,
+                vatAmount: -27.67,
+                grossAmount: -148,
+                currency: 'PLN',
+                status: 'NEW',
+                paymentStatus: 'UNPAID',
+                paidAmount: 0,
+                bookingPercentage: 100,
+                vatDeductionPercentage: 100,
+            });
+            mockInvoice._items = [];
+
+            mockRepository.findById.mockResolvedValue(mockInvoice);
+            mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
+            mockRepository.update.mockResolvedValue(undefined);
+
+            const result = await controller.updateBookingSettings(invoiceId, {
+                paymentStatus: 'NOT_APPLICABLE',
+            });
+
+            expect(mockRepository.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    paymentStatus: 'NOT_APPLICABLE',
+                    paidAmount: 0,
+                }),
+                expect.arrayContaining(['paymentStatus', 'paidAmount'])
+            );
+            expect(result.paymentStatus).toBe('NOT_APPLICABLE');
+            expect(result.paidAmount).toBe(0);
+        });
+
         it('NEGATIVE: Should reject invalid paymentStatus', async () => {
             // Arrange
             const invoiceId = 1;
@@ -303,6 +342,37 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                     paidAmount: 1230,
                 })
             ).rejects.toThrow(/PARTIALLY_PAID wymaga paidAmount < grossAmount/);
+        });
+
+        it('NEGATIVE: Should reject NOT_APPLICABLE with paidAmount > 0', async () => {
+            const invoiceId = 1;
+            const mockInvoice = new CostInvoice({
+                id: invoiceId,
+                ksefNumber: 'TEST-008A',
+                supplierName: 'Test Supplier',
+                invoiceNumber: 'FK/2024/08A',
+                issueDate: new Date('2024-01-01'),
+                netAmount: -120.33,
+                vatAmount: -27.67,
+                grossAmount: -148,
+                currency: 'PLN',
+                status: 'NEW',
+                paymentStatus: 'UNPAID',
+                paidAmount: 0,
+                bookingPercentage: 100,
+                vatDeductionPercentage: 100,
+            });
+            mockInvoice._items = [];
+
+            mockRepository.findById.mockResolvedValue(mockInvoice);
+            mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
+
+            await expect(
+                controller.updateBookingSettings(invoiceId, {
+                    paymentStatus: 'NOT_APPLICABLE',
+                    paidAmount: 1,
+                })
+            ).rejects.toThrow(/NOT_APPLICABLE wymaga paidAmount = 0/);
         });
     });
 

@@ -310,6 +310,28 @@ describe('extractPaymentInfoFromFa', () => {
             paidAmount: 0,
         });
     });
+
+    it('NOT_APPLICABLE gdy dokument ma ujemne brutto i brak Platnosc', () => {
+        expect(extractPaymentInfoFromFa({}, -148.0, -120.33)).toEqual({
+            paymentStatus: 'NOT_APPLICABLE',
+            paidAmount: 0,
+        });
+    });
+
+    it('NOT_APPLICABLE gdy dokument ma ujemne brutto i brak aktywnej flagi płatności', () => {
+        const fa = { Platnosc: { TerminPlatnosci: { Termin: '2026-03-02' } } };
+        expect(extractPaymentInfoFromFa(fa, -148.0, -120.33)).toEqual({
+            paymentStatus: 'NOT_APPLICABLE',
+            paidAmount: 0,
+        });
+    });
+
+    it('PAID pozostaje nadrzędne dla dokumentu ujemnego, gdy KSeF ma Zaplacono=1', () => {
+        expect(extractPaymentInfoFromFa(faFullyPaid(), -148.0, -120.33)).toMatchObject({
+            paymentStatus: 'PAID',
+            paidAmount: -148.0,
+        });
+    });
 });
 
 describe('extractInvoiceTypeFromFa', () => {

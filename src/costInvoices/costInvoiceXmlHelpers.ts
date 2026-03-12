@@ -94,14 +94,16 @@ export function extractInvoiceTypeFromFa(fa: any): string | undefined {
  *   - suma KwotaZaplatyCzesciowej >= grossAmount → PAID, paymentDate = najnowsza DataZaplatyCzesciowej
  *   - 0 < suma < grossAmount                     → PARTIALLY_PAID, paymentDate = najnowsza DataZaplatyCzesciowej
  *   - brak flag płatności lub kwota=0            → UNPAID
+ *   - dokument ujemny bez danych płatności       → NOT_APPLICABLE
  */
 export function extractPaymentInfoFromFa(
     fa: any,
     grossAmount: number,
     netAmount?: number,
-): { paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID'; paidAmount: number; paymentDate?: Date } {
+): { paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'NOT_APPLICABLE'; paidAmount: number; paymentDate?: Date } {
     const platnosc = fa?.Platnosc;
-    if (!platnosc) return { paymentStatus: 'UNPAID', paidAmount: 0 };
+    const defaultStatus = grossAmount < 0 ? 'NOT_APPLICABLE' : 'UNPAID';
+    if (!platnosc) return { paymentStatus: defaultStatus, paidAmount: 0 };
     void netAmount;
 
     // FA(3): osobny znacznik dla pełnej zapłaty ma wyższy priorytet niż wpłaty częściowe.
@@ -116,12 +118,12 @@ export function extractPaymentInfoFromFa(
 
     // FA(3): brak aktywnego znacznika płatności częściowej → brak wpłat.
     if (!isKsefFlagEnabled(platnosc.ZnacznikZaplatyCzesciowej)) {
-        return { paymentStatus: 'UNPAID', paidAmount: 0 };
+        return { paymentStatus: defaultStatus, paidAmount: 0 };
     }
 
     // ZaplataCzesciowa może być obiektem lub tablicą (wiele wpłat)
     let wpłaty = platnosc.ZaplataCzesciowa;
-    if (!wpłaty) return { paymentStatus: 'UNPAID', paidAmount: 0 };
+    if (!wpłaty) return { paymentStatus: defaultStatus, paidAmount: 0 };
     if (!Array.isArray(wpłaty)) wpłaty = [wpłaty];
 
     const totalPaid = wpłaty.reduce((sum: number, z: any) => {
@@ -129,7 +131,7 @@ export function extractPaymentInfoFromFa(
         return sum + (isFinite(kwota) && kwota > 0 ? kwota : 0);
     }, 0);
 
-    if (totalPaid <= 0) return { paymentStatus: 'UNPAID', paidAmount: 0 };
+    if (totalPaid <= 0) return { paymentStatus: defaultStatus, paidAmount: 0 };
 
     // Najnowsza data wpłaty częściowej
     const partialDates = wpłaty

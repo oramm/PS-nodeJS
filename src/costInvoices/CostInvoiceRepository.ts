@@ -308,7 +308,7 @@ export default class CostInvoiceRepository {
     async updateParsedFields(
         id: number,
         data: {
-            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'NOT_APPLICABLE';
             paidAmount: number;
             paymentDate?: Date;
             paymentMethod?: string;

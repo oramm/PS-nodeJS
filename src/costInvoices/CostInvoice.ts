@@ -234,8 +234,9 @@ export type CostInvoiceStatus = 'NEW' | 'EXCLUDED' | 'BOOKED';
  * UNPAID - niezapłacona
  * PARTIALLY_PAID - częściowo zapłacona
  * PAID - zapłacona
+ * NOT_APPLICABLE - status płatności nie ma zastosowania (np. korekta in minus bez danych płatności)
  */
-export type PaymentStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+export type PaymentStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
 
 /**
  * Model pozycji faktury kosztowej

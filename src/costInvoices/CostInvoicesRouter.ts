@@ -180,7 +180,7 @@ app.post(
  * - dateTo?: string (ISO date)
  * - supplierNip?: string
  * - categoryId?: number
- * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+ * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE'
  * - paymentMethod?: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'MOBILE' | 'VOUCHER' | 'CHECK' | 'CREDIT' | 'OTHER_OR_EMPTY'
  */
 app.post(
@@ -230,7 +230,7 @@ app.post(
  * - dateTo?: string (ISO date)
  * - supplierNip?: string
  * - categoryId?: number
- * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+ * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE'
  * - paymentMethod?: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'MOBILE' | 'VOUCHER' | 'CHECK' | 'CREDIT' | 'OTHER_OR_EMPTY'
  */
 app.get(
@@ -350,7 +350,7 @@ app.get(
  * - vatDeductionPercentage?: number (0-100)
  * - categoryId?: number
  * - notes?: string
- * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+ * - paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE'
  * - paidAmount?: number
  */
 app.patch(

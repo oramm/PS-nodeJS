@@ -498,7 +498,7 @@ export default class CostInvoiceController {
         xml: string,
         grossAmount: number,
     ): {
-        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'NOT_APPLICABLE';
         paidAmount: number;
         paymentDate?: Date;
         paymentMethod?: string;
@@ -528,14 +528,14 @@ export default class CostInvoiceController {
     private protectAlreadyPaidPaymentData(
         currentInvoice: CostInvoice,
         reparsed: {
-            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+            paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'NOT_APPLICABLE';
             paidAmount: number;
             paymentDate?: Date;
             paymentMethod?: string;
             invoiceType?: string;
         },
     ): {
-        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID';
+        paymentStatus: 'PAID' | 'PARTIALLY_PAID' | 'UNPAID' | 'NOT_APPLICABLE';
         paidAmount: number;
         paymentDate?: Date;
         paymentMethod?: string;
@@ -642,7 +642,7 @@ export default class CostInvoiceController {
             fields.push('paymentStatus');
 
             // Automatyczna normalizacja paidAmount na podstawie statusu
-            if (paymentStatus === 'UNPAID') {
+            if (paymentStatus === 'UNPAID' || paymentStatus === 'NOT_APPLICABLE') {
                 invoice.paidAmount = 0;
                 fields.push('paidAmount');
             } else if (paymentStatus === 'PAID') {

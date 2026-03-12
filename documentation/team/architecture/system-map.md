@@ -240,6 +240,27 @@ Klient (bussinesTypes.d.ts):
 
 Konwencja jest **spójna** po obu stronach.
 
+### Typ `PaymentStatus` (faktury kosztowe)
+
+Typ współdzielony między serwerem a klientem; utrzymywany ręcznie w obu projektach.
+
+| Wartość | Znaczenie |
+|---------|-----------|
+| `UNPAID` | Brak płatności |
+| `PARTIALLY_PAID` | Częściowo zapłacona |
+| `PAID` | W pełni zapłacona |
+| `NOT_APPLICABLE` | Nie dotyczy — korekta in minus (ujemna kwota brutto) bez sekcji `Platnosc` w KSeF XML |
+
+**Logika przypisania — backend (`costInvoiceXmlHelpers.extractPaymentInfoFromFa`):**
+- `grossAmount < 0` i brak / pusta sekcja `Platnosc` w KSeF XML → `NOT_APPLICABLE`
+- Pozostałe przypadki → `UNPAID` / `PARTIALLY_PAID` / `PAID` na podstawie flag i kwot z XML
+
+**Prezentacja — frontend (`CostInvoicesList`):**
+- `PaymentStatusBadge` — badge „–" (wariant `info`) dla `NOT_APPLICABLE`
+- `costInvoicePaymentFilters` — opcja filtra „Nie dotyczy" (`NOT_APPLICABLE`)
+
+---
+
 ### Nazewnictwo pól — mapowanie
 
 | Serwer (DB column) | Serwer (model) | Klient (interfejs) |

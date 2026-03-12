@@ -1,6 +1,6 @@
 import { PaymentStatus } from './CostInvoice';
 
-export const VALID_PAYMENT_STATUSES: PaymentStatus[] = ['UNPAID', 'PARTIALLY_PAID', 'PAID'];
+export const VALID_PAYMENT_STATUSES: PaymentStatus[] = ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'NOT_APPLICABLE'];
 
 /**
  * Walidator dla operacji na fakturach kosztowych
@@ -38,7 +38,7 @@ export class CostInvoiceValidator {
         }
 
         // Walidacja względem grossAmount
-        if (parsedPaidAmount !== undefined && grossAmount !== undefined) {
+        if (parsedPaidAmount !== undefined && grossAmount !== undefined && grossAmount >= 0) {
             if (parsedPaidAmount > grossAmount) {
                 return `Kwota płatności (${parsedPaidAmount}) nie może przekroczyć kwoty brutto faktury (${grossAmount})`;
             }
@@ -48,8 +48,8 @@ export class CostInvoiceValidator {
         if (paymentStatus !== undefined && parsedPaidAmount !== undefined) {
             const status = paymentStatus as PaymentStatus;
             
-            if (status === 'UNPAID' && parsedPaidAmount !== 0) {
-                return 'Status UNPAID wymaga paidAmount = 0';
+            if ((status === 'UNPAID' || status === 'NOT_APPLICABLE') && parsedPaidAmount !== 0) {
+                return `Status ${status} wymaga paidAmount = 0`;
             }
             
             if (status === 'PAID' && grossAmount !== undefined && parsedPaidAmount !== grossAmount) {
@@ -70,7 +70,7 @@ export class CostInvoiceValidator {
         if (paymentStatus !== undefined && paidAmount === undefined && grossAmount !== undefined) {
             const status = paymentStatus as PaymentStatus;
             
-            if (status === 'UNPAID') {
+            if (status === 'UNPAID' || status === 'NOT_APPLICABLE') {
                 // OK - będziemy ustawiać paidAmount = 0 w kontrolerze
             }
             
