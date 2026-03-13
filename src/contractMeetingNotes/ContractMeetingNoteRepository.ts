@@ -23,7 +23,12 @@ export type ContractMeetingNoteCreateContext = {
     contractName?: string;
     meetingProtocolsGdFolderId?: string | null;
     projectGdFolderId?: string | null;
+    employersText: string;
+    engineersText: string;
+    contractorsText: string;
 };
+
+type ContractEntityRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
 export default class ContractMeetingNoteRepository extends BaseRepository<ContractMeetingNote> {
     constructor() {
@@ -104,6 +109,12 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
             return null;
         }
 
+        const [employersText, engineersText, contractorsText] = await Promise.all([
+            this.getContractEntityTextByRole(contractId, 'EMPLOYER', conn),
+            this.getContractEntityTextByRole(contractId, 'ENGINEER', conn),
+            this.getContractEntityTextByRole(contractId, 'CONTRACTOR', conn),
+        ]);
+
         return {
             contractId: row.ContractId,
             contractNumber: row.ContractNumber
@@ -114,7 +125,52 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
                 : undefined,
             meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId ?? null,
             projectGdFolderId: row.ProjectGdFolderId ?? null,
+            employersText,
+            engineersText,
+            contractorsText,
         };
+    }
+
+    private async getContractEntityTextByRole(
+        contractId: number,
+        role: ContractEntityRole,
+        conn: mysqlPromise.PoolConnection
+    ): Promise<string> {
+        const sql = `SELECT Entities.Name
+            FROM Contracts_Entities
+            JOIN Entities ON Entities.Id = Contracts_Entities.EntityId
+            WHERE Contracts_Entities.ContractId = ?
+            AND Contracts_Entities.ContractRole = ?
+            ORDER BY Entities.Name ASC`;
+        const [rows] = await conn.execute(sql, [contractId, role]);
+        const typedRows = rows as { Name?: string | null }[];
+
+        return typedRows
+            .map((row) =>
+                row.Name === null || row.Name === undefined
+                    ? ''
+                    : ToolsDb.sqlToString(row.Name).trim()
+            )
+            .filter((name) => name.length > 0)
+            .sort((a, b) => a.localeCompare(b))
+            .join('\n');
+    }
+
+    async existsByMeetingId(
+        meetingId: number,
+        conn: mysqlPromise.PoolConnection
+    ): Promise<boolean> {
+        const sql = `SELECT 1 FROM ContractMeetingNotes WHERE MeetingId = ? LIMIT 1`;
+        const [rows] = await conn.execute(sql, [meetingId]);
+        return (rows as any[]).length > 0;
+    }
+
+    async deleteByMeetingIdInDb(
+        meetingId: number,
+        conn?: mysqlPromise.PoolConnection
+    ): Promise<void> {
+        const sql = `DELETE FROM ContractMeetingNotes WHERE MeetingId = ?`;
+        await ToolsDb.getQueryCallbackAsync(sql, conn, [meetingId]);
     }
 
     async updateContractMeetingProtocolsGdFolderId(

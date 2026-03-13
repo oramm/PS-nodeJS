@@ -21,6 +21,18 @@ export default class ContractMeetingNotesController extends BaseController<
     ContractMeetingNote,
     ContractMeetingNoteRepository
 > {
+    private static readonly requiredTemplateRangeNames = [
+        'MEETING_TITLE',
+        'MEETING_DATE',
+        'MEETING_LOCATION',
+        'CONTRACT_NUMBER',
+        'CREATED_BY',
+        'AGENDA_SECTION',
+        'EMPLOYERS',
+        'ENGINEERS',
+        'CONTRACTORS',
+    ] as const;
+
     private static instance: ContractMeetingNotesController;
 
     constructor() {
@@ -96,7 +108,12 @@ export default class ContractMeetingNotesController extends BaseController<
         if (items.length === 0) {
             throw new Error(`ContractMeetingNote with id=${id} not found`);
         }
-        await instance.repository.deleteFromDb(items[0]);
+        const note = items[0];
+        if (note.meetingId) {
+            await instance.repository.deleteByMeetingIdInDb(note.meetingId);
+        } else {
+            await instance.repository.deleteFromDb(note);
+        }
     }
 
     private async addWithAuth(
@@ -121,6 +138,19 @@ export default class ContractMeetingNotesController extends BaseController<
                         throw new Error(
                             `Contract ${payload.contractId} was not found`,
                         );
+                    }
+
+                    if (payload.meetingId) {
+                        const alreadyExists =
+                            await this.repository.existsByMeetingId(
+                                payload.meetingId,
+                                conn,
+                            );
+                        if (alreadyExists) {
+                            throw new Error(
+                                `A meeting note already exists for meetingId=${payload.meetingId}`,
+                            );
+                        }
                     }
 
                     const protocolFolderId =
@@ -158,7 +188,7 @@ export default class ContractMeetingNotesController extends BaseController<
                         fileId: createdProtocolGdId,
                     });
 
-                    const populateWarnings = await this.populateNoteDocument(
+                    await this.populateNoteDocument(
                         authClient,
                         createdProtocolGdId,
                         payload,
@@ -177,9 +207,6 @@ export default class ContractMeetingNotesController extends BaseController<
                     });
 
                     await this.repository.addInDb(note, conn, true);
-                    if (populateWarnings.length > 0) {
-                        (note as any)._warnings = populateWarnings;
-                    }
                     return note;
                 },
             );
@@ -235,82 +262,72 @@ export default class ContractMeetingNotesController extends BaseController<
         documentId: string,
         payload: ContractMeetingNoteCreatePayload,
         createContext: ContractMeetingNoteCreateContext,
-    ): Promise<string[]> {
-        const warnings: string[] = [];
-        // Populate template tags if present; skip gracefully if template has no #ENVI# tags
-        let hasNamedRanges = false;
-        try {
-            await ToolsDocs.initNamedRangesFromTags(authClient, documentId);
-            hasNamedRanges = true;
-        } catch (e: any) {
-            if (e?.message?.includes('No tags for namedRanges found')) {
-                const msg =
-                    'Szablon Google Docs nie zawiera tagów #ENVI#...# — metadane i agenda nie zostały uzupełnione. Dodaj do szablonu: #ENVI#MEETING_TITLE#, #ENVI#MEETING_DATE#, #ENVI#MEETING_LOCATION#, #ENVI#CONTRACT_NUMBER#, #ENVI#CREATED_BY#, #ENVI#AGENDA_SECTION#';
-                console.warn('ContractMeetingNotesController: ' + msg);
-                warnings.push(msg);
-            } else {
-                throw e;
-            }
-        }
+    ): Promise<void> {
+        await this.assertTemplateContract(authClient, documentId);
+        await ToolsDocs.initNamedRangesFromTags(authClient, documentId);
 
-        if (hasNamedRanges) {
-            // Prepare metadata for named ranges
-            const metadataRanges: { rangeName: string; newText: string }[] = [
-                { rangeName: 'MEETING_TITLE', newText: payload.title || '' },
-                {
-                    rangeName: 'MEETING_DATE',
-                    newText: payload.meetingDate || '',
-                },
-                {
-                    rangeName: 'CONTRACT_NUMBER',
-                    newText: createContext.contractNumber || '',
-                },
-            ];
+        // Prepare metadata for named ranges
+        const metadataRanges: { rangeName: string; newText: string }[] = [
+            { rangeName: 'MEETING_TITLE', newText: payload.title || '' },
+            {
+                rangeName: 'MEETING_DATE',
+                newText: payload.meetingDate || '',
+            },
+            {
+                rangeName: 'CONTRACT_NUMBER',
+                newText: createContext.contractNumber || '',
+            },
+            {
+                rangeName: 'EMPLOYERS',
+                newText: createContext.employersText,
+            },
+            {
+                rangeName: 'ENGINEERS',
+                newText: createContext.engineersText,
+            },
+            {
+                rangeName: 'CONTRACTORS',
+                newText: createContext.contractorsText,
+            },
+        ];
 
-            // Fetch meeting data for location if meetingId provided
-            if (payload.meetingId) {
-                const meetingRepo = new MeetingRepository();
-                const meetings = await meetingRepo.find([
-                    { id: payload.meetingId },
-                ]);
-                if (meetings.length > 0) {
-                    metadataRanges.push({
-                        rangeName: 'MEETING_LOCATION',
-                        newText: meetings[0].location || '',
-                    });
-                }
-            }
-            if (
-                !metadataRanges.find((r) => r.rangeName === 'MEETING_LOCATION')
-            ) {
+        // Fetch meeting data for location if meetingId provided
+        if (payload.meetingId) {
+            const meetingRepo = new MeetingRepository();
+            const meetings = await meetingRepo.find([{ id: payload.meetingId }]);
+            if (meetings.length > 0) {
                 metadataRanges.push({
                     rangeName: 'MEETING_LOCATION',
-                    newText: '',
+                    newText: meetings[0].location || '',
                 });
             }
-
-            // Fetch created-by person name
-            if (payload.createdByPersonId) {
-                const personName = await this.getPersonName(
-                    payload.createdByPersonId,
-                );
-                metadataRanges.push({
-                    rangeName: 'CREATED_BY',
-                    newText: personName,
-                });
-            } else {
-                metadataRanges.push({
-                    rangeName: 'CREATED_BY',
-                    newText: '',
-                });
-            }
-
-            await ToolsDocs.updateTextRunsInNamedRanges(
-                authClient,
-                documentId,
-                metadataRanges,
-            );
         }
+        if (!metadataRanges.find((r) => r.rangeName === 'MEETING_LOCATION')) {
+            metadataRanges.push({
+                rangeName: 'MEETING_LOCATION',
+                newText: '',
+            });
+        }
+
+        // Fetch created-by person name
+        if (payload.createdByPersonId) {
+            const personName = await this.getPersonName(payload.createdByPersonId);
+            metadataRanges.push({
+                rangeName: 'CREATED_BY',
+                newText: personName,
+            });
+        } else {
+            metadataRanges.push({
+                rangeName: 'CREATED_BY',
+                newText: '',
+            });
+        }
+
+        await ToolsDocs.updateTextRunsInNamedRanges(
+            authClient,
+            documentId,
+            metadataRanges,
+        );
 
         // Fetch arrangements and insert agenda structure
         if (payload.meetingId) {
@@ -327,24 +344,6 @@ export default class ContractMeetingNotesController extends BaseController<
                     body: arr.description || ' ',
                 }));
 
-                if (hasNamedRanges) {
-                    const docForCheck = (
-                        await ToolsDocs.getDocument(authClient, documentId)
-                    ).data;
-                    const agendaRange = ToolsDocs.getNamedRangeByName(
-                        docForCheck,
-                        'AGENDA_SECTION',
-                    );
-                    if (!agendaRange) {
-                        const agendaMsg =
-                            'Szablon Google Docs nie zawiera znacznika #ENVI#AGENDA_SECTION# — punkty agendy nie zostały wstawione. Dodaj ten znacznik do szablonu protokołu.';
-                        console.warn(
-                            'ContractMeetingNotesController: ' + agendaMsg,
-                        );
-                        warnings.push(agendaMsg);
-                    }
-                }
-
                 await ToolsDocs.insertAgendaStructure(
                     authClient,
                     documentId,
@@ -352,7 +351,31 @@ export default class ContractMeetingNotesController extends BaseController<
                 );
             }
         }
-        return warnings;
+    }
+
+    private async assertTemplateContract(
+        authClient: OAuth2Client,
+        documentId: string,
+    ): Promise<void> {
+        const templateDocument = (await ToolsDocs.getDocument(authClient, documentId))
+            .data;
+        const foundTags = ToolsDocs.getTagsForNamedRanges(templateDocument);
+        const requiredTags = [
+            ...ContractMeetingNotesController.requiredTemplateRangeNames,
+        ];
+        const missingTags = requiredTags.filter((tag) => !foundTags.includes(tag));
+
+        if (foundTags.length === 0) {
+            throw new Error(
+                `Szablon Google Docs ma błędny format znaczników. Wymagany format to #ENVI#NAZWA#. Dodaj tagi: ${requiredTags.map((tag) => `#ENVI#${tag}#`).join(', ')}`,
+            );
+        }
+
+        if (missingTags.length > 0) {
+            throw new Error(
+                `Szablon Google Docs jest niekompletny. Brakuje tagów: ${missingTags.map((tag) => `#ENVI#${tag}#`).join(', ')}`,
+            );
+        }
     }
 
     private async getPersonName(personId: number): Promise<string> {

@@ -9,6 +9,39 @@ import ToolsGd from '../../tools/ToolsGd';
 describe('ContractMeetingNotesController', () => {
     const mockConn = { threadId: 1001 } as any;
     const mockAuth = { mocked: true } as any;
+    const makeTemplateDocument = (tagNames: string[], withNamedAgenda = true) => {
+        const content = tagNames.map((tagName, index) => ({
+            startIndex: index * 20 + 1,
+            endIndex: index * 20 + 1 + `#ENVI#${tagName}#\n`.length,
+            paragraph: {
+                elements: [
+                    {
+                        startIndex: index * 20 + 1,
+                        endIndex: index * 20 + 1 + `#ENVI#${tagName}#\n`.length,
+                        textRun: { content: `#ENVI#${tagName}#\n` },
+                    },
+                ],
+            },
+        }));
+
+        const namedRanges = withNamedAgenda
+            ? {
+                  AGENDA_SECTION: {
+                      namedRanges: [
+                          {
+                              name: 'AGENDA_SECTION',
+                              ranges: [{ startIndex: 10, endIndex: 20 }],
+                          },
+                      ],
+                  },
+              }
+            : {};
+
+        return {
+            body: { content },
+            namedRanges,
+        };
+    };
 
     beforeEach(() => {
         jest.restoreAllMocks();
@@ -44,18 +77,20 @@ describe('ContractMeetingNotesController', () => {
             'updateTextRunsInNamedRanges',
         ).mockResolvedValue(undefined as any);
         jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
-            data: {
-                namedRanges: {
-                    AGENDA_SECTION: {
-                        namedRanges: [
-                            {
-                                name: 'AGENDA_SECTION',
-                                ranges: [{ startIndex: 10, endIndex: 20 }],
-                            },
-                        ],
-                    },
-                },
-            },
+            data: makeTemplateDocument(
+                [
+                    'MEETING_TITLE',
+                    'MEETING_DATE',
+                    'MEETING_LOCATION',
+                    'CONTRACT_NUMBER',
+                    'CREATED_BY',
+                    'AGENDA_SECTION',
+                    'EMPLOYERS',
+                    'ENGINEERS',
+                    'CONTRACTORS',
+                ],
+                true,
+            ),
         } as any);
         jest.spyOn(ToolsDocs, 'insertAgendaStructure').mockResolvedValue(
             undefined as any,
@@ -63,6 +98,11 @@ describe('ContractMeetingNotesController', () => {
         jest.spyOn(ToolsDb, 'getQueryCallbackAsync').mockResolvedValue(
             [] as any,
         );
+
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'existsByMeetingId',
+        ).mockResolvedValue(false);
     });
 
     it('creates notes folder with standard name and persists note', async () => {
@@ -73,6 +113,9 @@ describe('ContractMeetingNotesController', () => {
                 contractNumber: 'C-77',
                 meetingProtocolsGdFolderId: null,
                 projectGdFolderId: 'project-folder-1',
+                employersText: '',
+                engineersText: '',
+                contractorsText: '',
             });
         const setFolderSpy = jest
             .spyOn(ToolsGd, 'setFolder')
@@ -137,6 +180,9 @@ describe('ContractMeetingNotesController', () => {
             contractNumber: 'C-15',
             meetingProtocolsGdFolderId: 'existing-folder-15',
             projectGdFolderId: 'project-folder-15',
+            employersText: '',
+            engineersText: '',
+            contractorsText: '',
         });
         jest.spyOn(
             ContractMeetingNoteRepository.prototype,
@@ -169,6 +215,9 @@ describe('ContractMeetingNotesController', () => {
             contractNumber: 'C-99',
             meetingProtocolsGdFolderId: 'existing-folder-99',
             projectGdFolderId: 'project-folder-99',
+            employersText: 'Employer A\nEmployer B',
+            engineersText: 'Engineer A',
+            contractorsText: 'Contractor A',
         });
         jest.spyOn(
             ContractMeetingNoteRepository.prototype,
@@ -212,9 +261,18 @@ describe('ContractMeetingNotesController', () => {
                 },
             ],
         );
+        expect(ToolsDocs.updateTextRunsInNamedRanges).toHaveBeenCalledWith(
+            mockAuth,
+            'doc-1',
+            expect.arrayContaining([
+                { rangeName: 'EMPLOYERS', newText: 'Employer A\nEmployer B' },
+                { rangeName: 'ENGINEERS', newText: 'Engineer A' },
+                { rangeName: 'CONTRACTORS', newText: 'Contractor A' },
+            ]),
+        );
     });
 
-    it('stores warning when agenda placeholder is missing in template', async () => {
+    it('throws when one of new placeholders is missing in template', async () => {
         jest.spyOn(
             ContractMeetingNoteRepository.prototype,
             'getCreateContext',
@@ -223,6 +281,9 @@ describe('ContractMeetingNotesController', () => {
             contractNumber: 'C-101',
             meetingProtocolsGdFolderId: 'existing-folder-101',
             projectGdFolderId: 'project-folder-101',
+            employersText: '',
+            engineersText: '',
+            contractorsText: '',
         });
         jest.spyOn(
             ContractMeetingNoteRepository.prototype,
@@ -232,29 +293,255 @@ describe('ContractMeetingNotesController', () => {
             ContractMeetingNoteRepository.prototype,
             'addInDb',
         ).mockResolvedValue(undefined as any);
-        jest.spyOn(MeetingArrangementRepository.prototype, 'find').mockResolvedValue([
-            {
-                name: 'Punkt 1',
-                description: 'Opis punktu',
-            } as any,
-        ]);
         jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
-            data: { namedRanges: {} },
+            data: makeTemplateDocument(
+                [
+                    'MEETING_TITLE',
+                    'MEETING_DATE',
+                    'MEETING_LOCATION',
+                    'CONTRACT_NUMBER',
+                    'CREATED_BY',
+                    'AGENDA_SECTION',
+                    'EMPLOYERS',
+                    'ENGINEERS',
+                ],
+                false,
+            ),
         } as any);
 
-        const result = await ContractMeetingNotesController.addFromDto({
-            contractId: 101,
-            title: 'Meeting without placeholder',
-            meetingId: 51,
+        await expect(
+            ContractMeetingNotesController.addFromDto({
+                contractId: 101,
+                title: 'Meeting without placeholder',
+                meetingId: 51,
+            }),
+        ).rejects.toThrow(
+            'Szablon Google Docs jest niekompletny. Brakuje tagów: #ENVI#CONTRACTORS#',
+        );
+        expect(ToolsDocs.insertAgendaStructure).not.toHaveBeenCalled();
+    });
+
+    it('throws when template contains no valid ENVI tags', async () => {
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getCreateContext',
+        ).mockResolvedValue({
+            contractId: 102,
+            contractNumber: 'C-102',
+            meetingProtocolsGdFolderId: 'existing-folder-102',
+            projectGdFolderId: 'project-folder-102',
+            employersText: '',
+            engineersText: '',
+            contractorsText: '',
+        });
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getNextSequenceNumberForContract',
+        ).mockResolvedValue(4);
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'addInDb',
+        ).mockResolvedValue(undefined as any);
+        jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
+            data: {
+                body: {
+                    content: [
+                        {
+                            startIndex: 1,
+                            endIndex: 10,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 1,
+                                        endIndex: 10,
+                                        textRun: { content: '#zmienna\n' },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                namedRanges: {},
+            },
+        } as any);
+
+        await expect(
+            ContractMeetingNotesController.addFromDto({
+                contractId: 102,
+                title: 'Meeting invalid template',
+            }),
+        ).rejects.toThrow(
+            'Szablon Google Docs ma błędny format znaczników. Wymagany format to #ENVI#NAZWA#.',
+        );
+    });
+
+    it('passes empty strings for relation placeholders when contract has no entities', async () => {
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getCreateContext',
+        ).mockResolvedValue({
+            contractId: 103,
+            contractNumber: 'C-103',
+            meetingProtocolsGdFolderId: 'existing-folder-103',
+            projectGdFolderId: 'project-folder-103',
+            employersText: '',
+            engineersText: '',
+            contractorsText: '',
+        });
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getNextSequenceNumberForContract',
+        ).mockResolvedValue(1);
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'addInDb',
+        ).mockResolvedValue(undefined as any);
+
+        await ContractMeetingNotesController.addFromDto({
+            contractId: 103,
+            title: 'Meeting without entities',
         });
 
-        expect((result as any)._warnings).toContain(
-            'Szablon Google Docs nie zawiera znacznika #ENVI#AGENDA_SECTION# — punkty agendy nie zostały wstawione. Dodaj ten znacznik do szablonu protokołu.',
-        );
-        expect(ToolsDocs.insertAgendaStructure).toHaveBeenCalledWith(
+        expect(ToolsDocs.updateTextRunsInNamedRanges).toHaveBeenCalledWith(
             mockAuth,
             'doc-1',
-            [{ heading: 'Punkt 1', body: 'Opis punktu' }],
+            expect.arrayContaining([
+                { rangeName: 'EMPLOYERS', newText: '' },
+                { rangeName: 'ENGINEERS', newText: '' },
+                { rangeName: 'CONTRACTORS', newText: '' },
+            ]),
         );
+    });
+
+    describe('deleteById', () => {
+        it('calls deleteByMeetingIdInDb when note has a meetingId (removes all duplicates)', async () => {
+            const findSpy = jest
+                .spyOn(ContractMeetingNoteRepository.prototype, 'find')
+                .mockResolvedValue([
+                    { id: 10, meetingId: 55, contractId: 1 } as any,
+                ]);
+            const deleteByMeetingIdSpy = jest
+                .spyOn(
+                    ContractMeetingNoteRepository.prototype,
+                    'deleteByMeetingIdInDb',
+                )
+                .mockResolvedValue(undefined);
+            const deleteFromDbSpy = jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'deleteFromDb',
+            );
+
+            await ContractMeetingNotesController.deleteById(10);
+
+            expect(findSpy).toHaveBeenCalledWith([{ id: 10 }]);
+            expect(deleteByMeetingIdSpy).toHaveBeenCalledWith(55);
+            expect(deleteFromDbSpy).not.toHaveBeenCalled();
+        });
+
+        it('calls deleteFromDb when note has no meetingId', async () => {
+            const noteWithoutMeeting = { id: 20, meetingId: null, contractId: 1 } as any;
+            jest.spyOn(ContractMeetingNoteRepository.prototype, 'find').mockResolvedValue([
+                noteWithoutMeeting,
+            ]);
+            const deleteByMeetingIdSpy = jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'deleteByMeetingIdInDb',
+            );
+            const deleteFromDbSpy = jest
+                .spyOn(ContractMeetingNoteRepository.prototype, 'deleteFromDb')
+                .mockResolvedValue(undefined as any);
+
+            await ContractMeetingNotesController.deleteById(20);
+
+            expect(deleteFromDbSpy).toHaveBeenCalledWith(noteWithoutMeeting);
+            expect(deleteByMeetingIdSpy).not.toHaveBeenCalled();
+        });
+
+        it('throws when note is not found', async () => {
+            jest.spyOn(ContractMeetingNoteRepository.prototype, 'find').mockResolvedValue([]);
+
+            await expect(
+                ContractMeetingNotesController.deleteById(999),
+            ).rejects.toThrow('ContractMeetingNote with id=999 not found');
+        });
+
+        it('throws for invalid id', async () => {
+            await expect(
+                ContractMeetingNotesController.deleteById(0),
+            ).rejects.toThrow('id must be a positive integer');
+        });
+    });
+
+    describe('addFromDto 1:1 meeting guard', () => {
+        it('throws when a note already exists for the meetingId', async () => {
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'getCreateContext',
+            ).mockResolvedValue({
+                contractId: 200,
+                contractNumber: 'C-200',
+                meetingProtocolsGdFolderId: 'folder-200',
+                projectGdFolderId: 'project-200',
+                employersText: '',
+                engineersText: '',
+                contractorsText: '',
+            });
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'existsByMeetingId',
+            ).mockResolvedValue(true);
+
+            await expect(
+                ContractMeetingNotesController.addFromDto({
+                    contractId: 200,
+                    title: 'Duplicate meeting note',
+                    meetingId: 77,
+                }),
+            ).rejects.toThrow(
+                'A meeting note already exists for meetingId=77',
+            );
+
+            expect(ToolsGd.copyFile).not.toHaveBeenCalled();
+        });
+
+        it('proceeds normally when no note exists yet for the meetingId', async () => {
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'getCreateContext',
+            ).mockResolvedValue({
+                contractId: 201,
+                contractNumber: 'C-201',
+                meetingProtocolsGdFolderId: 'folder-201',
+                projectGdFolderId: 'project-201',
+                employersText: '',
+                engineersText: '',
+                contractorsText: '',
+            });
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'existsByMeetingId',
+            ).mockResolvedValue(false);
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'getNextSequenceNumberForContract',
+            ).mockResolvedValue(1);
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'addInDb',
+            ).mockResolvedValue(undefined as any);
+            jest.spyOn(MeetingRepository.prototype, 'find').mockResolvedValue([]);
+            jest.spyOn(
+                MeetingArrangementRepository.prototype,
+                'find',
+            ).mockResolvedValue([]);
+
+            const result = await ContractMeetingNotesController.addFromDto({
+                contractId: 201,
+                title: 'New meeting note',
+                meetingId: 88,
+            });
+
+            expect(result.protocolGdId).toBe('doc-1');
+        });
     });
 });
