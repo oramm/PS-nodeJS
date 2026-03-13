@@ -3,6 +3,8 @@ import { docs_v1, google } from 'googleapis';
 import Tools from './Tools';
 
 export default class ToolsDocs {
+    private static readonly templateTagRegex = /#ENVI#[A-Za-z0-9_]+#/;
+
     static async getDocument(auth: OAuth2Client, documentId: string) {
         const docs = google.docs({ version: 'v1', auth });
         return await docs.documents.get({ auth, documentId });
@@ -73,9 +75,11 @@ export default class ToolsDocs {
         const requests = [];
         if (textElements)
             for (const textElement of textElements) {
-                const namedRangeRegex = /#ENVI#[aA-zZ|\s]+#/;
                 const textRunContent = textElement.textRun?.content;
-                if (textRunContent && namedRangeRegex.test(textRunContent)) {
+                if (
+                    textRunContent &&
+                    this.templateContainsNamedRangeTag(textRunContent)
+                ) {
                     if (textElement.startIndex) {
                         const namedRangeName =
                             this.templateTagToRangeName(textRunContent);
@@ -417,14 +421,19 @@ export default class ToolsDocs {
             if (!paragraph?.elements) continue;
             //szukaj w textRunach
             for (const element of paragraph.elements) {
-                const namedRangeRegex = /#ENVI#[aA-zZ|\s]+#/;
                 const textRunContent = element.textRun?.content;
-                if (textRunContent && namedRangeRegex.test(textRunContent)) {
+                if (
+                    textRunContent &&
+                    this.templateContainsNamedRangeTag(textRunContent)
+                ) {
                     foundTags.push(this.templateTagToRangeName(textRunContent));
                 }
             }
         }
         return foundTags;
+    }
+    static templateContainsNamedRangeTag(text: string): boolean {
+        return this.templateTagRegex.test(text);
     }
     /**@deprecated */
     private static getlastTwoTextRunsFromTableCell(
@@ -503,7 +512,7 @@ export default class ToolsDocs {
     private static templateTagToRangeName(tag: string): string {
         return tag
             .replace(/#ENVI#/, '')
-            .replace(/#/, '')
+            .replace(/#/g, '')
             .trim();
     }
 
