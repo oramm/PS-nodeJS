@@ -39,6 +39,54 @@ Plan reference:
 - `N6B-UI-MERGE` -> `DONE`
 - `N7-STABILIZATION-ROLLOUT` -> `DONE`
 
+## 2026-03-13 - Session Folder-Dualism-Audit - contract-scoped meeting notes folder
+
+### 1. Scope
+
+- Checkpoint ID: `POST-N7-AUDIT-FOLDER-DUALISM`
+- Planned tasks:
+    - audit folder ownership for `contractMeetingNotes`, `meetings`, and `cases`
+    - choose one storage source of truth for new meeting notes
+    - implement contract-folder fallback and tests
+
+### 2. Completed
+
+- Audited backend folder ownership and documented the chosen rule in `folder-dualism-audit.md`.
+- Changed contract folder creation so `Notatki ze spotkań` is created inside the contract root folder.
+- Changed `ContractMeetingNotesController` fallback so missing note folders are created only under the contract folder, not under the project folder.
+- Extended repository create context with `contractGdFolderId`.
+- Added regression tests for contract folder structure and contract-based fallback.
+
+### 3. Evidence
+
+- Commands/checks:
+    - `Select-String -Path 'src\\**\\*.ts' -Pattern 'MeetingProtocolsGdFolderId|Notatki ze spotkań|setFolder\\(|meeting|CaseType'` -> confirmed project-level fallback plus separate case-folder flow
+- Tests:
+    - `yarn test src/contracts/__tests__/Contract.folderStructure.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts src/tools/__tests__/ToolsDocs.test.ts` -> PASS (4 suites, 26 tests)
+- Files changed:
+    - `documentation/team/operations/contract-meeting-notes/folder-dualism-audit.md`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `src/contracts/Contract.ts`
+    - `src/contracts/__tests__/Contract.folderStructure.test.ts`
+    - `src/contractMeetingNotes/ContractMeetingNoteRepository.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNoteRepository.test.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+
+### 4. Risks/Blockers
+
+- Existing contracts with already populated `MeetingProtocolsGdFolderId` are intentionally not migrated.
+- If a contract is missing `gdFolderId`, note creation now fails loudly instead of silently falling back to the project.
+
+### 5. Next Session (exact next actions)
+
+- If tests are green, run review loop against changed files only.
+- Decide separately whether historic project-level folders need backfill/migration.
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
 ## Session Log Template
 
 Copy for each session:
@@ -978,4 +1026,3 @@ Copy for each session:
 ### 6. Checkpoint Status
 
 - `OPEN`
-

@@ -111,6 +111,7 @@ describe('ContractMeetingNotesController', () => {
             .mockResolvedValue({
                 contractId: 77,
                 contractNumber: 'C-77',
+                contractGdFolderId: 'contract-folder-1',
                 meetingProtocolsGdFolderId: null,
                 projectGdFolderId: 'project-folder-1',
                 employersText: '',
@@ -147,7 +148,7 @@ describe('ContractMeetingNotesController', () => {
 
         expect(getCreateContextSpy).toHaveBeenCalledWith(77, mockConn);
         expect(setFolderSpy).toHaveBeenCalledWith(mockAuth, {
-            parentId: 'project-folder-1',
+            parentId: 'contract-folder-1',
             name: 'Notatki ze spotkań',
         });
         expect(updateFolderSpy).toHaveBeenCalledWith(
@@ -178,6 +179,7 @@ describe('ContractMeetingNotesController', () => {
         ).mockResolvedValue({
             contractId: 15,
             contractNumber: 'C-15',
+            contractGdFolderId: 'contract-folder-15',
             meetingProtocolsGdFolderId: 'existing-folder-15',
             projectGdFolderId: 'project-folder-15',
             employersText: '',
@@ -213,6 +215,7 @@ describe('ContractMeetingNotesController', () => {
         ).mockResolvedValue({
             contractId: 99,
             contractNumber: 'C-99',
+            contractGdFolderId: 'contract-folder-99',
             meetingProtocolsGdFolderId: 'existing-folder-99',
             projectGdFolderId: 'project-folder-99',
             employersText: 'Employer A\nEmployer B',
@@ -279,6 +282,7 @@ describe('ContractMeetingNotesController', () => {
         ).mockResolvedValue({
             contractId: 101,
             contractNumber: 'C-101',
+            contractGdFolderId: 'contract-folder-101',
             meetingProtocolsGdFolderId: 'existing-folder-101',
             projectGdFolderId: 'project-folder-101',
             employersText: '',
@@ -328,6 +332,7 @@ describe('ContractMeetingNotesController', () => {
         ).mockResolvedValue({
             contractId: 102,
             contractNumber: 'C-102',
+            contractGdFolderId: 'contract-folder-102',
             meetingProtocolsGdFolderId: 'existing-folder-102',
             projectGdFolderId: 'project-folder-102',
             employersText: '',
@@ -382,6 +387,7 @@ describe('ContractMeetingNotesController', () => {
         ).mockResolvedValue({
             contractId: 103,
             contractNumber: 'C-103',
+            contractGdFolderId: 'contract-folder-103',
             meetingProtocolsGdFolderId: 'existing-folder-103',
             projectGdFolderId: 'project-folder-103',
             employersText: '',
@@ -480,6 +486,7 @@ describe('ContractMeetingNotesController', () => {
             ).mockResolvedValue({
                 contractId: 200,
                 contractNumber: 'C-200',
+                contractGdFolderId: 'contract-folder-200',
                 meetingProtocolsGdFolderId: 'folder-200',
                 projectGdFolderId: 'project-200',
                 employersText: '',
@@ -511,6 +518,7 @@ describe('ContractMeetingNotesController', () => {
             ).mockResolvedValue({
                 contractId: 201,
                 contractNumber: 'C-201',
+                contractGdFolderId: 'contract-folder-201',
                 meetingProtocolsGdFolderId: 'folder-201',
                 projectGdFolderId: 'project-201',
                 employersText: '',
@@ -542,6 +550,38 @@ describe('ContractMeetingNotesController', () => {
             });
 
             expect(result.protocolGdId).toBe('doc-1');
+        });
+
+        it('throws when a missing meeting notes folder cannot fall back to contract folder', async () => {
+            const setFolderSpy = jest.spyOn(ToolsGd, 'setFolder');
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'getCreateContext',
+            ).mockResolvedValue({
+                contractId: 202,
+                contractNumber: 'C-202',
+                contractGdFolderId: null,
+                meetingProtocolsGdFolderId: null,
+                projectGdFolderId: 'project-202',
+                employersText: '',
+                engineersText: '',
+                contractorsText: '',
+            });
+            jest.spyOn(
+                ContractMeetingNoteRepository.prototype,
+                'existsByMeetingId',
+            ).mockResolvedValue(false);
+
+            await expect(
+                ContractMeetingNotesController.addFromDto({
+                    contractId: 202,
+                    title: 'Missing contract folder',
+                }),
+            ).rejects.toThrow(
+                'Contract 202 does not have contract Google Drive folder',
+            );
+
+            expect(setFolderSpy).not.toHaveBeenCalled();
         });
     });
 });

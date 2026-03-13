@@ -234,14 +234,14 @@ export default class ContractMeetingNotesController extends BaseController<
         if (createContext.meetingProtocolsGdFolderId) {
             return createContext.meetingProtocolsGdFolderId;
         }
-        if (!createContext.projectGdFolderId) {
+        if (!createContext.contractGdFolderId) {
             throw new Error(
-                `Contract ${createContext.contractId} does not have project Google Drive folder`,
+                `Contract ${createContext.contractId} does not have contract Google Drive folder`,
             );
         }
 
         const notesFolder = await ToolsGd.setFolder(authClient, {
-            parentId: createContext.projectGdFolderId,
+            parentId: createContext.contractGdFolderId,
             name: 'Notatki ze spotkań',
         });
         const notesFolderId = String(notesFolder.id || '');

@@ -21,6 +21,7 @@ export type ContractMeetingNoteCreateContext = {
     contractId: number;
     contractNumber?: string;
     contractName?: string;
+    contractGdFolderId?: string | null;
     meetingProtocolsGdFolderId?: string | null;
     projectGdFolderId?: string | null;
     employersText: string;
@@ -90,6 +91,7 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
                 Contracts.Id AS ContractId,
                 Contracts.Number AS ContractNumber,
                 Contracts.Name AS ContractName,
+                Contracts.GdFolderId AS ContractGdFolderId,
                 Contracts.MeetingProtocolsGdFolderId,
                 Projects.GdFolderId AS ProjectGdFolderId
             FROM Contracts
@@ -101,6 +103,7 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
             ContractId: number;
             ContractNumber?: string;
             ContractName?: string;
+            ContractGdFolderId?: string | null;
             MeetingProtocolsGdFolderId?: string | null;
             ProjectGdFolderId?: string | null;
         }[];
@@ -123,6 +126,7 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
             contractName: row.ContractName
                 ? ToolsDb.sqlToString(row.ContractName)
                 : undefined,
+            contractGdFolderId: row.ContractGdFolderId ?? null,
             meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId ?? null,
             projectGdFolderId: row.ProjectGdFolderId ?? null,
             employersText,

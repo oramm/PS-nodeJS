@@ -176,7 +176,7 @@ export default abstract class Contract
         const folder = await this.setContractRootFolder(auth);
         this.setGdFolderIdAndUrl(folder.id as string);
         const meetingNotesFolder = await ToolsGd.setFolder(auth, {
-            parentId: <string>this._project.gdFolderId,
+            parentId: <string>this.gdFolderId,
             name: 'Notatki ze spotkań',
         });
         this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
