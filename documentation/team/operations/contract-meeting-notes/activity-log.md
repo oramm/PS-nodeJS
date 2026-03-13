@@ -23,6 +23,26 @@ Use it as quick session memory in addition to detailed progress entries.
 
 ## Entries
 
+## 2026-03-13 22:10 - Legacy GD template compatibility via exact ENVI tag parsing
+
+- Checkpoint: `POST-N7-LEGACY-TEMPLATE-COMPAT`
+- Summary:
+    - Fixed `ToolsDocs` so it extracts the exact `#ENVI#...#` placeholder from mixed text runs instead of treating the whole line fragment as the tag.
+    - Restored strict validation for required meeting-note placeholders, including `#ENVI#CONTRACT_NUMBER#` and `#ENVI#CREATED_BY#`.
+    - Added regressions for embedded-tag detection and exact named-range boundaries.
+    - Prevented invalid Google Docs `insertText` requests when a placeholder is replaced with an empty string.
+- Files:
+    - `src/tools/ToolsDocs.ts`
+    - `src/tools/__tests__/ToolsDocs.test.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `documentation/team/operations/contract-meeting-notes/activity-log.md`
+- Impact: API, Docs, Tests
+- Notes:
+    - Templates with inline label text like `Sporządził: #ENVI#CREATED_BY#` now pass validation and keep surrounding text intact during replacement.
+    - Empty values now delete only the placeholder text; no empty insert request is sent to Google Docs.
+
 ## 2026-02-25 - N6+N6B+N7 implementation + runtime fixes
 
 - Checkpoint: `N6-FRONTEND-SEARCH`, `N6B-UI-MERGE`, `N7-STABILIZATION-ROLLOUT`
@@ -327,4 +347,3 @@ Use it as quick session memory in addition to detailed progress entries.
 - Impact: `DB/API/Docs`
 - Notes:
     - Runtime rollout remains blocked until migration `001` is executed and verified on target DB.
-

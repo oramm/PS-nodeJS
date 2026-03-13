@@ -3,7 +3,7 @@ import { docs_v1, google } from 'googleapis';
 import Tools from './Tools';
 
 export default class ToolsDocs {
-    private static readonly templateTagRegex = /#ENVI#[A-Za-z0-9_]+#/;
+    private static readonly templateTagRegex = /#ENVI#([A-Za-z0-9_]+)#/;
 
     static async getDocument(auth: OAuth2Client, documentId: string) {
         const docs = google.docs({ version: 'v1', auth });
@@ -46,18 +46,19 @@ export default class ToolsDocs {
         const paragraphs = this.getAllParagraphElementsFromDocument(content);
         paragraphs.forEach((element) => {
             if (element.paragraph) {
-                const request = this.createNameRangeRequestFromTextRun(
+                const paragraphRequests = this.createNameRangeRequestsFromTextRun(
                     element.paragraph,
                 );
-                const name = request?.createNamedRange?.name;
-                let namedRange;
-                if (request && name) {
+                paragraphRequests.forEach((request) => {
+                    const name = request.createNamedRange?.name;
+                    let namedRange;
+                    if (!name) return;
                     console.log(
                         `RangeName:: ${name}, s-e: ${request.createNamedRange?.range?.startIndex}-${request.createNamedRange?.range?.endIndex}`,
                     );
                     namedRange = this.getNamedRangeByName(document, name);
                     if (!namedRange) requests.push(request);
-                }
+                });
             }
         });
 
@@ -68,33 +69,61 @@ export default class ToolsDocs {
         return requests.length > 0;
     }
 
-    private static createNameRangeRequestFromTextRun(
+    private static createNameRangeRequestsFromTextRun(
         paragraph: docs_v1.Schema$Paragraph,
-    ): docs_v1.Schema$Request | undefined {
+    ): docs_v1.Schema$Request[] {
         const textElements = paragraph.elements;
-        const requests = [];
+        const requests: docs_v1.Schema$Request[] = [];
         if (textElements)
             for (const textElement of textElements) {
                 const textRunContent = textElement.textRun?.content;
-                if (
-                    textRunContent &&
-                    this.templateContainsNamedRangeTag(textRunContent)
-                ) {
-                    if (textElement.startIndex) {
-                        const namedRangeName =
-                            this.templateTagToRangeName(textRunContent);
-                        return {
-                            createNamedRange: {
-                                name: namedRangeName,
-                                range: {
-                                    startIndex: textElement.startIndex,
-                                    endIndex: textElement.endIndex,
-                                },
+                if (!textRunContent || !textElement.startIndex) continue;
+                const tagMatches = this.getTemplateTagMatches(textRunContent);
+
+                for (const tagMatch of tagMatches) {
+                    requests.push({
+                        createNamedRange: {
+                            name: tagMatch.rangeName,
+                            range: {
+                                startIndex:
+                                    textElement.startIndex + tagMatch.startOffset,
+                                endIndex:
+                                    textElement.startIndex + tagMatch.endOffset,
                             },
-                        };
-                    }
+                        },
+                    });
                 }
             }
+
+        return requests;
+    }
+
+    private static getTemplateTagMatches(text: string) {
+        const matches = [
+            ...text.matchAll(new RegExp(this.templateTagRegex.source, 'g')),
+        ];
+
+        return matches.map((match) => {
+            const fullTag = match[0];
+            const rangeName = match[1];
+            const startOffset = match.index ?? 0;
+
+            return {
+                fullTag,
+                rangeName,
+                startOffset,
+                endOffset: startOffset + fullTag.length,
+            };
+        });
+    }
+
+    private static templateTagToRangeName(tag: string): string {
+        const match = this.getTemplateTagMatches(tag)[0];
+        if (!match) {
+            throw new Error(`Invalid ENVI tag format: ${tag}`);
+        }
+
+        return match.rangeName.trim();
     }
 
     /** Wypełnia wszystie namedRanges w dokumentcie nową treścią */
@@ -338,43 +367,46 @@ export default class ToolsDocs {
             },
         });
         requests.push({
-            insertText: {
-                text: newText,
-                location: {
-                    index: requestIndexes.namedRangeStartIndex,
-                },
-            },
-        });
-        requests.push({
             deleteNamedRange: {
                 name: rangeName,
             },
         });
 
-        requests.push({
-            createNamedRange: {
-                name: rangeName,
-                range: {
-                    startIndex: requestIndexes.namedRangeStartIndex,
-                    endIndex:
-                        requestIndexes.namedRangeStartIndex + newText.length,
-                },
-            },
-        });
-
-        if (style) {
+        if (newText.length > 0) {
             requests.push({
-                updateTextStyle: {
+                insertText: {
+                    text: newText,
+                    location: {
+                        index: requestIndexes.namedRangeStartIndex,
+                    },
+                },
+            });
+            requests.push({
+                createNamedRange: {
+                    name: rangeName,
                     range: {
                         startIndex: requestIndexes.namedRangeStartIndex,
                         endIndex:
-                            <number>requestIndexes.namedRangeStartIndex +
+                            requestIndexes.namedRangeStartIndex +
                             newText.length,
                     },
-                    textStyle: style,
-                    fields: '*',
                 },
             });
+
+            if (style) {
+                requests.push({
+                    updateTextStyle: {
+                        range: {
+                            startIndex: requestIndexes.namedRangeStartIndex,
+                            endIndex:
+                                <number>requestIndexes.namedRangeStartIndex +
+                                newText.length,
+                        },
+                        textStyle: style,
+                        fields: '*',
+                    },
+                });
+            }
         }
         return requests;
     }
@@ -426,7 +458,8 @@ export default class ToolsDocs {
                     textRunContent &&
                     this.templateContainsNamedRangeTag(textRunContent)
                 ) {
-                    foundTags.push(this.templateTagToRangeName(textRunContent));
+                    const tagMatches = this.getTemplateTagMatches(textRunContent);
+                    foundTags.push(...tagMatches.map((match) => match.rangeName));
                 }
             }
         }
@@ -509,13 +542,6 @@ export default class ToolsDocs {
         //console.groupEnd();
         return;
     }
-    private static templateTagToRangeName(tag: string): string {
-        return tag
-            .replace(/#ENVI#/, '')
-            .replace(/#/g, '')
-            .trim();
-    }
-
     static getNamedRangeByName(
         document: docs_v1.Schema$Document,
         name: string,
@@ -686,7 +712,7 @@ export default class ToolsDocs {
         const requests: docs_v1.Schema$Request[] = [];
         requests.push({
             deleteContentRange: {
-                range: { startIndex, endIndex: endIndex - 1 }, // keep trailing \n
+                range: { startIndex, endIndex },
             },
         });
         requests.push({

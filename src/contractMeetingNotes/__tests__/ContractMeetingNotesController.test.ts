@@ -326,6 +326,189 @@ describe('ContractMeetingNotesController', () => {
         expect(ToolsDocs.insertAgendaStructure).not.toHaveBeenCalled();
     });
 
+    it('accepts required placeholders embedded in surrounding text', async () => {
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getCreateContext',
+        ).mockResolvedValue({
+            contractId: 104,
+            contractNumber: 'C-104',
+            contractGdFolderId: 'contract-folder-104',
+            meetingProtocolsGdFolderId: 'existing-folder-104',
+            projectGdFolderId: 'project-folder-104',
+            employersText: 'Employer A',
+            engineersText: 'Engineer A',
+            contractorsText: 'Contractor A',
+        });
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'getNextSequenceNumberForContract',
+        ).mockResolvedValue(1);
+        jest.spyOn(
+            ContractMeetingNoteRepository.prototype,
+            'addInDb',
+        ).mockResolvedValue(undefined as any);
+        jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
+            data: {
+                body: {
+                    content: [
+                        {
+                            startIndex: 1,
+                            endIndex: 35,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 1,
+                                        endIndex: 35,
+                                        textRun: { content: '#ENVI#MEETING_TITLE#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 36,
+                            endIndex: 69,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 36,
+                                        endIndex: 69,
+                                        textRun: { content: '#ENVI#MEETING_DATE#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 70,
+                            endIndex: 107,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 70,
+                                        endIndex: 107,
+                                        textRun: {
+                                            content: 'Kontrakt:\n#ENVI#CONTRACT_NUMBER# - \n',
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 108,
+                            endIndex: 143,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 108,
+                                        endIndex: 143,
+                                        textRun: { content: '#ENVI#MEETING_LOCATION#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 144,
+                            endIndex: 173,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 144,
+                                        endIndex: 173,
+                                        textRun: { content: '#ENVI#EMPLOYERS#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 174,
+                            endIndex: 203,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 174,
+                                        endIndex: 203,
+                                        textRun: { content: '#ENVI#ENGINEERS#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 204,
+                            endIndex: 235,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 204,
+                                        endIndex: 235,
+                                        textRun: { content: '#ENVI#CONTRACTORS#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 236,
+                            endIndex: 269,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 236,
+                                        endIndex: 269,
+                                        textRun: { content: '#ENVI#AGENDA_SECTION#\n' },
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            startIndex: 270,
+                            endIndex: 308,
+                            paragraph: {
+                                elements: [
+                                    {
+                                        startIndex: 270,
+                                        endIndex: 308,
+                                        textRun: {
+                                            content: 'Sporządził: #ENVI#CREATED_BY#\n',
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                namedRanges: {
+                    AGENDA_SECTION: {
+                        namedRanges: [
+                            {
+                                name: 'AGENDA_SECTION',
+                                ranges: [{ startIndex: 236, endIndex: 258 }],
+                            },
+                        ],
+                    },
+                },
+            },
+        } as any);
+
+        await expect(
+            ContractMeetingNotesController.addFromDto({
+                contractId: 104,
+                title: 'Meeting with inline labels',
+            }),
+        ).resolves.toEqual(
+            expect.objectContaining({
+                protocolGdId: 'doc-1',
+            }),
+        );
+
+        expect(ToolsDocs.updateTextRunsInNamedRanges).toHaveBeenCalledWith(
+            mockAuth,
+            'doc-1',
+            expect.arrayContaining([
+                { rangeName: 'CONTRACT_NUMBER', newText: 'C-104' },
+                { rangeName: 'CREATED_BY', newText: '' },
+            ]),
+        );
+    });
+
     it('throws when template contains no valid ENVI tags', async () => {
         jest.spyOn(
             ContractMeetingNoteRepository.prototype,

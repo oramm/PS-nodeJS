@@ -39,6 +39,52 @@ Plan reference:
 - `N6B-UI-MERGE` -> `DONE`
 - `N7-STABILIZATION-ROLLOUT` -> `DONE`
 
+## 2026-03-13 - Session Legacy-Template-Compat - exact ENVI tag parsing in mixed text runs
+
+### 1. Scope
+
+- Checkpoint ID: `POST-N7-LEGACY-TEMPLATE-COMPAT`
+- Planned tasks:
+    - reproduce runtime failure for GD template where `CONTRACT_NUMBER` and `CREATED_BY` existed but were embedded in surrounding text
+    - fix ENVI tag parsing so closing `#` terminates the tag even when normal text exists before/after the placeholder
+    - add regression tests for both detection and named range boundaries
+
+### 2. Completed
+
+- Changed `ToolsDocs` tag parsing to extract the exact `#ENVI#...#` token from a text run instead of treating the whole text run as the placeholder.
+- Restored strict `ContractMeetingNotesController` validation for all required meeting-note tags, including `CONTRACT_NUMBER` and `CREATED_BY`.
+- Added regression tests for tags embedded in surrounding text and for exact named-range start/end indexes.
+- Fixed `ToolsDocs.updateTextRunInNamedRange` so empty replacements do not send invalid `insertText` requests to Google Docs API.
+
+### 3. Evidence
+
+- Commands/checks:
+    - runtime stack trace from `POST /contractMeetingNote` showed false "missing tag" failure for `#ENVI#CONTRACT_NUMBER#` and `#ENVI#CREATED_BY#`
+- Tests:
+    - `yarn test src/tools/__tests__/ToolsDocs.test.ts src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts --runInBand` -> PASS (2 suites, 21 tests)
+- Files changed:
+    - `src/tools/ToolsDocs.ts`
+    - `src/tools/__tests__/ToolsDocs.test.ts`
+    - `src/contractMeetingNotes/ContractMeetingNotesController.ts`
+    - `src/contractMeetingNotes/__tests__/ContractMeetingNotesController.test.ts`
+    - `documentation/team/operations/contract-meeting-notes/progress.md`
+    - `documentation/team/operations/contract-meeting-notes/activity-log.md`
+
+### 4. Risks/Blockers
+
+- Parser still relies on contiguous `#ENVI#...#` text inside a single text run; if Google Docs splits one placeholder itself across multiple text runs, that would require a deeper parser change.
+- Missing required placeholders still block generation by design.
+- Empty replacements now remove the placeholder text entirely; if any template expects an empty named range to survive for later edits, that behavior is intentionally not preserved.
+
+### 5. Next Session (exact next actions)
+
+- Verify the affected live template by creating a real meeting note with inline label text around placeholders.
+- If any template splits a single placeholder across multiple Google Docs text runs, extend parser coverage with a dedicated test before changing production logic.
+
+### 6. Checkpoint Status
+
+- `CLOSED`
+
 ## 2026-03-13 - Session Folder-Dualism-Audit - contract-scoped meeting notes folder
 
 ### 1. Scope
