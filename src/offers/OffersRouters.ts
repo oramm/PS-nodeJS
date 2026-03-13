@@ -8,6 +8,12 @@ import EnviErrors from '../tools/Errors';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 import OfferBondsController from './OfferBond/OfferBondsController';
+import ToolsMail from '../tools/ToolsMail';
+
+function getAsyncTaskErrorMessage(error: unknown) {
+    if (error instanceof Error) return error.message;
+    return String(error);
+}
 
 app.post('/offers', async (req: Request, res: Response, next) => {
     try {
@@ -44,7 +50,8 @@ app.post('/offer', async (req: Request, res: Response, next) => {
                 );
             } catch (err) {
                 console.error('Błąd async:', err);
-                TaskStore.fail(taskId, (err as Error).message);
+                await ToolsMail.sendServerErrorReport(err, req);
+                TaskStore.fail(taskId, getAsyncTaskErrorMessage(err));
             }
         });
     } catch (error) {
@@ -76,7 +83,8 @@ app.put('/offer/:id', async (req: Request, res: Response, next) => {
                 TaskStore.complete(taskId, item, 'Oferta zmieniona pomyślnie');
             } catch (err) {
                 console.error('Błąd async:', err);
-                TaskStore.fail(taskId, (err as Error).message);
+                await ToolsMail.sendServerErrorReport(err, req);
+                TaskStore.fail(taskId, getAsyncTaskErrorMessage(err));
             }
         });
     } catch (error) {
