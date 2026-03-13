@@ -68,6 +68,7 @@ describe('ContractMeetingNotesController', () => {
         } as any);
         jest.spyOn(ToolsGd, 'createPermissions').mockResolvedValue({} as any);
         jest.spyOn(ToolsGd, 'trashFileOrFolder').mockResolvedValue({} as any);
+        jest.spyOn(ToolsGd, 'trashFile').mockResolvedValue('ok' as any);
 
         jest.spyOn(ToolsDocs, 'initNamedRangesFromTags').mockResolvedValue(
             undefined as any,
@@ -420,12 +421,44 @@ describe('ContractMeetingNotesController', () => {
     });
 
     describe('deleteById', () => {
-        it('calls deleteByMeetingIdInDb when note has a meetingId (removes all duplicates)', async () => {
+        it('trashes all Google Drive files and deletes all duplicates when note has a meetingId', async () => {
             const findSpy = jest
                 .spyOn(ContractMeetingNoteRepository.prototype, 'find')
-                .mockResolvedValue([
-                    { id: 10, meetingId: 55, contractId: 1 } as any,
+                .mockResolvedValueOnce([
+                    {
+                        id: 10,
+                        meetingId: 55,
+                        contractId: 1,
+                        protocolGdId: 'doc-base',
+                    } as any,
+                ])
+                .mockResolvedValueOnce([
+                    {
+                        id: 10,
+                        meetingId: 55,
+                        contractId: 1,
+                        protocolGdId: 'doc-base',
+                    } as any,
+                    {
+                        id: 11,
+                        meetingId: 55,
+                        contractId: 1,
+                        protocolGdId: 'doc-dup',
+                    } as any,
+                    {
+                        id: 12,
+                        meetingId: 55,
+                        contractId: 1,
+                        protocolGdId: null,
+                    } as any,
+                    {
+                        id: 13,
+                        meetingId: 55,
+                        contractId: 1,
+                        protocolGdId: '   ',
+                    } as any,
                 ]);
+            const trashFileSpy = jest.spyOn(ToolsGd, 'trashFile');
             const deleteByMeetingIdSpy = jest
                 .spyOn(
                     ContractMeetingNoteRepository.prototype,
@@ -439,16 +472,26 @@ describe('ContractMeetingNotesController', () => {
 
             await ContractMeetingNotesController.deleteById(10);
 
-            expect(findSpy).toHaveBeenCalledWith([{ id: 10 }]);
+            expect(findSpy).toHaveBeenNthCalledWith(1, [{ id: 10 }]);
+            expect(findSpy).toHaveBeenNthCalledWith(2, [{ meetingId: 55 }]);
+            expect(trashFileSpy).toHaveBeenCalledTimes(2);
+            expect(trashFileSpy).toHaveBeenNthCalledWith(1, mockAuth, 'doc-base');
+            expect(trashFileSpy).toHaveBeenNthCalledWith(2, mockAuth, 'doc-dup');
             expect(deleteByMeetingIdSpy).toHaveBeenCalledWith(55);
             expect(deleteFromDbSpy).not.toHaveBeenCalled();
         });
 
-        it('calls deleteFromDb when note has no meetingId', async () => {
-            const noteWithoutMeeting = { id: 20, meetingId: null, contractId: 1 } as any;
+        it('trashes a single Google Drive file and deletes one record when note has no meetingId', async () => {
+            const noteWithoutMeeting = {
+                id: 20,
+                meetingId: null,
+                contractId: 1,
+                protocolGdId: 'doc-single',
+            } as any;
             jest.spyOn(ContractMeetingNoteRepository.prototype, 'find').mockResolvedValue([
                 noteWithoutMeeting,
             ]);
+            const trashFileSpy = jest.spyOn(ToolsGd, 'trashFile');
             const deleteByMeetingIdSpy = jest.spyOn(
                 ContractMeetingNoteRepository.prototype,
                 'deleteByMeetingIdInDb',
@@ -459,6 +502,7 @@ describe('ContractMeetingNotesController', () => {
 
             await ContractMeetingNotesController.deleteById(20);
 
+            expect(trashFileSpy).toHaveBeenCalledWith(mockAuth, 'doc-single');
             expect(deleteFromDbSpy).toHaveBeenCalledWith(noteWithoutMeeting);
             expect(deleteByMeetingIdSpy).not.toHaveBeenCalled();
         });

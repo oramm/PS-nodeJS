@@ -104,16 +104,33 @@ export default class ContractMeetingNotesController extends BaseController<
             throw new Error('id must be a positive integer');
         }
         const instance = this.getInstance();
-        const items = await instance.repository.find([{ id }]);
-        if (items.length === 0) {
-            throw new Error(`ContractMeetingNote with id=${id} not found`);
-        }
-        const note = items[0];
-        if (note.meetingId) {
-            await instance.repository.deleteByMeetingIdInDb(note.meetingId);
-        } else {
-            await instance.repository.deleteFromDb(note);
-        }
+        await this.withAuth(async (_, authClient) => {
+            const items = await instance.repository.find([{ id }]);
+            if (items.length === 0) {
+                throw new Error(`ContractMeetingNote with id=${id} not found`);
+            }
+            const note = items[0];
+            const notesToDelete = note.meetingId
+                ? await instance.repository.find([{ meetingId: note.meetingId }])
+                : [note];
+            const protocolGdIds = [
+                ...new Set(
+                    notesToDelete
+                        .map((item) => item.protocolGdId?.trim() || '')
+                        .filter((protocolGdId) => protocolGdId.length > 0),
+                ),
+            ];
+
+            for (const protocolGdId of protocolGdIds) {
+                await ToolsGd.trashFile(authClient, protocolGdId);
+            }
+
+            if (note.meetingId) {
+                await instance.repository.deleteByMeetingIdInDb(note.meetingId);
+            } else {
+                await instance.repository.deleteFromDb(note);
+            }
+        });
     }
 
     private async addWithAuth(
