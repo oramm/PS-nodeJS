@@ -7,6 +7,7 @@
 1. Start with `documentation/team/onboarding/*` for setup, environment, and access.
 2. Use `documentation/team/runbooks/*` for repeatable team procedures.
 3. Use `documentation/team/operations/*` for DB/env/deploy changes and post-change records.
+   Read `post-change-checklist.md` first; open quarterly archive files only when older rollout context is needed.
 4. Do not add new operational `.md` files in repository root.
 
 ## Structure
@@ -39,6 +40,7 @@ Closed tasks policy:
 
 1. Update canonical docs in `documentation/team/*` to the latest system state.
 2. Add/maintain operational rollout facts in `documentation/team/operations/post-change-checklist.md` when DB/env/deploy is affected.
+   Keep the active file compact and move older entries to `documentation/team/operations/post-change-checklist-archive/`.
 3. Remove temporary `plan/progress/activity-log` for closed tasks (history remains in git).
 
 ## Change policy

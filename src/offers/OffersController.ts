@@ -9,6 +9,7 @@ import PersonsController from '../persons/PersonsController';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
 import EnviErrors from '../tools/Errors';
+import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
 import { MilestoneDateData, OfferEventData } from '../types/types';
@@ -576,6 +577,7 @@ export default class OffersController extends BaseController<
                 status: 'Nie rozpoczęty',
                 _dates: [
                     {
+                        startDate: ToolsDate.dateJsToSql(new Date()) as string,
                         endDate: i
                             ? <string>offer.submissionDeadline
                             : offer.setBidValidityDate(),

@@ -1,0 +1,4 @@
+ALTER TABLE Milestones
+    MODIFY COLUMN StartDate DATE NULL,
+    MODIFY COLUMN EndDate DATE NULL;
+

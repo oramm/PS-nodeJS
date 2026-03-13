@@ -23,12 +23,14 @@ Execute SQL migrations safely on the correct DB target (`development` local or `
 3. Resolve migration dependencies and order (for example base table migration before alter migration).
 4. Apply only missing migration steps, sequentially.
 5. Verify expected objects exist after apply.
-6. Update `documentation/team/operations/post-change-checklist.md` with:
+6. Update the active file `documentation/team/operations/post-change-checklist.md` with:
    - date,
    - target DB,
    - executed migrations,
-   - verification evidence,
-   - rollback notes.
+   - short verification summary,
+   - rollback notes,
+   - optional links to runbook / feature docs / scripts.
+   Open archive files only when older migration context is needed.
 
 ## Safety rules
 

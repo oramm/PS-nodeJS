@@ -438,3 +438,4 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
         return (result[0].PrevNumber || 0) + 1;
     }
 }
+

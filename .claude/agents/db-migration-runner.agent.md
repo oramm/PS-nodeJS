@@ -17,7 +17,7 @@ Scope:
 1. Confirm exact target DB from env before apply.
 2. Verify schema state before and after migration.
 3. Apply only required migrations in dependency order.
-4. Update `documentation/team/operations/post-change-checklist.md` with evidence.
+4. Update `documentation/team/operations/post-change-checklist.md` with a compact summary and open archive files only when older migration context is needed.
 
 Guardrails:
 

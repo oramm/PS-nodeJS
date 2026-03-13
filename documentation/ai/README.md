@@ -28,6 +28,7 @@
 3. Apply changes.
 4. If DB/env/deploy impact exists, update:
    `documentation/team/operations/post-change-checklist.md`.
+5. Read `post-change-checklist.md` before any archive file; open `documentation/team/operations/post-change-checklist-archive/*` only when older context is required.
 
 ## Persons V2 Refactor (AI session contract)
 
