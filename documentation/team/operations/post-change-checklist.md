@@ -9,10 +9,10 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 ## How to use
 
 1. Update the canonical document that owns the change:
-   - `documentation/team/operations/db-changes.md`
-   - `documentation/team/onboarding/environment.md`
-   - `documentation/team/operations/deployment-heroku.md`
-   - relevant runbook or `documentation/team/operations/<feature>/`
+    - `documentation/team/operations/db-changes.md`
+    - `documentation/team/onboarding/environment.md`
+    - `documentation/team/operations/deployment-heroku.md`
+    - relevant runbook or `documentation/team/operations/<feature>/`
 2. Add a short entry here when DB/env/deploy is affected.
 3. Keep detailed evidence, long command logs, and environment-specific troubleshooting outside this file unless they are required for rollout safety.
 
@@ -21,9 +21,9 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 - Keep only active or recent entries in this file.
 - Archive older entries to `documentation/team/operations/post-change-checklist-archive/<year>-Q<quarter>.md`.
 - Archive when any of the following is true:
-  - more than 20 entries are in the active file,
-  - an entry is older than 90 days,
-  - the file grows beyond roughly 500 lines.
+    - more than 20 entries are in the active file,
+    - an entry is older than 90 days,
+    - the file grows beyond roughly 500 lines.
 - New entries must use the current compact template.
 - Agents should read this file first and open archive files only when older context is needed.
 
@@ -63,6 +63,41 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-03-18 - Runtime bug backlog and bugfix automation scaffold
+
+### Scope
+
+- Added `BugEvents` runtime capture flow with deduplication by fingerprint, per-fingerprint rate limiting, and circuit-breaker persistence behavior.
+- Added optional `/client-error` ingest endpoint and CLI scripts: `bugfix:scan`, `bugfix:run`, `bugfix:sync-github`.
+- Added admin read model endpoint `/admin/bug-events`, daily inbox generation, and retention archiving automation.
+- Added SQL migration for `BugEvents` and `BugEventsArchive` tables.
+
+### Impact
+
+- DB: new tables `BugEvents` and `BugEventsArchive` (migration `src/bugEvents/migrations/001_create_bug_events.sql`).
+- ENV: added `BUG_GITHUB_SYNC_ENABLED`, `BUG_GITHUB_REPO`, `BUG_GITHUB_TOKEN`, `BUG_ERROR_MAIL_CRITICAL_ONLY`, `BUG_CLIENT_ERROR_ENABLED`, `BUG_CLIENT_ERROR_SECRET`, `TRUST_PROXY`, `BUG_ADMIN_READ_MODEL_ENABLED`, `BUG_ADMIN_READ_MODEL_SECRET`, `BUGFIX_DAILY_INBOX_*`, `BUGFIX_RETENTION_*`.
+- Deploy: run migration before deploying capture-enabled backend; configure env keys before enabling GitHub sync.
+
+### Required Actions
+
+- Apply the BugEvents migration on development and production databases.
+- Keep `BUG_GITHUB_SYNC_ENABLED=false` until repository/app credentials are verified.
+
+### Verification
+
+- Unit tests cover fingerprint stability, per-fingerprint rate-limit buffering/replay, and circuit-breaker behavior.
+- `yarn bugfix:scan` and `yarn bugfix:run` produce bug context data for local AI sessions.
+
+### Rollback
+
+- Disable capture-dependent workflows, set `BUG_GITHUB_SYNC_ENABLED=false`, and rollback by dropping `BugEventsArchive` then `BugEvents`.
+
+### Links
+
+- `src/bugEvents/migrations/001_create_bug_events.sql`
+- `src/scripts/bugfix-scan.ts`
+- `src/scripts/bugfix-run.ts`
+
 ## 2026-03-13 - Milestones date nullability
 
 ### Scope
@@ -89,8 +124,8 @@ Copy the block below for each new change:
 ### Rollback
 
 - Revert nullability with:
-  - `ALTER TABLE Milestones MODIFY COLUMN StartDate DATE NOT NULL;`
-  - `ALTER TABLE Milestones MODIFY COLUMN EndDate DATE NOT NULL;`
+    - `ALTER TABLE Milestones MODIFY COLUMN StartDate DATE NOT NULL;`
+    - `ALTER TABLE Milestones MODIFY COLUMN EndDate DATE NOT NULL;`
 
 ### Links
 

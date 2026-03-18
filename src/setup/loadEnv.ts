@@ -11,9 +11,16 @@ export function loadEnv(): void {
     dotenv.config({ path: envFile, override: true });
 
     Object.entries(shellEnv).forEach(([key, value]) => {
-        if (key !== 'KSEF_ENVIRONMENT' && value !== undefined) {
-            process.env[key] = value;
+        if (key === 'KSEF_ENVIRONMENT' || value === undefined) {
+            return;
         }
+
+        // Avoid wiping .env values with empty inherited shell variables.
+        if (typeof value === 'string' && value.trim().length === 0) {
+            return;
+        }
+
+        process.env[key] = value;
     });
 
     if (rootKsefEnvironment) {

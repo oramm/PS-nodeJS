@@ -2,20 +2,22 @@ import { ImapFlowOptions, Logger } from 'imapflow';
 import mysql from 'mysql2/promise';
 
 export default class Setup {
-    static dbConfig: mysql.PoolOptions = {
-        connectionLimit: 10,
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
-        multipleStatements: true,
-        timezone: '+00:00',
-        waitForConnections: true,
-        queueLimit: 0,
-        enableKeepAlive: true,
-        keepAliveInitialDelay: 0,
-        connectTimeout: 10000,
-    };
+    static get dbConfig(): mysql.PoolOptions {
+        return {
+            connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+            multipleStatements: process.env.DB_MULTIPLE_STATEMENTS !== 'false',
+            timezone: '+00:00',
+            waitForConnections: true,
+            queueLimit: 0,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 0,
+            connectTimeout: 10000,
+        };
+    }
 
     static biuroImapMailClient: ImapFlowOptions = {
         host: process.env.BIURO_IMAP_HOST as string,
