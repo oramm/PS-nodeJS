@@ -199,9 +199,13 @@ export default class CostInvoiceController {
         const supplierName = this.extractName(podmiot);
         const supplierAddress = this.extractAddress(podmiot);
 
-        // Daty
-        const issueDate = new Date(naglowek.DataWystawienia || invoiceInfo.invoicingDate);
-        const saleDate = naglowek.DataSprzedazy ? new Date(naglowek.DataSprzedazy) : undefined;
+        // Daty — FA(3): P_1 = data wystawienia, P_6 = data sprzedaży (w sekcji Fa)
+        const issueDate = new Date(fa.P_1 || naglowek.DataWystawienia || invoiceInfo.invoicingDate);
+        const saleDate = fa.P_6
+            ? new Date(fa.P_6)
+            : naglowek.DataSprzedazy
+              ? new Date(naglowek.DataSprzedazy)
+              : undefined;
         const dueDate = fa.TerminPlatnosci?.TerminPlatnosci 
             ? new Date(fa.TerminPlatnosci.TerminPlatnosci) 
             : undefined;
@@ -212,9 +216,23 @@ export default class CostInvoiceController {
         let vatAmount = parseDecimal(podsumowanie.WartoscVat || podsumowanie.WartoscVat_Faktura);
         let grossAmount = parseDecimal(podsumowanie.WartoscBrutto || podsumowanie.WartoscBrutto_Faktura);
 
-        // FA(3) - fallback na pola P_13_1 / P_14_1 / P_15 w sekcji Fa
-        if (netAmount === 0) netAmount = parseDecimal(fa.P_13_1 || fa.P_13_2 || fa.P_13_3);
-        if (vatAmount === 0) vatAmount = parseDecimal(fa.P_14_1 || fa.P_14_2 || fa.P_14_3);
+        // FA(3) - fallback na pola P_13_x / P_14_x / P_15 w sekcji Fa.
+        // Sumujemy wszystkie stawki (nie bierzemy pierwszej niezerowej), bo faktura może mieć
+        // wiele stawek VAT jednocześnie (np. 23% + 8%) lub tylko stawkę ZW (P_13_7).
+        // Mapowanie: P_13_1↔P_14_1 (23%), P_13_2↔P_14_2 (8%), P_13_3↔P_14_3 (5%),
+        //            P_13_6_1 (0%), P_13_7 (ZW/zwolniona — brak VAT, więc bez P_14_7).
+        if (netAmount === 0) {
+            netAmount = [fa.P_13_1, fa.P_13_2, fa.P_13_3, fa.P_13_6_1, fa.P_13_7].reduce(
+                (sum: number, v: any) => sum + (parseDecimal(v) || 0),
+                0,
+            );
+        }
+        if (vatAmount === 0) {
+            vatAmount = [fa.P_14_1, fa.P_14_2, fa.P_14_3].reduce(
+                (sum: number, v: any) => sum + (parseDecimal(v) || 0),
+                0,
+            );
+        }
         if (grossAmount === 0) grossAmount = parseDecimal(fa.P_15);
 
         const currency = fa.KodWaluty || naglowek.KodWaluty || 'PLN';
@@ -229,7 +247,7 @@ export default class CostInvoiceController {
             supplierNip,
             supplierName,
             supplierAddress,
-            invoiceNumber: invoiceInfo.invoiceNumber || naglowek.NrFaktury,
+            invoiceNumber: invoiceInfo.invoiceNumber || fa.P_2 || naglowek.NrFaktury,
             issueDate,
             saleDate,
             dueDate,
@@ -259,6 +277,16 @@ export default class CostInvoiceController {
             return Number.isNaN(parsed) ? fallback : parsed;
         };
 
+        // FA(3): P_12 może być liczbą (23, 8, 5, 0) lub stringiem ('zw', 'np').
+        // parseDecimal('zw', 23) zwróciłby 23 — stąd dedykowana funkcja.
+        const parseVatRate = (value: any): number => {
+            const str = String(value ?? '').trim().toLowerCase();
+            if (str === 'zw' || str === 'zwolniony' || str === 'np' || str === 'np.') return 0;
+            return parseDecimal(value, 23);
+        };
+
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+
         const items: CostInvoiceItem[] = [];
         const faWiersze = fa.FaWiersze || {};
         let wiersze = faWiersze.FaWiersz || fa.FaWiersz || [];
@@ -270,15 +298,40 @@ export default class CostInvoiceController {
 
         let lineNumber = 1;
         for (const wiersz of wiersze) {
+            // 1. Stawka VAT — parsuj jako pierwszą (potrzebna do konwersji brutto→netto)
+            const vatRate = parseVatRate(wiersz.P_12 ?? wiersz.StawkaVat);
+
+            // 2. Tryb cennika: netto (P_9A) vs brutto (P_9B, np. faktury detaliczne)
+            // W trybie brutto: P_11A = wartość brutto wiersza; netto = brutto / (1 + vatRate/100)
+            const isGrossPricing = wiersz.P_9B !== undefined && wiersz.P_9A === undefined;
+            const divisor = isGrossPricing && vatRate > 0 ? 1 + vatRate / 100 : 1;
+
+            // 3. Cena jednostkowa netto
+            const unitPriceRaw = parseDecimal(wiersz.P_9A ?? wiersz.P_9B ?? wiersz.CenaJednostkowa);
+            const unitPrice = round2(unitPriceRaw / divisor);
+
+            // 4. Wartość wiersza netto
+            // P_11  = wartość netto (przy P_9A)
+            // P_11A = wartość netto ze zniżką (przy P_9A) lub wartość brutto wiersza (przy P_9B)
+            const lineValueRaw = parseDecimal(wiersz.P_11 ?? wiersz.P_11A ?? wiersz.WartoscNetto);
+            const netValue = round2(lineValueRaw / divisor);
+
+            // 5. VAT per pozycja: P_11_1 (stary wariant) lub P_11Vat (FA(3) retail)
+            // Jeśli brak jawnego pola — oblicz z różnicy brutto-netto.
+            const vatValueExplicit = parseDecimal(
+                wiersz.P_11_1 ?? wiersz.P_11Vat ?? wiersz.WartoscVat,
+            );
+            const vatValue = vatValueExplicit || round2(lineValueRaw - netValue);
+
             const item = new CostInvoiceItem({
                 lineNumber,
                 description: wiersz.P_7 || wiersz.NazwaTowaruLubUslugi || 'Brak opisu',
                 quantity: parseDecimal(wiersz.P_8B || wiersz.Ilosc, 1),
                 unit: wiersz.P_8A || wiersz.JednostkaMiary || 'szt.',
-                unitPrice: parseDecimal(wiersz.P_9A || wiersz.CenaJednostkowa),
-                netValue: parseDecimal(wiersz.P_11 || wiersz.WartoscNetto),
-                vatRate: parseDecimal(wiersz.P_12 || wiersz.StawkaVat, 23),
-                vatValue: parseDecimal(wiersz.P_11_1 || wiersz.WartoscVat),
+                unitPrice,
+                netValue,
+                vatRate,
+                vatValue,
                 grossValue: 0, // Oblicz poniżej
                 isSelectedForBooking: true,
                 bookingPercentage: 100,

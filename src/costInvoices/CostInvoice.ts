@@ -273,7 +273,7 @@ export class CostInvoiceItem {
         this.unitPrice = data.unitPrice || 0;
         
         this.netValue = data.netValue || 0;
-        this.vatRate = data.vatRate || 23;
+        this.vatRate = data.vatRate ?? 23;
         this.vatValue = data.vatValue || 0;
         this.grossValue = data.grossValue || 0;
         
