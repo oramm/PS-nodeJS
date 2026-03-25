@@ -417,19 +417,19 @@ export default class InvoicesController extends BaseController<
 
     /**
      * API PUBLICZNE
-     * Wystawia fakturę i uploaduje plik do GD
+     * Wystawia fakturę i opcjonalnie uploaduje plik do GD
      *
      * @param invoiceData - Dane faktury
-     * @param invoiceFile - Plik faktury do uploadu
+     * @param invoiceFile - Plik faktury do uploadu (opcjonalny)
      * @param authSignal - Sygnał 'FETCH_TOKEN' (withAuth sam pobierze token)
      * @returns Promise<Invoice> - Wystawiona faktura
      */
     static async issue(
         invoiceData: InvoiceData,
-        invoiceFile: Express.Multer.File,
+        invoiceFile?: Express.Multer.File,
         authSignal?: string
     ): Promise<Invoice> {
-        // authSignal jest zawsze potrzebny dla issue - zawsze uploadujemy do GD
+        // authSignal jest zawsze potrzebny dla issue - zawsze uploadujemy do GD jeśli plik dostępny
         return await this.withAuth<Invoice>(
             async (instance: InvoicesController, authClient: OAuth2Client) => {
                 return await instance.issueInvoice(
@@ -443,17 +443,17 @@ export default class InvoicesController extends BaseController<
 
     /**
      * LOGIKA BIZNESOWA (prywatna)
-     * Wystawia fakturę - uploaduje plik do GD i aktualizuje DB
+     * Wystawia fakturę - opcjonalnie uploaduje plik do GD i aktualizuje DB
      *
      * @param auth - OAuth2Client dla operacji GD
      * @param invoiceData - Dane faktury
-     * @param invoiceFile - Plik faktury do uploadu
+     * @param invoiceFile - Plik faktury do uploadu (opcjonalny)
      * @returns Promise<Invoice> - Wystawiona faktura
      */
     private async issueInvoice(
         auth: OAuth2Client,
         invoiceData: InvoiceData,
-        invoiceFile: Express.Multer.File
+        invoiceFile?: Express.Multer.File
     ): Promise<Invoice> {
         console.group('InvoicesController.issueInvoice()');
         try {
@@ -464,15 +464,18 @@ export default class InvoicesController extends BaseController<
                 await ToolsGd.trashFile(auth, item.gdId);
             }
 
-            const fileData: drive_v3.Schema$File =
-                await ToolsGd.uploadFileMulter(
-                    auth,
-                    invoiceFile,
-                    undefined,
-                    parentGdFolderId
-                );
+            if (invoiceFile) {
+                const fileData: drive_v3.Schema$File =
+                    await ToolsGd.uploadFileMulter(
+                        auth,
+                        invoiceFile,
+                        undefined,
+                        parentGdFolderId
+                    );
 
-            item.setGdIdAndUrl(fileData.id);
+                item.setGdIdAndUrl(fileData.id);
+            }
+            // Jeśli plik nie był przesłany, gdId pozostaje null - to jest OK (plik to tylko archiwum)
 
             const fieldsToUpdate = [
                 'status',
@@ -488,7 +491,10 @@ export default class InvoicesController extends BaseController<
                 fieldsToUpdate
             );
 
-            console.log(`Invoice ${item.number} issued and file uploaded`);
+            const message = invoiceFile
+                ? `Invoice ${item.number} issued and file uploaded`
+                : `Invoice ${item.number} issued (no file attached)`;
+            console.log(message);
             return item;
         } finally {
             console.groupEnd();

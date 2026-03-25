@@ -89,9 +89,6 @@ app.put(
     async (req: Request, res: Response, next) => {
         try {
             const invoiceFile = req.file;
-            if (!invoiceFile) {
-                throw new Error('Nie załączono pliku faktury');
-            }
 
             // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
             let itemFromClient = req.parsedBody;
