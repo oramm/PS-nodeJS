@@ -40,6 +40,8 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     ksefStatus?: string | null;
     ksefSessionId?: string | null;
     ksefUpo?: string | null;
+    isJstSubordinate?: boolean;
+    isGvMember?: boolean;
     _totalGrossValue?: number;
     /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
     correctedInvoiceId?: number | null;
@@ -91,6 +93,14 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this.ksefStatus = (initParamObject as any).ksefStatus;
         this.ksefSessionId = (initParamObject as any).ksefSessionId;
         this.ksefUpo = (initParamObject as any).ksefUpo;
+        this.isJstSubordinate = Boolean(
+            (initParamObject as any).isJstSubordinate ?? false
+        );
+        this.isGvMember =
+            (initParamObject as any).isGvMember === undefined ||
+            (initParamObject as any).isGvMember === null
+                ? true
+                : Boolean((initParamObject as any).isGvMember);
         this.correctedInvoiceId = (initParamObject as any).correctedInvoiceId;
         this.correctionReason = (initParamObject as any).correctionReason;
         //this._items = initParamObject._items;

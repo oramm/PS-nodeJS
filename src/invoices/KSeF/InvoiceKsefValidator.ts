@@ -52,6 +52,20 @@ export default class InvoiceKsefValidator {
             errors.push('Valid non-negative daysToPay required');
         }
 
+        if (
+            invoiceDto.isJstSubordinate !== undefined &&
+            typeof invoiceDto.isJstSubordinate !== 'boolean'
+        ) {
+            errors.push('isJstSubordinate must be boolean');
+        }
+
+        if (
+            invoiceDto.isGvMember !== undefined &&
+            typeof invoiceDto.isGvMember !== 'boolean'
+        ) {
+            errors.push('isGvMember must be boolean');
+        }
+
         // Total is _totalNetValue
         const total = invoiceDto._totalNetValue;
         if (total === undefined || total === null) {

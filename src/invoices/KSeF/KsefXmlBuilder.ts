@@ -35,6 +35,14 @@ export default class KsefXmlBuilder {
     private static readonly SCHEMA_VERSION = '1-0E';
     private static readonly FORM_CODE_VALUE = 'FA';  // Treść elementu KodFormularza (enum TKodFormularza)
 
+    private static mapBooleanToKsefFlag(
+        value: boolean | undefined,
+        defaultValue: boolean,
+    ): 1 | 2 {
+        const resolvedValue = value === undefined ? defaultValue : value;
+        return resolvedValue ? 1 : 2;
+    }
+
     /**
      * Buduje XML faktury korygującej zgodny ze schematem FA(3)
      * 
@@ -69,6 +77,11 @@ export default class KsefXmlBuilder {
         const buyerName = this.escapeXml(invoice._entity?.name || '');
         const buyerNip = this.normalizeNip(invoice._entity?.taxNumber || '');
         const buyerAddress = this.escapeXml(invoice._entity?.address || '');
+        const buyerJst = this.mapBooleanToKsefFlag(
+            invoice.isJstSubordinate,
+            false,
+        );
+        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, true);
 
         // Data i numer faktury korygującej
         const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
@@ -131,8 +144,8 @@ export default class KsefXmlBuilder {
             <KodKraju>PL</KodKraju>
             <AdresL1>${buyerAddress}</AdresL1>
         </Adres>` : ''}
-        <JST>2</JST>
-        <GV>2</GV>
+        <JST>${buyerJst}</JST>
+        <GV>${buyerGv}</GV>
     </Podmiot2>
     <Fa>
         <KodWaluty>PLN</KodWaluty>
@@ -179,6 +192,11 @@ export default class KsefXmlBuilder {
         const buyerName = this.escapeXml(invoice._entity?.name || '');
         const buyerNip = this.normalizeNip(invoice._entity?.taxNumber || '');
         const buyerAddress = this.escapeXml(invoice._entity?.address || '');
+        const buyerJst = this.mapBooleanToKsefFlag(
+            invoice.isJstSubordinate,
+            false,
+        );
+        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, true);
 
         // Data i numer faktury
         const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
@@ -235,8 +253,8 @@ export default class KsefXmlBuilder {
         </Adres>`
                 : ''
         }
-        <JST>2</JST>
-        <GV>2</GV>
+        <JST>${buyerJst}</JST>
+        <GV>${buyerGv}</GV>
     </Podmiot2>
     <Fa>
         <KodWaluty>PLN</KodWaluty>

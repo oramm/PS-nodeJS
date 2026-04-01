@@ -83,4 +83,40 @@ describe('KsefXmlBuilder FA(3) payment and sale date mapping', () => {
         expect(xml).toContain('<NIP>9876543210</NIP>');
         expect(xml).not.toContain('<NIP>987-654-32-10</NIP>');
     });
+
+    it('mapuje pola JST/GV z checkboxów faktury', () => {
+        const xml = KsefXmlBuilder.buildXml(
+            makeInvoice({
+                isJstSubordinate: true,
+                isGvMember: false,
+            }) as any,
+        );
+
+        expect(xml).toContain('<JST>1</JST>');
+        expect(xml).toContain('<GV>2</GV>');
+    });
+
+    it('używa domyślnych wartości JST/GV gdy pola nie są ustawione', () => {
+        const xml = KsefXmlBuilder.buildXml(makeInvoice({}) as any);
+
+        expect(xml).toContain('<JST>2</JST>');
+        expect(xml).toContain('<GV>1</GV>');
+    });
+
+    it('mapuje JST/GV także dla faktury korygującej', () => {
+        const xml = KsefXmlBuilder.buildCorrectionXml(
+            makeInvoice({
+                isJstSubordinate: true,
+                isGvMember: true,
+            }) as any,
+            {
+                ksefNumber: '1111111111-20260101-AAAAAA-BBBBBB-CC',
+                invoiceNumber: 'FV/1/2026',
+                issueDate: '2026-01-01',
+            },
+        );
+
+        expect(xml).toContain('<JST>1</JST>');
+        expect(xml).toContain('<GV>1</GV>');
+    });
 });

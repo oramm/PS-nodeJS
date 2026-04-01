@@ -558,6 +558,10 @@ export interface InvoiceData extends RepositoryDataItem {
     ksefStatus?: string | null;
     ksefSessionId?: string | null;
     ksefUpo?: string | null;
+    /** Czy faktura dotyczy jednostki podrzędnej JST (KSeF: JST=1) */
+    isJstSubordinate?: boolean;
+    /** Czy faktura dotyczy członka grupy GV (KSeF: GV=1) */
+    isGvMember?: boolean;
     // Correction invoice fields
     /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
     correctedInvoiceId?: number | null;

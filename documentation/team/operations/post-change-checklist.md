@@ -63,6 +63,40 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-04-01 - Invoice JST/GV flags for KSeF payload
+
+### Scope
+
+- Added invoice-level flags `IsJstSubordinate` and `IsGvMember` to control KSeF `Podmiot2/JST` and `Podmiot2/GV` values.
+- Updated invoice model/repository typing and KSeF XML builder mapping (`true -> 1`, `false -> 2`).
+- Added frontend checkboxes in invoice add/edit modal with defaults: JST `false`, GV `true`.
+
+### Impact
+
+- DB: new columns in `Invoices`: `IsJstSubordinate` (default `0`) and `IsGvMember` (default `1`).
+- ENV: none.
+- Deploy: run migration `src/invoices/migrations/002_add_invoice_jst_gv_flags.sql` before deploying backend/frontend changes.
+
+### Required Actions
+
+- Apply migration on all target environments before rollout.
+- Verify add/edit invoice flows persist both flags and that KSeF XML contains expected `JST/GV` values.
+
+### Verification
+
+- Backend unit test suite `src/invoices/KSeF/__tests__/KsefXmlBuilder.test.ts` covers explicit and default JST/GV mapping, including correction XML path.
+- Frontend production build passes with new modal fields.
+
+### Rollback
+
+- Revert application code and drop columns `IsJstSubordinate`, `IsGvMember` if full rollback is required.
+
+### Links
+
+- `src/invoices/migrations/002_add_invoice_jst_gv_flags.sql`
+- `src/invoices/KSeF/KsefXmlBuilder.ts`
+- `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/Erp/InvoicesList/Modals/InvoiceModalBody.tsx`
+
 ## 2026-03-18 - Runtime bug backlog and bugfix automation scaffold
 
 ### Scope

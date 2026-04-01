@@ -68,6 +68,10 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             ksefStatus: row.KsefStatus,
             ksefSessionId: row.KsefSessionId,
             ksefUpo: row.KsefUpo,
+            isJstSubordinate: Boolean(row.IsJstSubordinate),
+            isGvMember: row.IsGvMember === undefined || row.IsGvMember === null
+                ? true
+                : Boolean(row.IsGvMember),
             correctedInvoiceId: row.CorrectedInvoiceId,
             correctionReason: ToolsDb.sqlToString(row.CorrectionReason),
             _lastUpdated: row.LastUpdated,
@@ -117,6 +121,8 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Invoices.KsefStatus,
             Invoices.KsefSessionId,
             Invoices.KsefUpo,
+            Invoices.IsJstSubordinate,
+            Invoices.IsGvMember,
             Invoices.CorrectedInvoiceId,
             Invoices.CorrectionReason,
             Invoices.LastUpdated,
