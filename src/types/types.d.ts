@@ -536,6 +536,12 @@ export interface CorrectionInvoiceSummary {
     _totalNetValue?: number;
 }
 
+export interface InvoiceThirdPartyData {
+    entityId?: number | null;
+    role: number;
+    _entity?: EntityData;
+}
+
 export interface InvoiceData extends RepositoryDataItem {
     number?: string | null;
     description?: string;
@@ -562,6 +568,14 @@ export interface InvoiceData extends RepositoryDataItem {
     isJstSubordinate?: boolean;
     /** Czy faktura dotyczy członka grupy GV (KSeF: GV=1) */
     isGvMember?: boolean;
+    /** Czy należy dodać sekcję Podmiot3 w XML KSeF */
+    includeThirdParty?: boolean;
+    /** ID encji mapowanej do Podmiot3 */
+    thirdPartyEntityId?: number | null;
+    /** Dane encji mapowanej do Podmiot3 */
+    _thirdParty?: EntityData;
+    /** Lista podmiotów trzecich mapowanych do sekcji Podmiot3 */
+    _thirdParties?: InvoiceThirdPartyData[];
     // Correction invoice fields
     /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
     correctedInvoiceId?: number | null;

@@ -63,6 +63,42 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-04-01 - Invoice multi-Podmiot3 with per-entry role (KSeF FA(3))
+
+### Scope
+
+- Added support for many `Podmiot3` entries per invoice with independent role selection (roles 1-10).
+- Added backend persistence table `InvoiceThirdParties` and list-based mapping in invoice read/write flow.
+- Updated KSeF validator and XML builder to emit many `Podmiot3` blocks and validate role constraints for JST/GV (`8` / `10`).
+- Updated frontend invoice modal/details to manage and display multiple `Podmiot3` records.
+
+### Impact
+
+- DB: new table `InvoiceThirdParties` with migration and one-time backfill from legacy invoice columns.
+- ENV: none.
+- Deploy: run migration `src/invoices/migrations/005_create_invoice_third_parties_table.sql` before backend/frontend rollout.
+
+### Required Actions
+
+- Apply migration on all target environments before deployment.
+- Verify add/edit invoice flow for multiple `Podmiot3` entries and KSeF XML generation with repeated `Podmiot3` sections.
+
+### Verification
+
+- Backend targeted tests updated and passing for KSeF `Podmiot3` validator/builder scenarios.
+- Frontend build passes with dynamic `Podmiot3` list UI and role selectors.
+
+### Rollback
+
+- Revert application code; if full rollback is needed, archive/drop `InvoiceThirdParties` after data backup.
+
+### Links
+
+- `src/invoices/migrations/005_create_invoice_third_parties_table.sql`
+- `src/invoices/KSeF/KsefXmlBuilder.ts`
+- `src/invoices/KSeF/InvoiceKsefValidator.ts`
+- `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/Erp/InvoicesList/Modals/InvoiceModalBody.tsx`
+
 ## 2026-04-01 - Invoice JST/GV flags for KSeF payload
 
 ### Scope

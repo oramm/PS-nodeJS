@@ -66,6 +66,76 @@ export default class InvoiceKsefValidator {
             errors.push('isGvMember must be boolean');
         }
 
+        if (
+            invoiceDto.includeThirdParty !== undefined &&
+            typeof invoiceDto.includeThirdParty !== 'boolean'
+        ) {
+            errors.push('includeThirdParty must be boolean');
+        }
+
+        const isJstSubordinate = invoiceDto.isJstSubordinate === true;
+        const isGvMember = invoiceDto.isGvMember === true;
+        const includeThirdParty = Boolean(invoiceDto.includeThirdParty);
+        const thirdParty = invoiceDto._thirdParty;
+        const thirdPartyEntityId = invoiceDto.thirdPartyEntityId;
+        const thirdParties = Array.isArray(invoiceDto._thirdParties)
+            ? invoiceDto._thirdParties
+            : [];
+        const normalizedThirdParties = thirdParties.length
+            ? thirdParties
+            : includeThirdParty && (thirdPartyEntityId || thirdParty?.id)
+              ? [
+                    {
+                        entityId: thirdPartyEntityId ?? thirdParty?.id,
+                        role: isJstSubordinate ? 8 : isGvMember ? 10 : 10,
+                        _entity: thirdParty,
+                    },
+                ]
+              : [];
+
+        if ((isJstSubordinate || isGvMember) && !includeThirdParty) {
+            errors.push('Podmiot3 is required when isJstSubordinate=true or isGvMember=true (set includeThirdParty=true)');
+        }
+
+        if (includeThirdParty && normalizedThirdParties.length === 0) {
+            errors.push('_thirdParties entry is required when includeThirdParty=true');
+        }
+
+        const hasRole8 = normalizedThirdParties.some(
+            (item: any) => Number(item.role) === 8,
+        );
+        const hasRole10 = normalizedThirdParties.some(
+            (item: any) => Number(item.role) === 10,
+        );
+
+        if (isJstSubordinate && !hasRole8) {
+            errors.push('Role 8 is required in _thirdParties when isJstSubordinate=true');
+        }
+
+        if (isGvMember && !hasRole10) {
+            errors.push('Role 10 is required in _thirdParties when isGvMember=true');
+        }
+
+        normalizedThirdParties.forEach((item: any, index: number) => {
+            const role = Number(item.role);
+            const entityId = item.entityId ?? item._entity?.id;
+            const entityName = (item._entity?.name || '').toString().trim();
+
+            if (!entityId) {
+                errors.push(`_thirdParties[${index}].entityId or _entity.id is required`);
+            }
+            if (!Number.isInteger(role) || role < 1 || role > 10) {
+                errors.push(`_thirdParties[${index}].role must be integer in range 1..10`);
+            }
+            if (!entityName) {
+                errors.push(`_thirdParties[${index}] name is required`);
+            }
+        });
+
+        if (!includeThirdParty && normalizedThirdParties.length > 0) {
+            errors.push('includeThirdParty=false but _thirdParties contains entries');
+        }
+
         // Total is _totalNetValue
         const total = invoiceDto._totalNetValue;
         if (total === undefined || total === null) {

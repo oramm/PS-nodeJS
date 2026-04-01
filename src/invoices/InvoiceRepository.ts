@@ -6,7 +6,7 @@ import Person from '../persons/Person';
 import ToolsDb from '../tools/ToolsDb';
 import ContractOur from '../contracts/ContractOur';
 import mysql from 'mysql2/promise';
-import { CorrectionInvoiceSummary } from '../types/types';
+import { CorrectionInvoiceSummary, InvoiceThirdPartyData } from '../types/types';
 
 export interface InvoicesSearchParams {
     id?: number;
@@ -70,8 +70,10 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             ksefUpo: row.KsefUpo,
             isJstSubordinate: Boolean(row.IsJstSubordinate),
             isGvMember: row.IsGvMember === undefined || row.IsGvMember === null
-                ? true
+                ? false
                 : Boolean(row.IsGvMember),
+            includeThirdParty: Boolean(row.IncludeThirdParty),
+            thirdPartyEntityId: row.ThirdPartyEntityId,
             correctedInvoiceId: row.CorrectedInvoiceId,
             correctionReason: ToolsDb.sqlToString(row.CorrectionReason),
             _lastUpdated: row.LastUpdated,
@@ -82,6 +84,14 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                 taxNumber: row.EntityTaxNumber,
             },
             _contract: _contract,
+            _thirdParty: row.ThirdPartyEntityId
+                ? {
+                    id: row.ThirdPartyEntityId,
+                    name: ToolsDb.sqlToString(row.ThirdPartyEntityName),
+                    address: row.ThirdPartyEntityAddress,
+                    taxNumber: row.ThirdPartyEntityTaxNumber,
+                }
+                : undefined,
             _editor: {
                 id: row.EditorId,
                 name: row.EditorName,
@@ -123,6 +133,8 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Invoices.KsefUpo,
             Invoices.IsJstSubordinate,
             Invoices.IsGvMember,
+            Invoices.IncludeThirdParty,
+            Invoices.ThirdPartyEntityId,
             Invoices.CorrectedInvoiceId,
             Invoices.CorrectionReason,
             Invoices.LastUpdated,
@@ -131,6 +143,9 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Entities.Name AS EntityName,
             Entities.Address AS EntityAddress,
             Entities.TaxNumber AS EntityTaxNumber,
+            ThirdPartyEntities.Name AS ThirdPartyEntityName,
+            ThirdPartyEntities.Address AS ThirdPartyEntityAddress,
+            ThirdPartyEntities.TaxNumber AS ThirdPartyEntityTaxNumber,
             Contracts.Number AS ContractNumber,
             Contracts.Name AS ContractName,
             Contracts.Value AS ContractValue,
@@ -157,6 +172,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
+        LEFT JOIN Entities AS ThirdPartyEntities ON ThirdPartyEntities.Id=Invoices.ThirdPartyEntityId
         JOIN Contracts ON Contracts.Id=Invoices.ContractId
         JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
         JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
@@ -170,7 +186,138 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         ORDER BY Invoices.IssueDate ASC`;
 
         const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToModel(row));
+        const invoices = rows.map((row) => this.mapRowToModel(row));
+        const invoiceIds = invoices
+            .map((invoice) => invoice.id)
+            .filter((id): id is number => typeof id === 'number');
+        const thirdPartiesByInvoiceId = await this.findThirdPartiesBulk(invoiceIds);
+
+        invoices.forEach((invoice) => {
+            if (!invoice.id) {
+                invoice._thirdParties = [];
+                return;
+            }
+
+            const thirdParties = thirdPartiesByInvoiceId.get(invoice.id) || [];
+            const hasLegacyThirdParty =
+                Boolean(invoice.includeThirdParty) &&
+                Boolean(invoice.thirdPartyEntityId || invoice._thirdParty?.id);
+
+            if (thirdParties.length > 0) {
+                invoice._thirdParties = thirdParties;
+                invoice.includeThirdParty = true;
+                invoice.thirdPartyEntityId = thirdParties[0].entityId ?? null;
+                invoice._thirdParty = thirdParties[0]._entity;
+            } else if (hasLegacyThirdParty) {
+                const legacyEntityId =
+                    invoice.thirdPartyEntityId ?? invoice._thirdParty?.id ?? null;
+                const fallbackRole = invoice.isJstSubordinate
+                    ? 8
+                    : invoice.isGvMember
+                      ? 10
+                      : 10;
+
+                invoice.includeThirdParty = true;
+                invoice._thirdParties = legacyEntityId
+                    ? [
+                          {
+                              entityId: legacyEntityId,
+                              role: fallbackRole,
+                              _entity: invoice._thirdParty,
+                          },
+                      ]
+                    : [];
+            } else {
+                invoice.includeThirdParty = false;
+                invoice.thirdPartyEntityId = null;
+                invoice._thirdParty = undefined;
+                invoice._thirdParties = [];
+            }
+        });
+
+        return invoices;
+    }
+
+    async findThirdPartiesBulk(
+        invoiceIds: number[]
+    ): Promise<Map<number, InvoiceThirdPartyData[]>> {
+        const result = new Map<number, InvoiceThirdPartyData[]>();
+        if (!invoiceIds.length) {
+            return result;
+        }
+
+        const placeholders = invoiceIds.map(() => '?').join(',');
+        const sql = `SELECT
+                InvoiceThirdParties.InvoiceId,
+                InvoiceThirdParties.EntityId,
+                InvoiceThirdParties.Role,
+                InvoiceThirdParties.Position,
+                Entities.Name AS EntityName,
+                Entities.Address AS EntityAddress,
+                Entities.TaxNumber AS EntityTaxNumber
+            FROM InvoiceThirdParties
+            JOIN Entities ON Entities.Id = InvoiceThirdParties.EntityId
+            WHERE InvoiceThirdParties.InvoiceId IN (${placeholders})
+            ORDER BY InvoiceThirdParties.InvoiceId, InvoiceThirdParties.Position ASC`;
+
+        const rows = await this.executeQuery(mysql.format(sql, invoiceIds));
+        rows.forEach((row) => {
+            const invoiceId = Number(row.InvoiceId);
+            if (!result.has(invoiceId)) {
+                result.set(invoiceId, []);
+            }
+
+            result.get(invoiceId)!.push({
+                entityId: row.EntityId,
+                role: Number(row.Role),
+                _entity: {
+                    id: row.EntityId,
+                    name: ToolsDb.sqlToString(row.EntityName),
+                    address: row.EntityAddress,
+                    taxNumber: row.EntityTaxNumber,
+                },
+            });
+        });
+
+        return result;
+    }
+
+    async replaceThirdPartiesInDb(
+        invoiceId: number,
+        thirdParties: InvoiceThirdPartyData[],
+        externalConn?: mysql.PoolConnection,
+    ): Promise<void> {
+        if (!invoiceId) {
+            throw new Error('Invoice id is required to replace third parties');
+        }
+
+        const conn = externalConn || (await ToolsDb.pool.getConnection());
+        try {
+            await conn.query('DELETE FROM InvoiceThirdParties WHERE InvoiceId = ?', [invoiceId]);
+
+            if (!thirdParties.length) {
+                return;
+            }
+
+            const insertSql = `
+                INSERT INTO InvoiceThirdParties (InvoiceId, EntityId, Role, Position)
+                VALUES (?, ?, ?, ?)
+            `;
+
+            for (let i = 0; i < thirdParties.length; i++) {
+                const item = thirdParties[i];
+                await conn.query(insertSql, [
+                    invoiceId,
+                    item.entityId,
+                    item.role,
+                    i + 1,
+                ]);
+            }
+        } finally {
+            if (!externalConn) {
+                conn.release();
+            }
+        }
     }
 
     private makeSearchTextCondition(searchText: string | undefined) {

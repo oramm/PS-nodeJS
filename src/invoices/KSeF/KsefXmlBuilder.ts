@@ -1,6 +1,6 @@
 import Invoice from '../Invoice';
-import ToolsDb from '../../tools/ToolsDb';
 import Setup from '../../setup/Setup';
+import { InvoiceThirdPartyData } from '../../types/types';
 
 /**
  * Interfejs danych oryginalnej faktury wymaganych do korekty
@@ -43,6 +43,67 @@ export default class KsefXmlBuilder {
         return resolvedValue ? 1 : 2;
     }
 
+    private static buildThirdPartyXml(invoice: Invoice): string {
+        const includeThirdParty = Boolean(invoice.includeThirdParty);
+        if (!includeThirdParty) {
+            return '';
+        }
+
+        const thirdParties: InvoiceThirdPartyData[] =
+            Array.isArray(invoice._thirdParties) && invoice._thirdParties.length > 0
+                ? invoice._thirdParties
+                : invoice._thirdParty
+                  ? [
+                        {
+                            entityId: invoice._thirdParty.id,
+                            role: invoice.isJstSubordinate ? 8 : invoice.isGvMember ? 10 : 10,
+                            _entity: invoice._thirdParty,
+                        },
+                    ]
+                  : [];
+
+        if (!thirdParties.length) {
+            throw new Error('Podmiot3 enabled, but _thirdParties is empty');
+        }
+
+        return thirdParties
+            .map((item) => {
+                const thirdParty = item._entity;
+                const role = Number(item.role);
+                const thirdPartyId = item.entityId ?? thirdParty?.id;
+
+                if (!thirdParty || !thirdPartyId) {
+                    throw new Error('Podmiot3 entry requires selected entity');
+                }
+                if (!Number.isInteger(role) || role < 1 || role > 10) {
+                    throw new Error('Podmiot3 role must be in range 1..10');
+                }
+
+                const thirdPartyName = this.escapeXml(thirdParty.name || '');
+                const thirdPartyAddress = this.escapeXml(thirdParty.address || '');
+                const thirdPartyNip = this.normalizeNip(thirdParty.taxNumber || '');
+
+                if ((role === 8 || role === 10) && !thirdPartyName) {
+                    throw new Error(`Podmiot3 with Rola=${role} requires third party name`);
+                }
+
+                return `
+    <Podmiot3>
+        <DaneIdentyfikacyjne>${thirdPartyNip ? `
+            <NIP>${thirdPartyNip}</NIP>` : `
+            <IDWew>${thirdPartyId}</IDWew>`}
+            <Nazwa>${thirdPartyName || `Podmiot ${thirdPartyId}`}</Nazwa>
+        </DaneIdentyfikacyjne>${thirdPartyAddress ? `
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>${thirdPartyAddress}</AdresL1>
+        </Adres>` : ''}
+        <Rola>${role}</Rola>
+    </Podmiot3>`;
+            })
+            .join('');
+    }
+
     /**
      * Buduje XML faktury korygującej zgodny ze schematem FA(3)
      * 
@@ -81,7 +142,8 @@ export default class KsefXmlBuilder {
             invoice.isJstSubordinate,
             false,
         );
-        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, true);
+        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, false);
+        const thirdPartyXml = this.buildThirdPartyXml(invoice);
 
         // Data i numer faktury korygującej
         const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
@@ -147,6 +209,7 @@ export default class KsefXmlBuilder {
         <JST>${buyerJst}</JST>
         <GV>${buyerGv}</GV>
     </Podmiot2>
+    ${thirdPartyXml}
     <Fa>
         <KodWaluty>PLN</KodWaluty>
         <P_1>${issueDate}</P_1>
@@ -196,7 +259,8 @@ export default class KsefXmlBuilder {
             invoice.isJstSubordinate,
             false,
         );
-        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, true);
+        const buyerGv = this.mapBooleanToKsefFlag(invoice.isGvMember, false);
+        const thirdPartyXml = this.buildThirdPartyXml(invoice);
 
         // Data i numer faktury
         const issueDate = this.formatDate(invoice.sentDate || invoice.issueDate);
@@ -256,6 +320,7 @@ export default class KsefXmlBuilder {
         <JST>${buyerJst}</JST>
         <GV>${buyerGv}</GV>
     </Podmiot2>
+    ${thirdPartyXml}
     <Fa>
         <KodWaluty>PLN</KodWaluty>
         <P_1>${issueDate}</P_1>

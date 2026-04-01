@@ -100,7 +100,7 @@ describe('KsefXmlBuilder FA(3) payment and sale date mapping', () => {
         const xml = KsefXmlBuilder.buildXml(makeInvoice({}) as any);
 
         expect(xml).toContain('<JST>2</JST>');
-        expect(xml).toContain('<GV>1</GV>');
+        expect(xml).toContain('<GV>2</GV>');
     });
 
     it('mapuje JST/GV także dla faktury korygującej', () => {
@@ -118,5 +118,119 @@ describe('KsefXmlBuilder FA(3) payment and sale date mapping', () => {
 
         expect(xml).toContain('<JST>1</JST>');
         expect(xml).toContain('<GV>1</GV>');
+    });
+
+    it('dodaje Podmiot3 z rolą 8 gdy JST=1', () => {
+        const xml = KsefXmlBuilder.buildXml(
+            makeInvoice({
+                isJstSubordinate: true,
+                isGvMember: false,
+                includeThirdParty: true,
+                _thirdParties: [
+                    {
+                        entityId: 77,
+                        role: 8,
+                        _entity: {
+                            id: 77,
+                            name: 'Jednostka JST',
+                            taxNumber: '123-456-32-18',
+                            address: 'ul. JST 5',
+                        },
+                    },
+                ],
+            }) as any,
+        );
+
+        expect(xml).toContain('<Podmiot3>');
+        expect(xml).toContain('<Rola>8</Rola>');
+        expect(xml).toContain('<NIP>1234563218</NIP>');
+    });
+
+    it('dodaje Podmiot3 z rolą 10 gdy GV=1', () => {
+        const xml = KsefXmlBuilder.buildXml(
+            makeInvoice({
+                isJstSubordinate: false,
+                isGvMember: true,
+                includeThirdParty: true,
+                _thirdParties: [
+                    {
+                        entityId: 88,
+                        role: 10,
+                        _entity: {
+                            id: 88,
+                            name: 'Członek GV',
+                            taxNumber: '',
+                            address: 'ul. GV 10',
+                        },
+                    },
+                ],
+            }) as any,
+        );
+
+        expect(xml).toContain('<Podmiot3>');
+        expect(xml).toContain('<Rola>10</Rola>');
+        expect(xml).toContain('<IDWew>88</IDWew>');
+        expect(xml).toContain('<Nazwa>Członek GV</Nazwa>');
+    });
+
+    it('dodaje Podmiot3 z domyślną rolą 10 także bez JST/GV', () => {
+        const xml = KsefXmlBuilder.buildXml(
+            makeInvoice({
+                isJstSubordinate: false,
+                isGvMember: false,
+                includeThirdParty: true,
+                _thirdParties: [
+                    {
+                        entityId: 99,
+                        role: 10,
+                        _entity: {
+                            id: 99,
+                            name: 'Podmiot dodatkowy',
+                            taxNumber: '',
+                            address: 'ul. Dodatkowa 3',
+                        },
+                    },
+                ],
+            }) as any,
+        );
+
+        expect(xml).toContain('<Podmiot3>');
+        expect(xml).toContain('<Rola>10</Rola>');
+        expect(xml).toContain('<IDWew>99</IDWew>');
+        expect(xml).toContain('<Nazwa>Podmiot dodatkowy</Nazwa>');
+    });
+
+    it('dodaje wiele sekcji Podmiot3 z różnymi rolami', () => {
+        const xml = KsefXmlBuilder.buildXml(
+            makeInvoice({
+                includeThirdParty: true,
+                _thirdParties: [
+                    {
+                        entityId: 51,
+                        role: 4,
+                        _entity: {
+                            id: 51,
+                            name: 'Dodatkowy nabywca 1',
+                            taxNumber: '1111111111',
+                            address: 'ul. Pierwsza 1',
+                        },
+                    },
+                    {
+                        entityId: 52,
+                        role: 6,
+                        _entity: {
+                            id: 52,
+                            name: 'Płatnik zastępczy',
+                            taxNumber: '2222222222',
+                            address: 'ul. Druga 2',
+                        },
+                    },
+                ],
+            }) as any,
+        );
+
+        expect(xml.match(/<Podmiot3>/g)?.length).toBe(2);
+        expect(xml).toContain('<Rola>4</Rola>');
+        expect(xml).toContain('<Rola>6</Rola>');
     });
 });

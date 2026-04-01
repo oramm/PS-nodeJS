@@ -7,6 +7,7 @@ import {
     CorrectionInvoiceSummary,
     EntityData,
     InvoiceData,
+    InvoiceThirdPartyData,
     OurContractData,
     PersonData,
     ProjectData,
@@ -42,6 +43,10 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     ksefUpo?: string | null;
     isJstSubordinate?: boolean;
     isGvMember?: boolean;
+    includeThirdParty?: boolean;
+    thirdPartyEntityId?: number | null;
+    _thirdParty?: EntityData;
+    _thirdParties?: InvoiceThirdPartyData[];
     _totalGrossValue?: number;
     /** ID faktury korygowanej (jeśli ta faktura jest korektą) */
     correctedInvoiceId?: number | null;
@@ -99,8 +104,63 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this.isGvMember =
             (initParamObject as any).isGvMember === undefined ||
             (initParamObject as any).isGvMember === null
-                ? true
+                ? false
                 : Boolean((initParamObject as any).isGvMember);
+        this.includeThirdParty = Boolean(
+            (initParamObject as any).includeThirdParty ?? false
+        );
+        this.thirdPartyEntityId =
+            (initParamObject as any)._thirdParty?.id ??
+            (initParamObject as any).thirdPartyEntityId ??
+            null;
+        this._thirdParty = (initParamObject as any)._thirdParty;
+
+        const rawThirdParties = Array.isArray((initParamObject as any)._thirdParties)
+            ? ((initParamObject as any)._thirdParties as any[])
+            : [];
+        this._thirdParties = rawThirdParties
+            .map((item) => {
+                const entityId = item?.entityId ?? item?._entity?.id ?? null;
+                const role = Number(item?.role);
+                if (!entityId || !Number.isFinite(role)) {
+                    return null;
+                }
+                return {
+                    entityId,
+                    role,
+                    _entity: item?._entity,
+                } as InvoiceThirdPartyData;
+            })
+            .filter(Boolean) as InvoiceThirdPartyData[];
+
+        const fallbackEntityId = this._thirdParty?.id ?? this.thirdPartyEntityId ?? null;
+
+        if (!this._thirdParties.length && fallbackEntityId) {
+            const fallbackRole = this.isJstSubordinate
+                ? 8
+                : this.isGvMember
+                  ? 10
+                  : 10;
+            this._thirdParties = [
+                {
+                    entityId: fallbackEntityId,
+                    role: fallbackRole,
+                    _entity: this._thirdParty,
+                },
+            ];
+        }
+
+        if (this._thirdParties.length > 0) {
+            this.includeThirdParty = true;
+            this.thirdPartyEntityId = this._thirdParties[0].entityId ?? null;
+            this._thirdParty = this._thirdParties[0]._entity;
+        }
+
+        if (!this.includeThirdParty) {
+            this.thirdPartyEntityId = null;
+            this._thirdParty = undefined;
+            this._thirdParties = [];
+        }
         this.correctedInvoiceId = (initParamObject as any).correctedInvoiceId;
         this.correctionReason = (initParamObject as any).correctionReason;
         //this._items = initParamObject._items;

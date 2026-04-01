@@ -1,7 +1,7 @@
 import Invoice from './Invoice';
 import InvoiceRepository, { InvoicesSearchParams } from './InvoiceRepository';
 import BaseController from '../controllers/BaseController';
-import { InvoiceData } from '../types/types';
+import { InvoiceData, InvoiceThirdPartyData } from '../types/types';
 import { UserData } from '../types/sessionTypes';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
@@ -93,13 +93,25 @@ export default class InvoicesController extends BaseController<
         console.group('InvoicesController.addInvoice()');
         try {
             const invoice = new Invoice(invoiceData);
+            this.normalizeThirdPartyState(invoice);
+            this.validateThirdPartyRules(invoice);
             const validator = new InvoiceValidator(
                 new ContractOur(invoice._contract),
                 invoice
             );
             await validator.checkValueWithContract(true);
 
-            await this.create(invoice);
+            await ToolsDb.transaction(async (conn) => {
+                await this.repository.addInDb(invoice, conn, true);
+                if (!invoice.id) {
+                    throw new Error('Invoice id missing after insert');
+                }
+                await this.repository.replaceThirdPartiesInDb(
+                    invoice.id,
+                    invoice._thirdParties || [],
+                    conn,
+                );
+            });
             console.log(
                 `Invoice for contract ${invoice._contract.ourId} added in db`
             );
@@ -180,6 +192,12 @@ export default class InvoicesController extends BaseController<
                 status: Setup.InvoiceStatus.DONE, // Korekta od razu gotowa
                 _contract: originalInvoice._contract,
                 _entity: originalInvoice._entity,
+                isJstSubordinate: originalInvoice.isJstSubordinate,
+                isGvMember: originalInvoice.isGvMember,
+                includeThirdParty: originalInvoice.includeThirdParty,
+                thirdPartyEntityId: originalInvoice.thirdPartyEntityId,
+                _thirdParty: originalInvoice._thirdParty,
+                _thirdParties: originalInvoice._thirdParties,
                 _editor: originalInvoice._editor,
                 _owner: originalInvoice._owner,
                 correctedInvoiceId: originalInvoiceId,
@@ -187,6 +205,8 @@ export default class InvoicesController extends BaseController<
             };
 
             const correctionInvoice = new Invoice(correctionInvoiceData);
+            instance.normalizeThirdPartyState(correctionInvoice);
+            instance.validateThirdPartyRules(correctionInvoice);
             
             // 4. Walidacja
             const validator = new InvoiceValidator(
@@ -196,7 +216,17 @@ export default class InvoicesController extends BaseController<
             await validator.checkValueWithContract(true);
 
             // 5. Zapisz fakturę korygującą
-            await instance.create(correctionInvoice);
+            await ToolsDb.transaction(async (conn) => {
+                await instance.repository.addInDb(correctionInvoice, conn, true);
+                if (!correctionInvoice.id) {
+                    throw new Error('Invoice id missing after insert');
+                }
+                await instance.repository.replaceThirdPartiesInDb(
+                    correctionInvoice.id,
+                    correctionInvoice._thirdParties || [],
+                    conn,
+                );
+            });
             
             // Sprawdź czy id zostało ustawione
             if (!correctionInvoice.id) {
@@ -336,6 +366,9 @@ export default class InvoicesController extends BaseController<
         console.group('InvoicesController.editInvoice()');
         try {
             const invoice = new Invoice(invoiceData);
+            await this.hydrateThirdPartyRulesStateFromDb(invoice, fieldsToUpdate);
+            this.normalizeThirdPartyState(invoice, fieldsToUpdate);
+            this.validateThirdPartyRules(invoice);
 
             if (
                 auth &&
@@ -349,16 +382,159 @@ export default class InvoicesController extends BaseController<
                 }
             }
 
-            await this.repository.editInDb(
-                invoice,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
+            await ToolsDb.transaction(async (conn) => {
+                await this.repository.editInDb(
+                    invoice,
+                    conn,
+                    true,
+                    fieldsToUpdate,
+                );
+                if (!invoice.id) {
+                    throw new Error('Invoice id missing for third-party update');
+                }
+                await this.repository.replaceThirdPartiesInDb(
+                    invoice.id,
+                    invoice._thirdParties || [],
+                    conn,
+                );
+            });
             console.log(`Invoice ${invoice.id} updated in db`);
             return invoice;
         } finally {
             console.groupEnd();
+        }
+    }
+
+    private async hydrateThirdPartyRulesStateFromDb(
+        invoice: Invoice,
+        fieldsToUpdate?: string[]
+    ): Promise<void> {
+        if (!invoice.id || !fieldsToUpdate?.length) {
+            return;
+        }
+
+        const existing = (await this.repository.find([{ id: invoice.id }]))[0];
+        if (!existing) {
+            return;
+        }
+
+        const updates = new Set(fieldsToUpdate);
+
+        if (!fieldsToUpdate.includes('isJstSubordinate')) {
+            invoice.isJstSubordinate = existing.isJstSubordinate;
+        }
+        if (!fieldsToUpdate.includes('isGvMember')) {
+            invoice.isGvMember = existing.isGvMember;
+        }
+        if (!fieldsToUpdate.includes('includeThirdParty')) {
+            invoice.includeThirdParty = existing.includeThirdParty;
+        }
+        if (!updates.has('_thirdParties')) {
+            invoice._thirdParties = existing._thirdParties;
+        }
+        if (updates.has('_thirdParty') && !updates.has('thirdPartyEntityId')) {
+            invoice.thirdPartyEntityId =
+                invoice._thirdParty?.id ?? invoice.thirdPartyEntityId ?? null;
+            fieldsToUpdate.push('thirdPartyEntityId');
+            updates.add('thirdPartyEntityId');
+        } else if (!updates.has('thirdPartyEntityId')) {
+            invoice.thirdPartyEntityId = existing.thirdPartyEntityId;
+        }
+        if (!updates.has('_thirdParty')) {
+            invoice._thirdParty = existing._thirdParty;
+        }
+    }
+
+    private normalizeThirdPartyState(
+        invoice: Invoice,
+        fieldsToUpdate?: string[]
+    ): void {
+        const rawList = Array.isArray(invoice._thirdParties)
+            ? invoice._thirdParties
+            : [];
+        const normalizedList = rawList
+            .map((item) => {
+                const entityId = item.entityId ?? item._entity?.id ?? null;
+                const role = Number(item.role);
+                if (!entityId || !Number.isFinite(role)) {
+                    return null;
+                }
+                return {
+                    entityId,
+                    role,
+                    _entity: item._entity,
+                } as InvoiceThirdPartyData;
+            })
+            .filter(Boolean) as InvoiceThirdPartyData[];
+
+        const fallbackEntityId = invoice._thirdParty?.id ?? invoice.thirdPartyEntityId ?? null;
+
+        if (!normalizedList.length && invoice.includeThirdParty && fallbackEntityId) {
+            const fallbackRole = invoice.isJstSubordinate
+                ? 8
+                : invoice.isGvMember
+                  ? 10
+                  : 10;
+            normalizedList.push({
+                entityId: fallbackEntityId,
+                role: fallbackRole,
+                _entity: invoice._thirdParty,
+            });
+        }
+
+        invoice._thirdParties = normalizedList;
+        invoice.includeThirdParty = normalizedList.length > 0;
+        invoice.thirdPartyEntityId = normalizedList[0]?.entityId ?? null;
+        invoice._thirdParty = normalizedList[0]?._entity;
+
+        if (fieldsToUpdate) {
+            if (!fieldsToUpdate.includes('includeThirdParty')) {
+                fieldsToUpdate.push('includeThirdParty');
+            }
+            if (!fieldsToUpdate.includes('thirdPartyEntityId')) {
+                fieldsToUpdate.push('thirdPartyEntityId');
+            }
+        }
+    }
+
+    private validateThirdPartyRules(invoice: Invoice): void {
+        const isJstSubordinate = invoice.isJstSubordinate === true;
+        const isGvMember = invoice.isGvMember === true;
+        const includeThirdParty = invoice.includeThirdParty === true;
+        const thirdParties = invoice._thirdParties || [];
+
+        if ((isJstSubordinate || isGvMember) && !includeThirdParty) {
+            throw new Error('Podmiot 3 jest wymagany gdy zaznaczono JST lub GV');
+        }
+
+        if (includeThirdParty && !thirdParties.length) {
+            throw new Error('Dla Podmiotu 3 wybierz co najmniej jedną encję');
+        }
+
+        const hasJstRole = thirdParties.some((item) => item.role === 8);
+        const hasGvRole = thirdParties.some((item) => item.role === 10);
+
+        if (isJstSubordinate && !hasJstRole) {
+            throw new Error('Dla JST wymagany jest Podmiot 3 z rolą 8');
+        }
+
+        if (isGvMember && !hasGvRole) {
+            throw new Error('Dla GV wymagany jest Podmiot 3 z rolą 10');
+        }
+
+        for (const thirdParty of thirdParties) {
+            if (!thirdParty.entityId) {
+                throw new Error('Każdy Podmiot 3 musi mieć wybraną encję');
+            }
+            if (!Number.isInteger(thirdParty.role) || thirdParty.role < 1 || thirdParty.role > 10) {
+                throw new Error('Rola Podmiotu 3 musi być w zakresie 1-10');
+            }
+        }
+
+        if (!includeThirdParty) {
+            invoice.thirdPartyEntityId = null;
+            invoice._thirdParty = undefined;
+            invoice._thirdParties = [];
         }
     }
 
