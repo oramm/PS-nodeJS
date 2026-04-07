@@ -401,3 +401,33 @@ app.get('/invoice/:id/ksef/xml', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+/**
+ * GET /invoice/:id/ksef/xml-preview
+ * Generuje XML KSeF na podstawie bieżących danych faktury (bez wysyłki do KSeF)
+ */
+app.get('/invoice/:id/ksef/xml-preview', async (req: Request, res: Response, next) => {
+    try {
+        const invoiceId = parseInt(req.params.id, 10);
+        if (isNaN(invoiceId)) {
+            return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+        }
+
+        const xml = await KsefController.generatePreviewXmlByInvoiceId(invoiceId);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader(
+            'Content-Disposition',
+            `inline; filename="invoice_${invoiceId}_preview.xml"`,
+        );
+        res.send(xml);
+    } catch (error: any) {
+        console.error('[KSeF] Błąd generowania XML podglądu:', error.message);
+        if (error.validationErrors) {
+            return res.status(400).json({
+                error: 'Walidacja nie powiodła się',
+                details: error.validationErrors,
+            });
+        }
+        next(error);
+    }
+});

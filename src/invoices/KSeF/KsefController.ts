@@ -355,4 +355,53 @@ export default class KsefController {
         }
         return resp.invoiceXml;
     }
+
+    /**
+     * Generuje podgląd XML KSeF na podstawie aktualnych danych faktury w systemie
+     * (bez wysyłania do API KSeF).
+     */
+    static async generatePreviewXmlByInvoiceId(invoiceId: number): Promise<string> {
+        const invoices = await this.repo.find([{ id: invoiceId }]);
+        const invoice = invoices[0];
+        if (!invoice) {
+            throw new Error(`Faktura ${invoiceId} nie znaleziona`);
+        }
+
+        if (!invoice._items || invoice._items.length === 0) {
+            invoice._items = await InvoiceItemsController.find([{ invoiceId }]);
+        }
+
+        InvoiceKsefValidator.validateForKsef(invoice as any);
+
+        if (!invoice.correctedInvoiceId) {
+            return KsefXmlBuilder.buildXml(invoice);
+        }
+
+        const originalInvoices = await this.repo.find([
+            { id: invoice.correctedInvoiceId },
+        ]);
+        const originalInvoice = originalInvoices[0];
+
+        const originalIssueDate = originalInvoice?.issueDate
+            ? new Date(originalInvoice.issueDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+
+        const originalInvoiceData: OriginalInvoiceData = {
+            ksefNumber:
+                originalInvoice?.ksefNumber ||
+                invoice.ksefNumber ||
+                'BRAK_NUMERU_KSEF',
+            invoiceNumber:
+                originalInvoice?.number ||
+                `FV/${originalInvoice?.id || invoice.correctedInvoiceId}`,
+            issueDate: originalIssueDate,
+        };
+
+        return KsefXmlBuilder.buildCorrectionXml(
+            invoice,
+            originalInvoiceData,
+            invoice.correctionReason || 'Korekta faktury',
+            1,
+        );
+    }
 }
