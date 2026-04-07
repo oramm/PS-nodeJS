@@ -54,6 +54,13 @@ export default class KsefController {
         const invoice = invoices[0];
         if (!invoice) throw new Error(`Faktura ${invoiceId} nie znaleziona`);
 
+        // Korekty bywają tworzone ze statusem DONE i bez sentDate.
+        // Dla KSeF pole P_1 może być mapowane z sentDate lub issueDate,
+        // więc ustawiamy sentDate fallbackiem na issueDate.
+        if (!invoice.sentDate && invoice.issueDate) {
+            invoice.sentDate = invoice.issueDate;
+        }
+
         // 2. Pobierz pozycje faktury jeśli nie załadowane
         if (!invoice._items || invoice._items.length === 0) {
             invoice._items = await InvoiceItemsController.find([{ invoiceId }]);

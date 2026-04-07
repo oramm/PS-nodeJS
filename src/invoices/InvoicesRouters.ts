@@ -1,11 +1,12 @@
 import InvoicesController from './InvoicesController';
 import { KsefController } from './KSeF';
 import { app } from '../index';
-import { Request, Response } from 'express';
+import { Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
 
 // Middleware do parsowania plików
 const upload = multer({ storage: multer.memoryStorage() });
+const uploadSingleFile = upload.single('file') as unknown as RequestHandler;
 
 app.post('/invoices', async (req: Request, res: Response, next) => {
     try {
@@ -200,7 +201,7 @@ app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => 
  * }
  * Response: { correctionInvoice, message }
  */
-app.post('/invoice/:id/correction', async (req: Request, res: Response, next) => {
+app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: Response, next) => {
     try {
         const originalInvoiceId = parseInt(req.params.id, 10);
         if (isNaN(originalInvoiceId)) {
@@ -219,16 +220,8 @@ app.post('/invoice/:id/correction', async (req: Request, res: Response, next) =>
             }
         }
         
-        // Obsługa pliku załącznika (tak jak w /issueInvoice/:id)
-        let invoiceFile: Express.Multer.File | undefined;
-        if (req.files) {
-            if (Array.isArray(req.files) && req.files.length > 0) {
-                invoiceFile = req.files[0];
-            } else if (typeof req.files === 'object' && 'file' in req.files) {
-                const fileArray = (req.files as any).file;
-                invoiceFile = Array.isArray(fileArray) ? fileArray[0] : fileArray;
-            }
-        }
+        // Obsługa pliku załącznika (multipart/form-data przez multer)
+        const invoiceFile = req.file;
         
         if (!correctionType || !['zero', 'custom'].includes(correctionType)) {
             return res.status(400).json({ 
