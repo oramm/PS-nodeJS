@@ -38,6 +38,7 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     _documentOpenUrl?: string;
     _totalNetValue?: number;
     ksefNumber?: string | null;
+    ksefCorrectionType?: 1 | 2 | 3 | null;
     ksefStatus?: string | null;
     ksefSessionId?: string | null;
     ksefUpo?: string | null;
@@ -95,6 +96,7 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
         this.ksefNumber = (initParamObject as any).ksefNumber;
+        this.ksefCorrectionType = (initParamObject as any).ksefCorrectionType;
         this.ksefStatus = (initParamObject as any).ksefStatus;
         this.ksefSessionId = (initParamObject as any).ksefSessionId;
         this.ksefUpo = (initParamObject as any).ksefUpo;

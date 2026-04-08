@@ -63,6 +63,41 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-04-08 - Invoice KSeF correction type persisted in DB
+
+### Scope
+
+- Added persistent optional field `KsefCorrectionType` on `Invoices` (values `1|2|3|null`) to replace browser local storage for correction type selection.
+- Updated backend invoice model/repository and KSeF correction XML generation to treat `TypKorekty` as optional (no implicit default).
+- Updated frontend correction/KSeF views to save correction type through API and read it from invoice data.
+
+### Impact
+
+- DB: new nullable column `Invoices.KsefCorrectionType` via migration.
+- ENV: none.
+- Deploy: run migration `src/invoices/migrations/006_add_invoice_ksef_correction_type.sql` before rollout.
+
+### Required Actions
+
+- Apply migration on each environment before deploying backend/frontend code.
+- Verify correction flow: select type, refresh page, ensure value persists and is used in XML preview/send.
+
+### Verification
+
+- Backend and frontend builds pass after change.
+- XML preview for correction shows full KSeF wording and supports missing type (optional field).
+
+### Rollback
+
+- Revert code and keep column unused; or drop `KsefCorrectionType` column if full rollback is required.
+
+### Links
+
+- `src/invoices/migrations/006_add_invoice_ksef_correction_type.sql`
+- `src/invoices/KSeF/KsefXmlBuilder.ts`
+- `src/invoices/KSeF/KsefController.ts`
+- `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/Erp/InvoicesList/InvoiceDetails/KsefSection.tsx`
+
 ## 2026-04-01 - Invoice multi-Podmiot3 with per-entry role (KSeF FA(3))
 
 ### Scope

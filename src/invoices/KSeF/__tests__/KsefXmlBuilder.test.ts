@@ -2,14 +2,14 @@ jest.mock('../../../setup/Setup', () => ({
     __esModule: true,
     default: {
         KSeF: {
-            nip: '1234567890',
+            nip: '7471917575',
             seller: {
-                name: 'ENVI Sp. z o.o.',
-                street: 'ul. Lubicz 25',
-                city: 'Kraków',
-                postalCode: '31-503',
-                bankAccount: 'PL61109010140000071219812874',
-                bankName: 'Test Bank',
+                name: 'ENVI KONSULTING s.c. Marek Gazda, Lucyna Stecuła',
+                street: 'ul. Brzechwy 3',
+                city: 'Brzeg',
+                postalCode: '49-305',
+                bankAccount: '48 1020 3668 0000 5502 0678 7115',
+                bankName: 'PKO BP',
             },
         },
     },
@@ -118,6 +118,34 @@ describe('KsefXmlBuilder FA(3) payment and sale date mapping', () => {
 
         expect(xml).toContain('<JST>1</JST>');
         expect(xml).toContain('<GV>1</GV>');
+    });
+
+    it('nie dodaje TypKorekty gdy typ nie został ustawiony', () => {
+        const xml = KsefXmlBuilder.buildCorrectionXml(
+            makeInvoice({}) as any,
+            {
+                ksefNumber: '1111111111-20260101-AAAAAA-BBBBBB-CC',
+                invoiceNumber: 'FV/1/2026',
+                issueDate: '2026-01-01',
+            },
+        );
+
+        expect(xml).not.toContain('<TypKorekty>');
+    });
+
+    it('dodaje TypKorekty gdy typ został ustawiony', () => {
+        const xml = KsefXmlBuilder.buildCorrectionXml(
+            makeInvoice({}) as any,
+            {
+                ksefNumber: '1111111111-20260101-AAAAAA-BBBBBB-CC',
+                invoiceNumber: 'FV/1/2026',
+                issueDate: '2026-01-01',
+            },
+            'Korekta faktury',
+            3,
+        );
+
+        expect(xml).toContain('<TypKorekty>3</TypKorekty>');
     });
 
     it('dodaje Podmiot3 z rolą 8 gdy JST=1', () => {

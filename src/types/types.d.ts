@@ -560,6 +560,7 @@ export interface InvoiceData extends RepositoryDataItem {
     _totalGrossValue?: number;
     _totalNetValue?: number;
     // KSeF integration fields
+    ksefCorrectionType?: 1 | 2 | 3 | null;
     ksefNumber?: string | null;
     ksefStatus?: string | null;
     ksefSessionId?: string | null;

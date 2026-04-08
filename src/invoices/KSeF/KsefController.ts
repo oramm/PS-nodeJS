@@ -54,13 +54,6 @@ export default class KsefController {
         const invoice = invoices[0];
         if (!invoice) throw new Error(`Faktura ${invoiceId} nie znaleziona`);
 
-        // Korekty bywają tworzone ze statusem DONE i bez sentDate.
-        // Dla KSeF pole P_1 może być mapowane z sentDate lub issueDate,
-        // więc ustawiamy sentDate fallbackiem na issueDate.
-        if (!invoice.sentDate && invoice.issueDate) {
-            invoice.sentDate = invoice.issueDate;
-        }
-
         // 2. Pobierz pozycje faktury jeśli nie załadowane
         if (!invoice._items || invoice._items.length === 0) {
             invoice._items = await InvoiceItemsController.find([{ invoiceId }]);
@@ -105,7 +98,12 @@ export default class KsefController {
 
         // 5. Generuj XML korekty zgodnie ze schematem FA(3)
         const correctionReason = originalData?.correctionReason || 'Korekta faktury';
-        const correctionType = originalData?.correctionType || 1; // Domyślnie: data wystawienia faktury korygowanej
+        const invoiceCorrectionType = Number((invoice as any).ksefCorrectionType);
+        const correctionType =
+            originalData?.correctionType ??
+            ([1, 2, 3].includes(invoiceCorrectionType)
+                ? (invoiceCorrectionType as 1 | 2 | 3)
+                : undefined);
         
         const xml = KsefXmlBuilder.buildCorrectionXml(
             invoice, 
@@ -367,7 +365,10 @@ export default class KsefController {
      * Generuje podgląd XML KSeF na podstawie aktualnych danych faktury w systemie
      * (bez wysyłania do API KSeF).
      */
-    static async generatePreviewXmlByInvoiceId(invoiceId: number): Promise<string> {
+    static async generatePreviewXmlByInvoiceId(
+        invoiceId: number,
+        correctionType?: 1 | 2 | 3,
+    ): Promise<string> {
         const invoices = await this.repo.find([{ id: invoiceId }]);
         const invoice = invoices[0];
         if (!invoice) {
@@ -404,11 +405,18 @@ export default class KsefController {
             issueDate: originalIssueDate,
         };
 
+        const invoiceCorrectionType = Number((invoice as any).ksefCorrectionType);
+        const resolvedCorrectionType =
+            correctionType ??
+            ([1, 2, 3].includes(invoiceCorrectionType)
+                ? (invoiceCorrectionType as 1 | 2 | 3)
+                : undefined);
+
         return KsefXmlBuilder.buildCorrectionXml(
             invoice,
             originalInvoiceData,
             invoice.correctionReason || 'Korekta faktury',
-            1,
+            resolvedCorrectionType,
         );
     }
 }

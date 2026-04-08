@@ -144,7 +144,11 @@ export default class InvoicesController extends BaseController<
             unitPrice: number;
             vatTax: number;
         }>,
-        invoiceFile?: Express.Multer.File
+        invoiceFile?: Express.Multer.File,
+        dates?: {
+            issueDate?: string;
+            sentDate?: string;
+        }
     ): Promise<Invoice> {
         const instance = this.getInstance();
         console.group('InvoicesController.createCorrectionInvoice()');
@@ -184,12 +188,17 @@ export default class InvoicesController extends BaseController<
             const nextN = maxN + 1;
             const correctionNumber = `FV-K_${nextN}/${baseOriginalNumber}`;
 
+            const correctionIssueDate =
+                dates?.issueDate || originalInvoice.issueDate || today;
+            const correctionSentDate = dates?.sentDate || today;
+
             const correctionInvoiceData: InvoiceData = {
                 number: correctionNumber,
                 description: `Korekta do faktury ${originalInvoice.number || originalInvoiceId}: ${correctionReason}`,
-                issueDate: today,
+                issueDate: correctionIssueDate,
+                sentDate: correctionSentDate,
                 daysToPay: originalInvoice.daysToPay,
-                status: Setup.InvoiceStatus.DONE, // Korekta od razu gotowa
+                status: Setup.InvoiceStatus.SENT, // Korekta od razu gotowa do dalszych kroków KSeF
                 _contract: originalInvoice._contract,
                 _entity: originalInvoice._entity,
                 isJstSubordinate: originalInvoice.isJstSubordinate,

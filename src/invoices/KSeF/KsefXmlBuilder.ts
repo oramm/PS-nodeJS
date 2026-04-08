@@ -115,19 +115,19 @@ export default class KsefXmlBuilder {
      * @param invoice - Faktura korygująca (pozycje pokazują różnicę: ujemne lub dodatnie)
      * @param originalInvoice - Dane oryginalnej faktury do korekty
      * @param correctionReason - Przyczyna korekty (opcjonalna, domyślnie "Korekta faktury")
-     * @param correctionType - Typ skutku korekty: 1=data pierwotna, 2=data korekty (domyślnie 2)
+     * @param correctionType - Opcjonalny typ skutku korekty: 1=data pierwotna, 2=data korekty, 3=inna data
      */
     static buildCorrectionXml(
         invoice: Invoice, 
         originalInvoice: OriginalInvoiceData,
         correctionReason: string = 'Korekta faktury',
-        correctionType: 1 | 2 | 3 = 2
+        correctionType?: 1 | 2 | 3
     ): string {
         // Dane sprzedawcy z Setup.KSeF (tak samo jak w buildXml)
         const { nip: sellerNip, seller } = Setup.KSeF;
-        const sellerName = seller.name || process.env.KSEF_SELLER_NAME || 'ENVI Sp. z o.o.';
-        const sellerStreet = seller.street || process.env.KSEF_SELLER_STREET || 'ul. Lubicz 25';
-        const sellerCity = seller.city || process.env.KSEF_SELLER_CITY || 'Kraków';
+        const sellerName = (seller.name || process.env.KSEF_SELLER_NAME|| '' ).trim();
+        const sellerStreet = (seller.street || process.env.KSEF_SELLER_STREET|| '').trim();
+        const sellerCity = (seller.city || process.env.KSEF_SELLER_CITY || '').trim();
 
         const sellerPostalCode = (seller.postalCode || '').trim();
         const sellerCityWithPostalCode = sellerPostalCode
@@ -165,9 +165,11 @@ export default class KsefXmlBuilder {
         const vatSections = this.buildVatSectionsXml(vatSummary);
 
         // Sekcja danych korekty (wymagana gdy RodzajFaktury = KOR, KOR_ZAL, KOR_ROZ)
+        const correctionTypeXml = correctionType
+            ? `\n        <TypKorekty>${correctionType}</TypKorekty>`
+            : '';
         const correctionSection = `
-        <PrzyczynaKorekty>${this.escapeXml(correctionReason)}</PrzyczynaKorekty>
-        <TypKorekty>${correctionType}</TypKorekty>
+        <PrzyczynaKorekty>${this.escapeXml(correctionReason)}</PrzyczynaKorekty>${correctionTypeXml}
         <DaneFaKorygowanej>
             <DataWystFaKorygowanej>${originalIssueDate}</DataWystFaKorygowanej>
             <NrFaKorygowanej>${originalNumber}</NrFaKorygowanej>

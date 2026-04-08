@@ -192,6 +192,8 @@ app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => 
  * Body: { 
  *   correctionType: 'zero' | 'custom',    // WYMAGANE - typ korekty
  *   correctionReason: string,             // WYMAGANE - przyczyna korekty
+ *   issueDate?: string,                   // OPCJONALNE - data sprzedaży korekty (YYYY-MM-DD), domyślnie jak w oryginalnej
+ *   sentDate?: string,                    // OPCJONALNE - data wysłania korekty (YYYY-MM-DD), domyślnie dziś
  *   customItems?: Array<{                 // OPCJONALNE - tylko dla typu 'custom'
  *     description: string,
  *     quantity: number,
@@ -208,7 +210,7 @@ app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: 
             return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
         }
         
-        const { correctionType, correctionReason } = req.body;
+        const { correctionType, correctionReason, issueDate, sentDate } = req.body;
         
         // Parsuj customItems - może być stringiem JSON (z FormData) lub obiektem
         let customItems = req.body.customItems;
@@ -232,6 +234,14 @@ app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: 
         if (!correctionReason) {
             return res.status(400).json({ error: 'Brak przyczyny korekty (correctionReason)' });
         }
+
+        if (issueDate && !/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+            return res.status(400).json({ error: 'Nieprawidłowy format issueDate (wymagany YYYY-MM-DD)' });
+        }
+
+        if (sentDate && !/^\d{4}-\d{2}-\d{2}$/.test(sentDate)) {
+            return res.status(400).json({ error: 'Nieprawidłowy format sentDate (wymagany YYYY-MM-DD)' });
+        }
         
         // Walidacja customItems tylko dla typu 'custom'
         const parsedCustomItems = Array.isArray(customItems) ? customItems : undefined;
@@ -251,7 +261,11 @@ app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: 
             correctionReason,
             req.session.userData,
             parsedCustomItems,
-            invoiceFile
+            invoiceFile,
+            {
+                issueDate,
+                sentDate,
+            }
         );
         
         // Upewnij się, że id jest ustawione przed zwróceniem odpowiedzi
@@ -282,7 +296,7 @@ app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: 
  *   originalInvoiceNumber?: string,       // opcjonalne - numer wewnętrzny oryginalnej faktury
  *   originalIssueDate?: string,           // opcjonalne - data wystawienia oryginalnej (YYYY-MM-DD)
  *   correctionReason?: string,            // opcjonalne - przyczyna korekty (domyślnie: "Korekta faktury")
- *   correctionType?: 1 | 2 | 3            // opcjonalne - typ korekty: 1=data oryg., 2=data korekty, 3=inna (domyślnie: 1)
+ *   correctionType?: 1 | 2 | 3            // opcjonalne - typ korekty: 1=data oryg., 2=data korekty, 3=inna
  * }
  * Response: { invoiceId, referenceNumber, status, originalKsefNumber, message }
  */
@@ -305,6 +319,21 @@ app.post('/invoice/:id/ksef/correction', async (req: Request, res: Response, nex
             return res.status(400).json({ error: 'Brak originalKsefNumber w body' });
         }
         
+        let parsedCorrectionType: 1 | 2 | 3 | undefined;
+        if (
+            correctionType !== undefined &&
+            correctionType !== null &&
+            correctionType !== ''
+        ) {
+            const numericCorrectionType = Number(correctionType);
+            if (![1, 2, 3].includes(numericCorrectionType)) {
+                return res.status(400).json({
+                    error: 'Nieprawidłowy correctionType. Dozwolone wartości: 1, 2, 3',
+                });
+            }
+            parsedCorrectionType = numericCorrectionType as 1 | 2 | 3;
+        }
+
         const result = await KsefController.submitCorrectionById(
             invoiceId, 
             originalKsefNumber,
@@ -312,7 +341,7 @@ app.post('/invoice/:id/ksef/correction', async (req: Request, res: Response, nex
                 originalInvoiceNumber,
                 originalIssueDate,
                 correctionReason,
-                correctionType
+                correctionType: parsedCorrectionType,
             }
         );
         res.json(result);
@@ -406,7 +435,22 @@ app.get('/invoice/:id/ksef/xml-preview', async (req: Request, res: Response, nex
             return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
         }
 
-        const xml = await KsefController.generatePreviewXmlByInvoiceId(invoiceId);
+        const rawCorrectionType = req.query.correctionType;
+        let correctionType: 1 | 2 | 3 | undefined;
+        if (rawCorrectionType !== undefined) {
+            const parsed = Number(rawCorrectionType);
+            if (![1, 2, 3].includes(parsed)) {
+                return res.status(400).json({
+                    error: 'Nieprawidłowy correctionType. Dozwolone wartości: 1, 2, 3',
+                });
+            }
+            correctionType = parsed as 1 | 2 | 3;
+        }
+
+        const xml = await KsefController.generatePreviewXmlByInvoiceId(
+            invoiceId,
+            correctionType,
+        );
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader(
             'Content-Disposition',

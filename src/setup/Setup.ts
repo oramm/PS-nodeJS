@@ -304,12 +304,12 @@ export default class Setup {
      *   KSEF_API_BASE_URL="https://..."   # opcjonalny override URL API
      *   KSEF_NIP="1234567890"            # 10 cyfr
      *   KSEF_TOKEN="..."                 # Token z KSeF
-     *   KSEF_SELLER_NAME="ENVI Sp. z o.o."
-     *   KSEF_SELLER_STREET="ul. Testowa 10"
-     *   KSEF_SELLER_CITY="Warszawa"
-     *   KSEF_SELLER_POSTAL_CODE="00-001"
-     *   KSEF_SELLER_BANK_ACCOUNT="PL61109010140000071219812874"
-     *   KSEF_SELLER_BANK_NAME="Santander Bank Polska S.A."
+     *   KSEF_SELLER_NAME=
+     *   KSEF_SELLER_STREET=
+     *   KSEF_SELLER_CITY=
+     *   KSEF_SELLER_POSTAL_CODE=
+     *   KSEF_SELLER_BANK_ACCOUNT=
+     *   KSEF_SELLER_BANK_NAME=
      */
     static get KSeF() {
         return {
