@@ -5,6 +5,7 @@ import KsefXmlBuilder, { OriginalInvoiceData } from './KsefXmlBuilder';
 import InvoiceKsefValidator from './InvoiceKsefValidator';
 import KsefMetadataRepository from './KsefMetadataRepository';
 import Setup from '../../setup/Setup';
+import * as crypto from 'crypto';
 
 /**
  * KSeF Controller
@@ -21,6 +22,109 @@ export default class KsefController {
     // Nie używamy static service - tworzymy nową instancję dla każdej operacji
     // ponieważ tokeny KSeF wygasają po ~15 minutach
     private static repo = new InvoiceRepository();
+
+    private static getQrBaseUrl(): string {
+        return Setup.KSeF.environment === 'production'
+            ? 'https://qr.ksef.mf.gov.pl'
+            : 'https://qr-test.ksef.mf.gov.pl';
+    }
+
+    private static toBase64Url(buffer: Buffer): string {
+        return buffer
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
+    }
+
+    private static formatQrDate(dateValue: string): string {
+        return new Date(dateValue)
+            .toISOString()
+            .slice(0, 10)
+            .split('-')
+            .reverse()
+            .join('-');
+    }
+
+    private static extractStoredQrSeed(meta: any): {
+        qrInvoiceHash: string;
+        qrIssueDate: string;
+    } | null {
+        const rawResponse = meta?.ResponseRaw;
+        if (!rawResponse) {
+            return null;
+        }
+
+        try {
+            const parsedResponse =
+                typeof rawResponse === 'string' ? JSON.parse(rawResponse) : rawResponse;
+            const qrInvoiceHash = parsedResponse?.qrInvoiceHash;
+            const qrIssueDate = parsedResponse?.qrIssueDate;
+
+            if (!qrInvoiceHash || !qrIssueDate) {
+                return null;
+            }
+
+            return { qrInvoiceHash, qrIssueDate };
+        } catch {
+            return null;
+        }
+    }
+
+    private static async loadInvoiceWithItems(invoiceId: number) {
+        const invoices = await this.repo.find([{ id: invoiceId }]);
+        const invoice = invoices[0];
+
+        if (!invoice) {
+            return null;
+        }
+
+        if (!invoice._items || invoice._items.length === 0) {
+            invoice._items = await InvoiceItemsController.find([{ invoiceId }]);
+        }
+
+        return invoice;
+    }
+
+    private static buildOnlineQrData(
+        invoice: any,
+        qrSeed?: {
+            qrInvoiceHash: string;
+            qrIssueDate: string;
+        },
+    ): {
+        qrVerificationUrl: string;
+        qrLabel: string;
+        qrPayload: {
+            environment: string;
+            sellerNip: string;
+            issueDate: string;
+            invoiceHash: string;
+        };
+    } | null {
+        const sellerNip = (Setup.KSeF.nip || '').replace(/\D+/g, '');
+        const issueDateSource = qrSeed?.qrIssueDate || invoice.sentDate || invoice.issueDate;
+
+        if (!sellerNip || !invoice.ksefNumber || !issueDateSource) {
+            return null;
+        }
+
+        const invoiceHash = qrSeed?.qrInvoiceHash;
+        if (!invoiceHash || !qrSeed?.qrIssueDate) {
+            return null;
+        }
+
+        return {
+            qrVerificationUrl: `${this.getQrBaseUrl()}/invoice/${sellerNip}/${this.formatQrDate(issueDateSource)}/${invoiceHash}`,
+            qrLabel: invoice.ksefNumber,
+            qrPayload: {
+                environment: Setup.KSeF.environment,
+                sellerNip,
+                issueDate: this.formatQrDate(issueDateSource),
+                invoiceHash,
+            },
+        };
+    }
 
     /**
      * Wysyła fakturę korygującą do KSeF
@@ -115,6 +219,10 @@ export default class KsefController {
 
         // 5. Wyślij korekty do KSeF (otwiera sesję, szyfruje i wysyła)
         const resp = await service.submitInvoice(xml, true); // true = korekta
+        const qrIssueDate = invoice.sentDate || invoice.issueDate;
+        const qrInvoiceHash = this.toBase64Url(
+            crypto.createHash('sha256').update(Buffer.from(xml, 'utf-8')).digest(),
+        );
 
         // 6. Zapisz metadata - referenceNumber
         const meta = {
@@ -125,7 +233,11 @@ export default class KsefController {
             submittedAt: new Date(),
             isCorrectionInvoice: true,
             referencesOriginalKsefNumber: originalKsefNumber,
-            responseRaw: resp,
+            responseRaw: {
+                ...resp,
+                qrInvoiceHash,
+                qrIssueDate,
+            },
         };
         await KsefMetadataRepository.saveMetadata(invoiceId, meta);
 
@@ -176,6 +288,10 @@ export default class KsefController {
 
         // 5. Wyślij do KSeF (otwiera sesję, szyfruje i wysyła)
         const resp = await service.submitInvoice(xml);
+        const qrIssueDate = invoice.sentDate || invoice.issueDate;
+        const qrInvoiceHash = this.toBase64Url(
+            crypto.createHash('sha256').update(Buffer.from(xml, 'utf-8')).digest(),
+        );
 
         // 6. Zapisz metadata - referenceNumber (jeszcze nie mamy ksefNumber!)
         const meta = {
@@ -184,7 +300,11 @@ export default class KsefController {
             sessionReferenceNumber: service.getSessionReferenceNumber(),
             status: 'PENDING', // Oczekuje na przetworzenie
             submittedAt: new Date(),
-            responseRaw: resp,
+            responseRaw: {
+                ...resp,
+                qrInvoiceHash,
+                qrIssueDate,
+            },
         };
         await KsefMetadataRepository.saveMetadata(invoiceId, meta);
 
@@ -222,12 +342,15 @@ export default class KsefController {
 
         // 2. Jeśli już mamy ksefNumber - zwróć zapisane dane
         if (meta.KsefNumber) {
+            const invoice = await this.loadInvoiceWithItems(invoiceId);
+            const qrSeed = this.extractStoredQrSeed(meta);
             return {
                 invoiceId,
                 ksefNumber: meta.KsefNumber,
                 status: meta.Status,
                 acquisitionDate: meta.AcquisitionDate,
                 upoDownloadUrl: meta.UpoDownloadUrl,
+                ...(invoice ? this.buildOnlineQrData({ ...invoice, ksefNumber: meta.KsefNumber }, qrSeed || undefined) : {}),
             };
         }
 
@@ -273,6 +396,12 @@ export default class KsefController {
 
         await KsefMetadataRepository.updateMetadata(invoiceId, updateData);
 
+        const qrInvoice = statusResp.ksefNumber ? await this.loadInvoiceWithItems(invoiceId) : null;
+        const qrSeed = this.extractStoredQrSeed(meta);
+        const qrData = qrInvoice
+            ? this.buildOnlineQrData({ ...qrInvoice, ksefNumber: statusResp.ksefNumber }, qrSeed || undefined)
+            : null;
+
         return {
             invoiceId,
             referenceNumber: meta.ReferenceNumber,
@@ -281,6 +410,7 @@ export default class KsefController {
             acquisitionDate: statusResp.acquisitionDate,
             invoicingDate: statusResp.invoicingDate,
             upoDownloadUrl: statusResp.upoDownloadUrl,
+            ...(qrData || {}),
         };
     }
 
