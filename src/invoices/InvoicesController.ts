@@ -69,6 +69,18 @@ export default class InvoicesController extends BaseController<
         return invoices;
     }
 
+    static async getNextIndexedNumber(year?: number): Promise<string> {
+        const instance = this.getInstance();
+        const effectiveYear =
+            typeof year === 'number' && Number.isInteger(year)
+                ? year
+                : new Date().getFullYear();
+
+        return await instance.repository.findNextNumberInIndexedYearFormat(
+            effectiveYear
+        );
+    }
+
     // ==================== CREATE ====================
     /**
      * API PUBLICZNE
@@ -669,12 +681,77 @@ export default class InvoicesController extends BaseController<
                 'sentDate',
                 'paymentDeadline',
             ];
-            await this.repository.editInDb(
-                item,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
+
+            if (!item.id) {
+                throw new Error('Invoice id is required to issue invoice');
+            }
+
+            const indexedFormatRegex = /^\d+\/\d{4}$/;
+            const shouldAssignIndexedNumber =
+                !item.number || indexedFormatRegex.test(item.number.trim());
+
+            if (shouldAssignIndexedNumber) {
+                const transactionConn = await ToolsDb.pool.getConnection();
+                const issueDateYear = Number(
+                    String(item.issueDate || '').slice(0, 4)
+                );
+                const numberingYear =
+                    Number.isInteger(issueDateYear) &&
+                    issueDateYear >= 1900 &&
+                    issueDateYear <= 9999
+                        ? issueDateYear
+                        : new Date().getFullYear();
+                let lockAcquired = false;
+
+                try {
+                    await transactionConn.beginTransaction();
+                    await this.repository.acquireInvoiceNumberingLock(
+                        numberingYear,
+                        transactionConn
+                    );
+                    lockAcquired = true;
+
+                    item.number =
+                        await this.repository.findNextNumberInIndexedYearFormatInTransaction(
+                            numberingYear,
+                            transactionConn
+                        );
+
+                    await this.repository.editInDb(
+                        item,
+                        transactionConn,
+                        true,
+                        fieldsToUpdate
+                    );
+
+                    await transactionConn.commit();
+                } catch (error) {
+                    await transactionConn.rollback();
+                    throw error;
+                } finally {
+                    if (lockAcquired) {
+                        try {
+                            await this.repository.releaseInvoiceNumberingLock(
+                                numberingYear,
+                                transactionConn
+                            );
+                        } catch (lockReleaseError) {
+                            console.error(
+                                'Failed to release invoice numbering lock',
+                                lockReleaseError
+                            );
+                        }
+                    }
+                    transactionConn.release();
+                }
+            } else {
+                await this.repository.editInDb(
+                    item,
+                    undefined,
+                    undefined,
+                    fieldsToUpdate
+                );
+            }
 
             const message = invoiceFile
                 ? `Invoice ${item.number} issued and file uploaded`

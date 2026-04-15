@@ -18,6 +18,28 @@ app.post('/invoices', async (req: Request, res: Response, next) => {
     }
 });
 
+app.post('/invoice/nextNumber', async (req: Request, res: Response, next) => {
+    try {
+        const rawYear = req.parsedBody?.year ?? req.body?.year;
+        const parsedYear =
+            rawYear === undefined || rawYear === null || rawYear === ''
+                ? undefined
+                : Number(rawYear);
+
+        if (
+            parsedYear !== undefined &&
+            (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > 9999)
+        ) {
+            return res.status(400).json({ error: 'Nieprawidłowy rok' });
+        }
+
+        const number = await InvoicesController.getNextIndexedNumber(parsedYear);
+        res.json({ number });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.post('/invoice', async (req: Request, res: Response, next) => {
     try {
         const item = await InvoicesController.add(req.body);

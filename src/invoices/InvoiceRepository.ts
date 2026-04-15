@@ -26,6 +26,84 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         super('Invoices');
     }
 
+    async findNextNumberInIndexedYearFormat(year: number): Promise<string> {
+        const normalizedYear = Number(year);
+        if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 9999) {
+            throw new Error(`Invalid year for invoice numbering: ${year}`);
+        }
+
+        const pattern = `^[0-9]+/${normalizedYear}$`;
+        const sql = mysql.format(
+            `SELECT MAX(CAST(SUBSTRING_INDEX(Invoices.Number, '/', 1) AS UNSIGNED)) AS MaxIndex
+            FROM Invoices
+            WHERE Invoices.Number REGEXP ?`,
+            [pattern]
+        );
+
+        const rows = await this.executeQuery(sql);
+        const maxIndex = Number(rows?.[0]?.MaxIndex || 0);
+        const nextIndex = Number.isFinite(maxIndex) ? maxIndex + 1 : 1;
+
+        return `${nextIndex}/${normalizedYear}`;
+    }
+
+    async acquireInvoiceNumberingLock(
+        year: number,
+        externalConn: mysql.PoolConnection
+    ): Promise<void> {
+        const normalizedYear = Number(year);
+        if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 9999) {
+            throw new Error(`Invalid year for invoice numbering: ${year}`);
+        }
+
+        const lockName = `invoice-numbering-${normalizedYear}`;
+        const [lockRows] = await externalConn.query(
+            'SELECT GET_LOCK(?, 10) AS LockAcquired',
+            [lockName]
+        );
+        const lockAcquired = Number((lockRows as any[])[0]?.LockAcquired || 0);
+
+        if (lockAcquired !== 1) {
+            throw new Error('Could not acquire invoice numbering lock');
+        }
+    }
+
+    async releaseInvoiceNumberingLock(
+        year: number,
+        externalConn: mysql.PoolConnection
+    ): Promise<void> {
+        const normalizedYear = Number(year);
+        if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 9999) {
+            throw new Error(`Invalid year for invoice numbering: ${year}`);
+        }
+
+        const lockName = `invoice-numbering-${normalizedYear}`;
+        await externalConn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+    }
+
+    async findNextNumberInIndexedYearFormatInTransaction(
+        year: number,
+        externalConn: mysql.PoolConnection
+    ): Promise<string> {
+        const normalizedYear = Number(year);
+        if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 9999) {
+            throw new Error(`Invalid year for invoice numbering: ${year}`);
+        }
+
+        const pattern = `^[0-9]+/${normalizedYear}$`;
+        const [rows] = await externalConn.query(
+            `SELECT MAX(CAST(SUBSTRING_INDEX(Invoices.Number, '/', 1) AS UNSIGNED)) AS MaxIndex
+             FROM Invoices
+             WHERE Invoices.Number REGEXP ?
+             FOR UPDATE`,
+            [pattern]
+        );
+
+        const maxIndex = Number((rows as any[])[0]?.MaxIndex || 0);
+        const nextIndex = Number.isFinite(maxIndex) ? maxIndex + 1 : 1;
+        return `${nextIndex}/${normalizedYear}`;
+    }
+
     protected mapRowToModel(row: any): Invoice {
         const contractInitParams = {
             id: row.ContractId,
