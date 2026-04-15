@@ -425,6 +425,18 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
     }
 
     /**
+     * Pobiera numer zapisany w DB dla konkretnego kamienia milowego
+     */
+    async getNumberById(id: number): Promise<number | undefined> {
+        const sql = mysql.format(
+            `SELECT Number FROM Milestones WHERE Id = ?`,
+            [id]
+        );
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        return result[0]?.Number != null ? Number(result[0].Number) : undefined;
+    }
+
+    /**
      * Pobiera następny numer dla kamienia milowego danego typu w kontrakcie
      */
     async getNextNumber(typeId: number, contractId: number): Promise<number> {
