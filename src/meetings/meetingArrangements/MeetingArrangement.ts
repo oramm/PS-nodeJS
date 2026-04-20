@@ -20,6 +20,7 @@ export interface MeetingArrangementData {
     _case?: {
         id?: number;
         name?: string;
+        _typeFolderNumber_TypeName_Number_Name?: string;
         _type?: {
             id?: number;
             name?: string;

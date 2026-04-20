@@ -17,7 +17,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
     }
 
     async find(
-        params?: MeetingArrangementSearchParams
+        params?: MeetingArrangementSearchParams,
     ): Promise<MeetingArrangement[]> {
         const projectCondition = params?.projectOurId
             ? `Contracts.ProjectOurId="${params.projectOurId}"`
@@ -46,9 +46,11 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
                 MeetingArrangements.LastUpdated,
                 Cases.Id AS CaseId,
                 Cases.Name AS CaseName,
+                Cases.Number AS CaseNumber,
                 CaseTypes.Id AS CaseTypeId,
                 CaseTypes.Name AS CaseTypeName,
                 CaseTypes.FolderNumber,
+                CaseTypes.IsUniquePerMilestone,
                 Milestones.Id AS MilestoneId,
                 Milestones.Name AS MilestoneName,
                 Contracts.Id AS ContractId,
@@ -94,6 +96,8 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
             _case: {
                 id: row.CaseId,
                 name: row.CaseName,
+                _typeFolderNumber_TypeName_Number_Name:
+                    this.makeCaseTypeaheadLabel(row),
                 _type: {
                     id: row.CaseTypeId,
                     name: row.CaseTypeName,
@@ -114,5 +118,26 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
 
     private processResult(result: any[]): MeetingArrangement[] {
         return result.map((row) => this.mapRowToModel(row));
+    }
+
+    private makeCaseTypeaheadLabel(row: any): string {
+        const baseLabel =
+            `${row.FolderNumber || ''} ${row.CaseTypeName || ''}`.trim();
+
+        if (row.IsUniquePerMilestone) {
+            return baseLabel;
+        }
+
+        const displayNumber = this.makeCaseDisplayNumber(row.CaseNumber);
+        const caseName = ToolsDb.sqlToString(row.CaseName) || '';
+        return `${baseLabel} | ${displayNumber} ${caseName}`.trim();
+    }
+
+    private makeCaseDisplayNumber(caseNumber?: number | null): string {
+        if (!caseNumber) {
+            return 'S00';
+        }
+
+        return caseNumber < 10 ? `S0${caseNumber}` : `S${caseNumber}`;
     }
 }
