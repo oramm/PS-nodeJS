@@ -61,6 +61,7 @@ export default class CostInvoiceRepository {
      * Znajdź wszystkie faktury z filtrami
      */
     async findAll(filters?: {
+        searchText?: string;
         status?: string;
         dateFrom?: Date;
         dateTo?: Date;
@@ -71,6 +72,17 @@ export default class CostInvoiceRepository {
     }): Promise<CostInvoice[]> {
         const conditions: string[] = ['1=1'];
         const params: any[] = [];
+
+        if (filters?.searchText) {
+            const searchText = `%${String(filters.searchText).trim()}%`;
+            conditions.push(`(
+                ci.InvoiceNumber LIKE ? OR
+                ci.SupplierName LIKE ? OR
+                ci.SupplierNip LIKE ? OR
+                ci.KsefNumber LIKE ?
+            )`);
+            params.push(searchText, searchText, searchText, searchText);
+        }
 
         if (filters?.status) {
             conditions.push('ci.Status = ?');

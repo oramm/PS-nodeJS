@@ -193,6 +193,9 @@ app.post(
             // Obsługa orConditions (standard projektu)
             if (body.orConditions && Array.isArray(body.orConditions) && body.orConditions.length > 0) {
                 const cond = body.orConditions[0];
+                if (typeof cond.searchText === 'string' && cond.searchText.trim()) {
+                    filters.searchText = cond.searchText.trim();
+                }
                 if (cond.status) filters.status = cond.status;
                 if (cond.dateFrom) filters.dateFrom = new Date(cond.dateFrom);
                 if (cond.dateTo) filters.dateTo = new Date(cond.dateTo);
@@ -201,6 +204,9 @@ app.post(
                 if (!assignPaymentFilters(cond, filters, res)) return;
             } else {
                 // Bezpośrednie filtry w body
+                if (typeof body.searchText === 'string' && body.searchText.trim()) {
+                    filters.searchText = body.searchText.trim();
+                }
                 if (body.status) filters.status = body.status;
                 if (body.dateFrom) filters.dateFrom = new Date(body.dateFrom);
                 if (body.dateTo) filters.dateTo = new Date(body.dateTo);
@@ -239,6 +245,9 @@ app.get(
         try {
             const filters: any = {};
 
+            if (typeof req.query.searchText === 'string' && req.query.searchText.trim()) {
+                filters.searchText = req.query.searchText.trim();
+            }
             if (req.query.status) filters.status = req.query.status as string;
             if (req.query.dateFrom) filters.dateFrom = new Date(req.query.dateFrom as string);
             if (req.query.dateTo) filters.dateTo = new Date(req.query.dateTo as string);
