@@ -567,6 +567,7 @@ require('./financialAidProgrammes/Needs/NeedsRouters');
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
+require('./ai/AiRouters');
 
 // ScrumSheet maintenance routes
 require('./ScrumSheet/ScrumSheetRouters');
