@@ -135,7 +135,8 @@ export default class ToolsGd {
     ) {
         if (!parameters.isTrashed) parameters.isTrashed = false;
         const drive = google.drive({ version: 'v3', auth });
-        const q = `name = '${parameters.fileName}' and '${parameters.parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = ${parameters.isTrashed}`;
+        const escapedFileName = parameters.fileName.replace(/'/g, "\\'");
+        const q = `name = '${escapedFileName}' and '${parameters.parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = ${parameters.isTrashed}`;
         const filesSchema = await drive.files.list({
             q,
         });
