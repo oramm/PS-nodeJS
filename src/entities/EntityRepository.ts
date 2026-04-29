@@ -87,7 +87,8 @@ export default class EntityRepository extends BaseRepository<Entity> {
             (word) =>
                 `(Entities.Name LIKE ${mysql.escape(`%${word}%`)}
                 OR Entities.Address LIKE ${mysql.escape(`%${word}%`)}
-                OR Entities.Email LIKE ${mysql.escape(`%${word}%`)})`
+                OR Entities.Email LIKE ${mysql.escape(`%${word}%`)}
+                OR Entities.TaxNumber LIKE ${mysql.escape(`%${word}%`)})`
         );
         return conditions.join(' AND ');
     }
