@@ -687,8 +687,7 @@ export default class InvoicesController extends BaseController<
             }
 
             const indexedFormatRegex = /^\d+\/\d{4}$/;
-            const shouldAssignIndexedNumber =
-                !item.number || indexedFormatRegex.test(item.number.trim());
+            const shouldAssignIndexedNumber = !item.number;
 
             if (shouldAssignIndexedNumber) {
                 const transactionConn = await ToolsDb.pool.getConnection();

@@ -34,17 +34,26 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
 
         const pattern = `^[0-9]+/${normalizedYear}$`;
         const sql = mysql.format(
-            `SELECT MAX(CAST(SUBSTRING_INDEX(Invoices.Number, '/', 1) AS UNSIGNED)) AS MaxIndex
-            FROM Invoices
-            WHERE Invoices.Number REGEXP ?`,
+            `SELECT SUBSTRING_INDEX(Invoices.Number, '/', 1) AS NumPart
+             FROM Invoices
+             WHERE Invoices.Number REGEXP ?`,
             [pattern]
         );
 
         const rows = await this.executeQuery(sql);
-        const maxIndex = Number(rows?.[0]?.MaxIndex || 0);
-        const nextIndex = Number.isFinite(maxIndex) ? maxIndex + 1 : 1;
+        const nums = new Set<number>();
+        for (const r of rows || []) {
+            const raw = String(r?.NumPart ?? '').trim();
+            if (!raw) continue;
+            const val = parseInt(raw, 10);
+            if (Number.isInteger(val) && val > 0) nums.add(val);
+        }
 
-        return `${nextIndex}/${normalizedYear}`;
+        // find smallest missing positive integer starting from 1
+        let candidate = 1;
+        while (nums.has(candidate)) candidate++;
+
+        return `${candidate}/${normalizedYear}`;
     }
 
     async acquireInvoiceNumberingLock(
@@ -92,16 +101,24 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
 
         const pattern = `^[0-9]+/${normalizedYear}$`;
         const [rows] = await externalConn.query(
-            `SELECT MAX(CAST(SUBSTRING_INDEX(Invoices.Number, '/', 1) AS UNSIGNED)) AS MaxIndex
+            `SELECT SUBSTRING_INDEX(Invoices.Number, '/', 1) AS NumPart
              FROM Invoices
              WHERE Invoices.Number REGEXP ?
              FOR UPDATE`,
             [pattern]
         );
 
-        const maxIndex = Number((rows as any[])[0]?.MaxIndex || 0);
-        const nextIndex = Number.isFinite(maxIndex) ? maxIndex + 1 : 1;
-        return `${nextIndex}/${normalizedYear}`;
+        const nums = new Set<number>();
+        for (const r of (rows as any[]) || []) {
+            const raw = String(r?.NumPart ?? '').trim();
+            if (!raw) continue;
+            const val = parseInt(raw, 10);
+            if (Number.isInteger(val) && val > 0) nums.add(val);
+        }
+
+        let candidate = 1;
+        while (nums.has(candidate)) candidate++;
+        return `${candidate}/${normalizedYear}`;
     }
 
     protected mapRowToModel(row: any): Invoice {
