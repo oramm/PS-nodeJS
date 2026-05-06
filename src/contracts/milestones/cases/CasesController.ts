@@ -12,6 +12,11 @@ import BaseController from '../../../controllers/BaseController';
 import ToolsSheets from '../../../tools/ToolsSheets';
 import Tools from '../../../tools/Tools';
 import Setup from '../../../setup/Setup';
+import PersonsController from '../../../persons/PersonsController';
+import { PersonData } from '../../../types/types';
+import ToolsMail from '../../../tools/ToolsMail';
+import Milestone from '../Milestone';
+import MilestoneRepository from '../MilestoneRepository';
 
 export default class CasesController extends BaseController<
     Case,
@@ -29,6 +34,82 @@ export default class CasesController extends BaseController<
             this.instance = new CasesController();
         }
         return this.instance;
+    }
+
+    private static async ensureParentFromDb(
+        caseItem: Case,
+        cache?: Map<number, Milestone>
+    ): Promise<void> {
+        const milestoneId = caseItem.milestoneId ?? caseItem._parent?.id;
+        if (!milestoneId) throw new Error('Case milestone id is missing');
+
+        let milestone = cache?.get(milestoneId);
+        if (!milestone) {
+            const milestoneRepo = new MilestoneRepository();
+            milestone = await milestoneRepo.findById(milestoneId);
+            if (!milestone)
+                throw new Error(`Milestone ${milestoneId} not found`);
+            cache?.set(milestoneId, milestone);
+        }
+
+        if (!milestone.gdFolderId || milestone.gdFolderId === 'root') {
+            throw new Error(
+                `Milestone ${milestoneId} has invalid Google Drive folder id`
+            );
+        }
+
+        caseItem._parent = milestone;
+        caseItem.milestoneId = milestoneId;
+    }
+
+    private static isRootParentError(error: unknown): boolean {
+        if (!(error instanceof Error)) return false;
+        return (
+            error.message.includes('Parent folder cannot be root') ||
+            error.message.includes('has invalid Google Drive folder id')
+        );
+    }
+
+    private static reportRootParentError(
+        error: unknown,
+        context: {
+            flow: 'addCase' | 'addBulkWithDefaultTasks';
+            caseItem?: Case;
+            caseItems?: Case[];
+        }
+    ): void {
+        if (!CasesController.isRootParentError(error)) return;
+
+        const milestoneId =
+            context.caseItem?.milestoneId ?? context.caseItem?._parent?.id;
+        const caseId = context.caseItem?.id;
+        const caseName = context.caseItem?.name;
+        const bulkMilestoneIds = context.caseItems
+            ? context.caseItems
+                  .map((item) => item.milestoneId ?? item._parent?.id)
+                  .filter((id) => typeof id === 'number')
+            : [];
+
+        const details = [
+            `flow=${context.flow}`,
+            milestoneId ? `milestoneId=${milestoneId}` : null,
+            caseId ? `caseId=${caseId}` : null,
+            caseName ? `caseName=${caseName}` : null,
+            bulkMilestoneIds.length > 0
+                ? `bulkMilestoneIds=${bulkMilestoneIds.join(',')}`
+                : null,
+        ]
+            .filter((item): item is string => Boolean(item))
+            .join(' | ');
+
+        const reportError = new Error(
+            `Google Drive parent folder resolved to root. ${details}`
+        );
+        if (error instanceof Error && error.stack) {
+            reportError.stack = error.stack;
+        }
+
+        void ToolsMail.sendServerErrorReport(reportError);
     }
 
     /**
@@ -103,6 +184,7 @@ export default class CasesController extends BaseController<
         console.group('CasesController.addCase()');
 
         try {
+            await CasesController.ensureParentFromDb(caseItem);
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);
             console.log('folder created');
@@ -155,6 +237,10 @@ export default class CasesController extends BaseController<
                 defaultTasksInDb: defaultTasks,
             };
         } catch (err) {
+            CasesController.reportRootParentError(err, {
+                flow: 'addCase',
+                caseItem,
+            });
             // Rollback GD: usuń folder jeśli transakcja DB się nie powiodła
             await caseItem
                 .deleteFolder(auth)
@@ -228,8 +314,16 @@ export default class CasesController extends BaseController<
      * @param caseItem - Case dla którego tworzymy Tasks
      * @returns Tablica Task
      */
-    static async prepareDefaultTasks(caseItem: Case): Promise<Task[]> {
+    static async prepareDefaultTasks(
+        caseItem: Case,
+        ownerCache?: Map<number, PersonData>
+    ): Promise<Task[]> {
         const defaultTasks: Task[] = [];
+
+        const owner = await CasesController.makeTaskOwner(
+            caseItem,
+            ownerCache
+        );
 
         // Pobierz szablony zadań dla tego typu sprawy
         const defaultTaskTemplates =
@@ -243,7 +337,7 @@ export default class CasesController extends BaseController<
                 description: template.description,
                 status: template.status ? template.status : 'Nie rozpoczęty',
                 _parent: caseItem,
-                _owner: CasesController.makeTaskOwner(caseItem),
+                _owner: owner,
             });
             defaultTasks.push(task);
         }
@@ -260,12 +354,35 @@ export default class CasesController extends BaseController<
      * @param caseItem - Case
      * @returns Owner lub undefined
      */
-    private static makeTaskOwner(caseItem: Case): any {
+    private static async makeTaskOwner(
+        caseItem: Case,
+        cache?: Map<number, PersonData>
+    ): Promise<PersonData | undefined> {
         if (
             caseItem._parent?._contract &&
             '_manager' in caseItem._parent._contract
         ) {
-            return caseItem._parent._contract._manager;
+            const manager = caseItem._parent._contract._manager;
+            if (!manager?.id) return undefined;
+            if (manager.name && manager.surname && manager.email) {
+                return manager as PersonData;
+            }
+            const cached = cache?.get(manager.id);
+            if (cached) return cached;
+            const persons = await PersonsController.find([
+                { id: manager.id },
+            ]);
+            const person = persons && persons.length > 0 ? persons[0] : null;
+            if (!person?.id || !person.name || !person.surname || !person.email)
+                return undefined;
+            const owner: PersonData = {
+                id: person.id,
+                name: person.name,
+                surname: person.surname,
+                email: person.email,
+            };
+            cache?.set(owner.id as number, owner);
+            return owner;
         }
         return undefined;
     }
@@ -409,10 +526,16 @@ export default class CasesController extends BaseController<
         }[] = [];
         const caseRepository = new CaseRepository();
         let conn: mysql.PoolConnection | undefined;
+        const milestoneCache = new Map<number, Milestone>();
+        const ownerCache = new Map<number, PersonData>();
 
         try {
             // 1. Utwórz foldery GD dla wszystkich Cases
             for (const caseItem of caseItems) {
+                await CasesController.ensureParentFromDb(
+                    caseItem,
+                    milestoneCache
+                );
                 await caseItem.createFolder(auth);
             }
             console.log('Case folders created in GD');
@@ -435,7 +558,8 @@ export default class CasesController extends BaseController<
 
                 // Przygotuj domyślne Tasks
                 const defaultTasks = await CasesController.prepareDefaultTasks(
-                    caseItem
+                    caseItem,
+                    ownerCache
                 );
 
                 // Zapisz Case z powiązanymi ProcessInstances i Tasks
@@ -469,6 +593,10 @@ export default class CasesController extends BaseController<
 
             return caseData;
         } catch (error) {
+            CasesController.reportRootParentError(error, {
+                flow: 'addBulkWithDefaultTasks',
+                caseItems,
+            });
             console.error('An error occurred:', error);
             await conn?.rollback();
             // Rollback GD - usuń utworzone foldery

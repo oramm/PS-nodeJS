@@ -106,6 +106,69 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
     }
 
     /**
+     * Pobiera pojedynczy Milestone po Id (bez ograniczenia parentType)
+     */
+    async findById(id: number): Promise<Milestone | undefined> {
+        const sql = mysql.format(
+            `SELECT  Milestones.Id,
+                Milestones.Number,
+                MilestoneTypes.Id AS TypeId,
+                MilestoneTypes.Name AS TypeName,
+                COALESCE(MilestoneTypes_ContractTypes.FolderNumber, MilestoneTypes_Offers.FolderNumber) AS FolderNumber,
+                COALESCE(MilestoneTypes_ContractTypes.IsDefault, TRUE) AS TypeIsDefault,
+                MilestoneTypes.IsUniquePerContract AS TypeIsUniquePerContract,
+                Milestones.Name,
+                Milestones.Description,
+                Milestones.Status,
+                Milestones.GdFolderId,
+                OurContractsData.OurId AS ParentOurId,
+                OurContractsData.ManagerId AS ParentManagerId,
+                OurContractsData.AdminId AS ParentAdminId,
+                Contracts.Id AS ContractId,
+                Contracts.Number AS ParentNumber,
+                Contracts.OurIdRelated AS ParentOurIdRelated,
+                ContractTypes.Id AS ContractTypeId,
+                ContractTypes.Name AS ContractTypeName,
+                ContractTypes.Description AS ContractTypeDescription,
+                ContractTypes.IsOur AS ContractTypeIsOur,
+                Contracts.ProjectOurId,
+                Offers.Id AS OfferId,
+                Offers.Alias AS OfferAlias,
+                Offers.IsOur AS OfferIsOur,
+                Offers.Form AS OfferForm,
+                Offers.BidProcedure AS OfferBidProcedure,
+                Offers.EmployerName AS OfferEmployerName,
+                Offers.EditorId AS OfferEditorId,
+                OfferTypes.Id AS OfferTypeId,
+                OfferTypes.Name AS OfferTypeName,
+                OfferTypes.Description AS OfferTypeDescription,
+                OfferTypes.IsOur AS OfferTypeIsOur,
+                Cities.Id AS CityId,
+                Cities.Name AS CityName,
+                Cities.Code AS CityCode
+            FROM Milestones
+            JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id
+            LEFT JOIN Offers ON Milestones.OfferId = Offers.Id
+            LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+            LEFT JOIN ContractTypes AS OfferTypes ON OfferTypes.Id = Offers.TypeId
+            LEFT JOIN Cities ON Cities.Id = Offers.CityId
+            LEFT JOIN MilestoneTypes_ContractTypes 
+                ON  MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
+                AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
+            LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
+            LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
+            WHERE Milestones.Id = ?
+            LIMIT 1`,
+            [id]
+        );
+
+        const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        if (!rows || rows.length === 0) return undefined;
+        return this.mapRowToModel(rows[0]);
+    }
+
+    /**
      * Mapuje wiersz z bazy danych na instancję Milestone
      *
      * @param row - Wiersz z bazy danych

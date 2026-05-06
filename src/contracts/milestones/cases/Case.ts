@@ -141,6 +141,8 @@ export default class Case extends BusinessObject implements CaseData {
     async createFolder(auth: OAuth2Client) {
         if (!this._parent?.gdFolderId)
             throw new Error('No parent folder found');
+        if (this._parent.gdFolderId === 'root')
+            throw new Error('Parent folder cannot be root');
         //znajdź (i jak trzeba utwórz) folder typu sprawy
         const parentFolder = await ToolsGd.setFolder(auth, {
             parentId: this._parent.gdFolderId,
