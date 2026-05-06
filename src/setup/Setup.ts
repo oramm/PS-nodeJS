@@ -147,6 +147,8 @@ export default class Setup {
         TO_DO: 'Do zrobienia',
         DONE: 'Zrobiona',
         SENT: 'Wysłana',
+        READY_FOR_KSEF: 'Gotowa do wysłania KSeF',
+        SENT_TO_KSEF: 'Wysłana do KSeF',
         PAID: 'Zapłacona',
         TO_CORRECT: 'Do korekty',
         WITHDRAWN: 'Wycofana',

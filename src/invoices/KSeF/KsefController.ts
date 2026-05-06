@@ -245,16 +245,17 @@ export default class KsefController {
         try {
             invoice.ksefStatus = 'PENDING_CORRECTION';
             invoice.ksefSessionId = resp.referenceNumber;
-            await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId']);
+            invoice.status = Setup.InvoiceStatus.SENT_TO_KSEF;
+            await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId', 'status']);
             console.log(`   [KSeF] Korekta faktury ${invoiceId} wysłana, referenceNumber: ${resp.referenceNumber}`);
         } catch (err) {
             console.error('Nie udało się zaktualizować statusu faktury:', err);
         }
 
-        return { 
-            invoiceId, 
+        return {
+            invoiceId,
             referenceNumber: resp.referenceNumber,
-            status: 'PENDING',
+            status: Setup.InvoiceStatus.SENT_TO_KSEF,
             originalKsefNumber,
             message: 'Korekta wysłana do KSeF. Użyj checkStatus aby sprawdzić jej status.'
         };
@@ -311,17 +312,18 @@ export default class KsefController {
         // 7. Zaktualizuj status faktury w systemie
         try {
             invoice.ksefStatus = 'PENDING';
-            invoice.ksefSessionId = resp.referenceNumber; // Tymczasowo - to jest referenceNumber
-            await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId']);
+            invoice.ksefSessionId = resp.referenceNumber;
+            invoice.status = Setup.InvoiceStatus.SENT_TO_KSEF;
+            await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId', 'status']);
             console.log(`   [KSeF] Faktura ${invoiceId} wysłana, referenceNumber: ${resp.referenceNumber}`);
         } catch (err) {
             console.error('Nie udało się zaktualizować statusu faktury:', err);
         }
 
-        return { 
-            invoiceId, 
+        return {
+            invoiceId,
             referenceNumber: resp.referenceNumber,
-            status: 'PENDING',
+            status: Setup.InvoiceStatus.SENT_TO_KSEF,
             message: 'Faktura wysłana do KSeF. Użyj checkStatus aby sprawdzić czy otrzymała numer KSeF.'
         };
     }

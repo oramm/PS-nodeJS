@@ -655,7 +655,7 @@ export default class InvoicesController extends BaseController<
         console.group('InvoicesController.issueInvoice()');
         try {
             const parentGdFolderId = '1WsNoU0m9BoeVHeb_leAFwtRa94k0CD71';
-            const item = new Invoice({ ...invoiceData, status: 'Zrobiona' });
+            const item = new Invoice({ ...invoiceData, status: Setup.InvoiceStatus.READY_FOR_KSEF });
 
             if (item.gdId) {
                 await ToolsGd.trashFile(auth, item.gdId);

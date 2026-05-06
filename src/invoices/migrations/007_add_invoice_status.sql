@@ -1,0 +1,1 @@
+ALTER TABLE `invoices` CHANGE `Status` `Status` ENUM('Na później','Do zrobienia','Zrobiona','Wysłana','Gotowa do wysłania KSeF','Wysłana do KSeF','Zapłacona','Wycofana','Do korekty') CHARACTER SET utf8 COLLATE utf8_polish_ci NOT NULL;
