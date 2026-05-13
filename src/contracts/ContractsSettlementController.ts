@@ -156,6 +156,8 @@ export default class ContractsSettlementController {
             Setup.InvoiceStatus.TO_DO,
             Setup.InvoiceStatus.DONE,
             Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.READY_FOR_KSEF,
+            Setup.InvoiceStatus.SENT_TO_KSEF,
             Setup.InvoiceStatus.PAID,
         ];
     }
@@ -168,6 +170,8 @@ export default class ContractsSettlementController {
             Setup.InvoiceStatus.TO_DO,
             Setup.InvoiceStatus.DONE,
             Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.READY_FOR_KSEF,
+            Setup.InvoiceStatus.SENT_TO_KSEF,
             Setup.InvoiceStatus.PAID,
         ];
     }

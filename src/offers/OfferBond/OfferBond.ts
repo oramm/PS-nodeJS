@@ -116,7 +116,7 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
 
         let instructions: string = '';
         if (this.form === Setup.OfferBondForm.GUARANTEE) {
-            const offersLink = `<a href="https://ps.envi.com.pl/React/#/offers/list" target="_blank">ERP</a>`;
+            const offersLink = `<a href="https://ps.envi.com.pl/#/offers/list" target="_blank">ERP</a>`;
             instructions += `
             <div>
                 <strong>Uwaga:</strong>    

@@ -108,7 +108,7 @@ export default class ToolsMail {
             Wiadomość została wysłana automatycznie z systemu ERP ENVI. Proszę nie odpowiadaj na tę wiadomość. <BR>
             Możesz napisać na grupie Skype "Witryna ENVI, ERP"
             </p>
-            <a href="https://ps.envi.com.pl/React/">Odwiedź nasz system ERP</a>
+            <a href="https://ps.envi.com.pl/">Odwiedź nasz system ERP</a>
         `;
     }
 
