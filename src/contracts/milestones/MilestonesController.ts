@@ -289,17 +289,15 @@ export default class MilestonesController extends BaseController<
 
                     // 2. Równolegle: GD + Scrum (jeśli nie tylko DB fields)
                     if (!isOnlyDbFields) {
-                        if (milestone.number == null && milestone.id) {
+                        if (milestone.number == null && milestone.id && !milestone._type?.isUniquePerContract) {
                             const fetchedNumber =
                                 await instance.repository.getNumberById(
                                     milestone.id
                                 );
-                            if (fetchedNumber == null)
-                                throw new Error(
-                                    `Cannot resolve number for Milestone id=${milestone.id}`
-                                );
-                            milestone.number = fetchedNumber;
-                            milestone.setFolderName();
+                            if (fetchedNumber != null) {
+                                milestone.number = fetchedNumber;
+                                milestone.setFolderName();
+                            }
                         }
                         await Promise.all([
                             instance.editMilestoneFolder(authClient, milestone),
