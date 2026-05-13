@@ -172,6 +172,9 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             thirdPartyEntityId: row.ThirdPartyEntityId,
             correctedInvoiceId: row.CorrectedInvoiceId,
             correctionReason: ToolsDb.sqlToString(row.CorrectionReason),
+            paymentStatus: row.PaymentStatus,
+            paidAmount: row.PaidAmount,
+            paymentDate: row.PaymentDate,
             _lastUpdated: row.LastUpdated,
             _entity: {
                 id: row.EntityId,
@@ -201,6 +204,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                 email: row.OwnerEmail,
             }),
             _totalNetValue: row.TotalNetValue,
+            _totalGrossValue: row.TotalGrossValue,
         });
     }
 
@@ -266,7 +270,11 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Owners.Name AS OwnerName,
             Owners.Surname AS OwnerSurname,
             Owners.Email AS OwnerEmail,
-            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue
+            Invoices.PaymentStatus,
+            Invoices.PaidAmount,
+            Invoices.PaymentDate,
+            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue,
+            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2) AS TotalGrossValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
         LEFT JOIN Entities AS ThirdPartyEntities ON ThirdPartyEntities.Id=Invoices.ThirdPartyEntityId
@@ -579,5 +587,102 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         });
 
         return result;
+    }
+
+    async findById(id: number): Promise<Invoice | null> {
+        const sql = `SELECT Invoices.Id,
+            Invoices.Number,
+            Invoices.Description,
+            Invoices.Status,
+            Invoices.IssueDate,
+            Invoices.SentDate,
+            Invoices.DaysToPay,
+            Invoices.PaymentDeadline,
+            Invoices.GdId,
+            Invoices.KsefNumber,
+            Invoices.KsefCorrectionType,
+            Invoices.KsefStatus,
+            Invoices.KsefSessionId,
+            Invoices.KsefUpo,
+            Invoices.IsJstSubordinate,
+            Invoices.IsGvMember,
+            Invoices.IncludeThirdParty,
+            Invoices.ThirdPartyEntityId,
+            Invoices.CorrectedInvoiceId,
+            Invoices.CorrectionReason,
+            Invoices.LastUpdated,
+            Invoices.ContractId,
+            Invoices.PaymentStatus,
+            Invoices.PaidAmount,
+            Invoices.PaymentDate,
+            Entities.Id AS EntityId,
+            Entities.Name AS EntityName,
+            Entities.Address AS EntityAddress,
+            Entities.TaxNumber AS EntityTaxNumber,
+            ThirdPartyEntities.Name AS ThirdPartyEntityName,
+            ThirdPartyEntities.Address AS ThirdPartyEntityAddress,
+            ThirdPartyEntities.TaxNumber AS ThirdPartyEntityTaxNumber,
+            Contracts.Number AS ContractNumber,
+            Contracts.Name AS ContractName,
+            Contracts.Value AS ContractValue,
+            Contracts.Alias AS ContractAlias,
+            Contracts.GdFolderId AS ContractGdFolderId,
+            OurContractsData.OurId AS ContractOurId,
+            ContractTypes.Id AS ContractTypeId,
+            ContractTypes.Name AS ContractTypeName,
+            ContractTypes.IsOur AS ContractTypeIsOur,
+            ContractTypes.Id AS ContractTypeDescription,
+            Projects.OurId AS ProjectOurId,
+            Projects.Name AS ProjectName,
+            Projects.GdFolderId AS ProjectGdFolderId,
+            Cities.Id AS CityId,
+            Cities.Name AS CityName,
+            Editors.Id AS EditorId,
+            Editors.Name AS EditorName,
+            Editors.Surname AS EditorSurname,
+            Editors.Email AS EditorEmail,
+            Owners.Id AS OwnerId,
+            Owners.Name AS OwnerName,
+            Owners.Surname AS OwnerSurname,
+            Owners.Email AS OwnerEmail,
+            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) AS TotalNetValue,
+            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2) AS TotalGrossValue
+        FROM Invoices
+        JOIN Entities ON Entities.Id=Invoices.EntityId
+        LEFT JOIN Entities AS ThirdPartyEntities ON ThirdPartyEntities.Id=Invoices.ThirdPartyEntityId
+        JOIN Contracts ON Contracts.Id=Invoices.ContractId
+        JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
+        JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
+        JOIN Projects ON Projects.OurId=Contracts.ProjectOurId
+        LEFT JOIN Persons AS Editors ON Editors.Id=Invoices.EditorId
+        LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
+        LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+        LEFT JOIN Cities ON Cities.Id = OurContractsData.CityId
+        WHERE Invoices.Id = ?
+        GROUP BY Invoices.Id`;
+
+        const rows = await this.executeQuery(mysql.format(sql, [id]));
+        if (!rows || rows.length === 0) return null;
+        return this.mapRowToModel(rows[0]);
+    }
+
+    async updatePayment(
+        id: number,
+        data: {
+            paymentStatus: string;
+            paidAmount: number;
+            paymentDate?: string | null;
+        },
+        conn?: mysql.PoolConnection,
+    ): Promise<void> {
+        const sql = mysql.format(
+            `UPDATE Invoices SET PaymentStatus=?, PaidAmount=?, PaymentDate=? WHERE Id=?`,
+            [data.paymentStatus, data.paidAmount, data.paymentDate ?? null, id],
+        );
+        if (conn) {
+            await conn.query(sql);
+        } else {
+            await this.executeQuery(sql);
+        }
     }
 }

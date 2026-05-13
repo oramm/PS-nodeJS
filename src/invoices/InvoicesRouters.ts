@@ -176,6 +176,28 @@ app.delete('/invoice/:id', async (req: Request, res: Response, next) => {
     }
 });
 
+app.patch('/invoices/:id/payment', async (req: Request, res: Response, next) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
+
+        const { paymentStatus, paidAmount, paymentDate } = req.body;
+        if (!paymentStatus) return res.status(400).json({ error: 'paymentStatus jest wymagany' });
+
+        const result = await InvoicesController.updatePayment(id, {
+            paymentStatus,
+            paidAmount: paidAmount !== undefined ? Number(paidAmount) : undefined,
+            paymentDate: paymentDate ?? null,
+        });
+        res.json(result);
+    } catch (error: any) {
+        if (error.message?.startsWith('Faktura')) {
+            return res.status(404).json({ error: error.message });
+        }
+        next(error);
+    }
+});
+
 // ==================== KSeF API ====================
 
 /**

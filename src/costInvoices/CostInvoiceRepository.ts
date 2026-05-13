@@ -273,6 +273,22 @@ export default class CostInvoiceRepository {
         return this.optionalColumnsCache;
     }
 
+    async updatePayment(
+        id: number,
+        data: { paymentStatus: string; paidAmount: number; paymentDate?: string | null },
+        conn?: import('mysql2/promise').PoolConnection,
+    ): Promise<void> {
+        const sql = mysql.format(
+            `UPDATE CostInvoices SET PaymentStatus=?, PaidAmount=?, UpdatedAt=NOW() WHERE Id=?`,
+            [data.paymentStatus, data.paidAmount, id],
+        );
+        if (conn) {
+            await conn.query(sql);
+        } else {
+            await ToolsDb.executeSQL(sql);
+        }
+    }
+
     /**
      * Aktualizuj fakturę
      */

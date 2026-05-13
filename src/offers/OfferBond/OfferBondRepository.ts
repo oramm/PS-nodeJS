@@ -69,6 +69,7 @@ export default class OfferBondRepository extends BaseRepository<OfferBond> {
             status: row.Status,
             expiryDate: row.ExpiryDate,
             offerId: row.OfferId,
+            offerAlias: row.OfferAlias ?? null,
         });
     }
 

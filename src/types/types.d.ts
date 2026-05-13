@@ -584,6 +584,10 @@ export interface InvoiceData extends RepositoryDataItem {
     correctionReason?: string | null;
     /** Lista faktur korygujących tę fakturę */
     _corrections?: CorrectionInvoiceSummary[];
+    // Payment status (bank sync)
+    paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
+    paidAmount?: number;
+    paymentDate?: string | null;
 }
 
 export interface InvoiceItemData extends RepositoryDataItem {
@@ -658,6 +662,7 @@ export interface ExternalOfferData extends OfferData {
 
 export interface OfferBondData extends RepositoryDataItem {
     offerId?: number;
+    offerAlias?: string | null;
     value: string | number;
     form: string;
     paymentData: string;
