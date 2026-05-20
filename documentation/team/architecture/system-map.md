@@ -105,110 +105,112 @@
 ## 3. Mapa endpointów serwer → klient
 
 ### Legenda
+
 - ✅ = używany przez klienta
 - 🔧 = server-only (cron, scripts, admin)
 - ❓ = prawdopodobnie używany (brak 100% pewności)
 
 ### Auth & Session
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/login` | POST | ✅ LoginPage.tsx | Google OAuth + dev mode |
-| `/logout` | POST | ✅ MainWindow | Logout + reload |
-| `/session` | GET | ✅ MainWindow | Weryfikacja sesji przy page load |
-| `/sessionTaskStatus/:taskId` | GET | ✅ RepositoryReact | Polling async tasks |
-| `/get-token` | POST | ❓ | OAuth token refresh |
-| `/oauthcallback` | GET | ❓ | Google OAuth callback |
-| `/client-error` | POST | ✅ ToolsFetch | Raportowanie błędów klienta |
+| Endpoint                     | Metoda | Klient             | Uwagi                            |
+| ---------------------------- | ------ | ------------------ | -------------------------------- |
+| `/login`                     | POST   | ✅ LoginPage.tsx   | Google OAuth + dev mode          |
+| `/logout`                    | POST   | ✅ MainWindow      | Logout + reload                  |
+| `/session`                   | GET    | ✅ MainWindow      | Weryfikacja sesji przy page load |
+| `/sessionTaskStatus/:taskId` | GET    | ✅ RepositoryReact | Polling async tasks              |
+| `/get-token`                 | POST   | ❓                 | OAuth token refresh              |
+| `/oauthcallback`             | GET    | ❓                 | Google OAuth callback            |
+| `/client-error`              | POST   | ✅ ToolsFetch      | Raportowanie błędów klienta      |
 
 ### Admin
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/cities` | POST | ✅ CitiesSearch | Lista miast |
-| `/city` | POST/PUT/DELETE | ✅ CitiesModal | CRUD miasto |
-| `/contractRanges` | POST | ✅ ContractRangesSearch | Lista zakresów |
-| `/contractRange` | POST/PUT/DELETE | ✅ ContractRangesModal | CRUD zakres |
+| Endpoint          | Metoda          | Klient                  | Uwagi          |
+| ----------------- | --------------- | ----------------------- | -------------- |
+| `/cities`         | POST            | ✅ CitiesSearch         | Lista miast    |
+| `/city`           | POST/PUT/DELETE | ✅ CitiesModal          | CRUD miasto    |
+| `/contractRanges` | POST            | ✅ ContractRangesSearch | Lista zakresów |
+| `/contractRange`  | POST/PUT/DELETE | ✅ ContractRangesModal  | CRUD zakres    |
 
 ### Contracts
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/contracts` | POST | ✅ ContractsSearch | Lista kontraktów |
-| `/contract` | POST/PUT/DELETE | ✅ ContractsModal | CRUD kontrakt |
-| `/milestones` | POST | ✅ | Lista kamieni milowych |
-| `/milestone` | POST/PUT/DELETE | ✅ | CRUD kamień milowy |
-| `/cases` | POST | ✅ | Lista spraw |
-| `/case` | POST/PUT/DELETE | ✅ | CRUD sprawa |
-| `/tasks` | POST | ✅ TasksGlobal | Lista zadań |
-| `/task` | POST/PUT/DELETE | ✅ | CRUD zadanie |
-| `/contractTypes` | POST | ✅ | Lista typów kontraktów |
-| `/milestoneTypes` | POST | ✅ | Lista typów kamieni |
-| `/caseTypes` | POST | ✅ | Lista typów spraw |
-| `/securities` | POST | ✅ | Lista zabezpieczeń |
-| `/materialCards` | GET | ❓ | Karty materiałowe |
-| `/risks` | GET | ✅ | Ryzyka |
+| Endpoint          | Metoda          | Klient             | Uwagi                  |
+| ----------------- | --------------- | ------------------ | ---------------------- |
+| `/contracts`      | POST            | ✅ ContractsSearch | Lista kontraktów       |
+| `/contract`       | POST/PUT/DELETE | ✅ ContractsModal  | CRUD kontrakt          |
+| `/milestones`     | POST            | ✅                 | Lista kamieni milowych |
+| `/milestone`      | POST/PUT/DELETE | ✅                 | CRUD kamień milowy     |
+| `/cases`          | POST            | ✅                 | Lista spraw            |
+| `/case`           | POST/PUT/DELETE | ✅                 | CRUD sprawa            |
+| `/tasks`          | POST            | ✅ TasksGlobal     | Lista zadań            |
+| `/task`           | POST/PUT/DELETE | ✅                 | CRUD zadanie           |
+| `/contractTypes`  | POST            | ✅                 | Lista typów kontraktów |
+| `/milestoneTypes` | POST            | ✅                 | Lista typów kamieni    |
+| `/caseTypes`      | POST            | ✅                 | Lista typów spraw      |
+| `/securities`     | POST            | ✅                 | Lista zabezpieczeń     |
+| `/materialCards`  | GET             | ❓                 | Karty materiałowe      |
+| `/risks`          | GET             | ✅                 | Ryzyka                 |
 
 ### Invoices & KSeF
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/invoices` | POST | ✅ InvoicesSearch | Lista faktur |
-| `/invoice` | POST/PUT/DELETE | ✅ InvoicesModal | CRUD faktura |
-| `/invoice/:id/ksef/*` | POST/GET | ✅ | Integracja KSeF |
-| `/invoiceItems` | POST | ✅ | Pozycje faktur |
-| `/invoiceItem` | POST/PUT/DELETE | ✅ | CRUD pozycja |
-| `/costInvoices` | POST | ✅ CostInvoicesSearch | Faktury kosztowe |
-| `/costInvoice` | POST/PUT/DELETE/PATCH | ✅ | CRUD faktura kosztowa |
+| Endpoint                | Metoda                | Klient                | Uwagi                             |
+| ----------------------- | --------------------- | --------------------- | --------------------------------- |
+| `/invoices`             | POST                  | ✅ InvoicesSearch     | Lista faktur                      |
+| `/invoice`              | POST/PUT/DELETE       | ✅ InvoicesModal      | CRUD faktura                      |
+| `/invoice/:id/ksef/*`   | POST/GET              | ✅                    | Integracja KSeF                   |
+| `/invoiceItems`         | POST                  | ✅                    | Pozycje faktur                    |
+| `/invoiceItem`          | POST/PUT/DELETE       | ✅                    | CRUD pozycja                      |
+| `/costInvoices`         | POST                  | ✅ CostInvoicesSearch | Faktury kosztowe                  |
+| `/costInvoice`          | POST/PUT/DELETE/PATCH | ✅                    | CRUD faktura kosztowa             |
+| `/cost-invoices/:id/qr` | GET                   | ✅ CostInvoiceDetails | Kod QR KSeF dla faktury kosztowej |
 
 ### Letters
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/contractsLetters` | POST | ✅ LettersSearch | Pisma kontraktowe |
-| `/offersLetters` | POST | ✅ | Pisma ofertowe |
-| `/letter` | POST/PUT | ✅ | CRUD pismo (polimorficzny) |
-| `/exportOurLetterToPDF` | PUT | ✅ | Eksport do PDF |
-| `/approveOurLetter/:id` | PUT | ✅ | Zatwierdzenie |
+| Endpoint                | Metoda   | Klient           | Uwagi                      |
+| ----------------------- | -------- | ---------------- | -------------------------- |
+| `/contractsLetters`     | POST     | ✅ LettersSearch | Pisma kontraktowe          |
+| `/offersLetters`        | POST     | ✅               | Pisma ofertowe             |
+| `/letter`               | POST/PUT | ✅               | CRUD pismo (polimorficzny) |
+| `/exportOurLetterToPDF` | PUT      | ✅               | Eksport do PDF             |
+| `/approveOurLetter/:id` | PUT      | ✅               | Zatwierdzenie              |
 
 ### Offers
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/offers` | POST | ✅ OffersSearch | Lista ofert |
-| `/offer` | POST/PUT/DELETE | ✅ OffersModal | CRUD oferta |
-| `/offerBonds` | POST/DELETE | ✅ | Wadium |
-| `/mailsToCheck` | POST | ✅ | Mail zaproszenia |
+| Endpoint        | Metoda          | Klient          | Uwagi            |
+| --------------- | --------------- | --------------- | ---------------- |
+| `/offers`       | POST            | ✅ OffersSearch | Lista ofert      |
+| `/offer`        | POST/PUT/DELETE | ✅ OffersModal  | CRUD oferta      |
+| `/offerBonds`   | POST/DELETE     | ✅              | Wadium           |
+| `/mailsToCheck` | POST            | ✅              | Mail zaproszenia |
 
 ### Persons
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/persons` | POST | ✅ PersonsSearch | Lista osób |
-| `/person` | POST/PUT/DELETE | ✅ PersonsModal | CRUD osoba |
-| `/v2/skills` | GET/POST/PUT/DELETE | ✅ SkillsDictionary | Słownik umiejętności v2 |
-| `/educations/*` | POST/PUT/DELETE | ✅ PersonProfile | CRUD wykształcenie |
-| `/experiences/*` | POST/PUT/DELETE | ✅ PersonProfile | CRUD doświadczenie |
-| `/profileSkills/*` | POST/PUT/DELETE | ✅ PersonProfile | CRUD umiejętności |
-| `/profileImport/*` | POST | ✅ PersonProfile | Import profilu AI |
-| `/publicProfileSubmission/*` | GET/POST/PUT | ✅ PublicProfilePage | Zgłoszenia publiczne |
+| Endpoint                     | Metoda              | Klient               | Uwagi                   |
+| ---------------------------- | ------------------- | -------------------- | ----------------------- |
+| `/persons`                   | POST                | ✅ PersonsSearch     | Lista osób              |
+| `/person`                    | POST/PUT/DELETE     | ✅ PersonsModal      | CRUD osoba              |
+| `/v2/skills`                 | GET/POST/PUT/DELETE | ✅ SkillsDictionary  | Słownik umiejętności v2 |
+| `/educations/*`              | POST/PUT/DELETE     | ✅ PersonProfile     | CRUD wykształcenie      |
+| `/experiences/*`             | POST/PUT/DELETE     | ✅ PersonProfile     | CRUD doświadczenie      |
+| `/profileSkills/*`           | POST/PUT/DELETE     | ✅ PersonProfile     | CRUD umiejętności       |
+| `/profileImport/*`           | POST                | ✅ PersonProfile     | Import profilu AI       |
+| `/publicProfileSubmission/*` | GET/POST/PUT        | ✅ PublicProfilePage | Zgłoszenia publiczne    |
 
 ### Other
 
-| Endpoint | Metoda | Klient | Uwagi |
-|----------|--------|--------|-------|
-| `/entities` | POST | ✅ EntitiesSearch | Podmioty |
-| `/entity` | POST/PUT/DELETE | ✅ | CRUD podmiot |
-| `/projects` | POST | ✅ ProjectsSearch | Projekty |
-| `/project` | POST/PUT/DELETE | ✅ | CRUD projekt |
-| `/financialAidProgrammes` | POST | ✅ | Programy |
-| `/focusAreas` | POST | ✅ | Obszary |
-| `/applicationCalls` | POST | ✅ | Nabory |
-| `/needs` | POST | ✅ | Potrzeby |
-| `/documentTemplates` | POST | ✅ | Szablony dokumentów |
-| `/meetings` | GET | ❓ | Spotkania (read-only) |
-| `/contractMeetingNotes` | POST | ✅ | Notatki ze spotkań |
-| `/scrumSheet/*` | GET | 🔧 | Scrum backup (cron) |
+| Endpoint                  | Metoda          | Klient            | Uwagi                 |
+| ------------------------- | --------------- | ----------------- | --------------------- |
+| `/entities`               | POST            | ✅ EntitiesSearch | Podmioty              |
+| `/entity`                 | POST/PUT/DELETE | ✅                | CRUD podmiot          |
+| `/projects`               | POST            | ✅ ProjectsSearch | Projekty              |
+| `/project`                | POST/PUT/DELETE | ✅                | CRUD projekt          |
+| `/financialAidProgrammes` | POST            | ✅                | Programy              |
+| `/focusAreas`             | POST            | ✅                | Obszary               |
+| `/applicationCalls`       | POST            | ✅                | Nabory                |
+| `/needs`                  | POST            | ✅                | Potrzeby              |
+| `/documentTemplates`      | POST            | ✅                | Szablony dokumentów   |
+| `/meetings`               | GET             | ❓                | Spotkania (read-only) |
+| `/contractMeetingNotes`   | POST            | ✅                | Notatki ze spotkań    |
+| `/scrumSheet/*`           | GET             | 🔧                | Scrum backup (cron)   |
 
 ---
 
@@ -216,12 +218,12 @@
 
 ### Definicje typów — dwie osobne kopie
 
-| Aspekt | Serwer (PS-nodeJS) | Klient (ENVI.ProjectSite) |
-|--------|-------------------|--------------------------|
-| Plik | `src/types/types.d.ts` | `Typings/bussinesTypes.d.ts` |
-| LOC | ~200 | ~819 |
-| Zakres | Typy wewnętrzne + model | Pełne interfejsy danych |
-| Sync | **Ręczny** | **Ręczny** |
+| Aspekt | Serwer (PS-nodeJS)      | Klient (ENVI.ProjectSite)    |
+| ------ | ----------------------- | ---------------------------- |
+| Plik   | `src/types/types.d.ts`  | `Typings/bussinesTypes.d.ts` |
+| LOC    | ~200                    | ~819                         |
+| Zakres | Typy wewnętrzne + model | Pełne interfejsy danych      |
+| Sync   | **Ręczny**              | **Ręczny**                   |
 
 **Brak shared package** — typy utrzymywane niezależnie w obu projektach.
 
@@ -244,18 +246,20 @@ Konwencja jest **spójna** po obu stronach.
 
 Typ współdzielony między serwerem a klientem; utrzymywany ręcznie w obu projektach.
 
-| Wartość | Znaczenie |
-|---------|-----------|
-| `UNPAID` | Brak płatności |
-| `PARTIALLY_PAID` | Częściowo zapłacona |
-| `PAID` | W pełni zapłacona |
+| Wartość          | Znaczenie                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `UNPAID`         | Brak płatności                                                                        |
+| `PARTIALLY_PAID` | Częściowo zapłacona                                                                   |
+| `PAID`           | W pełni zapłacona                                                                     |
 | `NOT_APPLICABLE` | Nie dotyczy — korekta in minus (ujemna kwota brutto) bez sekcji `Platnosc` w KSeF XML |
 
 **Logika przypisania — backend (`costInvoiceXmlHelpers.extractPaymentInfoFromFa`):**
+
 - `grossAmount < 0` i brak / pusta sekcja `Platnosc` w KSeF XML → `NOT_APPLICABLE`
 - Pozostałe przypadki → `UNPAID` / `PARTIALLY_PAID` / `PAID` na podstawie flag i kwot z XML
 
 **Prezentacja — frontend (`CostInvoicesList`):**
+
 - `PaymentStatusBadge` — badge „–" (wariant `info`) dla `NOT_APPLICABLE`
 - `costInvoicePaymentFilters` — opcja filtra „Nie dotyczy" (`NOT_APPLICABLE`)
 
@@ -263,12 +267,12 @@ Typ współdzielony między serwerem a klientem; utrzymywany ręcznie w obu proj
 
 ### Nazewnictwo pól — mapowanie
 
-| Serwer (DB column) | Serwer (model) | Klient (interfejs) |
-|--------------------|-----------------|--------------------|
-| `Id` | `id` | `id` |
-| `ContractId` | `contractId` | `contractId` |
-| `SequenceNumber` | `sequenceNumber` | `sequenceNumber` |
-| PascalCase | camelCase | camelCase |
+| Serwer (DB column) | Serwer (model)   | Klient (interfejs) |
+| ------------------ | ---------------- | ------------------ |
+| `Id`               | `id`             | `id`               |
+| `ContractId`       | `contractId`     | `contractId`       |
+| `SequenceNumber`   | `sequenceNumber` | `sequenceNumber`   |
+| PascalCase         | camelCase        | camelCase          |
 
 Konwersja PascalCase (DB) → camelCase (kod) odbywa się w `mapRowToModel()` na serwerze.
 

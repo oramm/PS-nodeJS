@@ -317,6 +317,38 @@ app.get(
 );
 
 /**
+ * GET /cost-invoices/:id/qr
+ *
+ * Zwraca dane potrzebne do wygenerowania kodu QR KSeF.
+ */
+app.get(
+    '/cost-invoices/:id/qr',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const rawId = String(req.params.id ?? '').trim();
+            if (!/^[1-9]\d*$/.test(rawId)) {
+                return res.status(400).json({ error: 'Nieprawidłowe id faktury' });
+            }
+            const id = parseInt(rawId, 10);
+            const qrData = await controller.getQrData(id);
+
+            res.json({
+                success: true,
+                data: qrData,
+            });
+        } catch (error: any) {
+            if (error?.statusCode) {
+                return res.status(error.statusCode).json({
+                    error: error.message,
+                    details: error.details,
+                });
+            }
+            next(error);
+        }
+    },
+);
+
+/**
  * GET /cost-invoices/:id/booking-validation
  *
  * Zwraca listę błędów walidacji księgowania

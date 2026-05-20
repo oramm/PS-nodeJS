@@ -4,6 +4,8 @@ import KsefService, { PurchaseInvoiceListItem } from '../invoices/KSeF/KsefServi
 import { XMLParser } from 'fast-xml-parser';
 import { extractSaleDateFromFa, extractDueDateFromFa, extractPaymentMethodFromFa, extractPaymentInfoFromFa, extractInvoiceTypeFromFa } from './costInvoiceXmlHelpers';
 import { CostInvoiceValidator } from './CostInvoiceValidator';
+import Setup from '../setup/Setup';
+import * as crypto from 'crypto';
 
 export class CostInvoiceError extends Error {
     statusCode: number;
@@ -16,6 +18,17 @@ export class CostInvoiceError extends Error {
     }
 }
 
+export type CostInvoiceQrData = {
+    qrVerificationUrl: string;
+    qrLabel: string;
+    qrPayload: {
+        environment: string;
+        sellerNip: string;
+        issueDate: string;
+        invoiceHash: string;
+    };
+};
+
 /**
  * Controller dla faktur kosztowych
  *
@@ -26,6 +39,28 @@ export default class CostInvoiceController {
 
     constructor() {
         this.repository = new CostInvoiceRepository();
+    }
+
+    private getQrBaseUrl(): string {
+        return Setup.KSeF.environment === 'production'
+            ? 'https://qr.ksef.mf.gov.pl'
+            : 'https://qr-test.ksef.mf.gov.pl';
+    }
+
+    private toBase64Url(buffer: Buffer): string {
+        return buffer
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
+    }
+
+    private formatQrDate(dateValue: Date): string {
+        const date = new Date(dateValue);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
     }
 
     // =====================================================
@@ -446,6 +481,46 @@ export default class CostInvoiceController {
             invoice._items = await this.repository.findItemsByInvoiceId(invoice.id!);
         }
         return invoice;
+    }
+
+    /**
+     * Zwraca dane do wygenerowania kodu QR (KSeF) dla faktury kosztowej.
+     */
+    async getQrData(id: number): Promise<CostInvoiceQrData> {
+        const invoice = await this.repository.findById(id);
+        if (!invoice) throw new CostInvoiceError(404, `Faktura ${id} nie istnieje`);
+
+        if (!invoice.xmlContent) {
+            throw new CostInvoiceError(400, 'Brak oryginalnego XML do wygenerowania kodu QR');
+        }
+
+        const supplierNip = (invoice.supplierNip || '').replace(/\D+/g, '');
+        if (!supplierNip) {
+            throw new CostInvoiceError(400, 'Brak NIP dostawcy do wygenerowania kodu QR');
+        }
+
+        if (!invoice.issueDate || isNaN(invoice.issueDate.getTime())) {
+            throw new CostInvoiceError(400, 'Brak daty wystawienia do wygenerowania kodu QR');
+        }
+
+        const invoiceHash = this.toBase64Url(
+            crypto.createHash('sha256').update(Buffer.from(invoice.xmlContent, 'utf-8')).digest(),
+        );
+
+        const issueDate = this.formatQrDate(invoice.issueDate);
+        const qrVerificationUrl = `${this.getQrBaseUrl()}/invoice/${supplierNip}/${issueDate}/${invoiceHash}`;
+        const qrLabel = invoice.ksefNumber || invoice.invoiceNumber || `KSeF-${id}`;
+
+        return {
+            qrVerificationUrl,
+            qrLabel,
+            qrPayload: {
+                environment: Setup.KSeF.environment,
+                sellerNip: supplierNip,
+                issueDate,
+                invoiceHash,
+            },
+        };
     }
 
     /**
