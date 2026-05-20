@@ -1080,10 +1080,10 @@ export default class KsefService {
     async searchPurchaseInvoices(
         dateFrom: Date,
         dateTo: Date,
-        pageOffset: number = 0,
     ): Promise<{
         invoices: PurchaseInvoiceListItem[];
         hasMorePages: boolean;
+        lastPermanentStorageDate?: string;
         totalCount: number;
     }> {
         // Upewnij się że mamy accessToken (NIE sesję interaktywną!)
@@ -1128,6 +1128,7 @@ export default class KsefService {
         return {
             invoices,
             hasMorePages: exportStatus.package.isTruncated ?? false,
+            lastPermanentStorageDate: exportStatus.lastPermanentStorageDate,
             totalCount: invoices.length,
         };
     }
@@ -1382,7 +1383,7 @@ export default class KsefService {
                 dateRange: {
                     from: this.formatDateTimeISO(dateFrom),
                     to: this.formatDateTimeISO(dateTo, true),
-                    dateType: 'Invoicing', // Invoicing | Issue | PermanentStorage
+                    dateType: 'PermanentStorage', // Invoicing | Issue | PermanentStorage
                 },
             },
             encryption: {
@@ -1544,24 +1545,54 @@ export default class KsefService {
     ): Promise<PurchaseInvoiceListItem[]> {
         // Podziel zakres na chunki po 89 dni (bezpieczny limit < 90 dni = ~3 miesiące)
         const chunks = this.splitDateRangeIntoDayChunks(dateFrom, dateTo, 89);
-        
+
         console.log(`   [KSeF] Data range podzielona na ${chunks.length} chunk(ów) (limit: 89 dni)`);
-        
+
         const allInvoices: PurchaseInvoiceListItem[] = [];
-        
+
+        const MAX_PAGES_PER_CHUNK = 100;
+
         for (let i = 0; i < chunks.length; i++) {
-            const { from, to } = chunks[i];
-            console.log(`   [KSeF] Chunk ${i + 1}/${chunks.length}: ${from.toISOString().split('T')[0]} → ${to.toISOString().split('T')[0]}`);
-            
-            const result = await this.searchPurchaseInvoices(from, to);
-            allInvoices.push(...result.invoices);
-            
+            let currentFrom = chunks[i].from;
+            const chunkTo = chunks[i].to;
+            let page = 1;
+
+            console.log(`   [KSeF] Chunk ${i + 1}/${chunks.length}: ${currentFrom.toISOString().split('T')[0]} → ${chunkTo.toISOString().split('T')[0]}`);
+
+            do {
+                if (page > MAX_PAGES_PER_CHUNK) {
+                    console.error(`   [KSeF] Chunk ${i + 1}: przekroczono limit ${MAX_PAGES_PER_CHUNK} stron, przerywam`);
+                    break;
+                }
+
+                if (page > 1) {
+                    await this.delay(1000);
+                }
+
+                const result = await this.searchPurchaseInvoices(currentFrom, chunkTo);
+                allInvoices.push(...result.invoices);
+
+                if (result.hasMorePages && result.lastPermanentStorageDate) {
+                    // +1ms żeby uniknąć duplikatu faktury na granicy (inclusive boundary)
+                    const nextFrom = new Date(new Date(result.lastPermanentStorageDate).getTime() + 1);
+                    if (nextFrom.getTime() <= currentFrom.getTime()) {
+                        console.warn(`   [KSeF] Chunk ${i + 1}: kursor nie przesunął się (${result.lastPermanentStorageDate}), przerywam`);
+                        break;
+                    }
+                    console.log(`   [KSeF] Chunk ${i + 1} strona ${page} obcięta (isTruncated), kontynuacja od: ${nextFrom.toISOString()}`);
+                    currentFrom = nextFrom;
+                    page++;
+                } else {
+                    break;
+                }
+            } while (true);
+
             // Rate limiting: czekaj między chunkkami (KSeF limit: 16 żądań/minutę)
             if (i < chunks.length - 1) {
-                await this.delay(1000); // 1 sekunda między chunkkami
+                await this.delay(1000);
             }
         }
-        
+
         console.log(
             `   [KSeF] Pobrano łącznie ${allInvoices.length} faktur zakupowych`,
         );
@@ -1717,6 +1748,7 @@ interface ExportStatusWithPackage {
     status: { code: number; description: string };
     completedDate?: string;
     packageExpirationDate?: string;
+    lastPermanentStorageDate?: string;
     package?: {
         invoiceCount: number;
         size: number;

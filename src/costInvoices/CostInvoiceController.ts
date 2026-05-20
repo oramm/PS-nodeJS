@@ -167,14 +167,16 @@ export default class CostInvoiceController {
                 }
 
                 try {
-                    // Rate limiting: KSeF limit = 16 żądań/minutę (~4 sekundy na żądanie)
-                    // Opóźnienie co 3 żądania
-                    if (idx > 0 && idx % 3 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 4000));
+                    let xml: string;
+                    if (invoiceInfo.rawXml != null && invoiceInfo.rawXml !== '') {
+                        xml = invoiceInfo.rawXml;
+                    } else {
+                        // Fallback: XML nie był w paczce eksportu — pobierz osobno (rate limiting)
+                        if (idx > 0 && idx % 3 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 4000));
+                        }
+                        xml = await ksefService.getInvoiceXml(invoiceInfo.ksefNumber);
                     }
-                    
-                    // Pobierz XML faktury
-                    const xml = await ksefService.getInvoiceXml(invoiceInfo.ksefNumber);
 
                     // Parsuj XML i utwórz obiekt faktury
                     const invoice = this.parseInvoiceXml(xml, invoiceInfo, sync.id!);
