@@ -779,6 +779,16 @@ export default class CurrentSprint {
         const timesColIndex = currentSprintValues[0].indexOf(
             Setup.ScrumSheet.CurrentSprint.timesColName
         );
+        const currentColCount = currentSprintValues[0].length;
+        const neededColCount = timesColIndex + persons.length;
+        if (neededColCount > currentColCount) {
+            await ToolsSheets.insertCols(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                sheetId: Setup.ScrumSheet.CurrentSprint.id,
+                startIndex: currentColCount,
+                endIndex: neededColCount,
+            });
+        }
         const formulaRequests = [];
         for (let i = 0; i < persons.length; i++) {
             formulaRequests.push({

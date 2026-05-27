@@ -28,7 +28,7 @@ export default class ScrumSheet {
             ]);
             const managersAndEmployees = await ScrumSheet.scrumGetPersons([
                 'ENVI_EMPLOYEE',
-                'ENVI_MANAGER',
+                //'ENVI_MANAGER',
             ]);
             await this.Planning.refreshTimeAvailable(
                 auth,

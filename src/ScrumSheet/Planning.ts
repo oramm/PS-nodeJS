@@ -29,36 +29,37 @@ export default class Planning {
             const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
             persons = (await PersonsController.find(orConditions)) || [];
         }
-        //wstaw wiersze przed przeostatnim istniejącym - kopiowanie formatu
-        await ToolsSheets.insertRows(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            sheetId: Setup.ScrumSheet.Planning.id,
-            startIndex:
-                Setup.ScrumSheet.Planning.firstDataRow + persons.length - 2,
-            endIndex:
-                Setup.ScrumSheet.Planning.firstDataRow + persons.length * 2 - 1,
-        });
-        //usuń początkowe stare wiersze
-        await ToolsSheets.deleteRows(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            sheetId: Setup.ScrumSheet.Planning.id,
-            startIndex: Setup.ScrumSheet.Planning.firstDataRow - 1,
-            endIndex:
-                Setup.ScrumSheet.Planning.firstDataRow + persons.length - 1,
-        });
-
-        //usuń ostatni wiersz
-        await ToolsSheets.deleteRows(auth, {
-            spreadsheetId: Setup.ScrumSheet.GdId,
-            sheetId: Setup.ScrumSheet.Planning.id,
-            startIndex:
-                Setup.ScrumSheet.Planning.firstDataRow + persons.length - 2,
-            endIndex:
-                Setup.ScrumSheet.Planning.firstDataRow + persons.length - 1,
-        });
+        // Liczba osób w arkuszu przed odświeżeniem: wiersze - nagłówki (firstDataRow-1) - wiersz SUM (1)
+        const nOld =
+            planingValues.length - Setup.ScrumSheet.Planning.firstDataRow;
+        if (persons.length > nOld) {
+            // Wstaw brakujące wiersze danych przed wierszem SUM
+            await ToolsSheets.insertRows(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                sheetId: Setup.ScrumSheet.Planning.id,
+                startIndex:
+                    Setup.ScrumSheet.Planning.firstDataRow + nOld - 1,
+                endIndex:
+                    Setup.ScrumSheet.Planning.firstDataRow +
+                    persons.length -
+                    1,
+            });
+        } else if (persons.length < nOld) {
+            // Usuń nadmiarowe wiersze danych
+            await ToolsSheets.deleteRows(auth, {
+                spreadsheetId: Setup.ScrumSheet.GdId,
+                sheetId: Setup.ScrumSheet.Planning.id,
+                startIndex:
+                    Setup.ScrumSheet.Planning.firstDataRow +
+                    persons.length -
+                    1,
+                endIndex:
+                    Setup.ScrumSheet.Planning.firstDataRow + nOld - 1,
+            });
+        }
 
         //lista osób
-        ToolsSheets.updateValues(auth, {
+        await ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1: `'${
                 Setup.ScrumSheet.Planning.name
@@ -70,7 +71,7 @@ export default class Planning {
             majorDimension: 'COLUMNS',
         });
         //dane stałe
-        ToolsSheets.updateValues(auth, {
+        await ToolsSheets.updateValues(auth, {
             spreadsheetId: Setup.ScrumSheet.GdId,
             rangeA1:
                 `'${Setup.ScrumSheet.Planning.name}'!${ToolsSheets.R1C1toA1(
@@ -84,7 +85,7 @@ export default class Planning {
             values: [[5, 8, '', 2, 1.5]],
         });
         //dostepne godziny - po prawej
-        ToolsSheets.repeatFormula(auth, {
+        await ToolsSheets.repeatFormula(auth, {
             range: {
                 sheetId: Setup.ScrumSheet.Planning.id,
                 startRowIndex: Setup.ScrumSheet.Planning.firstDataRow - 1,
@@ -99,13 +100,13 @@ export default class Planning {
             ),
         });
         //suma - ostatni wiersz na dole
-        ToolsSheets.repeatFormula(auth, {
+        await ToolsSheets.repeatFormula(auth, {
             range: {
                 sheetId: Setup.ScrumSheet.Planning.id,
                 startRowIndex:
                     Setup.ScrumSheet.Planning.firstDataRow + persons.length - 1,
                 endRowIndex:
-                    Setup.ScrumSheet.Planning.firstDataRow + persons.length + 1,
+                    Setup.ScrumSheet.Planning.firstDataRow + persons.length,
                 startColumnIndex: workingDaysColIndex,
                 endColumnIndex: extraMeetingsSummaryColNumber + 1,
             },
