@@ -63,6 +63,42 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-05-09 - SchemaMigrations runner and Heroku verify gate
+
+### Scope
+
+- Added a shared TypeScript SQL migration runner at `src/scripts/migrate.ts` with `list`, `verify`, `apply`, and `baseline` modes.
+- Added DB-backed migration tracking through `SchemaMigrations` and wired package scripts plus Heroku `release` verify gate.
+- Updated migration and deployment runbooks for baseline-first rollout.
+
+### Impact
+
+- DB: each target database now needs `SchemaMigrations`; it is created automatically by the runner.
+- ENV: none.
+- Deploy: baseline historical migrations on each environment, run `yarn migrate:verify`, then rely on the Heroku release gate.
+
+### Required Actions
+
+- Manually confirm historical schema state on development and production.
+- Run `yarn migrate:baseline` once per environment where historical migrations are already present but untracked.
+- Run `yarn migrate:verify` after baseline and before subsequent deploys.
+
+### Verification
+
+- Targeted Jest tests for the runner passed.
+- `yarn build` passed and emits `build/scripts/migrate.js` for Heroku release usage.
+
+### Rollback
+
+- Remove the Heroku release gate only if rollout must be paused.
+- Keep `SchemaMigrations` as audit state unless a deliberate rollback plan for migration tracking is approved.
+
+### Links
+
+- `src/scripts/migrate.ts`
+- `documentation/team/runbooks/db-migration-execution.md`
+- `documentation/team/operations/deployment-heroku.md`
+
 ## 2026-04-08 - Invoice KSeF correction type persisted in DB
 
 ### Scope

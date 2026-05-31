@@ -15,6 +15,7 @@ Kazde zadanie przechodzi sekwencje:
 5. Aktualizacja docs (jesli dotyczy).
 6. Commit request od orchestratora (`COMMIT_REQUEST` + `COMMIT_APPROVED`).
 7. Commit przez `factory/prompts/committer.md`.
+8. Release Gate tylko dla taskow dotykajacych DB/env/deploy albo gdy trzeba ocenic gotowosc do produkcyjnego release.
 
 Role prompt parity (V1.1):
 - `factory/prompts/planner.md`
@@ -24,6 +25,7 @@ Role prompt parity (V1.1):
 - `factory/prompts/reviewer.md`
 - `factory/prompts/documentarian.md`
 - `factory/prompts/committer.md`
+- `factory/prompts/release-gate.md`
 
 Hard rules:
 - `Reviewer != Coder` (swieze spojrzenie).
@@ -40,6 +42,50 @@ Hard rules:
 - Balans iteracji: 50/50 (1 task funkcjonalny + 1 task techniczny/refactor, o ile ma sens).
 - Committer NIE wykonuje `git add .` ani `git add -A`; staging tylko z `files_changed` lub staged-only.
 - W V1 gate `TEST_PASS/APPROVE/DOCS_SYNC_DONE` sa deklarowane przez orchestratora w `COMMIT_REQUEST` (state-store planowany w V2).
+
+## 1b. Release Gate (minimalny, bez nadmiarowosci)
+
+Release Gate jest opcjonalnym gate'em po commicie i przed ludzkim deployem.
+Uruchamiaj go tylko wtedy, gdy task:
+- dotyka DB,
+- dotyka env/deploy,
+- albo trzeba jednoznacznie ocenic gotowosc do produkcyjnego release.
+
+Release Gate NIE wykonuje deployu.
+Release Gate NIE auto-aplikuje migracji.
+Release Gate ocenia, czy release moze przejsc dalej jako `RELEASE_READY` albo musi zostac zatrzymany jako `RELEASE_BLOCKED`.
+
+Minimalny kontrakt V1:
+
+```text
+RELEASE_REQUEST:
+- change_scope
+- target_env
+- git_sha
+- db_impact (yes|no)
+- migration_action (none|apply|baseline)
+- checklist_entry_updated (yes|no)
+- test_verdict (TEST_PASS|n/a)
+- review_verdict (APPROVE|n/a)
+- operator_confirmed_target (yes|no)
+- migrate_verify_passed (yes|no|n/a)
+- release_approved (RELEASE_APPROVED)
+```
+
+Decyzja V1:
+- `RELEASE_READY`, gdy `release_approved == RELEASE_APPROVED` oraz review/docs sa zamkniete, a dla zmian DB/env/deploy operator potwierdzil target i `migrate:verify` jest zielone.
+- `RELEASE_BLOCKED`, gdy brakuje ktoregos z tych gate'ow albo wystepuje niejasny stan migracji.
+
+Canonical sources dla Release Gate:
+- `documentation/team/runbooks/db-migration-execution.md`
+- `documentation/team/operations/deployment-heroku.md`
+- `documentation/team/operations/post-change-checklist.md`
+
+Zasady minimalne:
+- Dla `db_impact=no` pole `migrate_verify_passed` moze miec wartosc `n/a`.
+- Dla `db_impact=yes` brak zielonego `migrate:verify` blokuje release.
+- `baseline` jest dozwolony tylko po recznym potwierdzeniu operatora, ze historyczny stan schematu juz istnieje.
+- Release Gate nie zastępuje `COMMIT_APPROVED` i nie zmienia zasad Committera.
 
 ## 1a. Documentation Layer Selection (obowiazkowe)
 

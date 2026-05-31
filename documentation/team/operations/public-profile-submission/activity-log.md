@@ -34,3 +34,17 @@
 - Verification:
     - `PS-nodeJS`: `yarn build` pass, `yarn jest src/persons/publicProfileSubmission/__tests__/PublicProfileSubmissionAuth.test.ts --runInBand` pass,
     - `ENVI.ProjectSite`: `yarn tsc --noEmit` pass, `yarn build` pass.
+
+## 2026-05-31 - Frontend activity log compressed into backend hub
+
+- Scope:
+    - frontend local activity log content was preserved while converting the client folder to a pointer,
+    - API/flow documents moved to the backend hub as the cross-repo source of truth.
+- Frontend files recorded by the local client log:
+    - `src/Persons/PersonProfile/PublicProfileSubmission/publicProfileSubmissionApi.ts`
+    - `src/Persons/PersonProfile/PublicProfileSubmission/personPublicProfileSubmissionReviewApi.ts`
+    - `src/Persons/PersonProfile/PersonProfilePage.tsx`
+    - `src/React/MainWindow/index.tsx`
+- Frontend verification recorded by the local client log:
+    - `yarn tsc --noEmit` pass
+    - `yarn build` pass

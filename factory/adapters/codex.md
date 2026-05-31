@@ -23,7 +23,9 @@ Asystent Orkiestratora ma prowadzic gate'y pytaniami z opcjami `1/2/3` (latwy wy
    - przekaz `ai_lead_model` (model prowadzacy glowny watek) oraz opcjonalnie `ai_coauthor_email`.
 7. Commit uruchom przez `factory/prompts/committer.md` tylko po `COMMIT_APPROVED`.
    - commit musi zawierac `Dark-Factory: yes` oraz trailer `Co-authored-by` dla AI.
-8. Przy planie taska uzupelnij:
+8. Jesli task dotyka DB/env/deploy albo trzeba ocenic gotowosc do produkcyjnego release, przygotuj `RELEASE_REQUEST` i ocen go przez `factory/prompts/release-gate.md` przed ludzkim deployem.
+  - `RELEASE_READY` nie zastępuje `COMMIT_APPROVED`; to osobny gate.
+9. Przy planie taska uzupelnij:
     - `execution_model` (`orchestrator_v1`)
     - `main_agent_policy.can_edit_code` (`false`)
     - `required_context_files`

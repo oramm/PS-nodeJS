@@ -16,6 +16,27 @@
 
 Uwaga: Typy (`src/types/types.d.ts`, `Typings/bussinesTypes.d.ts`) to kod, nie dokumentacja â€” wymienione w sekcji API contract.
 
+## Model cross-repo
+
+`PS-nodeJS` jest hubem dokumentacji systemowej dla architektury, API contract, DB, env, Heroku deploy oraz aktywnych inicjatyw dotykajacych jednoczesnie serwera i klienta. `ENVI.ProjectSite` przechowuje kod UI, instrukcje FE, pipeline GitHub Pages oraz aktywne plany tylko dla prac frontend-only.
+
+Klasyfikacja inicjatywy:
+
+| Typ | Canonical active docs | Regula |
+|-----|-----------------------|--------|
+| `backend-only` | `documentation/team/operations/<initiative>/` | Serwer, DB, env, deploy, runbooki backendowe |
+| `frontend-only` | `C:\Apache24\htdocs\ENVI.ProjectSite\documentation\operations\<initiative>\` | Tylko UI/UX, lokalny build, screenshot evidence |
+| `cross-repo` | `documentation/team/operations/<initiative>/` | Jeden plan w backend hubie; frontend trzyma tylko pointer |
+| `deploy/db/env` | `documentation/team/operations/<initiative>/` | Zawsze backend-owned, nawet gdy efekt widac w UI |
+
+Minimalny zestaw aktywnej inicjatywy to `plan.md`, `progress.md`, `activity-log.md`. Po stabilizacji zostaje stan finalny w canonical docs i evidence; roboczy halas jest usuwany albo kompresowany, a historia pozostaje w Git.
+
+Odpowiedzialnosc pipeline:
+
+- Heroku, migracje DB, env vars, migration gate i release checklist: `PS-nodeJS`.
+- GitHub Pages, webpack build, UI smoke i screenshot evidence: `ENVI.ProjectSite`.
+- Zmiany API/DTO: plan i contract source w `PS-nodeJS`; frontend aktualizuje swoje typy po weryfikacji backendu.
+
 ---
 
 ## 1. Architektura systemu
@@ -125,11 +146,12 @@ Historyczne aliasy root-level usuniete (2026-02-23):
 
 ## 8. Dokumentacja projektowa (plan/progress/log) - tylko aktywne taski
 
-`plan.md`, `progress.md`, `activity-log.md` sa artefaktami tymczasowymi i istnieja tylko dla OPEN/IN_PROGRESS.
+`plan.md`, `progress.md`, `activity-log.md` sa artefaktami tymczasowymi i istnieja tylko dla OPEN/IN_PROGRESS. Dla inicjatyw cross-repo canonical active docs sa zawsze w `documentation/team/operations/<initiative>/`; frontend moze miec jeden krotki `plan.md` typu pointer bez lokalnego progress/log.
 
 | Modul                      | Plan | Postep | Activity log |
 | -------------------------- | ---- | ------ | ------------ |
 | Contract Meeting Notes     | `documentation/team/operations/contract-meeting-notes/plan.md` | `documentation/team/operations/contract-meeting-notes/progress.md` | `documentation/team/operations/contract-meeting-notes/activity-log.md` |
+| Documentation Structure Reorg | `documentation/team/operations/documentation-structure-reorg/plan.md` | `documentation/team/operations/documentation-structure-reorg/progress.md` | `documentation/team/operations/documentation-structure-reorg/activity-log.md` |
 | Persons v2 refactor        | `documentation/team/operations/persons-v2-refactor/plan.md` | `documentation/team/operations/persons-v2-refactor/progress.md` | `documentation/team/operations/persons-v2-refactor/activity-log.md` |
 | Public profile submission  | `documentation/team/operations/public-profile-submission/plan.md` | `documentation/team/operations/public-profile-submission/progress.md` | `documentation/team/operations/public-profile-submission/activity-log.md` |
 
@@ -179,6 +201,7 @@ Jesli nie da sie jednoznacznie wyznaczyc katalogu:
 | `factory/prompts/planner.md`               | S.O.T. dla fazy inicjalizacji taska (Planner)             |
 | `factory/prompts/documentarian.md`         | Prompt Agenta Dokumentacyjnego (Auto-docs + Close&Purge)  |
 | `factory/prompts/committer.md`             | Prompt Agenta Committer (`COMMIT_APPROVED`, commit only)  |
+| `factory/prompts/release-gate.md`          | Minimalny gate gotowosci do produkcyjnego release         |
 
 Uwaga: Pliki `factory/AUDIT-SERVER.md` i `factory/AUDIT-CLIENT.md` zostaly przeniesione odpowiednio do:
 `documentation/team/architecture/conventions/coding-server.md`,
