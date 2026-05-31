@@ -21,6 +21,10 @@ import { resolveSeverity } from './bugEvents/BugPriority';
 import { createHash, timingSafeEqual } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
+import {
+    handleUncaughtException,
+    handleUnhandledRejection,
+} from './setup/processErrorHandlers';
 
 declare global {
     namespace Express {
@@ -73,7 +77,7 @@ function resolveTrustProxySetting(): boolean | number | string {
 }
 
 function pruneClientErrorRateLimitMap(
-    windowMap: Map<string, { windowStartMs: number; count: number }>
+    windowMap: Map<string, { windowStartMs: number; count: number }>,
 ): void {
     const now = Date.now();
     const staleThresholdMs = CLIENT_ERROR_WINDOW_MS * 2;
@@ -89,7 +93,7 @@ function pruneClientErrorRateLimitMap(
     }
 
     const entriesByOldest = Array.from(windowMap.entries()).sort(
-        (a, b) => a[1].windowStartMs - b[1].windowStartMs
+        (a, b) => a[1].windowStartMs - b[1].windowStartMs,
     );
     const overflow = windowMap.size - CLIENT_ERROR_RATE_LIMITER_MAX_KEYS;
 
@@ -115,16 +119,29 @@ function sanitizeClientErrorPayload(raw: any): {
     if (!message) return null;
 
     const stack =
-        typeof raw.stack === 'string' ? raw.stack.trim().slice(0, 12_000) : undefined;
-    const path = typeof raw.path === 'string' ? raw.path.trim().slice(0, 500) : undefined;
-    const route = typeof raw.route === 'string' ? raw.route.trim().slice(0, 500) : undefined;
+        typeof raw.stack === 'string'
+            ? raw.stack.trim().slice(0, 12_000)
+            : undefined;
+    const path =
+        typeof raw.path === 'string'
+            ? raw.path.trim().slice(0, 500)
+            : undefined;
+    const route =
+        typeof raw.route === 'string'
+            ? raw.route.trim().slice(0, 500)
+            : undefined;
     const userAgent =
         typeof raw.userAgent === 'string'
             ? raw.userAgent.trim().slice(0, 500)
             : undefined;
-    const userId = typeof raw.userId === 'string' ? raw.userId.trim().slice(0, 120) : undefined;
+    const userId =
+        typeof raw.userId === 'string'
+            ? raw.userId.trim().slice(0, 120)
+            : undefined;
     const statusCode =
-        Number.isInteger(raw.statusCode) && raw.statusCode >= 0 && raw.statusCode <= 599
+        Number.isInteger(raw.statusCode) &&
+        raw.statusCode >= 0 &&
+        raw.statusCode <= 599
             ? Number(raw.statusCode)
             : undefined;
 
@@ -151,7 +168,7 @@ function sanitizeClientErrorPayload(raw: any): {
 function isClientErrorRateLimited(
     windowMap: Map<string, { windowStartMs: number; count: number }>,
     rateKey: string,
-    maxRequestsPerWindow: number
+    maxRequestsPerWindow: number,
 ): boolean {
     pruneClientErrorRateLimitMap(windowMap);
 
@@ -180,7 +197,7 @@ function makeClientErrorRateKey(remoteAddress: string): string {
 
 function isMatchingClientErrorSecret(
     expectedSecret: string,
-    providedSecret: string
+    providedSecret: string,
 ): boolean {
     const expectedBuffer = createHash('sha256')
         .update(expectedSecret, 'utf8')
@@ -195,7 +212,7 @@ function isMatchingClientErrorSecret(
 function precheckClientErrorRequest(
     req: Request,
     res: Response,
-    next: NextFunction
+    next: NextFunction,
 ): void {
     const clientIp = req.ip || 'unknown';
 
@@ -204,7 +221,7 @@ function precheckClientErrorRequest(
         isClientErrorRateLimited(
             clientErrorPreAuthWindow,
             preAuthRateKey,
-            CLIENT_ERROR_PREAUTH_MAX_REQUESTS_PER_WINDOW
+            CLIENT_ERROR_PREAUTH_MAX_REQUESTS_PER_WINDOW,
         )
     ) {
         res.status(429).send({ errorMessage: 'Too many requests' });
@@ -216,10 +233,14 @@ function precheckClientErrorRequest(
         return;
     }
 
-    const allowSessionAuth = process.env.BUG_CLIENT_ERROR_ALLOW_SESSION !== 'false';
+    const allowSessionAuth =
+        process.env.BUG_CLIENT_ERROR_ALLOW_SESSION !== 'false';
     const hasSessionAuth =
         allowSessionAuth &&
-        Boolean(req.session?.userData?.userName || req.session?.userData?.systemRoleName);
+        Boolean(
+            req.session?.userData?.userName ||
+            req.session?.userData?.systemRoleName,
+        );
 
     const expectedSecret = process.env.BUG_CLIENT_ERROR_SECRET;
     const providedSecret = String(req.headers['x-client-error-secret'] || '');
@@ -231,9 +252,11 @@ function precheckClientErrorRequest(
     if (!hasSessionAuth && !hasSecretAuth) {
         if (!expectedSecret && !allowSessionAuth) {
             console.warn(
-                '[BugEvent] BUG_CLIENT_ERROR_ENABLED=true but both secret auth and session auth are unavailable.'
+                '[BugEvent] BUG_CLIENT_ERROR_ENABLED=true but both secret auth and session auth are unavailable.',
             );
-            res.status(503).send({ errorMessage: 'Client error ingest misconfigured' });
+            res.status(503).send({
+                errorMessage: 'Client error ingest misconfigured',
+            });
             return;
         }
 
@@ -246,7 +269,7 @@ function precheckClientErrorRequest(
         isClientErrorRateLimited(
             clientErrorPostAuthWindow,
             postAuthRateKey,
-            CLIENT_ERROR_MAX_REQUESTS_PER_WINDOW
+            CLIENT_ERROR_MAX_REQUESTS_PER_WINDOW,
         )
     ) {
         res.status(429).send({ errorMessage: 'Too many requests' });
@@ -269,7 +292,10 @@ async function generateDailyBugfixInbox(): Promise<void> {
     const enabled = process.env.BUGFIX_DAILY_INBOX_CRON_ENABLED === 'true';
     if (!enabled) return;
 
-    const top = Math.max(1, Number(process.env.BUGFIX_DAILY_INBOX_TOP || '10') || 10);
+    const top = Math.max(
+        1,
+        Number(process.env.BUGFIX_DAILY_INBOX_TOP || '10') || 10,
+    );
     const out =
         process.env.BUGFIX_DAILY_INBOX_OUT ||
         path.resolve(process.cwd(), 'tmp', 'bugfix-daily-inbox.json');
@@ -285,17 +311,22 @@ async function generateDailyBugfixInbox(): Promise<void> {
 
     mkdirSync(path.dirname(out), { recursive: true });
     writeFileSync(out, JSON.stringify(payload, null, 2), 'utf8');
-    console.log(`[BugFixCron] Daily inbox generated: ${out} (${bugs.length} bugs)`);
+    console.log(
+        `[BugFixCron] Daily inbox generated: ${out} (${bugs.length} bugs)`,
+    );
 }
 
 async function runBugRetention(): Promise<void> {
     if (process.env.BUGFIX_RETENTION_CRON_ENABLED !== 'true') return;
 
-    const months = Math.max(1, Number(process.env.BUGFIX_RETENTION_MONTHS || '6') || 6);
+    const months = Math.max(
+        1,
+        Number(process.env.BUGFIX_RETENTION_MONTHS || '6') || 6,
+    );
     const repository = new BugEventRepository();
     const result = await repository.archiveResolvedOlderThan(months);
     console.log(
-        `[BugFixCron] Retention complete: archived=${result.archivedCount}, deleted=${result.deletedCount}, months=${months}`
+        `[BugFixCron] Retention complete: archived=${result.archivedCount}, deleted=${result.deletedCount}, months=${months}`,
     );
 }
 
@@ -367,28 +398,27 @@ process.on('SIGTERM', async () => {
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('Wystąpił nieobsłużony wyjątek:', err);
-    bugEventCaptureService.capture({
-        error: err,
-        source: 'process_uncaught_exception',
-        env: process.env.NODE_ENV || 'production',
-    });
-    void ToolsMail.sendServerErrorReport(err);
+    handleUncaughtException(
+        {
+            bugEventCaptureService,
+            env: process.env.NODE_ENV || 'production',
+            sendServerErrorReport: (error) => ToolsMail.sendServerErrorReport(error),
+        },
+        err,
+    );
     // Można tutaj również dodać kod do łagodnego zamykania aplikacji, jeśli to konieczne
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error(
-        'Nieobsłużone odrzucenie Promise:',
-        promise,
-        'powód:',
+    handleUnhandledRejection(
+        {
+            bugEventCaptureService,
+            env: process.env.NODE_ENV || 'production',
+            sendServerErrorReport: (error) => ToolsMail.sendServerErrorReport(error),
+        },
         reason,
+        promise,
     );
-    bugEventCaptureService.capture({
-        error: reason,
-        source: 'process_unhandled_rejection',
-        env: process.env.NODE_ENV || 'production',
-    });
     // Podobnie jak powyżej, możemy tutaj dodać kod do łagodnego zamykania aplikacji
 });
 
@@ -434,62 +464,77 @@ app.use((req, res, next) => {
     next();
 });
 
-app.post('/client-error', precheckClientErrorRequest, express.json({ limit: '32kb' }), (req, res) => {
-    const clientIp = String(res.locals.clientErrorIp || req.ip || 'unknown');
+app.post(
+    '/client-error',
+    precheckClientErrorRequest,
+    express.json({ limit: '32kb' }),
+    (req, res) => {
+        const clientIp = String(
+            res.locals.clientErrorIp || req.ip || 'unknown',
+        );
 
-    const payload = sanitizeClientErrorPayload(req.body);
-    if (!payload) {
-        return res.status(400).send({ errorMessage: 'Invalid payload' });
-    }
+        const payload = sanitizeClientErrorPayload(req.body);
+        if (!payload) {
+            return res.status(400).send({ errorMessage: 'Invalid payload' });
+        }
 
-    const error = new Error(payload.message);
-    if (payload.stack) {
-        error.stack = payload.stack;
-    }
+        const error = new Error(payload.message);
+        if (payload.stack) {
+            error.stack = payload.stack;
+        }
 
-    bugEventCaptureService.capture({
-        error,
-        source: 'frontend',
-        env: process.env.NODE_ENV || 'production',
-        requestContext: {
-            path: payload.path || req.path,
-            method: 'CLIENT',
-            userAgent: payload.userAgent || req.headers['user-agent'],
-            statusCode: payload.statusCode || 0,
-            route: payload.route,
-            ip: clientIp,
-        },
-        userContext: {
-            userId: payload.userId,
-        },
-        tags: payload.tags,
-    });
+        bugEventCaptureService.capture({
+            error,
+            source: 'frontend',
+            env: process.env.NODE_ENV || 'production',
+            requestContext: {
+                path: payload.path || req.path,
+                method: 'CLIENT',
+                userAgent: payload.userAgent || req.headers['user-agent'],
+                statusCode: payload.statusCode || 0,
+                route: payload.route,
+                ip: clientIp,
+            },
+            userContext: {
+                userId: payload.userId,
+            },
+            tags: payload.tags,
+        });
 
-    return res.status(202).send({ ok: true });
-});
+        return res.status(202).send({ ok: true });
+    },
+);
 
 app.get('/admin/bug-events', async (req, res) => {
     if (process.env.BUG_ADMIN_READ_MODEL_ENABLED !== 'true') {
         return res.status(404).send({ errorMessage: 'Not enabled' });
     }
 
-    const roleRaw = String(req.session?.userData?.systemRoleName || '').toLowerCase();
+    const roleRaw = String(
+        req.session?.userData?.systemRoleName || '',
+    ).toLowerCase();
     const roleTokens = roleRaw
         .split(/[\s,;|]+/)
         .map((token) => token.trim())
         .filter((token) => token.length > 0);
-    const isAdmin = roleTokens.includes('admin') || roleTokens.includes('superadmin');
+    const isAdmin =
+        roleTokens.includes('admin') || roleTokens.includes('superadmin');
     if (!isAdmin) {
         return res.status(403).send({ errorMessage: 'Forbidden' });
     }
 
     const expectedSecret = process.env.BUG_ADMIN_READ_MODEL_SECRET;
     if (!expectedSecret) {
-        return res.status(503).send({ errorMessage: 'Admin read model misconfigured' });
+        return res
+            .status(503)
+            .send({ errorMessage: 'Admin read model misconfigured' });
     }
 
     const providedSecret = String(req.headers['x-bug-admin-secret'] || '');
-    if (!providedSecret || !isMatchingClientErrorSecret(expectedSecret, providedSecret)) {
+    if (
+        !providedSecret ||
+        !isMatchingClientErrorSecret(expectedSecret, providedSecret)
+    ) {
         return res.status(403).send({ errorMessage: 'Forbidden' });
     }
 
@@ -497,10 +542,14 @@ app.get('/admin/bug-events', async (req, res) => {
     const severities = parseCsvQuery(req.query.severities) as any[];
     const sources = parseCsvQuery(req.query.sources) as any[];
     const fingerprint =
-        typeof req.query.fingerprint === 'string' && req.query.fingerprint.trim().length > 0
+        typeof req.query.fingerprint === 'string' &&
+        req.query.fingerprint.trim().length > 0
             ? req.query.fingerprint.trim()
             : undefined;
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50) || 50));
+    const limit = Math.max(
+        1,
+        Math.min(200, Number(req.query.limit || 50) || 50),
+    );
 
     const repository = new BugEventRepository();
     const bugs = await repository.find({

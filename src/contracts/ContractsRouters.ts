@@ -10,6 +10,12 @@ import { CityData, ContractTypeData } from '../types/types';
 import crypto from 'crypto'; // u góry pliku
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
+import ToolsMail from '../tools/ToolsMail';
+
+function getAsyncTaskErrorMessage(error: unknown) {
+    if (error instanceof Error) return error.message;
+    return String(error);
+}
 
 app.post('/contracts', async (req: Request, res: Response, next) => {
     try {
@@ -89,7 +95,16 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                 );
             } catch (err) {
                 console.error('Błąd podczas tworzenia kontraktu:', err);
-                TaskStore.fail(taskId, (err as Error).message);
+                try {
+                    await ToolsMail.sendServerErrorReport(err, req);
+                } catch (mailError) {
+                    console.error(
+                        'Nie udało się wysłać maila o błędzie kontraktu:',
+                        mailError,
+                    );
+                } finally {
+                    TaskStore.fail(taskId, getAsyncTaskErrorMessage(err));
+                }
             }
         });
     } catch (error) {
