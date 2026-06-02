@@ -1,7 +1,7 @@
 # Mapa Dokumentacji - Zrodla Prawdy (S.O.T.)
 
 > Dla kazdej kategorii wskazane jest zrodlo prawdy (S.O.T.) oraz pliki pomocnicze.
-> Aktualizacja: 2026-02-25
+> Aktualizacja: 2026-06-02
 > Koncepcja fabryki: `factory/CONCEPT.md`
 > Diagramy koncepcji: `factory/CONCEPT-DIAGRAMS.md`
 > Konwencja sciezek: backend (`PS-nodeJS`) jako sciezki repo-relative, frontend (`ENVI.ProjectSite`) jako sciezki absolutne Windows.
@@ -152,6 +152,7 @@ Historyczne aliasy root-level usuniete (2026-02-23):
 | -------------------------- | ---- | ------ | ------------ |
 | Contract Meeting Notes     | `documentation/team/operations/contract-meeting-notes/plan.md` | `documentation/team/operations/contract-meeting-notes/progress.md` | `documentation/team/operations/contract-meeting-notes/activity-log.md` |
 | Documentation Structure Reorg | `documentation/team/operations/documentation-structure-reorg/plan.md` | `documentation/team/operations/documentation-structure-reorg/progress.md` | `documentation/team/operations/documentation-structure-reorg/activity-log.md` |
+| PS-nodeJS repository knowledge base | `documentation/team/operations/repo-knowledge-base/plan.md` | `documentation/team/operations/repo-knowledge-base/progress.md` | `documentation/team/operations/repo-knowledge-base/activity-log.md` |
 | Persons v2 refactor        | `documentation/team/operations/persons-v2-refactor/plan.md` | `documentation/team/operations/persons-v2-refactor/progress.md` | `documentation/team/operations/persons-v2-refactor/activity-log.md` |
 | Public profile submission  | `documentation/team/operations/public-profile-submission/plan.md` | `documentation/team/operations/public-profile-submission/progress.md` | `documentation/team/operations/public-profile-submission/activity-log.md` |
 
