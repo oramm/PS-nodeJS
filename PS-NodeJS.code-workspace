@@ -9,7 +9,8 @@
         "chat.tools.terminal.autoApprove": {
             "git add": true,
             "mysql": true,
-            "&": true
+            "&": true,
+            "git remote": true
         }
     }
 }

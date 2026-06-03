@@ -63,6 +63,38 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-06-02 - Heroku release gate temporarily disabled
+
+### Scope
+
+- Removed the Heroku `release` command from `Procfile` to unblock production deploys.
+- Recorded the operational pause because Heroku Common Runtime release dynos time out when connecting to `envi-konsulting.kylos.pl:3306`.
+
+### Impact
+
+- DB: none.
+- ENV: none.
+- Deploy: Heroku no longer runs `yarn node build/scripts/migrate.js verify` during release; deploys advance directly to the `web` process.
+
+### Required Actions
+
+- Keep migration verification as an operator-run step until DB connectivity from Heroku is fixed.
+- Re-enable the `release` gate after Heroku can reach the production DB reliably.
+
+### Verification
+
+- Heroku releases `v416`, `v417`, and `v418` failed in release phase with `connect ETIMEDOUT` for `envi-konsulting.kylos.pl/envikons_myEnvi`.
+- Local connectivity to `envi-konsulting.kylos.pl:3306` succeeds, which points to a Heroku-to-DB network path issue.
+
+### Rollback
+
+- Restore `release: yarn node build/scripts/migrate.js verify` in `Procfile` after DB connectivity from Heroku is confirmed.
+
+### Links
+
+- `Procfile`
+- `documentation/team/operations/deployment-heroku.md`
+
 ## 2026-05-09 - SchemaMigrations runner and Heroku verify gate
 
 ### Scope

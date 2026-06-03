@@ -28,6 +28,7 @@ Runbook for production deploys on Heroku.
 - Release succeeds only when repo migrations and `SchemaMigrations` are consistent.
 - `*_down.sql` files are ignored by the release gate.
 - Checksum drift means an already-tracked migration file changed after rollout and must be fixed by a new migration, not by editing the old one.
+- If Heroku Common Runtime cannot reach the external DB host, temporarily remove the `release` command from `Procfile`, deploy the web dyno without the gate, record the pause in `documentation/team/operations/post-change-checklist.md`, and restore `release: yarn node build/scripts/migrate.js verify` only after Heroku can reliably reach the production DB and release-phase verification succeeds again.
 
 ## Baseline-first activation
 
