@@ -38,6 +38,7 @@ export default class ContractEntityAssociationsHelper {
     static async getContractEntityAssociationsList(initParamObject: {
         projectId?: string;
         contractId?: number;
+        contractIds?: number[];
         isArchived?: boolean;
     }): Promise<ContractEntityAssociation[]> {
         const projectConditon =
@@ -50,7 +51,13 @@ export default class ContractEntityAssociationsHelper {
         const contractConditon =
             initParamObject && initParamObject.contractId
                 ? mysql.format('Contracts.Id = ?', [initParamObject.contractId])
-                : '1';
+                : initParamObject && initParamObject.contractIds?.length
+                  ? ToolsDb.makeOrConditionFromValueOrArray(
+                        initParamObject.contractIds,
+                        'Contracts',
+                        'Id',
+                    )
+                  : '1';
 
         const sql = `SELECT
                 Contracts_Entities.ContractId,
@@ -83,7 +90,7 @@ export default class ContractEntityAssociationsHelper {
      * @returns ContractEntityAssociation[] - Zmapowane asocjacje z instancjami Entity
      */
     static processContractEntityAssociations(
-        result: any[]
+        result: any[],
     ): ContractEntityAssociation[] {
         const newResult: ContractEntityAssociation[] = [];
 

@@ -230,6 +230,7 @@ export default class ContractRepository extends BaseRepository<
     async find(
         orConditions: ContractSearchParams[] = [],
     ): Promise<(ContractOur | ContractOther)[]> {
+        const firstCondition = orConditions[0] ?? ({} as ContractSearchParams);
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
@@ -265,9 +266,7 @@ export default class ContractRepository extends BaseRepository<
                     Projects.Name AS ProjectName,
                     Projects.Alias AS ProjectAlias,
                     Projects.GdFolderId AS ProjectGdFolderId,
-                    ${this.makeOptionalColumns(
-                        orConditions[0] ?? ({} as ContractSearchParams),
-                    )},
+                    ${this.makeOptionalColumns(firstCondition)},
                     Admins.Name AS AdminName, 
                     Admins.Surname AS AdminSurname, 
                     Admins.Email AS AdminEmail, 
@@ -312,7 +311,10 @@ export default class ContractRepository extends BaseRepository<
 
         const rows: ContractRow[] = await this.executeQuery(sql);
         const { entitiesPerProject, rangesPerContract } =
-            await this.setContractPartsbySearchParams(orConditions[0]);
+            await this.setContractPartsbySearchParams(
+                firstCondition,
+                rows.map((row) => row.Id),
+            );
 
         return rows.map((row) =>
             this.mapRowToModel({
@@ -523,6 +525,7 @@ export default class ContractRepository extends BaseRepository<
 
     private async setContractPartsbySearchParams(
         searchParams: ContractSearchParams,
+        contractIds: number[] = [],
     ) {
         let entitiesPerProject: ContractEntityAssociation[] = [];
         let rangesPerContract: ContractRangePerContractData[] = [];
@@ -535,6 +538,14 @@ export default class ContractRepository extends BaseRepository<
                     {
                         projectId: projectOurId,
                         contractId: searchParams.id,
+                        isArchived: searchParams.isArchived,
+                    },
+                );
+        } else if (contractIds.length) {
+            entitiesPerProject =
+                await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
+                    {
+                        contractIds,
                         isArchived: searchParams.isArchived,
                     },
                 );
