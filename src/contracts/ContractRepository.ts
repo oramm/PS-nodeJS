@@ -33,7 +33,7 @@ export default class ContractRepository extends BaseRepository<
     async addInDb(
         item: ContractOur | ContractOther,
         externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
+        isPartOfTransaction?: boolean,
     ): Promise<void> {
         // Dla ContractOur - musimy usunąć pola które należą do OurContractsData
         // przed zapisem do tabeli Contracts (nie ma tam tych kolumn)
@@ -73,7 +73,7 @@ export default class ContractRepository extends BaseRepository<
                     'OurContractsData',
                     ourData,
                     externalConn,
-                    isPartOfTransaction
+                    isPartOfTransaction,
                 );
             } catch (error) {
                 // Przywróć wartości nawet przy błędzie
@@ -93,7 +93,7 @@ export default class ContractRepository extends BaseRepository<
         item: ContractOur | ContractOther,
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
     ): Promise<void> {
         // Dla ContractOur - musimy obsłużyć podzielone tabele
         if (item instanceof ContractOur) {
@@ -107,10 +107,10 @@ export default class ContractRepository extends BaseRepository<
 
             // Rozdziel fieldsToUpdate na pola dla każdej tabeli
             const ourContractFieldsToUpdate = fieldsToUpdate?.filter((field) =>
-                ourContractFields.includes(field)
+                ourContractFields.includes(field),
             );
             const contractFieldsToUpdate = fieldsToUpdate?.filter(
-                (field) => !ourContractFields.includes(field)
+                (field) => !ourContractFields.includes(field),
             );
 
             // Tymczasowo zapisz i usuń wartości pól OurContractsData
@@ -134,7 +134,7 @@ export default class ContractRepository extends BaseRepository<
                         item,
                         externalConn,
                         isPartOfTransaction,
-                        contractFieldsToUpdate
+                        contractFieldsToUpdate,
                     );
                 }
 
@@ -162,7 +162,7 @@ export default class ContractRepository extends BaseRepository<
                         ourData,
                         externalConn,
                         isPartOfTransaction,
-                        ourContractFieldsToUpdate
+                        ourContractFieldsToUpdate,
                     );
                 }
             } catch (error) {
@@ -179,7 +179,7 @@ export default class ContractRepository extends BaseRepository<
                 item,
                 externalConn,
                 isPartOfTransaction,
-                fieldsToUpdate
+                fieldsToUpdate,
             );
         }
     }
@@ -187,7 +187,7 @@ export default class ContractRepository extends BaseRepository<
     async deleteFromDb(
         item: ContractOur | ContractOther,
         externalConn?: mysql.PoolConnection,
-        isPartOfTransaction?: boolean
+        isPartOfTransaction?: boolean,
     ): Promise<void> {
         if (item instanceof ContractOur) {
             const sql = `DELETE FROM OurContractsData WHERE Id = ?`;
@@ -196,20 +196,20 @@ export default class ContractRepository extends BaseRepository<
                 [item.id],
                 item,
                 externalConn,
-                isPartOfTransaction
+                isPartOfTransaction,
             );
         }
         await super.deleteFromDb(item, externalConn, isPartOfTransaction);
     }
 
     async isUniquePerProject(
-        contract: ContractOur | ContractOther
+        contract: ContractOur | ContractOther,
     ): Promise<boolean> {
         if (contract instanceof ContractOur) {
             const sql = `SELECT Id FROM OurContractsData WHERE OurId = ?`;
             const result: any[] = <any[]>(
                 await ToolsDb.getQueryCallbackAsync(
-                    mysql.format(sql, [contract.ourId])
+                    mysql.format(sql, [contract.ourId]),
                 )
             );
             return result.length > 0;
@@ -217,7 +217,7 @@ export default class ContractRepository extends BaseRepository<
             const sql = `SELECT Id FROM Contracts WHERE Number = ? AND ProjectOurId = ?`;
             const result: any[] = <any[]>(
                 await ToolsDb.getQueryCallbackAsync(
-                    mysql.format(sql, [contract.number, contract.projectOurId])
+                    mysql.format(sql, [contract.number, contract.projectOurId]),
                 )
             );
             return result.length > 0;
@@ -228,13 +228,13 @@ export default class ContractRepository extends BaseRepository<
      * Wyszukuje miasta z opcjonalnymi kryteriami
      */
     async find(
-        orConditions: ContractSearchParams[] = []
+        orConditions: ContractSearchParams[] = [],
     ): Promise<(ContractOur | ContractOther)[]> {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
-                      this.makeAndConditions.bind(this)
+                      this.makeAndConditions.bind(this),
                   )
                 : '1';
 
@@ -266,7 +266,7 @@ export default class ContractRepository extends BaseRepository<
                     Projects.Alias AS ProjectAlias,
                     Projects.GdFolderId AS ProjectGdFolderId,
                     ${this.makeOptionalColumns(
-                        orConditions[0] ?? ({} as ContractSearchParams)
+                        orConditions[0] ?? ({} as ContractSearchParams),
                     )},
                     Admins.Name AS AdminName, 
                     Admins.Surname AS AdminSurname, 
@@ -319,7 +319,7 @@ export default class ContractRepository extends BaseRepository<
                 ...row,
                 entitiesPerProject,
                 rangesPerContract,
-            })
+            }),
         );
     }
 
@@ -362,59 +362,59 @@ export default class ContractRepository extends BaseRepository<
 
         if (searchParams.id) {
             conditions.push(
-                mysql.format(`mainContracts.Id = ?`, [searchParams.id])
+                mysql.format(`mainContracts.Id = ?`, [searchParams.id]),
             );
         }
         if (searchParams.projectId) {
             conditions.push(
-                mysql.format(`Projects.Id = ?`, [searchParams.projectId])
+                mysql.format(`Projects.Id = ?`, [searchParams.projectId]),
             );
         }
         if (projectOurId) {
             conditions.push(
-                mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId])
+                mysql.format(`mainContracts.ProjectOurId = ?`, [projectOurId]),
             );
         }
         if (searchParams.contractOurId) {
             conditions.push(
                 mysql.format(`OurContractsData.OurId LIKE ?`, [
                     `%${searchParams.contractOurId}%`,
-                ])
+                ]),
             );
         }
         if (searchParams.contractName) {
             conditions.push(
                 mysql.format(`mainContracts.Name = ?`, [
                     searchParams.contractName,
-                ])
+                ]),
             );
         }
         if (searchParams.startDateFrom) {
             conditions.push(
                 mysql.format(`mainContracts.StartDate >= ?`, [
                     searchParams.startDateFrom,
-                ])
+                ]),
             );
         }
         if (searchParams.startDateTo) {
             conditions.push(
                 mysql.format(`mainContracts.StartDate <= ?`, [
                     searchParams.startDateTo,
-                ])
+                ]),
             );
         }
         if (searchParams.endDateFrom) {
             conditions.push(
                 mysql.format(`mainContracts.EndDate >= ?`, [
                     searchParams.endDateFrom,
-                ])
+                ]),
             );
         }
         if (searchParams.endDateTo) {
             conditions.push(
                 mysql.format(`mainContracts.EndDate <= ?`, [
                     searchParams.endDateTo,
-                ])
+                ]),
             );
         }
         if (typeId) {
@@ -425,7 +425,7 @@ export default class ContractRepository extends BaseRepository<
             const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
                 searchParams.statuses,
                 'mainContracts',
-                'Status'
+                'Status',
             );
             conditions.push(statusCondition);
         }
@@ -434,7 +434,7 @@ export default class ContractRepository extends BaseRepository<
                 ToolsDb.makeOrConditionFromValueOrArray(
                     searchParams._contractRanges.map((range) => range.id),
                     'ContractRangesContracts',
-                    'ContractRangeId'
+                    'ContractRangeId',
                 );
             conditions.push(contractRangesCondition);
         }
@@ -444,8 +444,8 @@ export default class ContractRepository extends BaseRepository<
             conditions.push(
                 mysql.format(
                     `(OurContractsData.AdminId = ? OR RelatedOurContractsData.AdminId = ?)`,
-                    [adminId, adminId]
-                )
+                    [adminId, adminId],
+                ),
             );
         }
 
@@ -467,12 +467,12 @@ export default class ContractRepository extends BaseRepository<
 
         if (isArchived) {
             conditions.push(
-                `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL}`
+                `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL}`,
             );
         }
 
         const searchTextCondition = this.makeSearchTextCondition(
-            searchParams.searchText
+            searchParams.searchText,
         );
         if (searchTextCondition !== '1') {
             conditions.push(searchTextCondition);
@@ -498,7 +498,20 @@ export default class ContractRepository extends BaseRepository<
         const words = searchText.trim().split(/\s+/);
         const wordGroups = words.map((word) => {
             const ors = searchFields.map((field) =>
-                mysql.format(`${field} LIKE ?`, [`%${word}%`])
+                mysql.format(`${field} LIKE ?`, [`%${word}%`]),
+            );
+            ors.push(
+                mysql.format(
+                    `EXISTS (
+                        SELECT 1
+                        FROM Contracts_Entities
+                        JOIN Entities ON Entities.Id = Contracts_Entities.EntityId
+                        WHERE Contracts_Entities.ContractId = mainContracts.Id
+                          AND Contracts_Entities.ContractRole = ?
+                          AND Entities.Name LIKE ?
+                    )`,
+                    ['CONTRACTOR', `%${word}%`],
+                ),
             );
             return `(${ors.join(' OR ')})`;
         });
@@ -509,21 +522,25 @@ export default class ContractRepository extends BaseRepository<
     private rangeRepository = new ContractRangeContractRepository();
 
     private async setContractPartsbySearchParams(
-        searchParams: ContractSearchParams
+        searchParams: ContractSearchParams,
     ) {
         let entitiesPerProject: ContractEntityAssociation[] = [];
         let rangesPerContract: ContractRangePerContractData[] = [];
-        //wybrano widok szczegółowy dla projketu lub kontraktu
-        if (searchParams.projectOurId || searchParams.id) {
+        const projectOurId =
+            searchParams._project?.ourId || searchParams.projectOurId;
+
+        if (projectOurId || searchParams.id) {
             entitiesPerProject =
                 await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
                     {
-                        projectId: searchParams.projectOurId,
+                        projectId: projectOurId,
                         contractId: searchParams.id,
                         isArchived: searchParams.isArchived,
-                    }
+                    },
                 );
-            // Użyj Repository zamiast Controller (Clean Architecture)
+        }
+
+        if (searchParams.id) {
             const rangeAssociations = await this.rangeRepository.find([
                 { contractId: searchParams.id },
             ]);
@@ -543,15 +560,17 @@ export default class ContractRepository extends BaseRepository<
         const contractors = entitiesPerProject!.filter(
             (item: ContractEntityAssociation) =>
                 item._contract.id === row.Id &&
-                item.contractRole === 'CONTRACTOR'
+                item.contractRole === 'CONTRACTOR',
         );
         const engineers = entitiesPerProject!.filter(
             (item: ContractEntityAssociation) =>
-                item._contract.id === row.Id && item.contractRole === 'ENGINEER'
+                item._contract.id === row.Id &&
+                item.contractRole === 'ENGINEER',
         );
         const employers = entitiesPerProject!.filter(
             (item: ContractEntityAssociation) =>
-                item._contract.id === row.Id && item.contractRole === 'EMPLOYER'
+                item._contract.id === row.Id &&
+                item.contractRole === 'EMPLOYER',
         );
 
         const initParam = {
@@ -650,7 +669,7 @@ export default class ContractRepository extends BaseRepository<
             throw new Error(
                 `Inconsistent city data for Contract.Id=${
                     row.Id ?? 'unknown'
-                }: CityId=${row.CityId} but missing CityName/CityCode`
+                }: CityId=${row.CityId} but missing CityName/CityCode`,
             );
 
         return {
@@ -666,11 +685,11 @@ export default class ContractRepository extends BaseRepository<
     private getEntitiesByRole(
         entitiesPerProject: ContractEntityAssociation[] = [],
         contractId: number,
-        role: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER'
+        role: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER',
     ): Entity[] {
         return entitiesPerProject
             .filter(
-                (i) => i._contract.id === contractId && i.contractRole === role
+                (i) => i._contract.id === contractId && i.contractRole === role,
             )
             .map((i) => i._entity);
     }
@@ -683,7 +702,7 @@ export default class ContractRepository extends BaseRepository<
             throw new Error('Nie można utworzyć OurId - brak typu kontraktu');
         if (!type.name)
             throw new Error(
-                'Nie można utworzyć OurId - brak nazwy typu kontraktu'
+                'Nie można utworzyć OurId - brak nazwy typu kontraktu',
             );
 
         const itemsCount = Tools.addZero(await this.getItemsCount(city, type));
@@ -716,7 +735,7 @@ export default class ContractRepository extends BaseRepository<
 
     private static getPrevNumberSQL(
         typeCondition: string,
-        cityCondition: string
+        cityCondition: string,
     ) {
         const sql = `SELECT MAX(CAST(SUBSTRING(OurContractsData.OurId, LENGTH(OurId) - 1, 2) AS UNSIGNED)) AS Number
                 FROM Contracts
