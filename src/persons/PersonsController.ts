@@ -392,4 +392,44 @@ export default class PersonsController extends BaseController<
         console.log(`User ${user.name} ${user.surname} added in db`);
         return user;
     }
+
+    /**
+     * Pobiera listę osób, które mogą być "osobą rejestrującą" pismo
+     * - Dla ENVI_COOPERATOR: zwraca tylko siebie
+     * - Dla innych ról: zwraca siebie + wszystkich ENVI_MANAGER i ENVI_EMPLOYEE
+     */
+    static async getRegisteringEditors(userData: UserData): Promise<Person[]> {
+        const loggedInPerson = await this.getPersonFromSessionUserData(userData);
+
+        // Jeśli zalogowany to cooperator, zwróć tylko siebie
+        if (userData.systemRoleName === 'ENVI_COOPERATOR') {
+            return [loggedInPerson];
+        }
+
+        // Dla innych ról, zwróć siebie + wszystkich pracowników ENVI
+        // Szukamy kolejno każdej roli (zamiast OR which might not work well)
+        const adminPersons = await this.find([{ systemRoleName: 'ADMIN' }]);
+        const managerPersons = await this.find([{ systemRoleName: 'ENVI_MANAGER' }]);
+        const employeePersons = await this.find([{ systemRoleName: 'ENVI_EMPLOYEE' }]);
+
+        // Łącz wyniki i usuń duplikaty
+        const allPersonsMap = new Map<number, Person>();
+        [adminPersons, managerPersons, employeePersons].forEach((persons) => {
+            persons.forEach((person) => {
+                if (person.id) {
+                    allPersonsMap.set(person.id, person);
+                }
+            });
+        });
+
+        // Upewnij się że zalogowany użytkownik jest na liście (na początku)
+        const result = [loggedInPerson];
+        allPersonsMap.forEach((person) => {
+            if (person.id !== loggedInPerson.id) {
+                result.push(person);
+            }
+        });
+
+        return result;
+    }
 }

@@ -220,3 +220,22 @@ app.put(
         }
     },
 );
+
+/**
+ * Pobiera listę osób, które mogą być "osobą rejestrującą" pismo.
+ * Zwraca filtrowaną listę na podstawie roli zalogowanego użytkownika:
+ * - ENVI_COOPERATOR: tylko siebie
+ * - Inne role: siebie + wszystkich ADMIN/ENVI_MANAGER/ENVI_EMPLOYEE
+ * Returns: Person[]
+ */
+app.get('/persons/registering-editors', async (req: Request, res: Response, next) => {
+    try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        const result = await PersonsController.getRegisteringEditors(
+            req.session.userData
+        );
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
