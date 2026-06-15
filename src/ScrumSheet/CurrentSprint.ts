@@ -7,6 +7,7 @@ import PersonsController from '../persons/PersonsController';
 import CurrentSprintValidator from './CurrentSprintValidator';
 
 export default class CurrentSprint {
+    private static readonly timesSummaryManagerPersonId = 386;
     /**
      * Ustawia nagłówki w arkuszu bieżącego sprintu zgodnie z ustawieniami w Setup
      * @todo wymaga jeszcze przeglądu i ew. poprawek
@@ -551,8 +552,9 @@ export default class CurrentSprint {
                 Setup.ScrumSheet.CurrentSprint.timesColName
             ) + 1;
         if (!persons) {
-            const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
-            persons = (await PersonsController.find(orConditions)) || [];
+            // const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
+            // persons = (await PersonsController.find(orConditions)) || [];
+            persons = await this.getTimesSummaryPersons();
         }
 
         await ToolsSheets.deleteColumns(auth, {
@@ -567,6 +569,9 @@ export default class CurrentSprint {
             startIndex: timesSummaryColNumber,
             endIndex: timesSummaryColNumber + persons.length,
         });
+        // Po wstawieniu nowych kolumn #Times przesuwa się o jeden dalej
+        // niż końcówka samego bloku #TimesSummary.
+        const shiftedTimesColNumber = timesSummaryColNumber + persons.length + 1;
 
         const formulas: any[][] = [
             [],
@@ -591,7 +596,7 @@ export default class CurrentSprint {
             spreadsheetId: Setup.ScrumSheet.GdId,
             range:
                 `'${Setup.ScrumSheet.CurrentSprint.name}'!R${Setup.ScrumSheet.CurrentSprint.firstDataRow}C${timesSummaryColNumber}:` +
-                `R${currentSprintValues.length}C${timesColNumber - 1}`,
+                `R${currentSprintValues.length}C${shiftedTimesColNumber - 1}`,
         });
         this.printTimesDescriptionColumn(auth, timesSummaryColNumber);
 
@@ -613,11 +618,11 @@ export default class CurrentSprint {
             formulas[3].push(
                 `=SUM(${ToolsSheets.R1C1toA1(
                     Setup.ScrumSheet.CurrentSprint.firstDataRow,
-                    timesColNumber + i
+                    shiftedTimesColNumber + i
                 )}:` +
                     `${ToolsSheets.R1C1toA1(
                         currentSprintValues.length,
-                        timesColNumber + i
+                        shiftedTimesColNumber + i
                     )})`
             );
             //ustaw czasy dzienne każdej osobie
@@ -772,8 +777,9 @@ export default class CurrentSprint {
             ).values;
 
         if (!persons) {
-            const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
-            persons = (await PersonsController.find(orConditions)) || [];
+            // const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
+            // persons = (await PersonsController.find(orConditions)) || [];
+            persons = await this.getTimesSummaryPersons();
         }
 
         const timesColIndex = currentSprintValues[0].indexOf(
@@ -811,6 +817,22 @@ export default class CurrentSprint {
             spreadsheetId: Setup.ScrumSheet.GdId,
             formulaRequests,
         });
+    }
+
+    static async getTimesSummaryPersons(): Promise<Person[]> {
+        const employees =
+            (await PersonsController.find([
+                { systemRoleName: 'ENVI_EMPLOYEE' },
+            ])) || [];
+        const manager = (
+            await PersonsController.find([
+                {
+                    systemRoleName: 'ENVI_MANAGER',
+                    id: CurrentSprint.timesSummaryManagerPersonId,
+                },
+            ])
+        )[0];
+        return manager ? [...employees, manager] : employees;
     }
 
     private static personTimePerTaskFormula(

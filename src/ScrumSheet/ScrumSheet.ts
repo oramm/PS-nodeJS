@@ -23,31 +23,25 @@ export default class ScrumSheet {
         try {
             console.group(`personRefresh start`);
             await CurrentSprintValidator.checkColumns(auth);
-            const employees = await ScrumSheet.scrumGetPersons([
-                'ENVI_EMPLOYEE',
-            ]);
-            const managersAndEmployees = await ScrumSheet.scrumGetPersons([
-                'ENVI_EMPLOYEE',
-                //'ENVI_MANAGER',
-            ]);
+            const persons = await CurrentSprint.getTimesSummaryPersons();
             await this.Planning.refreshTimeAvailable(
                 auth,
-                managersAndEmployees
+                persons
             );
             console.log('Planning Sheet refreshed');
             await this.CurrentSprint.makeTimesSummary(
                 auth,
-                managersAndEmployees
+                persons
             );
             console.log('Times summary refreshed');
             await this.CurrentSprint.makePersonTimePerTaskFormulas(
                 auth,
-                managersAndEmployees
+                persons
             );
             console.log('Person Time Per Task Formulas refreshed');
             await this.Data.synchronizePersonsInScrum(
                 auth,
-                managersAndEmployees
+                persons
             );
             console.log('Data sheet refreshed');
             console.log('Refresh completed');

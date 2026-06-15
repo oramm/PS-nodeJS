@@ -4,6 +4,7 @@ import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import PersonsController from '../persons/PersonsController';
 import Person from '../persons/Person';
+import CurrentSprint from './CurrentSprint';
 import { identitytoolkit } from 'googleapis/build/src/apis/identitytoolkit';
 
 export default class Planning {
@@ -26,8 +27,9 @@ export default class Planning {
                 Setup.ScrumSheet.Planning.extraMeetingsColName
             ) + 1;
         if (!persons) {
-            const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
-            persons = (await PersonsController.find(orConditions)) || [];
+            // const orConditions = [{ systemRoleName: 'ENVI_EMPLOYEE' }];
+            // persons = (await PersonsController.find(orConditions)) || [];
+            persons = await CurrentSprint.getTimesSummaryPersons();
         }
         // Liczba osób w arkuszu przed odświeżeniem: wiersze - nagłówki (firstDataRow-1) - wiersz SUM (1)
         const nOld =
