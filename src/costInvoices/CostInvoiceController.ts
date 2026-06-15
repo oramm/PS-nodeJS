@@ -29,6 +29,15 @@ export type CostInvoiceQrData = {
     };
 };
 
+type CostInvoiceReparsePreviewItem = {
+    id: number;
+    ksefNumber: string;
+    invoiceNumber: string;
+    changes: Record<string, { before: any; after: any }>;
+    before: Record<string, any>;
+    after: Record<string, any>;
+};
+
 /**
  * Controller dla faktur kosztowych
  *
@@ -242,17 +251,20 @@ export default class CostInvoiceController {
             return Number.isNaN(parsed) ? 0 : parsed;
         };
 
+        const sumDecimal = (values: any[]): number => {
+            const raw = values.reduce((sum: number, value: any) => sum + parseDecimal(value), 0);
+            return Math.round(raw * 100) / 100;
+        };
+
         const parser = new XMLParser({
             ignoreAttributes: false,
             attributeNamePrefix: '@_',
             removeNSPrefix: true,
-            tagValueProcessor: (tagName, tagValue, jPath) => {
-                // NrRB (rachunek bankowy) zawsze jako string - zapobiega konwersji na notację naukową
-                if (tagName === 'NrRB' && typeof tagValue === 'string') {
-                    return tagValue;
-                }
-                return tagValue;
-            },
+            // parseTagValue: false keeps all tag values as strings.
+            // Without this, fast-xml-parser converts 26-digit IBANs (NrRB) to IEEE-754 floats
+            // with precision loss (e.g. "16102036682917000000007667" → 1.6102036682917e+25).
+            // parseDecimal() / parseVatRate() already handle string→number conversion where needed.
+            parseTagValue: false,
         });
 
         const parsed = parser.parse(xml);
@@ -292,18 +304,66 @@ export default class CostInvoiceController {
         let vatAmount = parseDecimal(podsumowanie.WartoscVat || podsumowanie.WartoscVat_Faktura);
         let grossAmount = parseDecimal(podsumowanie.WartoscBrutto || podsumowanie.WartoscBrutto_Faktura);
 
-        // FA(3) - fallback na pola P_13_1 / P_14_1 / P_15 w sekcji Fa
-        if (netAmount === 0) netAmount = parseDecimal(fa.P_13_1 || fa.P_13_2 || fa.P_13_3);
-        if (vatAmount === 0) vatAmount = parseDecimal(fa.P_14_1 || fa.P_14_2 || fa.P_14_3);
+        // FA(3) - fallback na sumy P_13_* / P_14_* / P_15 w sekcji Fa
+        if (netAmount === 0) {
+            const netFallback = sumDecimal([
+                fa.P_13_1,
+                fa.P_13_2,
+                fa.P_13_3,
+                fa.P_13_4,
+                fa.P_13_5,
+                fa.P_13_6_1,
+                fa.P_13_6_2,
+                fa.P_13_6_3,
+                fa.P_13_7,
+                fa.P_13_8,
+                fa.P_13_9,
+                fa.P_13_10,
+            ]);
+            if (netFallback !== 0) netAmount = netFallback;
+        }
+
+        if (vatAmount === 0) {
+            const vatFallback = sumDecimal([
+                fa.P_14_1,
+                fa.P_14_2,
+                fa.P_14_3,
+                fa.P_14_4,
+                fa.P_14_5,
+                fa.P_14_6_1,
+                fa.P_14_6_2,
+                fa.P_14_6_3,
+                fa.P_14_7,
+                fa.P_14_8,
+                fa.P_14_9,
+                fa.P_14_10,
+            ]);
+            if (vatFallback !== 0) vatAmount = vatFallback;
+        }
+
         if (grossAmount === 0) grossAmount = parseDecimal(fa.P_15);
 
         const currency = fa.KodWaluty || naglowek.KodWaluty || 'PLN';
 
-        // Status płatności z XML — obsługujemy zarówno Zaplacono=1, jak i wpłaty częściowe.
-        const { paymentStatus, paidAmount, paymentDate } = extractPaymentInfoFromFa(fa, grossAmount, netAmount);
-
         // Pozycje faktury
         const items = this.parseInvoiceItems(fa);
+
+        if (items.length > 0) {
+            const netSum = items.reduce((sum, item) => sum + (item.netValue || 0), 0);
+            const vatSum = items.reduce((sum, item) => sum + (item.vatValue || 0), 0);
+            const grossSum = items.reduce((sum, item) => sum + (item.grossValue || 0), 0);
+
+            if (netAmount === 0 && netSum !== 0) netAmount = netSum;
+            if (vatAmount === 0 && vatSum !== 0) vatAmount = vatSum;
+            if (grossAmount === 0 && grossSum !== 0) grossAmount = grossSum;
+        }
+
+        if (grossAmount === 0 && (netAmount !== 0 || vatAmount !== 0)) {
+            grossAmount = netAmount + vatAmount;
+        }
+
+        // Status płatności z XML — obsługujemy zarówno Zaplacono=1, jak i wpłaty częściowe.
+        const { paymentStatus, paidAmount, paymentDate } = extractPaymentInfoFromFa(fa, grossAmount, netAmount);
 
         const invoice = new CostInvoice({
             ksefNumber: invoiceInfo.ksefNumber,
@@ -313,7 +373,7 @@ export default class CostInvoiceController {
             supplierName,
             supplierAddress,
             supplierBankAccount,
-            invoiceNumber: invoiceInfo.invoiceNumber || naglowek.NrFaktury,
+            invoiceNumber: String(fa.P_2 ?? invoiceInfo.invoiceNumber ?? naglowek.NrFaktury ?? '').trim(),
             invoiceType,
             issueDate,
             saleDate,
@@ -348,6 +408,20 @@ export default class CostInvoiceController {
             return Number.isNaN(parsed) ? fallback : parsed;
         };
 
+        const pickValue = (...values: any[]): any =>
+            values.find((value) => value !== null && value !== undefined && value !== '');
+
+        const parseVatRate = (value: any, fallback = 23): number => {
+            if (value === null || value === undefined || value === '') return fallback;
+            if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                if (normalized === 'zw' || normalized === 'zw.' || normalized === 'np' || normalized === 'np.') {
+                    return 0;
+                }
+            }
+            return parseDecimal(value, fallback);
+        };
+
         const items: CostInvoiceItem[] = [];
         const faWiersze = fa.FaWiersze || {};
         let wiersze = faWiersze.FaWiersz || fa.FaWiersz || [];
@@ -359,23 +433,54 @@ export default class CostInvoiceController {
 
         let lineNumber = 1;
         for (const wiersz of wiersze) {
+            // vatValueSpecified distinguishes "explicitly 0 (exempt)" from "field absent → must derive"
+            const rawVatPick = pickValue(wiersz.P_11Vat, wiersz.P_11_1, wiersz.WartoscVat);
+            const vatValueSpecified = rawVatPick !== undefined;
+
+            const unitPrice = parseDecimal(pickValue(wiersz.P_9A, wiersz.P_9B, wiersz.CenaJednostkowa));
+            const grossCandidate = parseDecimal(pickValue(wiersz.P_11A, wiersz.WartoscBrutto));
+            let netValue = parseDecimal(pickValue(wiersz.P_11, wiersz.WartoscNetto));
+            let vatValue = parseDecimal(rawVatPick);
+            const vatRate = parseVatRate(wiersz.P_12 ?? wiersz.StawkaVat, 23);
+
+            if (netValue > 0 && grossCandidate > 0) {
+                // Both net (P_11) and gross (P_11A) present — derive VAT from difference
+                const diff = Math.round((grossCandidate - netValue) * 100) / 100;
+                vatValue = diff > 0 ? diff : 0;
+            } else if (grossCandidate > 0 && netValue === 0) {
+                if (!vatValueSpecified && vatRate > 0) {
+                    // Only gross with a non-zero rate and no explicit VAT amount:
+                    // gross price includes VAT → split using the inclusion method
+                    vatValue = Math.round(grossCandidate * vatRate / (100 + vatRate) * 100) / 100;
+                    netValue = Math.round((grossCandidate - vatValue) * 100) / 100;
+                } else {
+                    // Explicit VAT (incl. 0 for exempt) or vatRate = 0
+                    netValue = Math.round((grossCandidate - vatValue) * 100) / 100;
+                    if (netValue < 0) netValue = 0;
+                }
+            } else if (netValue > 0 && grossCandidate === 0 && !vatValueSpecified && vatRate > 0) {
+                // Only net (P_11) with a non-zero rate and no explicit VAT amount → derive VAT
+                vatValue = Math.round(netValue * vatRate / 100 * 100) / 100;
+            }
+
+            const grossValue = grossCandidate > 0
+                ? grossCandidate
+                : Math.round((netValue + vatValue) * 100) / 100;
+
             const item = new CostInvoiceItem({
                 lineNumber,
                 description: wiersz.P_7 || wiersz.NazwaTowaruLubUslugi || 'Brak opisu',
                 quantity: parseDecimal(wiersz.P_8B || wiersz.Ilosc, 1),
                 unit: wiersz.P_8A || wiersz.JednostkaMiary || 'szt.',
-                unitPrice: parseDecimal(wiersz.P_9A || wiersz.CenaJednostkowa),
-                netValue: parseDecimal(wiersz.P_11 || wiersz.WartoscNetto),
-                vatRate: parseDecimal(wiersz.P_12 || wiersz.StawkaVat, 23),
-                vatValue: parseDecimal(wiersz.P_11_1 || wiersz.WartoscVat),
-                grossValue: 0, // Oblicz poniżej
+                unitPrice,
+                netValue,
+                vatRate,
+                vatValue,
+                grossValue,
                 isSelectedForBooking: true,
                 bookingPercentage: 100,
                 vatDeductionPercentage: 100,
             });
-
-            // Oblicz wartość brutto
-            item.grossValue = item.netValue + item.vatValue;
 
             items.push(item);
             lineNumber++;
@@ -388,10 +493,12 @@ export default class CostInvoiceController {
      * Wyciągnij NIP z podmiotu
      */
     private extractNip(podmiot: any): string {
-        return podmiot.DaneIdentyfikacyjne?.NIP 
-            || podmiot.NIP 
-            || podmiot.Identyfikator?.NIP 
-            || '';
+        const raw = podmiot.DaneIdentyfikacyjne?.NIP
+            ?? podmiot.NIP
+            ?? podmiot.Identyfikator?.NIP
+            ?? '';
+        // fast-xml-parser parses all-digit values as numbers; coerce to string
+        return String(raw).trim();
     }
 
     /**
@@ -399,7 +506,8 @@ export default class CostInvoiceController {
      */
     private extractName(podmiot: any): string {
         const dane = podmiot.DaneIdentyfikacyjne || podmiot;
-        return dane.Nazwa || dane.PelnaNazwa || dane.NazwaSkrocona || 'Nieznany dostawca';
+        const raw = dane.Nazwa || dane.PelnaNazwa || dane.NazwaSkrocona || 'Nieznany dostawca';
+        return String(raw).trim();
     }
 
     /**
@@ -407,6 +515,16 @@ export default class CostInvoiceController {
      */
     private extractAddress(podmiot: any): string {
         const adres = podmiot.Adres || podmiot.AdresZamieszkania || {};
+
+        // KSeF FA(3): free-form address lines (AdresL1 / AdresL2)
+        if (adres.AdresL1 || adres.AdresL2) {
+            return [adres.AdresL1, adres.AdresL2]
+                .filter(Boolean)
+                .map((s: any) => String(s).trim())
+                .join(', ');
+        }
+
+        // Structured address (older / non-FA3 formats)
         const parts = [
             adres.Ulica,
             adres.NrDomu,
@@ -569,6 +687,86 @@ export default class CostInvoiceController {
     }
 
     /**
+     * Podgląd zmian po reparse XML (nagłówek faktury bez pozycji).
+     * Zwraca tylko faktury, w których wykryto różnice.
+     */
+    async reparsePreviewFromXml(): Promise<{
+        scanned: number;
+        changed: number;
+        errors: string[];
+        invoices: CostInvoiceReparsePreviewItem[];
+    }> {
+        const all = await this.repository.findAll();
+        const errors: string[] = [];
+        const invoices: CostInvoiceReparsePreviewItem[] = [];
+
+        for (const invoice of all) {
+            if (!invoice.id) continue;
+            if (!invoice.xmlContent) continue;
+
+            try {
+                const reparsed = this.buildReparsedHeaderFromXml(invoice);
+                const before = this.normalizeHeaderForDiff(this.toJsonWithoutItems(invoice));
+                const after = this.normalizeHeaderForDiff(this.toJsonWithoutItems(reparsed));
+                const changes = this.diffObjects(before, after);
+
+                if (Object.keys(changes).length > 0) {
+                    invoices.push({
+                        id: invoice.id,
+                        ksefNumber: invoice.ksefNumber,
+                        invoiceNumber: invoice.invoiceNumber,
+                        changes,
+                        before,
+                        after,
+                    });
+                }
+            } catch (err: any) {
+                errors.push(`Faktura ${invoice.id} (${invoice.ksefNumber}): ${err.message}`);
+            }
+        }
+
+        return {
+            scanned: all.length,
+            changed: invoices.length,
+            errors,
+            invoices,
+        };
+    }
+
+    /**
+     * Zastosuj reparse XML dla wybranych faktur (per faktura).
+     */
+    async reparseApplyFromXml(ids: number[]): Promise<{ updated: number; errors: string[] }> {
+        const errors: string[] = [];
+        let updated = 0;
+
+        for (const id of ids) {
+            try {
+                const invoice = await this.repository.findById(id);
+                if (!invoice) {
+                    errors.push(`Faktura ${id}: nie istnieje`);
+                    continue;
+                }
+                if (!invoice.xmlContent) {
+                    errors.push(`Faktura ${id} (${invoice.ksefNumber}): brak XML`);
+                    continue;
+                }
+
+                const reparsed = this.buildReparsedHeaderFromXml(invoice);
+                await this.repository.updateReparsedHeader(reparsed);
+                if (reparsed._items && reparsed._items.length > 0) {
+                    await this.repository.updateItemFinancials(invoice.id!, reparsed._items);
+                }
+                updated++;
+            } catch (err: any) {
+                errors.push(`Faktura ${id}: ${err.message}`);
+            }
+        }
+
+        return { updated, errors };
+    }
+
+    /**
      * Wyciąga pola parsowalne z XML (bez tworzenia pełnego obiektu CostInvoice)
      */
     private extractParsedFieldsFromXml(
@@ -585,6 +783,7 @@ export default class CostInvoiceController {
             ignoreAttributes: false,
             attributeNamePrefix: '@_',
             removeNSPrefix: true,
+            parseTagValue: false,
         });
 
         const parsed = parser.parse(xml);
@@ -628,6 +827,157 @@ export default class CostInvoiceController {
             paidAmount: currentInvoice.paidAmount,
             paymentDate: currentInvoice.paymentDate ?? reparsed.paymentDate,
         };
+    }
+
+    private buildReparsedHeaderFromXml(current: CostInvoice): CostInvoice {
+        if (!current.xmlContent) {
+            throw new Error('Brak XML do reparse');
+        }
+
+        const acquisitionDate = current.ksefAcquisitionDate || current.issueDate || new Date();
+        const invoiceInfo: PurchaseInvoiceListItem = {
+            ksefNumber: current.ksefNumber,
+            ksefReferenceNumber: current.ksefNumber,
+            subjectNip: current.supplierNip || '',
+            subjectName: current.supplierName || '',
+            invoiceNumber: current.invoiceNumber || '',
+            invoicingDate: current.issueDate ? current.issueDate.toISOString() : new Date().toISOString(),
+            saleDate: current.saleDate ? current.saleDate.toISOString() : undefined,
+            dueDate: current.dueDate ? current.dueDate.toISOString() : undefined,
+            bankAccount: current.supplierBankAccount,
+            acquisitionTimestamp: acquisitionDate.toISOString(),
+            invoiceType: current.invoiceType || '',
+            grossValue: current.grossAmount,
+            currency: current.currency || 'PLN',
+            rawXml: current.xmlContent,
+        };
+
+        const reparsed = this.parseInvoiceXml(
+            current.xmlContent,
+            invoiceInfo,
+            current.syncId ?? 0,
+        );
+
+        const protectedPayment = this.protectAlreadyPaidPaymentData(current, {
+            paymentStatus: reparsed.paymentStatus,
+            paidAmount: reparsed.paidAmount,
+            paymentDate: reparsed.paymentDate,
+            paymentMethod: reparsed.paymentMethod,
+            invoiceType: reparsed.invoiceType,
+        });
+
+        reparsed.paymentStatus = protectedPayment.paymentStatus;
+        reparsed.paidAmount = protectedPayment.paidAmount;
+        reparsed.paymentDate = protectedPayment.paymentDate;
+        reparsed.paymentMethod = protectedPayment.paymentMethod;
+        reparsed.invoiceType = protectedPayment.invoiceType;
+
+        reparsed.id = current.id;
+        reparsed.ksefNumber = current.ksefNumber;
+        reparsed.ksefAcquisitionDate = current.ksefAcquisitionDate;
+        reparsed.syncId = current.syncId;
+        reparsed.status = current.status;
+        reparsed.bookingPercentage = current.bookingPercentage;
+        reparsed.vatDeductionPercentage = current.vatDeductionPercentage;
+        reparsed.categoryId = current.categoryId;
+        reparsed.bookedBy = current.bookedBy;
+        reparsed.bookedAt = current.bookedAt;
+        reparsed.notes = current.notes;
+        reparsed.createdAt = current.createdAt;
+        reparsed.updatedAt = current.updatedAt;
+        reparsed._category = current._category;
+        return reparsed;
+    }
+
+    private toJsonWithoutItems(invoice: CostInvoice): Record<string, any> {
+        const json = invoice.toJson();
+        delete json._items;
+        return json;
+    }
+
+    private normalizeHeaderForDiff(data: Record<string, any>): Record<string, any> {
+        const normalized = { ...data };
+
+        // Coerce string fields: XML parser returns all-digit values as numbers (NIP, numeric invoice numbers).
+        // Treat empty/null/undefined as null for stable comparison.
+        const stringFields = [
+            'supplierNip',
+            'supplierName',
+            'supplierAddress',
+            'supplierBankAccount',
+            'invoiceNumber',
+            'invoiceType',
+            'paymentMethod',
+            'currency',
+        ];
+        stringFields.forEach((key) => {
+            const val = normalized[key];
+            const str = (val !== null && val !== undefined) ? String(val).trim() : '';
+            normalized[key] = str || null;
+        });
+
+        // Normalize optional date fields
+        const dateFields = ['saleDate', 'dueDate', 'paymentDate'];
+        dateFields.forEach((key) => {
+            if (normalized[key] === '' || normalized[key] === undefined) {
+                normalized[key] = null;
+            }
+        });
+
+        // Round monetary amounts to 2 dp to avoid IEEE 754 comparison noise
+        const amountFields = ['netAmount', 'vatAmount', 'grossAmount', 'paidAmount', 'bookableNetAmount', 'deductibleVatAmount'];
+        amountFields.forEach((key) => {
+            if (typeof normalized[key] === 'number') {
+                normalized[key] = Math.round(normalized[key] * 100) / 100;
+            }
+        });
+
+        return normalized;
+    }
+
+    private diffObjects(
+        before: Record<string, any>,
+        after: Record<string, any>,
+    ): Record<string, { before: any; after: any }> {
+        const changes: Record<string, { before: any; after: any }> = {};
+        const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+
+        keys.forEach((key) => {
+            if (!this.deepEqual(before[key], after[key])) {
+                changes[key] = { before: before[key], after: after[key] };
+            }
+        });
+
+        return changes;
+    }
+
+    private deepEqual(left: any, right: any): boolean {
+        if (left === right) return true;
+        if (left === null || right === null || left === undefined || right === undefined) {
+            return left === right;
+        }
+
+        if (Array.isArray(left) && Array.isArray(right)) {
+            if (left.length !== right.length) return false;
+            for (let i = 0; i < left.length; i++) {
+                if (!this.deepEqual(left[i], right[i])) return false;
+            }
+            return true;
+        }
+
+        if (this.isPlainObject(left) && this.isPlainObject(right)) {
+            const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+            for (const key of keys) {
+                if (!this.deepEqual(left[key], right[key])) return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private isPlainObject(value: any): value is Record<string, any> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
     }
 
     /**

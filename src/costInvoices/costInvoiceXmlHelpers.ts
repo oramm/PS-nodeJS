@@ -51,8 +51,18 @@ export function extractPaymentMethodFromFa(fa: any): string | undefined {
     const platnosc = fa?.Platnosc;
     if (!platnosc) return undefined;
     const code = String(platnosc.FormaPlatnosci ?? '').trim();
-    if (!code) return undefined;
-    return PAYMENT_METHOD_LABELS[code] ?? `forma ${code}`;
+    if (code) {
+        return PAYMENT_METHOD_LABELS[code] ?? `forma ${code}`;
+    }
+
+    const opis = typeof platnosc.OpisPlatnosci === 'string' ? platnosc.OpisPlatnosci.trim() : '';
+    if (opis) return opis;
+
+    if (isKsefFlagEnabled(platnosc.PlatnoscInna)) {
+        return 'inna';
+    }
+
+    return undefined;
 }
 
 function isKsefFlagEnabled(value: unknown): boolean {

@@ -366,6 +366,111 @@ export default class CostInvoiceRepository {
     }
 
     /**
+     * Zaktualizuj cały nagłówek faktury na podstawie reparse XML (bez pozycji).
+     */
+    async updateReparsedHeader(invoice: CostInvoice): Promise<void> {
+        if (!invoice.id) throw new Error('Cannot update invoice without ID');
+
+        const optionalColumns = await this.getOptionalColumnsAvailability();
+
+        const setClauses: string[] = [
+            'SupplierNip = ?',
+            'SupplierName = ?',
+            'SupplierAddress = ?',
+            'InvoiceNumber = ?',
+            'IssueDate = ?',
+            'SaleDate = ?',
+            'DueDate = ?',
+            'NetAmount = ?',
+            'VatAmount = ?',
+            'GrossAmount = ?',
+            'Currency = ?',
+        ];
+
+        const params: any[] = [
+            invoice.supplierNip || null,
+            invoice.supplierName,
+            invoice.supplierAddress || null,
+            invoice.invoiceNumber,
+            invoice.issueDate,
+            invoice.saleDate || null,
+            invoice.dueDate || null,
+            invoice.netAmount,
+            invoice.vatAmount,
+            invoice.grossAmount,
+            invoice.currency,
+        ];
+
+        if (optionalColumns.supplierBankAccount) {
+            setClauses.push('SupplierBankAccount = ?');
+            params.push(invoice.supplierBankAccount || null);
+        }
+        if (optionalColumns.paymentStatus) {
+            setClauses.push('PaymentStatus = ?');
+            params.push(invoice.paymentStatus);
+        }
+        if (optionalColumns.paidAmount) {
+            setClauses.push('PaidAmount = ?');
+            params.push(invoice.paidAmount);
+        }
+        if (optionalColumns.paymentMethod) {
+            setClauses.push('PaymentMethod = ?');
+            params.push(invoice.paymentMethod || null);
+        }
+        if (optionalColumns.invoiceType) {
+            setClauses.push('InvoiceType = ?');
+            params.push(invoice.invoiceType || null);
+        }
+        if (optionalColumns.paymentDate) {
+            setClauses.push('PaymentDate = ?');
+            params.push(invoice.paymentDate || null);
+        }
+
+        setClauses.push('UpdatedAt = NOW()');
+        params.push(invoice.id);
+
+        const sql = mysql.format(
+            `UPDATE CostInvoices SET ${setClauses.join(', ')} WHERE Id = ?`,
+            params,
+        );
+        await ToolsDb.executeSQL(sql);
+    }
+
+    /**
+     * Zaktualizuj wartości finansowe pozycji faktury (bez booking settings).
+     * Dopasowanie po LineNumber — pozycje bez odpowiednika są pomijane.
+     */
+    async updateItemFinancials(invoiceId: number, newItems: CostInvoiceItem[]): Promise<void> {
+        const existing = await this.findItemsByInvoiceId(invoiceId);
+
+        for (const newItem of newItems) {
+            const match = existing.find((item) => item.lineNumber === newItem.lineNumber);
+            if (!match?.id) continue;
+
+            const sql = mysql.format(
+                `UPDATE CostInvoiceItems
+                 SET Description = ?, Quantity = ?, Unit = ?,
+                     UnitPrice = ?, NetValue = ?, VatRate = ?,
+                     VatValue = ?, GrossValue = ?
+                 WHERE Id = ?`,
+                [
+                    newItem.description,
+                    newItem.quantity,
+                    newItem.unit,
+                    newItem.unitPrice,
+                    newItem.netValue,
+                    newItem.vatRate,
+                    newItem.vatValue,
+                    newItem.grossValue,
+                    match.id,
+                ],
+            );
+
+            await ToolsDb.executeSQL(sql);
+        }
+    }
+
+    /**
      * Mapuj wiersz bazy na obiekt
      */
     private mapRowToInvoice(row: any): CostInvoice {

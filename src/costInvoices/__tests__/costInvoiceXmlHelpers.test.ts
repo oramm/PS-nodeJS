@@ -99,6 +99,16 @@ describe('extractPaymentMethodFromFa', () => {
     it('zwraca undefined gdy brak FormaPlatnosci', () => {
         expect(extractPaymentMethodFromFa({ Platnosc: {} })).toBeUndefined();
     });
+
+    it('zwraca OpisPlatnosci gdy brak FormaPlatnosci', () => {
+        expect(
+            extractPaymentMethodFromFa({ Platnosc: { OpisPlatnosci: 'Platnosc gotowka/karta' } })
+        ).toBe('Platnosc gotowka/karta');
+    });
+
+    it('zwraca "inna" gdy PlatnoscInna=1 i brak OpisPlatnosci', () => {
+        expect(extractPaymentMethodFromFa({ Platnosc: { PlatnoscInna: 1 } })).toBe('inna');
+    });
 });
 
 describe('extractPaymentInfoFromFa', () => {

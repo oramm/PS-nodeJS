@@ -46,6 +46,25 @@ function ensureBookingPermission(req: Request, res: Response): number | null {
     return userData.enviId;
 }
 
+function parseReparseIds(raw: any, res: Response): number[] | null {
+    if (!Array.isArray(raw) || raw.length === 0) {
+        res.status(400).json({ error: 'Brak listy ids' });
+        return null;
+    }
+
+    const ids: number[] = [];
+    for (const value of raw) {
+        const parsed = parseInt(String(value), 10);
+        if (!Number.isInteger(parsed) || parsed <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowe id w liście' });
+            return null;
+        }
+        if (!ids.includes(parsed)) ids.push(parsed);
+    }
+
+    return ids;
+}
+
 // =====================================================
 // SYNCHRONIZACJA
 // =====================================================
@@ -127,6 +146,60 @@ app.post(
             res.json({
                 success: true,
                 message: `Reparse zakończony: ${result.updated} zaktualizowanych, ${result.errors.length} błędów`,
+                data: result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+/**
+ * POST /cost-invoices/reparse-preview
+ *
+ * Zwraca tylko faktury, w których parser wykryje zmiany w nagłówku (bez pozycji).
+ */
+app.post(
+    '/cost-invoices/reparse-preview',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = ensureBookingPermission(req, res);
+            if (userId === null) return;
+
+            const result = await controller.reparsePreviewFromXml();
+
+            res.json({
+                success: true,
+                message: `Podgląd reparse: ${result.changed} faktur ze zmianami`,
+                data: result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+/**
+ * POST /cost-invoices/reparse-apply
+ *
+ * Zastosuj reparse dla wybranych faktur (per faktura).
+ * Body: { ids: number[] }
+ */
+app.post(
+    '/cost-invoices/reparse-apply',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = ensureBookingPermission(req, res);
+            if (userId === null) return;
+
+            const ids = parseReparseIds(req.body?.ids, res);
+            if (!ids) return;
+
+            const result = await controller.reparseApplyFromXml(ids);
+
+            res.json({
+                success: true,
+                message: `Reparse zastosowany: ${result.updated} zaktualizowanych, ${result.errors.length} błędów`,
                 data: result,
             });
         } catch (error) {
