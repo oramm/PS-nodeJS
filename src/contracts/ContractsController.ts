@@ -16,6 +16,8 @@ import {
     ContractTypeData,
 } from '../types/types';
 import Contract from './Contract';
+import ProjectRepository from '../projects/ProjectRepository';
+import ToolsGd from '../tools/ToolsGd';
 import ContractEntityController from './ContractEntityController';
 import ContractEntityRepository from './ContractEntityRepository';
 import ContractOther from './ContractOther';
@@ -494,6 +496,110 @@ export default class ContractsController extends BaseController<
     ): Promise<ContractOur | ContractOther> {
         return await this.withAuth(async (instance, auth) => {
             return await this.delete(contract, auth);
+        });
+    }
+
+    /**
+     * Przenosi ContractOur (wraz z powiązanymi ContractOther) do innego projektu.
+     *
+     * Kolejność operacji:
+     * 1. GD: przenieś folder ContractOur → nowy projekt (foldery ContractOther i kamieni przenoszą się automatycznie)
+     * 2. DB: zmień ProjectOurId dla ContractOur i wszystkich ContractOther (OurIdRelated = ourId)
+     * 3. Scrum: zaktualizuj nagłówek kontraktu (nowe projectOurId + sortProjects)
+     *
+     * Na błąd DB po udanym GD: cofamy przeniesienie folderu.
+     */
+    static async moveToProject(
+        contractId: number,
+        newProjectOurId: string,
+        auth: OAuth2Client
+    ): Promise<ContractOur> {
+        const contracts = await this.find([
+            { id: contractId, typesToInclude: 'our' },
+        ]);
+        if (!contracts.length)
+            throw new Error(`ContractOur o id=${contractId} nie znaleziono`);
+        const contractOur = contracts[0] as ContractOur;
+        if (!contractOur.gdFolderId)
+            throw new Error('ContractOur nie ma gdFolderId');
+
+        const oldProjectOurId = contractOur.projectOurId;
+        if (oldProjectOurId === newProjectOurId)
+            throw new Error('Kontrakt już jest przypisany do tego projektu');
+
+        const projectRepo = new ProjectRepository();
+        const [oldProjects, newProjects] = await Promise.all([
+            projectRepo.find([{ ourId: oldProjectOurId }]),
+            projectRepo.find([{ ourId: newProjectOurId }]),
+        ]);
+        if (!oldProjects.length)
+            throw new Error(`Stary projekt ${oldProjectOurId} nie znaleziono`);
+        if (!newProjects.length)
+            throw new Error(`Nowy projekt ${newProjectOurId} nie znaleziono`);
+        const oldProject = oldProjects[0];
+        const newProject = newProjects[0];
+        if (!oldProject.gdFolderId)
+            throw new Error('Stary projekt nie ma gdFolderId');
+        if (!newProject.gdFolderId)
+            throw new Error('Nowy projekt nie ma gdFolderId');
+
+        // GD najpierw — na błąd GD nie zmieniamy DB
+        await ToolsGd.moveFileOrFolder(
+            auth,
+            { id: contractOur.gdFolderId, parents: [oldProject.gdFolderId] },
+            newProject.gdFolderId
+        );
+
+        try {
+            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await conn.execute(
+                    `UPDATE Contracts SET ProjectOurId = ? WHERE Id = ?`,
+                    [newProjectOurId, contractOur.id]
+                );
+                await conn.execute(
+                    `UPDATE Contracts SET ProjectOurId = ? WHERE OurIdRelated = ?`,
+                    [newProjectOurId, contractOur.ourId]
+                );
+            });
+        } catch (err) {
+            // Rollback GD — cofnij przeniesienie folderu
+            await ToolsGd.moveFileOrFolder(
+                auth,
+                { id: contractOur.gdFolderId, parents: [newProject.gdFolderId] },
+                oldProject.gdFolderId
+            ).catch((gdErr) =>
+                console.error('Nie udało się cofnąć przeniesienia GD:', gdErr)
+            );
+            throw err;
+        }
+
+        contractOur.projectOurId = newProjectOurId;
+        contractOur._project = newProject;
+        contractOur._gdFolderUrl = ToolsGd.createGdFolderUrl(
+            contractOur.gdFolderId
+        );
+        await contractOur
+            .editInScrum(auth)
+            .catch((err) =>
+                console.error(
+                    'Błąd aktualizacji Scrum po przeniesieniu kontraktu:',
+                    err
+                )
+            );
+
+        return contractOur;
+    }
+
+    static async moveToProjectWithAuth(
+        contractId: number,
+        newProjectOurId: string
+    ): Promise<ContractOur> {
+        return await this.withAuth(async (_instance, auth) => {
+            return await ContractsController.moveToProject(
+                contractId,
+                newProjectOurId,
+                auth
+            );
         });
     }
 

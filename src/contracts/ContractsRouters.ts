@@ -146,6 +146,24 @@ async function simulateTaskProgress(
     }
 }
 
+app.put('/contract/:id/move', async (req: Request, res: Response, next) => {
+    try {
+        const contractId = parseInt(req.params.id);
+        const { newProjectOurId } = req.parsedBody;
+        if (!contractId || !newProjectOurId)
+            throw new Error(
+                'Brak wymaganych parametrów: id kontraktu i newProjectOurId'
+            );
+        const result = await ContractsController.moveToProjectWithAuth(
+            contractId,
+            newProjectOurId
+        );
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.put('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
