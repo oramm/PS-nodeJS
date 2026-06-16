@@ -3,7 +3,7 @@ import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
 import { SystemRoleName } from '../types/sessionTypes';
-import { CaseData, ContractData, OfferData, ProjectData } from '../types/types';
+import { CaseData, ContractData, EntityData, OfferData, ProjectData } from '../types/types';
 import BaseRepository from '../repositories/BaseRepository';
 import Letter from './Letter';
 import OurLetterContract from './OurLetterContract';
@@ -25,6 +25,7 @@ export type LetterSearchParams = {
     _contract?: ContractData;
     _offer?: OfferData;
     _case?: CaseData;
+    _entities?: EntityData[];
     searchText?: string;
     contractId?: number;
     offerId?: number;
@@ -419,6 +420,23 @@ export default class LetterRepository extends BaseRepository<Letter> {
     }
 
     /**
+     * Tworzy warunek filtrowania po odbiorcach (MAIN lub CC)
+     */
+    private makeEntitiesCondition(entities: EntityData[] | undefined): string {
+        if (!entities || entities.length === 0) return '1';
+        const entityIds = entities.map((e) => e.id).filter(Boolean);
+        if (entityIds.length === 0) return '1';
+        return entityIds
+            .map((id) =>
+                mysql.format(
+                    `EXISTS (SELECT 1 FROM Letters_Entities le_f WHERE le_f.LetterId = Letters.Id AND le_f.EntityId = ?)`,
+                    [id]
+                )
+            )
+            .join(' AND ');
+    }
+
+    /**
      * Tworzy warunek wyszukiwania po tekście
      */
     private makeSearchTextCondition(searchText: string | undefined): string {
@@ -501,15 +519,18 @@ export default class LetterRepository extends BaseRepository<Letter> {
             searchParams.searchText?.toString()
         );
 
-        const conditions = `${projectCondition} 
-            AND ${contractCondition} 
+        const entitiesCondition = this.makeEntitiesCondition(searchParams._entities);
+
+        const conditions = `${projectCondition}
+            AND ${contractCondition}
             AND ${milestoneCondition}
             AND ${caseCondition}
             AND ${creationDateFromCondition}
             AND ${creationDateToCondition}
             AND ${statusesCondition}
-            AND ${searchTextCondition} 
-            AND ${offerCondition}`;
+            AND ${searchTextCondition}
+            AND ${offerCondition}
+            AND ${entitiesCondition}`;
         return conditions;
     }
 
