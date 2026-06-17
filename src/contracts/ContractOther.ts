@@ -60,7 +60,10 @@ export default class ContractOther
     // addInDb/editInDb logika przeniesiona do ContractsController (Phase 2-3)
 
     setFolderName() {
-        this._folderName = `${this.number} ${this.alias || ''}`.trim();
+        const entityShortName = this._contractors?.[0]?.shortName;
+        this._folderName = ['K', this.alias, entityShortName]
+            .filter(Boolean)
+            .join(' ');
     }
 
     getType(ourId: string): string {

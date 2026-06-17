@@ -65,6 +65,7 @@ export default class ContractEntityAssociationsHelper {
                 Contracts_Entities.ContractRole,
                 OurContractsData.OurId AS ContractOurId,
                 Entities.Name,
+                Entities.ShortName,
                 Entities.Address,
                 Entities.TaxNumber,
                 Entities.Www,
@@ -104,6 +105,7 @@ export default class ContractEntityAssociationsHelper {
                 _entity: new Entity({
                     id: row.EntityId,
                     name: row.Name,
+                    shortName: row.ShortName,
                     address: row.Address,
                     taxNumber: row.TaxNumber,
                     www: row.Www,

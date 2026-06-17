@@ -133,6 +133,8 @@ export default class ContractsController extends BaseController<
     ): Promise<ContractOur | ContractOther> {
         const instance = this.getInstance();
 
+        this.ensureAliasPresent(contract);
+
         // Walidacja biznesowa
         if (await instance.repository.isUniquePerProject(contract)) {
             // Twórz komunikat błędu bez wywoływania protected metody
@@ -267,6 +269,8 @@ export default class ContractsController extends BaseController<
         console.group(`Editing contract ${contract._ourIdOrNumber_Name}`);
 
         try {
+            this.ensureAliasPresent(contract, fieldsToUpdate);
+
             // Lista pól które wymagają tylko update DB (bez GD/Scrum)
             const onlyDbFields = [
                 'status',
@@ -420,6 +424,22 @@ export default class ContractsController extends BaseController<
         return await this.withAuth(async (instance, auth) => {
             return await this.edit(contract, auth, fieldsToUpdate);
         });
+    }
+
+    private static ensureAliasPresent(
+        contract: ContractOur | ContractOther,
+        fieldsToUpdate?: string[]
+    ): void {
+        const shouldValidateAlias =
+            !fieldsToUpdate || fieldsToUpdate.includes('alias');
+
+        if (!shouldValidateAlias) {
+            return;
+        }
+
+        if (!contract.alias || !contract.alias.trim()) {
+            throw new Error('Alias jest wymagany');
+        }
     }
 
     /**

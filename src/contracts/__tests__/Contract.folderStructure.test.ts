@@ -54,13 +54,14 @@ describe('Contract folder structure', () => {
             _type: { id: 2, name: 'RB', isOur: false },
             _project: { id: 1, ourId: 'PRJ-1', gdFolderId: 'project-folder-1' },
             _ourContract: { id: 11, ourId: 'WAW.UR.010', gdFolderId: 'our-root-11' },
+            _contractors: [{ id: 1, name: 'ENVI SC', shortName: 'ENVI' }],
         } as any);
 
         await contract.createFolders(mockAuth);
 
         expect(setFolderSpy).toHaveBeenNthCalledWith(1, mockAuth, {
             parentId: 'our-root-11',
-            name: 'RB-12 Beta',
+            name: 'K Beta ENVI',
         });
         expect(setFolderSpy).toHaveBeenNthCalledWith(2, mockAuth, {
             parentId: 'contract-folder-2',
@@ -72,5 +73,34 @@ describe('Contract folder structure', () => {
         });
         expect(contract.gdFolderId).toBe('contract-folder-2');
         expect(contract.meetingProtocolsGdFolderId).toBe('meeting-folder-2');
+    });
+
+    it('generates ContractOther folder name without entity shortName when contractor has none', () => {
+        const contract = new ContractOther({
+            alias: 'Beta',
+            number: 'RB-12',
+            name: 'Roboty budowlane',
+            status: 'Aktywny',
+            comment: '',
+            _type: { id: 2, name: 'RB', isOur: false },
+            _project: { id: 1, ourId: 'PRJ-1', gdFolderId: 'project-folder-1' },
+            _contractors: [{ id: 1, name: 'ENVI SC' }],
+        } as any);
+
+        expect(contract._folderName).toBe('K Beta');
+    });
+
+    it('generates ContractOther folder name without alias when alias is missing', () => {
+        const contract = new ContractOther({
+            number: 'RB-12',
+            name: 'Roboty budowlane',
+            status: 'Aktywny',
+            comment: '',
+            _type: { id: 2, name: 'RB', isOur: false },
+            _project: { id: 1, ourId: 'PRJ-1', gdFolderId: 'project-folder-1' },
+            _contractors: [{ id: 1, name: 'ENVI SC', shortName: 'ENVI' }],
+        } as any);
+
+        expect(contract._folderName).toBe('K ENVI');
     });
 });

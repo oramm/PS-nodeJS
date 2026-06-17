@@ -44,6 +44,7 @@ export default class EntitiesController extends BaseController<
      */
     static async add(entityData: {
         name: string;
+        shortName?: string;
         address?: string;
         taxNumber?: string;
         www?: string;
@@ -63,6 +64,7 @@ export default class EntitiesController extends BaseController<
      */
     private async addEntity(entityData: {
         name: string;
+        shortName?: string;
         address?: string;
         taxNumber?: string;
         www?: string;
@@ -72,7 +74,24 @@ export default class EntitiesController extends BaseController<
         console.group('EntitiesController.addEntity()');
         try {
             const entity = new Entity(entityData);
-            await this.create(entity);
+            if (entity.shortName) {
+                const duplicate = await this.repository.find([
+                    { shortName: entity.shortName },
+                ]);
+                if (duplicate.length > 0)
+                    throw new Error(
+                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
+                    );
+            }
+            try {
+                await this.create(entity);
+            } catch (err: any) {
+                if (err.code === 'ER_DUP_ENTRY')
+                    throw new Error(
+                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
+                    );
+                throw err;
+            }
             console.log(`Entity ${entity.name} added in db`);
             return entity;
         } finally {
@@ -91,6 +110,7 @@ export default class EntitiesController extends BaseController<
     static async edit(entityData: {
         id: number;
         name?: string;
+        shortName?: string;
         address?: string;
         taxNumber?: string;
         www?: string;
@@ -111,6 +131,7 @@ export default class EntitiesController extends BaseController<
     private async editEntity(entityData: {
         id: number;
         name?: string;
+        shortName?: string;
         address?: string;
         taxNumber?: string;
         www?: string;
@@ -120,14 +141,32 @@ export default class EntitiesController extends BaseController<
         console.group('EntitiesController.editEntity()');
         try {
             const entity = new Entity(entityData);
-            await this.repository.editInDb(entity, undefined, undefined, [
-                'name',
-                'address',
-                'taxNumber',
-                'www',
-                'email',
-                'phone',
-            ]);
+            if (entity.shortName) {
+                const duplicate = await this.repository.find([
+                    { shortName: entity.shortName },
+                ]);
+                if (duplicate.length > 0 && duplicate[0].id !== entity.id)
+                    throw new Error(
+                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
+                    );
+            }
+            try {
+                await this.repository.editInDb(entity, undefined, undefined, [
+                    'name',
+                    'shortName',
+                    'address',
+                    'taxNumber',
+                    'www',
+                    'email',
+                    'phone',
+                ]);
+            } catch (err: any) {
+                if (err.code === 'ER_DUP_ENTRY')
+                    throw new Error(
+                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
+                    );
+                throw err;
+            }
             console.log(`Entity ${entity.name} updated in db`);
             return entity;
         } finally {

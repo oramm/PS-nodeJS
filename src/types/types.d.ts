@@ -348,6 +348,7 @@ export interface LetterEventData extends RepositoryDataItem {
 
 export interface EntityData extends RepositoryDataItem {
     name?: string;
+    shortName?: string;
     address?: string;
     taxNumber?: string;
     www?: string;

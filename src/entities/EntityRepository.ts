@@ -7,6 +7,7 @@ export interface EntitiesSearchParams {
     projectId?: string;
     id?: number;
     name?: string;
+    shortName?: string;
     searchText?: string;
 }
 
@@ -19,6 +20,7 @@ export default class EntityRepository extends BaseRepository<Entity> {
         return new Entity({
             id: row.Id,
             name: row.Name,
+            shortName: row.ShortName,
             address: row.Address,
             taxNumber: row.TaxNumber,
             www: row.Www,
@@ -36,12 +38,13 @@ export default class EntityRepository extends BaseRepository<Entity> {
                   )
                 : '1';
 
-        const sql = `SELECT Entities.Id, 
-                            Entities.Name, 
-                            Entities.Address, 
-                            Entities.TaxNumber, 
-                            Entities.Www, 
-                            Entities.Email, 
+        const sql = `SELECT Entities.Id,
+                            Entities.Name,
+                            Entities.ShortName,
+                            Entities.Address,
+                            Entities.TaxNumber,
+                            Entities.Www,
+                            Entities.Email,
                             Entities.Phone
                      FROM Entities
                      WHERE ${conditions}
@@ -67,6 +70,11 @@ export default class EntityRepository extends BaseRepository<Entity> {
         if (searchParams.name) {
             conditions.push(
                 mysql.format(`Entities.Name LIKE ?`, [`%${searchParams.name}%`])
+            );
+        }
+        if (searchParams.shortName) {
+            conditions.push(
+                mysql.format(`Entities.ShortName = ?`, [searchParams.shortName])
             );
         }
 
@@ -100,6 +108,7 @@ export default class EntityRepository extends BaseRepository<Entity> {
             const item = new Entity({
                 id: row.Id,
                 name: ToolsDb.sqlToString(row.Name),
+                shortName: ToolsDb.sqlToString(row.ShortName),
                 address: ToolsDb.sqlToString(row.Address),
                 taxNumber: row.TaxNumber,
                 www: row.Www,

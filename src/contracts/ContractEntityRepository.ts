@@ -31,6 +31,7 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
             _entity: new Entity({
                 id: row.EntityId,
                 name: row.Name,
+                shortName: row.ShortName,
                 address: row.Address,
                 taxNumber: row.TaxNumber,
                 www: row.Www,
