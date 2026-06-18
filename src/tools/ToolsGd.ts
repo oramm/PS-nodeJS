@@ -399,18 +399,28 @@ export default class ToolsGd {
     /** przenosi do kosza albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
     static async trashFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
         const drive = google.drive({ version: 'v3', auth });
-        const filesSchema = await drive.files.get({
-            fileId: gdFolderId,
-            fields: 'id, ownedByMe',
-        });
-        console.log(filesSchema.data);
-        if (filesSchema.data.ownedByMe)
-            await ToolsGd.trashFile(auth, filesSchema.data.id as string);
-        else
-            await ToolsGd.updateFolder(auth, {
-                id: gdFolderId,
-                name: `${filesSchema.data.name} - USUŃ`,
+        try {
+            const filesSchema = await drive.files.get({
+                fileId: gdFolderId,
+                fields: 'id, ownedByMe',
             });
+            console.log(filesSchema.data);
+            if (filesSchema.data.ownedByMe)
+                await ToolsGd.trashFile(auth, filesSchema.data.id as string);
+            else
+                await ToolsGd.updateFolder(auth, {
+                    id: gdFolderId,
+                    name: `${filesSchema.data.name} - USUŃ`,
+                });
+        } catch (error: any) {
+            if (error.code === 404 || error.status === 404) {
+                console.warn(
+                    `[GD API Warning] Plik lub folder o ID ${gdFolderId} nie istnieje na Dysku Google. Pominięto przenoszenie do kosza.`
+                );
+                return;
+            }
+            throw error;
+        }
     }
 
     /** domyślnie ustawia uprawnienia { type: 'anyone', role: 'writer' }

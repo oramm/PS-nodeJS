@@ -14,11 +14,22 @@ export default abstract class IncomingLetterGdController extends LetterGdControl
         auth: OAuth2Client,
         letterGdFolderId: string
     ) {
-        const letterFile = await ToolsGd.getFileOrFolderMetaDataById(
-            auth,
-            letterGdDocumentId
-        );
-        //przenieś wcześniej istniejący plik do nowego folderu
-        await ToolsGd.moveFileOrFolder(auth, letterFile, letterGdFolderId);
+        try {
+            const letterFile = await ToolsGd.getFileOrFolderMetaDataById(
+                auth,
+                letterGdDocumentId
+            );
+            //przenieś wcześniej istniejący plik do nowego folderu
+            await ToolsGd.moveFileOrFolder(auth, letterFile, letterGdFolderId);
+            
+        } catch (error: any) {
+            if (error.code === 404 || error.status === 404) {
+                console.warn(
+                    `[GD API Warning] Plik źródłowy o ID ${letterGdDocumentId} nie istnieje na Dysku Google. Pominięto przenoszenie pliku do nowego folderu.`
+                );
+                return; 
+            }
+            throw error; 
+        }
     }
 }
