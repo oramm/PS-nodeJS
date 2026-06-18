@@ -39,6 +39,43 @@ export type AiPersonProfileResult = {
 };
 
 export default class ToolsAI {
+    private static getOcrTextThreshold(): number {
+        return 400;
+    }
+
+    private static async maybeFallbackToOcr(
+        text: string,
+        workingBuffer: Buffer,
+        sourceLabel: string,
+    ): Promise<string> {
+        const extractedText = (text || '').trim();
+        if (extractedText.length >= this.getOcrTextThreshold()) {
+            return text;
+        }
+
+        // console.log(
+        //     `ToolsAI.extractTextFromFile - ${sourceLabel} extraction short (${extractedText.length}), trying OCR fallback`,
+        // );
+
+        try {
+            const ocr = await this.ocrPdfWithTesseract(workingBuffer);
+            const ocrText = (ocr || '').trim();
+            // console.log(
+            //     `ToolsAI.extractTextFromFile - OCR result length (${sourceLabel}):`,
+            //     ocrText.length,
+            // );
+            // console.log(`ToolsAI.extractTextFromFile - OCR text:\n`, ocrText);
+
+            if (ocrText.length > extractedText.length) {
+                return ocr;
+            }
+        } catch (ocrErr) {
+            console.warn('ToolsAI.extractTextFromFile - OCR CLI failed:', ocrErr);
+        }
+
+        return text;
+    }
+
     /**
      * Extract plain text from file buffer (PDF or DOCX)
      */
@@ -70,43 +107,33 @@ export default class ToolsAI {
                 console.log('ToolsAI.extractTextFromFile - pdf-lib not available or trim failed, continuing with full PDF', e && e.message ? e.message : e);
             }
 
-            const pdfModule: any = await import('pdf-parse');
-            const PDFParseClass = pdfModule.PDFParse ?? pdfModule.default?.PDFParse;
-            if (typeof PDFParseClass === 'function') {
-                const parser = new PDFParseClass({ data: workingBuffer });
-                const result = await parser.getText?.();
-                const txt = result?.text ?? '';
-                //console.log('ToolsAI.extractTextFromFile - pdf-parse.extract length:', txt.length);
-                // if ((txt || '').trim().length < 400 && process.env.ENABLE_OCR_CLI === 'true') {
-                //     console.log('ToolsAI.extractTextFromFile - extraction short, trying OCR CLI fallback');
-                //     try {
-                //             // OCR disabled: would run pdftoppm+tesseract here if enabled
-                //             console.log('ToolsAI.extractTextFromFile - OCR is disabled in this build; skipping OCR fallback');
-                //     } catch (ocrErr) {
-                //         console.warn('ToolsAI.extractTextFromFile - OCR CLI failed:', ocrErr);
-                //     }
-                // }
-                return txt;
-            }
-            // Fallback: try calling module as function (older API)
-            const pdfFunc = pdfModule.default ?? pdfModule;
-            if (typeof pdfFunc === 'function') {
-                const res = await pdfFunc(file.buffer);
-                const txt = res?.text ?? '';
-                console.log('ToolsAI.extractTextFromFile - pdf-parse(function) length:', txt.length);
-                if ((txt || '').trim().length < 400 && process.env.ENABLE_OCR_CLI === 'true') {
-                    console.log('ToolsAI.extractTextFromFile - extraction short, trying OCR CLI fallback');
-                    try {
-                        const ocr = await this.ocrPdfWithTesseract(file.buffer);
-                        console.log('ToolsAI.extractTextFromFile - OCR result length:', ocr.length);
-                        if ((ocr || '').trim().length > (txt || '').trim().length) return ocr;
-                    } catch (ocrErr) {
-                        console.warn('ToolsAI.extractTextFromFile - OCR CLI failed:', ocrErr);
+            let extractedText = '';
+
+            try {
+                const pdfModule: any = await import('pdf-parse');
+                const PDFParseClass = pdfModule.PDFParse ?? pdfModule.default?.PDFParse;
+                if (typeof PDFParseClass === 'function') {
+                    const parser = new PDFParseClass({ data: workingBuffer });
+                    const result = await parser.getText?.();
+                    extractedText = result?.text ?? '';
+                } else {
+                    // Fallback: try calling module as function (older API)
+                    const pdfFunc = pdfModule.default ?? pdfModule;
+                    if (typeof pdfFunc === 'function') {
+                        const res = await pdfFunc(workingBuffer);
+                        extractedText = res?.text ?? '';
+                    } else {
+                        console.warn('ToolsAI.extractTextFromFile - Unsupported pdf-parse module shape');
                     }
                 }
-                return txt;
+            } catch (err: any) {
+                console.warn(
+                    'ToolsAI.extractTextFromFile - pdf text extraction failed, continuing with OCR fallback',
+                    err && err.message ? err.message : err,
+                );
             }
-            throw new Error('Unsupported pdf-parse module shape');
+
+            return await this.maybeFallbackToOcr(extractedText, workingBuffer, 'pdf');
         }
 
         if (
@@ -114,18 +141,7 @@ export default class ToolsAI {
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         ) {
             const { value } = await mammoth.extractRawText({ buffer: file.buffer });
-            const txt = value || '';
-            //console.log('ToolsAI.extractTextFromFile - mammoth.extract length:', txt.length);
-            if ((txt || '').trim().length < 400 && process.env.ENABLE_OCR_CLI === 'true') {
-                console.log('ToolsAI.extractTextFromFile - mammoth short, trying OCR CLI fallback');
-                try {
-                        // OCR disabled: would run pdftoppm+tesseract here if enabled
-                        console.log('ToolsAI.extractTextFromFile - OCR is disabled in this build; skipping OCR fallback');
-                } catch (ocrErr) {
-                    console.warn('ToolsAI.extractTextFromFile - OCR CLI failed:', ocrErr);
-                }
-            }
-            return txt;
+            return value || '';
         }
 
         throw new Error('Unsupported file type for text extraction');
@@ -234,7 +250,7 @@ export default class ToolsAI {
         file: Express.Multer.File
     ): Promise<{ aiResult: AiAnalyzeResult; text: string; _model?: string; _usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }> {
         const text = await this.extractTextFromFile(file);
-        //console.log('Zawartość przesłanego pliku :', text);
+        // console.log('ToolsAI.analyzeDocument - text sent to AI:\n', text.substring(0, 2000));
         if (text.trim().length < 1)
             throw new Error('Empty document after extraction');
 
@@ -250,7 +266,8 @@ export default class ToolsAI {
             - "creationDate": Data sporządzenia pisma (YYYY-MM-DD). Jeśli nie ma, null.
             - "description": Krótki, jednozdaniowy temat pisma. Jeśli nie ma, null.
             - "responseDueDate": Data terminu odpowiedzi (YYYY-MM-DD) lub null.
-            - "senderName": Pełna nazwa nadawcy (np. "Urząd Miasta Krakowa") lub null.
+            - "senderNames": Tablica nazw nadawców bez formy prawnej. Usuń końcówki: Sp. z o.o., S.C., S.A., Sp.j., Sp.k., LLC, Ltd i podobne (np. "ABC Sp. z o.o." → "ABC"). Zachowaj istotne słowa nazwy własnej — nie skracaj do jednego słowa jeśli nazwa ma kilka znaczących członów (np. "Urząd Miasta Krakowa" zostaje jako całość). Jeśli nie ma nadawców, zwróć [].
+              WAŻNE: firma "ENVI", "ENVI s.c.", "Envi Konsulting", "Envi Konsulting s.c." i wszelkie jej warianty to ODBIORCA pisma, nie nadawca. Nigdy nie umieszczaj tych nazw w senderNames.
 
             Przykład (gdy brak danych):
             {
@@ -258,7 +275,7 @@ export default class ToolsAI {
               "creationDate": null,
               "description": null,
               "responseDueDate": null,
-              "senderName": null
+              "senderNames": []
             }
 
             Tekst do analizy (wcześniej wybierz pierwsze strony):
@@ -276,17 +293,27 @@ export default class ToolsAI {
                     creationDate: '2025-09-18',
                     description: 'Decyzja urzędowa',
                     responseDueDate: null,
-                    senderName: 'Urząd Miasta Krakowa',
+                    senderNames: ['Urząd Miasta Krakowa'],
                 },
             },
             {
-                input: 'Brak numeru pisma. Pismo sporządzono 2025-06-30. Nadawca: Polska Firma Sp. z o.o.',
+                input: 'W dniu 2026-09-18 Konsorcium wykonawców: FirmaA, FirmaB przesłał pismo nr ABC/123/2026 dotyczące decyzji.',
+                output: {
+                    number: 'ABC/123/2026',
+                    creationDate: '2026-09-18',
+                    description: 'Decyzja urzędowa',
+                    responseDueDate: null,
+                    senderNames: ['FirmaA', 'FirmaB'],
+                },
+            },
+            {
+                input: 'Brak numeru pisma. Pismo sporządzono 2025-06-30. Nadawcy: Polska Firma Sp. z o.o. oraz Jan Kowalski.',
                 output: {
                     number: null,
                     creationDate: '2025-06-30',
                     description: null,
                     responseDueDate: null,
-                    senderName: 'Polska Firma Sp. z o.o.',
+                    senderNames: ['Polska Firma', 'Jan Kowalski'],
                 },
             },
         ];
@@ -312,6 +339,7 @@ export default class ToolsAI {
         const responseContent = completion.choices?.[0]?.message?.content;
         if (!responseContent) throw new Error('OpenAI returned empty response');
 
+        console.log('ToolsAI.analyzeDocument - AI response:\n', responseContent);
         const aiResult = JSON.parse(responseContent);
         const { _model, _usage } = this.extractCompletionMeta(completion);
         return { aiResult, text, _model, _usage };

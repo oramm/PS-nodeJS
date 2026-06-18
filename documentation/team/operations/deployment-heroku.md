@@ -44,6 +44,13 @@ Runbook for production deploys on Heroku.
 - Record any new or changed vars in the checklist entry.
 - Never store secret values in repo docs.
 
+## Native OCR dependencies
+
+- If the app needs OCR for scanned PDFs, add `heroku-buildpack-apt` before `heroku/nodejs`.
+- Keep a root-level `Aptfile` with `poppler-utils`, `tesseract-ocr`, `tesseract-ocr-eng`, and `tesseract-ocr-pol`.
+- Verify that scanned PDF uploads still work after the buildpack change by calling the AI document analysis endpoint.
+- If the app is moved to a Heroku stack that does not support classic buildpacks, switch to the appropriate container/CNB approach before relying on APT packages.
+
 ## Rollback
 
 1. Revert to previous release.

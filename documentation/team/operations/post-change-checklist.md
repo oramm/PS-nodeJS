@@ -63,6 +63,39 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-06-17 - Heroku OCR buildpack and scan fallback
+
+### Scope
+
+- Added a root `Aptfile` for Heroku OCR dependencies.
+- Updated PDF text extraction so scanned documents can fall back to local OCR when `pdf-parse` does not extract enough text.
+
+### Impact
+
+- DB: none.
+- ENV: none.
+- Deploy: Heroku needs `heroku-buildpack-apt` before `heroku/nodejs` so `poppler-utils` and `tesseract-ocr` are available at runtime.
+
+### Required Actions
+
+- Add `heroku-buildpack-apt` as the first Heroku buildpack and keep the Node buildpack second.
+- Verify a scanned PDF through the AI document analysis endpoint after deploy.
+
+### Verification
+
+- Typecheck should pass after the OCR fallback change.
+- Scanned PDF uploads should now produce extracted text via OCR instead of returning an empty text payload.
+
+### Rollback
+
+- Remove the OCR buildpack, delete `Aptfile`, and revert the `ToolsAI` fallback if the OCR path causes regressions.
+
+### Links
+
+- `Aptfile`
+- `src/tools/ToolsAI.ts`
+- `documentation/team/operations/deployment-heroku.md`
+
 ## 2026-06-02 - Heroku release gate temporarily disabled
 
 ### Scope

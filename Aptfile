@@ -1,0 +1,5 @@
+# OCR dependencies for scanned PDF analysis on Heroku
+poppler-utils
+tesseract-ocr
+tesseract-ocr-eng
+tesseract-ocr-pol

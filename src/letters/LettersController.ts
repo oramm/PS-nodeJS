@@ -869,22 +869,39 @@ export default class LettersController extends BaseController<
 
         const fieldConfidence = (v: any) => (v ? 3 : 1);
 
+        const rawSenderNames: string[] = Array.isArray(aiResult.senderNames)
+            ? aiResult.senderNames
+            : aiResult.senderName
+              ? [aiResult.senderName]
+              : [];
+
+        const normalizedSenderNames = rawSenderNames
+            .map((n) => normalizeValue(n))
+            .filter((n): n is string => n !== null);
+
         const normalized = {
             number: { value: normalizeValue(aiResult.number) ?? null, confidence: fieldConfidence(aiResult.number) },
             creationDate: { value: normalizeValue(aiResult.creationDate) ?? null, confidence: fieldConfidence(aiResult.creationDate) },
             description: { value: normalizeValue(aiResult.description) ?? null, confidence: fieldConfidence(aiResult.description) },
             responseDueDate: { value: normalizeValue(aiResult.responseDueDate) ?? null, confidence: fieldConfidence(aiResult.responseDueDate) },
-            senderName: { value: normalizeValue(aiResult.senderName) ?? null, confidence: fieldConfidence(aiResult.senderName) },
+            senderName: { value: normalizedSenderNames[0] ?? null, confidence: normalizedSenderNames.length > 0 ? 3 : 1 },
         };
 
-        // Wzbogacenie danych: Wyszukaj encję w bazie danych (używamy znormalizowanej wartości senderName)
+        // Wzbogacenie danych: szukaj encji dla każdego nadawcy, deduplikuj po id, odfiltruj ENVI
+        const ENVI_ENTITY_NAMES = ['envi', 'envi konsulting'];
+        const isEnviEntity = (name: string) =>
+            ENVI_ENTITY_NAMES.includes(name.toLowerCase().trim());
+
+        const seenIds = new Set<number>();
         let senderEntity: EntityData[] = [];
-        const senderValue = normalized.senderName.value;
-        if (senderValue) {
-            const foundEntities = await EntitiesController.find([
-                { name: senderValue },
-            ]);
-            if (foundEntities.length > 0) senderEntity = foundEntities;
+        for (const senderValue of normalizedSenderNames) {
+            const foundEntities = await EntitiesController.find([{ name: senderValue }]);
+            for (const entity of foundEntities) {
+                if (!isEnviEntity(entity.name ?? '') && !seenIds.has(entity.id!)) {
+                    seenIds.add(entity.id!);
+                    senderEntity.push(entity);
+                }
+            }
         }
 
         // Zwracamy obiekt w kształcie oczekiwanym przez front-end: każde pole ma { value, confidence }
