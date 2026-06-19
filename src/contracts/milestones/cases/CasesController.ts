@@ -184,6 +184,18 @@ export default class CasesController extends BaseController<
         console.group('CasesController.addCase()');
 
         try {
+            if (caseItem._type.isUniquePerMilestone) {
+                const milestoneId = caseItem.milestoneId ?? caseItem._parent?.id;
+                const typeId = caseItem.typeId ?? caseItem._type?.id;
+                if (!milestoneId || !typeId)
+                    throw new Error('Brak wymaganych pól: milestoneId lub typeId');
+                const alreadyExists = await this.repository.existsUniqueCase(milestoneId, typeId);
+                if (alreadyExists)
+                    throw new Error(
+                        `Sprawa typu "${caseItem._type.name}" jest unikalna i istnieje już dla tego kamienia milowego`
+                    );
+            }
+
             await CasesController.ensureParentFromDb(caseItem);
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);

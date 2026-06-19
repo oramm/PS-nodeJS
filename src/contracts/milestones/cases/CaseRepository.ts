@@ -470,6 +470,25 @@ export default class CaseRepository extends BaseRepository<Case> {
     }
 
     /**
+     * Sprawdza czy sprawa unikalnego typu już istnieje dla danego kamienia milowego.
+     * Używana jako pre-check przed insertem, zanim zostanie utworzony folder GD.
+     */
+    async existsUniqueCase(
+        milestoneId: number,
+        typeId: number
+    ): Promise<boolean> {
+        const sql = mysql.format(
+            `SELECT 1 FROM Cases
+             JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
+             WHERE Cases.MilestoneId = ? AND Cases.TypeId = ? AND CaseTypes.IsUniquePerMilestone = 1
+             LIMIT 1`,
+            [milestoneId, typeId]
+        );
+        const result = await ToolsDb.getQueryCallbackAsync(sql);
+        return Array.isArray(result) && result.length > 0;
+    }
+
+    /**
      * Pobiera numer Case z bazy (dla non-unique Cases)
      *
      * @param caseId - ID Case

@@ -85,7 +85,7 @@
         "pdf-parse": "^2.4.5"
     },
     "engines": {
-        "node": "20.x"
+        "node": "24.16.0"
     },
     "resolutions": {
         "@types/express-serve-static-core": "4.17.41",
