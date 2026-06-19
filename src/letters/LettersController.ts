@@ -581,7 +581,7 @@ export default class LettersController extends BaseController<
         letter: Letter,
         conn: mysql.PoolConnection
     ): Promise<void> {
-        await this.deleteEntitiesAssociations(letter);
+        await this.deleteEntitiesAssociations(letter, conn);
         await this.addEntitiesAssociations(letter, conn);
     }
 
@@ -598,7 +598,7 @@ export default class LettersController extends BaseController<
         letter: Letter,
         conn: mysql.PoolConnection
     ): Promise<void> {
-        await this.deleteCaseAssociations(letter);
+        await this.deleteCaseAssociations(letter, conn);
         await this.addCaseAssociations(letter, conn);
     }
 
@@ -610,10 +610,11 @@ export default class LettersController extends BaseController<
      * @param letter - Letter którego asocjacje mają być usunięte
      */
     private static async deleteEntitiesAssociations(
-        letter: Letter
+        letter: Letter,
+        conn: mysql.PoolConnection
     ): Promise<void> {
         const sql = `DELETE FROM Letters_Entities WHERE LetterId = ?`;
-        await ToolsDb.executePreparedStmt(sql, [letter.id], letter);
+        await ToolsDb.executePreparedStmt(sql, [letter.id], letter, conn, true);
     }
 
     /**
@@ -623,9 +624,12 @@ export default class LettersController extends BaseController<
      *
      * @param letter - Letter którego asocjacje mają być usunięte
      */
-    private static async deleteCaseAssociations(letter: Letter): Promise<void> {
+    private static async deleteCaseAssociations(
+        letter: Letter,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
         const sql = `DELETE FROM Letters_Cases WHERE LetterId = ?`;
-        await ToolsDb.executePreparedStmt(sql, [letter.id], letter);
+        await ToolsDb.executePreparedStmt(sql, [letter.id], letter, conn, true);
     }
 
     /**
