@@ -21,6 +21,8 @@ export default class Case extends BusinessObject implements CaseData {
     _typeFolderNumber_TypeName_Number_Name?: string;
     _displayNumber?: string;
     milestoneId?: number;
+    parentCaseId?: number;
+    _parentCaseGdFolderId?: string;
     _parent: MilestoneData;
     _risk: any;
     _processesInstances?: any[];
@@ -33,6 +35,8 @@ export default class Case extends BusinessObject implements CaseData {
         this.id = initParamObject.id;
         this.number = initParamObject.number;
         this._type = initParamObject._type;
+        if (initParamObject.parentCaseId)
+            this.parentCaseId = initParamObject.parentCaseId;
         if (initParamObject._type.isUniquePerMilestone && this.number)
             this._wasChangedToUniquePerMilestone = true;
 
@@ -136,9 +140,21 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     /** Tworzy folder sprawy.
-     *  Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym
+     *  Jeżeli typ sprawy jest unikatowy nie powstaje jej podfolder -pliki są bezpośrednio w folderze typu sprawy w danym kamieniu milowym.
+     *  Dla podspraw (parentCaseId) folder tworzony jest bezpośrednio wewnątrz folderu sprawy nadrzędnej.
      */
     async createFolder(auth: OAuth2Client) {
+        if (this.parentCaseId) {
+            if (!this._parentCaseGdFolderId)
+                throw new Error('Parent case folder id not found');
+            const caseFolder = await ToolsGd.setFolder(auth, {
+                parentId: this._parentCaseGdFolderId,
+                name: `SXX ${this.name}`,
+            });
+            this.setGdFolderIdAndUrl(caseFolder?.id as string);
+            return caseFolder;
+        }
+
         if (!this._parent?.gdFolderId)
             throw new Error('No parent folder found');
         if (this._parent.gdFolderId === 'root')
@@ -178,6 +194,13 @@ export default class Case extends BusinessObject implements CaseData {
         }
         //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
         else {
+            if (this.parentCaseId && !this._parentCaseGdFolderId) {
+                // Podsprawa bez załadowanego folderu rodzica — nie można odtworzyć folderu
+                console.warn(
+                    `editFolder: podsprawa ${this.id} nie ma _parentCaseGdFolderId, pomijam tworzenie folderu`
+                );
+                return;
+            }
             const caseFolder = await this.createFolder(auth);
             this.setGdFolderIdAndUrl(caseFolder.id as string);
             return caseFolder;

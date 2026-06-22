@@ -11,7 +11,11 @@ export interface ContractsWithChildren {
         milestone: Milestone,
         casesWithTasks: {
             caseItem: Case,
-            tasks: Task[]
+            tasks: Task[],
+            subCasesWithTasks: {
+                caseItem: Case,
+                tasks: Task[]
+            }[]
         }[]
     }[]
 }

@@ -117,6 +117,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 MilestoneTypes.IsUniquePerContract,
                 MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
                 Cases.Id AS CaseId,
+                Cases.ParentCaseId AS CaseParentCaseId,
                 Cases.Name AS CaseName,
                 Cases.Description AS CaseDescription,
                 Cases.TypeId AS CaseTypeId,
@@ -159,7 +160,6 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
 
         const rows: ContractsWithChildrenRow[] = await this.executeQuery(sql);
 
-        // Pobierz asocjacje entities dla kontraktów (Helper - współdzielona logika)
         const entitiesPerProject =
             await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
                 {
@@ -169,7 +169,18 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 }
             );
 
-        return this.processContractsResult(rows, entitiesPerProject);
+        const subCaseTypeRels: any[] = await this.executeQuery(
+            'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
+        );
+        const subCaseTypeIdsMap = new Map<number, number[]>();
+        for (const rel of subCaseTypeRels) {
+            if (!subCaseTypeIdsMap.has(rel.ParentCaseTypeId)) {
+                subCaseTypeIdsMap.set(rel.ParentCaseTypeId, []);
+            }
+            subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
+        }
+
+        return this.processContractsResult(rows, entitiesPerProject, subCaseTypeIdsMap);
     }
 
     /**
@@ -283,7 +294,8 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
      */
     private processContractsResult(
         result: ContractsWithChildrenRow[],
-        entitiesPerProject: ContractEntityAssociation[] = []
+        entitiesPerProject: ContractEntityAssociation[] = [],
+        subCaseTypeIdsMap: Map<number, number[]> = new Map()
     ): ContractsWithChildren[] {
         const contracts: { [id: string]: ContractOur | ContractOther } = {};
         const contractsWithChildren: ContractsWithChildren[] = [];
@@ -425,6 +437,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
 
             const caseItem = new Case({
                 id: row.CaseId ?? undefined,
+                parentCaseId: row.CaseParentCaseId ?? undefined,
                 name: ToolsDb.sqlToString(row.CaseName ?? ''),
                 description: ToolsDb.sqlToString(row.CaseDescription ?? ''),
                 number: row.CaseNumber ?? undefined,
@@ -434,6 +447,10 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     name: row.CaseTypeName ?? '',
                     isDefault: Boolean(row.IsDefault),
                     isUniquePerMilestone: Boolean(row.IsUniquePerMilestone),
+                    _allowedSubCaseTypeIds:
+                        subCaseTypeIdsMap.get(row.CaseTypeId ?? 0) ?? [],
+                    allowsSubCases:
+                        (subCaseTypeIdsMap.get(row.CaseTypeId ?? 0) ?? []).length > 0,
                     milestoneTypeId: row.MilestoneTypeId,
                     folderNumber: row.CaseTypeFolderNumber,
                 },
@@ -492,6 +509,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     caseWithTasks = {
                         caseItem: caseItem,
                         tasks: [],
+                        subCasesWithTasks: [],
                     };
                     milestoneWithCases.casesWithTasks.push(caseWithTasks);
                 }
@@ -502,6 +520,39 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     !caseWithTasks.tasks.some((t) => t.id === task.id)
                 )
                     caseWithTasks.tasks.push(task);
+            }
+        }
+
+        // Reorganizuj podsprawy: przenieś z casesWithTasks do subCasesWithTasks rodzica
+        for (const contractWithChildren of contractsWithChildren) {
+            for (const milestoneWithCases of contractWithChildren.milestonesWithCases) {
+                const casesById = new Map(
+                    milestoneWithCases.casesWithTasks.map((c) => [
+                        c.caseItem.id,
+                        c,
+                    ])
+                );
+
+                const topLevelCases: typeof milestoneWithCases.casesWithTasks =
+                    [];
+
+                for (const caseWithTasks of milestoneWithCases.casesWithTasks) {
+                    const parentId = caseWithTasks.caseItem.parentCaseId;
+                    if (parentId) {
+                        const parent = casesById.get(parentId);
+                        if (parent) {
+                            parent.subCasesWithTasks.push({
+                                caseItem: caseWithTasks.caseItem,
+                                tasks: caseWithTasks.tasks,
+                            });
+                        }
+                        // parentId istnieje, ale rodzic nie — nie powinno się zdarzyć przy ON DELETE CASCADE
+                    } else {
+                        topLevelCases.push(caseWithTasks);
+                    }
+                }
+
+                milestoneWithCases.casesWithTasks = topLevelCases;
             }
         }
 
@@ -604,6 +655,7 @@ type ContractsWithChildrenRow = {
 
     // Case fields
     CaseId: number | null;
+    CaseParentCaseId: number | null;
     CaseName: string | null;
     CaseDescription: string | null;
     CaseTypeId: number | null;
@@ -614,5 +666,5 @@ type ContractsWithChildrenRow = {
     CaseTypeName: string | null;
     IsDefault: boolean | 0 | 1;
     IsUniquePerMilestone: boolean | 0 | 1;
-    CaseTypeFolderNumber: number | null;
+    CaseTypeFolderNumber: string | null;
 };

@@ -184,7 +184,7 @@ export default class CasesController extends BaseController<
         console.group('CasesController.addCase()');
 
         try {
-            if (caseItem._type.isUniquePerMilestone) {
+            if (caseItem._type.isUniquePerMilestone && !caseItem.parentCaseId) {
                 const milestoneId = caseItem.milestoneId ?? caseItem._parent?.id;
                 const typeId = caseItem.typeId ?? caseItem._type?.id;
                 if (!milestoneId || !typeId)
@@ -197,6 +197,17 @@ export default class CasesController extends BaseController<
             }
 
             await CasesController.ensureParentFromDb(caseItem);
+
+            if (caseItem.parentCaseId) {
+                const parentGdFolderId =
+                    await this.repository.findGdFolderById(caseItem.parentCaseId);
+                if (!parentGdFolderId)
+                    throw new Error(
+                        `Sprawa nadrzędna ${caseItem.parentCaseId} nie istnieje lub nie ma folderu GD`
+                    );
+                caseItem._parentCaseGdFolderId = parentGdFolderId;
+            }
+
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);
             console.log('folder created');
@@ -711,13 +722,22 @@ export default class CasesController extends BaseController<
         console.group('CasesController.deleteCase()');
 
         try {
+            // Pobierz podsprawy PRZED usunięciem — CASCADE usunie je z DB
+            const subCaseIds = caseItem.id
+                ? await this.repository.findSubCaseIds(caseItem.id)
+                : [];
+
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                // Usuń Case (CASCADE usunie ProcessInstances)
+                // Usuń Case (CASCADE usunie ProcessInstances, podsprawy i ich zadania)
                 await this.repository.deleteFromDb(caseItem, conn, true);
             });
 
             console.log('deleted from db');
+
+            const subCases = subCaseIds.map(
+                (id) => new Case({ id, _type: {} as any, _parent: {} as any })
+            );
 
             // Operacje post-DB: GD i Scrum (równolegle)
             await Promise.all([
@@ -729,6 +749,14 @@ export default class CasesController extends BaseController<
                     .deleteFromScrumSheet(auth)
                     .then(() => console.log('deleted from scrum'))
                     .catch((err) => console.log(err)),
+                ...subCases.map((sc) =>
+                    sc
+                        .deleteFromScrumSheet(auth)
+                        .then(() =>
+                            console.log(`sub-case ${sc.id} deleted from scrum`)
+                        )
+                        .catch((err) => console.log(err))
+                ),
             ]);
         } catch (err) {
             throw err;

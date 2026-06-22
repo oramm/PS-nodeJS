@@ -224,6 +224,7 @@ export interface CaseData extends RepositoryDataItem {
     number?: number;
     description?: string;
     gdFolderId?: string;
+    parentCaseId?: number;
     _parent: MilestoneData;
     _type: CaseType;
     _folderName?: string;
@@ -270,8 +271,10 @@ export interface CaseTypeData extends RepositoryDataItem {
     _folderName: string;
     isDefault: boolean;
     isUniquePerMilestone: boolean;
+    isSubCaseOnly?: boolean;
+    allowsSubCases?: boolean;
+    _allowedSubCaseTypeIds?: number[];
     _milestoneType: MilestoneType;
-    isDefault: boolean;
 }
 
 export interface GenericDocumentData extends RepositoryDataItem {

@@ -19,6 +19,7 @@ export type CasesSearchParams = {
     offerId?: number;
     milestoneId?: number;
     caseId?: number;
+    parentCaseId?: number;
     typeId?: number;
     milestoneTypeId?: number;
     searchText?: string;
@@ -50,8 +51,9 @@ export default class CaseRepository extends BaseRepository<Case> {
                 ? 'Milestones.ContractId IS NOT NULL'
                 : 'Milestones.OfferId IS NOT NULL';
 
-        const sql = `SELECT 
+        const sql = `SELECT
             Cases.Id,
+            Cases.ParentCaseId,
             CaseTypes.Id AS CaseTypeId,
             CaseTypes.Name AS CaseTypeName,
             CaseTypes.IsDefault,
@@ -108,8 +110,7 @@ export default class CaseRepository extends BaseRepository<Case> {
 
         const result: any[] = await this.executeQuery(sql);
 
-        // Pobierz powiązane dane
-        const [processes, processesInstances] = await Promise.all([
+        const [processes, processesInstances, subCaseTypeRels] = await Promise.all([
             ProcessesController.find({
                 projectId: orConditions[0]?.projectId,
                 contractId: orConditions[0]?.contractId,
@@ -120,11 +121,22 @@ export default class CaseRepository extends BaseRepository<Case> {
                 contractId: orConditions[0]?.contractId,
                 milestoneId: orConditions[0]?.milestoneId,
             }),
+            this.executeQuery(
+                'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
+            ),
         ]);
 
-        // Mapuj wyniki z uwzględnieniem filtrów
+        const subCaseTypeIdsMap = new Map<number, number[]>();
+        for (const rel of subCaseTypeRels) {
+            if (!subCaseTypeIdsMap.has(rel.ParentCaseTypeId)) {
+                subCaseTypeIdsMap.set(rel.ParentCaseTypeId, []);
+            }
+            subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
+        }
+
         const cases: Case[] = [];
         for (const row of result) {
+            row._allowedSubCaseTypeIds = subCaseTypeIdsMap.get(row.CaseTypeId) ?? [];
             const caseItem = this.mapRowToModel(
                 row,
                 processes,
@@ -158,11 +170,14 @@ export default class CaseRepository extends BaseRepository<Case> {
 
         return new Case({
             id: row.Id,
+            parentCaseId: row.ParentCaseId ?? undefined,
             _type: {
                 id: row.CaseTypeId,
                 name: row.CaseTypeName,
                 isDefault: row.IsDefault,
                 isUniquePerMilestone: row.IsUniquePerMilestone,
+                _allowedSubCaseTypeIds: row._allowedSubCaseTypeIds ?? [],
+                allowsSubCases: (row._allowedSubCaseTypeIds ?? []).length > 0,
                 milestoneTypeId: row.MilestoneTypeId,
                 folderNumber: row.CaseTypeFolderNumber,
                 _processes:
@@ -230,6 +245,10 @@ export default class CaseRepository extends BaseRepository<Case> {
             ? mysql.format('Cases.Id = ?', [searchParams.caseId])
             : '1';
 
+        const parentCaseCondition = searchParams.parentCaseId
+            ? mysql.format('Cases.ParentCaseId = ?', [searchParams.parentCaseId])
+            : '1';
+
         const typeIdCondition = searchParams.typeId
             ? mysql.format('Cases.TypeId = ?', [searchParams.typeId])
             : '1';
@@ -244,11 +263,12 @@ export default class CaseRepository extends BaseRepository<Case> {
             searchParams.searchText
         );
 
-        return `${projectCondition} 
-            AND ${contractCondition} 
+        return `${projectCondition}
+            AND ${contractCondition}
             AND ${offerCondition}
-            AND ${milestoneCondition} 
+            AND ${milestoneCondition}
             AND ${caseCondition}
+            AND ${parentCaseCondition}
             AND ${searchTextCondition}
             AND ${typeIdCondition}
             AND ${milestoneTypeCondition}`;
@@ -354,6 +374,24 @@ export default class CaseRepository extends BaseRepository<Case> {
             },
         };
         return offerInitParam;
+    }
+
+    async findGdFolderById(caseId: number): Promise<string | null> {
+        const sql = mysql.format(
+            'SELECT GdFolderId FROM Cases WHERE Id = ?',
+            [caseId]
+        );
+        const result: any[] = await this.executeQuery(sql);
+        return result[0]?.GdFolderId ?? null;
+    }
+
+    async findSubCaseIds(parentCaseId: number): Promise<number[]> {
+        const sql = mysql.format(
+            'SELECT Id FROM Cases WHERE ParentCaseId = ?',
+            [parentCaseId]
+        );
+        const result: any[] = await this.executeQuery(sql);
+        return result.map((row) => row.Id as number);
     }
 
     /**

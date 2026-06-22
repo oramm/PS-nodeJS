@@ -17,12 +17,13 @@ export default class CaseTypeRepository extends BaseRepository<CaseType> {
     async find(params: any = {}): Promise<CaseType[]> {
         const orConditions = params.orConditions || [];
 
-        const sql = `SELECT  
+        const sql = `SELECT
                 CaseTypes.Id,
                 CaseTypes.Name,
                 CaseTypes.Description,
                 CaseTypes.IsDefault,
                 CaseTypes.IsUniquePerMilestone,
+                CaseTypes.IsSubCaseOnly,
                 CaseTypes.MilestoneTypeId,
                 CaseTypes.FolderNumber,
                 CaseTypes.LastUpdated,
@@ -35,11 +36,28 @@ export default class CaseTypeRepository extends BaseRepository<CaseType> {
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
-        // Pobierz procesy dla wszystkich znalezionych typów spraw
-        // Optymalizacja: pobierz procesy tylko raz
         const processes = await ProcessesController.find({});
+        const caseTypes = result.map((row) => this.mapRowToModel(row, processes));
 
-        return result.map((row) => this.mapRowToModel(row, processes));
+        await this.hydrateAllowedSubCaseTypeIds(caseTypes);
+        return caseTypes;
+    }
+
+    private async hydrateAllowedSubCaseTypeIds(caseTypes: CaseType[]): Promise<void> {
+        const rels: any[] = await this.executeQuery(
+            'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
+        );
+        const subCaseTypeIdsMap = new Map<number, number[]>();
+        for (const rel of rels) {
+            if (!subCaseTypeIdsMap.has(rel.ParentCaseTypeId)) {
+                subCaseTypeIdsMap.set(rel.ParentCaseTypeId, []);
+            }
+            subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
+        }
+        for (const ct of caseTypes) {
+            ct._allowedSubCaseTypeIds = subCaseTypeIdsMap.get(ct.id!) ?? [];
+            ct.allowsSubCases = ct._allowedSubCaseTypeIds.length > 0;
+        }
     }
 
     private makeAndConditions(initParamObject: any) {
@@ -88,7 +106,9 @@ export default class CaseTypeRepository extends BaseRepository<CaseType> {
             ORDER BY MilestoneTypeId`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
-        return result.map((row) => this.mapRowToModel(row));
+        const caseTypes = result.map((row) => this.mapRowToModel(row));
+        await this.hydrateAllowedSubCaseTypeIds(caseTypes);
+        return caseTypes;
     }
 
     protected mapRowToModel(row: any, processes: any[] = []): CaseType {
@@ -118,6 +138,7 @@ export default class CaseTypeRepository extends BaseRepository<CaseType> {
             description: row.Description,
             isDefault: row.IsDefault,
             isUniquePerMilestone: row.IsUniquePerMilestone,
+            isSubCaseOnly: Boolean(row.IsSubCaseOnly),
             _milestoneType: { id: row.MilestoneTypeId },
             folderNumber: row.FolderNumber,
             _processes: processes.filter(
