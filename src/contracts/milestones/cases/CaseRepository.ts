@@ -85,6 +85,9 @@ export default class CaseRepository extends BaseRepository<Case> {
             Offers.Id AS OfferId,
             Offers.Alias AS OfferAlias,
             Offers.IsOur AS OfferIsOur,
+            Cities.Id AS CityId,
+            Cities.Name AS CityName,
+            Cities.Code AS CityCode,
             Risks.Id AS RiskId,
             Risks.Probability AS RiskProbability,
             Risks.OverallImpact AS RiskOverallImpact
@@ -96,6 +99,7 @@ export default class CaseRepository extends BaseRepository<Case> {
         LEFT JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
         LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
         LEFT JOIN Offers ON Milestones.OfferId=Offers.Id
+        LEFT JOIN Cities ON Cities.Id = Offers.CityId
         LEFT JOIN Risks ON Risks.CaseId=Cases.Id
         LEFT JOIN MilestoneTypes_ContractTypes 
             ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
