@@ -22,7 +22,8 @@ import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 import ToolsAI from '../tools/ToolsAI';
-import { EntityData } from '../types/types';
+import { CaseData, EntityData } from '../types/types';
+import { resolveShortcutParentId } from './resolveShortcutParentId';
 import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 
@@ -402,9 +403,12 @@ export default class LettersController extends BaseController<
                                 ? letter.gdDocumentId
                                 : letter.gdFolderId;
 
+                            const parentId =
+                                await resolveShortcutParentId(auth, caseItem);
+
                             await ToolsGd.createShortcut(auth, {
                                 targetId: targetId!,
-                                parentId: caseItem.gdFolderId,
+                                parentId,
                                 name: `${letter.number} ${letter.description}`,
                             });
                         }
@@ -500,9 +504,12 @@ export default class LettersController extends BaseController<
                             ? letter.gdDocumentId
                             : letter.gdFolderId;
 
+                        const parentId =
+                            await resolveShortcutParentId(auth, caseItem);
+
                         await ToolsGd.createShortcut(auth, {
                             targetId: targetId!,
-                            parentId: caseItem.gdFolderId,
+                            parentId,
                             name: `${letter.number} ${letter.description}`,
                         });
                     }

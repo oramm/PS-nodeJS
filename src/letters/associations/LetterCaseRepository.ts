@@ -106,9 +106,10 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 ContractTypes.Name AS ContractTypeName, 
                 ContractTypes.IsOur AS ContractTypeIsOur, 
                 ContractTypes.Description AS ContractTypeDescription,
-                Contracts.Id AS ContractId, 
-                Contracts.Number AS ContractNumber, 
+                Contracts.Id AS ContractId,
+                Contracts.Number AS ContractNumber,
                 Contracts.Name AS ContractName,
+                Contracts.LettersShortcutsInSubfolder AS ContractLettersShortcutsInSubfolder,
                 Offers.Id AS OfferId,
                 Offers.Alias AS OfferAlias,
                 Offers.IsOur AS OfferIsOur,
@@ -181,6 +182,8 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
             ourId: row.ContractOurId,
             number: row.ContractNumber,
             name: ToolsDb.sqlToString(row.ContractName),
+            lettersShortcutsInSubfolder:
+                !!row.ContractLettersShortcutsInSubfolder,
             _type: {
                 id: row.ContractTypeId,
                 name: row.ContractTypeName,

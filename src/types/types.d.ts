@@ -56,6 +56,7 @@ export interface ContractData extends RepositoryDataItem {
     _employers?: Entity[];
     _contractRangesPerContract?: ContractRangePerContractData[];
     _contractRangesNames?: string[];
+    lettersShortcutsInSubfolder?: boolean;
 }
 
 export interface OurContractData extends ContractData {

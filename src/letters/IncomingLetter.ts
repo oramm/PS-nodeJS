@@ -5,6 +5,7 @@ import IncomingLetterGdController from './gdControlers/IncomingLetterGdControlle
 import EnviErrors from '../tools/Errors';
 import { IncomingLetterData } from '../types/types';
 import { UserData } from '../types/sessionTypes';
+import { resolveShortcutParentId } from './resolveShortcutParentId';
 
 export default abstract class IncomingLetter
     extends Letter
@@ -113,9 +114,13 @@ export default abstract class IncomingLetter
                 if (targetId && this._cases && this._cases.length > 0) {
                     const shortcutPromises = this._cases.map(async (caseItem) => {
                         if (caseItem.gdFolderId) {
+                            const parentId = await resolveShortcutParentId(
+                                auth,
+                                caseItem
+                            );
                             await ToolsGd.createShortcut(auth, {
                                 targetId: targetId!,
-                                parentId: caseItem.gdFolderId,
+                                parentId,
                                 name: `${this.number} ${this.description}`,
                             });
                         }
