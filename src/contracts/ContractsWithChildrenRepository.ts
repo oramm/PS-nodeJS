@@ -214,6 +214,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             conditions.push(mysql.format('Cases.Id = ?', [caseId]));
         }
 
+        // Task Owner
+        const ownerId = searchParams._owner?.id;
+        if (ownerId) {
+            conditions.push(mysql.format('Tasks.OwnerId = ?', [ownerId]));
+        }
+
         // Project
         const projectOurId = searchParams._project?.ourId;
         if (projectOurId) {
