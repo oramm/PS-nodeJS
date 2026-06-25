@@ -31,6 +31,11 @@ import TasksController from './milestones/cases/tasks/TasksController';
 import Milestone from './milestones/Milestone';
 import MilestonesController from './milestones/MilestonesController';
 import MilestoneTemplatesController from './milestones/milestoneTemplates/MilestoneTemplatesController';
+import {
+    enqueueAqmPush,
+    isAqmContractType,
+    tryDeliverAfterCommit,
+} from './aqmSync/AqmSync';
 
 export type ContractSearchParams = {
     id?: number;
@@ -167,6 +172,7 @@ export default class ContractsController extends BaseController<
 
             // Operacje bazodanowe - TRANSAKCJA
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
+            let aqmOutboxId: number | undefined;
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
                 await instance.repository.addInDb(contract, conn, true);
@@ -182,8 +188,22 @@ export default class ContractsController extends BaseController<
                         conn
                     );
                 }
+
+                // 4. WS10: jeśli typ „AQM" → wpis outbox w TEJ SAMEJ transakcji (L8)
+                if (isAqmContractType(contract.typeId)) {
+                    aqmOutboxId = await enqueueAqmPush(contract, conn);
+                }
             });
             console.log('Contract added in db');
+
+            // WS10: push do AQM STRICTLY post-commit; awaria nigdy nie rolbackuje
+            // ani nie wychodzi z transakcji umowy (L8). Defense-in-depth: nawet
+            // gdyby tryDeliverAfterCommit kiedyś rzuciło, .catch() izoluje umowę.
+            if (aqmOutboxId !== undefined) {
+                await tryDeliverAfterCommit(aqmOutboxId).catch((err) =>
+                    console.error('[AqmSync] post-commit push (add) error:', err)
+                );
+            }
 
             // Operacje Scrum (jeśli auth dostępne)
             if (auth) {
@@ -359,6 +379,7 @@ export default class ContractsController extends BaseController<
             }
 
             // Operacje bazodanowe - TRANSAKCJA
+            let aqmOutboxId: number | undefined;
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
                 await instance.repository.editInDb(
@@ -397,9 +418,27 @@ export default class ContractsController extends BaseController<
                         conn
                     );
                 }
+
+                // 4. WS10: jeśli typ „AQM" → wpis outbox w TEJ SAMEJ transakcji (L8)
+                if (isAqmContractType(contract.typeId)) {
+                    aqmOutboxId = await enqueueAqmPush(contract, conn);
+                }
             });
 
             console.log('Contract edited in db');
+
+            // WS10: push do AQM STRICTLY post-commit; awaria nigdy nie rolbackuje
+            // ani nie wychodzi z transakcji umowy (L8). Defense-in-depth: nawet
+            // gdyby tryDeliverAfterCommit kiedyś rzuciło, .catch() izoluje umowę.
+            if (aqmOutboxId !== undefined) {
+                await tryDeliverAfterCommit(aqmOutboxId).catch((err) =>
+                    console.error(
+                        '[AqmSync] post-commit push (edit) error:',
+                        err
+                    )
+                );
+            }
+
             console.groupEnd();
 
             return contract;

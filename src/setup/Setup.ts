@@ -337,5 +337,28 @@ export default class Setup {
         };
     }
 
+    /**
+     * Konfiguracja integracji push PS ENVI -> AQM (WS10).
+     * Tylko surowe wartości z .env — odczytywane lazily (getter), po loadEnv().
+     * Sekrety (token) NIE trafiają do SB ani repo — tylko nazwy env (.env.example).
+     *
+     * Format w .env:
+     *   AQM_SYNC_BASE_URL="https://model3.e-aquamatic.pl"   # baza URL AQM
+     *   AQM_SYNC_TOKEN="..."                                 # Bearer service-token (sekret)
+     *   AQM_SYNC_CONTRACT_TYPE_IDS="10"                      # allowlist id typów (CSV)
+     */
+    static get AqmSync() {
+        const rawTypeIds = process.env.AQM_SYNC_CONTRACT_TYPE_IDS ?? '10';
+        const contractTypeIds = rawTypeIds
+            .split(',')
+            .map((part) => parseInt(part.trim(), 10))
+            .filter((id) => Number.isInteger(id));
+        return {
+            baseUrl: process.env.AQM_SYNC_BASE_URL,
+            token: process.env.AQM_SYNC_TOKEN,
+            contractTypeIds,
+        };
+    }
+
     static x: 'sss' | 'ddd';
 }
