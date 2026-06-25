@@ -346,6 +346,7 @@ export default class Setup {
      *   AQM_SYNC_BASE_URL="https://model3.e-aquamatic.pl"   # baza URL AQM
      *   AQM_SYNC_TOKEN="..."                                 # Bearer service-token (sekret)
      *   AQM_SYNC_CONTRACT_TYPE_IDS="10"                      # allowlist id typów (CSV)
+     *   AQM_SYNC_DRAIN_INTERVAL_MS="60000"                   # interwał drainera outbox (ms); 0 = wyłączony
      */
     static get AqmSync() {
         const rawTypeIds = process.env.AQM_SYNC_CONTRACT_TYPE_IDS ?? '10';
@@ -353,10 +354,18 @@ export default class Setup {
             .split(',')
             .map((part) => parseInt(part.trim(), 10))
             .filter((id) => Number.isInteger(id));
+        const rawDrainInterval = Number(
+            process.env.AQM_SYNC_DRAIN_INTERVAL_MS ?? '60000'
+        );
+        const drainIntervalMs =
+            Number.isFinite(rawDrainInterval) && rawDrainInterval >= 0
+                ? rawDrainInterval
+                : 60000;
         return {
             baseUrl: process.env.AQM_SYNC_BASE_URL,
             token: process.env.AQM_SYNC_TOKEN,
             contractTypeIds,
+            drainIntervalMs,
         };
     }
 

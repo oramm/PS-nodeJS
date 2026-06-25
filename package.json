@@ -19,6 +19,8 @@
         "migrate:baseline": "yarn build && yarn node build/scripts/migrate.js baseline",
         "send-milestone-report": "node build/scripts/send-milestone-report.js",
         "backfill:sale-due-dates": "node build/scripts/backfillSaleAndDueDateFromXml.js --dry-run",
+        "aqm:backfill": "cross-env NODE_ENV=development ts-node src/scripts/aqm-backfill.ts",
+        "aqm:backfill:apply": "cross-env NODE_ENV=development ts-node src/scripts/aqm-backfill.ts --apply",
         "bugfix:scan": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-scan.ts",
         "bugfix:run": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-run.ts",
         "bugfix:sync-github": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-sync-github.ts",

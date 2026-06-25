@@ -17,6 +17,7 @@ import ContractOther from '../ContractOther';
 
 const OUTBOX_TABLE = 'AqmSyncOutbox';
 const PUSH_PATH = '/api/integrations/ps-envi/contract';
+const MATCH_PATH = '/api/integrations/ps-envi/match';
 
 export type AqmEntityPayload = {
     legacyEntityId?: number;
@@ -45,6 +46,30 @@ type AnyContract = ContractOur | ContractOther;
  */
 export function normalizeNip(nip: unknown): string {
     return String(nip ?? '').replace(/\D/g, '');
+}
+
+/**
+ * Validate a NIP by the full mod-11 checksum (frozen decision O2,
+ * decisions/2026-06-25-ws10-ps-envi-push-decision.md):
+ *  1. normalize identically to KSeF (strip non-digits), require exactly 10 digits;
+ *  2. weights for positions 1..9: [6,5,7,2,3,4,5,6,7];
+ *  3. c = (Σ digit[i] * weight[i]) mod 11; c === 10 → invalid;
+ *  4. valid ⟺ c === digit[10];
+ *  5. guard: reject all-zeros (passes a raw checksum but is not a real NIP).
+ * This is STRICTER than the rest of PS on purpose: tax_nr is the AQM dedup key.
+ */
+export function isValidNipChecksum(nip: unknown): boolean {
+    const digits = normalizeNip(nip);
+    if (!/^[0-9]{10}$/.test(digits)) return false;
+    if (digits === '0000000000') return false;
+    const weights = [6, 5, 7, 2, 3, 4, 5, 6, 7];
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+        sum += Number(digits[i]) * weights[i];
+    }
+    const c = sum % 11;
+    if (c === 10) return false;
+    return c === Number(digits[9]);
 }
 
 /** True when the contract's typeId is in the env-driven allowlist (O1/L2). */
@@ -244,4 +269,56 @@ export async function drainAqmOutbox(options?: {
     }
 
     return summary;
+}
+
+export type AqmMatchProxyResult = {
+    status: number;
+    body: any;
+};
+
+/**
+ * Server-side call to the AQM match endpoint (L11 preview), used by the PS
+ * `/aqm/match` proxy. The AQM Bearer token (Setup.AqmSync.token) is attached
+ * here and NEVER reaches the browser. Read-only; relays AQM's status + JSON.
+ * On misconfiguration / network error returns a 502 with a soft body so the
+ * front can degrade gracefully (match preview is non-blocking).
+ */
+export async function fetchAqmMatch(query: {
+    taxNr: string;
+    name?: string;
+}): Promise<AqmMatchProxyResult> {
+    const { baseUrl, token } = Setup.AqmSync;
+    if (!baseUrl) {
+        return {
+            status: 502,
+            body: { match: 'NONE', organization: null, error: 'AQM_SYNC_BASE_URL nie ustawione' },
+        };
+    }
+
+    const params = new URLSearchParams();
+    params.set('taxNr', query.taxNr ?? '');
+    if (query.name) params.set('name', query.name);
+
+    try {
+        const response = await fetch(
+            `${baseUrl}${MATCH_PATH}?${params.toString()}`,
+            {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${token ?? ''}`,
+                },
+            }
+        );
+        const body = await response.json().catch(() => null);
+        return { status: response.status, body };
+    } catch (err: any) {
+        return {
+            status: 502,
+            body: {
+                match: 'NONE',
+                organization: null,
+                error: err?.message ?? String(err),
+            },
+        };
+    }
 }

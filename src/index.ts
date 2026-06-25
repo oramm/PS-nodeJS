@@ -25,6 +25,8 @@ import {
     handleUncaughtException,
     handleUnhandledRejection,
 } from './setup/processErrorHandlers';
+import Setup from './setup/Setup';
+import { drainAqmOutbox } from './contracts/aqmSync/AqmSync';
 
 declare global {
     namespace Express {
@@ -426,6 +428,25 @@ setInterval(() => {
     void bugEventCaptureService.flushPendingWindows();
 }, 30_000);
 
+// WS10 — AQM outbox drainer (L8): re-send PENDING/FAILED contract pushes on an
+// interval with attempt-based backoff. Non-blocking (void) and fully swallowed
+// (drainAqmOutbox never throws); a drain error can never break the server.
+// Interval from env AQM_SYNC_DRAIN_INTERVAL_MS (default 60s; 0 disables).
+{
+    const drainIntervalMs = Setup.AqmSync.drainIntervalMs;
+    if (drainIntervalMs > 0) {
+        const drainTimer = setInterval(() => {
+            void drainAqmOutbox().catch((err) =>
+                console.error('[AqmSync] scheduled drain error:', err),
+            );
+        }, drainIntervalMs);
+        // Do not keep the event loop alive solely for the drainer.
+        if (typeof drainTimer.unref === 'function') drainTimer.unref();
+    } else {
+        console.log('[AqmSync] outbox drainer disabled (AQM_SYNC_DRAIN_INTERVAL_MS=0)');
+    }
+}
+
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method))
         req.parsedBody = Tools.parseObjectsJSON(req.body);
@@ -592,6 +613,7 @@ require('./costInvoices/CostInvoicesRouter');
 require('./projects/ProjectsRouters');
 
 require('./contracts/ContractsRouters');
+require('./contracts/aqmSync/AqmSyncRouters');
 require('./meetings/MeetingsRouters');
 require('./meetings/meetingArrangements/MeetingArrangementsRouters');
 require('./contractMeetingNotes/ContractMeetingNotesRouters');
