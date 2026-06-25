@@ -61,13 +61,16 @@ export default class ContractRepository extends BaseRepository<
                 item.cityId = cityId;
 
                 // Dodaj dane w tabeli OurContractsData
+                // Klucze camelCase zgodnie z konwencją (ToolsDb kapitalizuje
+                // je do nazw kolumn), spójnie z editInDb() oraz mechanizmem
+                // _isIdNonIncrement, który rozpoznaje wyłącznie klucz `id`.
                 const ourData = {
                     _isIdNonIncrement: true,
-                    Id: item.id,
-                    OurId: ourId,
-                    ManagerId: managerId,
-                    AdminId: adminId,
-                    CityId: cityId,
+                    id: item.id,
+                    ourId: ourId,
+                    managerId: managerId,
+                    adminId: adminId,
+                    cityId: cityId,
                 };
                 await ToolsDb.addInDb(
                     'OurContractsData',

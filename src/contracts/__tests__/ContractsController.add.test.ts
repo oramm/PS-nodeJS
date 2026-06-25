@@ -58,6 +58,11 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
             }
         );
 
+        // Mock ToolsDb.getQueryCallbackAsync - używane przez REALNĄ
+        // ContractRepository.isUniquePerProject() (repozytorium nie jest
+        // mockowane). Pusty wynik => kontrakt nie jest duplikatem.
+        (ToolsDb.getQueryCallbackAsync as any).mockResolvedValue([]);
+
         // Mock ToolsDb.addInDb - przechwytuje dane i zwraca ID
         (ToolsDb.addInDb as any).mockImplementation(
             async (
