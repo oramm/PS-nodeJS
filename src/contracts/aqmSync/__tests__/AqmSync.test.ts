@@ -228,7 +228,7 @@ describe('drainAqmOutbox', () => {
                 text: async () => '',
             });
 
-        const summary = await drainAqmOutbox({ intervalMs: 0 });
+        const summary = await drainAqmOutbox();
         expect(summary).toEqual({ processed: 2, sent: 1, failed: 1 });
     });
 
@@ -236,7 +236,7 @@ describe('drainAqmOutbox', () => {
         (ToolsDb.getQueryCallbackAsync as any).mockRejectedValue(
             new Error('db down')
         );
-        const summary = await drainAqmOutbox({ intervalMs: 0 });
+        const summary = await drainAqmOutbox();
         expect(summary).toEqual({ processed: 0, sent: 0, failed: 0 });
     });
 });

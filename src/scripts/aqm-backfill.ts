@@ -71,7 +71,7 @@ async function main() {
             `[AqmBackfill] already enqueued/synced (deduped): ${report.alreadyEnqueued}`
         );
     } else {
-        console.log(`[AqmBackfill] would push: ${report.wouldPush}`);
+        console.log(`[AqmBackfill] would push: ${report.qualify}`);
         console.log('[AqmBackfill] dry-run — nothing written.');
     }
 }

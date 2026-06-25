@@ -150,8 +150,7 @@ function parsePayload(raw: any): AqmContractPushPayload {
  * This function never throws — failures are recorded, not propagated.
  */
 export async function deliverOutboxRow(
-    row: OutboxRow,
-    conn?: mysql.PoolConnection
+    row: OutboxRow
 ): Promise<'SENT' | 'FAILED'> {
     const { baseUrl, token } = Setup.AqmSync;
     try {
@@ -171,8 +170,7 @@ export async function deliverOutboxRow(
                 `UPDATE ${OUTBOX_TABLE}
                  SET Status = 'SENT', LastError = NULL
                  WHERE Id = ?`,
-                [row.Id],
-                conn
+                [row.Id]
             );
             return 'SENT';
         }
@@ -180,12 +178,11 @@ export async function deliverOutboxRow(
         const bodyText = await response.text().catch(() => '');
         await markFailed(
             row,
-            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(),
-            conn
+            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim()
         );
         return 'FAILED';
     } catch (err: any) {
-        await markFailed(row, err?.message ?? String(err), conn).catch(
+        await markFailed(row, err?.message ?? String(err)).catch(
             (dbErr) =>
                 console.error('[AqmSync] nie udało się zapisać FAILED:', dbErr)
         );
@@ -195,15 +192,13 @@ export async function deliverOutboxRow(
 
 async function markFailed(
     row: OutboxRow,
-    error: string,
-    conn?: mysql.PoolConnection
+    error: string
 ): Promise<void> {
     await ToolsDb.executeSQL(
         `UPDATE ${OUTBOX_TABLE}
          SET Status = 'FAILED', Attempts = Attempts + 1, LastError = ?
          WHERE Id = ?`,
-        [error?.slice(0, 60000) ?? null, row.Id],
-        conn
+        [error?.slice(0, 60000) ?? null, row.Id]
     );
 }
 
@@ -229,18 +224,16 @@ export async function tryDeliverAfterCommit(outboxId: number): Promise<void> {
 }
 
 /**
- * Drain PENDING/FAILED rows. Re-sends each with a small inter-row interval and
- * simple attempt-based backoff (skip rows whose Attempts exceed maxAttempts).
+ * Drain PENDING/FAILED rows. Re-sends each with simple attempt-based backoff
+ * (skip rows whose Attempts exceed maxAttempts).
  * Intended to be called on an interval. Never throws.
  */
 export async function drainAqmOutbox(options?: {
     batchSize?: number;
     maxAttempts?: number;
-    intervalMs?: number;
 }): Promise<{ sent: number; failed: number; processed: number }> {
     const batchSize = options?.batchSize ?? 50;
     const maxAttempts = options?.maxAttempts ?? 10;
-    const intervalMs = options?.intervalMs ?? 200;
 
     const summary = { sent: 0, failed: 0, processed: 0 };
 
@@ -260,9 +253,6 @@ export async function drainAqmOutbox(options?: {
             summary.processed += 1;
             if (result === 'SENT') summary.sent += 1;
             else summary.failed += 1;
-            if (intervalMs > 0) {
-                await new Promise((resolve) => setTimeout(resolve, intervalMs));
-            }
         }
     } catch (err) {
         console.error('[AqmSync] drainAqmOutbox error:', err);

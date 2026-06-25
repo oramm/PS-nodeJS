@@ -64,8 +64,6 @@ export type BackfillReport = {
     qualify: number;
     skipped: number;
     skippedByReason: Record<SkipReason, number>;
-    /** dry-run: how many WOULD push. apply: how many were newly enqueued. */
-    wouldPush: number;
     enqueued: number;
     alreadyEnqueued: number;
     rows: BackfillRow[];
@@ -100,7 +98,6 @@ export async function runBackfill(
         qualify: 0,
         skipped: 0,
         skippedByReason: emptySkipCounters(),
-        wouldPush: 0,
         enqueued: 0,
         alreadyEnqueued: 0,
         rows: [],
@@ -132,7 +129,6 @@ export async function runBackfill(
         report.qualify += 1;
 
         if (!apply) {
-            report.wouldPush += 1;
             report.rows.push(row);
             continue;
         }
@@ -157,7 +153,6 @@ export async function runBackfill(
         }
         row.enqueued = true;
         report.enqueued += 1;
-        report.wouldPush += 1;
         report.rows.push(row);
     }
 

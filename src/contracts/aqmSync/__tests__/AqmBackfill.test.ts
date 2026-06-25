@@ -101,7 +101,6 @@ describe('runBackfill — dry-run (writes nothing)', () => {
         expect(report.mode).toBe('dry-run');
         expect(report.total).toBe(5);
         expect(report.qualify).toBe(2);
-        expect(report.wouldPush).toBe(2);
         expect(report.skipped).toBe(3);
         expect(report.skippedByReason).toEqual({
             NO_EMPLOYER: 1,
