@@ -31,6 +31,10 @@ export type AqmContractPayload = {
     startDate?: string;
     endDate?: string;
     gdriveFolderUrl?: string;
+    /** K6: true gdy kontrakt zakończony statusem lub data końcowa już minęła. */
+    ended: boolean;
+    /** K8: czytelny kod ENVI umowy (np. SZA.AQM.06) — wyłącznie informacyjny. */
+    ourId?: string;
 };
 
 export type AqmContractPushPayload = {
@@ -82,6 +86,9 @@ export function isAqmContractType(typeId: number | undefined): boolean {
  * Build the AQM push payload from the EMPLOYER side of the contract.
  * `_employers[0]` -> its Entity -> { legacyEntityId, name, taxNr(normalized), address }.
  * gdriveFolderUrl is derived from Contracts.GdFolderId (a folder ID, NOT a URL).
+ *
+ * K6 — ended: true when status is 'Zakończony'|'Archiwalny' OR endDate < today (date-only, UTC).
+ * K8 — ourId: the ENVI contract code from ContractOur.ourId (undefined for ContractOther).
  */
 export function buildAqmPayload(contract: AnyContract): AqmContractPushPayload {
     const employer = contract._employers?.[0] as any;
@@ -96,6 +103,17 @@ export function buildAqmPayload(contract: AnyContract): AqmContractPushPayload {
         ? `https://drive.google.com/drive/folders/${gdFolderId}`
         : undefined;
 
+    // K6: ended by status or by end date already passed (date-only UTC comparison).
+    const today = new Date().toISOString().slice(0, 10);
+    const endedByStatus =
+        contract.status === 'Zakończony' || contract.status === 'Archiwalny';
+    const endedByDate =
+        contract.endDate != null && contract.endDate < today;
+    const ended = endedByStatus || endedByDate;
+
+    // K8: ourId present only for ContractOur instances.
+    const ourId = (contract as ContractOur).ourId ?? undefined;
+
     return {
         entity: {
             legacyEntityId: employer.id,
@@ -108,6 +126,8 @@ export function buildAqmPayload(contract: AnyContract): AqmContractPushPayload {
             startDate: contract.startDate,
             endDate: contract.endDate,
             gdriveFolderUrl,
+            ended,
+            ourId,
         },
     };
 }

@@ -27,6 +27,8 @@ import {
 const baseContract = (overrides: any = {}) => ({
     id: 4567,
     typeId: 10,
+    status: 'W trakcie',
+    ourId: 'SZA.AQM.06',
     startDate: '2026-06-01',
     endDate: '2027-05-31',
     gdFolderId: 'FOLDER_ABC123',
@@ -90,6 +92,8 @@ describe('buildAqmPayload (from EMPLOYER)', () => {
             endDate: '2027-05-31',
             gdriveFolderUrl:
                 'https://drive.google.com/drive/folders/FOLDER_ABC123',
+            ended: false,
+            ourId: 'SZA.AQM.06',
         });
     });
 
@@ -104,6 +108,59 @@ describe('buildAqmPayload (from EMPLOYER)', () => {
         expect(() =>
             buildAqmPayload(baseContract({ _employers: [] }) as any)
         ).toThrow();
+    });
+});
+
+describe('buildAqmPayload — ended (K6)', () => {
+    it('active contract: Status=W trakcie + future endDate → ended:false', () => {
+        const payload = buildAqmPayload(
+            baseContract({ status: 'W trakcie', endDate: '2099-12-31' }) as any
+        );
+        expect(payload.contract.ended).toBe(false);
+    });
+
+    it('driver case: Status=Zakończony + future endDate → ended:true', () => {
+        const payload = buildAqmPayload(
+            baseContract({ status: 'Zakończony', endDate: '2099-12-31' }) as any
+        );
+        expect(payload.contract.ended).toBe(true);
+    });
+
+    it('Status=Archiwalny → ended:true regardless of endDate', () => {
+        const payload = buildAqmPayload(
+            baseContract({ status: 'Archiwalny', endDate: '2099-12-31' }) as any
+        );
+        expect(payload.contract.ended).toBe(true);
+    });
+
+    it('active status but past endDate → ended:true', () => {
+        const payload = buildAqmPayload(
+            baseContract({ status: 'W trakcie', endDate: '2020-01-01' }) as any
+        );
+        expect(payload.contract.ended).toBe(true);
+    });
+
+    it('null endDate + active status → ended:false', () => {
+        const payload = buildAqmPayload(
+            baseContract({ status: 'W trakcie', endDate: null }) as any
+        );
+        expect(payload.contract.ended).toBe(false);
+    });
+});
+
+describe('buildAqmPayload — ourId (K8)', () => {
+    it('returns ourId from the ContractOur instance', () => {
+        const payload = buildAqmPayload(
+            baseContract({ ourId: 'SZA.AQM.06' }) as any
+        );
+        expect(payload.contract.ourId).toBe('SZA.AQM.06');
+    });
+
+    it('ourId is undefined when the contract has no ourId (ContractOther-like)', () => {
+        const payload = buildAqmPayload(
+            baseContract({ ourId: undefined }) as any
+        );
+        expect(payload.contract.ourId).toBeUndefined();
     });
 });
 
