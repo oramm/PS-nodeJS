@@ -63,6 +63,52 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-06-27 - AQM WS11 PS data remediation
+
+### Scope
+
+- Added six `Contracts_Entities` EMPLOYER associations for active TypeId=10 AQM contracts, then added Eko-Babice contract 497 -> entity 245, using `Invoices.ContractId/EntityId` as the authoritative source and validating each NIP with the WS10 O2 checksum rule.
+
+### Impact
+
+- DB: production PS ENVI data changed on `envi-konsulting.kylos.pl/envikons_myEnvi`; contracts 748, 772, 860, 1053, 1081, 1231, and 497 now have one EMPLOYER each.
+- ENV: none.
+- Deploy: no PS deploy. Frontend fix was pushed to ENVI.ProjectSite `master` (`4d4ea8b`) but not deployed here. `aqm:backfill --apply` was run after backup and fully reconciled.
+
+### Required Actions
+
+- M1 closed after owner decision: Eko-Babice is a closed contract and should use the customer from invoices, not a new active PS contract.
+- Keep M3 prod AQM backfill owner-gated and backup-first.
+- Do not run `aqm:backfill --apply` again until the 2026-06-27 apply output is reconciled; next session starts from outbox/AQM reads.
+- During M3 final reconciliation, explicitly verify Eko-Babice AQM organization after apply: WS10 should match by NIP 1181462152 and link `legacy_entity_id` to PS `EntityId=245` (it was legacy id 29 before PS-master link).
+- 2026-06-27 M3 final reconciliation complete and owner-acked; WS11 plan closed as `done`. Do not retry/apply unless a new, separate delta is approved.
+- Frontend fix `_employers` is pushed to ENVI.ProjectSite `master` (`4d4ea8b`); deployment still needs separate GO before rollout.
+
+### Verification
+
+- Independent MCP read confirmed all six target contracts have `EmployerCount=1`.
+- AQM TypeId=10 re-audit changed from 32 pushable / 58 without EMPLOYER to 38 pushable / 52 without EMPLOYER.
+- `aqm:backfill` dry-run on `NODE_ENV=production` reported total 90, qualify 38, skipped 52, and wrote nothing; `AqmSyncOutbox` remained 32 SENT.
+- 2026-06-27 repeated gate-check: PS still 90 TypeId=10, 38 pushable, 52 without EMPLOYER, `AqmSyncOutbox` 32 SENT; AQM prod still 33 `org_contracts` = 32 with `legacy_contract_id` + 1 native Eko-Babice.
+- 2026-06-27 after adding 497 -> 245: MCP read confirmed contract 497 has EMPLOYER 245 and NIP 1181462152; re-audit is 39 pushable / 51 without EMPLOYER / 0 multiple / 90 total. `aqm:backfill` dry-run reported total 90, qualify 39, skipped 51, and wrote nothing; `AqmSyncOutbox` remained 32 SENT.
+- 2026-06-27 Eko-Babice SELECT check: PS `Entities.Id=245` already has NIP 1181462152, contract 497 has three invoices with `EntityId=245`, and `Contracts_Entities` has 497 -> 245 EMPLOYER; AQM prod native `org_contracts.id=1` has organization NIP 1181462152. No PS DB update was needed.
+- 2026-06-27 OurContract client validation check: frontend `_employers` selector now keeps array-shaped form state; AQM exact-one rule remains in Yup schema.
+- 2026-06-27 WS10 code check: AQM ingest matches organization by `legacy_entity_id` first, then normalized NIP; for Eko-Babice, current AQM `legacy_entity_id=29` and PS payload `legacyEntityId=245` means the expected path is NIP match and relink to 245.
+- 2026-06-27 M3 start: AQM prod backup created at `/var/backups/aqm/aqm_2026-06-27_105402.sql.gz`; `aqm:backfill --apply` on `NODE_ENV=production` reported total 90, qualify 39, skipped 51, newly enqueued 7, already enqueued/synced 32. Post-apply outbox/AQM reconciliation was not run yet.
+- 2026-06-27 M3 monitoring: `AqmSyncOutbox` is 39 SENT / 0 PENDING / 0 FAILED; the seven new ContractIds 497, 748, 772, 860, 1053, 1081, 1231 are SENT with `LastError=NULL`.
+- 2026-06-27 final reconciliation: PS TypeId=10 audit is 90 total / 39 pushable / 51 without EMPLOYER / 0 multiple; AQM prod read-only is 40 `org_contracts` total, 39 with `legacy_contract_id`, 1 native NULL, and no duplicate `legacy_contract_id`.
+- 2026-06-27 set equality: the 39 PS pushable ContractIds exactly match the 39 AQM `org_contracts.legacy_contract_id` values.
+- 2026-06-27 Eko-Babice post-apply check: AQM organization NIP 1181462152 has `legacy_entity_id=245`, no organization has `legacy_entity_id=29`, and AQM now has PS-master `legacy_contract_id=497` under that organization.
+- 2026-06-27 WS11 closeout: SB plan/progress/activity-log closed; WS12 concurrency gate cleared for N1.
+
+### Rollback
+
+- Remove only the added `Contracts_Entities` rows for the listed ContractId/EntityId pairs if the owner asks to revert the remediation.
+
+### Links
+
+- `C:\Users\oram\ENVISecondBrain\20_projects\Aplikacje\AQM.APP.01\plans\2026-06-26-aqm3-ws11-backfill-reconciliation-progress.md`
+
 ## 2026-06-17 - Heroku OCR buildpack and scan fallback
 
 ### Scope
