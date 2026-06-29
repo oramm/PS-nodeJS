@@ -648,6 +648,7 @@ require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
 require('./Admin/Cities/CitiesRouters');
 require('./Admin/ContractRanges/ContractRangesRouters');
+require('./bankSync/BankSyncRouter');
 
 app.use(
     async (err: unknown, req: Request, res: Response, next: NextFunction) => {

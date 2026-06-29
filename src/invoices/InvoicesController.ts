@@ -998,4 +998,49 @@ export default class InvoicesController extends BaseController<
     ): Promise<Invoice> {
         return await this.copy(invoiceToCopyData, userData);
     }
+
+    // ==================== PAYMENT ====================
+    /**
+     * Aktualizuje status płatności faktury przychodowej.
+     * Walidacja przez InvoiceValidator.validatePaymentUpdate.
+     */
+    static async updatePayment(
+        id: number,
+        data: {
+            paymentStatus: string;
+            paidAmount?: number;
+            paymentDate?: string | null;
+        },
+    ): Promise<Invoice> {
+        const instance = this.getInstance();
+        const invoice = await instance.repository.findById(id);
+        if (!invoice) throw new Error(`Faktura ${id} nie istnieje`);
+
+        const grossAmount = invoice._totalNetValue ?? 0;
+
+        const error = InvoiceValidator.validatePaymentUpdate(
+            { paymentStatus: data.paymentStatus, paidAmount: data.paidAmount },
+            grossAmount,
+        );
+        if (error) throw new Error(error);
+
+        const status = data.paymentStatus as 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
+        let paidAmount: number;
+        if (status === 'UNPAID' || status === 'NOT_APPLICABLE') {
+            paidAmount = 0;
+        } else if (status === 'PAID') {
+            paidAmount = grossAmount;
+        } else {
+            paidAmount = data.paidAmount!;
+        }
+
+        await instance.repository.updatePayment(id, {
+            paymentStatus: status,
+            paidAmount,
+            paymentDate: data.paymentDate ?? null,
+        });
+
+        const updated = await instance.repository.findById(id);
+        return updated!;
+    }
 }

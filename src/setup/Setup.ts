@@ -369,5 +369,16 @@ export default class Setup {
         };
     }
 
+    static get Bank() {
+        return {
+            matching: {
+                autoThreshold: Number(process.env.BANK_MATCH_AUTO_THRESHOLD ?? 0.85),
+                proposeThreshold: Number(process.env.BANK_MATCH_PROPOSE_THRESHOLD ?? 0.5),
+                amountToleranceGrosze: Number(process.env.BANK_AMOUNT_TOLERANCE_GROSZE ?? 1),
+            },
+            dateWindowDays: Number(process.env.BANK_DATE_WINDOW_DAYS ?? 60),
+        };
+    }
+
     static x: 'sss' | 'ddd';
 }

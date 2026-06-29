@@ -56,6 +56,11 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     /** Lista faktur korygujących tę fakturę */
     _corrections?: CorrectionInvoiceSummary[];
 
+    // Pola statusu płatności (dodane przez bank sync)
+    paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
+    paidAmount?: number;
+    paymentDate?: string | null;
+
     constructor(initParamObject: InvoiceData) {
         super({ ...initParamObject, _dbTableName: 'Invoices' });
         this.daysToPay = initParamObject.daysToPay;
@@ -93,6 +98,7 @@ export default class Invoice extends BusinessObject implements InvoiceData {
                 this._owner?.email;
         }
         this._totalNetValue = initParamObject._totalNetValue as number;
+        this._totalGrossValue = initParamObject._totalGrossValue as number;
         this._contract = initParamObject._contract;
         this.contractId = this._contract.id;
         this.ksefNumber = (initParamObject as any).ksefNumber;
@@ -165,6 +171,13 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         }
         this.correctedInvoiceId = (initParamObject as any).correctedInvoiceId;
         this.correctionReason = (initParamObject as any).correctionReason;
+
+        const rawPaymentStatus = (initParamObject as any).paymentStatus;
+        const validStatuses = ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'NOT_APPLICABLE'];
+        this.paymentStatus = validStatuses.includes(rawPaymentStatus) ? rawPaymentStatus : 'UNPAID';
+        const rawPaidAmount = Number((initParamObject as any).paidAmount ?? 0);
+        this.paidAmount = Number.isFinite(rawPaidAmount) ? rawPaidAmount : 0;
+        this.paymentDate = (initParamObject as any).paymentDate ?? null;
         //this._items = initParamObject._items;
     }
 
