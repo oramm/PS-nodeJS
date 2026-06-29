@@ -19,6 +19,9 @@ export interface MeetingArrangementData {
     };
     _case?: {
         id?: number;
+        parentCaseId?: number;
+        subCaseNumber?: number;
+        _parentCaseNumber?: number;
         name?: string;
         _typeFolderNumber_TypeName_Number_Name?: string;
         _type?: {

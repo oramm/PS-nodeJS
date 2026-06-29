@@ -62,6 +62,7 @@ export default class CaseRepository extends BaseRepository<Case> {
             CaseTypes.FolderNumber AS CaseTypeFolderNumber,
             Cases.Name,
             Cases.Number,
+            Cases.SubCaseNumber,
             Cases.Description,
             Cases.GdFolderId,
             Cases.LastUpdated,
@@ -138,9 +139,18 @@ export default class CaseRepository extends BaseRepository<Case> {
             subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
         }
 
+        const caseNumberById = new Map<number, number>();
+        for (const row of result) {
+            if (row.Id != null && row.Number != null)
+                caseNumberById.set(row.Id, row.Number);
+        }
+
         const cases: Case[] = [];
         for (const row of result) {
             row._allowedSubCaseTypeIds = subCaseTypeIdsMap.get(row.CaseTypeId) ?? [];
+            row._parentCaseNumber = row.ParentCaseId != null
+                ? caseNumberById.get(row.ParentCaseId)
+                : undefined;
             const caseItem = this.mapRowToModel(
                 row,
                 processes,
@@ -175,6 +185,7 @@ export default class CaseRepository extends BaseRepository<Case> {
         return new Case({
             id: row.Id,
             parentCaseId: row.ParentCaseId ?? undefined,
+            _parentCaseNumber: row._parentCaseNumber,
             _type: {
                 id: row.CaseTypeId,
                 name: row.CaseTypeName,
@@ -191,6 +202,7 @@ export default class CaseRepository extends BaseRepository<Case> {
             },
             name: ToolsDb.sqlToString(row.Name),
             number: row.Number,
+            subCaseNumber: row.SubCaseNumber ?? undefined,
             description: ToolsDb.sqlToString(row.Description),
             gdFolderId: row.GdFolderId,
             _parent: new Milestone({
@@ -288,12 +300,14 @@ export default class CaseRepository extends BaseRepository<Case> {
         const conditions = words.map((word) =>
             mysql.format(
                 `(Cases.Number LIKE ? 
+                    OR Cases.SubCaseNumber LIKE ?
                     OR Cases.Name LIKE ?
                     OR Cases.Description LIKE ?
                     OR CaseTypes.FolderNumber LIKE ?
                     OR Milestones.Name LIKE ?
-                    OR CaseTypes.Name LIKE ?)`,
+                    OR CaseTypes.Name LIKE ?)` ,
                 [
+                    `%${word}%`,
                     `%${word}%`,
                     `%${word}%`,
                     `%${word}%`,
@@ -548,13 +562,24 @@ export default class CaseRepository extends BaseRepository<Case> {
                 conn
             )
         );
-        const row = result[0];
-        if (!row?.Number) {
-            throw new Error(
-                `No Number found in db for nonUnique Case ${caseId}`
-            );
-        }
-        return row.Number as number;
+        return (result[0]?.Number as number) ?? undefined;
+    }
+
+    async getNextSubCaseNumber(
+        parentCaseId: number,
+        conn?: mysql.PoolConnection
+    ): Promise<number> {
+        const sql = mysql.format(
+            `SELECT COALESCE(MAX(SubCaseNumber), 0) + 1 AS nextNumber
+             FROM Cases
+             WHERE ParentCaseId = ?
+             FOR UPDATE`,
+            [parentCaseId]
+        );
+        const result = <mysql.RowDataPacket[]>(
+            await ToolsDb.getQueryCallbackAsync(sql, conn)
+        );
+        return (result[0]?.nextNumber as number) ?? 1;
     }
 
     /**

@@ -39,6 +39,9 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 id: row.CaseId,
                 name: row.CaseName,
                 number: row.CaseNumber,
+                subCaseNumber: row.CaseSubCaseNumber ?? undefined,
+                parentCaseId: row.CaseParentCaseId ?? undefined,
+                _parentCaseNumber: row.CaseParentCaseNumber ?? undefined,
                 description: row.CaseDescription,
                 gdFolderId: row.CaseGdFolderId,
                 _type: {
@@ -85,8 +88,11 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 Letters.GdDocumentId, 
                 Letters.GdFolderId, 
                 Letters.LastUpdated, 
-                Cases.Name AS CaseName, 
-                Cases.Number AS CaseNumber, 
+                Cases.Name AS CaseName,
+                Cases.Number AS CaseNumber,
+                Cases.ParentCaseId AS CaseParentCaseId,
+                Cases.SubCaseNumber AS CaseSubCaseNumber,
+                ParentCases.Number AS CaseParentCaseNumber,
                 Cases.Description AS CaseDescription, 
                 Cases.GdFolderId AS CaseGdFolderId, 
                 CaseTypes.Id AS CaseTypeId, 
@@ -123,6 +129,7 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
             FROM Letters_Cases
             JOIN Letters ON Letters_Cases.LetterId = Letters.Id
             JOIN Cases ON Letters_Cases.CaseId = Cases.Id
+            LEFT JOIN Cases AS ParentCases ON ParentCases.Id = Cases.ParentCaseId
             JOIN CaseTypes ON Cases.TypeId = CaseTypes.Id
             JOIN Milestones ON Cases.MilestoneId=Milestones.Id
             JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id

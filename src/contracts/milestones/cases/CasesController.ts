@@ -206,6 +206,10 @@ export default class CasesController extends BaseController<
                         `Sprawa nadrzędna ${caseItem.parentCaseId} nie istnieje lub nie ma folderu GD`
                     );
                 caseItem._parentCaseGdFolderId = parentGdFolderId;
+                // _parentCaseNumber set here (read-only lookup, no transaction needed)
+                caseItem._parentCaseNumber = await this.repository.getNumber(
+                    caseItem.parentCaseId
+                );
             }
 
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
@@ -217,19 +221,29 @@ export default class CasesController extends BaseController<
 
             // 2. Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                // 2a. Przygotuj ProcessInstances (w ramach transakcji)
+                // 2a. Numer podsprawy - wewnątrz transakcji z FOR UPDATE aby uniknąć race condition
+                if (caseItem.parentCaseId) {
+                    caseItem.subCaseNumber =
+                        await this.repository.getNextSubCaseNumber(
+                            caseItem.parentCaseId,
+                            conn
+                        );
+                    caseItem.number = undefined;
+                }
+
+                // 2b. Przygotuj ProcessInstances (w ramach transakcji)
                 processInstances =
                     await CasesController.prepareProcessInstances(
                         caseItem,
                         conn
                     );
 
-                // 2b. Przygotuj domyślne Tasks (w ramach transakcji)
+                // 2c. Przygotuj domyślne Tasks (w ramach transakcji)
                 defaultTasks = await CasesController.prepareDefaultTasks(
                     caseItem
                 );
 
-                // 2c. Dodaj Case + powiązane dane do DB
+                // 2d. Dodaj Case + powiązane dane do DB
                 await this.repository.addWithRelated(
                     caseItem,
                     processInstances,

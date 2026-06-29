@@ -123,6 +123,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 Cases.TypeId AS CaseTypeId,
                 Cases.GdFolderId AS CaseGdFolderId,
                 Cases.Number AS CaseNumber,
+                Cases.SubCaseNumber AS CaseSubCaseNumber,
                 CaseTypes.Id AS CaseTypeId,
                 CaseTypes.Name AS CaseTypeName,
                 CaseTypes.IsDefault,
@@ -308,6 +309,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
         // Tworzymy zbiór kamieni milowych, aby uniknąć duplikacji
         const milestonesById: { [id: number]: Milestone } = {};
 
+        const caseNumberById = new Map<number, number>();
+        for (const row of result) {
+            if (row.CaseId != null && row.CaseNumber != null)
+                caseNumberById.set(row.CaseId, row.CaseNumber);
+        }
+
         for (const row of result) {
             let contract = contracts[row.ContractId];
             if (!contract) {
@@ -444,9 +451,14 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             const caseItem = new Case({
                 id: row.CaseId ?? undefined,
                 parentCaseId: row.CaseParentCaseId ?? undefined,
+                _parentCaseNumber:
+                    row.CaseParentCaseId != null
+                        ? caseNumberById.get(row.CaseParentCaseId)
+                        : undefined,
                 name: ToolsDb.sqlToString(row.CaseName ?? ''),
                 description: ToolsDb.sqlToString(row.CaseDescription ?? ''),
                 number: row.CaseNumber ?? undefined,
+                subCaseNumber: row.CaseSubCaseNumber ?? undefined,
                 gdFolderId: row.CaseGdFolderId ?? undefined,
                 _type: {
                     id: row.CaseTypeId,
@@ -667,6 +679,7 @@ type ContractsWithChildrenRow = {
     CaseTypeId: number | null;
     CaseGdFolderId: string | null;
     CaseNumber: number | null;
+    CaseSubCaseNumber: number | null;
 
     // CaseType fields
     CaseTypeName: string | null;

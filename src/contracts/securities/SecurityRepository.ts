@@ -33,6 +33,9 @@ export default class SecurityRepository extends BaseRepository<Security> {
                 id: row.CaseId,
                 name: row.CaseName,
                 number: row.CaseNumber,
+                subCaseNumber: row.CaseSubCaseNumber ?? undefined,
+                parentCaseId: row.CaseParentCaseId ?? undefined,
+                _parentCaseNumber: row.CaseParentCaseNumber ?? undefined,
                 description: row.CaseDescription,
                 gdFolderId: row.CaseGdFolderId,
                 _type: {
@@ -98,6 +101,9 @@ export default class SecurityRepository extends BaseRepository<Security> {
                     Cases.Id AS CaseId,
                     Cases.Name AS CaseName,
                     Cases.Number AS CaseNumber,
+                    Cases.ParentCaseId AS CaseParentCaseId,
+                    Cases.SubCaseNumber AS CaseSubCaseNumber,
+                    ParentCases.Number AS CaseParentCaseNumber,
                     Cases.Description AS CaseDescription,
                     Cases.GdFolderId AS CaseGdFolderId,
                     CaseTypes.Id AS CaseTypeId,
@@ -131,6 +137,7 @@ export default class SecurityRepository extends BaseRepository<Security> {
                 JOIN OurContractsData ON OurContractsData.Id=ContractId 
                 JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
                 JOIN Cases ON Cases.Id = CaseId
+                LEFT JOIN Cases AS ParentCases ON ParentCases.Id = Cases.ParentCaseId
                 JOIN CaseTypes ON CaseTypes.Id = Cases.TypeId
                 LEFT JOIN Persons AS Editors ON Securities.EditorId = Editors.Id
                 LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id

@@ -63,6 +63,39 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-06-26 - SubCaseNumber for child cases
+
+### Scope
+
+- Added a dedicated `Cases.SubCaseNumber` column for local numbering of sub-cases.
+- Updated case creation and read models so `Number` stays trigger-managed while display labels use `SubCaseNumber` for child cases.
+- Wrote, but did not run, the SQL migration for the new column and unique `(ParentCaseId, SubCaseNumber)` index.
+
+### Impact
+
+- DB: new nullable `Cases.SubCaseNumber` column and unique index on `(ParentCaseId, SubCaseNumber)`.
+- ENV: none.
+- Deploy: backend code must land together with the DB migration.
+
+### Required Actions
+
+- Apply `src/contracts/milestones/cases/migrations/002_sub_case_number.sql` in the target database.
+- Deploy the backend after the migration so new sub-cases store local numbering in `SubCaseNumber`.
+
+### Verification
+
+- `yarn -s tsc --noEmit`
+
+### Rollback
+
+- Drop the `SubCaseNumber` column and `uq_cases_parent_sub_case_number` index, then revert the backend changes.
+
+### Links
+
+- `src/contracts/milestones/cases/migrations/002_sub_case_number.sql`
+- `src/contracts/milestones/cases/migrations/002_sub_case_number_down.sql`
+- `documentation/team/features/sub-case-propagation.md`
+
 ## 2026-06-27 - AQM WS11 PS data remediation
 
 ### Scope

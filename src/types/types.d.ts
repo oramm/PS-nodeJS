@@ -223,9 +223,11 @@ export interface MilestoneDateData extends RepositoryDataItem {
 export interface CaseData extends RepositoryDataItem {
     name?: string | null;
     number?: number;
+    subCaseNumber?: number;
     description?: string;
     gdFolderId?: string;
     parentCaseId?: number;
+    _parentCaseNumber?: number;
     _parent: MilestoneData;
     _type: CaseType;
     _folderName?: string;

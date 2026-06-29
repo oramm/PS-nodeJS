@@ -396,6 +396,9 @@ export default class TasksController extends BaseController<
             Cases.GdFolderId AS CaseGdFolderId,
             Cases.TypeId AS CaseTypeId,
             Cases.Number AS CaseNumber,
+            Cases.ParentCaseId AS CaseParentCaseId,
+            Cases.SubCaseNumber AS CaseSubCaseNumber,
+            ParentCases.Number AS CaseParentCaseNumber,
             CaseTypes.Name AS CaseTypeName,
             CaseTypes.FolderNumber AS CaseTypeFolderNumber,
             Milestones.Id AS MilestoneId,
@@ -411,6 +414,7 @@ export default class TasksController extends BaseController<
             ParentContracts.ProjectOurId
             FROM Cases
             LEFT JOIN CaseTypes ON CaseTypes.Id=Cases.TypeId
+            LEFT JOIN Cases AS ParentCases ON ParentCases.Id=Cases.ParentCaseId
             JOIN Milestones ON Milestones.Id=Cases.MilestoneId
             LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             JOIN Contracts AS ParentContracts ON Milestones.ContractId = ParentContracts.Id
@@ -432,6 +436,9 @@ export default class TasksController extends BaseController<
                 caseGdFolderId: <string | undefined>row.CaseGdFolderId,
                 caseTypeId: <number>row.CaseTypeId,
                 caseNumber: <number>row.CaseNumber,
+                caseParentCaseId: row.CaseParentCaseId as number | null,
+                caseSubCaseNumber: row.CaseSubCaseNumber as number | null,
+                parentCaseNumber: row.CaseParentCaseNumber as number | null,
                 caseTypeName: <string>row.CaseTypeName,
                 caseTypeFolderNumber: <string>row.CaseTypeFolderNumber,
                 milestoneId: <number>row.MilestoneId,
@@ -555,13 +562,16 @@ export default class TasksController extends BaseController<
 
             const parentCase = new Case({
                 number: parents.caseNumber,
+                subCaseNumber: parents.caseSubCaseNumber ?? undefined,
+                parentCaseId: parents.caseParentCaseId ?? undefined,
+                _parentCaseNumber: parents.parentCaseNumber ?? undefined,
                 _type: {},
                 _parent: {
                     name: parents.milestoneName,
                     _type: {},
                 } as MilestoneData,
             });
-            const parentCaseDisplayNumber = parentCase.number
+            const parentCaseDisplayNumber = parentCase._displayNumber
                 ? ' | ' + parentCase._displayNumber
                 : '';
             let contract_Number_Alias = parents.contractNumber;

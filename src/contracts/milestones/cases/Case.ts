@@ -13,6 +13,7 @@ import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesControll
 export default class Case extends BusinessObject implements CaseData {
     id?: number;
     number?: number;
+    subCaseNumber?: number;
     _wasChangedToUniquePerMilestone?: boolean;
     name?: string | null;
     description?: string;
@@ -22,6 +23,7 @@ export default class Case extends BusinessObject implements CaseData {
     _displayNumber?: string;
     milestoneId?: number;
     parentCaseId?: number;
+    _parentCaseNumber?: number;
     _parentCaseGdFolderId?: string;
     _parent: MilestoneData;
     _risk: any;
@@ -34,9 +36,12 @@ export default class Case extends BusinessObject implements CaseData {
         super({ ...initParamObject, _dbTableName: 'Cases' });
         this.id = initParamObject.id;
         this.number = initParamObject.number;
+        this.subCaseNumber = initParamObject.subCaseNumber;
         this._type = initParamObject._type;
         if (initParamObject.parentCaseId)
             this.parentCaseId = initParamObject.parentCaseId;
+        if (initParamObject._parentCaseNumber !== undefined)
+            this._parentCaseNumber = initParamObject._parentCaseNumber;
         if (initParamObject._type.isUniquePerMilestone && this.number)
             this._wasChangedToUniquePerMilestone = true;
 
@@ -50,12 +55,7 @@ export default class Case extends BusinessObject implements CaseData {
             if (initParamObject._type.id)
                 this.typeId = initParamObject._type.id;
 
-            this.setDisplayNumber(); //ustawia też this._folderName - uruchamia this.setGdFolderName();
-            this._typeFolderNumber_TypeName_Number_Name = `${this._type.folderNumber} ${this._type.name}`;
-            if (!this._type.isUniquePerMilestone)
-                this._typeFolderNumber_TypeName_Number_Name += ` | ${
-                    this._displayNumber
-                } ${this.name || ''}`;
+            this.setDisplayNumber();
         }
         if (initParamObject.gdFolderId) {
             this.setGdFolderIdAndUrl(initParamObject.gdFolderId);
@@ -76,18 +76,35 @@ export default class Case extends BusinessObject implements CaseData {
     }
     setAsUniquePerMilestone() {
         this.number = undefined;
+        this.subCaseNumber = undefined;
         this.name = null;
     }
 
-    //ustawia numer do wyświetlenia w sytemie na podstawie danych z bazy
     setDisplayNumber() {
-        let _displayNumber;
-        if (!this.number) _displayNumber = '00';
-        else if (this.number < 10) _displayNumber = '0' + this.number;
-        else _displayNumber = this.number;
-        _displayNumber = 'S' + _displayNumber;
-        this._displayNumber = _displayNumber;
+        if (this.parentCaseId) {
+            const parentNum = this._parentCaseNumber ?? 0;
+            const parentStr =
+                parentNum < 10 ? '0' + parentNum : String(parentNum);
+            const subCaseNumber = this.subCaseNumber ?? this.number;
+            const subStr = !subCaseNumber
+                ? '00'
+                : subCaseNumber < 10
+                  ? '0' + subCaseNumber
+                  : String(subCaseNumber);
+            this._displayNumber = `S${parentStr}.${subStr}`;
+        } else {
+            let _displayNumber: string | number;
+            if (!this.number) _displayNumber = '00';
+            else if (this.number < 10) _displayNumber = '0' + this.number;
+            else _displayNumber = this.number;
+            this._displayNumber = 'S' + _displayNumber;
+        }
         this.gdFolderName();
+        if (this._type) {
+            this._typeFolderNumber_TypeName_Number_Name = `${this._type.folderNumber} ${this._type.name}`;
+            if (!this._type.isUniquePerMilestone)
+                this._typeFolderNumber_TypeName_Number_Name += ` | ${this._displayNumber} ${this.name || ''}`;
+        }
     }
 
     gdFolderName() {

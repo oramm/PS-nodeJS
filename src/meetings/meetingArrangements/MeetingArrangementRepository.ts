@@ -47,6 +47,9 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
                 Cases.Id AS CaseId,
                 Cases.Name AS CaseName,
                 Cases.Number AS CaseNumber,
+                Cases.ParentCaseId AS CaseParentCaseId,
+                Cases.SubCaseNumber AS CaseSubCaseNumber,
+                ParentCases.Number AS CaseParentCaseNumber,
                 CaseTypes.Id AS CaseTypeId,
                 CaseTypes.Name AS CaseTypeName,
                 CaseTypes.FolderNumber,
@@ -62,6 +65,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
                 Persons.Email AS OwnerEmail
             FROM MeetingArrangements
             JOIN Cases ON MeetingArrangements.CaseId=Cases.Id
+            LEFT JOIN Cases AS ParentCases ON ParentCases.Id=Cases.ParentCaseId
             JOIN CaseTypes ON Cases.TypeId=CaseTypes.Id
             JOIN Milestones ON Cases.MilestoneId=Milestones.Id
             JOIN Contracts ON Milestones.ContractId=Contracts.Id
@@ -96,6 +100,9 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
             _case: {
                 id: row.CaseId,
                 name: row.CaseName,
+                subCaseNumber: row.CaseSubCaseNumber ?? undefined,
+                parentCaseId: row.CaseParentCaseId ?? undefined,
+                _parentCaseNumber: row.CaseParentCaseNumber ?? undefined,
                 _typeFolderNumber_TypeName_Number_Name:
                     this.makeCaseTypeaheadLabel(row),
                 _type: {
@@ -128,16 +135,33 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
             return baseLabel;
         }
 
-        const displayNumber = this.makeCaseDisplayNumber(row.CaseNumber);
+        const displayNumber = this.makeCaseDisplayNumber(row);
         const caseName = ToolsDb.sqlToString(row.CaseName) || '';
         return `${baseLabel} | ${displayNumber} ${caseName}`.trim();
     }
 
-    private makeCaseDisplayNumber(caseNumber?: number | null): string {
-        if (!caseNumber) {
-            return 'S00';
+    private makeCaseDisplayNumber(row: any): string {
+        if (row.CaseParentCaseId && row.CaseParentCaseNumber != null) {
+            return `${this.makeSimpleCaseDisplayNumber(
+                row.CaseParentCaseNumber
+            )}.${this.makePaddedCaseNumber(
+                row.CaseSubCaseNumber ?? row.CaseNumber
+            )}`;
         }
 
-        return caseNumber < 10 ? `S0${caseNumber}` : `S${caseNumber}`;
+        return this.makeSimpleCaseDisplayNumber(row.CaseNumber);
     }
+
+    private makeSimpleCaseDisplayNumber(caseNumber?: number | null): string {
+        return `S${this.makePaddedCaseNumber(caseNumber)}`;
+    }
+
+    private makePaddedCaseNumber(caseNumber?: number | null): string {
+        if (!caseNumber) {
+            return '00';
+        }
+
+        return caseNumber < 10 ? `0${caseNumber}` : String(caseNumber);
+    }
+
 }
