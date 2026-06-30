@@ -617,13 +617,18 @@ export default class CasesController extends BaseController<
             await conn.commit();
             console.log('Cases with Tasks saved in DB');
 
-            // 3. Dodaj do Scrum
+            // 3. Dodaj do Scrum (błąd nie może cofnąć już zatwierdzonej transakcji DB)
             for (const data of caseData) {
                 await CasesController.addInScrum(
                     data.caseItem,
                     auth,
                     data.defaultTasksInDb,
                     options?.isPartOfBatch
+                ).catch((err) =>
+                    console.error(
+                        `[addBulkWithDefaultTasks] Scrum sync failed for case ${data.caseItem.id} ("${data.caseItem.name}"):`,
+                        err
+                    )
                 );
             }
             console.log('Cases added to Scrum');
