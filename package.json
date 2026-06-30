@@ -26,6 +26,7 @@
         "bugfix:sync-github": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-sync-github.ts",
         "bugfix:daily-inbox": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-daily-inbox.ts",
         "bugfix:retention": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-retention.ts",
+        "gd:check-trashed": "cross-env NODE_ENV=development ts-node src/scripts/gd-check-trashed-cases.ts",
         "check:cycles": "madge --circular --extensions ts,tsx src",
         "test": "jest",
         "test:watch": "jest --watch",
