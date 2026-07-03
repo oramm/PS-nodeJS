@@ -339,7 +339,7 @@ export default class KsefController {
         // 1. Pobierz metadata faktury
         const meta = await KsefMetadataRepository.findByInvoiceId(invoiceId);
         if (!meta) {
-            throw new Error(`Faktura ${invoiceId} nie była wysłana do KSeF`);
+            return { invoiceId, ksefNumber: null, status: null };
         }
 
         // 2. Jeśli już mamy ksefNumber - zwróć zapisane dane
