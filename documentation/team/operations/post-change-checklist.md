@@ -63,6 +63,40 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-07-03 - Invoice Status ENUM: add "Odrzucona przez KSeF"
+
+### Scope
+
+- Added a persistent terminal-error status for invoices rejected by KSeF: backend `KsefController.checkStatusByInvoiceId` now writes `Invoices.Status = 'Odrzucona przez KSeF'` and `Invoices.KsefStatus = 'ERROR'` when KSeF returns a terminal error code (>=400, excluding 440 duplicate), instead of silently leaving the invoice stuck on "Wysłana do KSeF" forever.
+- Wrote, but did not execute (pending explicit approval), the SQL migration widening the `Invoices.Status` ENUM to include the new value.
+
+### Impact
+
+- DB: `Invoices.Status` ENUM needs `'Odrzucona przez KSeF'` appended; without this migration, MariaDB (non-strict mode) silently truncates the write to `''` instead of erroring, which is exactly the bug this migration fixes (confirmed empirically on local dev DB `envi_16_06`, invoice Id 6283).
+- ENV: none.
+- Deploy: run migration `src/invoices/migrations/009_add_invoice_ksef_error_status.sql` on every target environment (dev, and production before/with backend deploy) before this backend code path can persist the new status correctly.
+
+### Required Actions
+
+- Apply `src/invoices/migrations/009_add_invoice_ksef_error_status.sql` on development and production before/with rollout.
+- Any invoice rows already silently corrupted to `Status=''` by this bug (e.g. Invoices.Id 6283 on local dev) need a corrective re-check (click "Odśwież status") or manual UPDATE after the migration lands.
+
+### Verification
+
+- After migration: `SHOW COLUMNS FROM Invoices WHERE Field='Status'` should list `'Odrzucona przez KSeF'` in the enum.
+- Re-trigger a KSeF rejection check on an affected invoice and confirm `Invoices.Status` persists as `'Odrzucona przez KSeF'` (not `''`) via direct DB read, and that the frontend badge/buttons reflect it after a full page reload (not just in-session).
+
+### Rollback
+
+- `ALTER TABLE invoices CHANGE Status Status ENUM('Na później','Do zrobienia','Zrobiona','Wysłana','Gotowa do wysłania KSeF','Wysłana do KSeF','Zapłacona','Wycofana','Do korekty') CHARACTER SET utf8 COLLATE utf8_polish_ci NOT NULL;` (matches migration `007_add_invoice_status.sql`) — only safe if no row currently holds the new value.
+
+### Links
+
+- `src/invoices/migrations/009_add_invoice_ksef_error_status.sql`
+- `src/invoices/KSeF/KsefController.ts`
+- `src/setup/Setup.ts`
+- `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/Erp/InvoicesList/InvoiceDetails/KsefSection.tsx`
+
 ## 2026-06-26 - SubCaseNumber for child cases
 
 ### Scope
