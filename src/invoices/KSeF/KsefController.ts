@@ -394,6 +394,16 @@ export default class KsefController {
                 invoice.ksefStatus = statusResp.status?.code === 200 ? 'ACCEPTED' : updateData.status;
                 await this.repo.editInDb(invoice, undefined, undefined, ['ksefNumber', 'ksefStatus']);
             }
+        } else if (statusResp.status?.code && statusResp.status.code >= 400 && statusResp.status.code !== 440) {
+            // Błąd terminalny (np. "Błąd weryfikacji semantyki dokumentu faktury") - zapisz trwale na fakturze,
+            // inaczej invoice.status/ksefStatus zostają na "wysłana/PENDING" na zawsze mimo odrzucenia przez KSeF
+            const invoices = await this.repo.find([{ id: invoiceId }]);
+            if (invoices[0]) {
+                const invoice = invoices[0];
+                invoice.status = Setup.InvoiceStatus.KSEF_ERROR;
+                invoice.ksefStatus = 'ERROR';
+                await this.repo.editInDb(invoice, undefined, undefined, ['status', 'ksefStatus']);
+            }
         }
 
         await KsefMetadataRepository.updateMetadata(invoiceId, updateData);
