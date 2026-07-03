@@ -149,6 +149,7 @@ export default class Setup {
         SENT: 'Wysłana',
         READY_FOR_KSEF: 'Gotowa do wysłania KSeF',
         SENT_TO_KSEF: 'Wysłana do KSeF',
+        KSEF_ERROR: 'Odrzucona przez KSeF',
         PAID: 'Zapłacona',
         TO_CORRECT: 'Do korekty',
         WITHDRAWN: 'Wycofana',
