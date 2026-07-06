@@ -18,6 +18,7 @@ import mysql from 'mysql2/promise';
 import LetterEntity from './associations/LetterEntity';
 import LetterCase from './associations/LetterCase';
 import ToolsGd from '../tools/ToolsGd';
+import ToolsMail from '../tools/ToolsMail';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
@@ -588,6 +589,17 @@ export default class LettersController extends BaseController<
         letter: Letter,
         conn: mysql.PoolConnection
     ): Promise<void> {
+        // GUARD: pusty zestaw podmiotów oznacza niekompletny payload, a nie
+        // świadome usunięcie wszystkich powiązań (formularz wymaga ≥1 podmiotu).
+        // Bez tego DELETE+rebuild skasowałby Letters_Entities i pismo zniknęłoby
+        // z wyszukiwarki (INNER JOIN Letters_Entities).
+        if (
+            letter._entitiesMain.length === 0 &&
+            letter._entitiesCc.length === 0
+        ) {
+            this.reportEmptyAssociations(letter, 'Letters_Entities');
+            return;
+        }
         await this.deleteEntitiesAssociations(letter, conn);
         await this.addEntitiesAssociations(letter, conn);
     }
@@ -605,8 +617,37 @@ export default class LettersController extends BaseController<
         letter: Letter,
         conn: mysql.PoolConnection
     ): Promise<void> {
+        // GUARD: pusta lista spraw oznacza niekompletny payload, a nie świadome
+        // usunięcie wszystkich powiązań (formularz wymaga ≥1 sprawy). Bez tego
+        // DELETE+rebuild skasowałby Letters_Cases i pismo zniknęłoby z
+        // wyszukiwarki (INNER JOIN Letters_Cases).
+        if (letter._cases.length === 0) {
+            this.reportEmptyAssociations(letter, 'Letters_Cases');
+            return;
+        }
         await this.deleteCaseAssociations(letter, conn);
         await this.addCaseAssociations(letter, conn);
+    }
+
+    /**
+     * Wysyła mailowy raport o próbie aktualizacji asocjacji pisma z pustym
+     * zestawem powiązań (pominiętej przez guard). Sygnalizuje niekompletny
+     * payload, który wcześniej powodował trwałe usuwanie rekordów z
+     * Letters_Cases / Letters_Entities i znikanie pism z wyszukiwarki.
+     */
+    private static reportEmptyAssociations(
+        letter: Letter,
+        table: 'Letters_Cases' | 'Letters_Entities'
+    ): void {
+        const message =
+            `LettersController: pominięto aktualizację ${table} dla pisma ` +
+            `id=${letter.id}, number=${letter.number} — pusty zestaw powiązań ` +
+            `w payloadzie (_cases=${letter._cases.length}, ` +
+            `_entitiesMain=${letter._entitiesMain.length}, ` +
+            `_entitiesCc=${letter._entitiesCc.length}). ` +
+            `Powiązania NIE zostały usunięte, ale należy zweryfikować źródło edycji.`;
+        console.warn(message);
+        void ToolsMail.sendServerErrorReport(new Error(message));
     }
 
     /**
@@ -709,10 +750,16 @@ export default class LettersController extends BaseController<
 
             // Po operacjach na Google Drive mogą zmienić się identyfikatory
             // plików/folderów (gdDocumentId, gdFolderId) oraz liczba plików.
-            // Zapisz te zmiany w bazie danych, aby linki w aplikacji wskazywały
-            // na nowo utworzone zasoby.
+            // Zapisujemy WYŁĄCZNIE te pola. Nie wolno wołać edit() bez listy
+            // pól, bo wtedy edit() kasuje i odtwarza WSZYSTKIE asocjacje
+            // (Letters_Cases / Letters_Entities) na podstawie obiektu z payloadu
+            // — a to wywołanie służy tylko utrwaleniu pól GD.
             try {
-                await LettersController.edit(letter);
+                await LettersController.edit(letter, [
+                    'gdDocumentId',
+                    'gdFolderId',
+                    'letterFilesCount',
+                ]);
                 console.log('Letter GD-related fields persisted to DB');
             } catch (err) {
                 console.error('Failed to persist GD changes to DB:', err);
@@ -787,8 +834,15 @@ export default class LettersController extends BaseController<
         // 1. Dodaj załączniki do GD
         await letter.appendAttachmentsHandler(auth, blobEnviObjects);
 
-        // 2. Aktualizuj Letter w bazie danych
-        await LettersController.edit(letter);
+        // 2. Utrwal TYLKO pola GD (liczba plików / identyfikatory). Bez listy
+        // pól edit() skasowałby i odtworzył wszystkie asocjacje na podstawie
+        // obiektu z payloadu, który przy dorzucaniu załączników nie musi
+        // zawierać kompletnych _cases/_entities.
+        await LettersController.edit(letter, [
+            'gdDocumentId',
+            'gdFolderId',
+            'letterFilesCount',
+        ]);
     }
 
     /**
