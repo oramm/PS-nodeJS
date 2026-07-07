@@ -13,7 +13,6 @@ import Tools from './tools/Tools';
 import ToolsDb from './tools/ToolsDb';
 import ToolsMail from './tools/ToolsMail';
 import cron from 'node-cron';
-import ScrumBackup from './ScrumSheet/ScrumBackup';
 import ToolsGapi from './setup/Sessions/ToolsGapi';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
@@ -642,6 +641,8 @@ require('./ai/AiRouters');
 
 // ScrumSheet maintenance routes
 require('./ScrumSheet/ScrumSheetRouters');
+// Scrumboard (aplikacja webowa - następca arkusza ScrumSheet)
+require('./scrumboard/ScrumboardRouters');
 require('./offers/OffersRouters');
 require('./offers/OfferBond/OfferBondsRouters');
 require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
@@ -695,20 +696,6 @@ app.listen(port, async () => {
     console.log('Db time zone set to +00:00');
 });
 
-cron.schedule('0 5 * * 1', async () => {
-    console.log('Uruchamianie zaplanowanego zadania kopii zapasowej...');
-    try {
-        await ToolsGapi.gapiReguestHandler(
-            null,
-            null as any,
-            ScrumBackup.backupScrumSheet,
-            [],
-            ScrumBackup,
-        );
-    } catch (error) {
-        console.error('Błąd podczas wykonywania zaplanowanego zadania:', error);
-    }
-});
 
 if (process.env.BUGFIX_DAILY_INBOX_CRON_ENABLED === 'true') {
     const expr = process.env.BUGFIX_DAILY_INBOX_CRON_EXPRESSION || '30 6 * * *';

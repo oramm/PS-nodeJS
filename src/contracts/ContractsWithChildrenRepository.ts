@@ -21,6 +21,8 @@ export type ContractsWithChildrenSearchParams = {
     _project?: Project;
     _contract?: Contract;
     contractId?: number;
+    /** OurId kontraktu ENVI - zwraca kontrakty powiązane (na roboty/dostawy) */
+    ourIdRelated?: string;
     _milestone?: Milestone;
     milestoneId?: number;
     _case?: Case;
@@ -32,6 +34,11 @@ export type ContractsWithChildrenSearchParams = {
     statusType?: 'active' | 'archived' | 'all';
     statuses?: string[];
 };
+
+/** mysql2 zwraca DECIMAL jako string - konwersja na number (NULL zostaje null) */
+function decimalToNumber(value: number | string | null): number | null {
+    return value === null || value === undefined ? null : Number(value);
+}
 
 /**
  * Repository dla ContractsWithChildren - warstwa dostępu do danych
@@ -133,6 +140,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 Tasks.Description AS TaskDescription,
                 Tasks.Deadline AS TaskDeadline,
                 Tasks.Status AS TaskStatus,
+                Tasks.EstimatedHours AS TaskEstimatedHours,
+                Tasks.HoursMon AS TaskHoursMon,
+                Tasks.HoursTue AS TaskHoursTue,
+                Tasks.HoursWed AS TaskHoursWed,
+                Tasks.HoursThu AS TaskHoursThu,
+                Tasks.HoursFri AS TaskHoursFri,
                 Tasks.OwnerId,
                 TasksOwners.Name AS OwnerName,
                 TasksOwners.Surname AS OwnerSurname,
@@ -200,6 +213,15 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             searchParams.contractId || searchParams._contract?.id;
         if (contractId) {
             conditions.push(mysql.format('Contracts.Id = ?', [contractId]));
+        }
+
+        // Kontrakty powiązane z kontraktem ENVI (scrumboard: prawy panel)
+        if (searchParams.ourIdRelated) {
+            conditions.push(
+                mysql.format('Contracts.OurIdRelated = ?', [
+                    searchParams.ourIdRelated,
+                ])
+            );
         }
 
         // Milestone ID
@@ -341,10 +363,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     number: row.ContractNumber,
                     name: ToolsDb.sqlToString(row.ContractName ?? ''),
                     comment: ToolsDb.sqlToString(row.ContractComment ?? ''),
-                    startDate: ToolsDate.dateJsToSql(
-                        row.ContractStartDate ?? ''
-                    ),
-                    endDate: ToolsDate.dateJsToSql(row.ContractEndDate ?? ''),
+                    startDate: row.ContractStartDate
+                        ? ToolsDate.dateJsToSql(row.ContractStartDate)
+                        : null,
+                    endDate: row.ContractEndDate
+                        ? ToolsDate.dateJsToSql(row.ContractEndDate)
+                        : null,
                     value: row.ContractValue,
                     status: row.ContractStatus,
                     gdFolderId: row.ContractGdFolderId,
@@ -481,6 +505,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 description: ToolsDb.sqlToString(row.TaskDescription ?? ''),
                 deadline: row.TaskDeadline ?? undefined,
                 status: row.TaskStatus ?? '',
+                estimatedHours: decimalToNumber(row.TaskEstimatedHours),
+                hoursMon: decimalToNumber(row.TaskHoursMon),
+                hoursTue: decimalToNumber(row.TaskHoursTue),
+                hoursWed: decimalToNumber(row.TaskHoursWed),
+                hoursThu: decimalToNumber(row.TaskHoursThu),
+                hoursFri: decimalToNumber(row.TaskHoursFri),
                 _owner: {
                     id: row.OwnerId ? row.OwnerId : undefined,
                     name: row.OwnerName ? row.OwnerName : '',
@@ -600,6 +630,12 @@ type ContractsWithChildrenRow = {
     TaskDescription: string | null;
     TaskDeadline: Date | string | null;
     TaskStatus: string | null;
+    TaskEstimatedHours: number | string | null;
+    TaskHoursMon: number | string | null;
+    TaskHoursTue: number | string | null;
+    TaskHoursWed: number | string | null;
+    TaskHoursThu: number | string | null;
+    TaskHoursFri: number | string | null;
     OwnerId: number | null;
     OwnerName: string | null;
     OwnerSurname: string | null;

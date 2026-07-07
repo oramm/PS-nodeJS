@@ -676,6 +676,7 @@ export default class CasesController extends BaseController<
         defaultTasks: Task[],
         isPartOfBatch?: boolean
     ): Promise<void> {
+        if (!Setup.scrumSheetSyncEnabled) return;
         const caseData = [
             caseItem.id,
             caseItem.typeId,

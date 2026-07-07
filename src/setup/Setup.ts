@@ -132,6 +132,20 @@ export default class Setup {
         },
     };
 
+    /** Konfiguracja scrumboarda w aplikacji webowej (następca arkusza ScrumSheet) */
+    static ScrumBoard = {
+        /** folder GD na kopie raportów scrumboarda */
+        reportFolderId: '1W1uWZj3Oje6h-PGYYJieXMSjAbihY-rS',
+        /** manager uwzględniany w podsumowaniu godzin obok pracowników (dawniej hardkod w CurrentSprint) */
+        timesSummaryExtraPersonId: 386,
+    };
+
+    /** Flaga wygaszania starej synchronizacji z arkuszem ScrumSheet.
+     *  Domyślnie włączona; ustaw SCRUM_SHEET_SYNC_ENABLED=false aby wyłączyć. */
+    static get scrumSheetSyncEnabled(): boolean {
+        return process.env.SCRUM_SHEET_SYNC_ENABLED !== 'false';
+    }
+
     static CaseTypes = {
         SECURITY_GUARANTEE: 99,
     };

@@ -245,6 +245,12 @@ export interface TaskData extends RepositoryDataItem {
     _parent: Case;
     _lastUpdated?: string;
     status: string;
+    estimatedHours?: number | null;
+    hoursMon?: number | null;
+    hoursTue?: number | null;
+    hoursWed?: number | null;
+    hoursThu?: number | null;
+    hoursFri?: number | null;
     ownerId?: number | null;
     _owner?: PersonData;
 }

@@ -466,6 +466,8 @@ export default class TasksController extends BaseController<
         externalConn?: mysql.PoolConnection,
         isPartOfBatch?: boolean
     ) {
+        // Wygaszanie synchronizacji z arkuszem ScrumSheet (patrz Setup.scrumSheetSyncEnabled)
+        if (!Setup.scrumSheetSyncEnabled) return;
         const conn: mysql.PoolConnection = externalConn
             ? externalConn
             : await ToolsDb.pool.getConnection();
@@ -725,6 +727,7 @@ export default class TasksController extends BaseController<
     }
 
     static async editInScrum(task: Task, auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         let currentSprintValues = <any[][]>(
             await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -774,6 +777,7 @@ export default class TasksController extends BaseController<
     }
 
     static async deleteFromScrum(task: Task, auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
             valueToFind: <number>task.id,

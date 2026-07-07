@@ -8,6 +8,12 @@ export default class Task extends BusinessObject {
     description?: string;
     deadline?: string | Date | null;
     status?: string;
+    estimatedHours?: number | null;
+    hoursMon?: number | null;
+    hoursTue?: number | null;
+    hoursWed?: number | null;
+    hoursThu?: number | null;
+    hoursFri?: number | null;
     ownerId?: number | null;
     _owner?: PersonData;
     caseId?: number;
@@ -26,6 +32,19 @@ export default class Task extends BusinessObject {
             this.deadline = ToolsDate.dateJsToSql(initParamObject.deadline);
         else if (initParamObject.deadline === null) this.deadline = null;
         this.status = initParamObject.status;
+        // undefined = pole nietknięte (pomijane przy zapisie do DB), null = wyczyszczenie wartości
+        if (initParamObject.estimatedHours !== undefined)
+            this.estimatedHours = initParamObject.estimatedHours;
+        if (initParamObject.hoursMon !== undefined)
+            this.hoursMon = initParamObject.hoursMon;
+        if (initParamObject.hoursTue !== undefined)
+            this.hoursTue = initParamObject.hoursTue;
+        if (initParamObject.hoursWed !== undefined)
+            this.hoursWed = initParamObject.hoursWed;
+        if (initParamObject.hoursThu !== undefined)
+            this.hoursThu = initParamObject.hoursThu;
+        if (initParamObject.hoursFri !== undefined)
+            this.hoursFri = initParamObject.hoursFri;
         if (initParamObject._owner) {
             this.ownerId = initParamObject._owner.id;
             this._owner = initParamObject._owner;

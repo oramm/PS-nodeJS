@@ -150,6 +150,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     }
 
     async editInScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         let currentSprintValues = <any[][]>(
             await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -214,6 +215,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         let currentSprintValues = <any[][]>(
             await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,

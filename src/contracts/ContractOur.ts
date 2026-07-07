@@ -79,6 +79,7 @@ export default class ContractOur extends Contract implements OurContractData {
     }
     /** wstawia wiersz nagłówka kontratu - bez zadań */
     async addInScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         if (!(await this.shouldBeInScrum())) return;
 
         await ToolsSheets.insertRows(auth, {
@@ -155,6 +156,7 @@ export default class ContractOur extends Contract implements OurContractData {
     }
     /**zmienia dane w nagłówku kontraktu i odnosniki */
     async editInScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         if (!(await this.shouldBeInScrum())) {
             this.deleteFromScrum(auth);
             return;
@@ -232,6 +234,7 @@ export default class ContractOur extends Contract implements OurContractData {
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractOurIdColName,
             valueToFind: this.ourId,

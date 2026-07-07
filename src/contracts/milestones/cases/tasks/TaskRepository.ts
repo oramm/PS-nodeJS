@@ -32,6 +32,11 @@ export default class TaskRepository extends BaseRepository<Task> {
         super('Tasks');
     }
 
+    /** mysql2 zwraca DECIMAL jako string - konwersja na number (NULL zostaje null) */
+    static decimalToNumber(value: any): number | null {
+        return value === null || value === undefined ? null : Number(value);
+    }
+
     protected mapRowToModel(row: any): Task {
         return new Task({
             id: row.Id,
@@ -39,6 +44,12 @@ export default class TaskRepository extends BaseRepository<Task> {
             description: row.Description,
             deadline: row.Deadline,
             status: row.Status,
+            estimatedHours: TaskRepository.decimalToNumber(row.EstimatedHours),
+            hoursMon: TaskRepository.decimalToNumber(row.HoursMon),
+            hoursTue: TaskRepository.decimalToNumber(row.HoursTue),
+            hoursWed: TaskRepository.decimalToNumber(row.HoursWed),
+            hoursThu: TaskRepository.decimalToNumber(row.HoursThu),
+            hoursFri: TaskRepository.decimalToNumber(row.HoursFri),
             ownerId: row.OwnerId,
             _owner: {
                 id: row.OwnerId,
@@ -74,6 +85,12 @@ export default class TaskRepository extends BaseRepository<Task> {
                     Tasks.Description AS TaskDescription,
                     Tasks.Deadline AS TaskDeadline,
                     Tasks.Status AS TaskStatus,
+                    Tasks.EstimatedHours,
+                    Tasks.HoursMon,
+                    Tasks.HoursTue,
+                    Tasks.HoursWed,
+                    Tasks.HoursThu,
+                    Tasks.HoursFri,
                     Tasks.OwnerId,
                     Cases.Id AS CaseId,
                     Cases.Name AS CaseName,

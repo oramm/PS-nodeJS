@@ -250,6 +250,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     async editInScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         await Promise.all([
             this.editInDataSheet(auth),
             this.editInCurrentSprintSheet(auth),
@@ -361,6 +362,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     async deleteFromScrumSheet(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         await Promise.all([
             this.deleteFromCurrentSprintSheet(auth),
             this.deleteFromDataSheet(auth),
