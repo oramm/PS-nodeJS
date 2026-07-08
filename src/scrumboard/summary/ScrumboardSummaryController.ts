@@ -50,16 +50,26 @@ export default class ScrumboardSummaryController {
             planningEntries.map((entry) => [entry.personId, entry])
         );
 
-        // Wszystkie zadania scrumboardowe (nie-Backlog) osób z podsumowania
+        // Zadania scrumboardowe (nie-Backlog) osób z podsumowania,
+        // z pominięciem zadań z kontraktów zakończonych/archiwalnych
         const placeholders = personIds.map(() => '?').join(', ');
         const rows: TaskHoursRow[] = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT OwnerId, Status, EstimatedHours,
-                    HoursMon, HoursTue, HoursWed, HoursThu, HoursFri
+            `SELECT Tasks.OwnerId, Tasks.Status, Tasks.EstimatedHours,
+                    Tasks.HoursMon, Tasks.HoursTue, Tasks.HoursWed, Tasks.HoursThu, Tasks.HoursFri
                 FROM Tasks
-                WHERE OwnerId IN (${placeholders})
-                    AND Status <> ?`,
+                JOIN Cases ON Cases.Id = Tasks.CaseId
+                JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+                JOIN Contracts ON Contracts.Id = Milestones.ContractId
+                WHERE Tasks.OwnerId IN (${placeholders})
+                    AND Tasks.Status <> ?
+                    AND Contracts.Status NOT IN (?, ?)`,
             undefined,
-            [...personIds, Setup.TaskStatus.BACKLOG]
+            [
+                ...personIds,
+                Setup.TaskStatus.BACKLOG,
+                Setup.ContractStatus.FINISHED,
+                Setup.ContractStatus.ARCHIVAL,
+            ]
         )) as any[];
 
         const reportedOnlyStatuses = new Set([
