@@ -138,6 +138,10 @@ export default class Setup {
         reportFolderId: '1W1uWZj3Oje6h-PGYYJieXMSjAbihY-rS',
         /** manager uwzględniany w podsumowaniu godzin obok pracowników (dawniej hardkod w CurrentSprint) */
         timesSummaryExtraPersonId: 386,
+        /** OurId kontraktu-koszyka "Oferty" (stały biznesowo, niezależny od id środowiska) */
+        offersBucketContractOurId: 'ENV.OFE.01',
+        /** Nazwa typu sprawy-koszyka utworzonego w migracji 003 (unikalny per kamień) */
+        bucketCaseTypeName: 'Zadania',
     };
 
     /** Flaga wygaszania starej synchronizacji z arkuszem ScrumSheet.
