@@ -397,6 +397,13 @@ export default class KsefXmlBuilder {
 
     /**
      * Buduje sekcje podsumowania VAT (P_13_x, P_14_x)
+     *
+     * UWAGA: warunek `net !== 0` (a nie `net > 0`) jest wymagany dla faktur
+     * korygujących. Na korekcie pola P_13/P_14 zawierają RÓŻNICĘ (kwota po
+     * korekcie − kwota pierwotna), która może być ujemna. Warunek `> 0`
+     * powodował, że tabela VAT (P_13/P_14) w ogóle nie pojawiała się na
+     * korektach zmniejszających. Zob. broszura FA(3) — pola P_13/P_14/P_15
+     * na korekcie mogą przyjmować wartości ujemne.
      */
     private static buildVatSectionsXml(
         vatSummary: Map<string, { net: number; vat: number }>,
@@ -405,7 +412,7 @@ export default class KsefXmlBuilder {
 
         // Stawka 23%
         const vat23 = vatSummary.get('23');
-        if (vat23 && vat23.net > 0) {
+        if (vat23 && vat23.net !== 0) {
             xml += `
         <P_13_1>${this.formatAmount(vat23.net)}</P_13_1>
         <P_14_1>${this.formatAmount(vat23.vat)}</P_14_1>`;
@@ -413,7 +420,7 @@ export default class KsefXmlBuilder {
 
         // Stawka 8%
         const vat8 = vatSummary.get('8');
-        if (vat8 && vat8.net > 0) {
+        if (vat8 && vat8.net !== 0) {
             xml += `
         <P_13_2>${this.formatAmount(vat8.net)}</P_13_2>
         <P_14_2>${this.formatAmount(vat8.vat)}</P_14_2>`;
@@ -421,7 +428,7 @@ export default class KsefXmlBuilder {
 
         // Stawka 5%
         const vat5 = vatSummary.get('5');
-        if (vat5 && vat5.net > 0) {
+        if (vat5 && vat5.net !== 0) {
             xml += `
         <P_13_3>${this.formatAmount(vat5.net)}</P_13_3>
         <P_14_3>${this.formatAmount(vat5.vat)}</P_14_3>`;
@@ -429,14 +436,14 @@ export default class KsefXmlBuilder {
 
         // Stawka 0%
         const vat0 = vatSummary.get('0');
-        if (vat0 && vat0.net > 0) {
+        if (vat0 && vat0.net !== 0) {
             xml += `
         <P_13_6_1>${this.formatAmount(vat0.net)}</P_13_6_1>`;
         }
 
         // Stawka ZW (zwolniony)
         const vatZw = vatSummary.get('zw');
-        if (vatZw && vatZw.net > 0) {
+        if (vatZw && vatZw.net !== 0) {
             xml += `
         <P_13_7>${this.formatAmount(vatZw.net)}</P_13_7>`;
         }

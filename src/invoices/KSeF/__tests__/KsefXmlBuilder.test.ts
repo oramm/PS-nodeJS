@@ -148,6 +148,29 @@ describe('KsefXmlBuilder FA(3) payment and sale date mapping', () => {
         expect(xml).toContain('<TypKorekty>3</TypKorekty>');
     });
 
+    it('dodaje tabelę VAT (P_13/P_14) na korekcie zmniejszającej z wartościami ujemnymi', () => {
+        const xml = KsefXmlBuilder.buildCorrectionXml(
+            makeInvoice({
+                _items: [
+                    {
+                        description: 'Korekta usługi',
+                        quantity: -1,
+                        unitPrice: 100,
+                        vatRate: 23,
+                    },
+                ],
+            }) as any,
+            {
+                ksefNumber: '1111111111-20260101-AAAAAA-BBBBBB-CC',
+                invoiceNumber: 'FV/1/2026',
+                issueDate: '2026-01-01',
+            },
+        );
+
+        expect(xml).toContain('<P_13_1>-100.00</P_13_1>');
+        expect(xml).toContain('<P_14_1>-23.00</P_14_1>');
+    });
+
     it('dodaje Podmiot3 z rolą 8 gdy JST=1', () => {
         const xml = KsefXmlBuilder.buildXml(
             makeInvoice({
