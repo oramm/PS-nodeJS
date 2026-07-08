@@ -157,14 +157,17 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = Contracts.OurIdRelated
             LEFT JOIN Milestones ON Milestones.ContractId=Contracts.Id
             LEFT JOIN Cases ON Cases.MilestoneId=Milestones.Id
-            JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
+            -- LEFT (nie INNER): kontrakty-koszyki (np. Oferty/Sprawy ogólne) mają kamienie bez typu
+            -- (MilestoneTypeId=NULL) i nie są w MilestoneTypes_ContractTypes. Dla poprawnych danych
+            -- wynik jest identyczny jak przy INNER; LEFT tylko przestaje ukrywać te koszyki.
+            LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             LEFT JOIN CaseTypes ON Cases.typeId=CaseTypes.Id
             LEFT JOIN Tasks ON Tasks.CaseId=Cases.Id
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
             LEFT JOIN Persons AS RelatedManagers ON RelatedOurContractsData.ManagerId = RelatedManagers.Id
             LEFT JOIN Persons AS RelatedAdmins ON RelatedOurContractsData.AdminId = RelatedAdmins.Id
-            JOIN MilestoneTypes_ContractTypes
+            LEFT JOIN MilestoneTypes_ContractTypes
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId
                 AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN Persons AS TasksOwners ON TasksOwners.Id = Tasks.OwnerId
