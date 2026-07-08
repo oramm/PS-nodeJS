@@ -40,6 +40,31 @@ export default class CaseRepository extends BaseRepository<Case> {
     }
 
     /**
+     * Zwraca Id sprawy-koszyka scrumboardu dla kontraktu wskazanego OurId
+     * (np. "Oferty" = ENV.OFE.01). Koszyk to sprawa typu bez powiązanego typu
+     * kamienia (CaseTypes.MilestoneTypeId IS NULL), utworzona migracją 003.
+     */
+    async findScrumboardBucketCaseId(
+        contractOurId: string,
+        caseTypeName: string
+    ): Promise<number | undefined> {
+        const sql = mysql.format(
+            `SELECT Cases.Id AS Id
+             FROM Cases
+             JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+             JOIN OurContractsData ON OurContractsData.Id = Milestones.ContractId
+             JOIN CaseTypes ON CaseTypes.Id = Cases.TypeId
+             WHERE OurContractsData.OurId = ?
+               AND CaseTypes.Name = ?
+               AND CaseTypes.MilestoneTypeId IS NULL
+             LIMIT 1`,
+            [contractOurId, caseTypeName]
+        );
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+        return rows[0]?.Id;
+    }
+
+    /**
      * Wyszukuje Cases w bazie danych
      *
      * @param orConditions - Warunki wyszukiwania (OR groups)

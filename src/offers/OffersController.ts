@@ -4,6 +4,8 @@ import CitiesController from '../Admin/Cities/CitiesController';
 import Milestone from '../contracts/milestones/Milestone';
 import MilestonesController from '../contracts/milestones/MilestonesController';
 import CasesController from '../contracts/milestones/cases/CasesController';
+import TasksController from '../contracts/milestones/cases/tasks/TasksController';
+import Person from '../persons/Person';
 import MilestoneTemplatesController from '../contracts/milestones/milestoneTemplates/MilestoneTemplatesController';
 import PersonsController from '../persons/PersonsController';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
@@ -12,7 +14,7 @@ import EnviErrors from '../tools/Errors';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
-import { MilestoneDateData, OfferEventData } from '../types/types';
+import { MilestoneDateData, OfferEventData, TaskData } from '../types/types';
 import ExternalOffer from './ExternalOffer';
 import Offer from './Offer';
 import OfferBondsController from './OfferBond/OfferBondsController';
@@ -302,11 +304,59 @@ export default class OffersController extends BaseController<
 
             TaskStore.update(taskId, 'Zapisuję nowe wydarzenie dla oferty', 95);
             await OfferEventsController.addNew(offer._lastEvent);
+
+            // Zadanie w koszyku scrumboardu "Oferty", przypisane do osoby rejestrującej.
+            await OffersController.addOffersScrumboardTask(offer, _editor, auth);
             console.groupEnd();
         } catch (err) {
             // Rollback: usuń ofertę przy błędzie (przekazujemy auth bo już go mamy)
             await this.delete(offer, undefined, auth);
             throw err;
+        }
+    }
+
+    /**
+     * Tworzy zadanie w koszyku scrumboardu "Oferty" (kontrakt ENV.OFE.01),
+     * przypisane do osoby rejestrującej ofertę. Best-effort — błąd nie może
+     * przerwać rejestracji oferty (dlatego własny try/catch, nie propagujemy).
+     */
+    private static async addOffersScrumboardTask(
+        offer: Offer,
+        owner: Person,
+        auth: OAuth2Client
+    ): Promise<void> {
+        try {
+            const caseId = await CasesController.getScrumboardBucketCaseId(
+                Setup.ScrumBoard.offersBucketContractOurId,
+                Setup.ScrumBoard.bucketCaseTypeName
+            );
+            if (!caseId) {
+                console.warn(
+                    'Koszyk scrumboardu "Oferty" nie istnieje (migracja 003?) — pomijam zadanie'
+                );
+                return;
+            }
+            await TasksController.add(
+                {
+                    name: `Oferta ${offer.alias}${
+                        offer.employerName ? ' - ' + offer.employerName : ''
+                    }${
+                        offer._city?.name ? ' - ' + offer._city.name : ''
+                    }`,
+                    status: Setup.TaskStatus.NOT_STARTED,
+                    deadline: offer.submissionDeadline ?? null,
+                    _owner: owner,
+                    // add() mapuje _case -> _parent (rzutowanie: TaskData wymaga _parent,
+                    // ale w praktyce dostarcza go _case)
+                    _case: { id: caseId },
+                } as unknown as TaskData & { _case: { id: number } },
+                auth
+            );
+        } catch (err) {
+            console.error(
+                'Nie udało się utworzyć zadania scrumboardu dla oferty:',
+                err
+            );
         }
     }
 

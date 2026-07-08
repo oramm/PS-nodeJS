@@ -127,6 +127,20 @@ export default class CasesController extends BaseController<
     }
 
     /**
+     * Id sprawy-koszyka scrumboardu dla kontraktu o podanym OurId (np. "Oferty").
+     * Zwraca undefined, jeśli koszyk nie istnieje (migracja 003 nie zastosowana).
+     */
+    static async getScrumboardBucketCaseId(
+        contractOurId: string,
+        caseTypeName: string
+    ): Promise<number | undefined> {
+        return this.getInstance().repository.findScrumboardBucketCaseId(
+            contractOurId,
+            caseTypeName
+        );
+    }
+
+    /**
      * API PUBLICZNE (dla Routera i innych klas)
      * Dodaje nowy Case - wrapper używający withAuth
      *
