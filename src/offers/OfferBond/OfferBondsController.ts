@@ -81,7 +81,7 @@ export default class OfferBondsController extends BaseController<
 
             return offerBond;
         } catch (err) {
-            await this.delete(offerBond);
+            if (offerBond.id) await this.delete(offerBond);
             throw err;
         }
     }

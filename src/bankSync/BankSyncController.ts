@@ -314,7 +314,7 @@ export default class BankSyncController {
                 bond: {
                     id: bond.id!,
                     offerId: bond.offerId,
-                    offerAlias: bond.offerAlias ?? null,
+                    offerAlias: bond._offerAlias ?? null,
                     value: bondValue,
                     status: bond.status,
                     expiryDate: bond.expiryDate ?? null,

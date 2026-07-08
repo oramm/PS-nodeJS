@@ -12,7 +12,7 @@ import ToolsMail from '../../tools/ToolsMail';
 export default class OfferBond extends BusinessObject implements OfferBondData {
     id?: number;
     offerId: number;
-    offerAlias?: string | null;
+    _offerAlias?: string | null;
     value: string | number;
     form: string;
     paymentData: string;
@@ -25,7 +25,7 @@ export default class OfferBond extends BusinessObject implements OfferBondData {
         if (!initParamObject.offerId)
             throw new Error('Offer id is not defined');
         this.offerId = initParamObject.offerId;
-        this.offerAlias = initParamObject.offerAlias ?? null;
+        this._offerAlias = initParamObject.offerAlias ?? null;
         //this.value = initParamObject.value;
 
         if (typeof initParamObject.value === 'string') {
