@@ -12,6 +12,7 @@ export interface ScrumboardAbsenceData {
     _typeName?: string;
     _typeColor?: string;
     _countsAgainstLimit?: boolean;
+    _countsAsCare?: boolean;
 }
 
 /** Nieobecność jako zakres dat (odpowiednik zaznaczenia w arkuszu "urlopy"). */
@@ -28,6 +29,7 @@ export default class ScrumboardAbsence implements ScrumboardAbsenceData {
     _typeName?: string;
     _typeColor?: string;
     _countsAgainstLimit?: boolean;
+    _countsAsCare?: boolean;
 
     constructor(data: ScrumboardAbsenceData) {
         this.id = data.id;
@@ -42,5 +44,6 @@ export default class ScrumboardAbsence implements ScrumboardAbsenceData {
         this._typeName = data._typeName;
         this._typeColor = data._typeColor;
         this._countsAgainstLimit = data._countsAgainstLimit;
+        this._countsAsCare = data._countsAsCare;
     }
 }

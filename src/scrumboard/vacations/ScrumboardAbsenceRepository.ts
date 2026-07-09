@@ -29,6 +29,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
             _typeName: row.TypeName,
             _typeColor: row.TypeColor,
             _countsAgainstLimit: !!row.CountsAgainstLimit,
+            _countsAsCare: !!row.CountsAsCare,
         });
     }
 
@@ -55,7 +56,8 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
 
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
                 a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
-                t.Name AS TypeName, t.Color AS TypeColor, t.CountsAgainstLimit
+                t.Name AS TypeName, t.Color AS TypeColor,
+                t.CountsAgainstLimit, t.CountsAsCare
             FROM ScrumboardAbsences a
             JOIN ScrumboardAbsenceTypes t ON t.Id = a.TypeId
             ${where}
@@ -69,7 +71,8 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
     async findById(id: number): Promise<ScrumboardAbsence | undefined> {
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
                 a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
-                t.Name AS TypeName, t.Color AS TypeColor, t.CountsAgainstLimit
+                t.Name AS TypeName, t.Color AS TypeColor,
+                t.CountsAgainstLimit, t.CountsAsCare
             FROM ScrumboardAbsences a
             JOIN ScrumboardAbsenceTypes t ON t.Id = a.TypeId
             WHERE a.Id = ?`;

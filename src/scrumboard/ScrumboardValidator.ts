@@ -141,10 +141,11 @@ export default class ScrumboardValidator {
         return num;
     }
 
-    /** Wymiar urlopu: bieżący (limitDays) + zaległy (carryoverDays), oba >= 0. */
+    /** Wymiar urlopu: bieżący + zaległy + pula opieki, wszystkie >= 0. */
     static parseVacationLimit(body: any): {
         limitDays: number;
         carryoverDays: number;
+        careDays: number;
     } {
         return {
             limitDays: this.parseDayAmount(body?.limitDays, 'limitDays'),
@@ -152,6 +153,7 @@ export default class ScrumboardValidator {
                 body?.carryoverDays ?? 0,
                 'carryoverDays'
             ),
+            careDays: this.parseDayAmount(body?.careDays ?? 0, 'careDays'),
         };
     }
 }

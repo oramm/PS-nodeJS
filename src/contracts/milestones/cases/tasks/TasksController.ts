@@ -419,7 +419,7 @@ export default class TasksController extends BaseController<
             LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             JOIN Contracts AS ParentContracts ON Milestones.ContractId = ParentContracts.Id
             LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
-            JOIN ContractTypes ON ContractTypes.Id = ParentContracts.TypeId
+            LEFT JOIN ContractTypes ON ContractTypes.Id = ParentContracts.TypeId
             LEFT JOIN MilestoneTypes_ContractTypes 
                 ON  MilestoneTypes_ContractTypes.ContractTypeId=ContractTypes.Id 
                 AND MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id
