@@ -113,7 +113,9 @@ export default class ScrumboardSummaryController {
                   planning.extraMeetingsHours
                 : 0;
             const available = planning ? planning._hoursAvailable : 0;
-            const total = acc.assigned + meetings;
+            const worked = acc.days.reduce((s, h) => s + h, 0);
+            const total = worked + meetings;
+            const remaining = available - worked;
             return {
                 personId: id,
                 personName: `${person.name ?? ''} ${person.surname ?? ''}`.trim(),
@@ -127,7 +129,7 @@ export default class ScrumboardSummaryController {
                 fri: acc.days[4],
                 meetings,
                 total,
-                remaining: available - total,
+                remaining,
             };
         });
     }
