@@ -12,7 +12,8 @@ export type ScrumboardEventType =
     | 'task-hours-changed'
     | 'hours-reset'
     | 'task-status-changed'
-    | 'planning-changed';
+    | 'planning-changed'
+    | 'absence-changed';
 
 type Client = {
     id: number;

@@ -8,6 +8,7 @@ import ScrumboardTaskHoursController from './taskHours/ScrumboardTaskHoursContro
 import ScrumboardPlanningController from './planning/ScrumboardPlanningController';
 import ScrumboardSummaryController from './summary/ScrumboardSummaryController';
 import ScrumboardReportController from './report/ScrumboardReportController';
+import ScrumboardVacationsController from './vacations/ScrumboardVacationsController';
 import TasksController from '../contracts/milestones/cases/tasks/TasksController';
 import { getScrumboardPersons } from './ScrumboardPersons';
 
@@ -236,6 +237,134 @@ app.post(
     async (req: Request, res: Response, next) => {
         try {
             const result = await ScrumboardReportController.generate();
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy (dane roczne zakładki) ----
+app.get(
+    '/scrumboard/vacations',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            const year = req.query.year
+                ? ScrumboardValidator.parseYear(req.query.year)
+                : new Date().getFullYear();
+            res.send(await ScrumboardVacationsController.getYearData(year));
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy: liczniki tygodniowe (informacyjne, dla zakładki Planowanie) ----
+app.get(
+    '/scrumboard/vacations/weekCounts',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            res.send(await ScrumboardVacationsController.getWeekCounts());
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy: utworzenie nieobecności ----
+app.post(
+    '/scrumboard/vacation',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            const values = ScrumboardValidator.parseAbsenceCreate(
+                req.parsedBody
+            );
+            const absence = await ScrumboardVacationsController.addAbsence(
+                values,
+                req.session.userData?.enviId
+            );
+            ScrumboardEvents.broadcast('absence-changed', {
+                action: 'add',
+                personId: absence.personId,
+                absenceId: absence.id,
+            });
+            res.send(absence);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy: edycja nieobecności ----
+app.put(
+    '/scrumboard/vacation/:id',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            const id = ScrumboardValidator.parseId(req.params.id, 'absenceId');
+            const values = ScrumboardValidator.parseAbsenceEdit(req.parsedBody);
+            const absence = await ScrumboardVacationsController.editAbsence(
+                id,
+                values
+            );
+            ScrumboardEvents.broadcast('absence-changed', {
+                action: 'edit',
+                personId: absence.personId,
+                absenceId: absence.id,
+            });
+            res.send(absence);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy: usunięcie nieobecności ----
+app.delete(
+    '/scrumboard/vacation/:id',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            const id = ScrumboardValidator.parseId(req.params.id, 'absenceId');
+            await ScrumboardVacationsController.deleteAbsence(id);
+            ScrumboardEvents.broadcast('absence-changed', {
+                action: 'delete',
+                absenceId: id,
+            });
+            res.send({ ok: true });
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ---- Urlopy: ustawienie rocznego limitu osoby ----
+app.put(
+    '/scrumboard/vacationLimit/:personId/:year',
+    requireSession,
+    async (req: Request, res: Response, next) => {
+        try {
+            const personId = ScrumboardValidator.parseId(
+                req.params.personId,
+                'personId'
+            );
+            const year = ScrumboardValidator.parseYear(req.params.year);
+            const { limitDays, carryoverDays } =
+                ScrumboardValidator.parseVacationLimit(req.parsedBody);
+            const result = await ScrumboardVacationsController.setLimit(
+                personId,
+                year,
+                limitDays,
+                carryoverDays
+            );
+            ScrumboardEvents.broadcast('absence-changed', {
+                action: 'limit',
+                personId,
+                year,
+            });
             res.send(result);
         } catch (error) {
             next(error);
