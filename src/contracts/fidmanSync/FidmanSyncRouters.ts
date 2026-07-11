@@ -8,16 +8,20 @@ import {
 /**
  * SYNC-P2 — operational surface on top of the SYNC-P1 FIDman outbox.
  *
- *   GET  /fidmanSync/contract/:id/status
+ * Route shape follows the per-entity sub-resource idiom used by the KSeF routes
+ * (InvoicesRouters.ts: GET /invoice/:id/ksef/status, POST /invoice/:id/ksef/send)
+ * and /contract/:id/move — i.e. /<resource>/:id/<subfeature>/<action>.
+ *
+ *   GET  /contract/:id/fidmanSync/status
  *     -> FidmanSyncStatus (see FidmanSync.ts) for the badge + skip-reason "awizo"
  *        on the contract list/card.
- *   POST /fidmanSync/contract/:id/retry
+ *   POST /contract/:id/fidmanSync/retry
  *     -> manual "dopchnij synchronizację": re-delivers the latest FAILED/SKIPPED
  *        row via deliverOutboxRow (P1 code, not reimplemented). 404 when there is
  *        no FAILED/SKIPPED row to retry.
  */
 app.get(
-    '/fidmanSync/contract/:id/status',
+    '/contract/:id/fidmanSync/status',
     async (req: Request, res: Response, next) => {
         try {
             const contractId = parseInt(req.params.id, 10);
@@ -32,7 +36,7 @@ app.get(
 );
 
 app.post(
-    '/fidmanSync/contract/:id/retry',
+    '/contract/:id/fidmanSync/retry',
     async (req: Request, res: Response, next) => {
         try {
             const contractId = parseInt(req.params.id, 10);
