@@ -5,6 +5,7 @@ import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 import Entity from '../../entities/Entity';
 import Project from '../../projects/Project';
+import { isValidNipChecksum } from '../aqmSync/AqmSync';
 
 /**
  * SYNC-P1 — PS ENVI -> FIDman sync.
@@ -511,4 +512,94 @@ export async function drainFidmanOutbox(options?: {
     }
 
     return summary;
+}
+
+export type FidmanNipGapEntity = {
+    entityId: number;
+    name: string | null;
+    taxNumber: string | null;
+    /** Synced-type contracts (this allowlist, non-Archiwalny) where this entity is a party. */
+    contractIds: number[];
+    reason: 'NO_NIP';
+    reasonLabel: string | null;
+};
+
+export type FidmanNeedsDataContract = {
+    contractId: number;
+    number: string | null;
+    name: string | null;
+    reason: 'NEEDS_DATA';
+    reasonLabel: string | null;
+};
+
+export type FidmanNipGapReport = {
+    noNip: FidmanNipGapEntity[];
+    needsData: FidmanNeedsDataContract[];
+};
+
+/**
+ * SYNC-P3 — "awizowanie braków": read-only gap list for the same scope as the
+ * B1 backfill (TypeId allowlist, Status <> 'Archiwalny'):
+ *  - noNip: distinct entities that are a party of ≥1 synced-type contract and
+ *    whose TaxNumber does not pass isValidNipChecksum (missing or malformed).
+ *  - needsData: synced-type contracts missing StartDate or EndDate.
+ * Reuses the type-id allowlist helper (typeIdInClause) and the P2 skip-reason
+ * label (fidmanSkipReasonLabel) — no new screen, this is the data source for
+ * whatever surface (badge/list) wants to render it.
+ */
+export async function getFidmanNipGapReport(): Promise<FidmanNipGapReport> {
+    const { clause, ids } = typeIdInClause();
+    if (ids.length === 0) return { noNip: [], needsData: [] };
+
+    const entityRows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT ce.EntityId AS entityId, e.Name AS name, e.TaxNumber AS taxNumber,
+                ce.ContractId AS contractId
+         FROM Contracts_Entities ce
+         JOIN Contracts c ON c.Id = ce.ContractId
+         JOIN Entities e ON e.Id = ce.EntityId
+         WHERE c.TypeId IN (${clause}) AND c.Status <> 'Archiwalny'`,
+        undefined,
+        ids
+    )) as {
+        entityId: number;
+        name: string | null;
+        taxNumber: string | null;
+        contractId: number;
+    }[];
+
+    const byEntity = new Map<number, FidmanNipGapEntity>();
+    for (const row of entityRows ?? []) {
+        if (isValidNipChecksum(row.taxNumber)) continue;
+        const existing = byEntity.get(row.entityId);
+        if (existing) {
+            existing.contractIds.push(row.contractId);
+        } else {
+            byEntity.set(row.entityId, {
+                entityId: row.entityId,
+                name: row.name,
+                taxNumber: row.taxNumber,
+                contractIds: [row.contractId],
+                reason: 'NO_NIP',
+                reasonLabel: fidmanSkipReasonLabel('NO_NIP'),
+            });
+        }
+    }
+
+    const contractRows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT Id AS contractId, Number AS number, Name AS name
+         FROM Contracts
+         WHERE TypeId IN (${clause}) AND Status <> 'Archiwalny'
+           AND (StartDate IS NULL OR EndDate IS NULL)`,
+        undefined,
+        ids
+    )) as { contractId: number; number: string | null; name: string | null }[];
+
+    return {
+        noNip: [...byEntity.values()],
+        needsData: (contractRows ?? []).map((row) => ({
+            ...row,
+            reason: 'NEEDS_DATA' as const,
+            reasonLabel: fidmanSkipReasonLabel('NEEDS_DATA'),
+        })),
+    };
 }

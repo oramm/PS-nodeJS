@@ -8,6 +8,7 @@ import {
     entityHasSyncedContract,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from '../contracts/fidmanSync/FidmanSync';
+import { isValidNipChecksum } from '../contracts/aqmSync/AqmSync';
 
 export type { EntitiesSearchParams };
 
@@ -81,6 +82,11 @@ export default class EntitiesController extends BaseController<
         console.group('EntitiesController.addEntity()');
         try {
             const entity = new Entity(entityData);
+            // SYNC-P3: no NIP guard here — a brand-new entity has no id yet, so it
+            // cannot already be a party of a contract (associations only reference
+            // existing entity ids, see ContractEntityController.addAssociations).
+            // entityHasSyncedContract() would always be false at this point; the
+            // guard only has bite on editEntity below.
             if (entity.shortName) {
                 const duplicate = await this.repository.find([
                     { shortName: entity.shortName },
@@ -163,6 +169,21 @@ export default class EntitiesController extends BaseController<
             try {
                 await ToolsDb.transaction(
                     async (conn: mysql.PoolConnection) => {
+                        const isSyncParty = await entityHasSyncedContract(
+                            entity.id,
+                            conn
+                        );
+                        // SYNC-P3: entities that are already a party of a synced-type
+                        // contract must carry a NIP that passes format+checksum — it
+                        // is FIDman's dedup/link key (legacy_id -> normalized NIP).
+                        // Non-sync-party entities are untouched: no format requirement,
+                        // so editing foreign/legacy counterparts that never sync keeps
+                        // working exactly as before.
+                        if (isSyncParty && !isValidNipChecksum(entity.taxNumber)) {
+                            throw new Error(
+                                `Podmiot "${entity.name ?? entity.id}" jest stroną zsynchronizowanej z FIDman umowy — wymagany prawidłowy NIP (10 cyfr, poprawna suma kontrolna).`
+                            );
+                        }
                         await this.repository.editInDb(entity, conn, true, [
                             'name',
                             'shortName',
@@ -172,7 +193,7 @@ export default class EntitiesController extends BaseController<
                             'email',
                             'phone',
                         ]);
-                        if (await entityHasSyncedContract(entity.id, conn)) {
+                        if (isSyncParty) {
                             fidmanOutboxId = await enqueueFidmanEntityPush(
                                 entity,
                                 conn

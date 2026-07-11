@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { app } from '../../index';
 import {
     getFidmanContractSyncStatus,
+    getFidmanNipGapReport,
     retryFidmanContractSync,
 } from './FidmanSync';
 
@@ -19,6 +20,11 @@ import {
  *     -> manual "dopchnij synchronizację": re-delivers the latest FAILED/SKIPPED
  *        row via deliverOutboxRow (P1 code, not reimplemented). 404 when there is
  *        no FAILED/SKIPPED row to retry.
+ *   GET  /fidmanSync/gaps
+ *     -> SYNC-P3 "awizowanie braków": FidmanNipGapReport — entities missing a
+ *        valid NIP that are parties of synced-type contracts, plus synced-type
+ *        contracts missing StartDate/EndDate. Global (not per-contract), so it
+ *        sits at the top level rather than under /contract/:id.
  */
 app.get(
     '/contract/:id/fidmanSync/status',
@@ -55,3 +61,12 @@ app.post(
         }
     }
 );
+
+app.get('/fidmanSync/gaps', async (req: Request, res: Response, next) => {
+    try {
+        const report = await getFidmanNipGapReport();
+        res.send(report);
+    } catch (error) {
+        next(error);
+    }
+});
