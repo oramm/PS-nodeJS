@@ -633,6 +633,7 @@ require('./projects/ProjectsRouters');
 
 require('./contracts/ContractsRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
+require('./contracts/fidmanSync/FidmanSyncRouters');
 require('./meetings/MeetingsRouters');
 require('./meetings/meetingArrangements/MeetingArrangementsRouters');
 require('./contractMeetingNotes/ContractMeetingNotesRouters');

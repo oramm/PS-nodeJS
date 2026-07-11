@@ -362,6 +362,109 @@ export async function tryDeliverAfterCommit(outboxId: number): Promise<void> {
     }
 }
 
+export type FidmanSyncStatus = {
+    contractId: number;
+    kind: FidmanKind;
+    status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED' | 'NONE';
+    skipReason: string | null;
+    skipReasonLabel: string | null;
+    lastError: string | null;
+    attempts: number;
+    updatedAt: string | null;
+};
+
+/** Human-readable meaning of a FIDman SkipReason, for the "awizo braków" UI. */
+export function fidmanSkipReasonLabel(reason: string | null): string | null {
+    switch (reason) {
+        case 'NEEDS_DATA':
+            return 'FIDman potrzebuje uzupełnienia danych kontrahenta, aby zaktualizować rekord.';
+        case 'NO_NIP':
+            return 'Brak numeru NIP kontrahenta — FIDman nie może dopasować/utworzyć rekordu bez NIP.';
+        default:
+            return reason ? `Nieznany powód pominięcia: ${reason}` : null;
+    }
+}
+
+/**
+ * SYNC-P2 — read the most recent `contract.upsert` outbox row for a contract, for
+ * the "synchronizacja do dopchnięcia" status badge on the contract list/card.
+ * Returns status 'NONE' (no LastError/Attempts/reason) when the contract was never
+ * enqueued (e.g. non-synced type, or created before P1 shipped).
+ */
+export async function getFidmanContractSyncStatus(
+    contractId: number
+): Promise<FidmanSyncStatus> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT Id, Status, SkipReason, LastError, Attempts, UpdatedAt
+         FROM ${OUTBOX_TABLE}
+         WHERE Kind = 'contract.upsert' AND RefId = ?
+         ORDER BY Id DESC
+         LIMIT 1`,
+        undefined,
+        [contractId]
+    )) as any[];
+
+    const row = rows?.[0];
+    if (!row) {
+        return {
+            contractId,
+            kind: 'contract.upsert',
+            status: 'NONE',
+            skipReason: null,
+            skipReasonLabel: null,
+            lastError: null,
+            attempts: 0,
+            updatedAt: null,
+        };
+    }
+    return {
+        contractId,
+        kind: 'contract.upsert',
+        status: row.Status,
+        skipReason: row.SkipReason ?? null,
+        skipReasonLabel: fidmanSkipReasonLabel(row.SkipReason ?? null),
+        lastError: row.LastError ?? null,
+        attempts: row.Attempts ?? 0,
+        updatedAt: row.UpdatedAt ?? null,
+    };
+}
+
+/**
+ * SYNC-P2 — manual "dopchnij synchronizację" action: re-deliver the most recent
+ * FAILED/SKIPPED `contract.upsert` outbox row for a contract using the SAME
+ * `deliverOutboxRow` P1 uses (no reimplementation of the HTTP/status logic).
+ *
+ * // ponytail: re-delivers the row's existing Payload snapshot rather than
+ * // rebuilding it from live contract/entity data — rebuilding would require
+ * // re-joining the full contract (employers/engineers/contractors) here, which
+ * // duplicates ContractsController's assembly logic. In practice a source-data
+ * // fix (contract edit or Entity edit) already re-enqueues a fresh row via the
+ * // existing P1 wiring, so "dopchnij" is for retrying a transient delivery
+ * // failure, not for re-snapshotting stale payloads.
+ */
+export async function retryFidmanContractSync(
+    contractId: number
+): Promise<
+    | { ok: true; status: FidmanSyncStatus }
+    | { ok: false; reason: 'NOT_FOUND' }
+> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT Id, Kind, RefId, Payload, Status, Attempts, SkipReason
+         FROM ${OUTBOX_TABLE}
+         WHERE Kind = 'contract.upsert' AND RefId = ? AND Status IN ('FAILED', 'SKIPPED')
+         ORDER BY Id DESC
+         LIMIT 1`,
+        undefined,
+        [contractId]
+    )) as OutboxRow[];
+
+    const row = rows?.[0];
+    if (!row) return { ok: false, reason: 'NOT_FOUND' };
+
+    await deliverOutboxRow(row);
+    return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
+}
+
 /**
  * Drain PENDING/FAILED rows (SKIPPED rows are left alone — they need a source-data
  * fix, not a re-send). Re-sends each with simple attempt-based backoff.
