@@ -36,6 +36,11 @@ import {
     isAqmContractType,
     tryDeliverAfterCommit,
 } from './aqmSync/AqmSync';
+import {
+    enqueueFidmanContractPush,
+    isFidmanContractType,
+    tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
+} from './fidmanSync/FidmanSync';
 
 export type ContractSearchParams = {
     id?: number;
@@ -173,6 +178,7 @@ export default class ContractsController extends BaseController<
             // Operacje bazodanowe - TRANSAKCJA
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             let aqmOutboxId: number | undefined;
+            let fidmanOutboxId: number | undefined;
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
                 await instance.repository.addInDb(contract, conn, true);
@@ -193,6 +199,15 @@ export default class ContractsController extends BaseController<
                 if (isAqmContractType(contract.typeId)) {
                     aqmOutboxId = await enqueueAqmPush(contract, conn);
                 }
+
+                // 5. SYNC-P1: jeśli typ FIDman (3/4) → wpis outbox w TEJ SAMEJ
+                // transakcji (L8). Osobna tabela, ta sama gwarancja atomowości.
+                if (isFidmanContractType(contract.typeId)) {
+                    fidmanOutboxId = await enqueueFidmanContractPush(
+                        contract,
+                        conn
+                    );
+                }
             });
             console.log('Contract added in db');
 
@@ -202,6 +217,14 @@ export default class ContractsController extends BaseController<
             if (aqmOutboxId !== undefined) {
                 await tryDeliverAfterCommit(aqmOutboxId).catch((err) =>
                     console.error('[AqmSync] post-commit push (add) error:', err)
+                );
+            }
+            if (fidmanOutboxId !== undefined) {
+                await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
+                    console.error(
+                        '[FidmanSync] post-commit push (add) error:',
+                        err
+                    )
                 );
             }
 
@@ -380,6 +403,7 @@ export default class ContractsController extends BaseController<
 
             // Operacje bazodanowe - TRANSAKCJA
             let aqmOutboxId: number | undefined;
+            let fidmanOutboxId: number | undefined;
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
                 await instance.repository.editInDb(
@@ -423,6 +447,15 @@ export default class ContractsController extends BaseController<
                 if (isAqmContractType(contract.typeId)) {
                     aqmOutboxId = await enqueueAqmPush(contract, conn);
                 }
+
+                // 5. SYNC-P1: jeśli typ FIDman (3/4) → wpis outbox w TEJ SAMEJ
+                // transakcji (L8). Osobna tabela, ta sama gwarancja atomowości.
+                if (isFidmanContractType(contract.typeId)) {
+                    fidmanOutboxId = await enqueueFidmanContractPush(
+                        contract,
+                        conn
+                    );
+                }
             });
 
             console.log('Contract edited in db');
@@ -434,6 +467,14 @@ export default class ContractsController extends BaseController<
                 await tryDeliverAfterCommit(aqmOutboxId).catch((err) =>
                     console.error(
                         '[AqmSync] post-commit push (edit) error:',
+                        err
+                    )
+                );
+            }
+            if (fidmanOutboxId !== undefined) {
+                await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
+                    console.error(
+                        '[FidmanSync] post-commit push (edit) error:',
                         err
                     )
                 );

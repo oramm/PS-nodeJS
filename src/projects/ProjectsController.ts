@@ -6,6 +6,11 @@ import Project from './Project';
 import ProjectEntitiesController from './ProjectEntitiesController';
 import ProjectEntity from './ProjectEntity';
 import ProjectRepository, { ProjectSearchParams } from './ProjectRepository';
+import {
+    enqueueFidmanProjectPush,
+    projectHasSyncedContract,
+    tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
+} from '../contracts/fidmanSync/FidmanSync';
 
 export default class ProjectsController extends BaseController<
     Project,
@@ -154,6 +159,10 @@ export default class ProjectsController extends BaseController<
         console.group('ProjectsController.editProject()');
 
         try {
+            // SYNC-P1: wpis do FidmanSyncOutbox w TEJ SAMEJ transakcji co edycja
+            // projektu (L8), tylko gdy projekt jest rodzicem ≥1 umowy typu FIDman.
+            let fidmanOutboxId: number | undefined;
+
             // Równolegle: DB i GD
             await Promise.all([
                 // 1. Transakcja DB
@@ -163,6 +172,14 @@ export default class ProjectsController extends BaseController<
 
                     // 1b. Edytuj asocjacje (delete + insert)
                     await this.editProjectEntitiesAssociations(project, conn);
+
+                    // 1c. SYNC-P1: enqueue FIDman push w tej samej transakcji
+                    if (await projectHasSyncedContract(project.ourId, conn)) {
+                        fidmanOutboxId = await enqueueFidmanProjectPush(
+                            project,
+                            conn
+                        );
+                    }
                 }),
 
                 // 2. Edytuj folder GD
@@ -170,6 +187,17 @@ export default class ProjectsController extends BaseController<
             ]);
 
             console.log('Project edited');
+
+            // SYNC-P1: push STRICTLY post-commit; awaria nigdy nie rolbackuje
+            // ani nie wychodzi z edycji projektu (L8).
+            if (fidmanOutboxId !== undefined) {
+                await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
+                    console.error(
+                        '[FidmanSync] post-commit push (project edit) error:',
+                        err
+                    )
+                );
+            }
             return project;
         } finally {
             console.groupEnd();

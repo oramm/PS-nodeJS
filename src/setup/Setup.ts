@@ -388,6 +388,38 @@ export default class Setup {
         };
     }
 
+    /**
+     * Konfiguracja integracji sync PS ENVI -> FIDman (SYNC-P1).
+     * Tylko surowe wartości z .env — odczytywane lazily (getter), po loadEnv().
+     * Sekrety (token) NIE trafiają do SB ani repo — tylko nazwy env (.env.example).
+     *
+     * Format w .env:
+     *   FIDMAN_SYNC_BASE_URL="https://nowy.fidman.eu"     # baza URL FIDman
+     *   FIDMAN_SYNC_TOKEN="..."                            # Bearer service-token (sekret)
+     *   FIDMAN_SYNC_CONTRACT_TYPE_IDS="3,4"               # allowlist id typów (CSV)
+     *   FIDMAN_SYNC_DRAIN_INTERVAL_MS="60000"             # interwał drainera outbox (ms); 0 = wyłączony
+     */
+    static get FidmanSync() {
+        const rawTypeIds = process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS ?? '3,4';
+        const contractTypeIds = rawTypeIds
+            .split(',')
+            .map((part) => parseInt(part.trim(), 10))
+            .filter((id) => Number.isInteger(id));
+        const rawDrainInterval = Number(
+            process.env.FIDMAN_SYNC_DRAIN_INTERVAL_MS ?? '60000'
+        );
+        const drainIntervalMs =
+            Number.isFinite(rawDrainInterval) && rawDrainInterval >= 0
+                ? rawDrainInterval
+                : 60000;
+        return {
+            baseUrl: process.env.FIDMAN_SYNC_BASE_URL,
+            token: process.env.FIDMAN_SYNC_TOKEN,
+            contractTypeIds,
+            drainIntervalMs,
+        };
+    }
+
     static get Bank() {
         return {
             matching: {

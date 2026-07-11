@@ -26,6 +26,7 @@ import {
 } from './setup/processErrorHandlers';
 import Setup from './setup/Setup';
 import { drainAqmOutbox } from './contracts/aqmSync/AqmSync';
+import { drainFidmanOutbox } from './contracts/fidmanSync/FidmanSync';
 
 declare global {
     namespace Express {
@@ -443,6 +444,25 @@ setInterval(() => {
         if (typeof drainTimer.unref === 'function') drainTimer.unref();
     } else {
         console.log('[AqmSync] outbox drainer disabled (AQM_SYNC_DRAIN_INTERVAL_MS=0)');
+    }
+}
+
+// SYNC-P1 — FIDman outbox drainer (L8): backstop re-send of PENDING/FAILED PS→FIDman
+// pushes on an interval. Separate table (FidmanSyncOutbox) from the AQM drainer.
+// Non-blocking (void) and fully swallowed (drainFidmanOutbox never throws).
+// Interval from env FIDMAN_SYNC_DRAIN_INTERVAL_MS (default 60s; 0 disables).
+{
+    const drainIntervalMs = Setup.FidmanSync.drainIntervalMs;
+    if (drainIntervalMs > 0) {
+        const drainTimer = setInterval(() => {
+            void drainFidmanOutbox().catch((err) =>
+                console.error('[FidmanSync] scheduled drain error:', err),
+            );
+        }, drainIntervalMs);
+        // Do not keep the event loop alive solely for the drainer.
+        if (typeof drainTimer.unref === 'function') drainTimer.unref();
+    } else {
+        console.log('[FidmanSync] outbox drainer disabled (FIDMAN_SYNC_DRAIN_INTERVAL_MS=0)');
     }
 }
 

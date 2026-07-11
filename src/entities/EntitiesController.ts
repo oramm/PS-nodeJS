@@ -1,6 +1,13 @@
+import mysql from 'mysql2/promise';
 import Entity from './Entity';
 import BaseController from '../controllers/BaseController';
 import EntityRepository, { EntitiesSearchParams } from './EntityRepository';
+import ToolsDb from '../tools/ToolsDb';
+import {
+    enqueueFidmanEntityPush,
+    entityHasSyncedContract,
+    tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
+} from '../contracts/fidmanSync/FidmanSync';
 
 export type { EntitiesSearchParams };
 
@@ -150,16 +157,29 @@ export default class EntitiesController extends BaseController<
                         `Skrócona nazwa "${entity.shortName}" jest już zajęta`
                     );
             }
+            // SYNC-P1: wpis do FidmanSyncOutbox w TEJ SAMEJ transakcji co edycja
+            // encji (L8), tylko gdy encja jest stroną ≥1 umowy typu FIDman.
+            let fidmanOutboxId: number | undefined;
             try {
-                await this.repository.editInDb(entity, undefined, undefined, [
-                    'name',
-                    'shortName',
-                    'address',
-                    'taxNumber',
-                    'www',
-                    'email',
-                    'phone',
-                ]);
+                await ToolsDb.transaction(
+                    async (conn: mysql.PoolConnection) => {
+                        await this.repository.editInDb(entity, conn, true, [
+                            'name',
+                            'shortName',
+                            'address',
+                            'taxNumber',
+                            'www',
+                            'email',
+                            'phone',
+                        ]);
+                        if (await entityHasSyncedContract(entity.id, conn)) {
+                            fidmanOutboxId = await enqueueFidmanEntityPush(
+                                entity,
+                                conn
+                            );
+                        }
+                    }
+                );
             } catch (err: any) {
                 if (err.code === 'ER_DUP_ENTRY')
                     throw new Error(
@@ -168,6 +188,17 @@ export default class EntitiesController extends BaseController<
                 throw err;
             }
             console.log(`Entity ${entity.name} updated in db`);
+
+            // SYNC-P1: push STRICTLY post-commit; awaria nigdy nie rolbackuje
+            // ani nie wychodzi z edycji encji (L8).
+            if (fidmanOutboxId !== undefined) {
+                await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
+                    console.error(
+                        '[FidmanSync] post-commit push (entity edit) error:',
+                        err
+                    )
+                );
+            }
             return entity;
         } finally {
             console.groupEnd();
