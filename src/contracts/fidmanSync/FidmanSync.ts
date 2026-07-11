@@ -39,37 +39,40 @@ export type FidmanKind =
 
 export type FidmanRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
+// Field names match the FIDman ingest wire schema (apps/api/src/ps-sync/validation.ts),
+// NOT FIDman's internal DB columns. FIDman maps them to columns on its side.
 export type FidmanEntityPayload = {
     legacyEntityId?: number;
     name?: string;
     /** PS TaxNumber sent as-is (even null); FIDman normalizes and decides NO_NIP. */
-    taxnr: string | null;
-    website?: string;
+    taxNumber: string | null;
+    www?: string;
     email?: string;
     phone?: string;
+    address?: string;
     role?: FidmanRole;
 };
 
 export type FidmanProjectRef = {
     legacyProjectId?: number;
     /** PS OurId — natural key. */
-    number?: string;
+    ourId?: string;
 };
 
 export type FidmanContractPayload = {
     legacyContractId?: number;
     /** PS Number. */
-    contractid: string | null;
+    number: string | null;
     name: string | null;
-    startdate: string | null;
-    enddate: string | null;
+    startDate: string | null;
+    endDate: string | null;
     project?: FidmanProjectRef;
     entities: FidmanEntityPayload[];
 };
 
 export type FidmanProjectPayload = FidmanProjectRef & {
     name?: string;
-    description?: string;
+    comment?: string;
 };
 
 export type FidmanEnvelope =
@@ -99,10 +102,11 @@ function buildEntityPayload(
     return {
         legacyEntityId: entity?.id,
         name: entity?.name,
-        taxnr: entity?.taxNumber ?? null,
-        website: entity?.www,
+        taxNumber: entity?.taxNumber ?? null,
+        www: entity?.www,
         email: entity?.email,
         phone: entity?.phone,
+        address: entity?.address,
         ...(role ? { role } : {}),
     };
 }
@@ -129,17 +133,17 @@ function collectContractEntities(contract: any): FidmanEntityPayload[] {
 export function buildContractPayload(contract: AnyContract): FidmanEnvelope {
     const c = contract as any;
     const project: FidmanProjectRef | undefined = c._project
-        ? { legacyProjectId: c._project.id, number: c._project.ourId }
+        ? { legacyProjectId: c._project.id, ourId: c._project.ourId }
         : undefined;
 
     return {
         kind: 'contract.upsert',
         payload: {
             legacyContractId: c.id,
-            contractid: c.number ?? null,
+            number: c.number ?? null,
             name: c.name ?? null,
-            startdate: c.startDate ?? null,
-            enddate: c.endDate ?? null,
+            startDate: c.startDate ?? null,
+            endDate: c.endDate ?? null,
             ...(project ? { project } : {}),
             entities: collectContractEntities(c),
         },
@@ -158,9 +162,9 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
         kind: 'project.upsert',
         payload: {
             legacyProjectId: p.id,
-            number: p.ourId,
+            ourId: p.ourId,
             name: p.name,
-            description: p.comment,
+            comment: p.comment,
         },
     };
 }

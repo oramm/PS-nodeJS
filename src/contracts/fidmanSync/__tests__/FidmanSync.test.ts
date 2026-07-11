@@ -85,29 +85,31 @@ describe('buildContractPayload (contract.upsert)', () => {
         const p = env.payload as any;
         expect(p).toMatchObject({
             legacyContractId: 4567,
-            contractid: 'UM/001',
+            number: 'UM/001',
             name: 'Umowa FIDman',
-            startdate: '2026-06-01',
-            enddate: '2027-05-31',
-            project: { legacyProjectId: 88, number: 'PRJ-001' },
+            startDate: '2026-06-01',
+            endDate: '2027-05-31',
+            project: { legacyProjectId: 88, ourId: 'PRJ-001' },
         });
         expect(p.entities).toEqual([
             {
                 legacyEntityId: 123,
                 name: 'PWiK Sp. z o.o.',
-                taxnr: '7471917575',
-                website: 'https://pwik.pl',
+                taxNumber: '7471917575',
+                www: 'https://pwik.pl',
                 email: 'biuro@pwik.pl',
                 phone: '111222333',
+                address: undefined,
                 role: 'EMPLOYER',
             },
             {
                 legacyEntityId: 200,
                 name: 'Inżynier',
-                taxnr: null, // sent even when null — FIDman decides NO_NIP
-                website: undefined,
+                taxNumber: null, // sent even when null — FIDman decides NO_NIP
+                www: undefined,
                 email: undefined,
                 phone: undefined,
+                address: undefined,
                 role: 'ENGINEER',
             },
         ]);
@@ -117,13 +119,13 @@ describe('buildContractPayload (contract.upsert)', () => {
         const env = buildContractPayload(
             baseContract({ startDate: undefined, endDate: null }) as any
         );
-        expect((env.payload as any).startdate).toBeNull();
-        expect((env.payload as any).enddate).toBeNull();
+        expect((env.payload as any).startDate).toBeNull();
+        expect((env.payload as any).endDate).toBeNull();
     });
 });
 
 describe('buildEntityUpsert / buildProjectUpsert', () => {
-    it('entity.upsert carries source-owned fields + null taxnr', () => {
+    it('entity.upsert carries source-owned fields + null taxNumber', () => {
         const env = buildEntityUpsert({
             id: 9,
             name: 'ACME',
@@ -134,14 +136,15 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
         expect(env.payload).toEqual({
             legacyEntityId: 9,
             name: 'ACME',
-            taxnr: null,
-            website: 'https://acme.pl',
+            taxNumber: null,
+            www: 'https://acme.pl',
             email: undefined,
             phone: undefined,
+            address: undefined,
         });
     });
 
-    it('project.upsert maps OurId→number, Comment→description', () => {
+    it('project.upsert maps OurId→ourId, Comment→comment', () => {
         const env = buildProjectUpsert({
             id: 5,
             ourId: 'PRJ-9',
@@ -151,9 +154,9 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
         expect(env.kind).toBe('project.upsert');
         expect(env.payload).toEqual({
             legacyProjectId: 5,
-            number: 'PRJ-9',
+            ourId: 'PRJ-9',
             name: 'Nowy',
-            description: 'komentarz',
+            comment: 'komentarz',
         });
     });
 });
@@ -174,8 +177,8 @@ describe('enqueueFidmanContractPush (same tx conn)', () => {
         expect(params[0]).toBe('contract.upsert'); // Kind
         expect(params[1]).toBe(4567); // RefId = Contract PK
         const parsed = JSON.parse(params[2]);
-        expect(parsed.entities[0].taxnr).toBe('7471917575');
-        expect(parsed.project.number).toBe('PRJ-001');
+        expect(parsed.entities[0].taxNumber).toBe('7471917575');
+        expect(parsed.project.ourId).toBe('PRJ-001');
     });
 });
 
