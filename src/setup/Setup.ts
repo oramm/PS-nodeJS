@@ -420,6 +420,22 @@ export default class Setup {
         };
     }
 
+    /**
+     * Konfiguracja integracji lookup PS ENVI -> GUS BIR (NIP-G1).
+     * Tylko surowa wartość z .env — odczytywana lazily (getter), po loadEnv().
+     * Sekret (klucz) NIE trafia do SB ani repo — tylko nazwa env (.env.example).
+     * BLOCKED do gate G-N1: bez GUS_BIR_KEY endpoint /entities/lookup-nip
+     * odpowiada 503 (fail-closed, lookup jest opcjonalnym przyciskiem).
+     *
+     * Format w .env:
+     *   GUS_BIR_KEY="..."   # klucz produkcyjny GUS BIR (sekret); brak = 503
+     */
+    static get GusBir() {
+        return {
+            key: process.env.GUS_BIR_KEY,
+        };
+    }
+
     static get Bank() {
         return {
             matching: {
