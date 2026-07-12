@@ -606,11 +606,15 @@ export default class CostInvoiceController {
 
         const result = await this.whiteListClient.check(invoice.supplierNip, invoice.supplierBankAccount, asOfDate);
 
-        await this.repository.updateWhiteList(id, {
+        const persisted = await this.repository.updateWhiteList(id, {
             whiteListStatus: result.status,
             whiteListRequestId: result.requestId,
             whiteListCheckedAt: result.checkedAt,
         });
+        if (!persisted) {
+            // Kolumny WL niedostepne (brak migracji 004 / przestarzaly cache) — NIE raportuj sukcesu.
+            throw new CostInvoiceError(500, 'Kolumny Białej Listy niedostępne — wymagana migracja 004 / restart');
+        }
 
         invoice.whiteListStatus = result.status;
         invoice.whiteListRequestId = result.requestId;

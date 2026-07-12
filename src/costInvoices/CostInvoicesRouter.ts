@@ -270,6 +270,13 @@ app.post(
                 if (isNaN(parsed.getTime())) {
                     return res.status(400).json({ error: 'Nieprawidłowa data' });
                 }
+                // wl-api 400-uje daty z przyszłości → klient mapuje na ERROR i nadpisałby
+                // poprzedni wynik. Odrzuć zawczasu (walidacja wejścia; semantyka overwrite bez zmian).
+                const endOfToday = new Date();
+                endOfToday.setHours(23, 59, 59, 999);
+                if (parsed.getTime() > endOfToday.getTime()) {
+                    return res.status(400).json({ error: 'Data nie może być z przyszłości' });
+                }
                 asOfDate = parsed;
             }
 

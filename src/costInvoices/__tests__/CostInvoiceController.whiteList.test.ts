@@ -223,7 +223,7 @@ describe('CostInvoiceController — hook Białej Listy VAT przy imporcie KSeF', 
             });
 
             mockRepository.findById.mockResolvedValue(existingInvoice);
-            mockRepository.updateWhiteList.mockResolvedValue(undefined);
+            mockRepository.updateWhiteList.mockResolvedValue(true);
             mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
 
             const newCheckedAt = new Date('2026-06-15T09:00:00Z');
@@ -262,7 +262,7 @@ describe('CostInvoiceController — hook Białej Listy VAT przy imporcie KSeF', 
                 issueDate: new Date('2026-05-01'),
             });
             mockRepository.findById.mockResolvedValue(existingInvoice);
-            mockRepository.updateWhiteList.mockResolvedValue(undefined);
+            mockRepository.updateWhiteList.mockResolvedValue(true);
             mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
             mockWhiteListClient.check.mockResolvedValue({
                 status: 'VERIFIED_OK',
@@ -274,6 +274,30 @@ describe('CostInvoiceController — hook Białej Listy VAT przy imporcie KSeF', 
             await controller.checkWhiteList(7, paymentDate);
 
             expect(mockWhiteListClient.check).toHaveBeenCalledWith(VALID_NIP, VALID_NRB, paymentDate);
+        });
+
+        it('LOUD FAILURE: rzuca CostInvoiceError 500 gdy kolumny WL niedostępne (updateWhiteList -> false), NIE raportuje sukcesu', async () => {
+            const existingInvoice = new CostInvoice({
+                id: 8,
+                ksefNumber: 'K-8',
+                supplierName: 'Test',
+                supplierNip: VALID_NIP,
+                supplierBankAccount: VALID_NRB,
+                invoiceNumber: 'FV/8',
+                issueDate: new Date('2026-05-01'),
+            });
+            mockRepository.findById.mockResolvedValue(existingInvoice);
+            mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
+            mockWhiteListClient.check.mockResolvedValue({
+                status: 'VERIFIED_OK',
+                requestId: 'r',
+                checkedAt: new Date(),
+            });
+            // Kolumny WL nieutrwalone (brak migracji 004 / przestarzały cache).
+            mockRepository.updateWhiteList.mockResolvedValue(false);
+
+            await expect(controller.checkWhiteList(8)).rejects.toThrow(CostInvoiceError);
+            await expect(controller.checkWhiteList(8)).rejects.toMatchObject({ statusCode: 500 });
         });
     });
 });

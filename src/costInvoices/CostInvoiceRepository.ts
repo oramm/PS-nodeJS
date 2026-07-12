@@ -292,11 +292,13 @@ export default class CostInvoiceRepository {
     /**
      * Nadpisz wynik weryfikacji Bialej Listy VAT (tylko ostatni wynik — bez historii).
      * Uzywane zarowno przez hook importu KSeF, jak i endpoint recznej (re-)weryfikacji.
+     * Zwraca `true` gdy cokolwiek utrwalono; `false` gdy kolumny WL sa niedostepne
+     * (brak migracji 004 / przestarzaly cache) — wtedy nic nie zapisano.
      */
     async updateWhiteList(
         id: number,
         data: { whiteListStatus: WhiteListStatus; whiteListRequestId?: string; whiteListCheckedAt?: Date },
-    ): Promise<void> {
+    ): Promise<boolean> {
         const optionalColumns = await this.getOptionalColumnsAvailability();
 
         const setClauses: string[] = [];
@@ -315,7 +317,7 @@ export default class CostInvoiceRepository {
             params.push(data.whiteListCheckedAt ?? null);
         }
 
-        if (setClauses.length === 0) return;
+        if (setClauses.length === 0) return false;
 
         setClauses.push('UpdatedAt = NOW()');
         params.push(id);
@@ -325,6 +327,7 @@ export default class CostInvoiceRepository {
             params,
         );
         await ToolsDb.executeSQL(sql);
+        return true;
     }
 
     async updatePayment(

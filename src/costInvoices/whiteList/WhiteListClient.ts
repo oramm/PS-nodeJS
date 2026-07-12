@@ -72,14 +72,9 @@ export default class WhiteListClient {
 
         try {
             const url = `${WL_API_BASE_URL}/${normalizedNip}/bank-account/${normalizedNrb}?date=${formatDate(date)}`;
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-            let response: Response;
-            try {
-                response = await fetch(url, { method: 'GET', signal: controller.signal });
-            } finally {
-                clearTimeout(timeout);
-            }
+            // AbortSignal.timeout covers the WHOLE request, incl. the body read (response.json()),
+            // so a stalled KAS body during an outage cannot hang the serial import. (Node 18+, zero-dep.)
+            const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
 
             if (!response.ok) {
                 return { status: 'ERROR', checkedAt };
