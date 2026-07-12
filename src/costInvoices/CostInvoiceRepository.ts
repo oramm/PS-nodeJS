@@ -3,6 +3,7 @@ import mysql from 'mysql2';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostCategory } from './CostInvoice';
 import { toPaymentStatus } from './CostInvoiceValidator';
 import { buildPaymentMethodFilterSql } from './costInvoicePaymentMethodFilters';
+import { toWhiteListStatus, WhiteListStatus } from './whiteList/WhiteListClient';
 
 /**
  * Repository dla faktur kosztowych
@@ -17,6 +18,9 @@ export default class CostInvoiceRepository {
         paymentMethod: boolean;
         invoiceType: boolean;
         paymentDate: boolean;
+        whiteListStatus: boolean;
+        whiteListRequestId: boolean;
+        whiteListCheckedAt: boolean;
     } | null = null;
     
     // =====================================================
@@ -171,6 +175,9 @@ export default class CostInvoiceRepository {
             ...(optionalColumns.supplierBankAccount
                 ? ['SupplierBankAccount']
                 : []),
+            ...(optionalColumns.whiteListStatus ? ['WhiteListStatus'] : []),
+            ...(optionalColumns.whiteListRequestId ? ['WhiteListRequestId'] : []),
+            ...(optionalColumns.whiteListCheckedAt ? ['WhiteListCheckedAt'] : []),
             'InvoiceNumber',
             'IssueDate',
             'SaleDate',
@@ -202,6 +209,9 @@ export default class CostInvoiceRepository {
             ...(optionalColumns.supplierBankAccount
                 ? [invoice.supplierBankAccount || null]
                 : []),
+            ...(optionalColumns.whiteListStatus ? [invoice.whiteListStatus] : []),
+            ...(optionalColumns.whiteListRequestId ? [invoice.whiteListRequestId || null] : []),
+            ...(optionalColumns.whiteListCheckedAt ? [invoice.whiteListCheckedAt || null] : []),
             invoice.invoiceNumber,
             invoice.issueDate,
             invoice.saleDate || null,
@@ -240,6 +250,9 @@ export default class CostInvoiceRepository {
         paymentMethod: boolean;
         invoiceType: boolean;
         paymentDate: boolean;
+        whiteListStatus: boolean;
+        whiteListRequestId: boolean;
+        whiteListCheckedAt: boolean;
     }> {
         if (this.optionalColumnsCache) {
             return this.optionalColumnsCache;
@@ -251,7 +264,7 @@ export default class CostInvoiceRepository {
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE()
                     AND TABLE_NAME = 'CostInvoices'
-                    AND COLUMN_NAME IN ('SupplierBankAccount', 'PaymentStatus', 'PaidAmount', 'PaymentMethod', 'InvoiceType', 'PaymentDate')
+                    AND COLUMN_NAME IN ('SupplierBankAccount', 'PaymentStatus', 'PaidAmount', 'PaymentMethod', 'InvoiceType', 'PaymentDate', 'WhiteListStatus', 'WhiteListRequestId', 'WhiteListCheckedAt')
             `,
             [],
         );
@@ -268,9 +281,50 @@ export default class CostInvoiceRepository {
             paymentMethod: columnNames.has('PaymentMethod'),
             invoiceType: columnNames.has('InvoiceType'),
             paymentDate: columnNames.has('PaymentDate'),
+            whiteListStatus: columnNames.has('WhiteListStatus'),
+            whiteListRequestId: columnNames.has('WhiteListRequestId'),
+            whiteListCheckedAt: columnNames.has('WhiteListCheckedAt'),
         };
 
         return this.optionalColumnsCache;
+    }
+
+    /**
+     * Nadpisz wynik weryfikacji Bialej Listy VAT (tylko ostatni wynik — bez historii).
+     * Uzywane zarowno przez hook importu KSeF, jak i endpoint recznej (re-)weryfikacji.
+     */
+    async updateWhiteList(
+        id: number,
+        data: { whiteListStatus: WhiteListStatus; whiteListRequestId?: string; whiteListCheckedAt?: Date },
+    ): Promise<void> {
+        const optionalColumns = await this.getOptionalColumnsAvailability();
+
+        const setClauses: string[] = [];
+        const params: any[] = [];
+
+        if (optionalColumns.whiteListStatus) {
+            setClauses.push('WhiteListStatus = ?');
+            params.push(data.whiteListStatus);
+        }
+        if (optionalColumns.whiteListRequestId) {
+            setClauses.push('WhiteListRequestId = ?');
+            params.push(data.whiteListRequestId ?? null);
+        }
+        if (optionalColumns.whiteListCheckedAt) {
+            setClauses.push('WhiteListCheckedAt = ?');
+            params.push(data.whiteListCheckedAt ?? null);
+        }
+
+        if (setClauses.length === 0) return;
+
+        setClauses.push('UpdatedAt = NOW()');
+        params.push(id);
+
+        const sql = mysql.format(
+            `UPDATE CostInvoices SET ${setClauses.join(', ')} WHERE Id = ?`,
+            params,
+        );
+        await ToolsDb.executeSQL(sql);
     }
 
     async updatePayment(
@@ -499,6 +553,9 @@ export default class CostInvoiceRepository {
             supplierName: row.SupplierName,
             supplierAddress: row.SupplierAddress,
             supplierBankAccount: row.SupplierBankAccount,
+            whiteListStatus: toWhiteListStatus(row.WhiteListStatus),
+            whiteListRequestId: row.WhiteListRequestId ?? undefined,
+            whiteListCheckedAt: row.WhiteListCheckedAt ?? undefined,
             invoiceNumber: row.InvoiceNumber,
             issueDate: row.IssueDate,
             saleDate: row.SaleDate,

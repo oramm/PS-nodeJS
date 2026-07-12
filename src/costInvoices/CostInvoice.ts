@@ -1,4 +1,5 @@
 import ToolsDate from '../tools/ToolsDate';
+import { WhiteListStatus } from './whiteList/WhiteListClient';
 
 /**
  * Model faktury kosztowej (zakupowej) z KSeF
@@ -21,7 +22,12 @@ export default class CostInvoice {
     supplierName: string;
     supplierAddress?: string;
     supplierBankAccount?: string;
-    
+
+    // Weryfikacja Bialej Listy VAT (KAS wl-api) — ponytail: tylko ostatni wynik
+    whiteListStatus: WhiteListStatus;
+    whiteListRequestId?: string;
+    whiteListCheckedAt?: Date;
+
     // Dane faktury
     invoiceNumber: string;
     invoiceType?: string;
@@ -84,7 +90,11 @@ export default class CostInvoice {
         this.supplierName = data.supplierName || '';
         this.supplierAddress = data.supplierAddress;
         this.supplierBankAccount = data.supplierBankAccount;
-        
+
+        this.whiteListStatus = data.whiteListStatus || 'NOT_CHECKED';
+        this.whiteListRequestId = data.whiteListRequestId;
+        this.whiteListCheckedAt = data.whiteListCheckedAt ? new Date(data.whiteListCheckedAt) : undefined;
+
         this.invoiceNumber = data.invoiceNumber || '';
         this.invoiceType = data.invoiceType;
         this.issueDate = data.issueDate ? new Date(data.issueDate) : new Date();
@@ -171,6 +181,9 @@ export default class CostInvoice {
             supplierName: this.supplierName,
             supplierAddress: this.supplierAddress,
             supplierBankAccount: this.supplierBankAccount,
+            whiteListStatus: this.whiteListStatus,
+            whiteListRequestId: this.whiteListRequestId,
+            whiteListCheckedAt: formatDate(this.whiteListCheckedAt),
             invoiceNumber: this.invoiceNumber,
             invoiceType: this.invoiceType,
             issueDate: formatDate(this.issueDate),

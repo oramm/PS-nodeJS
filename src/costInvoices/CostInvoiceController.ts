@@ -6,6 +6,7 @@ import { extractSaleDateFromFa, extractDueDateFromFa, extractPaymentMethodFromFa
 import { CostInvoiceValidator } from './CostInvoiceValidator';
 import Setup from '../setup/Setup';
 import * as crypto from 'crypto';
+import WhiteListClient from './whiteList/WhiteListClient';
 
 export class CostInvoiceError extends Error {
     statusCode: number;
@@ -45,9 +46,11 @@ type CostInvoiceReparsePreviewItem = {
  */
 export default class CostInvoiceController {
     private repository: CostInvoiceRepository;
+    private whiteListClient: WhiteListClient;
 
     constructor() {
         this.repository = new CostInvoiceRepository();
+        this.whiteListClient = new WhiteListClient();
     }
 
     private getQrBaseUrl(): string {
@@ -189,6 +192,10 @@ export default class CostInvoiceController {
 
                     // Parsuj XML i utwórz obiekt faktury
                     const invoice = this.parseInvoiceXml(xml, invoiceInfo, sync.id!);
+
+                    // Weryfikacja Białej Listy VAT (KAS wl-api) — fail-open: błąd/timeout
+                    // NIGDY nie może zablokować importu ani zapisu faktury.
+                    await this.applyWhiteListCheck(invoice);
 
                     // Zapisz fakturę
                     const invoiceId = await this.repository.create(invoice);
@@ -564,6 +571,53 @@ export default class CostInvoiceController {
 
         // Formatuj: XX XXXX XXXX XXXX XXXX XXXX XXXX
         return digits.replace(/(\d{2})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})/, '$1 $2 $3 $4 $5 $6 $7');
+    }
+
+    /**
+     * Weryfikuje rachunek bankowy dostawcy na Białej Liście VAT i zapisuje wynik
+     * bezpośrednio na obiekcie faktury (przed zapisem do bazy przy imporcie KSeF).
+     *
+     * Fail-open (mandatory): każdy błąd/timeout wywołania KAS wl-api kończy się
+     * statusem ERROR — import faktury NIGDY nie zostaje zablokowany ani przerwany.
+     * WhiteListClient.check() sam w sobie nie rzuca wyjątków, ale ten hook ma
+     * własny try/catch jako dodatkowe zabezpieczenie na wypadek przyszłej zmiany klienta.
+     */
+    private async applyWhiteListCheck(invoice: CostInvoice): Promise<void> {
+        try {
+            const result = await this.whiteListClient.check(invoice.supplierNip, invoice.supplierBankAccount);
+            invoice.whiteListStatus = result.status;
+            invoice.whiteListRequestId = result.requestId;
+            invoice.whiteListCheckedAt = result.checkedAt;
+        } catch (err: any) {
+            console.error('[CostInvoice] WhiteList check nieoczekiwanie rzucił wyjątek, ustawiam ERROR (fail-open):', err?.message || err);
+            invoice.whiteListStatus = 'ERROR';
+            invoice.whiteListRequestId = undefined;
+            invoice.whiteListCheckedAt = new Date();
+        }
+    }
+
+    /**
+     * Ręczna (re-)weryfikacja Białej Listy VAT — nadpisuje poprzedni wynik (tylko ostatni wynik).
+     * `asOfDate` pozwala sprawdzić stan na dzień płatności zamiast dzisiaj.
+     */
+    async checkWhiteList(id: number, asOfDate?: Date): Promise<CostInvoice> {
+        const invoice = await this.repository.findById(id);
+        if (!invoice) throw new CostInvoiceError(404, `Faktura ${id} nie istnieje`);
+
+        const result = await this.whiteListClient.check(invoice.supplierNip, invoice.supplierBankAccount, asOfDate);
+
+        await this.repository.updateWhiteList(id, {
+            whiteListStatus: result.status,
+            whiteListRequestId: result.requestId,
+            whiteListCheckedAt: result.checkedAt,
+        });
+
+        invoice.whiteListStatus = result.status;
+        invoice.whiteListRequestId = result.requestId;
+        invoice.whiteListCheckedAt = result.checkedAt;
+        invoice._items = await this.repository.findItemsByInvoiceId(id);
+
+        return invoice;
     }
 
     // =====================================================

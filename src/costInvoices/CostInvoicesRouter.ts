@@ -242,8 +242,56 @@ app.post(
 );
 
 /**
+ * POST /cost-invoices/:id/white-list/check
+ *
+ * Ręczna (re-)weryfikacja rachunku bankowego dostawcy na Białej Liście VAT (KAS wl-api).
+ * Nadpisuje poprzedni wynik (przechowywany jest tylko ostatni). Przydatne do sprawdzenia
+ * stanu na dzień płatności (opcjonalny `date` w body, domyślnie dziś).
+ *
+ * Body:
+ * - date?: string (ISO date) — dzień, na który sprawdzić wpis (np. dzień płatności)
+ */
+app.post(
+    '/cost-invoices/:id/white-list/check',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const userId = ensureBookingPermission(req, res);
+            if (userId === null) return;
+
+            const rawId = String(req.params.id ?? '').trim();
+            if (!/^[1-9]\d*$/.test(rawId)) {
+                return res.status(400).json({ error: 'Nieprawidłowe id faktury' });
+            }
+            const id = parseInt(rawId, 10);
+
+            let asOfDate: Date | undefined;
+            if (req.body?.date) {
+                const parsed = new Date(req.body.date);
+                if (isNaN(parsed.getTime())) {
+                    return res.status(400).json({ error: 'Nieprawidłowa data' });
+                }
+                asOfDate = parsed;
+            }
+
+            const invoice = await controller.checkWhiteList(id, asOfDate);
+
+            res.json({
+                success: true,
+                message: `Weryfikacja Białej Listy: ${invoice.whiteListStatus}`,
+                data: invoice.toJson(),
+            });
+        } catch (error: any) {
+            if (error?.statusCode) {
+                return res.status(error.statusCode).json({ error: error.message });
+            }
+            next(error);
+        }
+    },
+);
+
+/**
  * POST /cost-invoices
- * 
+ *
  * Pobierz listę faktur kosztowych z filtrami w body (standard projektu)
  * 
  * Body:
