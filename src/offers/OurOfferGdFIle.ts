@@ -94,10 +94,32 @@ export default class OurOfferGdFile extends DocumentGdFile {
             },
             {
                 rangeName: 'employerName',
-                newText: (this.enviDocumentData.employerName ||
-                    this.enviDocumentData._employer?.name) as string,
+                newText: this.makeEmployerText(),
             },
         ];
+    }
+
+    /** Nazwa zamawiającego + adres i NIP (każdy w osobnej linii), jeśli podmiot został dopasowany
+     * po nazwie w kartotece Entities. Przecinki w adresie też rozbijane na osobne linie. */
+    private makeEmployerText(): string {
+        const name = (this.enviDocumentData.employerName ||
+            this.enviDocumentData._employer?.name) as string;
+        const addressLines = this.enviDocumentData._employer?.address
+            ?.split(',')
+            .map((part) => part.trim())
+            .filter(Boolean);
+        const taxNumber = this.enviDocumentData._employer?.taxNumber;
+
+        return [name, ...(addressLines || []), taxNumber && this.formatNip(taxNumber)]
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    /** Formatuje NIP jako "NIP xxx-xxx-xx-xx"; gdy numer nie ma 10 cyfr, zwraca surową wartość bez formatowania grup */
+    private formatNip(taxNumber: string): string {
+        const digits = taxNumber.replace(/\D/g, '');
+        if (digits.length !== 10) return `NIP ${taxNumber}`;
+        return `NIP ${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 10)}`;
     }
 
     makeFileName() {

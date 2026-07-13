@@ -2,6 +2,7 @@
 jest.mock('../OfferRepository');
 jest.mock('../offerEvent/OfferEventsController');
 jest.mock('../../persons/PersonsController');
+jest.mock('../../entities/EntitiesController');
 
 import OffersController from '../OffersController';
 import OfferRepository from '../OfferRepository';
@@ -9,6 +10,7 @@ import OurOffer from '../OurOffer';
 import ExternalOffer from '../ExternalOffer';
 import OfferEventsController from '../offerEvent/OfferEventsController';
 import PersonsController from '../../persons/PersonsController';
+import EntitiesController from '../../entities/EntitiesController';
 import { OAuth2Client } from 'google-auth-library';
 import { UserData } from '../../types/sessionTypes';
 import { OfferEventData } from '../../types/types';
@@ -264,6 +266,90 @@ describe('OffersController', () => {
             await expect(OffersController.delete(unknownOffer)).rejects.toThrow(
                 'Unknown offer type'
             );
+        });
+    });
+
+    describe('matchEmployerEntity', () => {
+        let employerOffer: OurOffer;
+
+        beforeEach(() => {
+            employerOffer = {
+                employerName: 'Gmina Warszawa',
+                setEmployerDetails: jest.fn(),
+            } as unknown as OurOffer;
+        });
+
+        it('should set employer details on exact case-insensitive match', async () => {
+            const entity = {
+                id: 5,
+                name: 'gmina warszawa',
+                address: 'ul. Testowa 1',
+                taxNumber: '5252248481',
+            };
+            (EntitiesController.find as jest.Mock).mockResolvedValue([
+                entity,
+            ]);
+
+            await (OffersController as any).matchEmployerEntity(
+                employerOffer
+            );
+
+            expect(EntitiesController.find).toHaveBeenCalledWith([
+                { name: 'Gmina Warszawa' },
+            ]);
+            expect(employerOffer.setEmployerDetails).toHaveBeenCalledWith(
+                entity
+            );
+        });
+
+        it('should not set employer details when no exact match found', async () => {
+            (EntitiesController.find as jest.Mock).mockResolvedValue([
+                { id: 1, name: 'Inna Nazwa Sp. z o.o.' },
+            ]);
+
+            await (OffersController as any).matchEmployerEntity(
+                employerOffer
+            );
+
+            expect(employerOffer.setEmployerDetails).not.toHaveBeenCalled();
+        });
+
+        it('should deterministically pick the lowest-id entity when multiple exact matches exist', async () => {
+            const older = { id: 3, name: 'Gmina Warszawa' };
+            const newer = { id: 10, name: 'Gmina Warszawa' };
+            (EntitiesController.find as jest.Mock).mockResolvedValue([
+                newer,
+                older,
+            ]);
+
+            await (OffersController as any).matchEmployerEntity(
+                employerOffer
+            );
+
+            expect(employerOffer.setEmployerDetails).toHaveBeenCalledWith(
+                older
+            );
+        });
+
+        it('should not throw and should leave employer unset when the lookup fails', async () => {
+            (EntitiesController.find as jest.Mock).mockRejectedValue(
+                new Error('DB down')
+            );
+
+            await expect(
+                (OffersController as any).matchEmployerEntity(employerOffer)
+            ).resolves.toBeUndefined();
+            expect(employerOffer.setEmployerDetails).not.toHaveBeenCalled();
+        });
+
+        it('should skip the lookup entirely when offer has no employerName', async () => {
+            employerOffer.employerName = undefined;
+
+            await (OffersController as any).matchEmployerEntity(
+                employerOffer
+            );
+
+            expect(EntitiesController.find).not.toHaveBeenCalled();
         });
     });
 

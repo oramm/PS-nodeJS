@@ -8,6 +8,7 @@ import ToolsGd from '../tools/ToolsGd';
 import {
     CityData,
     ContractTypeData,
+    EntityData,
     OfferData,
     OfferEventData,
 } from '../types/types';
@@ -33,6 +34,8 @@ export default abstract class Offer
     isOur: boolean;
     bidProcedure?: string;
     employerName?: string;
+    /** Dane podmiotu (adres, NIP) dopasowane po nazwie z kartoteki Entities - używane wyłącznie do generowania dokumentu oferty */
+    _employer?: EntityData;
     status?: string;
     gdFolderId?: string;
     _gdFolderUrl?: string;
@@ -97,6 +100,11 @@ export default abstract class Offer
         console.log('shouldEditGdElements', _fieldsToUpdate);
         if (!_fieldsToUpdate) return true;
         return _fieldsToUpdate.includes('submissionDeadline');
+    }
+
+    /** Ustawia dane podmiotu (adres, NIP) dopasowane po nazwie zamawiającego - wołane przez Controller przed wygenerowaniem dokumentu oferty */
+    setEmployerDetails(entity: EntityData) {
+        this._employer = entity;
     }
 
     setGdFolderIdAndUrl(gdFolderId: string) {

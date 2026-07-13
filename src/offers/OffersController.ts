@@ -15,6 +15,7 @@ import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import { UserData } from '../types/sessionTypes';
 import { MilestoneDateData, OfferEventData, TaskData } from '../types/types';
+import EntitiesController from '../entities/EntitiesController';
 import ExternalOffer from './ExternalOffer';
 import Offer from './Offer';
 import OfferBondsController from './OfferBond/OfferBondsController';
@@ -253,6 +254,39 @@ export default class OffersController extends BaseController<
     }
 
     /**
+     * Dopasowuje podmiot z kartoteki Entities po nazwie zamawiającego (dokładne dopasowanie, bez rozróżniania wielkości liter)
+     * i wpina jego adres/NIP do oferty - używane do wypełnienia dokumentu oferty (#ENVI#employerName#).
+     * Nie rzuca błędu - to wzbogacenie dokumentu, a nie krok krytyczny dla zapisania/edycji oferty.
+     */
+    private static async matchEmployerEntity(offer: OurOffer): Promise<void> {
+        if (!offer.employerName) return;
+        try {
+            const matchedEntities = await EntitiesController.find([
+                { name: offer.employerName },
+            ]);
+            const exactMatches = matchedEntities
+                .filter(
+                    (entity) =>
+                        entity.name?.trim().toLowerCase() ===
+                        offer.employerName?.trim().toLowerCase()
+                )
+                .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+
+            if (exactMatches.length > 1)
+                console.warn(
+                    `matchEmployerEntity: znaleziono ${exactMatches.length} podmiotów o nazwie "${offer.employerName}" - wybieram najstarszy rekord (Id=${exactMatches[0].id})`
+                );
+
+            if (exactMatches[0]) offer.setEmployerDetails(exactMatches[0]);
+        } catch (error) {
+            console.warn(
+                `matchEmployerEntity: nie udało się dopasować podmiotu "${offer.employerName}" - dokument oferty pokaże samą nazwę`,
+                error
+            );
+        }
+    }
+
+    /**
      * Add new offer (base logic for all offer types)
      * PRIVATE: Called by addOurOffer/addExternalOffer
      */
@@ -265,6 +299,8 @@ export default class OffersController extends BaseController<
         const instance = this.getInstance();
         try {
             console.group('Creating new offer');
+            if (offer instanceof OurOffer)
+                await this.matchEmployerEntity(offer);
             TaskStore.update(taskId, 'Tworzę foldery', 15);
             await offer.createGdElements(auth);
             console.log('Offer folder created');
@@ -419,6 +455,8 @@ export default class OffersController extends BaseController<
             TaskStore.update(taskId, 'Edytuję ofertę', 5);
 
             if (this.shouldEditGdElements(fieldsToUpdate)) {
+                if (offer instanceof OurOffer)
+                    await this.matchEmployerEntity(offer);
                 TaskStore.update(taskId, 'Edytuję ofertę na Dysku Google', 20);
                 await offer.editGdElements(auth, taskId);
             }
