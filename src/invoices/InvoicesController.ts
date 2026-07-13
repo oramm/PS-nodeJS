@@ -295,8 +295,20 @@ export default class InvoicesController extends BaseController<
             }
             console.log(`Dodano ${itemsToCreate.length} pozycji do faktury korygującej`);
 
-            // 8. Opcjonalnie: oznacz oryginalną fakturę jako skorygowaną
-            if (correctionType === 'zero') {
+            // 8. Oznacz oryginalną fakturę
+            // - jeśli była już wysłana do KSeF -> "Skorygowana" (dokument w KSeF nie znika,
+            //   zostaje skorygowany kolejnym dokumentem)
+            // - jeśli sprzed KSeF / niewysłana -> "Wycofana" (dotychczasowe zachowanie dla
+            //   korekty do zera)
+            const wasSentToKsef =
+                !!originalInvoice.ksefNumber ||
+                originalInvoice.status === Setup.InvoiceStatus.SENT_TO_KSEF;
+
+            if (wasSentToKsef) {
+                originalInvoice.status = Setup.InvoiceStatus.CORRECTED;
+                await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
+                console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako skorygowana`);
+            } else if (correctionType === 'zero') {
                 originalInvoice.status = Setup.InvoiceStatus.WITHDRAWN;
                 await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
                 console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako wycofana`);

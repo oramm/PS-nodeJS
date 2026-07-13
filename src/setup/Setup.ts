@@ -171,6 +171,7 @@ export default class Setup {
         PAID: 'Zapłacona',
         TO_CORRECT: 'Do korekty',
         WITHDRAWN: 'Wycofana',
+        CORRECTED: 'Skorygowana',
     };
 
     static ProjectStatuses = {
