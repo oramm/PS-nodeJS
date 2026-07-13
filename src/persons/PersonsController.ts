@@ -5,6 +5,7 @@ import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../tools/ToolsDb';
+import Setup from '../setup/Setup';
 
 export type { PersonsSearchParams };
 
@@ -244,16 +245,18 @@ export default class PersonsController extends BaseController<
             // TODO:
             // NOTE: ScrumSheet importuje PersonsController, więc używamy dynamic import
             // (legacy workaround do czasu osobnej analizy/refaktoryzacji modułu ScrumSheet).
-            const [{ default: Planning }, { default: CurrentSprint }] =
-                await Promise.all([
-                    import('../ScrumSheet/Planning'),
-                    import('../ScrumSheet/CurrentSprint'),
-                ]);
+            if (Setup.scrumSheetSyncEnabled) {
+                const [{ default: Planning }, { default: CurrentSprint }] =
+                    await Promise.all([
+                        import('../ScrumSheet/Planning'),
+                        import('../ScrumSheet/CurrentSprint'),
+                    ]);
 
-            await Promise.all([
-                Planning.refreshTimeAvailable(auth),
-                CurrentSprint.makePersonTimePerTaskFormulas(auth),
-            ]);
+                await Promise.all([
+                    Planning.refreshTimeAvailable(auth),
+                    CurrentSprint.makePersonTimePerTaskFormulas(auth),
+                ]);
+            }
 
             return user;
         });

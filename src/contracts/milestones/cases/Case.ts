@@ -250,7 +250,6 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     async editInScrum(auth: OAuth2Client) {
-        if (!Setup.scrumSheetSyncEnabled) return;
         await Promise.all([
             this.editInDataSheet(auth),
             this.editInCurrentSprintSheet(auth),
@@ -294,6 +293,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     private async editInCurrentSprintSheet(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         let currentSprintValues = <any[][]>(
             await ToolsSheets.getValues(auth, {
                 spreadsheetId: Setup.ScrumSheet.GdId,
@@ -362,7 +362,6 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     async deleteFromScrumSheet(auth: OAuth2Client) {
-        if (!Setup.scrumSheetSyncEnabled) return;
         await Promise.all([
             this.deleteFromCurrentSprintSheet(auth),
             this.deleteFromDataSheet(auth),
@@ -398,6 +397,7 @@ export default class Case extends BusinessObject implements CaseData {
     }
 
     private async deleteFromCurrentSprintSheet(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.caseIdColName,
             valueToFind: <number>this.id,

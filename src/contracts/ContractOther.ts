@@ -103,6 +103,7 @@ export default class ContractOther
     async addInScrum(auth: OAuth2Client) {}
 
     async editInScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         if (!(await this.shouldBeInScrum())) {
             this.deleteFromScrum(auth).then(() => {
                 console.log('ContractOther deleted From Scrum');
@@ -148,6 +149,7 @@ export default class ContractOther
     }
 
     async deleteFromScrum(auth: OAuth2Client) {
+        if (!Setup.scrumSheetSyncEnabled) return;
         CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.contractDbIdColName,
             valueToFind: <number>this.id,

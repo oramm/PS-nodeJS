@@ -1192,6 +1192,7 @@ export default class ContractsController extends BaseController<
 
         // Post-processing dla ContractOur i ContractOther (logika Scrum)
         if (
+            Setup.scrumSheetSyncEnabled &&
             contract instanceof ContractOur &&
             (await contract.shouldBeInScrum())
         ) {
@@ -1224,7 +1225,11 @@ export default class ContractsController extends BaseController<
                 );
             });
             await CurrentSprint.makePersonTimePerTaskFormulas(auth);
-        } else if (contract instanceof ContractOther && contract.ourIdRelated) {
+        } else if (
+            Setup.scrumSheetSyncEnabled &&
+            contract instanceof ContractOther &&
+            contract.ourIdRelated
+        ) {
             TaskStore.update(taskId, 'Ostatnie porządki w scrum', 95);
             await CurrentSprint.setSumInContractRow(
                 auth,
