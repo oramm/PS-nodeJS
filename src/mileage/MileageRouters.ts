@@ -16,6 +16,18 @@ app.get(
     }
 );
 
+app.get('/mileage/drivers', async (req: Request, res: Response, next: any) => {
+    try {
+        if (!req.session.userData)
+            throw new Error('Musisz być zalogowany.');
+        res.send(
+            await MileageController.getDrivers(req.session.userData.enviId)
+        );
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.post(
     '/mileage/scan-odometer',
     upload.single('file') as any,

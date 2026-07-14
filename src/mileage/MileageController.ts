@@ -3,6 +3,8 @@ import { oAuthClient } from '../setup/Sessions/ToolsGapi';
 import ToolsSheets from '../tools/ToolsSheets';
 import ToolsVision from '../tools/ToolsVision';
 import CarRepository, { MileageVehicle } from './CarRepository';
+import StaffMemberRepository from '../staff/StaffMemberRepository';
+import PersonsController from '../persons/PersonsController';
 
 const SHEET_RANGE = 'A:K';
 const HEADER_ROWS = 1;
@@ -170,6 +172,23 @@ export default class MileageController {
                 };
             })
         );
+    }
+
+    /** Kierowcy (StaffMembers.IsDriver) - zalogowany na początku listy (domyślny wybór). */
+    static async getDrivers(currentPersonId?: number) {
+        const personIds = await StaffMemberRepository.getDriverPersonIds();
+        if (personIds.length === 0) return [];
+        const persons = await PersonsController.find(
+            personIds.map((id) => ({ id }))
+        );
+        return persons.sort((a, b) => {
+            if (a.id === currentPersonId) return -1;
+            if (b.id === currentPersonId) return 1;
+            return `${a.surname} ${a.name}`.localeCompare(
+                `${b.surname} ${b.name}`,
+                'pl'
+            );
+        });
     }
 
     static async scanOdometer(
