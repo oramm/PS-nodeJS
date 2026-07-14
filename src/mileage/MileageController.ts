@@ -169,6 +169,7 @@ export default class MileageController {
                         vehicle,
                         title
                     ),
+                    sheetUrl: `https://docs.google.com/spreadsheets/d/${vehicle.spreadsheetId}/edit#gid=${vehicle.gid}`,
                 };
             })
         );
