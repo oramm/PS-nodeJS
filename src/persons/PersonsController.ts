@@ -4,7 +4,9 @@ import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
+import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
+import StaffMemberRepository from '../staff/StaffMemberRepository';
 import Setup from '../setup/Setup';
 
 export type { PersonsSearchParams };
@@ -62,6 +64,26 @@ export default class PersonsController extends BaseController<
      * CREATE
      * Dodaje osobę (tylko DB).
      */
+    /**
+     * Po nadaniu roli 1/2/3 zakłada rekord StaffMembers z domyślnymi flagami roli
+     * (jeśli jeszcze nie ma). Wołane w tej samej transakcji co zapis konta.
+     */
+    private static async ensureStaffMemberForRole(
+        personId: number | undefined,
+        systemRoleId: number | undefined,
+        roleWasWritten: boolean,
+        conn: mysql.PoolConnection
+    ): Promise<void> {
+        if (!personId || !roleWasWritten) return;
+        if (systemRoleId === undefined || ![1, 2, 3].includes(systemRoleId))
+            return;
+        await StaffMemberRepository.ensureDefaultsForRole(
+            personId,
+            systemRoleId,
+            conn
+        );
+    }
+
     static async add(person: Person): Promise<Person> {
         const instance = this.getInstance();
         const hasAccountFields =
@@ -82,6 +104,12 @@ export default class PersonsController extends BaseController<
                 );
                 person.id = personForPersonsWrite.id;
                 await instance.repository.upsertPersonAccountInDb(person, conn);
+                await this.ensureStaffMemberForRole(
+                    person.id,
+                    person.systemRoleId,
+                    true, // add: domyślnie synchronizuje wszystkie pola konta
+                    conn
+                );
             });
         } else {
             await instance.repository.addInDb(person);
@@ -131,6 +159,12 @@ export default class PersonsController extends BaseController<
                     conn,
                     accountFieldsToSync,
                 );
+                await this.ensureStaffMemberForRole(
+                    person.id,
+                    person.systemRoleId,
+                    accountFieldsToSync.includes('systemRoleId'),
+                    conn,
+                );
             });
         } else {
             if (hasPersonFields) {
@@ -147,6 +181,12 @@ export default class PersonsController extends BaseController<
                         person,
                         conn,
                         accountFieldsToSync,
+                    );
+                    await this.ensureStaffMemberForRole(
+                        person.id,
+                        person.systemRoleId,
+                        accountFieldsToSync.includes('systemRoleId'),
+                        conn,
                     );
                 });
             }
@@ -324,6 +364,12 @@ export default class PersonsController extends BaseController<
                 },
                 conn,
                 fieldsToSync,
+            );
+            await this.ensureStaffMemberForRole(
+                accountData.personId,
+                accountData.systemRoleId,
+                fieldsToSync.includes('systemRoleId'),
+                conn,
             );
         });
 

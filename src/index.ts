@@ -630,6 +630,7 @@ require('./invoices/InvoiceItemsRouters');
 require('./costInvoices/CostInvoicesRouter');
 
 require('./projects/ProjectsRouters');
+require('./mileage/MileageRouters');
 
 require('./contracts/ContractsRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
