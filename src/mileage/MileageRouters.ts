@@ -1,9 +1,6 @@
-import multer from 'multer';
 import { Request, Response } from 'express';
 import { app } from '../index';
 import MileageController from './MileageController';
-
-const upload = multer({ storage: multer.memoryStorage() });
 
 app.get(
     '/mileage/vehicles',
@@ -27,28 +24,6 @@ app.get('/mileage/drivers', async (req: Request, res: Response, next: any) => {
         next(error);
     }
 });
-
-app.post(
-    '/mileage/scan-odometer',
-    upload.single('file') as any,
-    async (req: Request, res: Response, next: any) => {
-        try {
-            if (!req.file)
-                throw new Error('Nie załączono zdjęcia licznika.');
-            const previousEndReading = req.body.previousEndReading
-                ? Number(req.body.previousEndReading)
-                : null;
-            const candidates = await MileageController.scanOdometer(
-                req.body.vehicleId,
-                previousEndReading,
-                req.file.buffer
-            );
-            res.send({ candidates });
-        } catch (error) {
-            next(error);
-        }
-    }
-);
 
 app.post('/mileage/trip', async (req: Request, res: Response, next: any) => {
     try {

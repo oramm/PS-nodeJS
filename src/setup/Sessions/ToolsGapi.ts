@@ -30,7 +30,6 @@ export default class ToolsGapi {
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/drive',
         'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/cloud-vision',
     ];
     //'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/userinfo.profile openid https://www.googleapis.com/auth/drive'
 

@@ -1,7 +1,6 @@
 import { OAuth2Client } from 'google-auth-library';
 import { oAuthClient } from '../setup/Sessions/ToolsGapi';
 import ToolsSheets from '../tools/ToolsSheets';
-import ToolsVision from '../tools/ToolsVision';
 import CarRepository, { MileageVehicle } from './CarRepository';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import PersonsController from '../persons/PersonsController';
@@ -9,8 +8,6 @@ import PersonsController from '../persons/PersonsController';
 const SHEET_RANGE = 'A:K';
 const HEADER_ROWS = 1;
 const END_READING_COL = 'G'; // stan licznika końcowy = bieżący przebieg
-const MAX_PLAUSIBLE_TRIP_KM = 1500;
-const READING_DIGITS = 6;
 // Google Sheets "jasnożółty 3" (light yellow 3) = #fff2cc
 const FUELING_ROW_COLOR = { red: 1, green: 0.9490196, blue: 0.8 };
 
@@ -190,29 +187,6 @@ export default class MileageController {
                 'pl'
             );
         });
-    }
-
-    static async scanOdometer(
-        vehicleId: string,
-        previousEndReading: number | null,
-        imageBuffer: Buffer
-    ) {
-        await this.getVehicle(vehicleId); // walidacja istnienia pojazdu
-        const auth = await this.getAuth();
-        const blocks = await ToolsVision.detectDigitBlocks(auth, imageBuffer);
-        const candidates = blocks
-            .filter((b) => b.digits.length === READING_DIGITS)
-            .filter((b) => {
-                if (previousEndReading == null) return true;
-                const value = Number(b.digits);
-                return (
-                    value >= previousEndReading &&
-                    value <= previousEndReading + MAX_PLAUSIBLE_TRIP_KM
-                );
-            })
-            .sort((a, b) => b.height - a.height)
-            .map((b) => Number(b.digits));
-        return [...new Set(candidates)].slice(0, 5);
     }
 
     static async addTrip(dto: MileageTripDto, driver: string) {
