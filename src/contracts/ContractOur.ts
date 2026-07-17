@@ -1,5 +1,6 @@
 import { OAuth2Client } from 'google-auth-library';
 import City from '../Admin/Cities/City';
+import Entity from '../entities/Entity';
 import Person from '../persons/Person';
 import PersonsController from '../persons/PersonsController';
 import CurrentSprint from '../ScrumSheet/CurrentSprint';
@@ -17,6 +18,8 @@ export default class ContractOur extends Contract implements OurContractData {
     _admin?: Person;
     cityId?: number;
     _city?: City;
+    invoiceBuyerEntityId?: number;
+    _invoiceBuyer?: Entity;
 
     constructor(initParamObject: any) {
         super(initParamObject);
@@ -36,6 +39,14 @@ export default class ContractOur extends Contract implements OurContractData {
         if (initParamObject._city) {
             this.cityId = initParamObject._city.id;
             this._city = initParamObject._city;
+        }
+        if (initParamObject._invoiceBuyer) {
+            this._invoiceBuyer = new Entity(initParamObject._invoiceBuyer);
+            this.invoiceBuyerEntityId = initParamObject._invoiceBuyer.id;
+        } else if (initParamObject.invoiceBuyerEntityId !== undefined) {
+            // Brak zagnieżdżonego _invoiceBuyer (np. edycja z surowym Id albo
+            // jawne czyszczenie pola przez null) — D5: pole opcjonalne, NULL dozwolony.
+            this.invoiceBuyerEntityId = initParamObject.invoiceBuyerEntityId;
         }
         //znacznik uniwersalny gdy chemy wybierać ze wszystkich kontraktów Our i Works
         let ourIdOrNumber = this.ourId;

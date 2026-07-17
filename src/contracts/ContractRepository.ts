@@ -43,12 +43,14 @@ export default class ContractRepository extends BaseRepository<
             const managerId = item.managerId;
             const adminId = item.adminId;
             const cityId = item.cityId;
+            const invoiceBuyerEntityId = item.invoiceBuyerEntityId;
 
             // Usuń pola przed INSERT do Contracts
             delete (item as any).ourId;
             delete (item as any).managerId;
             delete (item as any).adminId;
             delete (item as any).cityId;
+            delete (item as any).invoiceBuyerEntityId;
 
             try {
                 // Dodaj do tabeli Contracts
@@ -59,6 +61,7 @@ export default class ContractRepository extends BaseRepository<
                 item.managerId = managerId;
                 item.adminId = adminId;
                 item.cityId = cityId;
+                item.invoiceBuyerEntityId = invoiceBuyerEntityId;
 
                 // Dodaj dane w tabeli OurContractsData
                 // Klucze camelCase zgodnie z konwencją (ToolsDb kapitalizuje
@@ -71,6 +74,7 @@ export default class ContractRepository extends BaseRepository<
                     managerId: managerId,
                     adminId: adminId,
                     cityId: cityId,
+                    invoiceBuyerEntityId: invoiceBuyerEntityId,
                 };
                 await ToolsDb.addInDb(
                     'OurContractsData',
@@ -84,6 +88,7 @@ export default class ContractRepository extends BaseRepository<
                 item.managerId = managerId;
                 item.adminId = adminId;
                 item.cityId = cityId;
+                item.invoiceBuyerEntityId = invoiceBuyerEntityId;
                 throw error;
             }
         } else {
@@ -106,6 +111,7 @@ export default class ContractRepository extends BaseRepository<
                 'managerId',
                 'adminId',
                 'cityId',
+                'invoiceBuyerEntityId',
             ];
 
             // Rozdziel fieldsToUpdate na pola dla każdej tabeli
@@ -121,11 +127,13 @@ export default class ContractRepository extends BaseRepository<
             const managerId = item.managerId;
             const adminId = item.adminId;
             const cityId = item.cityId;
+            const invoiceBuyerEntityId = item.invoiceBuyerEntityId;
 
             delete (item as any).ourId;
             delete (item as any).managerId;
             delete (item as any).adminId;
             delete (item as any).cityId;
+            delete (item as any).invoiceBuyerEntityId;
 
             try {
                 // 1. Update tabeli Contracts (jeśli są pola do update)
@@ -146,6 +154,7 @@ export default class ContractRepository extends BaseRepository<
                 item.managerId = managerId;
                 item.adminId = adminId;
                 item.cityId = cityId;
+                item.invoiceBuyerEntityId = invoiceBuyerEntityId;
 
                 // 2. Update tabeli OurContractsData (jeśli są pola do update)
                 if (
@@ -159,6 +168,7 @@ export default class ContractRepository extends BaseRepository<
                         managerId: managerId,
                         adminId: adminId,
                         cityId: cityId,
+                        invoiceBuyerEntityId: invoiceBuyerEntityId,
                     };
                     await ToolsDb.editInDb(
                         'OurContractsData',
@@ -174,6 +184,7 @@ export default class ContractRepository extends BaseRepository<
                 item.managerId = managerId;
                 item.adminId = adminId;
                 item.cityId = cityId;
+                item.invoiceBuyerEntityId = invoiceBuyerEntityId;
                 throw error;
             }
         } else {
@@ -259,12 +270,17 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.MaterialCardsGdFolderId,
                     mainContracts.LettersShortcutsInSubfolder,
                     mainContracts.LastUpdated,
-                    OurContractsData.OurId, 
-                    OurContractsData.ManagerId, 
+                    OurContractsData.OurId,
+                    OurContractsData.ManagerId,
                     OurContractsData.AdminId,
+                    OurContractsData.InvoiceBuyerEntityId,
                     Cities.Id AS CityId,
                     Cities.Name AS CityName,
                     Cities.Code AS CityCode,
+                    InvoiceBuyers.Id AS InvoiceBuyerId,
+                    InvoiceBuyers.Name AS InvoiceBuyerName,
+                    InvoiceBuyers.Address AS InvoiceBuyerAddress,
+                    InvoiceBuyers.TaxNumber AS InvoiceBuyerTaxNumber,
                     Projects.Id AS ProjectId,
                     Projects.OurId AS ProjectOurId,
                     Projects.Name AS ProjectName,
@@ -297,6 +313,7 @@ export default class ContractRepository extends BaseRepository<
                   FROM Contracts AS mainContracts
                   LEFT JOIN OurContractsData ON OurContractsData.Id=mainContracts.id
                   LEFT JOIN Cities ON Cities.Id=OurContractsData.CityId
+                  LEFT JOIN Entities AS InvoiceBuyers ON InvoiceBuyers.Id=OurContractsData.InvoiceBuyerEntityId
                   JOIN Projects ON Projects.OurId=mainContracts.ProjectOurId
                   LEFT JOIN Contracts AS RelatedContracts ON RelatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=mainContracts.OurIdRelated)
                   LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = mainContracts.OurIdRelated
@@ -639,6 +656,8 @@ export default class ContractRepository extends BaseRepository<
             materialCardsGdFolderId: row.MaterialCardsGdFolderId,
             lettersShortcutsInSubfolder: !!row.LettersShortcutsInSubfolder,
             ourId: row.OurId,
+            invoiceBuyerEntityId: row.InvoiceBuyerEntityId ?? undefined,
+            _invoiceBuyer: this.mapInvoiceBuyerToModel(row),
             _manager: {
                 id: row.ManagerId,
                 name: row.ManagerName,
@@ -692,6 +711,21 @@ export default class ContractRepository extends BaseRepository<
             id: row.CityId,
             name: ToolsDb.sqlToString(row.CityName),
             code: row.CityCode,
+        };
+    }
+
+    private mapInvoiceBuyerToModel(row: ContractRow) {
+        if (!row.InvoiceBuyerId) return undefined;
+
+        return {
+            id: row.InvoiceBuyerId,
+            name: row.InvoiceBuyerName
+                ? ToolsDb.sqlToString(row.InvoiceBuyerName)
+                : row.InvoiceBuyerName,
+            address: row.InvoiceBuyerAddress
+                ? ToolsDb.sqlToString(row.InvoiceBuyerAddress)
+                : row.InvoiceBuyerAddress,
+            taxNumber: row.InvoiceBuyerTaxNumber,
         };
     }
 
@@ -836,6 +870,11 @@ type ContractRow = {
     CityId?: number | null;
     CityName?: string | null;
     CityCode?: string | null;
+    InvoiceBuyerEntityId?: number | null;
+    InvoiceBuyerId?: number | null;
+    InvoiceBuyerName?: string | null;
+    InvoiceBuyerAddress?: string | null;
+    InvoiceBuyerTaxNumber?: string | null;
     RelatedId?: number | null;
     RelatedOurId?: string | null;
     RelatedName?: string | null;

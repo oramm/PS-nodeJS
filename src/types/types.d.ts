@@ -66,6 +66,9 @@ export interface OurContractData extends ContractData {
     _ourType: string;
     _admin?: Person;
     _city?: City;
+    /** Nabywca FV (Podmiot2 KSeF) dla umow klasy JST — FK do Entities.Id, opcjonalny. */
+    invoiceBuyerEntityId?: number;
+    _invoiceBuyer?: EntityData;
 }
 export interface OtherContractData extends ContractData {
     _contractors?: Entity[];

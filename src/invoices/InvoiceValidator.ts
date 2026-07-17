@@ -25,6 +25,7 @@ export default class InvoiceValidator {
 
     async checkValueWithContract(isNewInvoice: boolean): Promise<boolean> {
         this.checkContractValueSet();
+        this.checkInvoiceBuyerConsistency();
 
         const contractSettlementData = await this.getContractSettlementData();
         if (isNewInvoice) {
@@ -34,6 +35,32 @@ export default class InvoiceValidator {
         }
 
         return true;
+    }
+
+    /**
+     * SOFT guard (log-only, NIE rzuca) dla spójności Nabywcy FV.
+     *
+     * Gdy kontrakt ma skonfigurowanego Nabywcę FV (`_invoiceBuyer`), Nabywca
+     * faktury (`invoice.entityId`) powinien być równy `_invoiceBuyer.id`.
+     * Rozbieżność jest tylko logowana przez `console.warn` — celowo bez throw,
+     * aby nie blokować wystawiania FV w okresie przejściowym rolloutu (F5).
+     * Eskalacja do twardego odrzucenia dopiero po decyzji właściciela.
+     */
+    private checkInvoiceBuyerConsistency(): void {
+        const invoiceBuyer = this.contract._invoiceBuyer;
+        if (!invoiceBuyer) return;
+
+        if (this.invoice.entityId !== invoiceBuyer.id) {
+            console.warn(
+                `[FV Nabywca][SOFT] Niespójność Nabywcy FV dla kontraktu ` +
+                    `${this.contract.ourId ?? this.contract.id}: ` +
+                    `Nabywca faktury (entityId=${this.invoice.entityId ?? 'brak'}) ` +
+                    `różni się od Nabywcy FV skonfigurowanego na kontrakcie ` +
+                    `(_invoiceBuyer.id=${invoiceBuyer.id}` +
+                    `${invoiceBuyer.name ? `, ${invoiceBuyer.name}` : ''}). ` +
+                    `Guard log-only — FV nie została zablokowana.`
+            );
+        }
     }
 
     private checkContractValueSet() {

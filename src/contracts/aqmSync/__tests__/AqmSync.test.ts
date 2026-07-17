@@ -164,6 +164,45 @@ describe('buildAqmPayload — ourId (K8)', () => {
     });
 });
 
+describe('buildAqmPayload — D4 regression: InvoiceBuyerEntityId/_invoiceBuyer must NOT affect the AQM payload', () => {
+    // F1 plan (20_projects/Aplikacje/AQM.APP.01/plans/2026-07-16-psenvi-fv-nabywca-odbiorca-plan.md),
+    // locked decision D4: the new optional "Nabywca FV" field on ContractOur
+    // (OurContractsData.InvoiceBuyerEntityId / ContractOur._invoiceBuyer) is
+    // wholly orthogonal to the AQM push, which is built from the EMPLOYER side
+    // only (Zamawiajacy = zaklad, unchanged). buildAqmPayload must never read
+    // invoiceBuyerEntityId/_invoiceBuyer, so the payload is byte-identical
+    // whether the field is set or absent.
+    it('payload is byte-identical (JSON.stringify) with vs. without the invoice-buyer field set', () => {
+        const withoutInvoiceBuyer = baseContract();
+        const withInvoiceBuyer = baseContract({
+            invoiceBuyerEntityId: 900,
+            _invoiceBuyer: {
+                id: 900,
+                name: 'Gmina Duszniki',
+                address: 'ul. Sportowa 1, 64-550 Duszniki',
+                taxNumber: '7871995455',
+            },
+        });
+
+        const payloadWithout = buildAqmPayload(withoutInvoiceBuyer as any);
+        const payloadWith = buildAqmPayload(withInvoiceBuyer as any);
+
+        expect(JSON.stringify(payloadWith)).toBe(
+            JSON.stringify(payloadWithout)
+        );
+        expect(payloadWith).toEqual(payloadWithout);
+    });
+
+    it('payload is identical when the invoice-buyer field is explicitly null (cleared)', () => {
+        const payloadNull = buildAqmPayload(
+            baseContract({ invoiceBuyerEntityId: null, _invoiceBuyer: null }) as any
+        );
+        const payloadAbsent = buildAqmPayload(baseContract() as any);
+
+        expect(JSON.stringify(payloadNull)).toBe(JSON.stringify(payloadAbsent));
+    });
+});
+
 describe('enqueueAqmPush (same tx conn)', () => {
     it('inserts a PENDING outbox row via the provided connection and returns insertId', async () => {
         const conn: any = {
