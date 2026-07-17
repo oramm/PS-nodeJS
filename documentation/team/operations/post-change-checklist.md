@@ -98,6 +98,43 @@ Copy the block below for each new change:
 - `src/contracts/milestones/cases/CaseRepository.ts`
 - `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/View/Modals/CommonFormComponents/CaseStatusFilter.tsx`
 
+## 2026-07-17 - Invoice buyer (Nabywca FV) on our contracts + JST auto-fill/lock
+
+### Scope
+
+- Added optional `OurContractsData.InvoiceBuyerEntityId` (nullable FK -> `Entities(Id)`, `ON DELETE RESTRICT`) via migration `src/contracts/migrations/005_add_invoice_buyer_to_our_contracts.sql`. Server model/repo hydrate `ContractOur._invoiceBuyer` (new `LEFT JOIN Entities AS InvoiceBuyers` in the contract search query). Soft (log-only) buyer-consistency guard added in `InvoiceValidator.checkInvoiceBuyerConsistency`.
+- Frontend (`ENVI.ProjectSite` master `4735e6e`): "Nabywca FV" selector on the our-contract form + auto-fill/lock of buyer (gmina) + receiver (Podmiot3 role 8 = Zamawiajacy) on a NEW invoice from a contract that carries the field.
+- Deployed: server `main` `0befe1e` -> Heroku `erp-envi` v476; front `master` -> GitHub Pages.
+
+### Impact
+
+- DB: kylos `envikons_myEnvi` gained nullable `OurContractsData.InvoiceBuyerEntityId` + FK `FK_OurContractsData_InvoiceBuyerEntityId`. Additive only, zero backfill, zero data touched.
+- ENV: none.
+- Deploy: Heroku v476 (release gate `migrate verify` green — 005 applied, unrelated FIDman migration 004 intentionally NOT part of this commit and NOT applied to kylos). Front on Pages.
+
+### Required Actions
+
+- Migration 005 applied to kylos 2026-07-17 (backup-first) BEFORE server push — required ordering because the Heroku release gate blocks deploy on any pending migration in the deployed repo.
+- Owner-tail (outside this change): set contract 871 `Nabywca FV = entity 459` in the UI; owner issues the first real invoice + KSeF send; then RO post-check (entity 459 + its 18 invoices byte-untouched, baseline SUM(Id)=94805; outbox 871 payload NIP `7871006601`; AQM model3 org 44/54 unchanged).
+
+### Verification
+
+- `migrate:list` on kylos: `pending=1 drift=0`, `005 APPLIED` (executionMillis=950); only unrelated FIDman `004` remains pending (not in deployed repo).
+- Hard read-only smoke: deployed `ContractRepository.find([])` against kylos -> 793 contracts, new JOIN clean, 0 with `_invoiceBuyer` (pre-871-config).
+- Heroku v476 web dyno `up`; Pages workflow `success`.
+- RO baseline: entity 459 + 18 invoices unchanged (SUM(Id)=94805, Id 4425-6248); `OurContractsData.871.InvoiceBuyerEntityId = NULL`.
+
+### Rollback
+
+- Backup of `OurContractsData` before migration: `scratchpad/kylos-OurContractsData-pre005-20260717-073437.sql` (single-table mysqldump, restorable).
+- Schema rollback (additive, safe): `src/contracts/migrations/005_add_invoice_buyer_to_our_contracts_down.sql` (DROP FK, DROP COLUMN) — only after reverting the app code that reads the column.
+
+### Links
+
+- `src/contracts/migrations/005_add_invoice_buyer_to_our_contracts.sql`
+- `src/contracts/ContractRepository.ts`, `src/invoices/InvoiceValidator.ts`
+- Plan/progress: `20_projects/Aplikacje/AQM.APP.01/plans/2026-07-16-psenvi-fv-nabywca-odbiorca-*.md` (SB vault)
+
 ## 2026-07-03 - Invoice Status ENUM: add "Odrzucona przez KSeF"
 
 ### Scope
