@@ -1,7 +1,17 @@
 import CasesController from './CasesController';
 import { app } from '../../../index';
 import Case from './Case';
+import Setup from '../../../setup/Setup';
 import { Request, Response } from 'express';
+
+/** Waliduje wartość statusu sprawy z klienta. Zwraca komunikat błędu albo undefined. */
+function validateCaseStatus(status: unknown): string | undefined {
+    if (status === undefined) return undefined;
+    const validStatuses = Object.values(Setup.CaseStatus);
+    if (typeof status !== 'string' || !validStatuses.includes(status))
+        return `Nieprawidłowy status sprawy: ${status}. Dozwolone: ${validStatuses.join(', ')}`;
+    return undefined;
+}
 
 app.post('/cases', async (req: Request, res: Response, next) => {
     try {
@@ -18,6 +28,11 @@ app.post('/cases', async (req: Request, res: Response, next) => {
 
 app.post('/case', async (req: Request, res: Response, next) => {
     try {
+        const statusError = validateCaseStatus(req.parsedBody.status);
+        if (statusError) {
+            res.status(400).send(statusError);
+            return;
+        }
         const caseItem = new Case({
             ...req.parsedBody,
         });
@@ -33,13 +48,22 @@ app.post('/case', async (req: Request, res: Response, next) => {
 
 app.put('/case/:id', async (req: Request, res: Response, next) => {
     try {
+        const statusError = validateCaseStatus(req.parsedBody.status);
+        if (statusError) {
+            res.status(400).send(statusError);
+            return;
+        }
         const itemFromClient = req.parsedBody;
         let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)
             item.setAsUniquePerMilestone();
 
         // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        const result = await CasesController.edit(item);
+        const result = await CasesController.edit(
+            item,
+            undefined,
+            req.parsedBody._fieldsToUpdate
+        );
 
         res.send(result);
     } catch (error) {

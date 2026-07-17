@@ -24,6 +24,7 @@ export type CasesSearchParams = {
     milestoneTypeId?: number;
     searchText?: string;
     hasProcesses?: string;
+    statuses?: string[];
 };
 
 /**
@@ -89,6 +90,7 @@ export default class CaseRepository extends BaseRepository<Case> {
             Cases.Number,
             Cases.SubCaseNumber,
             Cases.Description,
+            Cases.Status,
             Cases.GdFolderId,
             Cases.LastUpdated,
             Milestones.Id AS MilestoneId,
@@ -229,6 +231,7 @@ export default class CaseRepository extends BaseRepository<Case> {
             number: row.Number,
             subCaseNumber: row.SubCaseNumber ?? undefined,
             description: ToolsDb.sqlToString(row.Description),
+            status: row.Status,
             gdFolderId: row.GdFolderId,
             _parent: new Milestone({
                 id: row.MilestoneId,
@@ -300,6 +303,14 @@ export default class CaseRepository extends BaseRepository<Case> {
               ])
             : '1';
 
+        const statusCondition = searchParams.statuses?.length
+            ? ToolsDb.makeOrConditionFromValueOrArray(
+                  searchParams.statuses,
+                  'Cases',
+                  'Status'
+              )
+            : '1';
+
         const searchTextCondition = this.makeSearchTextCondition(
             searchParams.searchText
         );
@@ -312,7 +323,8 @@ export default class CaseRepository extends BaseRepository<Case> {
             AND ${parentCaseCondition}
             AND ${searchTextCondition}
             AND ${typeIdCondition}
-            AND ${milestoneTypeCondition}`;
+            AND ${milestoneTypeCondition}
+            AND ${statusCondition}`;
     }
 
     /**
@@ -627,16 +639,18 @@ export default class CaseRepository extends BaseRepository<Case> {
      * @param shouldResetProcessInstances - Czy zresetować ProcessInstances (przy zmianie typu)
      * @param newProcessInstances - Nowe ProcessInstances (jeśli reset)
      * @param conn - Połączenie DB (wymagane - część transakcji Controller)
+     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji (np. ['status'])
      * @returns Zaktualizowany Case
      */
     async editWithRelated(
         caseItem: Case,
         shouldResetProcessInstances: boolean,
         newProcessInstances: any[],
-        conn: mysql.PoolConnection
+        conn: mysql.PoolConnection,
+        fieldsToUpdate?: string[]
     ): Promise<Case> {
         // 1. Edytuj Case
-        await this.editInDb(caseItem, conn, true);
+        await this.editInDb(caseItem, conn, true, fieldsToUpdate);
 
         // 2. Jeśli trzeba, zresetuj ProcessInstances
         if (shouldResetProcessInstances) {

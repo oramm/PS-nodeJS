@@ -444,12 +444,21 @@ export default class CasesController extends BaseController<
      *
      * @param caseItem - Case do edycji
      * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
+     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji (np. ['status'])
      * @returns Zaktualizowany Case
      */
-    static async edit(caseItem: Case, auth?: OAuth2Client): Promise<Case> {
+    static async edit(
+        caseItem: Case,
+        auth?: OAuth2Client,
+        fieldsToUpdate?: string[]
+    ): Promise<Case> {
         return await this.withAuth<Case>(
             async (instance: CasesController, authClient: OAuth2Client) => {
-                return await instance.editCase(authClient, caseItem);
+                return await instance.editCase(
+                    authClient,
+                    caseItem,
+                    fieldsToUpdate
+                );
             },
             auth
         );
@@ -473,14 +482,28 @@ export default class CasesController extends BaseController<
      *
      * @param auth - OAuth2Client dla operacji GD
      * @param caseItem - Case do edycji
+     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji (np. ['status'])
      * @returns Zaktualizowany Case
      */
-    private async editCase(auth: OAuth2Client, caseItem: Case): Promise<Case> {
+    private async editCase(
+        auth: OAuth2Client,
+        caseItem: Case,
+        fieldsToUpdate?: string[]
+    ): Promise<Case> {
         console.group('CasesController.editCase()');
 
         try {
+            // Edycja tylko pól DB (np. szybka zmiana statusu) - pomija GD/Scrum
+            // i reset ProcessInstances (analogicznie do MilestonesController.edit)
+            const onlyDbFields = ['status', 'description'];
+            const isOnlyDbFields =
+                !!fieldsToUpdate &&
+                fieldsToUpdate.length > 0 &&
+                fieldsToUpdate.every((field) => onlyDbFields.includes(field));
+
             // Sprawdź czy trzeba zresetować ProcessInstances
             const shouldResetProcessInstances =
+                !isOnlyDbFields &&
                 caseItem._processesInstances !== undefined &&
                 caseItem._processesInstances.length > 0;
 
@@ -502,23 +525,26 @@ export default class CasesController extends BaseController<
                     caseItem,
                     shouldResetProcessInstances,
                     newProcessInstances,
-                    conn
+                    conn,
+                    fieldsToUpdate
                 );
             });
 
             console.log('edited in db');
 
-            // Operacje post-DB: GD i Scrum (równolegle)
-            await Promise.all([
-                caseItem
-                    .editFolder(auth)
-                    .then(() => console.log('folder updated'))
-                    .catch((err) => console.log(err)),
-                caseItem
-                    .editInScrum(auth)
-                    .then(() => console.log('updated in scrum'))
-                    .catch((err) => console.log(err)),
-            ]);
+            // Operacje post-DB: GD i Scrum (równolegle) - zbędne przy edycji tylko pól DB
+            if (!isOnlyDbFields) {
+                await Promise.all([
+                    caseItem
+                        .editFolder(auth)
+                        .then(() => console.log('folder updated'))
+                        .catch((err) => console.log(err)),
+                    caseItem
+                        .editInScrum(auth)
+                        .then(() => console.log('updated in scrum'))
+                        .catch((err) => console.log(err)),
+                ]);
+            }
 
             return caseItem;
         } catch (err) {

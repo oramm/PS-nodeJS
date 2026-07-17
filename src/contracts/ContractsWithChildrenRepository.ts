@@ -127,6 +127,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 Cases.ParentCaseId AS CaseParentCaseId,
                 Cases.Name AS CaseName,
                 Cases.Description AS CaseDescription,
+                Cases.Status AS CaseStatus,
                 Cases.TypeId AS CaseTypeId,
                 Cases.GdFolderId AS CaseGdFolderId,
                 Cases.Number AS CaseNumber,
@@ -484,6 +485,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                         : undefined,
                 name: ToolsDb.sqlToString(row.CaseName ?? ''),
                 description: ToolsDb.sqlToString(row.CaseDescription ?? ''),
+                status: row.CaseStatus ?? undefined,
                 number: row.CaseNumber ?? undefined,
                 subCaseNumber: row.CaseSubCaseNumber ?? undefined,
                 gdFolderId: row.CaseGdFolderId ?? undefined,
@@ -715,6 +717,7 @@ type ContractsWithChildrenRow = {
     CaseParentCaseId: number | null;
     CaseName: string | null;
     CaseDescription: string | null;
+    CaseStatus: string | null;
     CaseTypeId: number | null;
     CaseGdFolderId: string | null;
     CaseNumber: number | null;

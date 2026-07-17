@@ -201,6 +201,12 @@ export default class Setup {
         ARCHIVAL: 'Archiwalny',
     };
 
+    static CaseStatus = {
+        FOR_LATER: 'Na zaś',
+        IN_PROGRESS: 'W trakcie',
+        CLOSED: 'Zamknięta',
+    };
+
     static TaskStatus = {
         BACKLOG: 'Backlog',
         NOT_STARTED: 'Nie rozpoczęty',

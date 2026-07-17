@@ -63,6 +63,41 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-07-17 - Case statuses (Cases.Status)
+
+### Scope
+
+- Added case statuses `'Na zaś' | 'W trakcie' | 'Zamknięta'` (`Setup.CaseStatus` / `MainSetup.CaseStatus`), analogous to milestone statuses.
+- Backend: new `Cases.Status` column, status in Case model/CaseRepository, `statuses[]` filter in `CasesSearchParams`, `_fieldsToUpdate` support in `PUT /case/:id` (DB-only edits skip GD/Scrum and ProcessInstances reset), server-side status value validation in `CasesRouters`.
+- Frontend: `CaseStatusSelector` in case/subcase modals (default `'Na zaś'`), `CaseStatusBadge`, inline status dropdown in TasksGlobal tree, status filter (funnel + popover) in `CaseSelectMenuElement` hiding `'Zamknięta'` by default.
+- Wrote, but did not execute (pending explicit approval), migration `004_case_statuses.sql`.
+
+### Impact
+
+- DB: new `Cases.Status VARCHAR(30) NOT NULL DEFAULT 'Na zaś'` + backfill inheriting from milestone status (Zakończony/Archiwalny→Zamknięta, Nie rozpoczęty→Na zaś, W trakcie/NULL→W trakcie).
+- ENV: none.
+- Deploy: apply `src/contracts/milestones/cases/migrations/004_case_statuses.sql` on each target environment before/with backend deploy; frontend deploy after backend.
+
+### Required Actions
+
+- Apply migration 004 on development and production before rollout.
+- Deploy backend and frontend together (case selector filters on `status` returned by `/cases`).
+
+### Verification
+
+- Backend `yarn build` (tsc) passes; frontend `tsc --noEmit` passes.
+- After migration: `SHOW COLUMNS FROM Cases LIKE 'Status'` and a spot-check that cases under finished milestones have `Status='Zamknięta'`.
+
+### Rollback
+
+- `src/contracts/milestones/cases/migrations/004_case_statuses_down.sql` (drops the column) + revert code.
+
+### Links
+
+- `src/contracts/milestones/cases/migrations/004_case_statuses.sql`
+- `src/contracts/milestones/cases/CaseRepository.ts`
+- `C:/xampp/htdocs/envi/ENVI.ProjectSite/src/View/Modals/CommonFormComponents/CaseStatusFilter.tsx`
+
 ## 2026-07-03 - Invoice Status ENUM: add "Odrzucona przez KSeF"
 
 ### Scope

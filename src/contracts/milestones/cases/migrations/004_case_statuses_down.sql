@@ -1,0 +1,2 @@
+ALTER TABLE Cases
+    DROP COLUMN Status;

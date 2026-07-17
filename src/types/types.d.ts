@@ -228,6 +228,7 @@ export interface CaseData extends RepositoryDataItem {
     number?: number;
     subCaseNumber?: number;
     description?: string;
+    status?: string;
     gdFolderId?: string;
     parentCaseId?: number;
     _parentCaseNumber?: number;

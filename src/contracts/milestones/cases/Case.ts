@@ -17,6 +17,7 @@ export default class Case extends BusinessObject implements CaseData {
     _wasChangedToUniquePerMilestone?: boolean;
     name?: string | null;
     description?: string;
+    status?: string;
     _type: CaseType;
     typeId?: number;
     _typeFolderNumber_TypeName_Number_Name?: string;
@@ -50,6 +51,7 @@ export default class Case extends BusinessObject implements CaseData {
         if (initParamObject.description !== undefined)
             // musi być sprawdzenie undefined, żeby obsłużyć pusty ciąg
             this.description = initParamObject.description;
+        this.status = initParamObject.status;
         if (initParamObject._type) {
             this._type = initParamObject._type;
             if (initParamObject._type.id)
