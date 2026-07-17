@@ -200,6 +200,25 @@ export default class ToolsGd {
         }
     }
 
+    /** Tworzy pusty natywny plik Google (Dokument / Arkusz) w danym folderze.
+     * mimeType: 'application/vnd.google-apps.document' | 'application/vnd.google-apps.spreadsheet'
+     */
+    static async createNativeFile(
+        auth: OAuth2Client,
+        params: { name: string; parentId: string; mimeType: string }
+    ) {
+        const drive = google.drive({ version: 'v3', auth });
+        const filesSchema = await drive.files.create({
+            requestBody: {
+                name: params.name,
+                parents: [params.parentId],
+                mimeType: params.mimeType,
+            },
+            fields: 'id,name,webViewLink',
+        });
+        return filesSchema.data;
+    }
+
     static async createFolder(
         auth: OAuth2Client,
         folderData: { name: string; parents: string[] }
