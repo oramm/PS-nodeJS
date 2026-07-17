@@ -238,6 +238,7 @@ export default class KsefController {
                 qrInvoiceHash,
                 qrIssueDate,
             },
+            sentXml: xml,
         };
         await KsefMetadataRepository.saveMetadata(invoiceId, meta);
 
@@ -306,6 +307,7 @@ export default class KsefController {
                 qrInvoiceHash,
                 qrIssueDate,
             },
+            sentXml: xml,
         };
         await KsefMetadataRepository.saveMetadata(invoiceId, meta);
 
@@ -493,7 +495,7 @@ export default class KsefController {
         if (!meta?.KsefNumber) {
             throw new Error('Brak numeru KSeF dla tej faktury');
         }
-        
+
         // Nowa instancja serwisu (fresh token)
         const service = new KsefService();
         const resp = await service.getInvoiceByKsefNumber(meta.KsefNumber);
@@ -504,13 +506,42 @@ export default class KsefController {
     }
 
     /**
-     * Generuje podgląd XML KSeF na podstawie aktualnych danych faktury w systemie
-     * (bez wysyłania do API KSeF).
+     * Zwraca XML podglądu faktury KSeF:
+     * 1) jeśli istnieje zapisany SentXml — dokładnie XML wysłany do KSeF,
+     * 2) dla starej faktury z KsefNumber — pobiera dokument z KSeF i backfilluje SentXml,
+     * 3) w ostateczności generuje XML z bieżących danych faktury (bez wysyłki).
      */
     static async generatePreviewXmlByInvoiceId(
         invoiceId: number,
         correctionType?: 1 | 2 | 3,
     ): Promise<string> {
+        // Jeśli faktura została już wysłana do KSeF, pokaż XML rzeczywiście wysłany,
+        // a nie generowany na nowo z aktualnego (potencjalnie zmienionego) stanu faktury.
+        const meta = await KsefMetadataRepository.findByInvoiceId(invoiceId);
+        if (meta?.SentXml) {
+            return meta.SentXml;
+        }
+
+        // Stara faktura bez zapisanego XML - pobierz dokument zarejestrowany w KSeF
+        // i zapisz go (backfill). Dopiero gdy się nie uda, generuj z bieżących danych.
+        if (meta?.KsefNumber) {
+            try {
+                const resp = await new KsefService().getInvoiceByKsefNumber(
+                    meta.KsefNumber,
+                );
+                if (resp.invoiceXml) {
+                    await KsefMetadataRepository.updateMetadata(invoiceId, {
+                        sentXml: resp.invoiceXml,
+                    });
+                    return resp.invoiceXml;
+                }
+            } catch (err: any) {
+                console.warn(
+                    `   [KSeF] Nie udało się pobrać XML z KSeF dla faktury ${invoiceId}: ${err.message}. Generuję podgląd z bieżących danych.`,
+                );
+            }
+        }
+
         const invoices = await this.repo.find([{ id: invoiceId }]);
         const invoice = invoices[0];
         if (!invoice) {

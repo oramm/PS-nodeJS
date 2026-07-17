@@ -263,6 +263,36 @@ export default class KsefService {
         }
     }
 
+    private async requestText(
+        method: 'GET' | 'POST' | 'PUT',
+        path: string,
+        headers: Record<string, string> = {},
+        timeoutMs = 60000,
+    ): Promise<string> {
+        const url = `${this.baseURL}${path}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await this.fetchWithRetry(url, {
+                method,
+                headers,
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(
+                    `KSeF HTTP ${response.status} ${response.statusText}: ${text}`,
+                );
+            }
+
+            return await response.text();
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
     private async requestArrayBuffer(
         path: string,
         headers: Record<string, string> = {},
@@ -898,12 +928,17 @@ export default class KsefService {
             await this.authenticateWithKsefToken();
         }
 
-        return await this.requestJson<InvoiceDetailsResponse>(
+        // Endpoint zwraca surowy dokument faktury (application/xml), nie JSON.
+        const invoiceXml = await this.requestText(
             'GET',
             `/invoices/ksef/${ksefNumber}`,
-            undefined,
-            { Authorization: `Bearer ${this.accessToken}` },
+            {
+                Authorization: `Bearer ${this.accessToken}`,
+                Accept: 'application/xml',
+            },
         );
+
+        return { ksefReferenceNumber: ksefNumber, invoiceXml };
     }
 
     /**

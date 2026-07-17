@@ -13,6 +13,7 @@ interface KsefMetadata {
     upoDownloadUrlExpirationDate?: string | null;
     submittedAt?: Date;
     responseRaw?: any;
+    sentXml?: string | null;
 }
 
 /**
@@ -42,9 +43,10 @@ export default class KsefMetadataRepository {
             REPLACE INTO InvoiceKsefMetadata (
                 InvoiceId, ReferenceNumber, SessionReferenceNumber, KsefNumber,
                 Status, StatusDescription, AcquisitionDate, PermanentStorageDate,
-                UpoDownloadUrl, UpoDownloadUrlExpirationDate, SubmittedAt, ResponseRaw
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        
+                UpoDownloadUrl, UpoDownloadUrlExpirationDate, SubmittedAt, ResponseRaw,
+                SentXml
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
         const params = [
             invoiceId,
             meta.referenceNumber || null,
@@ -58,6 +60,7 @@ export default class KsefMetadataRepository {
             meta.upoDownloadUrlExpirationDate || null,
             meta.submittedAt || new Date(),
             meta.responseRaw ? JSON.stringify(meta.responseRaw) : null,
+            meta.sentXml || null,
         ];
         
         return await ToolsDb.executePreparedStmt(sql, params, meta);
@@ -98,6 +101,10 @@ export default class KsefMetadataRepository {
             setClauses.push('UpoDownloadUrlExpirationDate = ?');
             params.push(updates.upoDownloadUrlExpirationDate);
         }
+        if (updates.sentXml !== undefined) {
+            setClauses.push('SentXml = ?');
+            params.push(updates.sentXml);
+        }
 
         if (setClauses.length === 0) return;
 
@@ -117,7 +124,13 @@ export default class KsefMetadataRepository {
             undefined,
             [invoiceId]
         );
-        return rows && rows.length > 0 ? rows[0] : null;
+        const row = rows && rows.length > 0 ? rows[0] : null;
+        // SentXml jest zapisywany przez prepared stmt, który backslash-escapuje ' i " -
+        // odwracamy to przy odczycie (surowy SELECT * pomija standardowy sqlToString).
+        if (row?.SentXml) {
+            row.SentXml = ToolsDb.sqlToString(row.SentXml);
+        }
+        return row;
     }
 
     /**
