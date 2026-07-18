@@ -67,7 +67,7 @@ export type FidmanContractPayload = {
     name: string | null;
     startDate: string | null;
     endDate: string | null;
-    project?: FidmanProjectRef;
+    project?: FidmanProjectPayload;
     entities: FidmanEntityPayload[];
 };
 
@@ -84,6 +84,9 @@ export type FidmanEnvelope =
 export type FidmanIngestResponse = {
     created?: number;
     updated?: number;
+    // DM-L1: FIDman echoes its own fidschm.contracts.id for a contract.upsert so PS can store the
+    // reverse link (Contracts.FidmanContractId). Absent for entity/project pushes.
+    contractId?: number;
     skipped?: { legacyEntityId?: number | null; reason?: string }[];
 };
 
@@ -133,8 +136,13 @@ function collectContractEntities(contract: any): FidmanEntityPayload[] {
  */
 export function buildContractPayload(contract: AnyContract): FidmanEnvelope {
     const c = contract as any;
-    const project: FidmanProjectRef | undefined = c._project
-        ? { legacyProjectId: c._project.id, ourId: c._project.ourId }
+    // R7-P1: carry the REAL project name (ContractRepository loads it as _project.name),
+    // not just the natural key. Without it FIDman's `p.name ?? p.ourId` insert fallback
+    // seeds projects.name = ourId → the "Nazwa == Numer" bug in Słowniki → Projekty.
+    // (comment is not loaded onto a contract's _project, so it stays omitted — the
+    // standalone project.upsert still carries it.)
+    const project: FidmanProjectPayload | undefined = c._project
+        ? { legacyProjectId: c._project.id, ourId: c._project.ourId, name: c._project.name }
         : undefined;
 
     return {
@@ -325,6 +333,16 @@ export async function deliverOutboxRow(
                  WHERE Id = ?`,
                 [row.Id]
             );
+            // DM-L1 reverse link: persist FIDman's own contract id (PK↔PK) onto PS Contracts.
+            // RefId of a contract.upsert row = PS Contracts.Id (see enqueueRow). No-clobber:
+            // only fill when empty — never overwrite a non-null with a different id.
+            if (row.Kind === 'contract.upsert' && typeof body?.contractId === 'number') {
+                await ToolsDb.executeSQL(
+                    `UPDATE Contracts SET FidmanContractId = ?
+                     WHERE Id = ? AND FidmanContractId IS NULL`,
+                    [body.contractId, row.RefId]
+                );
+            }
             return 'SENT';
         }
 

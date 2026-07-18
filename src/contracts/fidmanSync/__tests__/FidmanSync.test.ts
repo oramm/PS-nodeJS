@@ -89,7 +89,14 @@ describe('buildContractPayload (contract.upsert)', () => {
             name: 'Umowa FIDman',
             startDate: '2026-06-01',
             endDate: '2027-05-31',
-            project: { legacyProjectId: 88, ourId: 'PRJ-001' },
+        });
+        // R7-P1: the inline project ref MUST carry the real project name (not just the
+        // natural key), otherwise FIDman's `p.name ?? p.ourId` insert fallback seeds
+        // projects.name = ourId (the "Nazwa == Numer" bug). ourId-only ref = the bug.
+        expect(p.project).toEqual({
+            legacyProjectId: 88,
+            ourId: 'PRJ-001',
+            name: 'Projekt',
         });
         expect(p.entities).toEqual([
             {
@@ -224,6 +231,24 @@ describe('deliverOutboxRow', () => {
         expect(opts.headers.Authorization).toBe('Bearer tok');
         const [sql] = (ToolsDb.executeSQL as jest.Mock).mock.calls[0] as any;
         expect(sql).toContain("Status = 'SENT'");
+    });
+
+    it('DM-L1: 200 contract.upsert with contractId → writes FidmanContractId (no-clobber)', async () => {
+        (global as any).fetch = jest.fn<any>().mockResolvedValue({
+            status: 200,
+            json: async () => ({ created: 1, updated: 0, contractId: 8813, skipped: [] }),
+            text: async () => '',
+        });
+
+        const result = await deliverOutboxRow(row);
+        expect(result).toBe('SENT');
+        // A Contracts UPDATE persists FIDman's id onto the PS row (RefId = PS Contracts.Id).
+        const calls = (ToolsDb.executeSQL as jest.Mock).mock.calls as any[];
+        const linkCall = calls.find(([sql]) => /UPDATE Contracts SET FidmanContractId/.test(sql));
+        expect(linkCall).toBeDefined();
+        const [linkSql, linkParams] = linkCall;
+        expect(linkSql).toContain('FidmanContractId IS NULL'); // no-clobber
+        expect(linkParams).toEqual([8813, row.RefId]);
     });
 
     it('200 + skipped NEEDS_DATA → marks row SKIPPED + SkipReason (not a failure)', async () => {
