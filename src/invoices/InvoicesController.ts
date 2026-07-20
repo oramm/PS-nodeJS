@@ -806,6 +806,14 @@ export default class InvoicesController extends BaseController<
         invoice: Invoice,
         actingUser?: UserData
     ): Promise<void> {
+        // Powiadomienie wysyłamy tylko na produkcji
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(
+                `[Invoice ToDo notify] Pominięto powiadomienie o fakturze ${invoice.id} — środowisko nie-produkcyjne (NODE_ENV=${process.env.NODE_ENV})`
+            );
+            return;
+        }
+
         if (
             actingUser?.enviId ===
             InvoicesController.INVOICE_TODO_NOTIFY_SKIP_ENVI_ID
