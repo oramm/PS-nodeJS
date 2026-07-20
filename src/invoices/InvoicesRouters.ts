@@ -97,7 +97,8 @@ app.put(
         try {
             const item = await InvoicesController.updateStatus(
                 req.parsedBody,
-                'Do zrobienia'
+                'Do zrobienia',
+                req.session.userData
             );
             res.send(item);
         } catch (error) {

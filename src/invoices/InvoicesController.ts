@@ -11,6 +11,7 @@ import PersonsController from '../persons/PersonsController';
 import { OAuth2Client } from 'google-auth-library';
 import ContractOur from '../contracts/ContractOur';
 import ToolsGd from '../tools/ToolsGd';
+import ToolsMail from '../tools/ToolsMail';
 import InvoiceValidator from './InvoiceValidator';
 import { drive_v3 } from 'googleapis';
 import KsefController from './KSeF/KsefController';
@@ -22,6 +23,15 @@ export default class InvoicesController extends BaseController<
     InvoiceRepository
 > {
     private static instance: InvoicesController;
+
+    /** Adresat powiadomienia o fakturze oznaczonej jako "Do zrobienia". */
+    private static readonly INVOICE_TODO_NOTIFY_RECIPIENT =
+        'agnieszka.brodziak@envi.com.pl';
+    /**
+     * enviId (id osoby) właściciela powyższego maila — Agnieszka Brodziak.
+     * Gdy to ona sama zmienia status, nie wysyłamy powiadomienia do niej.
+     */
+    private static readonly INVOICE_TODO_NOTIFY_SKIP_ENVI_ID = 386;
 
     constructor() {
         super(new InvoiceRepository());
@@ -581,10 +591,15 @@ export default class InvoicesController extends BaseController<
      */
     static async updateStatus(
         invoiceData: InvoiceData,
-        newStatus: string
+        newStatus: string,
+        userData?: UserData
     ): Promise<Invoice> {
         const instance = this.getInstance();
-        return await instance.updateInvoiceStatus(invoiceData, newStatus);
+        return await instance.updateInvoiceStatus(
+            invoiceData,
+            newStatus,
+            userData
+        );
     }
 
     /**
@@ -597,7 +612,8 @@ export default class InvoicesController extends BaseController<
      */
     private async updateInvoiceStatus(
         invoiceData: InvoiceData,
-        newStatus: string
+        newStatus: string,
+        actingUser?: UserData
     ): Promise<Invoice> {
         console.group('InvoicesController.updateInvoiceStatus()');
         try {
@@ -618,6 +634,12 @@ export default class InvoicesController extends BaseController<
                 fieldsToUpdate
             );
             console.log(`Invoice ${invoice.id} status updated to ${newStatus}`);
+
+            // Faktura właśnie otrzymała status "Do zrobienia"
+            if (newStatus === Setup.InvoiceStatus.TO_DO) {
+                await this.notifyInvoiceSetAsToDo(invoice, actingUser);
+            }
+
             return invoice;
         } finally {
             console.groupEnd();
@@ -771,6 +793,61 @@ export default class InvoicesController extends BaseController<
             return item;
         } finally {
             console.groupEnd();
+        }
+    }
+
+    /**
+     * Powiadamia mailowo o fakturze oznaczonej jako "Do zrobienia".
+     * Nie wysyła, gdy status zmienia sama adresatka powiadomienia
+     * (INVOICE_TODO_NOTIFY_SKIP_ENVI_ID). Błąd wysyłki nie przerywa
+     * zmiany statusu (log-only).
+     */
+    private async notifyInvoiceSetAsToDo(
+        invoice: Invoice,
+        actingUser?: UserData
+    ): Promise<void> {
+        if (
+            actingUser?.enviId ===
+            InvoicesController.INVOICE_TODO_NOTIFY_SKIP_ENVI_ID
+        ) {
+            return;
+        }
+
+        const invoiceUrl = `https://ps.envi.com.pl/#/invoice/${invoice.id}`;
+        const contractName = ToolsMail.escapeHtml(
+            invoice._contract?.ourId ||
+                invoice._contract?.number ||
+                invoice._contract?.name ||
+                ''
+        );
+        const changedBy = ToolsMail.escapeHtml(
+            actingUser?.userName || 'nieznany użytkownik'
+        );
+        const invoiceLabel = ToolsMail.escapeHtml(
+            invoice.number || `#${invoice.id}`
+        );
+
+        const subject = `[ERP ENVI] Faktura ${invoiceLabel} do zrobienia`;
+        const html =
+            `<p>Faktura <strong>${invoiceLabel}</strong> została oznaczona jako ` +
+            `<strong>„Do zrobienia”</strong> przez ${changedBy}.</p>` +
+            (contractName ? `<p>Kontrakt: ${contractName}</p>` : '') +
+            `<p><a href="${invoiceUrl}">Otwórz fakturę w systemie ERP</a></p>`;
+
+        try {
+            await ToolsMail.sendMail({
+                to: InvoicesController.INVOICE_TODO_NOTIFY_RECIPIENT,
+                subject,
+                html,
+            });
+            console.log(
+                `[Invoice ToDo notify] Powiadomienie o fakturze ${invoice.id} wysłane do ${InvoicesController.INVOICE_TODO_NOTIFY_RECIPIENT}`
+            );
+        } catch (error) {
+            console.error(
+                `[Invoice ToDo notify] Nie udało się wysłać powiadomienia o fakturze ${invoice.id}:`,
+                error
+            );
         }
     }
 

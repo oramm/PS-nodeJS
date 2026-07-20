@@ -106,7 +106,7 @@ export default class ToolsMail {
             <p>
             Ten mail jest poufny i przeznaczony tylko dla użytkowników systemu ERP ENVI. <BR>
             Wiadomość została wysłana automatycznie z systemu ERP ENVI. Proszę nie odpowiadaj na tę wiadomość. <BR>
-            Możesz napisać na grupie Skype "Witryna ENVI, ERP"
+            Możesz napisać na grupie Google Chat "Witryna projektu"
             </p>
             <a href="https://ps.envi.com.pl/">Odwiedź nasz system ERP</a>
         `;
@@ -423,7 +423,7 @@ export default class ToolsMail {
         }
     }
 
-    private static escapeHtml(str: string) {
+    static escapeHtml(str: string) {
         return str
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
