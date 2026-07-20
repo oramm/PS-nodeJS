@@ -50,3 +50,23 @@ app.post('/gdFolderDocument', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+/** Tworzenie podfolderu o podanej nazwie w folderze GD. */
+app.post('/gdFolderSubfolder', async (req: Request, res: Response, next) => {
+    try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+
+        const { gdFolderId, name } = req.parsedBody as {
+            gdFolderId: string;
+            name: string;
+        };
+
+        const created = await GdFilesController.createSubfolder({
+            gdFolderId,
+            name,
+        });
+        res.send(created);
+    } catch (error) {
+        next(error);
+    }
+});

@@ -41,10 +41,7 @@ export default class Setup {
         offersRootFolderId: '0B2pP2WpBR244WDgzT0RHcmFCMW8',
         ourOfferTemplateGdId: '173TvhbPAgRD_08Ey5cq4PP8RxOmCh4vO-UjjzB5dGro',
         financialAidProgrammesRootFolderId: '1_RCqZ_uSYM0z-akgJwrQlBeaJW2OKn0T',
-        // Pusty Google Doc w trybie „strony" (nie pageless) — kopiowany zamiast tworzenia
-        // od zera, bo Docs API nie ma przełącznika pageless→strony. Utwórz raz na koncie
-        // master, wklej tu ID. Puste = fallback do pustego dokumentu (pageless).
-        blankDocTemplateId: '',
+        blankDocTemplateId: '1qPVaj0i4ZMnojnpKaIsn3ehkAwLuzxxultVLZ9NDRkc',
     };
 
     static ScrumSheet = {

@@ -106,4 +106,27 @@ export default class GdFilesController extends BaseController<any, any> {
             return file;
         }, auth);
     }
+
+    /** Tworzy podfolder o podanej nazwie w folderze GD (lub zwraca istniejący o tej nazwie). */
+    static async createSubfolder(
+        params: { gdFolderId: string; name: string },
+        auth?: OAuth2Client
+    ): Promise<CreatedGdFile> {
+        const { gdFolderId, name } = params;
+        if (!gdFolderId) throw new Error('Nie podano gdFolderId');
+        if (!name || !name.trim()) throw new Error('Nie podano nazwy folderu');
+
+        return await this.withAuth(async (_instance, authClient) => {
+            const folder = await ToolsGd.setFolder(authClient, {
+                parentId: gdFolderId,
+                name: name.trim(),
+            });
+            const id = folder.id as string;
+            return {
+                id,
+                name: folder.name ?? name.trim(),
+                webViewLink: ToolsGd.createGdFolderUrl(id),
+            };
+        }, auth);
+    }
 }
