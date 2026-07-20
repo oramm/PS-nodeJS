@@ -173,6 +173,47 @@ export default class Setup {
         CORRECTED: 'Skorygowana',
     };
 
+    /**
+     * Kanoniczne grupy statusów faktur używane do liczenia wartości
+     * rozliczenia kontraktu. Jedno źródło prawdy dla:
+     * - ContractsSettlementController (szczegóły/rozliczenie kontraktu),
+     * - ContractsController i ContractRepository (lista kontraktów, dashboard).
+     */
+    static InvoiceStatusGroups = {
+        /**
+         * Faktury faktycznie wystawione / będące w obiegu (rozliczone).
+         * Wysłane, wysłane do KSeF, zapłacone oraz skorygowane
+         * (skorygowana to nadal faktura obiegowa).
+         */
+        ISSUED: [
+            Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.SENT_TO_KSEF,
+            Setup.InvoiceStatus.PAID,
+            Setup.InvoiceStatus.CORRECTED,
+        ],
+        /**
+         * Faktury zarejestrowane w systemie (zaplanowane lub wystawione).
+         * Wszystkie statusy poza wycofanymi (WITHDRAWN) i odrzuconymi
+         * przez KSeF (KSEF_ERROR), które nie stanowią zobowiązania.
+         */
+        REGISTERED: [
+            Setup.InvoiceStatus.FOR_LATER,
+            Setup.InvoiceStatus.TO_DO,
+            Setup.InvoiceStatus.DONE,
+            Setup.InvoiceStatus.READY_FOR_KSEF,
+            Setup.InvoiceStatus.SENT,
+            Setup.InvoiceStatus.SENT_TO_KSEF,
+            Setup.InvoiceStatus.PAID,
+            Setup.InvoiceStatus.TO_CORRECT,
+            Setup.InvoiceStatus.CORRECTED,
+        ],
+    };
+
+    /** Buduje listę statusów do klauzuli SQL IN(...) z grupy statusów. */
+    static invoiceStatusSqlList(group: string[]): string {
+        return group.map((status) => `'${status}'`).join(', ');
+    }
+
     static ProjectStatuses = {
         NOT_STARTED: 'Nie rozpoczęty',
         IN_PROGRESS: 'W trakcie',

@@ -26,12 +26,12 @@ export default class ContractsSettlementController {
             condition.invoiceStatuses =
                 condition.invoiceStatuses || this.externalStatuses();
         });
-        const externalStatuses = this.externalStatuses()
-            .map((s) => `'${s}'`)
-            .join(', ');
-        const registeredStatuses = this.registeredStatuses()
-            .map((s) => `'${s}'`)
-            .join(', ');
+        const externalStatuses = Setup.invoiceStatusSqlList(
+            this.externalStatuses()
+        );
+        const registeredStatuses = Setup.invoiceStatusSqlList(
+            this.registeredStatuses()
+        );
 
         const sql = `SELECT 
             Contracts.Id, 
@@ -150,30 +150,14 @@ export default class ContractsSettlementController {
         return newResult;
     }
 
-    /**statusy wydane na zewnątrz */
+    /** Statusy faktur wystawionych / w obiegu (rozliczone). */
     private static externalStatuses() {
-        return [
-            Setup.InvoiceStatus.TO_DO,
-            Setup.InvoiceStatus.DONE,
-            Setup.InvoiceStatus.SENT,
-            Setup.InvoiceStatus.READY_FOR_KSEF,
-            Setup.InvoiceStatus.SENT_TO_KSEF,
-            Setup.InvoiceStatus.PAID,
-        ];
+        return Setup.InvoiceStatusGroups.ISSUED;
     }
 
-    /**statusy  zarejestrowane poza  */
+    /** Statusy faktur zarejestrowanych w systemie. */
     private static registeredStatuses() {
-        return [
-            Setup.InvoiceStatus.FOR_LATER,
-            Setup.InvoiceStatus.TO_CORRECT,
-            Setup.InvoiceStatus.TO_DO,
-            Setup.InvoiceStatus.DONE,
-            Setup.InvoiceStatus.SENT,
-            Setup.InvoiceStatus.READY_FOR_KSEF,
-            Setup.InvoiceStatus.SENT_TO_KSEF,
-            Setup.InvoiceStatus.PAID,
-        ];
+        return Setup.InvoiceStatusGroups.REGISTERED;
     }
 }
 

@@ -853,27 +853,6 @@ export default class ContractsController extends BaseController<
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
     }
 
-    private static makeOptionalColumns(searchParams: ContractSearchParams) {
-        const remainingNotScheduledValueColumn = searchParams.getRemainingValue
-            ? `(SELECT mainContracts.Value - IFNULL(
-            SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 0)) 
-                AS RemainingNotScheduledValue`
-            : null;
-
-        const remainingNotIssuedColumn = searchParams.getRemainingValue
-            ? `(SELECT mainContracts.Value - IFNULL(
-                (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) 
-                    FROM Invoices 
-                    JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id 
-                    WHERE Invoices.ContractId = mainContracts.Id 
-                      AND Invoices.Status IN('Zrobiona', 'Wysłana', 'Zapłacona')), 0))
-                    AS RemainingNotIssuedValue`
-            : null;
-
-        return `${remainingNotScheduledValueColumn},
-                    ${remainingNotIssuedColumn} `;
-    }
-
     private static async processContractsResult(
         result: any[],
         initParamObject: ContractSearchParams

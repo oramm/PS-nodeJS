@@ -347,24 +347,31 @@ export default class ContractRepository extends BaseRepository<
     }
 
     private makeOptionalColumns(searchParams: ContractSearchParams) {
+        const issuedStatuses = Setup.invoiceStatusSqlList(
+            Setup.InvoiceStatusGroups.ISSUED
+        );
+        const registeredStatuses = Setup.invoiceStatusSqlList(
+            Setup.InvoiceStatusGroups.REGISTERED
+        );
+
         const remainingNotScheduledValueColumn = searchParams.getRemainingValue
             ? `(SELECT mainContracts.Value - IFNULL(
                 (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice)
-                   FROM Invoices 
-                   JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id 
-                  WHERE Invoices.ContractId = mainContracts.Id 
-                    AND Invoices.Status IN('Zrobiona','Wysłana','Zapłacona')
+                   FROM Invoices
+                   JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+                  WHERE Invoices.ContractId = mainContracts.Id
+                    AND Invoices.Status IN(${registeredStatuses})
                 ), 0)
                ) AS RemainingNotScheduledValue`
             : `NULL AS RemainingNotScheduledValue`;
 
         const remainingNotIssuedColumn = searchParams.getRemainingValue
             ? `(SELECT mainContracts.Value - IFNULL(
-                (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice) 
-                   FROM Invoices 
-                   JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id 
-                  WHERE Invoices.ContractId = mainContracts.Id 
-                    AND Invoices.Status IN('Zrobiona','Wysłana','Zapłacona')
+                (SELECT SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice)
+                   FROM Invoices
+                   JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
+                  WHERE Invoices.ContractId = mainContracts.Id
+                    AND Invoices.Status IN(${issuedStatuses})
                 ), 0)
                ) AS RemainingNotIssuedValue`
             : `NULL AS RemainingNotIssuedValue`;
