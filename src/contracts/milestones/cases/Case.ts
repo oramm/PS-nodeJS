@@ -34,6 +34,14 @@ export default class Case extends BusinessObject implements CaseData {
     _folderName?: string;
 
     constructor(initParamObject: CaseData) {
+        if (!initParamObject._type)
+            throw new Error(
+                'Nie można utworzyć sprawy: brak typu sprawy (_type). Wybierz typ sprawy i spróbuj ponownie.'
+            );
+        if (!initParamObject._parent)
+            throw new Error(
+                'Nie można utworzyć sprawy: brak kamienia milowego (_parent). Sprawa musi być powiązana z kamieniem milowym.'
+            );
         super({ ...initParamObject, _dbTableName: 'Cases' });
         this.id = initParamObject.id;
         this.number = initParamObject.number;
