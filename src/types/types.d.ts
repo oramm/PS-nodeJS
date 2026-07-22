@@ -57,6 +57,7 @@ export interface ContractData extends RepositoryDataItem {
     _contractRangesPerContract?: ContractRangePerContractData[];
     _contractRangesNames?: string[];
     lettersShortcutsInSubfolder?: boolean;
+    approvedDocumentation?: boolean;
 }
 
 export interface OurContractData extends ContractData {
@@ -318,6 +319,7 @@ export interface LetterData extends GenericDocumentData {
     relatedLetterNumber?: string | null;
     responseDueDate?: string;
     responseIKNumber?: string | null;
+    addedToApprovedDocumentation?: boolean;
 }
 
 export interface OurLetterData extends LetterData {

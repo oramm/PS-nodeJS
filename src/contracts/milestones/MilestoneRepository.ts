@@ -66,6 +66,7 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             ContractTypes.Description AS ContractTypeDescription,
             ContractTypes.IsOur AS ContractTypeIsOur,
             Contracts.ProjectOurId,
+            Contracts.ApprovedDocumentation AS ParentApprovedDocumentation,
             Offers.Id AS OfferId,
             Offers.Alias AS OfferAlias,
             Offers.IsOur AS OfferIsOur,
@@ -132,6 +133,7 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
                 ContractTypes.Description AS ContractTypeDescription,
                 ContractTypes.IsOur AS ContractTypeIsOur,
                 Contracts.ProjectOurId,
+                Contracts.ApprovedDocumentation AS ParentApprovedDocumentation,
                 Offers.Id AS OfferId,
                 Offers.Alias AS OfferAlias,
                 Offers.IsOur AS OfferIsOur,
@@ -266,6 +268,7 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             _manager: { id: row.ParentManagerId },
             _admin: { id: row.ParentAdminId },
             projectId: row.ProjectOurId,
+            approvedDocumentation: !!row.ParentApprovedDocumentation,
             _type: {
                 id: row.ContractTypeId,
                 name: row.ContractTypeName,

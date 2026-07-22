@@ -155,8 +155,27 @@ export default class Setup {
 
     static MilestoneTypes = {
         OURCONTRACT_ADMINISTRATION: 1,
+        DESIGN_SUPERVISION: 6,
         OFFER_SUBMISSION: 51,
         OFFER_EVALUATION: 52,
+    };
+
+    /** Rejestr „Dokumentacja zatwierdzona” w kamieniu projektowanie-nadzór. */
+    static ApprovedDocumentation = {
+        folderName: '04 Dokumentacja zatwierdzona',
+        sheetName: 'Rejestr dokumentacji zatwierdzonej',
+        // Kolejność kolumn = kolejność w wierszu w ApprovedDocsController.registerLetter
+        header: [
+            'Lp',
+            'Data',
+            'Rodzaj',
+            'Nr pisma zatwierdzającego',
+            'Dotyczy',
+            'Sprawa',
+            'Link',
+        ],
+        // Podpowiedzi w kolumnie „Rodzaj” (dropdown, ale można wpisać inne).
+        rodzajOptions: ['pismo', 'mail'],
     };
 
     static InvoiceStatus = {

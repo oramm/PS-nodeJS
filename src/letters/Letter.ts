@@ -44,6 +44,8 @@ export default abstract class Letter
     relatedLetterNumber?: string | null;
     responseDueDate?: string;
     responseIKNumber?: string | null;
+    /** czy pismo jest w rejestrze „Dokumentacja zatwierdzona” (kolumna AddedToApprovedDocumentation) */
+    addedToApprovedDocumentation?: boolean;
 
     constructor(initParamObject: LetterData) {
         super({ ...initParamObject, _dbTableName: 'Letters' });
@@ -96,6 +98,8 @@ export default abstract class Letter
         if (initParamObject.responseDueDate)
             this.responseDueDate = initParamObject.responseDueDate;
         this.responseIKNumber = initParamObject.responseIKNumber;
+        this.addedToApprovedDocumentation =
+            !!initParamObject.addedToApprovedDocumentation;
     }
 
     private initLastEvent(lastEventData: LetterEventData | undefined | null) {

@@ -343,6 +343,19 @@ export default class ContractsController extends BaseController<
                     }),
                 ]);
 
+                // Utwórz folder „Dokumentacja zatwierdzona” w istniejących kamieniach
+                // projektowanie-nadzór kontraktu. Pomijamy przy edycji częściowej,
+                // która nie dotyka flagi (get-or-create i tak jest idempotentne).
+                const approvedDocsInScope =
+                    !fieldsToUpdate ||
+                    fieldsToUpdate.includes('approvedDocumentation');
+                if (approvedDocsInScope) {
+                    await MilestonesController.ensureApprovedDocsFolders(
+                        contract,
+                        auth
+                    );
+                }
+
                 // Jeśli kontrakt był dodawany na nowo do Scrum, dodaj tasks
                 if (wasAddedToScrum) {
                     await this.addExistingTasksInScrum(contract, auth);

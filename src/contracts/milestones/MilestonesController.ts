@@ -4,7 +4,11 @@ import BaseController from '../../controllers/BaseController';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
 import { UserData } from '../../types/sessionTypes';
-import { MilestoneParentType } from '../../types/types';
+import {
+    MilestoneParentType,
+    OurContractData,
+    OtherContractData,
+} from '../../types/types';
 import Case from './cases/Case';
 import CasesController from './cases/CasesController';
 import CaseTemplateRepository from './cases/caseTemplates/CaseTemplateRepository';
@@ -13,6 +17,8 @@ import Milestone from './Milestone';
 import MilestoneRepository, {
     MilestonesSearchParams,
 } from './MilestoneRepository';
+import ApprovedDocsController from './approvedDocs/ApprovedDocsController';
+import Setup from '../../setup/Setup';
 
 /**
  * Controller dla Milestone - warstwa orkiestracji
@@ -491,7 +497,59 @@ export default class MilestonesController extends BaseController<
             );
         }
         await Promise.all(promises);
+
+        // 6. Folder „04 Dokumentacja zatwierdzona” + arkusz — tylko dla kamieni
+        // projektowanie-nadzór na kontraktach z włączoną flagą. Best-effort: brak
+        // rejestru nie może przerwać tworzenia folderów kamienia.
+        if (ApprovedDocsController.isApplicable(milestone)) {
+            try {
+                await ApprovedDocsController.ensureFolderAndSheet(
+                    auth,
+                    milestone
+                );
+            } catch (err) {
+                console.error(
+                    'Nie udało się utworzyć folderu „Dokumentacja zatwierdzona”:',
+                    err
+                );
+            }
+        }
+
         return folder;
+    }
+
+    /**
+     * Zapewnia folder „04 Dokumentacja zatwierdzona” + arkusz we wszystkich
+     * istniejących kamieniach projektowanie-nadzór danego kontraktu.
+     * Wywoływane po włączeniu flagi na kontrakcie. Best-effort per kamień.
+     */
+    static async ensureApprovedDocsFolders(
+        contract: OurContractData | OtherContractData,
+        auth: OAuth2Client
+    ): Promise<void> {
+        if (!contract.approvedDocumentation || !contract.id) return;
+
+        const milestones = await new MilestoneRepository().find([
+            {
+                contractId: contract.id,
+                typeId: Setup.MilestoneTypes.DESIGN_SUPERVISION,
+            },
+        ]);
+
+        for (const milestone of milestones) {
+            if (!milestone.gdFolderId) continue;
+            try {
+                await ApprovedDocsController.ensureFolderAndSheet(
+                    auth,
+                    milestone
+                );
+            } catch (err) {
+                console.error(
+                    `Nie udało się utworzyć folderu „Dokumentacja zatwierdzona” dla kamienia ${milestone.id}:`,
+                    err
+                );
+            }
+        }
     }
 
     /**

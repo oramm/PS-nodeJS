@@ -51,6 +51,7 @@ export default abstract class Contract
     _contractRangesPerContract: ContractRangePerContractData[] = [];
     _contractRangesNames?: string[] = [];
     lettersShortcutsInSubfolder: boolean;
+    approvedDocumentation: boolean;
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super({ ...initParamObject, _dbTableName: 'Contracts' });
@@ -154,6 +155,7 @@ export default abstract class Contract
         this.status = initParamObject.status;
         this.lettersShortcutsInSubfolder =
             !!initParamObject.lettersShortcutsInSubfolder;
+        this.approvedDocumentation = !!initParamObject.approvedDocumentation;
         this._lastUpdated = initParamObject._lastUpdated;
     }
 

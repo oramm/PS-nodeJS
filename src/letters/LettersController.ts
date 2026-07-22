@@ -27,6 +27,8 @@ import { CaseData, EntityData } from '../types/types';
 import { resolveShortcutParentId } from './resolveShortcutParentId';
 import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
+import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
+import ApprovedDocsController from '../contracts/milestones/approvedDocs/ApprovedDocsController';
 
 export default class LettersController extends BaseController<
     Letter,
@@ -422,6 +424,9 @@ export default class LettersController extends BaseController<
             await Promise.all(postDbPromises);
             console.log('Finished all post-DB operations including shortcuts.');
 
+            // 6b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
+            await this.registerApprovedDocumentation(auth, letter);
+
             // 7. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
@@ -518,6 +523,9 @@ export default class LettersController extends BaseController<
                 await Promise.all(shortcutPromises);
             }
 
+            // 3b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
+            await this.registerApprovedDocumentation(auth, letter);
+
             // 4. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
@@ -528,6 +536,55 @@ export default class LettersController extends BaseController<
                 letter.gdFolderId || letter.gdDocumentId
             );
             throw err;
+        }
+    }
+
+    /**
+     * Rejestruje pismo w „Dokumentacji zatwierdzonej” kamieni projektowanie-nadzór.
+     *
+     * Best-effort: pismo jest już zapisane, więc błąd rejestru jest tylko logowany
+     * i NIE wywołuje rollbacku. Dane kamienia (folder, typ, flaga kontraktu)
+     * domykane są z bazy (MilestoneRepository.findById), a nie z DTO klienta.
+     */
+    private async registerApprovedDocumentation(
+        auth: OAuth2Client,
+        letter: Letter
+    ): Promise<void> {
+        if (!letter.addedToApprovedDocumentation || !letter._cases?.length)
+            return;
+
+        try {
+            const milestoneRepo = new MilestoneRepository();
+            const milestoneIds = [
+                ...new Set(
+                    letter._cases
+                        .map((caseItem) => caseItem._parent?.id)
+                        .filter((id): id is number => typeof id === 'number')
+                ),
+            ];
+
+            for (const milestoneId of milestoneIds) {
+                try {
+                    const milestone = await milestoneRepo.findById(milestoneId);
+                    if (!milestone) continue;
+                    if (!ApprovedDocsController.isApplicable(milestone)) continue;
+                    await ApprovedDocsController.registerLetter(
+                        auth,
+                        milestone,
+                        letter
+                    );
+                } catch (err) {
+                    console.error(
+                        `Rejestr „Dokumentacja zatwierdzona” — kamień ${milestoneId} pominięty:`,
+                        err
+                    );
+                }
+            }
+        } catch (err) {
+            console.error(
+                'Rejestr „Dokumentacja zatwierdzona” — pominięto z powodu błędu:',
+                err
+            );
         }
     }
 
@@ -766,7 +823,11 @@ export default class LettersController extends BaseController<
             }
         }
 
-        // 3. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
+        // 3. Rejestr „Dokumentacja zatwierdzona” (best-effort) — również przy edycji,
+        // gdy użytkownik zaznaczy opcję na istniejącym piśmie.
+        await this.registerApprovedDocumentation(auth, letter);
+
+        // 4. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
         const statusChanged =
             !fieldsToUpdate || fieldsToUpdate.includes('status');
         if (

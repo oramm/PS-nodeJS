@@ -73,6 +73,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 Letters.RelatedLetterNumber,
                 Letters.ResponseDueDate,
                 Letters.ResponseIKNumber,
+                Letters.AddedToApprovedDocumentation,
 
                 -- Pobieranie danych powiązanego projektu
                 Projects.Id AS ProjectId,
@@ -305,6 +306,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
             relatedLetterNumber: row.RelatedLetterNumber,
             responseDueDate: row.ResponseDueDate,
             responseIKNumber: row.ResponseIKNumber,
+            addedToApprovedDocumentation: !!row.AddedToApprovedDocumentation,
 
             _cases: _casesAssociationsPerLetter.map((item) => item._case),
             _entitiesMain: _letterEntitiesMainPerLetter.map(

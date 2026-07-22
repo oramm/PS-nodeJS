@@ -146,6 +146,29 @@ export default class ToolsGd {
         }
     }
     /**
+     * Znajduje plik po nazwie i typie MIME w danym folderze (get, bez tworzenia).
+     * W odróżnieniu od getFileMetaDataByName (zaszyty mimeType folderu) pozwala
+     * wskazać dowolny mimeType, np. arkusza Google.
+     */
+    static async getFileMetaDataByNameAndMimeType(
+        auth: OAuth2Client,
+        parameters: {
+            parentId: string;
+            fileName: string;
+            mimeType: string;
+            isTrashed?: boolean;
+        }
+    ) {
+        const isTrashed = parameters.isTrashed ?? false;
+        const drive = google.drive({ version: 'v3', auth });
+        const escapedFileName = parameters.fileName.replace(/'/g, "\\'");
+        const q = `name = '${escapedFileName}' and '${parameters.parentId}' in parents and mimeType = '${parameters.mimeType}' and trashed = ${isTrashed}`;
+        const filesSchema = await drive.files.list({ q });
+        if (filesSchema.data.files && filesSchema.data.files.length)
+            return filesSchema.data.files[0];
+    }
+
+    /**
      * Sprawdza czy plik lub folder istnieje
      */
     static async fileOrFolderExists(

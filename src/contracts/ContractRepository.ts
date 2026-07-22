@@ -269,6 +269,7 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.MeetingProtocolsGdFolderId,
                     mainContracts.MaterialCardsGdFolderId,
                     mainContracts.LettersShortcutsInSubfolder,
+                    mainContracts.ApprovedDocumentation,
                     mainContracts.LastUpdated,
                     OurContractsData.OurId,
                     OurContractsData.ManagerId,
@@ -662,6 +663,7 @@ export default class ContractRepository extends BaseRepository<
             meetingProtocolsGdFolderId: row.MeetingProtocolsGdFolderId,
             materialCardsGdFolderId: row.MaterialCardsGdFolderId,
             lettersShortcutsInSubfolder: !!row.LettersShortcutsInSubfolder,
+            approvedDocumentation: !!row.ApprovedDocumentation,
             ourId: row.OurId,
             invoiceBuyerEntityId: row.InvoiceBuyerEntityId ?? undefined,
             _invoiceBuyer: this.mapInvoiceBuyerToModel(row),
@@ -861,6 +863,7 @@ type ContractRow = {
     MeetingProtocolsGdFolderId: string | null;
     MaterialCardsGdFolderId: string | null;
     LettersShortcutsInSubfolder: number | null;
+    ApprovedDocumentation: number | null;
     OurId: number | null;
     ManagerId: number | null;
     ManagerName: string | null;
