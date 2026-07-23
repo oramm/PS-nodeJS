@@ -37,7 +37,10 @@ export default class ToolsGd {
 
     static async getFileOrFolderMetaDataById(auth: OAuth2Client, id: string) {
         const drive = google.drive({ version: 'v3', auth });
-        const fileSchema = await drive.files.get({ fileId: id });
+        const fileSchema = await drive.files.get({
+            fileId: id,
+            fields: 'id, name, parents, mimeType',
+        });
         return fileSchema.data;
     }
 

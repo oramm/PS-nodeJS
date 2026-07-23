@@ -63,6 +63,43 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-07-23 - CaseTypeFolders cache (GD link for shared case-type folders)
+
+### Scope
+
+- Case types that are NOT unique-per-milestone share one GD folder across all cases of that type within a milestone; that folder's ID was never persisted anywhere, only individual `Cases.GdFolderId`.
+- Added `CaseTypeFolders (MilestoneId, CaseTypeId, GdFolderId)` cache table (PK on the pair). `ContractsWithChildrenRepository.find()` now LEFT JOINs it directly (`CaseType.gdFolderId`/`_gdFolderUrl` in the tree response) - no live Drive API calls on the read path anymore.
+- `Case.createFolder()` now sets `this._type.gdFolderId` when it resolves/creates the shared type folder; `CasesController.persistCaseTypeFolder()` upserts it into `CaseTypeFolders` after create/edit-folder calls (best-effort, does not block the main flow) - so all NEW case-type folders self-populate the cache going forward.
+- OLD case-type folders predate this and have no row yet. One-time backfill script `src/scripts/backfill-case-type-folders.ts` (dry-run by default, `--apply` to write) finds missing `(MilestoneId, CaseTypeId)` pairs via `Cases.GdFolderId`, resolves each via a single Drive `parents[0]` lookup, and upserts.
+- Reverted an earlier in-session draft that instead ran the Drive lookup live inside `ContractsWithChildrenController.find()` on every request (via a `BaseController`/`withAuth` refactor) - removed, since neither caller (`/contractsWithChildren` router, `ScrumboardReportController`) passes `auth`, so it would have silently fetched a fresh OAuth token + hit Drive API on every tree load.
+
+### Impact
+
+- DB: new table `CaseTypeFolders`. Additive only, no existing table touched.
+- ENV: none.
+- Deploy: apply `src/contracts/milestones/cases/caseTypes/migrations/005_case_type_folders.sql` before/with backend deploy. Then run `yarn backfill:case-type-folders` (dry-run) to see how many old pairs are missing, then `yarn backfill:case-type-folders:apply` to populate them (needs `REFRESH_TOKEN` in env).
+
+### Required Actions
+
+- Apply migration 005 on development and production.
+- Run the backfill script (dry-run first) once per environment after the migration lands, so existing case-type folders get their GD link without waiting for someone to next create/edit a case of that type.
+
+### Verification
+
+- `yarn build` (tsc) passes.
+- Targeted jest run for `src/contracts` in progress at time of writing - see next session/agent for pass/fail before marking rollout-safe.
+
+### Rollback
+
+- `src/contracts/milestones/cases/caseTypes/migrations/005_case_type_folders_down.sql` (drops the table) + revert the code (JOIN, `persistCaseTypeFolder`, `CaseType.setGdFolderIdAndUrl`, backfill script).
+
+### Links
+
+- `src/contracts/milestones/cases/caseTypes/migrations/005_case_type_folders.sql`
+- `src/contracts/milestones/cases/caseTypes/CaseTypeFolderRepository.ts`
+- `src/scripts/backfill-case-type-folders.ts`
+- `src/contracts/ContractsWithChildrenRepository.ts`, `src/contracts/milestones/cases/CasesController.ts`
+
 ## 2026-07-17 - Case statuses (Cases.Status)
 
 ### Scope

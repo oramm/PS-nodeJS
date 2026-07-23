@@ -17,6 +17,7 @@ import { PersonData } from '../../../types/types';
 import ToolsMail from '../../../tools/ToolsMail';
 import Milestone from '../Milestone';
 import MilestoneRepository from '../MilestoneRepository';
+import CaseTypeFolderRepository from './caseTypes/CaseTypeFolderRepository';
 
 export default class CasesController extends BaseController<
     Case,
@@ -110,6 +111,26 @@ export default class CasesController extends BaseController<
         }
 
         void ToolsMail.sendServerErrorReport(reportError);
+    }
+
+    /**
+     * Zapisuje w DB (cache) ID folderu GD typu sprawy dla danego kamienia milowego,
+     * jeśli createFolder/editFolder go właśnie ustaliło. Best-effort - błąd nie
+     * przerywa głównego przepływu (folder w GD i tak już istnieje).
+     */
+    private static async persistCaseTypeFolder(caseItem: Case): Promise<void> {
+        if (caseItem._type.isUniquePerMilestone) return;
+        if (!caseItem._type.gdFolderId) return;
+        if (!caseItem.milestoneId || !caseItem._type.id) return;
+        try {
+            await new CaseTypeFolderRepository().upsert(
+                caseItem.milestoneId,
+                caseItem._type.id,
+                caseItem._type.gdFolderId
+            );
+        } catch (error) {
+            console.warn('persistCaseTypeFolder: nie udało się zapisać', error);
+        }
     }
 
     /**
@@ -229,6 +250,7 @@ export default class CasesController extends BaseController<
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);
             console.log('folder created');
+            await CasesController.persistCaseTypeFolder(caseItem);
 
             let processInstances: ProcessInstance[] = [];
             let defaultTasks: Task[] = [];
@@ -276,6 +298,7 @@ export default class CasesController extends BaseController<
                 caseItem
                     .editFolder(auth)
                     .then(() => console.log('folder name corrected'))
+                    .then(() => CasesController.persistCaseTypeFolder(caseItem))
                     .catch((err) => console.log(err)),
                 CasesController.addInScrum(caseItem, auth, defaultTasks)
                     .then(() => console.log('added in scrum'))
@@ -538,6 +561,7 @@ export default class CasesController extends BaseController<
                     caseItem
                         .editFolder(auth)
                         .then(() => console.log('folder updated'))
+                        .then(() => CasesController.persistCaseTypeFolder(caseItem))
                         .catch((err) => console.log(err)),
                     caseItem
                         .editInScrum(auth)
@@ -614,6 +638,7 @@ export default class CasesController extends BaseController<
                     milestoneCache
                 );
                 await caseItem.createFolder(auth);
+                await CasesController.persistCaseTypeFolder(caseItem);
             }
             console.log('Case folders created in GD');
 

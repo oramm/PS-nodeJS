@@ -191,6 +191,14 @@ export default class Case extends BusinessObject implements CaseData {
             parentId: this._parent.gdFolderId,
             name: this._type.folderNumber + ' ' + this._type.name,
         });
+        if (!this._type.isUniquePerMilestone) {
+            // _type bywa zwykłym obiektem z JSON (req.body), nie instancją CaseType -
+            // ustawiamy pola wprost, bez polegania na metodach klasy.
+            this._type.gdFolderId = parentFolder?.id as string;
+            this._type._gdFolderUrl = ToolsGd.createGdFolderUrl(
+                parentFolder?.id as string
+            );
+        }
         let caseFolder = parentFolder;
         if (!this._type.isUniquePerMilestone) {
             caseFolder = await ToolsGd.setFolder(auth, {

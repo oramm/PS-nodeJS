@@ -289,6 +289,9 @@ export interface CaseTypeData extends RepositoryDataItem {
     allowsSubCases?: boolean;
     _allowedSubCaseTypeIds?: number[];
     _milestoneType: MilestoneType;
+    gdFolderId?: string;
+    _gdFolderUrl?: string;
+    _folderPath?: string;
 }
 
 export interface GenericDocumentData extends RepositoryDataItem {
