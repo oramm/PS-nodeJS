@@ -631,6 +631,7 @@ require('./costInvoices/CostInvoicesRouter');
 
 require('./projects/ProjectsRouters');
 require('./mileage/MileageRouters');
+require('./siteVisits/SiteVisitRouters');
 
 require('./contracts/ContractsRouters');
 require('./contracts/aqmSync/AqmSyncRouters');

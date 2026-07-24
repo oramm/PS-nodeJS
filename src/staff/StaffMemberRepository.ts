@@ -1,7 +1,12 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 
-type StaffFlag = 'IsInScrum' | 'IsDriver' | 'HasCostInvoiceAccess' | 'HasBankAccess';
+type StaffFlag =
+    | 'IsInScrum'
+    | 'IsDriver'
+    | 'HasCostInvoiceAccess'
+    | 'HasBankAccess'
+    | 'CanLogSiteVisits';
 
 export default class StaffMemberRepository {
     /**
@@ -42,5 +47,20 @@ export default class StaffMemberRepository {
 
     static getDriverPersonIds(): Promise<number[]> {
         return this.getPersonIdsByFlag('IsDriver');
+    }
+
+    static getSiteVisitorPersonIds(): Promise<number[]> {
+        return this.getPersonIdsByFlag('CanLogSiteVisits');
+    }
+
+    /** Czy dana osoba ma dostęp do rejestru wizyt na budowie (i jest aktywna). */
+    static async hasSiteVisitAccess(personId: number): Promise<boolean> {
+        const sql = `SELECT 1 FROM StaffMembers
+            WHERE PersonId = ? AND CanLogSiteVisits = 1 AND IsActive = 1
+            LIMIT 1`;
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
+            personId,
+        ])) as any[];
+        return rows.length > 0;
     }
 }

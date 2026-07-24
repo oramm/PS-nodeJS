@@ -7,6 +7,30 @@ export default class ToolsGd {
         return 'https://drive.google.com/drive/folders/' + gdFolderId;
     }
 
+    /**
+     * Strumień bajtów pliku z GD wraz z jego mimeType i nazwą - do proxy'owania
+     * podglądu (np. zdjęć wizyt) przez backend, bez upubliczniania plików na Drive.
+     */
+    static async getFileMedia(
+        auth: OAuth2Client,
+        fileId: string
+    ): Promise<{ stream: Readable; mimeType?: string; name?: string }> {
+        const drive = google.drive({ version: 'v3', auth });
+        const meta = await drive.files.get({
+            fileId,
+            fields: 'mimeType,name',
+        });
+        const res = await drive.files.get(
+            { fileId, alt: 'media' },
+            { responseType: 'stream' }
+        );
+        return {
+            stream: res.data as Readable,
+            mimeType: meta.data.mimeType ?? undefined,
+            name: meta.data.name ?? undefined,
+        };
+    }
+
     static createDocumentOpenUrl(gdDocumentId: string): string | undefined {
         if (gdDocumentId)
             return 'https://drive.google.com/open?id=' + gdDocumentId;
