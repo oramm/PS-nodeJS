@@ -33,6 +33,9 @@ export type LetterSearchParams = {
     creationDateFrom?: string;
     creationDateTo?: string;
     statuses?: string[];
+    /** APPROVED = pisma w „Dokumentacji zatwierdzonej"; REMAINING = pisma na
+     *  kontraktach z włączoną dokumentacją, jeszcze niezatwierdzone. */
+    approvedDocumentationFilter?: 'APPROVED' | 'REMAINING';
 };
 
 export type LetterFindParams = {
@@ -523,6 +526,14 @@ export default class LetterRepository extends BaseRepository<Letter> {
 
         const entitiesCondition = this.makeEntitiesCondition(searchParams._entities);
 
+        // „dokumentacja zatwierdzona" vs „pozostałe" (tylko kontrakty z włączoną flagą)
+        const approvedDocumentationCondition =
+            searchParams.approvedDocumentationFilter === 'APPROVED'
+                ? 'Letters.AddedToApprovedDocumentation = 1'
+                : searchParams.approvedDocumentationFilter === 'REMAINING'
+                ? '(Contracts.ApprovedDocumentation = 1 AND Letters.AddedToApprovedDocumentation = 0)'
+                : '1';
+
         const conditions = `${projectCondition}
             AND ${contractCondition}
             AND ${milestoneCondition}
@@ -532,7 +543,8 @@ export default class LetterRepository extends BaseRepository<Letter> {
             AND ${statusesCondition}
             AND ${searchTextCondition}
             AND ${offerCondition}
-            AND ${entitiesCondition}`;
+            AND ${entitiesCondition}
+            AND ${approvedDocumentationCondition}`;
         return conditions;
     }
 

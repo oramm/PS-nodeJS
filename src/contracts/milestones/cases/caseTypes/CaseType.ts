@@ -14,6 +14,9 @@ export default class CaseType extends BusinessObject {
     milestoneTypeId: number;
     _processes: any[];
     _folderName: string;
+    gdFolderId?: string;
+    _gdFolderUrl?: string;
+    _folderPath?: string;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'CaseTypes' });

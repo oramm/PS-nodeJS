@@ -17,6 +17,7 @@ import { PersonData } from '../../../types/types';
 import ToolsMail from '../../../tools/ToolsMail';
 import Milestone from '../Milestone';
 import MilestoneRepository from '../MilestoneRepository';
+import CaseTypeFolderRepository from './caseTypes/CaseTypeFolderRepository';
 
 export default class CasesController extends BaseController<
     Case,
@@ -60,6 +61,33 @@ export default class CasesController extends BaseController<
 
         caseItem._parent = milestone;
         caseItem.milestoneId = milestoneId;
+    }
+
+    /**
+     * Kasuje folder GD sprawy, ale TYLKO jeśli żadna sprawa w DB już go nie używa.
+     *
+     * Dwa żądania dodania sprawy o tej samej nazwie (np. ponowione po timeoucie)
+     * trafiają przez ToolsGd.setFolder na TEN SAM folder - dopasowanie idzie po nazwie,
+     * a nazwa "SXX ..." jest zmieniana na numer dopiero po commicie. Gdy drugie żądanie
+     * padnie, jego rollback kasował folder należący do sprawy zapisanej przez pierwsze.
+     */
+    private static async deleteFolderIfUnusedInDb(
+        caseItem: Case,
+        auth: OAuth2Client,
+        repository: CaseRepository
+    ): Promise<void> {
+        if (caseItem.gdFolderId) {
+            const usedByCases = await repository.countCasesWithGdFolder(
+                caseItem.gdFolderId
+            );
+            if (usedByCases > 0) {
+                console.warn(
+                    `Folder GD ${caseItem.gdFolderId} jest używany przez ${usedByCases} spraw(y) w DB - pomijam kasowanie`
+                );
+                return;
+            }
+        }
+        await caseItem.deleteFolder(auth);
     }
 
     private static isRootParentError(error: unknown): boolean {
@@ -110,6 +138,26 @@ export default class CasesController extends BaseController<
         }
 
         void ToolsMail.sendServerErrorReport(reportError);
+    }
+
+    /**
+     * Zapisuje w DB (cache) ID folderu GD typu sprawy dla danego kamienia milowego,
+     * jeśli createFolder/editFolder go właśnie ustaliło. Best-effort - błąd nie
+     * przerywa głównego przepływu (folder w GD i tak już istnieje).
+     */
+    private static async persistCaseTypeFolder(caseItem: Case): Promise<void> {
+        if (caseItem._type.isUniquePerMilestone) return;
+        if (!caseItem._type.gdFolderId) return;
+        if (!caseItem.milestoneId || !caseItem._type.id) return;
+        try {
+            await new CaseTypeFolderRepository().upsert(
+                caseItem.milestoneId,
+                caseItem._type.id,
+                caseItem._type.gdFolderId
+            );
+        } catch (error) {
+            console.warn('persistCaseTypeFolder: nie udało się zapisać', error);
+        }
     }
 
     /**
@@ -229,6 +277,7 @@ export default class CasesController extends BaseController<
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);
             console.log('folder created');
+            await CasesController.persistCaseTypeFolder(caseItem);
 
             let processInstances: ProcessInstance[] = [];
             let defaultTasks: Task[] = [];
@@ -276,6 +325,7 @@ export default class CasesController extends BaseController<
                 caseItem
                     .editFolder(auth)
                     .then(() => console.log('folder name corrected'))
+                    .then(() => CasesController.persistCaseTypeFolder(caseItem))
                     .catch((err) => console.log(err)),
                 CasesController.addInScrum(caseItem, auth, defaultTasks)
                     .then(() => console.log('added in scrum'))
@@ -293,10 +343,11 @@ export default class CasesController extends BaseController<
                 caseItem,
             });
             // Rollback GD: usuń folder jeśli transakcja DB się nie powiodła
-            await caseItem
-                .deleteFolder(auth)
-                .then(() => console.log('folder deleted'))
-                .catch((err) => console.log(err));
+            await CasesController.deleteFolderIfUnusedInDb(
+                caseItem,
+                auth,
+                this.repository
+            ).catch((err) => console.log(err));
             throw err;
         } finally {
             console.groupEnd();
@@ -538,6 +589,7 @@ export default class CasesController extends BaseController<
                     caseItem
                         .editFolder(auth)
                         .then(() => console.log('folder updated'))
+                        .then(() => CasesController.persistCaseTypeFolder(caseItem))
                         .catch((err) => console.log(err)),
                     caseItem
                         .editInScrum(auth)
@@ -614,6 +666,7 @@ export default class CasesController extends BaseController<
                     milestoneCache
                 );
                 await caseItem.createFolder(auth);
+                await CasesController.persistCaseTypeFolder(caseItem);
             }
             console.log('Case folders created in GD');
 
@@ -683,13 +736,11 @@ export default class CasesController extends BaseController<
             await conn?.rollback();
             // Rollback GD - usuń utworzone foldery
             for (const caseItem of caseItems) {
-                if (caseItem.gdFolderId) {
-                    await caseItem
-                        .deleteFolder(auth)
-                        .catch((err) =>
-                            console.error('Error deleting folder:', err)
-                        );
-                }
+                await CasesController.deleteFolderIfUnusedInDb(
+                    caseItem,
+                    auth,
+                    caseRepository
+                ).catch((err) => console.error('Error deleting folder:', err));
             }
             throw error;
         } finally {
@@ -800,8 +851,11 @@ export default class CasesController extends BaseController<
 
             // Operacje post-DB: GD i Scrum (równolegle)
             await Promise.all([
-                caseItem
-                    .deleteFolder(auth)
+                CasesController.deleteFolderIfUnusedInDb(
+                    caseItem,
+                    auth,
+                    this.repository
+                )
                     .then(() => console.log('folder deleted'))
                     .catch((err) => console.log(err)),
                 caseItem

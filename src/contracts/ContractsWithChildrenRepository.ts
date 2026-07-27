@@ -137,6 +137,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 CaseTypes.IsDefault,
                 CaseTypes.IsUniquePerMilestone,
                 CaseTypes.FolderNumber AS CaseTypeFolderNumber,
+                CaseTypeFolders.GdFolderId AS CaseTypeGdFolderId,
                 Tasks.Name AS TaskName,
                 Tasks.Description AS TaskDescription,
                 Tasks.Deadline AS TaskDeadline,
@@ -163,6 +164,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             -- wynik jest identyczny jak przy INNER; LEFT tylko przestaje ukrywać te koszyki.
             LEFT JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
             LEFT JOIN CaseTypes ON Cases.typeId=CaseTypes.Id
+            LEFT JOIN CaseTypeFolders ON CaseTypeFolders.MilestoneId=Milestones.Id AND CaseTypeFolders.CaseTypeId=CaseTypes.Id
             LEFT JOIN Tasks ON Tasks.CaseId=Cases.Id
             LEFT JOIN Persons AS ContractManagers ON OurContractsData.ManagerId = ContractManagers.Id
             LEFT JOIN Persons AS ContractAdmins ON OurContractsData.AdminId = ContractAdmins.Id
@@ -198,7 +200,11 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
         }
 
-        return this.processContractsResult(rows, entitiesPerProject, subCaseTypeIdsMap);
+        return this.processContractsResult(
+            rows,
+            entitiesPerProject,
+            subCaseTypeIdsMap
+        );
     }
 
     /**
@@ -500,6 +506,10 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                         (subCaseTypeIdsMap.get(row.CaseTypeId ?? 0) ?? []).length > 0,
                     milestoneTypeId: row.MilestoneTypeId,
                     folderNumber: row.CaseTypeFolderNumber,
+                    gdFolderId: row.CaseTypeGdFolderId ?? undefined,
+                    _gdFolderUrl: row.CaseTypeGdFolderId
+                        ? ToolsGd.createGdFolderUrl(row.CaseTypeGdFolderId)
+                        : undefined,
                 },
                 _parent: uniqueMilestone,
             });
@@ -728,4 +738,5 @@ type ContractsWithChildrenRow = {
     IsDefault: boolean | 0 | 1;
     IsUniquePerMilestone: boolean | 0 | 1;
     CaseTypeFolderNumber: string | null;
+    CaseTypeGdFolderId: string | null;
 };
