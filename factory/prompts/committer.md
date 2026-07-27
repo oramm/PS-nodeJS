@@ -57,7 +57,8 @@ Pola opcjonalne (deklaracyjne w V1):
 4. Dodaj tylko dozwolone pliki (lub pozostaw staged-only).
 5. Zbuduj commit message:
 - preferuj `<type>: <subject>`
-- fallback: `chore: update files for <change_scope>`
+- **`<subject>` PO POLSKU i zrozumialy dla nietechnicznego uzytkownika systemu** - push jest zsynchronizowany z Google Chat, komunikat czytaja pracownicy korzystajacy z PS ENVI, nie programisci. Nazywaj funkcje tak, jak widzi ja uzytkownik na ekranie; zero identyfikatorow z kodu w temacie. Zmiana czysto techniczna (refaktor, CI, zaleznosci) -> subject zaczyna sie od `Techniczne:`. Body moze zostac po angielsku i zawierac szczegoly techniczne.
+- fallback: `chore: aktualizacja plikow dla <change_scope>`
 - commit message MUSI zawierac adnotacje o pochodzeniu z Dark Factory, np. w body:
   - `Dark-Factory: yes`
 - commit message MUSI zawierac trailer `Co-authored-by` dla AI prowadzacego glowny watek:
