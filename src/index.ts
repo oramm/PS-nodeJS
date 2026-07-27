@@ -679,11 +679,23 @@ app.use(
     async (err: unknown, req: Request, res: Response, next: NextFunction) => {
         console.error('Wystąpił błąd:', err);
 
-        const message = err instanceof Error ? err.message : 'Nieznany błąd';
+        // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.
+        // ponytail: jeden generyczny komunikat z nazwą klucza, bez mapowania per encja
+        const isDuplicateEntry = (err as any)?.code === 'ER_DUP_ENTRY';
+        const statusCode = isDuplicateEntry ? 409 : 500;
+
+        const rawMessage = err instanceof Error ? err.message : 'Nieznany błąd';
+        const duplicateKey = isDuplicateEntry
+            ? /for key '(.+?)'/.exec(rawMessage)?.[1]
+            : undefined;
+        const message = isDuplicateEntry
+            ? `Rekord o takich danych już istnieje${duplicateKey ? ` (${duplicateKey})` : ''}`
+            : rawMessage;
+
         const severity = resolveSeverity({
             source: 'express_error_middleware',
             env: process.env.NODE_ENV || 'production',
-            message,
+            message: rawMessage,
         });
 
         bugEventCaptureService.capture({
@@ -693,7 +705,7 @@ app.use(
             requestContext: {
                 path: req.path,
                 method: req.method,
-                statusCode: 500,
+                statusCode,
                 requestId: req.headers['x-request-id'],
             },
             userContext: {
@@ -703,14 +715,16 @@ app.use(
         });
 
         const shouldSendEmail =
-            process.env.BUG_ERROR_MAIL_CRITICAL_ONLY === 'true'
-                ? severity === 'critical'
-                : true;
+            statusCode < 500
+                ? false // błąd użytkownika - zostaje w bug events, bez maila
+                : process.env.BUG_ERROR_MAIL_CRITICAL_ONLY === 'true'
+                  ? severity === 'critical'
+                  : true;
         if (shouldSendEmail) {
             void ToolsMail.sendServerErrorReport(err, req);
         }
 
-        res.status(500).send({ errorMessage: message });
+        res.status(statusCode).send({ errorMessage: message });
     },
 );
 

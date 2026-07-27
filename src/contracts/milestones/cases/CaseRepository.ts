@@ -440,6 +440,16 @@ export default class CaseRepository extends BaseRepository<Case> {
         return result[0]?.GdFolderId ?? null;
     }
 
+    /** Ile spraw w DB wskazuje na ten folder GD (0 = folder osierocony, można kasować) */
+    async countCasesWithGdFolder(gdFolderId: string): Promise<number> {
+        const sql = mysql.format(
+            'SELECT COUNT(*) AS casesCount FROM Cases WHERE GdFolderId = ?',
+            [gdFolderId]
+        );
+        const result: any[] = await this.executeQuery(sql);
+        return Number(result[0]?.casesCount ?? 0);
+    }
+
     async findSubCaseIds(parentCaseId: number): Promise<number[]> {
         const sql = mysql.format(
             'SELECT Id FROM Cases WHERE ParentCaseId = ?',
