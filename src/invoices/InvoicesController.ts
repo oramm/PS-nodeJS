@@ -134,6 +134,9 @@ export default class InvoicesController extends BaseController<
                     conn,
                 );
             });
+            // LastUpdated wypełnia baza, ale wartość nie wraca do obiektu w pamięci.
+            // Bez tego szczegóły faktury pokazują "Invalid date" tuż po dodaniu.
+            invoice._lastUpdated = new Date().toISOString();
             console.log(
                 `Invoice for contract ${invoice._contract.ourId} added in db`
             );

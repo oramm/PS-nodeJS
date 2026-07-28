@@ -78,6 +78,9 @@ export default class OfferEventsController extends BaseController<
 
             console.group('Creating new OfferEvent');
             await instance.repository.addInDb(offerEvent);
+            // LastUpdated wypełnia baza, ale wartość nie wraca do obiektu w pamięci.
+            // Bez tego lista ofert pokazuje "Invalid date" tuż po rejestracji.
+            offerEvent._lastUpdated = new Date().toISOString();
             console.log('OfferEvent added to db');
             console.groupEnd();
 

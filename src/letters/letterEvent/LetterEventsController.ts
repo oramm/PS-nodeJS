@@ -63,6 +63,9 @@ export default class LetterEventsController {
             console.group('Creating new LetterEvent');
             // Użyj Repository zamiast letterEvent.addInDb()
             await instance.repository.addInDb(letterEvent);
+            // LastUpdated wypełnia baza, ale wartość nie wraca do obiektu w pamięci.
+            // Bez tego lista pism pokazuje "Invalid date" tuż po rejestracji.
+            letterEvent._lastUpdated = new Date().toISOString();
             console.log('LetterEvent added to db');
             console.groupEnd();
         } catch (err) {
