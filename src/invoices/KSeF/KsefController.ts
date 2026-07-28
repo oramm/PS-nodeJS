@@ -5,6 +5,9 @@ import KsefXmlBuilder, { OriginalInvoiceData } from './KsefXmlBuilder';
 import InvoiceKsefValidator from './InvoiceKsefValidator';
 import KsefMetadataRepository from './KsefMetadataRepository';
 import Setup from '../../setup/Setup';
+import ToolsMail from '../../tools/ToolsMail';
+import Invoice from '../Invoice';
+import { UserData } from '../../types/sessionTypes';
 import * as crypto from 'crypto';
 
 /**
@@ -22,6 +25,68 @@ export default class KsefController {
     // Nie używamy static service - tworzymy nową instancję dla każdej operacji
     // ponieważ tokeny KSeF wygasają po ~15 minutach
     private static repo = new InvoiceRepository();
+
+    /**
+     * Powiadamia autora (właściciela) faktury o zmianie statusu KSeF na
+     * "Wysłana do KSeF" lub "Odrzucona przez KSeF". Nie wysyła, gdy status
+     * zmienia sam autor faktury. Błąd wysyłki nie przerywa operacji KSeF
+     * (log-only).
+     */
+    private static async notifyOwnerOnKsefStatusChange(
+        invoice: Invoice,
+        newStatus: string,
+        actingUser?: UserData
+    ): Promise<void> {
+        try {
+            // Autora zmieniającego status własnej faktury nie powiadamiamy
+            if (actingUser?.enviId && actingUser.enviId === invoice.ownerId) {
+                return;
+            }
+
+            const ownerEmail = invoice._owner?.email;
+            if (!ownerEmail) {
+                console.warn(
+                    `[KSeF notify] Faktura ${invoice.id} bez adresu e-mail autora — pomijam powiadomienie`
+                );
+                return;
+            }
+
+            const recipient = ownerEmail;
+
+            const invoiceUrl = `https://ps.envi.com.pl/#/invoice/${invoice.id}`;
+            const invoiceLabel = ToolsMail.escapeHtml(
+                invoice.number || `#${invoice.id}`
+            );
+            const contractName = ToolsMail.escapeHtml(
+                invoice._contract?.ourId ||
+                    invoice._contract?.number ||
+                    invoice._contract?.name ||
+                    ''
+            );
+
+            const isRejected = newStatus === Setup.InvoiceStatus.KSEF_ERROR;
+            const subject = isRejected
+                ? `[ERP ENVI] Faktura ${invoiceLabel} odrzucona przez KSeF`
+                : `[ERP ENVI] Faktura ${invoiceLabel} wysłana do KSeF`;
+            const statusHtml = isRejected
+                ? 'została <strong>odrzucona przez KSeF</strong>'
+                : 'została <strong>wysłana do KSeF</strong>';
+            const html =
+                `<p>Faktura <strong>${invoiceLabel}</strong> ${statusHtml}.</p>` +
+                (contractName ? `<p>Kontrakt: ${contractName}</p>` : '') +
+                `<p><a href="${invoiceUrl}">Otwórz fakturę w systemie ERP</a></p>`;
+
+            await ToolsMail.sendMail({ to: recipient, subject, html });
+            console.log(
+                `[KSeF notify] Powiadomienie o fakturze ${invoice.id} (${newStatus}) wysłane do ${recipient}`
+            );
+        } catch (error) {
+            console.error(
+                `[KSeF notify] Nie udało się wysłać powiadomienia o fakturze ${invoice.id}:`,
+                error
+            );
+        }
+    }
 
     private static getQrBaseUrl(): string {
         return Setup.KSeF.environment === 'production'
@@ -149,7 +214,8 @@ export default class KsefController {
             originalIssueDate?: string;
             correctionReason?: string;
             correctionType?: 1 | 2 | 3;
-        }
+        },
+        actingUser?: UserData
     ) {
         const service = new KsefService();
         
@@ -249,6 +315,7 @@ export default class KsefController {
             invoice.status = Setup.InvoiceStatus.SENT_TO_KSEF;
             await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId', 'status']);
             console.log(`   [KSeF] Korekta faktury ${invoiceId} wysłana, referenceNumber: ${resp.referenceNumber}`);
+            await this.notifyOwnerOnKsefStatusChange(invoice, Setup.InvoiceStatus.SENT_TO_KSEF, actingUser);
         } catch (err) {
             console.error('Nie udało się zaktualizować statusu faktury:', err);
         }
@@ -268,7 +335,7 @@ export default class KsefController {
      * @param invoiceId - ID faktury w systemie
      * @returns { invoiceId, referenceNumber, status } - numer referencyjny do sprawdzenia statusu
      */
-    static async submitInvoiceById(invoiceId: number) {
+    static async submitInvoiceById(invoiceId: number, actingUser?: UserData) {
         // Nowa instancja serwisu dla każdej wysyłki (fresh token)
         const service = new KsefService();
         // 1. Pobierz fakturę z pozycjami
@@ -318,6 +385,7 @@ export default class KsefController {
             invoice.status = Setup.InvoiceStatus.SENT_TO_KSEF;
             await this.repo.editInDb(invoice, undefined, undefined, ['ksefStatus', 'ksefSessionId', 'status']);
             console.log(`   [KSeF] Faktura ${invoiceId} wysłana, referenceNumber: ${resp.referenceNumber}`);
+            await this.notifyOwnerOnKsefStatusChange(invoice, Setup.InvoiceStatus.SENT_TO_KSEF, actingUser);
         } catch (err) {
             console.error('Nie udało się zaktualizować statusu faktury:', err);
         }
@@ -402,9 +470,19 @@ export default class KsefController {
             const invoices = await this.repo.find([{ id: invoiceId }]);
             if (invoices[0]) {
                 const invoice = invoices[0];
+                // Status sprawdzany jest wielokrotnie (polling) — powiadamiamy
+                // tylko przy faktycznym przejściu w stan odrzucenia, inaczej
+                // autor dostawałby ten sam mail przy każdym odświeżeniu.
+                const wasAlreadyRejected =
+                    invoice.status === Setup.InvoiceStatus.KSEF_ERROR;
                 invoice.status = Setup.InvoiceStatus.KSEF_ERROR;
                 invoice.ksefStatus = 'ERROR';
                 await this.repo.editInDb(invoice, undefined, undefined, ['status', 'ksefStatus']);
+                // Odrzucenie wykrywane podczas sprawdzania statusu — brak akcji
+                // konkretnego użytkownika, więc zawsze powiadamiamy autora faktury.
+                if (!wasAlreadyRejected) {
+                    await this.notifyOwnerOnKsefStatusChange(invoice, Setup.InvoiceStatus.KSEF_ERROR);
+                }
             }
         }
 

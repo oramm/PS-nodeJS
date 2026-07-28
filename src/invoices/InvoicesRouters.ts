@@ -214,7 +214,10 @@ app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => 
             return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
         }
         
-        const result = await KsefController.submitInvoiceById(invoiceId);
+        const result = await KsefController.submitInvoiceById(
+            invoiceId,
+            req.session.userData
+        );
         res.json(result);
     } catch (error: any) {
         console.error('[KSeF] Błąd wysyłki faktury:', error.message);
@@ -380,14 +383,15 @@ app.post('/invoice/:id/ksef/correction', async (req: Request, res: Response, nex
         }
 
         const result = await KsefController.submitCorrectionById(
-            invoiceId, 
+            invoiceId,
             originalKsefNumber,
             {
                 originalInvoiceNumber,
                 originalIssueDate,
                 correctionReason,
                 correctionType: parsedCorrectionType,
-            }
+            },
+            req.session.userData
         );
         res.json(result);
     } catch (error: any) {
