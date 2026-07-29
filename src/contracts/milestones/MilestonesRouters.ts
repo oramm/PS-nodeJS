@@ -13,7 +13,12 @@ import ContractsController from '../ContractsController';
 app.post('/milestones', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const parentType = req.parsedBody.parentType as MilestoneParentType;
+        // `parentType` można podać top-level albo jako `milestoneParentType` w pierwszym
+        // warunku — spójnie z kształtem zapytania używanym przez klienta dla /cases (tam typ
+        // rodzica jest wnioskowany z contractId). Dzięki temu klient może pytać o kamienie
+        // oferty samym `orConditions`, bez dodatkowego pola w ciele żądania.
+        const parentType = (req.parsedBody.parentType ??
+            orConditions?.[0]?.milestoneParentType) as MilestoneParentType;
         const result = await MilestonesController.find(
             orConditions,
             parentType
