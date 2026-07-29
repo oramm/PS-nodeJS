@@ -66,6 +66,8 @@ export type ContractSearchParams = {
     _admin?: Person;
     _manager?: Person;
     _contractRangesPerContract?: ContractRangePerContractData[];
+    /** Maksymalna liczba zwracanych kontraktów (np. podpowiedzi w selektorze) */
+    limit?: number;
 };
 
 export default class ContractsController extends BaseController<

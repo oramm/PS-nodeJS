@@ -329,7 +329,14 @@ export default class ContractRepository extends BaseRepository<
                   LEFT JOIN ContractRanges ON ContractRangesContracts.ContractRangeId = ContractRanges.Id
                   WHERE ${conditions}
                   GROUP BY mainContracts.Id
-                  ORDER BY mainContracts.EndDate, mainContracts.ProjectOurId, OurContractsData.OurId, mainContracts.Number`;
+                  ORDER BY ${[
+                      ...this.makeOurIdRelevanceOrder(firstCondition.searchText),
+                      'mainContracts.EndDate',
+                      'mainContracts.ProjectOurId',
+                      'OurContractsData.OurId',
+                      'mainContracts.Number',
+                  ].join(', ')}
+                  ${this.makeLimit(firstCondition.limit)}`;
 
         const rows: ContractRow[] = await this.executeQuery(sql);
         const { entitiesPerProject, rangesPerContract } =
@@ -345,6 +352,36 @@ export default class ContractRepository extends BaseRepository<
                 rangesPerContract,
             }),
         );
+    }
+
+    /**
+     * Trafienia w nasz identyfikator (OurId) idą na górę listy: najpierw te, które
+     * zaczynają się od szukanego tekstu, potem zawierające wszystkie szukane słowa,
+     * na końcu reszta (trafienia w nazwę, numer, alias, nazwę wykonawcy).
+     * Zwraca człony ORDER BY do doklejenia przed domyślnym sortowaniem (może być pusto).
+     */
+    private makeOurIdRelevanceOrder(searchText: string | undefined): string[] {
+        const trimmedText = searchText?.trim() ?? '';
+        const words = trimmedText.split(/\s+/).filter(Boolean);
+        if (words.length === 0) return [];
+
+        const startsWithText = mysql.format(`OurContractsData.OurId LIKE ?`, [
+            `${trimmedText}%`,
+        ]);
+        const containsAllWords = words
+            .map((word) =>
+                mysql.format(`OurContractsData.OurId LIKE ?`, [`%${word}%`]),
+            )
+            .join(' AND ');
+
+        return [
+            `CASE WHEN ${startsWithText} THEN 0 WHEN ${containsAllWords} THEN 1 ELSE 2 END`,
+        ];
+    }
+
+    private makeLimit(limit: number | undefined): string {
+        if (!limit || !Number.isInteger(limit) || limit <= 0) return '';
+        return mysql.format(`LIMIT ?`, [limit]);
     }
 
     private makeOptionalColumns(searchParams: ContractSearchParams) {
@@ -838,6 +875,8 @@ export type ContractSearchParams = {
     _manager?: Person;
     _contractRangesPerContract?: ContractRangePerContractData[];
     _contractRanges?: ContractRangeData[];
+    /** Maksymalna liczba zwracanych kontraktów (np. podpowiedzi w selektorze) */
+    limit?: number;
 };
 
 type ContractRow = {
