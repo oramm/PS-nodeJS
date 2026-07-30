@@ -14,6 +14,9 @@ import ToolsDb from './tools/ToolsDb';
 import ToolsMail from './tools/ToolsMail';
 import cron from 'node-cron';
 import ToolsGapi from './setup/Sessions/ToolsGapi';
+import agentTokenAuth, {
+    reportAgentTokenConfig,
+} from './setup/Sessions/agentTokenAuth';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
@@ -497,6 +500,10 @@ app.use(
     }) as any,
 );
 
+// LIS-2 — headless agent entry. Must sit after session() and before the routes, so the
+// agent reaches the same controllers as the UI. Inactive without AGENT_API_TOKEN.
+app.use(agentTokenAuth);
+
 app.use((req, res, next) => {
     console.log(
         `Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `,
@@ -732,6 +739,8 @@ app.listen(port, async () => {
     console.log(`server is listenning on port: ${port}`);
     ToolsDb.initialize();
     console.log('Db time zone set to +00:00');
+    // LIS-2 — a misconfigured agent token must be loud, never silently inactive.
+    reportAgentTokenConfig();
 });
 
 
