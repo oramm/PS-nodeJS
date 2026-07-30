@@ -24,7 +24,10 @@ import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 import ToolsAI from '../tools/ToolsAI';
 import { CaseData, EntityData } from '../types/types';
-import { resolveShortcutParentId } from './resolveShortcutParentId';
+import {
+    createCaseShortcuts,
+    syncCaseShortcutNames,
+} from './resolveShortcutParentId';
 import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
@@ -395,30 +398,7 @@ export default class LettersController extends BaseController<
             }
 
             // 5. Utwórz skróty w folderach Cases
-            if (
-                (letter.gdDocumentId || letter.gdFolderId) &&
-                letter._cases.length > 0
-            ) {
-                const shortcutCreationPromises = letter._cases.map(
-                    async (caseItem) => {
-                        if (caseItem.gdFolderId) {
-                            const targetId = letter.gdDocumentId
-                                ? letter.gdDocumentId
-                                : letter.gdFolderId;
-
-                            const parentId =
-                                await resolveShortcutParentId(auth, caseItem);
-
-                            await ToolsGd.createShortcut(auth, {
-                                targetId: targetId!,
-                                parentId,
-                                name: `${letter.number} ${letter.description}`,
-                            });
-                        }
-                    }
-                );
-                await Promise.all(shortcutCreationPromises);
-            }
+            await createCaseShortcuts(auth, letter);
 
             // 6. Wykonaj wszystkie operacje post-DB
             await Promise.all(postDbPromises);
@@ -500,28 +480,7 @@ export default class LettersController extends BaseController<
             await LettersController.addNew(letter);
 
             // 3. Utwórz skróty w folderach Cases
-            if (
-                (letter.gdDocumentId || letter.gdFolderId) &&
-                letter._cases.length > 0
-            ) {
-                const shortcutPromises = letter._cases.map(async (caseItem) => {
-                    if (caseItem.gdFolderId) {
-                        const targetId = letter.gdDocumentId
-                            ? letter.gdDocumentId
-                            : letter.gdFolderId;
-
-                        const parentId =
-                            await resolveShortcutParentId(auth, caseItem);
-
-                        await ToolsGd.createShortcut(auth, {
-                            targetId: targetId!,
-                            parentId,
-                            name: `${letter.number} ${letter.description}`,
-                        });
-                    }
-                });
-                await Promise.all(shortcutPromises);
-            }
+            await createCaseShortcuts(auth, letter);
 
             // 3b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
             await this.registerApprovedDocumentation(auth, letter);
@@ -823,11 +782,27 @@ export default class LettersController extends BaseController<
             }
         }
 
-        // 3. Rejestr „Dokumentacja zatwierdzona” (best-effort) — również przy edycji,
+        // 3. Nazwy skrótów w folderach spraw (best-effort). Poza blokiem GD wyżej,
+        // bo `description` i `number` są na liście onlyDbFields — sama zmiana opisu
+        // nie rusza Dysku, a nazwę skrótu zmienia.
+        if (
+            !fieldsToUpdate ||
+            fieldsToUpdate.some((field) =>
+                ['number', 'description'].includes(field)
+            )
+        ) {
+            try {
+                await syncCaseShortcutNames(auth, letter);
+            } catch (err) {
+                console.error('Nie udało się zsynchronizować nazw skrótów:', err);
+            }
+        }
+
+        // 4. Rejestr „Dokumentacja zatwierdzona” (best-effort) — również przy edycji,
         // gdy użytkownik zaznaczy opcję na istniejącym piśmie.
         await this.registerApprovedDocumentation(auth, letter);
 
-        // 4. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
+        // 5. Jeśli zmieniono status na "Zatwierdzony", utwórz event APPROVED
         const statusChanged =
             !fieldsToUpdate || fieldsToUpdate.includes('status');
         if (

@@ -464,6 +464,16 @@ export default class ToolsGd {
         }
     }
 
+    /** Znajduje wszystkie skróty wskazujące na dany plik/folder (niezależnie od ich lokalizacji) */
+    static async findShortcutsByTarget(auth: OAuth2Client, targetId: string) {
+        const drive = google.drive({ version: 'v3', auth });
+        const filesSchema = await drive.files.list({
+            q: `shortcutDetails.targetId = '${targetId}' and trashed = false`,
+            fields: 'files(id, name, parents)',
+        });
+        return filesSchema.data.files || [];
+    }
+
 
     /** przenosi do kosza albo zmmienia nazwę dodając oznacznienie 'USUŃ' jeśli nie ma uprawnień */
     static async trashFileOrFolder(auth: OAuth2Client, gdFolderId: string) {
