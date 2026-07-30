@@ -92,7 +92,7 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
             typeof this.enviDocumentData.number === 'number'
                 ? this.enviDocumentData.number.toString()
                 : this.enviDocumentData.number;
-        return [
+        const namedRangesData = [
             {
                 rangeName: 'creationDate',
                 newText: ToolsDate.dateYMDtoDMY(
@@ -116,6 +116,26 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
             },
             { rangeName: 'addressCc', newText: this.addressCcLabel() },
         ];
+        const contents = this.contentsLabel();
+        if (contents !== undefined)
+            namedRangesData.push({ rangeName: 'contents', newText: contents });
+
+        return namedRangesData;
+    }
+
+    /** Treść pisma z danych wejściowych, przygotowana dla zakresu nazwanego `contents`.
+     *  Zwraca `undefined`, gdy treści nie podano - wtedy zakres nie jest dokładany,
+     *  `updateTextRunsInNamedRanges` go nie rusza i tag `#ENVI#contents#` zostaje
+     *  w dokumencie nietknięty, czyli tak jak przed tą zmianą.
+     *  Podział na akapity jest taki sam jak w zakresie `address`: zwykły `\n`
+     *  w tekście wstawianym przez `insertText`. Zawijanie CR jest normalizowane,
+     *  bo `insertText` wstawia znaki dosłownie. */
+    protected contentsLabel(): string | undefined {
+        const contents = this.enviDocumentData._contents;
+        if (typeof contents !== 'string') return undefined;
+
+        const normalized = contents.replace(/\r\n?/g, '\n').trim();
+        return normalized.length > 0 ? normalized : undefined;
     }
 
     protected addressCcLabel() {

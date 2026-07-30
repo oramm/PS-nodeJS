@@ -11,6 +11,8 @@ export default abstract class OurLetter
     implements OurLetterData
 {
     _template?: DocumentTemplateData;
+    /** treść pisma - tylko dla generatora dokumentu, nie jest zapisywana w bazie */
+    _contents?: string;
     isOur: true = true;
     abstract _letterGdController: OurLetterGdController;
 
@@ -20,6 +22,25 @@ export default abstract class OurLetter
         //_template jest potrzebny tylko przy tworzeniu pisma
         if (initParamObject._template)
             this._template = initParamObject._template;
+
+        //_contents jest potrzebne tylko przy wypełnianiu dokumentu pisma
+        if (initParamObject._contents !== undefined) {
+            if (typeof initParamObject._contents !== 'string')
+                throw new Error('_contents musi być tekstem');
+            this._contents = initParamObject._contents;
+        }
+    }
+
+    /** Dane pisma dla generatora dokumentu.
+     *  Treść (`_contents`) przekazujemy WYŁĄCZNIE przy tworzeniu pisma, czyli wtedy,
+     *  gdy jest `_template`. Przy edycji źródłem prawdy dla treści jest dokument na Dysku:
+     *  treści nie ma w bazie, więc payload odesłany przez klienta mógłby po cichu nadpisać
+     *  poprawki wpisane przez użytkownika wprost w Dokumentach Google. */
+    protected makeGdFileData(_template?: DocumentTemplateData) {
+        return {
+            ...this,
+            _contents: _template ? this._contents : undefined,
+        };
     }
 
     /** Tworzy plik z dokumentem i ustawia this.gdDocumentId

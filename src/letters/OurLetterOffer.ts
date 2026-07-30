@@ -25,7 +25,7 @@ export default class OurLetterOffer
     makeLetterGdFileController(_template?: DocumentTemplateData) {
         return new OurLetterOfferGdFile({
             _template,
-            enviDocumentData: { ...this },
+            enviDocumentData: this.makeGdFileData(_template),
         });
     }
 }

@@ -29,7 +29,7 @@ export default class OurLetterContract
     makeLetterGdFileController(_template?: DocumentTemplateData) {
         return new OurLetterContractGdFile({
             _template,
-            enviDocumentData: { ...this },
+            enviDocumentData: this.makeGdFileData(_template),
         });
     }
 }

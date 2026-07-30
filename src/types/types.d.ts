@@ -327,6 +327,10 @@ export interface LetterData extends GenericDocumentData {
 
 export interface OurLetterData extends LetterData {
     _template?: DocumentTemplateData;
+    /** Treść pisma wstawiana w zakres nazwany `contents` dokumentu na GD.
+     *  Prefiks `_` trzyma pole poza zapisem do bazy (ToolsDb.prepareFieldsToWrite).
+     *  Brak wartości = tag `#ENVI#contents#` zostaje w dokumencie nietknięty. */
+    _contents?: string;
     isOur: true;
 }
 
