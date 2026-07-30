@@ -26,6 +26,7 @@ import ToolsAI from '../tools/ToolsAI';
 import { CaseData, EntityData } from '../types/types';
 import {
     createCaseShortcuts,
+    reconcileCaseShortcuts,
     syncCaseShortcutNames,
 } from './resolveShortcutParentId';
 import EntitiesController from '../entities/EntitiesController';
@@ -572,22 +573,39 @@ export default class LettersController extends BaseController<
                 fieldsToUpdate.includes('_entitiesMain') ||
                 fieldsToUpdate.includes('_entitiesCc');
 
-            const dbOperations: Promise<any>[] = [
-                instance.repository
-                    .editInDb(letter, conn, true, fieldsToUpdate)
-                    .then(() => {
-                        console.log('letterData edited');
-                    }),
-            ];
+            // Lista pól ograniczona do samych powiązań (`_cases`, `_entitiesMain`,
+            // `_entitiesCc`) nie ma ani jednej kolumny do zapisania. Bez tego
+            // odsiania `dynamicUpdatePreparedStmt` buduje `UPDATE Letters SET`
+            // z pustą listą przypisań i zapytanie kończy się błędem składni —
+            // czyli edycja samych spraw była trasą nieprzejezdną.
+            // Pusta tablica przechodzi dalej celowo: `ToolsDb.editInDb` rzuca
+            // wtedy „No fields to update!" i tak ma zostać. Cichy brak zapisu
+            // byłby gorszy od błędu.
+            const hasDbColumnsToUpdate =
+                !fieldsToUpdate ||
+                fieldsToUpdate.length === 0 ||
+                fieldsToUpdate.some((field) => !field.startsWith('_'));
+
+            // Sekwencyjnie, nie `Promise.all`. Gdy zapis wiersza pisma padnie,
+            // `Promise.all` odrzuca od razu, transakcja jest wycofywana, ale
+            // rozpoczęte już operacje na powiązaniach biegną dalej i ich zapisy
+            // trafiają do bazy PO wycofaniu — czyli poza transakcją.
+            if (hasDbColumnsToUpdate) {
+                await instance.repository.editInDb(
+                    letter,
+                    conn,
+                    true,
+                    fieldsToUpdate
+                );
+                console.log('letterData edited');
+            }
 
             if (shouldUpdateCases) {
-                dbOperations.push(this.editCaseAssociations(letter, conn));
+                await this.editCaseAssociations(letter, conn);
             }
             if (shouldUpdateEntities) {
-                dbOperations.push(this.editEntitiesAssociations(letter, conn));
+                await this.editEntitiesAssociations(letter, conn);
             }
-
-            await Promise.all(dbOperations);
             console.log('associations renewed');
         });
     }
@@ -741,12 +759,17 @@ export default class LettersController extends BaseController<
         userData: UserData,
         fieldsToUpdate?: string[]
     ): Promise<void> {
+        // Pola, których zmiana NIE dotyka dokumentu ani folderu pisma na Dysku.
+        // `_cases` jest tu, bo zmiana sprawy przenosi skrót (patrz niżej), ale nie
+        // ma prawa uruchamiać `editLetterGdElements` — to przepisuje zakresy nazwane
+        // dokumentu i nadpisuje nagłówek, w tym sekcję „dotyczy".
         const onlyDbFields = [
             'status',
             'description',
             'number',
             'name',
             'editorId',
+            '_cases',
         ];
         const isOnlyDbFields =
             fieldsToUpdate &&
@@ -755,9 +778,35 @@ export default class LettersController extends BaseController<
 
         console.group('Letter edit');
 
+        // 1a. Stan powiązań ze sprawami SPRZED edycji — wyłącznie z bazy.
+        // Sprawa zdejmowana z powiązań nie występuje w payloadzie, więc jej
+        // folder na Dysku można poznać tylko tutaj.
+        const shouldUpdateCases =
+            !fieldsToUpdate || fieldsToUpdate.includes('_cases');
+        let previousCases: CaseData[] = [];
+        if (shouldUpdateCases && letter.id) {
+            previousCases =
+                await LetterCaseAssociationsController.findCasesByLetterId(
+                    letter.id
+                );
+        }
+
         // 1. Edytuj w bazie danych
         await LettersController.edit(letter, fieldsToUpdate);
         console.log('Letter edited in DB');
+
+        // 1b. Uzgodnij skróty w folderach spraw z tym, co jest teraz w bazie
+        // (best-effort: pismo jest już zapisane, błąd Dysku nie cofa edycji).
+        if (shouldUpdateCases) {
+            try {
+                await reconcileCaseShortcuts(auth, letter, previousCases);
+            } catch (err) {
+                console.error(
+                    'Nie udało się uzgodnić skrótów po zmianie spraw pisma:',
+                    err
+                );
+            }
+        }
 
         // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD
         if (!isOnlyDbFields) {

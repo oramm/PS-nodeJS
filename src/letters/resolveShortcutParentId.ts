@@ -34,6 +34,279 @@ export async function createCaseShortcuts(
 }
 
 /**
+ * Uzgadnia skróty po zmianie powiązań pisma ze sprawami.
+ *
+ * Dla spraw DODANYCH zakłada skrót (przez `resolveShortcutParentId`, więc trafia
+ * do podfolderu „Pisma", gdy kontrakt tak ma ustawione). Dla spraw ZDJĘTYCH kasuje
+ * skrót wskazujący na dokument albo folder TEGO pisma, i wyłącznie w folderze
+ * sprawy zdejmowanej.
+ *
+ * Skąd biorą się dane, bo to decyduje o bezpieczeństwie kasowania:
+ * sprawy zdjęte pochodzą WYŁĄCZNIE z bazy (`previousCases`), nie z payloadu —
+ * klient nie ma jak wskazać cudzego folderu do sprzątnięcia.
+ *
+ * Reguły kasowania (żadnej nie wolno pominąć):
+ * 1. Kasujemy tylko plik o `mimeType` skrótu, którego `shortcutDetails.targetId`
+ *    wskazuje na dokument albo folder tego pisma.
+ * 2. Kasujemy tylko w folderze sprawy zdejmowanej (albo w jej podfolderze „Pisma").
+ * 3. Nie ruszamy folderu, który po zmianie nadal obsługuje którąś ze spraw pisma.
+ * 4. Nie udało się odczytać celu albo cel jest inny niż oczekiwany — NIE kasujemy,
+ *    zapisujemy to w logu i idziemy dalej. Cichy `catch` bez logu jest zakazany.
+ * 5. Kasujemy do KOSZA (`trashFile`), nie trwale — pomyłka ma być odwracalna.
+ *
+ * Świadomie POZA zakresem: skróty osierocone, czyli wskazujące na pisma, których
+ * nie ma już w bazie. Takie leżą na produkcji (np. skrót do pisma 6030 w folderze
+ * sprawy 13653) i porządkowanie ich wymaga osobnego przelotu. Tu ich nie dotykamy,
+ * bo reguła 1 wiąże kasowanie z identyfikatorami edytowanego pisma.
+ */
+export async function reconcileCaseShortcuts(
+    auth: OAuth2Client,
+    letter: LetterData,
+    previousCases: CaseData[]
+): Promise<void> {
+    const currentCases = (letter._cases || []).filter(
+        (caseItem) => caseItem?.id
+    );
+
+    // GUARD, ten sam co w LettersController.editCaseAssociations: pusta lista
+    // spraw oznacza niekompletny payload, a nie świadome zdjęcie wszystkich
+    // powiązań. Baza w takim wypadku zostaje nietknięta, więc Dysk też musi.
+    if (!currentCases.length) return;
+
+    const targetIds = [letter.gdDocumentId, letter.gdFolderId].filter(
+        (id): id is string => !!id
+    );
+    if (!targetIds.length) return;
+
+    const currentCaseIds = new Set(currentCases.map((caseItem) => caseItem.id));
+    const previousCaseIds = new Set(
+        previousCases.map((caseItem) => caseItem?.id).filter((id) => !!id)
+    );
+
+    const addedCases = currentCases.filter(
+        (caseItem) => !previousCaseIds.has(caseItem.id)
+    );
+    const removedCases = previousCases.filter(
+        (caseItem) => caseItem?.id && !currentCaseIds.has(caseItem.id)
+    );
+
+    if (!addedCases.length && !removedCases.length) return;
+
+    await addShortcutsForCases(auth, letter, addedCases, targetIds);
+    await removeShortcutsForCases(
+        auth,
+        letter,
+        removedCases,
+        currentCases,
+        targetIds
+    );
+}
+
+/**
+ * Zakłada skróty w folderach spraw dodanych do pisma.
+ * Pisma do ofert pomijamy tak samo jak w `createCaseShortcuts` — tam oryginał
+ * dokumentu leży już w folderze pierwszej sprawy.
+ */
+async function addShortcutsForCases(
+    auth: OAuth2Client,
+    letter: LetterData,
+    addedCases: CaseData[],
+    targetIds: string[]
+): Promise<void> {
+    if (!addedCases.length || isOfferLetter(letter)) return;
+    const targetId = targetIds[0];
+
+    for (const caseItem of addedCases) {
+        try {
+            if (!caseItem.gdFolderId) {
+                console.warn(
+                    `[Skróty pism] Sprawa ${caseItem.id} nie ma folderu na Dysku — skrótu do pisma ${letter.id} nie założono.`
+                );
+                continue;
+            }
+            const parentId = await resolveShortcutParentId(auth, caseItem);
+            if (!parentId) {
+                console.warn(
+                    `[Skróty pism] Nie udało się ustalić folderu na skrót dla sprawy ${caseItem.id} — pismo ${letter.id}.`
+                );
+                continue;
+            }
+            // Skrót już tam jest (np. powtórzona edycja albo skrót założony
+            // ręcznie) — drugiego nie dokładamy.
+            if (await hasShortcutInFolder(auth, targetIds, parentId)) {
+                console.log(
+                    `[Skróty pism] W folderze ${parentId} jest już skrót do pisma ${letter.id} — pomijam tworzenie.`
+                );
+                continue;
+            }
+            await ToolsGd.createShortcut(auth, {
+                targetId,
+                parentId,
+                name: makeShortcutName(letter),
+            });
+        } catch (err) {
+            console.error(
+                `[Skróty pism] Nie udało się założyć skrótu do pisma ${letter.id} w sprawie ${caseItem.id}:`,
+                err
+            );
+        }
+    }
+}
+
+/**
+ * Kasuje (do kosza) skróty do pisma w folderach spraw zdjętych z powiązań.
+ * Każdy warunek z listy reguł jest tu sprawdzany osobno i osobno logowany.
+ */
+async function removeShortcutsForCases(
+    auth: OAuth2Client,
+    letter: LetterData,
+    removedCases: CaseData[],
+    currentCases: CaseData[],
+    targetIds: string[]
+): Promise<void> {
+    if (!removedCases.length) return;
+
+    // Foldery nadal obsługujące którąś ze spraw pisma. Gdyby sprawa zdjęta
+    // i sprawa pozostająca wskazywały ten sam folder, skasowanie skrótu
+    // zabrałoby ślad również tej pozostającej.
+    const keptFolderIds = new Set<string>();
+    for (const caseItem of currentCases) {
+        if (caseItem.gdFolderId) keptFolderIds.add(caseItem.gdFolderId);
+        try {
+            const parentId = await resolveShortcutParentId(auth, caseItem, {
+                createIfMissing: false,
+            });
+            if (parentId) keptFolderIds.add(parentId);
+        } catch (err) {
+            console.error(
+                `[Skróty pism] Nie udało się ustalić folderu skrótów dla pozostającej sprawy ${caseItem.id} — kasowanie skrótów pisma ${letter.id} wstrzymane:`,
+                err
+            );
+            return;
+        }
+    }
+
+    for (const caseItem of removedCases) {
+        try {
+            if (!caseItem.gdFolderId) {
+                console.warn(
+                    `[Skróty pism] Zdjęta sprawa ${caseItem.id} nie ma folderu na Dysku — nie ma czego sprzątać.`
+                );
+                continue;
+            }
+            const parentId = await resolveShortcutParentId(auth, caseItem, {
+                createIfMissing: false,
+            });
+            if (!parentId) {
+                console.warn(
+                    `[Skróty pism] Zdjęta sprawa ${caseItem.id}: nie ma folderu na skróty (podfolder „Pisma" nie istnieje) — nic nie kasuję.`
+                );
+                continue;
+            }
+            if (keptFolderIds.has(parentId)) {
+                console.warn(
+                    `[Skróty pism] Folder ${parentId} obsługuje nadal inną sprawę pisma ${letter.id} — skrótu nie kasuję.`
+                );
+                continue;
+            }
+            await trashLetterShortcutsInFolder(
+                auth,
+                letter,
+                targetIds,
+                parentId
+            );
+        } catch (err) {
+            console.error(
+                `[Skróty pism] Nie udało się sprzątnąć skrótu pisma ${letter.id} w zdjętej sprawie ${caseItem.id}:`,
+                err
+            );
+        }
+    }
+}
+
+/** Czy w folderze leży już skrót wskazujący na to pismo */
+async function hasShortcutInFolder(
+    auth: OAuth2Client,
+    targetIds: string[],
+    parentId: string
+): Promise<boolean> {
+    for (const targetId of targetIds) {
+        const shortcuts = await ToolsGd.findShortcutsByTarget(auth, targetId);
+        if (
+            shortcuts.some((shortcut) => shortcut.parents?.includes(parentId))
+        )
+            return true;
+    }
+    return false;
+}
+
+/**
+ * Przenosi do kosza skróty do pisma leżące w danym folderze — po uprzednim
+ * odczycie celu każdego z nich. Rozbieżność albo błąd odczytu zostawia skrót
+ * nietknięty i zapisuje powód w logu.
+ */
+async function trashLetterShortcutsInFolder(
+    auth: OAuth2Client,
+    letter: LetterData,
+    targetIds: string[],
+    parentId: string
+): Promise<void> {
+    const candidateIds = new Set<string>();
+    for (const targetId of targetIds) {
+        const shortcuts = await ToolsGd.findShortcutsByTarget(auth, targetId);
+        shortcuts
+            .filter((shortcut) => shortcut.parents?.includes(parentId))
+            .forEach((shortcut) => {
+                if (shortcut.id) candidateIds.add(shortcut.id);
+            });
+    }
+
+    if (!candidateIds.size) {
+        console.log(
+            `[Skróty pism] W folderze ${parentId} nie ma skrótu do pisma ${letter.id} — nie ma czego kasować.`
+        );
+        return;
+    }
+
+    for (const shortcutId of candidateIds) {
+        let metaData;
+        try {
+            metaData = await ToolsGd.getShortcutMetaData(auth, shortcutId);
+        } catch (err) {
+            console.error(
+                `[Skróty pism] Nie udało się odczytać skrótu ${shortcutId} — NIE kasuję:`,
+                err
+            );
+            continue;
+        }
+
+        const isShortcut =
+            metaData.mimeType === 'application/vnd.google-apps.shortcut';
+        const pointsAtThisLetter = !!(
+            metaData.shortcutDetails?.targetId &&
+            targetIds.includes(metaData.shortcutDetails.targetId)
+        );
+        const liesInThisFolder = !!metaData.parents?.includes(parentId);
+
+        if (!isShortcut || !pointsAtThisLetter || !liesInThisFolder) {
+            console.error(
+                `[Skróty pism] Plik ${shortcutId} nie spełnia warunków kasowania — NIE kasuję. ` +
+                    `mimeType=${metaData.mimeType}, ` +
+                    `cel=${metaData.shortcutDetails?.targetId}, ` +
+                    `oczekiwany cel z {${targetIds.join(', ')}}, ` +
+                    `rodzice=${metaData.parents?.join(', ')}, oczekiwany ${parentId}.`
+            );
+            continue;
+        }
+
+        await ToolsGd.trashFile(auth, shortcutId);
+        console.log(
+            `[Skróty pism] Skrót ${shortcutId} („${metaData.name}") do pisma ${letter.id} przeniesiony do kosza z folderu ${parentId}.`
+        );
+    }
+}
+
+/**
  * Doprowadza nazwy istniejących skrótów do bieżących danych pisma.
  *
  * Nazwa skrótu jest na Dysku niezależna od nazwy celu — zmiana nazwy dokumentu

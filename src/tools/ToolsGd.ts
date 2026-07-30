@@ -464,6 +464,22 @@ export default class ToolsGd {
         }
     }
 
+    /**
+     * Odczytuje metadane skrótu razem z jego celem (`shortcutDetails.targetId`).
+     *
+     * Osobna metoda, bo `getFileOrFolderMetaDataById` nie prosi o `shortcutDetails`
+     * ani o `trashed`, a bez celu nie wolno skrótu skasować — kasowanie skrótu,
+     * który wskazuje gdzie indziej, jest trudne do odkręcenia.
+     */
+    static async getShortcutMetaData(auth: OAuth2Client, id: string) {
+        const drive = google.drive({ version: 'v3', auth });
+        const fileSchema = await drive.files.get({
+            fileId: id,
+            fields: 'id, name, mimeType, parents, trashed, shortcutDetails',
+        });
+        return fileSchema.data;
+    }
+
     /** Znajduje wszystkie skróty wskazujące na dany plik/folder (niezależnie od ich lokalizacji) */
     static async findShortcutsByTarget(auth: OAuth2Client, targetId: string) {
         const drive = google.drive({ version: 'v3', auth });

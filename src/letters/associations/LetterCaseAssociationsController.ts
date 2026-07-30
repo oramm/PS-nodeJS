@@ -1,5 +1,10 @@
 import BaseController from '../../controllers/BaseController';
-import { ContractData, OfferData, ProjectData } from '../../types/types';
+import {
+    CaseData,
+    ContractData,
+    OfferData,
+    ProjectData,
+} from '../../types/types';
 import LetterCase from './LetterCase';
 import LetterCaseRepository, {
     LetterCaseSearchParams as RepoSearchParams,
@@ -12,6 +17,7 @@ export type LetterCaseSearchParams = {
     _contract?: ContractData;
     offerId?: number;
     _offer?: OfferData;
+    letterId?: number;
 };
 
 /**
@@ -72,8 +78,21 @@ export default class LetterCaseAssociationsController extends BaseController<
             projectId: searchParams._project?.ourId || searchParams.projectId,
             contractId: searchParams._contract?.id || searchParams.contractId,
             offerId: searchParams._offer?.id || searchParams.offerId,
+            letterId: searchParams.letterId,
         };
 
         return await instance.repository.find(repoSearchParams);
+    }
+
+    /**
+     * Sprawy powiązane z pismem — stan zapisany w bazie, nie z payloadu klienta.
+     *
+     * Używane przy uzgadnianiu skrótów po edycji: sprawa zdejmowana z powiązań
+     * nie ma prawa pojawić się w payloadzie, więc jej folder można poznać
+     * wyłącznie z bazy.
+     */
+    static async findCasesByLetterId(letterId: number): Promise<CaseData[]> {
+        const associations = await this.find({ letterId });
+        return associations.map((association) => association._case as CaseData);
     }
 }

@@ -11,6 +11,7 @@ export type LetterCaseSearchParams = {
     projectId?: string;
     contractId?: number;
     offerId?: number;
+    letterId?: number;
 };
 
 export default class LetterCaseRepository extends BaseRepository<LetterCase> {
@@ -174,6 +175,14 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
         if (searchParams.offerId) {
             whereClauses.push(
                 mysql.format('Offers.Id = ?', [searchParams.offerId])
+            );
+        }
+
+        if (searchParams.letterId) {
+            whereClauses.push(
+                mysql.format('Letters_Cases.LetterId = ?', [
+                    searchParams.letterId,
+                ])
             );
         }
 
