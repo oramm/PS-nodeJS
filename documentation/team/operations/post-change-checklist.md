@@ -63,6 +63,40 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-07-31 - IncomingMails (koperta pisma przychodzącego) + Letters.IncomingMailId
+
+### Scope
+
+- New table `IncomingMails`: an inbox message stored as a record (`MessageId`, `Account`, `Subject`, `Body`, `From`, `To`, `Date`, `EditorId`).
+- New nullable column `Letters.IncomingMailId` with FK to `IncomingMails.Id` — one mail can carry several letters, a mail without a letter is a valid row.
+- New route `POST /incomingMail`: registers the envelope or returns the existing one (`isNew: false`).
+
+### Impact
+
+- DB: `IncomingMails` created; `Letters` gained `IncomingMailId` + constraint `Letters_IncomingMail_ibfk`.
+- ENV: none.
+- Deploy: apply `src/letters/migrations/002_create_incoming_mails.sql` before deploying code that writes `IncomingMailId`.
+
+### Required Actions
+
+- Applied on local `envikons_myEnvi` on 2026-07-31. **NOT applied on kylos** — production rollout is a separate, owner-gated step.
+- Run `yarn jest src/letters` and `npx tsc --noEmit`.
+
+### Verification
+
+- Pre-check: `IncomingMails` absent, `Letters.IncomingMailId` absent.
+- Post-check by schema read (`SHOW CREATE TABLE`, `information_schema.KEY_COLUMN_USAGE`): table present with `UNIQUE (MessageId)`, column present, FK present. A green `migrate verify` is not accepted as evidence here.
+- Runtime: registering the same message twice creates one envelope and one letter; the second pass returns `isNew: false` and is reported as a skip.
+
+### Rollback
+
+- `ALTER TABLE Letters DROP FOREIGN KEY Letters_IncomingMail_ibfk; ALTER TABLE Letters DROP COLUMN IncomingMailId; DROP TABLE IncomingMails;`
+
+### Links
+
+- `src/letters/migrations/002_create_incoming_mails.sql`
+- `src/letters/incomingMails/`
+
 ## 2026-07-23 - CaseTypeFolders cache (GD link for shared case-type folders)
 
 ### Scope

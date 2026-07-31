@@ -682,6 +682,7 @@ require('./financialAidProgrammes/Needs/NeedsRouters');
 require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
+require('./letters/incomingMails/IncomingMailsRouters');
 require('./gdFiles/GdFilesRouters');
 require('./ai/AiRouters');
 

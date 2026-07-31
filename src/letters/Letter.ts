@@ -46,6 +46,9 @@ export default abstract class Letter
     responseIKNumber?: string | null;
     /** czy pismo jest w rejestrze „Dokumentacja zatwierdzona” (kolumna AddedToApprovedDocumentation) */
     addedToApprovedDocumentation?: boolean;
+    /** koperta: mail przychodzący, z którego pismo zarejestrowano (Letters.IncomingMailId).
+     *  Jeden mail bywa kopertą kilku pism, dlatego klucz obcy stoi po stronie pisma. */
+    incomingMailId?: number;
     /** czy pismo założył agent — liczone ze zdarzenia utworzenia, nie z autora wiersza
      *  (autorstwo przechodzi na człowieka przy zatwierdzeniu) ani z ostatniego zdarzenia */
     _isCreatedByAgent?: boolean;
@@ -103,6 +106,10 @@ export default abstract class Letter
         this.responseIKNumber = initParamObject.responseIKNumber;
         this.addedToApprovedDocumentation =
             !!initParamObject.addedToApprovedDocumentation;
+        // undefined zostaje undefined: ToolsDb pomija takie pola przy INSERT i UPDATE,
+        // więc pismo wychodzące ani edycja bez koperty nie nadpisze kolumny
+        if (initParamObject.incomingMailId)
+            this.incomingMailId = initParamObject.incomingMailId;
         this._isCreatedByAgent = !!initParamObject._isCreatedByAgent;
     }
 

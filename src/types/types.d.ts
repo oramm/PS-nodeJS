@@ -329,6 +329,9 @@ export interface LetterData extends GenericDocumentData {
     responseDueDate?: string;
     responseIKNumber?: string | null;
     addedToApprovedDocumentation?: boolean;
+    /** Koperta: mail przychodzący, z którego pismo zarejestrowano (Letters.IncomingMailId).
+     *  Jeden mail może być kopertą kilku pism. Puste przy pismach wychodzących. */
+    incomingMailId?: number | null;
     /** Czy pismo założył agent. Liczone ze zdarzenia utworzenia (CREATED), nie z autora
      *  wiersza ani z ostatniego zdarzenia — autorstwo przechodzi na człowieka przy
      *  zatwierdzeniu, a fakt „ten wpis założył agent” ma zostać na zawsze. */
@@ -718,6 +721,24 @@ export interface MailData extends RepositoryDataItem {
     _lastUpdated?: string;
     editorId?: number | null;
     _editor?: PersonData;
+}
+
+/** Koperta pisma przychodzącego. Nie dziedziczy po MailData, bo tożsamością wiadomości jest
+ *  RFC Message-ID, a nie UID IMAP — UID jest per-folder i zmienia się przy przeniesieniu. */
+export interface IncomingMailData extends RepositoryDataItem {
+    messageId: string;
+    account: string;
+    subject: string;
+    body: string;
+    from: string;
+    to: string;
+    /** 'YYYY-MM-DD HH:MM:SS' w UTC; model normalizuje wejście do tego kształtu */
+    date: string;
+    editorId?: number | null;
+    _editor?: PersonData;
+    _lastUpdated?: string;
+    /** liczba pism zarejestrowanych z tej koperty; 0 = mail „do decyzji” (G-PRZ-5) */
+    _lettersCount?: number;
 }
 
 export interface OfferInvitationMailToProcessData extends MailData {
