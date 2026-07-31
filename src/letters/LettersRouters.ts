@@ -213,6 +213,12 @@ app.put(
         try {
             if (!req.session.userData)
                 throw new Error('Użytkownik niezalogowany');
+            // Id z adresu jest rozstrzygający; niezgodność w ciele żądania to błąd,
+            // nie cicha korekta.
+            req.parsedBody.id = resolveRouteLetterId(
+                req.params.id,
+                req.parsedBody.id,
+            );
             const item = LettersController.createProperLetter(req.parsedBody);
             if (
                 !req.parsedBody._blobEnviObjects ||
@@ -248,6 +254,9 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
 app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        // Id z adresu jest rozstrzygający; niezgodność w ciele żądania to błąd,
+        // nie cicha korekta.
+        req.body.id = resolveRouteLetterId(req.params.id, req.body.id);
         const item = LettersController.createProperLetter(req.body);
         if (!(item instanceof OurLetter))
             throw new Error('Błąd przy zatwierdzaniu pisma');
@@ -271,6 +280,9 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
 app.delete('/letter/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        // Id z adresu jest rozstrzygający. Ta trasa kasuje pismo razem z jego folderem
+        // na Dysku, a cel brała wyłącznie z ciała żądania — adres był dekoracją.
+        req.body.id = resolveRouteLetterId(req.params.id, req.body.id);
         const item = LettersController.createProperLetter(req.body);
 
         // 1. Usuń z Google Drive

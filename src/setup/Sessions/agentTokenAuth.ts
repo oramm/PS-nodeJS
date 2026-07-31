@@ -37,8 +37,10 @@ import { SystemRoleName, UserData } from '../../types/sessionTypes';
 
 const AGENT_TOKEN_HEADER = 'x-envi-agent-token';
 
-/** Technical account created for G-LIS-1. Stable across environments, unlike Persons.Id. */
-const AGENT_SYSTEM_EMAIL = 'agent@ps.envi.com.pl';
+/** Technical account created for G-LIS-1. Stable across environments, unlike Persons.Id.
+ *  Exported so that policy layers can recognise an agent-authenticated request without
+ *  importing the application layer or hardcoding the address a second time. */
+export const AGENT_SYSTEM_EMAIL = 'agent@ps.envi.com.pl';
 
 /** Display name used in session logs and bug-event user context. */
 const AGENT_USER_NAME = 'Agent automatyczny';

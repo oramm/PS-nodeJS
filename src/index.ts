@@ -17,6 +17,7 @@ import ToolsGapi from './setup/Sessions/ToolsGapi';
 import agentTokenAuth, {
     reportAgentTokenConfig,
 } from './setup/Sessions/agentTokenAuth';
+import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
@@ -503,6 +504,11 @@ app.use(
 // LIS-2 — headless agent entry. Must sit after session() and before the routes, so the
 // agent reaches the same controllers as the UI. Inactive without AGENT_API_TOKEN.
 app.use(agentTokenAuth);
+
+// LIS-5 — the agent creates and edits, it never destroys. Must sit directly after the layer
+// that grants the agent identity and before every route, because the identity is what this
+// policy keys on. A logged-in person is not affected.
+app.use(denyDestructiveForAgent);
 
 app.use((req, res, next) => {
     console.log(
