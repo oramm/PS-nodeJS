@@ -653,6 +653,7 @@ require('./mileage/MileageRouters');
 require('./siteVisits/SiteVisitRouters');
 
 require('./contracts/ContractsRouters');
+require('./contracts/caseListSheet/CaseListSheetRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
 require('./contracts/fidmanSync/FidmanSyncRouters');
 require('./meetings/MeetingsRouters');
