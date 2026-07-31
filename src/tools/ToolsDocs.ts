@@ -346,6 +346,52 @@ export default class ToolsDocs {
         return indexes;
     }
 
+    /** Jedyny zakres nazwany, w którym treść może nieść nagłówki. Pozostałe zakresy
+     *  (adres, opis, numer) to pojedyncze wartości i `#` w nich jest zwykłym znakiem. */
+    private static readonly HEADING_AWARE_RANGE = 'contents';
+
+    /**
+     * Rozdziela treść na tekst do wstawienia i listę akapitów, które mają dostać styl
+     * nagłówka dokumentu.
+     *
+     * Linia zaczynająca się od `#`, `##` albo `###` i spacji jest nagłówkiem odpowiednio
+     * pierwszego, drugiego i trzeciego poziomu. Prefiks znika z tekstu, zostaje sam tytuł.
+     * Zapis jest ten sam, którym pisane są robocze wersje pism w plikach `.md`, więc treść
+     * można wkleić bez przepisywania.
+     *
+     * Styl bierze się z **szablonu pisma**, a nie z tego kodu: `namedStyleType` wskazuje
+     * `HEADING_1`…`HEADING_3` zdefiniowane w dokumencie firmowym. Zmiana wyglądu nagłówków
+     * jest więc zmianą szablonu, nie kodu.
+     *
+     * Przesunięcia liczone są względem początku wstawianego tekstu.
+     */
+    static splitContentsHeadings(text: string): {
+        text: string;
+        headings: { start: number; end: number; level: number }[];
+    } {
+        const HEADING_LINE = /^(#{1,3})\s+(.*)$/;
+        const lines: string[] = [];
+        const headings: { start: number; end: number; level: number }[] = [];
+        let offset = 0;
+
+        for (const line of text.split('\n')) {
+            const match = HEADING_LINE.exec(line);
+            const content = match ? match[2].trim() : line;
+            // Sam prefiks bez tytułu nie jest nagłówkiem — zakres o zerowej długości
+            // niczego by nie ostylował, a wysłalibyśmy pusty request.
+            if (match && content.length > 0)
+                headings.push({
+                    start: offset,
+                    end: offset + content.length,
+                    level: match[1].length,
+                });
+            lines.push(content);
+            offset += content.length + 1; // +1 za znak nowej linii
+        }
+
+        return { text: lines.join('\n'), headings };
+    }
+
     private static makeTextRunUpdateRequests(
         requestIndexes: {
             namedRangeStartIndex: number;
@@ -353,10 +399,16 @@ export default class ToolsDocs {
             deleteStartIndex: number;
             deleteEndIndex: number;
         },
-        newText: string,
+        rawText: string,
         rangeName: string,
         style: docs_v1.Schema$TextStyle | undefined,
     ) {
+        const parsed =
+            rangeName === this.HEADING_AWARE_RANGE
+                ? this.splitContentsHeadings(rawText)
+                : { text: rawText, headings: [] };
+        const newText = parsed.text;
+
         const requests: docs_v1.Schema$Request[] = [];
         requests.push({
             deleteContentRange: {
@@ -403,6 +455,36 @@ export default class ToolsDocs {
                                 newText.length,
                         },
                         textStyle: style,
+                        fields: '*',
+                    },
+                });
+            }
+
+            // Nagłówki idą NA KOŃCU, bo `updateTextStyle` wyżej nakłada styl tagu na całą
+            // wstawioną treść z `fields: '*'`. Kolejność jest tu regułą, nie porządkiem:
+            // odwrotna zamazałaby nagłówki stylem akapitu zwykłego.
+            for (const heading of parsed.headings) {
+                const range = {
+                    startIndex:
+                        requestIndexes.namedRangeStartIndex + heading.start,
+                    endIndex: requestIndexes.namedRangeStartIndex + heading.end,
+                };
+                requests.push({
+                    updateParagraphStyle: {
+                        range,
+                        paragraphStyle: {
+                            namedStyleType: `HEADING_${heading.level}`,
+                        },
+                        fields: 'namedStyleType',
+                    },
+                });
+                // Zdjęcie stylu tekstu nałożonego wyżej. Bez tego font, rozmiar i kolor
+                // z tagu wygrywają z definicją nagłówka, bo styl na poziomie fragmentu
+                // ma pierwszeństwo nad stylem nazwanym akapitu.
+                requests.push({
+                    updateTextStyle: {
+                        range,
+                        textStyle: {},
                         fields: '*',
                     },
                 });
