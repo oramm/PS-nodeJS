@@ -8,6 +8,7 @@ import { docs_v1 } from 'googleapis';
 import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
+import resolveRouteLetterId from './resolveRouteLetterId';
 import multer from 'multer';
 
 // Middleware do parsowania plików
@@ -178,10 +179,12 @@ app.put(
                 }
             }
 
-            // Upewnij się że id jest ustawione (z URL jeśli brakuje w body)
-            if (!initParamsFromClient.id && req.params.id) {
-                initParamsFromClient.id = parseInt(req.params.id, 10);
-            }
+            // Id z adresu jest rozstrzygający; niezgodność w ciele żądania to błąd,
+            // nie cicha korekta.
+            initParamsFromClient.id = resolveRouteLetterId(
+                req.params.id,
+                initParamsFromClient.id
+            );
 
             const _fieldsToUpdate = initParamsFromClient._fieldsToUpdate;
 
