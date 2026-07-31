@@ -36,7 +36,7 @@ export default class Setup {
     };
 
     static Gd = {
-        rootFolderId: '1C_wMgQJtzsFmgsmHp7Dr_F1VJx4v1mjo',
+        rootFolderId: '0AFGVqb32NbAaUk9PVA',//1C_wMgQJtzsFmgsmHp7Dr_F1VJx4v1mjo
         meetingProtocoTemlateId: '1B5D2ZUkPgNft0-0JZCtkxSk8eAZa91DnwQY8Bbln9Bo',
         offersRootFolderId: '0B2pP2WpBR244WDgzT0RHcmFCMW8',
         ourOfferTemplateGdId: '173TvhbPAgRD_08Ey5cq4PP8RxOmCh4vO-UjjzB5dGro',

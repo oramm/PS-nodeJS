@@ -65,6 +65,7 @@ export default class ScrumboardReportController extends BaseController<
                 parents: [Setup.ScrumBoard.reportFolderId],
             },
             fields: 'id',
+            supportsAllDrives: true,
         });
         const gdId = created.data.id as string;
 

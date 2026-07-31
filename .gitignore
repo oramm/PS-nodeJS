@@ -6,6 +6,20 @@ build/
 .env.local
 Tests/
 
+# Tokeny OAuth zbierane do migracji GD (poświadczenia - NIE commitować!)
+tokens.json
+
+# Artefakty operacyjne migracji Google Drive (raporty, manifesty, snapshoty, logi)
+gd-out/
+gd-*.csv
+gd-*.json
+gd-*.jsonl
+gd-*.txt
+gd-*.log
+snap-*.jsonl
+bak-*.jsonl
+*.log
+
 # Test coverage (generowane lokalnie - NIE commitować!)
 coverage/
 *.lcov
