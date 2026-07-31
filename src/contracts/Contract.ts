@@ -13,6 +13,7 @@ import {
     ContractRangeData,
     EntityData,
     ProjectData,
+    SettlementMethod,
 } from '../types/types';
 import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
@@ -52,6 +53,24 @@ export default abstract class Contract
     _contractRangesNames?: string[] = [];
     lettersShortcutsInSubfolder: boolean;
     approvedDocumentation: boolean;
+    settlementMethod?: SettlementMethod | null;
+
+    /** Walidacja na wejściu, a nie w bazie: produkcja (MariaDB) ma PUSTY `sql_mode`, więc
+     *  niedozwolona wartość ENUM nie wywala zapytania, tylko wchodzi jako pusty string.
+     *  `undefined` zwracamy świadomie — ToolsDb pomija takie pola, czyli edycja kontraktu,
+     *  która nie niesie metody rozliczenia, nie kasuje wpisanej wcześniej wartości. */
+    private static parseSettlementMethod(
+        value: unknown
+    ): SettlementMethod | null | undefined {
+        if (value === undefined) return undefined;
+        if (value === null || value === '') return null;
+        if (value === 'LUMP_SUM' || value === 'MEASUREMENT') return value;
+        throw new Error(
+            `Nieznana metoda rozliczenia: ${JSON.stringify(
+                value
+            )}. Dozwolone: LUMP_SUM, MEASUREMENT albo brak wartości.`
+        );
+    }
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super({ ...initParamObject, _dbTableName: 'Contracts' });
@@ -156,6 +175,9 @@ export default abstract class Contract
         this.lettersShortcutsInSubfolder =
             !!initParamObject.lettersShortcutsInSubfolder;
         this.approvedDocumentation = !!initParamObject.approvedDocumentation;
+        this.settlementMethod = Contract.parseSettlementMethod(
+            initParamObject.settlementMethod
+        );
         this._lastUpdated = initParamObject._lastUpdated;
     }
 

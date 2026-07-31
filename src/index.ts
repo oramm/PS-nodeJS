@@ -341,6 +341,8 @@ const corsOptions = {
     origin: [
         'http://localhost', // Port 80 (domyślny)
         'http://localhost:9000', // Apache - MUSISZ dodać jawnie
+        'http://localhost:9010', // front dev na porcie zapasowym, gdy 9000 jest zajęty
+                                 // przez równoległą sesję (przegląd wizualny UI lokalnie)
         'https://erp-envi.herokuapp.com',
         'https://erp.envi.com.pl',
         'https://ps.envi.com.pl',

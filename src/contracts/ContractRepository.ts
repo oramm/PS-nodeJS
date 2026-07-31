@@ -8,6 +8,7 @@ import {
     ContractRangeData,
     ContractRangePerContractData,
     ContractTypeData,
+    SettlementMethod,
 } from '../types/types';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
@@ -270,6 +271,7 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.MaterialCardsGdFolderId,
                     mainContracts.LettersShortcutsInSubfolder,
                     mainContracts.ApprovedDocumentation,
+                    mainContracts.SettlementMethod,
                     mainContracts.LastUpdated,
                     OurContractsData.OurId,
                     OurContractsData.ManagerId,
@@ -377,6 +379,36 @@ export default class ContractRepository extends BaseRepository<
         return [
             `CASE WHEN ${startsWithText} THEN 0 WHEN ${containsAllWords} THEN 1 ELSE 2 END`,
         ];
+    }
+
+    /**
+     * Warunek filtra „tylko nietypowe rozliczenie" (RZL-5). Odpowiada na pytanie
+     * z kanonu plakietki typu kontraktu (40_wiki/firma/technologie/
+     * plakietka-typu-kontraktu-akcent, sekcja „Uzupełnienie po stronie listy"):
+     * akcent na plakietce mówi „czy TA umowa jest nietypowa", ten filtr — „pokaż
+     * WSZYSTKIE nietypowe". Reguła identyczna z kontraktem danych (RZL plan):
+     * Czerwony + LUMP_SUM albo Żółty + MEASUREMENT. Typy spoza osi FIDIC — nigdy.
+     *
+     * ŚWIADOMA DECYZJA: dopasowanie po NAZWIE typu (pierwsze słowo, join
+     * ContractTypes już istnieje w find()), NIE po `TypeId`. `ContractTypeBadge`
+     * (ENVI.ProjectSite/src/View/Resultsets/CommonComponents.tsx) też wyprowadza
+     * kolor z pierwszego słowa nazwy typu, a nie z `TypeId` — kodując ten warunek
+     * na `TypeId IN (3,4)` dokładalibyśmy drugie miejsce, które może się z badge'em
+     * po cichu rozjechać przy każdej zmianie/dodaniu wiersza słownika `ContractTypes`
+     * o tej samej barwie FIDIC. To jest dokładnie precedens kruchości, który w tym
+     * repo już istnieje jako `APPROVED_DOCS_CONTRACT_TYPE_IDS = [3, 8]`
+     * (ContractModalBody.tsx) i który plan RZL wskazuje jako błąd do niepowtarzania
+     * (ryzyko R4). NIE „naprawiać" tego z powrotem na `TypeId` bez nowej decyzji.
+     */
+    private makeAtypicalSettlementCondition(): string {
+        return mysql.format(
+            `(
+                (SUBSTRING_INDEX(ContractTypes.Name, ' ', 1) = ? AND mainContracts.SettlementMethod = ?)
+                OR
+                (SUBSTRING_INDEX(ContractTypes.Name, ' ', 1) = ? AND mainContracts.SettlementMethod = ?)
+            )`,
+            ['Czerwony', 'LUMP_SUM', 'Żółty', 'MEASUREMENT'],
+        );
     }
 
     private makeLimit(limit: number | undefined): string {
@@ -531,6 +563,10 @@ export default class ContractRepository extends BaseRepository<
 
         if (searchParams.onlyOurs) {
             conditions.push('OurContractsData.OurId IS NOT NULL');
+        }
+
+        if (searchParams.onlyAtypicalSettlement) {
+            conditions.push(this.makeAtypicalSettlementCondition());
         }
 
         if (isArchived) {
@@ -701,6 +737,9 @@ export default class ContractRepository extends BaseRepository<
             materialCardsGdFolderId: row.MaterialCardsGdFolderId,
             lettersShortcutsInSubfolder: !!row.LettersShortcutsInSubfolder,
             approvedDocumentation: !!row.ApprovedDocumentation,
+            // `|| null`, a nie `?? null`: przy pustym sql_mode (produkcja) niedozwolona wartość
+            // ENUM wchodzi do bazy jako pusty string, którego `IS NULL` nie złapie. Zmierzone.
+            settlementMethod: row.SettlementMethod || null,
             ourId: row.OurId,
             invoiceBuyerEntityId: row.InvoiceBuyerEntityId ?? undefined,
             _invoiceBuyer: this.mapInvoiceBuyerToModel(row),
@@ -867,6 +906,9 @@ export type ContractSearchParams = {
     _contractType?: ContractType;
     typesToInclude?: 'our' | 'other' | 'all';
     onlyOurs?: boolean; //@deprecated
+    /** RZL-5: tylko kontrakty z akcentem odstępstwa (Czerwony+LUMP_SUM albo
+     * Żółty+MEASUREMENT) — zob. makeAtypicalSettlementCondition(). */
+    onlyAtypicalSettlement?: boolean;
     isArchived?: boolean;
     statuses?: string | string[];
     onlyKeyData?: boolean;
@@ -903,6 +945,7 @@ type ContractRow = {
     MaterialCardsGdFolderId: string | null;
     LettersShortcutsInSubfolder: number | null;
     ApprovedDocumentation: number | null;
+    SettlementMethod: SettlementMethod | null;
     OurId: number | null;
     ManagerId: number | null;
     ManagerName: string | null;

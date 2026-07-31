@@ -29,6 +29,11 @@ export interface ProjectData extends RepositoryDataItem {
     _employers?: EntityData[];
 }
 
+/** Metoda rozliczenia robót — oś niezależna od trybu FIDIC w `_type`.
+ *  Dziedzina ma dwie wartości; kontrakt z pozycjami obu rodzajów wpisujemy wg przeważającej.
+ *  Brak wartości (`null`) znaczy „jeszcze nie wpisano", a nie trzeci stan domenowy. */
+export type SettlementMethod = 'LUMP_SUM' | 'MEASUREMENT';
+
 export interface ContractData extends RepositoryDataItem {
     name: string;
     projectOurId?: string;
@@ -58,6 +63,7 @@ export interface ContractData extends RepositoryDataItem {
     _contractRangesNames?: string[];
     lettersShortcutsInSubfolder?: boolean;
     approvedDocumentation?: boolean;
+    settlementMethod?: SettlementMethod | null;
 }
 
 export interface OurContractData extends ContractData {
