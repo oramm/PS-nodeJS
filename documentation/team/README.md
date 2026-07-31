@@ -2,6 +2,9 @@
 
 `documentation/team/*` is the canonical operational documentation for this repository.
 
+Code and database are the source of truth for how the system works. These docs cover rules,
+decisions, procedures and rollout facts that are not visible in code.
+
 ## How to use
 
 1. Start with `documentation/team/onboarding/*` for setup, environment, and access.
@@ -13,42 +16,20 @@
 
 ## Structure
 
-- `documentation/team/architecture/clean-architecture.md`
-- `documentation/team/architecture/clean-architecture-details.md`
-- `documentation/team/architecture/ai-decision-trees.md`
-- `documentation/team/architecture/testing-per-layer.md`
-- `documentation/team/architecture/refactoring-audit.md`
-- `documentation/team/architecture/auth-migration.md`
-- `documentation/team/architecture/system-map.md`
-- `documentation/team/architecture/system-context.md`
-- `documentation/team/architecture/conventions/coding-server.md`
-- `documentation/team/architecture/conventions/coding-client.md`
-- `documentation/team/onboarding/local-setup.md`
-- `documentation/team/onboarding/environment.md`
-- `documentation/team/onboarding/access-and-secrets.md`
-- `documentation/team/runbooks/dev-login.md`
-- `documentation/team/runbooks/testing.md`
-- `documentation/team/runbooks/public-profile-submission-link-recovery.md`
-- `documentation/team/operations/db-changes.md`
-- `documentation/team/operations/deployment-heroku.md`
-- `documentation/team/operations/post-change-checklist.md`
-- `documentation/team/operations/docs-map.md`
-- `documentation/team/operations/<initiative>/plan.md` (temporary, active tasks only)
-- `documentation/team/operations/<initiative>/progress.md` (temporary, active tasks only)
-- `documentation/team/operations/<initiative>/activity-log.md` (temporary, active tasks only)
+- `architecture/clean-architecture.md` — layer rules (target vs legacy)
+- `architecture/testing-per-layer.md` — what to mock per layer
+- `architecture/system-context.md` — C4 context diagram
+- `onboarding/` — local setup, environment, access and secrets
+- `runbooks/` — testing, dev-login, local dev orchestration, DB migration execution, bug backlog, public profile link recovery
+- `operations/` — db-changes, deployment-heroku, post-change-checklist (+ archive), db-migration-memory
 
-## Initiative ownership
+## Initiative docs
 
-Operational initiatives are classified before documents are created. Canonical ownership rules live in `documentation/team/operations/docs-map.md` (section `Model cross-repo`).
+Cross-repo and deploy/db/env work is backend-owned; frontend-only work stays in `ENVI.ProjectSite`.
 
-Short rule: cross-repo and deploy/db/env work is backend-owned; frontend-only work stays in `ENVI.ProjectSite`. For stable modules, code is the implementation documentation. Repository docs describe rules, decisions, rollout, evidence, and knowledge that is not obvious from code.
-
-Closed tasks policy:
-
-1. Update canonical docs in `documentation/team/*` to the latest system state.
-2. Add/maintain operational rollout facts in `documentation/team/operations/post-change-checklist.md` when DB/env/deploy is affected.
-   Keep the active file compact and move older entries to `documentation/team/operations/post-change-checklist-archive/`.
-3. Remove temporary `plan/progress/activity-log` for closed tasks or compress them into one short final-state note in canonical docs (history remains in git).
+An open initiative may keep `plan.md` / `progress.md` / `activity-log.md` under
+`documentation/team/operations/<initiative>/`. These are temporary: when the task closes,
+fold anything durable into the canonical docs above and delete them (history stays in git).
 
 ## Change policy
 

@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 PS-NodeJS: Express.js + TypeScript backend, Clean Architecture. MariaDB, Google Drive/Docs, MongoDB (sessions).
+Frontend to osobne repo: `C:\Apache24\htdocs\ENVI.ProjectSite`.
 
 ## Development Commands
 
@@ -33,6 +34,13 @@ Full rules: `documentation/team/architecture/clean-architecture.md`
 - ❌ `getList()` → use `find()`
 - ❌ `new Model(req.body)` in Router → use `Controller.addFromDto(dto)`
 - ❌ `instance.create()`, `instance.edit()`, `instance.delete()` → use `instance.repository.*InDb()`
+- ❌ `ToolsGapi.gapiReguestHandler` in new Routers → use `BaseController.withAuth()` (legacy calls tolerated where they already exist)
+
+## Database conventions (ToolsDb)
+
+- Column names start with an uppercase letter; `Id` is auto-increment.
+- Object fields prefixed with `_` are skipped in SQL.
+- Schema changes go in stages: migration → transition period → removal of the old shape. Keep backward compatibility until the migration is finished.
 
 ## Environment & Database (Critical)
 
@@ -53,62 +61,15 @@ Naming: `makeAndConditions(searchParams)`, `{Entity}Validator`, `{Entity}TypeRes
 Tests in `__tests__/` per module. Mock DB/APIs/Controllers, never mock business logic.
 Full guide: `documentation/team/runbooks/testing.md`
 
-## Canonical Docs (read on demand, not by default)
+## Docs (read on demand, not by default)
 
-**Architecture** (`documentation/team/architecture/`):
+Kod i baza sa zrodlem prawdy o tym, jak system dziala. Dokumentacja opisuje reguly, decyzje
+i procedury operacyjne, ktorych z kodu nie widac.
 
-- `clean-architecture.md` — rules (MUST READ for any code task)
-- `ai-decision-trees.md` — decision trees for AI
-- `clean-architecture-details.md` — detailed examples
-- `testing-per-layer.md` — testing per layer
-- `refactoring-audit.md` — post-refactor checklist
-- `auth-migration.md` — OAuth2 withAuth migration
-- `conventions/coding-server.md` — server conventions
-- `conventions/coding-client.md` — client conventions
-- `system-map.md` — server-client system map
-
-**Operational** (`documentation/team/`):
-
-- `README.md` — doc structure and change policy
-- `onboarding/environment.md` — environment setup
-- `runbooks/testing.md` — testing framework
-- `operations/db-changes.md` — DB changes workflow
-- `operations/post-change-checklist.md` — post-change checks
-
-## Factory: Review Process
-
-Mapa źródeł prawdy: `documentation/team/operations/docs-map.md` — sprawdź ZANIM szukasz informacji o projekcie.
-
-**ŻELAZNA ZASADA: Nie kończ zadania bez review.**
-
-Po napisaniu lub zmodyfikowaniu kodu źródłowego:
-
-1. Uruchom SUBAGENTA z promptem z `factory/prompts/reviewer.md`
-2. Przekaż mu TYLKO zmienione pliki (git diff)
-3. Subagent pracuje w IZOLOWANYM kontekście (fresh eyes)
-4. Czekaj na VERDICT:
-    - APPROVE → kontynuuj (commit / następny krok)
-    - REQUEST_CHANGES →
-      a) Napraw KAŻDY CRITICAL i HIGH
-      b) Rozważ MEDIUM
-      c) Ponów review
-      d) Max 3 rundy → jeśli nadal CHANGES → zapytaj człowieka
-5. WYJĄTKI (można pominąć review):
-    - Zmiany TYLKO w plikach \*.md (dokumentacja)
-    - Zmiany TYLKO w factory/ (meta-narzędzia fabryki)
-
-Commit po review/docs realizuj przez `factory/prompts/committer.md` i dopiero po jawnym `COMMIT_APPROVED` od orchestratora.
-
-## Factory: Cross-Tool Adapter
-
-Gdy pracujesz w trybie Dark Factory, stosuj wspolny adapter procesu:
-
-- `factory/TOOL-ADAPTERS.md` (kanoniczny workflow multi-tool)
-- `factory/adapters/codex.md` (skrot dla Codex)
-- `factory/adapters/claude-code.md` (skrot dla Claude Code)
-- `factory/adapters/copilot-vscode.md` (skrot dla Copilot w VS Code)
-
-Context Gate v1 (Low-Context First):
-
-- Start sesji z: `factory/CONCEPT.md`, `factory/TOOL-ADAPTERS.md`, `factory/prompts/reviewer.md`, `factory/prompts/planner.md`
-- Canonical docs doładowuj selektywnie, nie domyślnie.
+- `documentation/team/architecture/clean-architecture.md` — reguly warstw (MUST READ dla zadan kodowych)
+- `documentation/team/architecture/testing-per-layer.md` — co mockowac na ktorej warstwie
+- `documentation/team/architecture/system-context.md` — diagram kontekstu (C4)
+- `documentation/team/onboarding/environment.md` — srodowiska i `.env`
+- `documentation/team/operations/db-changes.md` — workflow zmian DB
+- `documentation/team/operations/post-change-checklist.md` — wpis po zmianie DB/env/deploy
+- `documentation/team/runbooks/` — testy, dev-login, migracje, lokalny dev, bug backlog

@@ -1,9 +1,10 @@
 # Agent Rules For This Repository
 
-## Canonical docs
+## Docs
 
-1. `documentation/team/*` is the canonical source for operational knowledge.
-2. Tool-specific instructions (for example `.github/instructions/*`, Claude/Copilot configs) must map to canonical docs and not duplicate long operational content.
+1. `documentation/team/*` is the canonical operational documentation (architecture rules, onboarding, runbooks, operations).
+2. Code and database are the source of truth for how the system works. Do not write docs that restate code.
+3. Tool-specific files (`CLAUDE.md`, `.github/instructions/*`, `.claude/skills/*`) stay thin and link to canonical docs.
 
 ## Mandatory updates for DB/env/deploy changes
 
@@ -16,6 +17,7 @@
 1. Do not create new operational `.md` files in root.
 2. Add new runbooks under `documentation/team/runbooks/*`.
 3. Add onboarding or operations docs under `documentation/team/onboarding/*` and `documentation/team/operations/*`.
+4. Temporary plan/progress/activity-log files are allowed only while a task is open; delete them when it closes (history stays in git).
 
 ## Package manager rule
 

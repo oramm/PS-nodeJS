@@ -52,7 +52,7 @@ async function main() {
     writeFileSync(outPath, JSON.stringify(payload, null, 2), 'utf8');
 
     console.log(`[bugfix:run] Context file generated: ${outPath}`);
-    console.log('[bugfix:run] Next step: run local Codex/Claude session with factory/prompts/bug-fix-loop.md and this context file.');
+    console.log('[bugfix:run] Next step: run a local Codex/Claude session with this context file (see documentation/team/runbooks/bug-backlog-module.md).');
 }
 
 main().catch((error) => {

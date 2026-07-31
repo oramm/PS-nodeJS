@@ -5,7 +5,8 @@ description: 'Clean Architecture guidelines - PRIORITY: CRITICAL | ENFORCE: STRI
 
 # Wytyczne Architektoniczne - Clean Architecture
 
-> 📖 **Więcej:** [Szczegółowy przewodnik](./clean-architecture-details.md) | [AI Assistant](./ai-decision-trees.md) | [Testowanie](./testing-per-layer.md) | [Audyt Refaktoryzacji](./refactoring-audit.md)
+> 📖 **Więcej:** [Testowanie](./testing-per-layer.md) | [Kontekst systemu](./system-context.md)
+> Implementacje wzorcow czytaj z kodu: `src/controllers/BaseController.ts`, `src/repositories/BaseRepository.ts`.
 
 ## 🎯 Filozofia
 
@@ -313,7 +314,7 @@ Model **MOŻE** mieć operacje na Google Drive / Email, jeśli:
 2. ✅ Model otrzymuje `auth: OAuth2Client` jako **parametr** (nie pobiera sam)
 3. ✅ Model importuje tylko `ToolsGd`/`ToolsEmail` (nie Controllery!)
 
-Zobacz [szczegóły](./clean-architecture-details.md#model-io).
+Przyklad: `OurLetter.exportToPDF(auth)` - operacja na Google Drive, wywolywana przez Controller.
 
 ## 🔧 Wzorce Implementacyjne
 
@@ -465,7 +466,6 @@ async find(params) {
 
 > ⚠️ **DEPRECATED:** Metody `instance.create()`, `instance.edit()`, `instance.delete()` są **@deprecated**.
 > W nowym kodzie używaj bezpośrednio `instance.repository.addInDb()`, `instance.repository.editInDb()`, `instance.repository.deleteFromDb()`.
-> Szczegóły: [auth-migration.md](./auth-migration.md)
 
 ```typescript
 abstract class BaseController<T, R extends BaseRepository<T>> {
@@ -512,9 +512,22 @@ await MyController.add(item, conn, true);
 await MyController.getInstance().create(item); // NIE RÓB TAK!
 ```
 
-### ToolsGapi.gapiReguestHandler()
+### Autoryzacja Google API
 
-**Kiedy używać:** Do operacji wymagających autoryzacji Google API (Drive, Docs, Gmail).
+**Nowy kod:** `BaseController.withAuth()` - Controller dostaje `OAuth2Client` i orkiestruje operacje GD/Docs/Gmail.
+
+```typescript
+static async add(item: T, auth?: OAuth2Client): Promise<T> {
+    return await this.withAuth(async (instance, authClient) => {
+        await item.createFolder(authClient);
+        await instance.repository.addInDb(item);
+        return item;
+    }, auth);
+}
+```
+
+**Legacy: `ToolsGapi.gapiReguestHandler()`** - tolerowane w routerach, ktore juz go uzywaja
+(`grep -rl gapiReguestHandler src`); nie dodawaj go do nowych endpointow. Zasady dla istniejacych wywolan:
 
 ```typescript
 // ✅ POPRAWNIE - funkcja async z OAuth2Client jako pierwszy parametr
@@ -549,10 +562,11 @@ await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
 1. **Oznacz @deprecated** - nie usuwaj od razu
 2. **Stwórz nową implementację** w odpowiedniej warstwie
 3. **Migruj stopniowo** - Router → inne komponenty
-4. **Przeprowadź audyt** - [szczegółowa checklist](./refactoring-audit.md)
-5. **Usuń deprecated** po weryfikacji (grep/search)
+4. **Usuń deprecated** po weryfikacji (grep/search)
 
-> 📋 **Audyt Refaktoryzacji:** Po każdej refaktoryzacji CRUD/Repository/Model użyj [przewodnika audytu](./refactoring-audit.md) aby zweryfikować, że nie utracono funkcjonalności.
+> ⚠️ **Po przeniesieniu mapowania DB → Model** porownaj liste pol `row.` przed i po
+> (`git show <base>:<plik> | grep 'row\.' | sort` vs to samo na nowej wersji).
+> Ciche zgubienie pola albo JOIN-a to najczestszy blad tej refaktoryzacji - traktuj jako blocker.
 
 ## ✅ Checklist Przed Commitem
 
@@ -563,7 +577,3 @@ await ToolsGapi.gapiReguestHandler(req, res, (auth: OAuth2Client) => {
 -   [ ] Validator jest **osobną klasą** (jeśli istnieje)
 -   [ ] Validator NIE jest wewnątrz innych warstw
 -   [ ] Brak cykli zależności (sprawdź: `madge`)
-
----
-
-📚 **Więcej:** [Szczegółowy przewodnik z przykładami](./clean-architecture-details.md)

@@ -13,11 +13,7 @@ Ten plik jest adapterem narzedziowym. Zrodlo prawdy to canonical docs w `documen
 ## Canonical source of truth
 
 - `documentation/team/architecture/clean-architecture.md`
-- `documentation/team/architecture/clean-architecture-details.md`
-- `documentation/team/architecture/ai-decision-trees.md`
 - `documentation/team/architecture/testing-per-layer.md`
-- `documentation/team/architecture/refactoring-audit.md`
-- `documentation/team/architecture/auth-migration.md`
 
 ## Egzekwowanie reguly target vs legacy
 
