@@ -18,6 +18,7 @@ import agentTokenAuth, {
     reportAgentTokenConfig,
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
+import requireSession from './setup/Sessions/requireSession';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
@@ -509,6 +510,11 @@ app.use(agentTokenAuth);
 // that grants the agent identity and before every route, because the identity is what this
 // policy keys on. A logged-in person is not affected.
 app.use(denyDestructiveForAgent);
+
+// Every route needs a session unless it is on the explicit list inside this layer. Must sit
+// before the routes below — including the ones registered inline in this file — because the
+// per-route checks it backs up were missing on some of them.
+app.use(requireSession);
 
 app.use((req, res, next) => {
     console.log(
