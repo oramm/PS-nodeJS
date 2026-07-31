@@ -158,7 +158,8 @@ export default class LettersController extends BaseController<
 
     /**
      * PUBLIC API: Zatwierdza pismo wychodzące
-     * Tworzy event APPROVED i aktualizuje letter._lastEvent
+     * Tworzy event APPROVED, przenosi autorstwo na zatwierdzającego
+     * i aktualizuje letter._lastEvent
      *
      * @param letter - instancja pisma wychodzącego do zatwierdzenia
      * @param userData - dane użytkownika zatwierdzającego
@@ -176,6 +177,24 @@ export default class LettersController extends BaseController<
             _editor,
         });
         await LetterEventsController.addNew(letter._lastEvent);
+
+        // Autorstwo przechodzi na osobę zatwierdzającą — decyzja właściciela z 2026-07-31:
+        // w rejestrze figuruje ten, kto wziął za pismo odpowiedzialność, a bierze ją ten,
+        // kto je zatwierdził. Dotyczy to zwłaszcza pism zarejestrowanych bezgłowo przez
+        // konto agenta: do zatwierdzenia autorem jest agent i tak ma być, bo dopóki nikt
+        // pisma nie zatwierdził, rejestr nie ma powodu wskazywać człowieka.
+        //
+        // `LetterEvents` zostaje nietknięte: historia ma dalej pokazywać, kto pismo
+        // UTWORZYŁ (CREATED) i kto je ZATWIERDZIŁ (APPROVED). Autorstwo to stan bieżący,
+        // historia to zapis faktów.
+        //
+        // Świadomie NIE dotyczy to `LetterRepository.autoApprove()` — ten dopisuje brakujące
+        // zdarzenia APPROVED hurtowo, z zaszytym `125 AS EditorId`, więc jeden przelot
+        // porządkowy przepisałby autorstwo setek pism na jedną osobę. Autorstwo przenosi
+        // wyłącznie zatwierdzenie wykonane przez człowieka tą drogą.
+        letter._editor = _editor;
+        letter.editorId = _editor.id;
+        await LettersController.edit(letter, ['editorId']);
     }
 
     /**
