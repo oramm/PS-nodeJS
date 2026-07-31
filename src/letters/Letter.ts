@@ -46,6 +46,9 @@ export default abstract class Letter
     responseIKNumber?: string | null;
     /** czy pismo jest w rejestrze „Dokumentacja zatwierdzona” (kolumna AddedToApprovedDocumentation) */
     addedToApprovedDocumentation?: boolean;
+    /** czy pismo założył agent — liczone ze zdarzenia utworzenia, nie z autora wiersza
+     *  (autorstwo przechodzi na człowieka przy zatwierdzeniu) ani z ostatniego zdarzenia */
+    _isCreatedByAgent?: boolean;
 
     constructor(initParamObject: LetterData) {
         super({ ...initParamObject, _dbTableName: 'Letters' });
@@ -100,6 +103,7 @@ export default abstract class Letter
         this.responseIKNumber = initParamObject.responseIKNumber;
         this.addedToApprovedDocumentation =
             !!initParamObject.addedToApprovedDocumentation;
+        this._isCreatedByAgent = !!initParamObject._isCreatedByAgent;
     }
 
     private initLastEvent(lastEventData: LetterEventData | undefined | null) {

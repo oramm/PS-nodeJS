@@ -19,6 +19,8 @@ import LetterEntityAssociationsController from './associations/LetterEntityAssoc
 import LetterCase from './associations/LetterCase';
 import LetterEntity from './associations/LetterEntity';
 import { LetterDbEditContext } from './letterEditScope';
+import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
+import Setup from '../setup/Setup';
 
 export type LetterSearchParams = {
     projectId?: string;
@@ -151,6 +153,13 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 LastLetterEvent.LastUpdated AS LastEventDate,
                 LastLetterEvent.GdFilesJSON AS LastEventGdFilesJSON,
                 LastLetterEvent.RecipientsJSON AS LastEventRecipientsJSON,
+
+                -- Tożsamość autora ZDARZENIA UTWORZENIA (nie ostatniego zdarzenia
+                -- i nie autora wiersza) — z niej liczy się znacznik pisma agenta
+                COALESCE(
+                    CreationEventEditorAccount.SystemEmail,
+                    CreationEventEditor.SystemEmail
+                ) AS CreationEventEditorSystemEmail,
     
                 -- Pobieranie powiązanych encji i spraw
                 GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
@@ -180,6 +189,8 @@ export default class LetterRepository extends BaseRepository<Letter> {
     
             -- Połączenie z tabelą Persons, aby pobrać dane osoby, która utworzyła zdarzenie
             LEFT JOIN Persons AS LastEventEditor ON LastEventEditor.Id = LastLetterEvent.EditorId
+
+            ${this.makeCreationEventJoins()}
             ${this.makeUserJoinCondition(
                 userData
             )} -- Dodawanie warunku dla EXTERNAL-USER
@@ -211,6 +222,48 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 _casesAssociationsPerProject,
                 _letterEntitiesPerProject
             )
+        );
+    }
+
+    /**
+     * Złączenia do ZDARZENIA UTWORZENIA pisma.
+     *
+     * Osobne od złączeń z ostatnim zdarzeniem i nie do zastąpienia nimi: autorstwo pisma
+     * przechodzi na człowieka przy zatwierdzeniu, więc ostatnie zdarzenie i autor wiersza
+     * przestają wskazywać agenta. Znacznik „założył agent” jest faktem historycznym.
+     *
+     * Podzapytanie z MIN(Id) zamiast prostego złączenia po EventType, żeby pismo z dwoma
+     * zdarzeniami CREATED nie zdublowało wiersza. PersonAccounts dokładane tak samo jak
+     * w PersonRepository.getSystemRole — tożsamość agenta rozstrzyga SystemEmail, nigdy Id
+     * (Id konta agenta jest inne lokalnie i na produkcji).
+     */
+    private makeCreationEventJoins(): string {
+        return `LEFT JOIN (
+                SELECT LetterId, MIN(Id) AS CreationEventId
+                FROM LetterEvents
+                WHERE EventType = ${mysql.escape(
+                    Setup.LetterEventType.CREATED
+                )}
+                GROUP BY LetterId
+            ) AS CreationLetterEvents ON CreationLetterEvents.LetterId = Letters.Id
+            LEFT JOIN LetterEvents AS CreationLetterEvent
+                ON CreationLetterEvent.Id = CreationLetterEvents.CreationEventId
+            LEFT JOIN Persons AS CreationEventEditor
+                ON CreationEventEditor.Id = CreationLetterEvent.EditorId
+            LEFT JOIN PersonAccounts AS CreationEventEditorAccount
+                ON CreationEventEditorAccount.PersonId = CreationEventEditor.Id
+                AND CreationEventEditorAccount.IsActive = 1`;
+    }
+
+    /**
+     * Czy adres tożsamości należy do konta agenta.
+     * Porównanie po SystemEmail — ta sama stała, którą posługuje się warstwa wejścia agenta.
+     */
+    private isAgentSystemEmail(systemEmail: unknown): boolean {
+        if (typeof systemEmail !== 'string') return false;
+        return (
+            systemEmail.trim().toLowerCase() ===
+            AGENT_SYSTEM_EMAIL.toLowerCase()
         );
     }
 
@@ -356,6 +409,9 @@ export default class LetterRepository extends BaseRepository<Letter> {
             responseDueDate: row.ResponseDueDate,
             responseIKNumber: row.ResponseIKNumber,
             addedToApprovedDocumentation: !!row.AddedToApprovedDocumentation,
+            _isCreatedByAgent: this.isAgentSystemEmail(
+                row.CreationEventEditorSystemEmail
+            ),
 
             _cases: _casesAssociationsPerLetter.map((item) => item._case),
             _entitiesMain: _letterEntitiesMainPerLetter.map(

@@ -4,7 +4,7 @@ import Case from '../../contracts/milestones/cases/Case';
 import ContractOur from '../../contracts/ContractOur';
 import ContractOther from '../../contracts/ContractOther';
 import ToolsDb from '../../tools/ToolsDb';
-import { OfferData } from '../../types/types';
+import { EntityData, OfferData } from '../../types/types';
 import mysql from 'mysql2/promise';
 
 export type LetterCaseSearchParams = {
@@ -118,6 +118,11 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 Contracts.Name AS ContractName,
                 Contracts.LettersShortcutsInSubfolder AS ContractLettersShortcutsInSubfolder,
                 Contracts.ApprovedDocumentation AS ContractApprovedDocumentation,
+                ContractContractors.ContractorsJSON AS ContractContractorsJSON,
+                RelatedOurContractsData.OurId AS RelatedOurId,
+                RelatedContracts.Id AS RelatedId,
+                RelatedContracts.Name AS RelatedName,
+                RelatedContracts.GdFolderId AS RelatedGdFolderId,
                 Offers.Id AS OfferId,
                 Offers.Alias AS OfferAlias,
                 Offers.IsOur AS OfferIsOur,
@@ -144,6 +149,8 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
                 AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=Milestones.TypeId
+            ${this.makeContractorsJoin()}
+            ${this.makeRelatedOurContractJoins()}
             WHERE ${whereConditions}
             ORDER BY Letters_Cases.LetterId, Cases.Name`;
 
@@ -202,6 +209,17 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
             lettersShortcutsInSubfolder:
                 !!row.ContractLettersShortcutsInSubfolder,
             approvedDocumentation: !!row.ContractApprovedDocumentation,
+            // nasz kontrakt nadrzędny — puste dla naszych kontraktów.
+            // Model ContractOther wyprowadza z tego `ourIdRelated`, którego używa wiersz rejestru.
+            _ourContract: row.RelatedOurId
+                ? {
+                      id: row.RelatedId,
+                      ourId: row.RelatedOurId,
+                      name: ToolsDb.sqlToString(row.RelatedName || ''),
+                      gdFolderId: row.RelatedGdFolderId,
+                  }
+                : undefined,
+            _contractors: this.makeContractors(row),
             _type: {
                 id: row.ContractTypeId,
                 name: row.ContractTypeName,
@@ -213,6 +231,73 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
             ? new ContractOur(contractInitParams)
             : new ContractOther(contractInitParams);
         return _contract;
+    }
+
+    /**
+     * Złączenie z wykonawcami kontraktu.
+     *
+     * Osobne podzapytanie grupujące, a nie proste złączenie z Contracts_Entities: kontrakt
+     * miewa kilku wykonawców, a to zapytanie zwraca jeden wiersz na parę pismo-sprawa
+     * i nie ma GROUP BY. Zwykłe złączenie zwielokrotniłoby sprawy pisma.
+     */
+    private makeContractorsJoin(): string {
+        return `LEFT JOIN (
+                SELECT
+                    Contracts_Entities.ContractId,
+                    JSON_ARRAYAGG(
+                        JSON_OBJECT(
+                            'id', Entities.Id,
+                            'name', Entities.Name,
+                            'shortName', Entities.ShortName
+                        )
+                        ORDER BY Entities.Name
+                    ) AS ContractorsJSON
+                FROM Contracts_Entities
+                JOIN Entities ON Entities.Id = Contracts_Entities.EntityId
+                WHERE Contracts_Entities.ContractRole = 'CONTRACTOR'
+                GROUP BY Contracts_Entities.ContractId
+            ) AS ContractContractors ON ContractContractors.ContractId = Contracts.Id`;
+    }
+
+    /**
+     * Złączenie z naszym kontraktem nadrzędnym (tym, który nadzoruje kontrakt wykonawcy).
+     * Wiązanie idzie po `Contracts.OurIdRelated` -> `OurContractsData.OurId`, tak samo jak
+     * w ContractRepository — kolumna trzyma oznaczenie, nie klucz obcy.
+     */
+    private makeRelatedOurContractJoins(): string {
+        return `LEFT JOIN OurContractsData AS RelatedOurContractsData
+                ON RelatedOurContractsData.OurId = Contracts.OurIdRelated
+            LEFT JOIN Contracts AS RelatedContracts
+                ON RelatedContracts.Id = RelatedOurContractsData.Id`;
+    }
+
+    /**
+     * Wykonawcy kontraktu z kolumny JSON. Sterownik potrafi oddać JSON zarówno jako łańcuch,
+     * jak i gotową tablicę — stąd oba warianty.
+     */
+    private makeContractors(row: any): EntityData[] {
+        const raw = row.ContractContractorsJSON;
+        if (!raw) return [];
+
+        let parsed: unknown = raw;
+        if (typeof raw === 'string') {
+            try {
+                parsed = JSON.parse(raw);
+            } catch {
+                return [];
+            }
+        }
+        if (!Array.isArray(parsed)) return [];
+
+        return parsed
+            .filter((item): item is EntityData => !!item && !!(item as any).id)
+            .map((item) => ({
+                id: item.id,
+                name: item.name ? ToolsDb.sqlToString(item.name) : undefined,
+                shortName: item.shortName
+                    ? ToolsDb.sqlToString(item.shortName)
+                    : undefined,
+            })) as EntityData[];
     }
 
     /**

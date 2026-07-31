@@ -323,6 +323,10 @@ export interface LetterData extends GenericDocumentData {
     responseDueDate?: string;
     responseIKNumber?: string | null;
     addedToApprovedDocumentation?: boolean;
+    /** Czy pismo założył agent. Liczone ze zdarzenia utworzenia (CREATED), nie z autora
+     *  wiersza ani z ostatniego zdarzenia — autorstwo przechodzi na człowieka przy
+     *  zatwierdzeniu, a fakt „ten wpis założył agent” ma zostać na zawsze. */
+    _isCreatedByAgent?: boolean;
 }
 
 export interface OurLetterData extends LetterData {
