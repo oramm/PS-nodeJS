@@ -814,26 +814,46 @@ export default class LettersController extends BaseController<
         await LettersController.edit(letter, fieldsToUpdate);
         console.log('Letter edited in DB');
 
-        // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD
+        // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD.
+        //
+        // Błąd tego kroku NIE MOŻE przerwać funkcji przed uzgodnieniem skrótów
+        // (2b). Powiązania ze sprawami są w tym miejscu już zapisane i
+        // zacommitowane, więc pominięcie 2b zostawia bazę mówiącą „sprawa C"
+        // i Dysk mówiący „sprawa B" — trwale, bo uzgadnianie pracuje na różnicy
+        // zestawów spraw i kolejna edycja tej różnicy już nie zobaczy.
+        // Na produkcji wystarczy do tego 429 albo 5xx z Dysku, cofnięte
+        // uprawnienie, dokument bez zakresów nazwanych albo folder w koszu.
+        // Wyjątek oddajemy dalej dopiero po 2b, żeby zachować dotychczasowe
+        // zachowanie trasy: użytkownik nadal dostaje błąd, a kroki 3-5 się
+        // nie wykonują.
+        let gdElementsError: unknown;
         if (!isOnlyDbFields && !casesOnlyEdit) {
-            await letter.editLetterGdElements(auth, files);
-            console.log('Letter folder and file in GD edited');
-
-            // Po operacjach na Google Drive mogą zmienić się identyfikatory
-            // plików/folderów (gdDocumentId, gdFolderId) oraz liczba plików.
-            // Zapisujemy WYŁĄCZNIE te pola. Nie wolno wołać edit() bez listy
-            // pól, bo wtedy edit() kasuje i odtwarza WSZYSTKIE asocjacje
-            // (Letters_Cases / Letters_Entities) na podstawie obiektu z payloadu
-            // — a to wywołanie służy tylko utrwaleniu pól GD.
             try {
-                await LettersController.edit(letter, [
-                    'gdDocumentId',
-                    'gdFolderId',
-                    'letterFilesCount',
-                ]);
-                console.log('Letter GD-related fields persisted to DB');
+                await letter.editLetterGdElements(auth, files);
+                console.log('Letter folder and file in GD edited');
+
+                // Po operacjach na Google Drive mogą zmienić się identyfikatory
+                // plików/folderów (gdDocumentId, gdFolderId) oraz liczba plików.
+                // Zapisujemy WYŁĄCZNIE te pola. Nie wolno wołać edit() bez listy
+                // pól, bo wtedy edit() kasuje i odtwarza WSZYSTKIE asocjacje
+                // (Letters_Cases / Letters_Entities) na podstawie obiektu z payloadu
+                // — a to wywołanie służy tylko utrwaleniu pól GD.
+                try {
+                    await LettersController.edit(letter, [
+                        'gdDocumentId',
+                        'gdFolderId',
+                        'letterFilesCount',
+                    ]);
+                    console.log('Letter GD-related fields persisted to DB');
+                } catch (err) {
+                    console.error('Failed to persist GD changes to DB:', err);
+                }
             } catch (err) {
-                console.error('Failed to persist GD changes to DB:', err);
+                gdElementsError = err;
+                console.error(
+                    'Letter GD elements edit failed — skróty i tak zostaną uzgodnione, błąd oddany dalej po kroku 2b:',
+                    err
+                );
             }
         }
 
@@ -869,6 +889,13 @@ export default class LettersController extends BaseController<
                     err
                 );
             }
+        }
+
+        // Dopiero teraz oddajemy błąd kroku 2 — skróty są już uzgodnione,
+        // więc baza i Dysk mówią to samo, cokolwiek zawiodło na Dysku.
+        if (gdElementsError) {
+            console.groupEnd();
+            throw gdElementsError;
         }
 
         // 3. Nazwy skrótów w folderach spraw (best-effort). Poza blokiem GD wyżej,

@@ -246,6 +246,35 @@ describe('reconcileCaseShortcuts — czego kasować nie wolno', () => {
         );
     });
 
+    /**
+     * Pismo przychodzące potrafi nie mieć dokumentu — skróty wskazują wtedy
+     * folder pisma. Cel musi być brany także z `gdFolderId`, inaczej takie pismo
+     * zostawia skrót w zdejmowanej sprawie i nie dostaje go w nowej.
+     */
+    it('obsługuje pismo bez dokumentu: celem skrótu jest folder pisma', async () => {
+        registerShortcut({
+            id: 'skrot-na-folder',
+            parents: ['case-folder-10'],
+            targetId: 'letter-folder-1',
+        });
+
+        await reconcileCaseShortcuts(
+            auth,
+            identity({ gdDocumentId: null }),
+            [makeCase(10)],
+            [makeCase(20)]
+        );
+
+        expect(ToolsGd.trashFile).toHaveBeenCalledWith(auth, 'skrot-na-folder');
+        expect(ToolsGd.createShortcut).toHaveBeenCalledWith(
+            auth,
+            expect.objectContaining({
+                targetId: 'letter-folder-1',
+                parentId: 'case-folder-20',
+            })
+        );
+    });
+
     it('NIE kasuje pliku, który nie jest skrótem', async () => {
         registerShortcut({
             id: 'dokument-oryginal',
