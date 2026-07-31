@@ -18,6 +18,7 @@ import LetterCaseAssociationsController, {
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 import LetterCase from './associations/LetterCase';
 import LetterEntity from './associations/LetterEntity';
+import { LetterDbEditContext } from './letterEditScope';
 
 export type LetterSearchParams = {
     projectId?: string;
@@ -47,6 +48,51 @@ export type LetterFindParams = {
 export default class LetterRepository extends BaseRepository<Letter> {
     constructor() {
         super('Letters');
+    }
+
+    /**
+     * Stan pisma z bazy potrzebny do decyzji o operacjach na Dysku Google.
+     *
+     * Osobne, wąskie zapytanie zamiast `find()`, bo `find()` wymaga kontekstu
+     * projektu i uprawnień, a tutaj chodzi o jedno pismo po kluczu głównym.
+     * Identyfikatory dokumentu i folderu MUSZĄ pochodzić stąd, nie z żądania —
+     * to na ich podstawie kasowane są skróty na Dysku.
+     */
+    async findEditContextById(
+        letterId: number
+    ): Promise<LetterDbEditContext | undefined> {
+        const letterSql = mysql.format(
+            `SELECT Id, Number, Description, CreationDate, RegistrationDate,
+                    GdDocumentId, GdFolderId
+             FROM Letters WHERE Id = ?`,
+            [letterId]
+        );
+        const letterRows: any[] = <any[]>(
+            await ToolsDb.getQueryCallbackAsync(letterSql)
+        );
+        if (!letterRows.length) return undefined;
+        const row = letterRows[0];
+
+        const entitiesSql = mysql.format(
+            `SELECT EntityId, LetterRole FROM Letters_Entities WHERE LetterId = ?`,
+            [letterId]
+        );
+        const entityRows: any[] = <any[]>(
+            await ToolsDb.getQueryCallbackAsync(entitiesSql)
+        );
+
+        return {
+            id: row.Id,
+            number: row.Number,
+            description: ToolsDb.sqlToString(row.Description),
+            creationDate: row.CreationDate,
+            registrationDate: row.RegistrationDate,
+            gdDocumentId: row.GdDocumentId,
+            gdFolderId: row.GdFolderId,
+            entityKeys: entityRows
+                .map((entity) => `${entity.LetterRole}:${entity.EntityId}`)
+                .sort(),
+        };
     }
 
     /**

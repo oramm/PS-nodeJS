@@ -29,6 +29,7 @@ import {
     reconcileCaseShortcuts,
     syncCaseShortcutNames,
 } from './resolveShortcutParentId';
+import { isCasesOnlyEdit, LetterDbEditContext } from './letterEditScope';
 import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
@@ -45,7 +46,7 @@ export default class LettersController extends BaseController<
     }
 
     // Singleton pattern dla zachowania kompatybilności ze statycznymi metodami
-    private static getInstance(): LettersController {
+    static getInstance(): LettersController {
         if (!this.instance) {
             this.instance = new LettersController();
         }
@@ -778,38 +779,43 @@ export default class LettersController extends BaseController<
 
         console.group('Letter edit');
 
-        // 1a. Stan powiązań ze sprawami SPRZED edycji — wyłącznie z bazy.
-        // Sprawa zdejmowana z powiązań nie występuje w payloadzie, więc jej
-        // folder na Dysku można poznać tylko tutaj.
+        // 1a. Stan SPRZED edycji — wyłącznie z bazy. Dwa powody, oba twarde:
+        // (1) sprawa zdejmowana z powiązań nie występuje w payloadzie, więc jej
+        //     folder na Dysku można poznać tylko tutaj;
+        // (2) o tym, czy ruszać dokument, nie może decydować deklaracja klienta
+        //     w `_fieldsToUpdate` — front pism jej nie wysyła.
         const shouldUpdateCases =
             !fieldsToUpdate || fieldsToUpdate.includes('_cases');
         let previousCases: CaseData[] = [];
-        if (shouldUpdateCases && letter.id) {
-            previousCases =
-                await LetterCaseAssociationsController.findCasesByLetterId(
-                    letter.id
-                );
+        let dbEditContext: LetterDbEditContext | undefined;
+        if (letter.id) {
+            dbEditContext = await LettersController.getInstance()
+                .repository.findEditContextById(letter.id);
+            if (shouldUpdateCases)
+                previousCases =
+                    await LetterCaseAssociationsController.findCasesByLetterId(
+                        letter.id
+                    );
         }
+
+        // Zmiana samych powiązań ze sprawami nie ma prawa ruszyć dokumentu.
+        // Rozstrzygane porównaniem pola po polu (baza vs żądanie), nie listą
+        // pól od klienta — inaczej ochrona działałaby tylko dla tych wywołań,
+        // które same o nią poproszą.
+        const casesOnlyEdit =
+            shouldUpdateCases &&
+            isCasesOnlyEdit(dbEditContext, letter, files?.length ?? 0);
+        if (casesOnlyEdit)
+            console.log(
+                'Letter edit: zmiana dotyczy wyłącznie spraw — dokument na Dysku nietknięty'
+            );
 
         // 1. Edytuj w bazie danych
         await LettersController.edit(letter, fieldsToUpdate);
         console.log('Letter edited in DB');
 
-        // 1b. Uzgodnij skróty w folderach spraw z tym, co jest teraz w bazie
-        // (best-effort: pismo jest już zapisane, błąd Dysku nie cofa edycji).
-        if (shouldUpdateCases) {
-            try {
-                await reconcileCaseShortcuts(auth, letter, previousCases);
-            } catch (err) {
-                console.error(
-                    'Nie udało się uzgodnić skrótów po zmianie spraw pisma:',
-                    err
-                );
-            }
-        }
-
         // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD
-        if (!isOnlyDbFields) {
+        if (!isOnlyDbFields && !casesOnlyEdit) {
             await letter.editLetterGdElements(auth, files);
             console.log('Letter folder and file in GD edited');
 
@@ -828,6 +834,40 @@ export default class LettersController extends BaseController<
                 console.log('Letter GD-related fields persisted to DB');
             } catch (err) {
                 console.error('Failed to persist GD changes to DB:', err);
+            }
+        }
+
+        // 2b. Uzgodnij skróty w folderach spraw (best-effort: pismo jest już
+        // zapisane, błąd Dysku nie cofa edycji). Stan „po" czytany z bazy, nie
+        // z payloadu — dopiero tam widać, które sprawy naprawdę zostały zapisane,
+        // z ich folderami i flagą podfolderu „Pisma". Identyfikatory dokumentu
+        // i folderu też z bazy, i to po ewentualnym zapisie pól GD wyżej.
+        if (shouldUpdateCases && letter.id) {
+            try {
+                const dbAfter = await LettersController.getInstance()
+                    .repository.findEditContextById(letter.id);
+                const currentCases =
+                    await LetterCaseAssociationsController.findCasesByLetterId(
+                        letter.id
+                    );
+                if (dbAfter)
+                    await reconcileCaseShortcuts(
+                        auth,
+                        {
+                            id: dbAfter.id,
+                            number: dbAfter.number,
+                            description: dbAfter.description,
+                            gdDocumentId: dbAfter.gdDocumentId,
+                            gdFolderId: dbAfter.gdFolderId,
+                        },
+                        previousCases,
+                        currentCases
+                    );
+            } catch (err) {
+                console.error(
+                    'Nie udało się uzgodnić skrótów po zmianie spraw pisma:',
+                    err
+                );
             }
         }
 

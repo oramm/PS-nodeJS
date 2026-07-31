@@ -3,6 +3,18 @@ import ToolsGd from '../tools/ToolsGd';
 import { CaseData, LetterData } from '../types/types';
 
 /**
+ * Tożsamość pisma na Dysku, odczytana z bazy. Wyłącznie te pola i tylko z bazy —
+ * to na ich podstawie kasowane są pliki, więc nie wolno ich brać z żądania.
+ */
+export type LetterShortcutIdentity = {
+    id: number;
+    number: string | number | null;
+    description: string | null;
+    gdDocumentId: string | null;
+    gdFolderId: string | null;
+};
+
+/**
  * Tworzy skróty do pisma w folderach jego spraw.
  *
  * Pisma do ofert są pomijane W CAŁOŚCI — decyzja właściciela produktu.
@@ -41,13 +53,21 @@ export async function createCaseShortcuts(
  * skrót wskazujący na dokument albo folder TEGO pisma, i wyłącznie w folderze
  * sprawy zdejmowanej.
  *
- * Skąd biorą się dane, bo to decyduje o bezpieczeństwie kasowania:
- * sprawy zdjęte pochodzą WYŁĄCZNIE z bazy (`previousCases`), nie z payloadu —
- * klient nie ma jak wskazać cudzego folderu do sprzątnięcia.
+ * ŹRÓDŁO DANYCH JEST TU REGUŁĄ BEZPIECZEŃSTWA, nie szczegółem implementacji.
+ * Wszystko, co decyduje CO skasować i GDZIE, pochodzi z bazy:
+ * - `identity.gdDocumentId` / `identity.gdFolderId` — z wiersza `Letters`;
+ * - `previousCases` i `currentCases` — z `Letters_Cases` (przed i po edycji),
+ *   razem z `Cases.GdFolderId` i flagą `Contracts.LettersShortcutsInSubfolder`.
+ * Payload klienta może wskazać, KTÓRE sprawy mają być powiązane — i tylko tyle;
+ * zanim tu dotrze, jest już zapisany w `Letters_Cases`. Funkcja celowo NIE
+ * przyjmuje `LetterData`, żeby obiektu z żądania nie dało się tu wstawić przez
+ * pomyłkę: obiekt pisma jest budowany w całości z `req.body`
+ * (`LettersRouters` → `createProperLetter`), więc porównywanie jego pól ze sobą
+ * nie byłoby żadną bramką.
  *
  * Reguły kasowania (żadnej nie wolno pominąć):
  * 1. Kasujemy tylko plik o `mimeType` skrótu, którego `shortcutDetails.targetId`
- *    wskazuje na dokument albo folder tego pisma.
+ *    wskazuje na dokument albo folder tego pisma — według bazy.
  * 2. Kasujemy tylko w folderze sprawy zdejmowanej (albo w jej podfolderze „Pisma").
  * 3. Nie ruszamy folderu, który po zmianie nadal obsługuje którąś ze spraw pisma.
  * 4. Nie udało się odczytać celu albo cel jest inny niż oczekiwany — NIE kasujemy,
@@ -61,43 +81,50 @@ export async function createCaseShortcuts(
  */
 export async function reconcileCaseShortcuts(
     auth: OAuth2Client,
-    letter: LetterData,
-    previousCases: CaseData[]
+    identity: LetterShortcutIdentity,
+    previousCases: CaseData[],
+    currentCases: CaseData[]
 ): Promise<void> {
-    const currentCases = (letter._cases || []).filter(
-        (caseItem) => caseItem?.id
-    );
+    const casesNow = (currentCases || []).filter((caseItem) => caseItem?.id);
 
-    // GUARD, ten sam co w LettersController.editCaseAssociations: pusta lista
-    // spraw oznacza niekompletny payload, a nie świadome zdjęcie wszystkich
-    // powiązań. Baza w takim wypadku zostaje nietknięta, więc Dysk też musi.
-    if (!currentCases.length) return;
+    // GUARD, ten sam co w LettersController.editCaseAssociations: brak powiązań
+    // w bazie po edycji oznacza, że guard niekompletnego payloadu zadziałał
+    // i wiersze zostały nietknięte. Skoro baza się nie zmieniła, Dysk też nie może.
+    if (!casesNow.length) return;
 
-    const targetIds = [letter.gdDocumentId, letter.gdFolderId].filter(
+    const targetIds = [identity.gdDocumentId, identity.gdFolderId].filter(
         (id): id is string => !!id
     );
     if (!targetIds.length) return;
 
-    const currentCaseIds = new Set(currentCases.map((caseItem) => caseItem.id));
+    const currentCaseIds = new Set(casesNow.map((caseItem) => caseItem.id));
     const previousCaseIds = new Set(
-        previousCases.map((caseItem) => caseItem?.id).filter((id) => !!id)
+        (previousCases || [])
+            .map((caseItem) => caseItem?.id)
+            .filter((id) => !!id)
     );
 
-    const addedCases = currentCases.filter(
+    const addedCases = casesNow.filter(
         (caseItem) => !previousCaseIds.has(caseItem.id)
     );
-    const removedCases = previousCases.filter(
+    const removedCases = (previousCases || []).filter(
         (caseItem) => caseItem?.id && !currentCaseIds.has(caseItem.id)
     );
 
     if (!addedCases.length && !removedCases.length) return;
 
-    await addShortcutsForCases(auth, letter, addedCases, targetIds);
+    // Pismo do oferty rozpoznajemy po kamieniu sprawy odczytanym z bazy,
+    // nie po polu `_offer` z payloadu.
+    const isOffer = [...casesNow, ...removedCases].some(
+        (caseItem) => caseItem?._parent?._offer
+    );
+
+    await addShortcutsForCases(auth, identity, addedCases, targetIds, isOffer);
     await removeShortcutsForCases(
         auth,
-        letter,
+        identity,
         removedCases,
-        currentCases,
+        casesNow,
         targetIds
     );
 }
@@ -109,11 +136,12 @@ export async function reconcileCaseShortcuts(
  */
 async function addShortcutsForCases(
     auth: OAuth2Client,
-    letter: LetterData,
+    letter: LetterShortcutIdentity,
     addedCases: CaseData[],
-    targetIds: string[]
+    targetIds: string[],
+    isOffer: boolean
 ): Promise<void> {
-    if (!addedCases.length || isOfferLetter(letter)) return;
+    if (!addedCases.length || isOffer) return;
     const targetId = targetIds[0];
 
     for (const caseItem of addedCases) {
@@ -159,7 +187,7 @@ async function addShortcutsForCases(
  */
 async function removeShortcutsForCases(
     auth: OAuth2Client,
-    letter: LetterData,
+    letter: LetterShortcutIdentity,
     removedCases: CaseData[],
     currentCases: CaseData[],
     targetIds: string[]
@@ -247,7 +275,7 @@ async function hasShortcutInFolder(
  */
 async function trashLetterShortcutsInFolder(
     auth: OAuth2Client,
-    letter: LetterData,
+    letter: LetterShortcutIdentity,
     targetIds: string[],
     parentId: string
 ): Promise<void> {
@@ -287,14 +315,23 @@ async function trashLetterShortcutsInFolder(
             targetIds.includes(metaData.shortcutDetails.targetId)
         );
         const liesInThisFolder = !!metaData.parents?.includes(parentId);
+        // Skrót już w koszu zostawiamy w spokoju — powtórne „kasowanie" tylko
+        // zaśmiecałoby log i udawało pracę, której nie ma.
+        const alreadyTrashed = metaData.trashed === true;
 
-        if (!isShortcut || !pointsAtThisLetter || !liesInThisFolder) {
+        if (
+            !isShortcut ||
+            !pointsAtThisLetter ||
+            !liesInThisFolder ||
+            alreadyTrashed
+        ) {
             console.error(
                 `[Skróty pism] Plik ${shortcutId} nie spełnia warunków kasowania — NIE kasuję. ` +
                     `mimeType=${metaData.mimeType}, ` +
                     `cel=${metaData.shortcutDetails?.targetId}, ` +
                     `oczekiwany cel z {${targetIds.join(', ')}}, ` +
-                    `rodzice=${metaData.parents?.join(', ')}, oczekiwany ${parentId}.`
+                    `rodzice=${metaData.parents?.join(', ')}, oczekiwany ${parentId}, ` +
+                    `w koszu=${metaData.trashed}.`
             );
             continue;
         }
@@ -368,7 +405,10 @@ async function collectShortcutFolderIds(
     return new Set(folderIds.filter((id): id is string => !!id));
 }
 
-function makeShortcutName(letter: LetterData): string {
+function makeShortcutName(letter: {
+    number?: string | number | null;
+    description?: string | null;
+}): string {
     return `${letter.number} ${letter.description}`;
 }
 
