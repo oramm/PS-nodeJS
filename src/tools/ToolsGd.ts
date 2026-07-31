@@ -53,6 +53,8 @@ export default class ToolsGd {
         const filesSchema = await drive.files.list({
             fields: 'nextPageToken, files(id, name, mimeType, lastModifyingUser, modifiedTime)',
             q: `'${parentFolderID}' in parents`, // Query to list files in the folder
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
         if (!filesSchema.data.files || !filesSchema.data.files.length)
             return [];
@@ -64,6 +66,7 @@ export default class ToolsGd {
         const fileSchema = await drive.files.get({
             fileId: id,
             fields: 'id, name, parents, mimeType',
+            supportsAllDrives: true,
         });
         return fileSchema.data;
     }
@@ -82,13 +85,14 @@ export default class ToolsGd {
                 const fileId = fileData.id;
                 // Pobierz strumień pliku
                 const res = await drive.files.get(
-                    { fileId, alt: 'media' },
+                    { fileId, alt: 'media', supportsAllDrives: true },
                     { responseType: 'stream' }
                 );
                 // Pobierz metadane pliku, aby uzyskać oryginalną nazwę
                 const fileMetadata = await drive.files.get({
                     fileId,
                     fields: 'name',
+                    supportsAllDrives: true,
                 });
 
                 return {
@@ -117,6 +121,7 @@ export default class ToolsGd {
         const fileMetadata = await drive.files.get({
             fileId: gdDocumentId,
             fields: 'name, parents',
+            supportsAllDrives: true,
         });
         const docName = fileMetadata.data.name || newFileName;
         const parentFolderId = fileMetadata.data.parents?.[0];
@@ -145,6 +150,7 @@ export default class ToolsGd {
                 body: res.data as Readable, // Using the stream directly from export
             },
             fields: 'id',
+            supportsAllDrives: true,
         });
 
         console.log(`Plik PDF utworzony i przesłany: ${uploadedPdf.data.id}`);
@@ -166,6 +172,8 @@ export default class ToolsGd {
         const q = `name = '${escapedFileName}' and '${parameters.parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = ${parameters.isTrashed}`;
         const filesSchema = await drive.files.list({
             q,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
         if (filesSchema.data.files && filesSchema.data.files.length) {
             filesSchema.data.files.map((file: drive_v3.Schema$File) => {});
@@ -241,6 +249,7 @@ export default class ToolsGd {
                 },
                 media,
                 fields,
+                supportsAllDrives: true,
                 ...otherOptions,
             });
             return res.data;
@@ -265,6 +274,7 @@ export default class ToolsGd {
                 mimeType: params.mimeType,
             },
             fields: 'id,name,webViewLink',
+            supportsAllDrives: true,
         });
         return filesSchema.data;
     }
@@ -282,6 +292,7 @@ export default class ToolsGd {
         const filesSchema = await drive.files.create({
             requestBody: fileMetadata,
             fields: 'id',
+            supportsAllDrives: true,
         });
         //console.log('New Gd folder Id: ', filesSchema.data.id);
         return filesSchema.data;
@@ -327,6 +338,7 @@ export default class ToolsGd {
             const filesSchema = await drive.files.update({
                 fileId: fileId,
                 requestBody: requestBody,
+                supportsAllDrives: true,
             });
             console.log(`Zaktualizowano plik ${fileId}`);
             return filesSchema.data;
@@ -363,6 +375,7 @@ export default class ToolsGd {
                 fileId: fileId,
                 removeParents: fileData.parents?.join(','),
                 addParents: newParentFolderId,
+                supportsAllDrives: true,
             });
             console.log(`Plik przeniesiony do ${newParentFolderId}`);
             return 'ok';
@@ -396,6 +409,7 @@ export default class ToolsGd {
             const drive = google.drive({ version: 'v3', auth });
             await drive.files.delete({
                 fileId: fileId,
+                supportsAllDrives: true,
             });
             console.log(`z Dysku Google usunięto plik ${fileId}`);
             return 'ok';
@@ -418,6 +432,7 @@ export default class ToolsGd {
                     name: copyName,
                     parents: [destFolderId],
                 },
+                supportsAllDrives: true,
             });
             console.log(`Skopiowano plik ${originFileId}`);
             return newFile;
@@ -454,6 +469,7 @@ export default class ToolsGd {
             const response = await drive.files.create({
                 requestBody: shortcutMetadata,
                 fields: 'id, name',
+                supportsAllDrives: true,
             });
     
             console.log(`Utworzono skrót: "${response.data.name}" (ID: ${response.data.id}) wskazujący na plik ${options.targetId}`);
@@ -497,10 +513,15 @@ export default class ToolsGd {
         try {
             const filesSchema = await drive.files.get({
                 fileId: gdFolderId,
-                fields: 'id, ownedByMe',
+                fields: 'id, name, ownedByMe, driveId, capabilities(canTrash)',
+                supportsAllDrives: true,
             });
-            console.log(filesSchema.data);
-            if (filesSchema.data.ownedByMe)
+            // Na Dysku współdzielonym `ownedByMe` jest ZAWSZE false (właścicielem
+            // jest organizacja), więc o możliwości usunięcia decyduje canTrash.
+            const canTrash =
+                filesSchema.data.capabilities?.canTrash ??
+                filesSchema.data.ownedByMe;
+            if (canTrash)
                 await ToolsGd.trashFile(auth, filesSchema.data.id as string);
             else
                 await ToolsGd.updateFolder(auth, {
@@ -518,7 +539,17 @@ export default class ToolsGd {
         }
     }
 
-    /** domyślnie ustawia uprawnienia { type: 'anyone', role: 'writer' }
+    /** Nadaje uprawnienia do pliku/folderu.
+     *
+     * Domyślnie (bez podanych `permissions`) ustawia publiczny link
+     * { type: 'anyone', role: 'writer' } — historyczny sposób na to, by
+     * użytkownicy otwierali w przeglądarce pliki należące do konta systemowego.
+     *
+     * NA DYSKU WSPÓŁDZIELONYM domyślne uprawnienie jest POMIJANE:
+     * dostęp mają członkowie dysku, więc publiczny link jest zbędny, a przy
+     * zablokowanym udostępnianiu zewnętrznym Google odrzuciłby to wywołanie.
+     * Uprawnienia podane jawnie (np. konkretny użytkownik) są nadawane zawsze.
+     *
      * https://developers.google.com/drive/api/v3/manage-sharing#create_a_permission
      */
     static async createPermissions(
@@ -530,14 +561,22 @@ export default class ToolsGd {
             ];
         }
     ) {
-        if (!parameters.permissions)
-            parameters.permissions = [{ type: 'anyone', role: 'writer' }];
         const drive = google.drive({ version: 'v3', auth });
+        if (!parameters.permissions) {
+            const { data } = await drive.files.get({
+                fileId: parameters.fileId,
+                fields: 'driveId',
+                supportsAllDrives: true,
+            });
+            if (data.driveId) return; // Dysk współdzielony - dostęp z członkostwa
+            parameters.permissions = [{ type: 'anyone', role: 'writer' }];
+        }
         for (const permission of parameters.permissions) {
             let permissionSchema = await drive.permissions.create({
                 requestBody: permission,
                 fileId: parameters.fileId,
                 fields: 'id',
+                supportsAllDrives: true,
             });
             //console.log('Permission createed: %o', permissionSchema.data);
             return permissionSchema.data;

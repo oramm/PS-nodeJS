@@ -248,10 +248,14 @@ export default class Case extends BusinessObject implements CaseData {
             const drive = google.drive({ version: 'v3', auth });
             const filesSchema = await drive.files.get({
                 fileId: this.gdFolderId,
-                fields: 'id, ownedByMe',
+                fields: 'id, ownedByMe, capabilities(canTrash)',
+                supportsAllDrives: true,
             });
-            console.log(filesSchema.data);
-            if (filesSchema.data.ownedByMe)
+            // na Dysku współdzielonym ownedByMe jest zawsze false - liczy się canTrash
+            if (
+                filesSchema.data.capabilities?.canTrash ??
+                filesSchema.data.ownedByMe
+            )
                 await ToolsGd.trashFile(auth, filesSchema.data.id as string);
             else
                 await ToolsGd.updateFolder(auth, {
