@@ -63,6 +63,38 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-08-01 - MailScans (znacznik ostatniego skanu skrzynki)
+
+### Scope
+
+- New table `MailScans`, one row per `(Account, Mailbox)`: how far the mailbox was scanned, when, and by whom.
+- New routes `GET /mailScan` (read, `scan: null` = never scanned) and `POST /mailScan` (advance after a finished run).
+
+### Impact
+
+- DB: `MailScans` created, `UNIQUE (Account, Mailbox)`, FK `MailScans_Person_ibfk` to `Persons`.
+- ENV: none.
+- Deploy: apply `003_create_mail_scans.sql` **before** deploying the code — `POST /mailScan` fails without the table.
+
+### Required Actions
+
+- Apply `src/letters/migrations/003_create_mail_scans.sql` on the target DB together with the still-unapplied `002_create_incoming_mails.sql`.
+- Run `npx jest src/letters/incomingMails`.
+
+### Verification
+
+- Read `information_schema` before and after; a green migration ledger is not evidence.
+- The advance-only and never-in-the-future rules live in the SQL of `MailScanRepository.advance`, not in the app — verify on a live DB, not only by unit test.
+
+### Rollback
+
+- `DROP TABLE MailScans;` — no other table references it.
+
+### Links
+
+- `src/letters/migrations/003_create_mail_scans.sql`
+- `src/letters/incomingMails/MailScanRepository.ts`
+
 ## 2026-07-31 - IncomingMails (koperta pisma przychodzącego) + Letters.IncomingMailId
 
 ### Scope

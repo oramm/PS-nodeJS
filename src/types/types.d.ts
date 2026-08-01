@@ -741,6 +741,16 @@ export interface IncomingMailData extends RepositoryDataItem {
     _lettersCount?: number;
 }
 
+/** Znacznik ostatniego skanu skrzynki; jeden na (Account, Mailbox), wspólny dla wszystkich operatorów */
+export interface MailScanData extends RepositoryDataItem {
+    account: string;
+    mailbox: string;
+    /** 'YYYY-MM-DD HH:MM:SS'; granica faktycznie przetworzonego okna, nigdy z przyszłości */
+    scannedUntil: string;
+    lastRunAt?: string;
+    editorId?: number | null;
+}
+
 export interface OfferInvitationMailToProcessData extends MailData {
     status: string;
     _ourOfferId?: number;
