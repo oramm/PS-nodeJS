@@ -17,6 +17,20 @@ export default class PersonsController extends BaseController<
 > {
     private static instance: PersonsController;
 
+    // ponytail: fallback gdy caller nie przesle _fieldsToUpdate (stare formularze) -
+    // bez tego getPersonsWriteFields/getAccountWriteFields ciszej zwracaja [] i nic sie nie zapisuje
+    private static readonly DEFAULT_EDIT_FIELDS = [
+        'name',
+        'surname',
+        'position',
+        'email',
+        'cellphone',
+        'phone',
+        'comment',
+        'systemRoleId',
+        'systemEmail',
+    ];
+
     constructor() {
         super(new PersonRepository());
     }
@@ -127,7 +141,12 @@ export default class PersonsController extends BaseController<
         fieldsToUpdate: string[],
     ): Promise<Person> {
         const person = new Person(personData);
-        return await this.edit(person, fieldsToUpdate);
+        return await this.edit(
+            person,
+            fieldsToUpdate?.length
+                ? fieldsToUpdate
+                : this.DEFAULT_EDIT_FIELDS,
+        );
     }
 
     /**
@@ -228,17 +247,7 @@ export default class PersonsController extends BaseController<
         return await this.withAuth(async (instance, auth) => {
             const user = new Person(userData);
 
-            const fieldsToUpdate = [
-                'name',
-                'surname',
-                'position',
-                'email',
-                'cellphone',
-                'phone',
-                'comment',
-                'systemRoleId',
-                'systemEmail',
-            ];
+            const fieldsToUpdate = PersonsController.DEFAULT_EDIT_FIELDS;
             const accountFieldsToSync =
                 instance.repository.getAccountWriteFields(fieldsToUpdate);
             const personFieldsToUpdate =
