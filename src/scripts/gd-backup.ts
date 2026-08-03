@@ -108,7 +108,7 @@ function retryable(err: any): boolean {
     );
 }
 let retryCount = 0;
-async function withRetry<T>(fn: () => Promise<T>, max = 6): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, max = 10): Promise<T> {
     let attempt = 0;
     while (true) {
         try {
@@ -117,7 +117,7 @@ async function withRetry<T>(fn: () => Promise<T>, max = 6): Promise<T> {
             if (retryable(err) && attempt < max) {
                 retryCount++;
                 await sleep(
-                    Math.min(2 ** attempt * 500, 16000) +
+                    Math.min(2 ** attempt * 500, 60000) +
                         Math.floor(Math.random() * 400)
                 );
                 attempt++;

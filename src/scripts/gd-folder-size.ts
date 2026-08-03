@@ -113,7 +113,7 @@ async function listChildren(
             } catch (err: any) {
                 if (isRetryable(err) && attempt < 6) {
                     const backoff =
-                        Math.min(2 ** attempt * 500, 16000) +
+                        Math.min(2 ** attempt * 500, 60000) +
                         Math.floor(Math.random() * 400);
                     attempt++;
                     await sleep(backoff);
