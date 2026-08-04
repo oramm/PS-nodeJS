@@ -17,6 +17,10 @@ export default class Person extends BusinessObject implements PersonData {
     _entity: EntityData;
     _nameSurnameEmail: string;
     _skillNames?: string;
+    /** Projekty przypisane pracownikowi kontraktowemu. Nie zapisywane w Persons -
+     * mieszkają w PersonProjects. Pole podróżuje tam i z powrotem, żeby klient
+     * dostał z odpowiedzi to, co wysłał, i mógł zapisać przypisania po zapisie osoby. */
+    _projectAssignments?: { ourId: string }[];
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Persons' });
@@ -40,5 +44,6 @@ export default class Person extends BusinessObject implements PersonData {
             this._alias =
                 this.name.substring(0, 1) + this.surname.substring(0, 3);
         this._skillNames = initParamObject._skillNames;
+        this._projectAssignments = initParamObject._projectAssignments;
     }
 }
