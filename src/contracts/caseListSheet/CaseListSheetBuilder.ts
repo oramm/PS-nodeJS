@@ -5,6 +5,7 @@ import type { ContractsWithChildren } from '../ContractTypes';
 import {
     CaseListMatrix,
     CaseListSheetParams,
+    HyperlinkRow,
     LevelRun,
     RowGroup,
     SHEET_LEVELS,
@@ -39,15 +40,28 @@ export function buildCaseListMatrix(
         ? [...BASE_HEADER, OWNER_HEADER]
         : [...BASE_HEADER];
 
-    const rows: any[][] = [
-        [`Spis spraw - ${buildContractLabel(contractWithChildren.contract)}`],
-        [buildConfigLabel(params, context)],
-        [],
-        header,
-    ];
+    const rows: any[][] = [];
     const groups: RowGroup[] = [];
+    // Hiperłącza do folderów na GD — zakładane osobnym żądaniem przez Controller.
+    const linkRows: HyperlinkRow[] = [];
+
+    rows.push([
+        `Spis spraw - ${buildContractLabel(contractWithChildren.contract)}`,
+    ]);
+    const contractFolderUrl = resolveFolderUrl(contractWithChildren.contract);
+    if (contractFolderUrl)
+        linkRows.push({
+            rowIndex: 0,
+            columnIndex: 0,
+            startIndex: 0,
+            url: contractFolderUrl,
+        });
+    rows.push([buildConfigLabel(params, context)]);
+    rows.push(['']);
+    rows.push(header);
+
     // Poziom każdego wiersza — wiersze nagłówkowe nie mają poziomu.
-    const rowLevels: (SheetLevel | null)[] = rows.map(() => null);
+    const rowLevels: (SheetLevel | null)[] = [null, null, null, null];
 
     /** Dopisuje wiersz razem z jego poziomem, żeby oba ciągi nie mogły się rozjechać. */
     function emit(
@@ -58,10 +72,21 @@ export function buildCaseListMatrix(
             status?: string;
             description?: string;
             owner?: string;
+            folderUrl?: string;
         }
     ) {
+        const rowIndex = rows.length;
         rows.push(makeRow(level, depth, name, { ...options, withOwnerColumn }));
         rowLevels.push(level);
+        // Link zaczyna się za wcięciem, żeby podkreślenie nie ciągnęło się przez puste
+        // znaki na początku komórki.
+        if (options.folderUrl)
+            linkRows.push({
+                rowIndex,
+                columnIndex: 1,
+                startIndex: indentOf(depth).length,
+                url: options.folderUrl,
+            });
     }
 
     for (const { milestone, casesWithTasks } of contractWithChildren
@@ -72,6 +97,7 @@ export function buildCaseListMatrix(
             status: milestone.status,
             // Kamienie nie mają pola uwag w bazie — kolumna zostaje pusta.
             description: '',
+            folderUrl: resolveFolderUrl(milestone),
         });
         const milestoneChildrenStart = rows.length;
 
@@ -82,6 +108,7 @@ export function buildCaseListMatrix(
             emit(SHEET_LEVELS.CASE, 1, buildCaseLabel(caseItem), {
                 status: caseItem.status,
                 description: caseItem.description,
+                folderUrl: resolveFolderUrl(caseItem),
             });
             const caseChildrenStart = rows.length;
 
@@ -95,6 +122,7 @@ export function buildCaseListMatrix(
                 emit(SHEET_LEVELS.SUBCASE, 2, buildCaseLabel(subCase), {
                     status: subCase.status,
                     description: subCase.description,
+                    folderUrl: resolveFolderUrl(subCase),
                 });
                 const subCaseChildrenStart = rows.length;
 
@@ -114,6 +142,7 @@ export function buildCaseListMatrix(
         levelRuns: collapseLevelRuns(rowLevels),
         headerRowIndex: HEADER_ROW_INDEX,
         colCount: header.length,
+        linkRows,
     };
 }
 
@@ -130,7 +159,8 @@ export function collapseLevelRuns(
         if (!level) continue;
 
         const last = runs[runs.length - 1];
-        if (last && last.level === level && last.endRow === row) last.endRow = row + 1;
+        if (last && last.level === level && last.endRow === row)
+            last.endRow = row + 1;
         else runs.push({ level, startRow: row, endRow: row + 1 });
     }
     return runs;
@@ -252,12 +282,16 @@ function makeRow(
 ): any[] {
     const row = [
         level,
-        INDENT.repeat(depth) + name,
+        indentOf(depth) + name,
         options.status ?? '',
         options.description ?? '',
     ];
     if (options.withOwnerColumn) row.push(options.owner ?? '');
     return row;
+}
+
+function indentOf(depth: number): string {
+    return INDENT.repeat(depth);
 }
 
 /** Grupa musi obejmować co najmniej jeden wiersz — puste gałęzie pomijamy. */
@@ -292,6 +326,18 @@ function buildCaseLabel(caseItem: any): string {
         .filter(Boolean)
         .join(' ')
         .trim();
+}
+
+/**
+ * Adres folderu na GD — gotowy `_gdFolderUrl` z drzewa, a gdy go nie ma, składany
+ * z `gdFolderId`. Brak obu = wiersz bez linku (np. sprawa jeszcze bez folderu).
+ */
+function resolveFolderUrl(entity: any): string | undefined {
+    if (!entity) return undefined;
+    if (entity._gdFolderUrl) return entity._gdFolderUrl;
+    if (entity.gdFolderId)
+        return `https://drive.google.com/drive/folders/${entity.gdFolderId}`;
+    return undefined;
 }
 
 function isFinishedMilestone(milestone: any): boolean {

@@ -37,6 +37,15 @@ export interface LevelRun {
     endRow: number;
 }
 
+/** Hiperłącze do folderu na GD wpięte w tekst komórki (indeksy 0-based). */
+export interface HyperlinkRow {
+    rowIndex: number;
+    columnIndex: number;
+    /** Znak, od którego zaczyna się link — pomija wcięcie, żeby nie było podkreślone. */
+    startIndex: number;
+    url: string;
+}
+
 export type SheetLevel = (typeof SHEET_LEVELS)[keyof typeof SHEET_LEVELS];
 
 export interface CaseListMatrix {
@@ -49,4 +58,6 @@ export interface CaseListMatrix {
     headerRowIndex: number;
     /** Liczba kolumn (4 lub 5 — z kolumną „Osoba"). */
     colCount: number;
+    /** Wiersze, którym Controller dokłada hiperłącza do folderów na GD. */
+    linkRows: HyperlinkRow[];
 }

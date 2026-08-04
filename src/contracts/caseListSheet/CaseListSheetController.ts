@@ -175,6 +175,14 @@ export default class CaseListSheetController extends BaseController<any, any> {
             sheetId,
             matrix
         );
+        // Linki na końcu — updateCells nadpisuje tekst komórki, więc musi iść po
+        // formatowaniu poziomów (tamto rusza tylko userEnteredFormat).
+        await CaseListSheetController.applyHyperlinks(
+            auth,
+            gdId,
+            sheetId,
+            matrix
+        );
 
         return {
             gdId,
@@ -211,9 +219,7 @@ export default class CaseListSheetController extends BaseController<any, any> {
                                 buildPersonLabel(task._owner)
                             );
             }
-        return personIds.map(
-            (id) => labelsById.get(id) || `Osoba #${id}`
-        );
+        return personIds.map((id) => labelsById.get(id) || `Osoba #${id}`);
     }
 
     /** Podmienia zakładkę na pustą — zwraca sheetId nowej. Plik (i link) zostaje ten sam. */
@@ -243,7 +249,10 @@ export default class CaseListSheetController extends BaseController<any, any> {
                             // zakładki potrafi nie wystarczyć dużemu kontraktowi,
                             // a zapis poza siatkę kończy się błędem.
                             gridProperties: {
-                                rowCount: Math.max(matrix.values.length + 10, 100),
+                                rowCount: Math.max(
+                                    matrix.values.length + 10,
+                                    100
+                                ),
                                 columnCount: Math.max(matrix.colCount, 5),
                             },
                         },
@@ -270,6 +279,68 @@ export default class CaseListSheetController extends BaseController<any, any> {
             spreadsheetId
         );
         return newSheetId;
+    }
+
+    /**
+     * Nazwy kontraktu, kamieni i spraw stają się linkami do ich folderów na GD.
+     *
+     * Domyślny styl linku w Sheets (niebieski) gryzie się z szarościami poziomów, więc
+     * kolor wymuszamy na czarny. Link zaczyna się dopiero za wcięciem — inaczej
+     * podkreślenie ciągnęłoby się przez puste znaki i rozmywało strukturę drzewa.
+     */
+    private static async applyHyperlinks(
+        auth: OAuth2Client,
+        gdId: string,
+        sheetId: number,
+        matrix: CaseListMatrix
+    ): Promise<void> {
+        const requests = matrix.linkRows.map((link) => {
+            const text = String(
+                matrix.values[link.rowIndex]?.[link.columnIndex] ?? ''
+            );
+            const linkRun = {
+                startIndex: link.startIndex,
+                format: {
+                    link: { uri: link.url },
+                    foregroundColor: gray(0),
+                    underline: true,
+                },
+            };
+            return {
+                updateCells: {
+                    start: {
+                        sheetId,
+                        rowIndex: link.rowIndex,
+                        columnIndex: link.columnIndex,
+                    },
+                    rows: [
+                        {
+                            values: [
+                                {
+                                    userEnteredValue: { stringValue: text },
+                                    // Wcięcie zostaje osobnym biegiem bez linku
+                                    // (pusty format = dziedziczy format komórki).
+                                    textFormatRuns:
+                                        link.startIndex > 0
+                                            ? [
+                                                  {
+                                                      startIndex: 0,
+                                                      format: {},
+                                                  },
+                                                  linkRun,
+                                              ]
+                                            : [linkRun],
+                                },
+                            ],
+                        },
+                    ],
+                    fields: 'userEnteredValue,textFormatRuns',
+                },
+            };
+        });
+
+        if (requests.length)
+            await ToolsSheets.batchUpdateSheet(auth, requests, gdId);
     }
 
     private static async applyFormatting(
@@ -309,10 +380,17 @@ export default class CaseListSheetController extends BaseController<any, any> {
                 textFormat: { italic: true, foregroundColor: gray(0.4) },
             }),
             // Nagłówki kolumn — pogrubione na szarym tle
-            repeatCell(sheetId, HEADER_ROW_INDEX, HEADER_ROW_INDEX + 1, 0, colCount, {
-                textFormat: { bold: true },
-                backgroundColor: gray(0.9),
-            })
+            repeatCell(
+                sheetId,
+                HEADER_ROW_INDEX,
+                HEADER_ROW_INDEX + 1,
+                0,
+                colCount,
+                {
+                    textFormat: { bold: true },
+                    backgroundColor: gray(0.9),
+                }
+            )
         );
 
         // Nagłówki zostają na wierzchu przy przewijaniu
@@ -396,7 +474,9 @@ export default class CaseListSheetController extends BaseController<any, any> {
                             booleanRule: {
                                 condition: {
                                     type: 'TEXT_CONTAINS',
-                                    values: [{ userEnteredValue: rule.contains }],
+                                    values: [
+                                        { userEnteredValue: rule.contains },
+                                    ],
                                 },
                                 format: { backgroundColor: rule.color },
                             },
