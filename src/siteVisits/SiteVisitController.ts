@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import BaseController from '../controllers/BaseController';
 import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
+import { ProjectScope } from '../types/sessionTypes';
 import SiteVisit, { SiteVisitPhotoData } from './SiteVisit';
 import SiteVisitRepository, {
     AssignableContract,
@@ -48,9 +49,13 @@ export default class SiteVisitController extends BaseController<
 
     /** Kontrakty dostępne dla użytkownika (aktywne + przypisane rolą). */
     static async getContracts(
-        personId: number
+        personId: number,
+        scope?: ProjectScope
     ): Promise<AssignableContract[]> {
-        return this.getInstance().repository.getAssignableContracts(personId);
+        return this.getInstance().repository.getAssignableContracts(
+            personId,
+            scope
+        );
     }
 
     /** Wizyty zalogowanego użytkownika (nagłówki + zdjęcia), najnowsze pierwsze. */
@@ -116,7 +121,8 @@ export default class SiteVisitController extends BaseController<
         dto: SiteVisitInputDto,
         files: Express.Multer.File[],
         personId: number,
-        authorName: string
+        authorName: string,
+        scope?: ProjectScope
     ): Promise<{ id: number; photoCount: number; gdFolderUrl?: string }> {
         SiteVisitValidator.validate(dto, files.length);
 
@@ -126,7 +132,8 @@ export default class SiteVisitController extends BaseController<
             // Autoryzacja: kontrakt musi być na liście dostępnych dla tej osoby.
             const contract = await repository.getAssignableContract(
                 personId,
-                dto.contractId
+                dto.contractId,
+                scope
             );
             if (!contract)
                 throw new Error(

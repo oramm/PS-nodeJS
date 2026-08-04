@@ -1,6 +1,8 @@
 import BaseRepository from '../../repositories/BaseRepository';
 import { Security, SecuritiesSearchParams } from './Security';
 import ToolsDb from '../../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../../tools/ProjectScope';
+import { ProjectScope } from '../../types/sessionTypes';
 import Case from '../milestones/cases/Case';
 import { MilestoneData } from '../../types/types';
 import ContractOur from '../ContractOur';
@@ -83,7 +85,10 @@ export default class SecurityRepository extends BaseRepository<Security> {
     /**
      * Wyszukuje papiery wartościowe w bazie danych
      */
-    async find(orConditions: SecuritiesSearchParams[]): Promise<Security[]> {
+    async find(
+        orConditions: SecuritiesSearchParams[],
+        scope?: ProjectScope
+    ): Promise<Security[]> {
         const sql = `SELECT 
                     Securities.Id,
                     Securities.ContractId,
@@ -142,10 +147,13 @@ export default class SecurityRepository extends BaseRepository<Security> {
                 LEFT JOIN Persons AS Editors ON Securities.EditorId = Editors.Id
                 LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
                 LEFT JOIN Persons AS Managers ON OurContractsData.ManagerId = Managers.Id
-                WHERE ${ToolsDb.makeOrGroupsConditions(
+                WHERE (${ToolsDb.makeOrGroupsConditions(
                     orConditions,
                     this.makeAndConditions.bind(this)
-                )}
+                )}) AND ${makeProjectScopeCondition(
+            'Contracts.ProjectOurId',
+            scope
+        )}
                 ORDER BY ContractEndDate DESC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

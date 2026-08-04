@@ -19,6 +19,7 @@ import agentTokenAuth, {
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
 import requireSession from './setup/Sessions/requireSession';
+import contractWorkerPolicy from './setup/Sessions/contractWorkerPolicy';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
@@ -518,6 +519,11 @@ app.use(denyDestructiveForAgent);
 // per-route checks it backs up were missing on some of them.
 app.use(requireSession);
 
+// Rola CONTRACT_WORKER dociera tylko do tras z jawnej listy w tej warstwie i dostaje
+// tu policzony zakres projektów. Musi stać po requireSession (potrzebuje sesji) i przed
+// wszystkimi trasami, łącznie z rejestrowanymi inline poniżej. Dla pozostałych ról to no-op.
+app.use(contractWorkerPolicy);
+
 app.use((req, res, next) => {
     console.log(
         `Session  middleware:: ID: ${req.sessionID} path: ${req.path} userName: ${req.session.userData?.userName} / ${req.session.userData?.systemRoleName} / ${process.env.NODE_ENV} `,
@@ -639,6 +645,7 @@ require('./persons/PersonsRouters');
 require('./persons/experiences/ExperienceRouters');
 
 require('./persons/projectRoles/RolesRouters');
+require('./persons/projectAssignments/ProjectAssignmentsRouters');
 require('./persons/educations/EducationRouters');
 require('./persons/skills/SkillsDictionaryRouters');
 require('./persons/profileSkills/ProfileSkillRouters');
@@ -705,7 +712,19 @@ app.use(
         // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.
         // ponytail: jeden generyczny komunikat z nazwą klucza, bez mapowania per encja
         const isDuplicateEntry = (err as any)?.code === 'ER_DUP_ENTRY';
-        const statusCode = isDuplicateEntry ? 409 : 500;
+        // Błąd, który sam zna swój status HTTP (np. ForbiddenError z ProjectScopeGuard albo
+        // walidacja wejścia), nie jest awarią serwera. Bez tego każda odmowa dostępu i każda
+        // literówka użytkownika szłaby jako 500, czyli z mailem-raportem do zespołu.
+        const explicitStatus = (err as any)?.status;
+        const hasExplicitClientStatus =
+            Number.isInteger(explicitStatus) &&
+            explicitStatus >= 400 &&
+            explicitStatus < 500;
+        const statusCode = hasExplicitClientStatus
+            ? explicitStatus
+            : isDuplicateEntry
+              ? 409
+              : 500;
 
         const rawMessage = err instanceof Error ? err.message : 'Nieznany błąd';
         const duplicateKey = isDuplicateEntry

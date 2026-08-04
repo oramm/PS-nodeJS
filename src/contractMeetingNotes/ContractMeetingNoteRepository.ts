@@ -3,6 +3,8 @@ import mysqlPromise from 'mysql2/promise';
 import BaseRepository from '../repositories/BaseRepository';
 import ContractMeetingNote from './ContractMeetingNote';
 import ToolsDb from '../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 import ToolsDate from '../tools/ToolsDate';
 
 export type ContractMeetingNoteSearchParams = {
@@ -37,7 +39,8 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
     }
 
     async find(
-        orConditions: ContractMeetingNoteSearchParams[] = []
+        orConditions: ContractMeetingNoteSearchParams[] = [],
+        scope?: ProjectScope
     ): Promise<ContractMeetingNote[]> {
         const sql = `SELECT
                 ContractMeetingNotes.Id,
@@ -59,10 +62,10 @@ export default class ContractMeetingNoteRepository extends BaseRepository<Contra
             FROM ContractMeetingNotes
             JOIN Contracts ON Contracts.Id = ContractMeetingNotes.ContractId
             LEFT JOIN Persons ON Persons.Id = ContractMeetingNotes.CreatedByPersonId
-            WHERE ${ToolsDb.makeOrGroupsConditions(
+            WHERE (${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
-            )}
+            )}) AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
             ORDER BY ContractMeetingNotes.ContractId DESC, ContractMeetingNotes.SequenceNumber DESC`;
 
         const result = await this.executeQuery(sql);

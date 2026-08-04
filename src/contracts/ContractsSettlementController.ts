@@ -3,6 +3,8 @@ import ToolsDb from '../tools/ToolsDb';
 import ContractType from './contractTypes/ContractType';
 import Project from '../projects/Project';
 import Setup from '../setup/Setup';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 
 export type ContractSettlementSearchParams = {
     id?: number;
@@ -21,7 +23,10 @@ export type ContractSettlementSearchParams = {
 };
 
 export default class ContractsSettlementController {
-    static async getSums(orConditions: ContractSettlementSearchParams[] = []) {
+    static async getSums(
+        orConditions: ContractSettlementSearchParams[] = [],
+        scope?: ProjectScope
+    ) {
         orConditions.forEach((condition) => {
             condition.invoiceStatuses =
                 condition.invoiceStatuses || this.externalStatuses();
@@ -45,10 +50,10 @@ export default class ContractsSettlementController {
           LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.id
           LEFT JOIN Invoices ON Invoices.ContractId=Contracts.Id
           LEFT JOIN InvoiceItems ON InvoiceItems.ParentId=Invoices.Id 
-          WHERE ${ToolsDb.makeOrGroupsConditions(
+          WHERE (${ToolsDb.makeOrGroupsConditions(
               orConditions,
               this.makeAndConditions.bind(this)
-          )}
+          )}) AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
           ORDER BY Contracts.ProjectOurId, OurContractsData.OurId DESC, Contracts.Number`;
 
         try {

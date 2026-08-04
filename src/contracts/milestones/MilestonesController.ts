@@ -3,7 +3,7 @@ import mysql from 'mysql2/promise';
 import BaseController from '../../controllers/BaseController';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsGd from '../../tools/ToolsGd';
-import { UserData } from '../../types/sessionTypes';
+import { ProjectScope, UserData } from '../../types/sessionTypes';
 import {
     MilestoneParentType,
     OurContractData,
@@ -58,10 +58,11 @@ export default class MilestonesController extends BaseController<
      */
     static async find(
         orConditions: MilestonesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
+        parentType: MilestoneParentType = 'CONTRACT',
+        scope?: ProjectScope
     ): Promise<Milestone[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions, parentType);
+        return await instance.repository.find(orConditions, parentType, scope);
     }
 
     /**

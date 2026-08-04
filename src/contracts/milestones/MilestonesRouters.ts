@@ -21,7 +21,8 @@ app.post('/milestones', async (req: Request, res: Response, next) => {
             orConditions?.[0]?.milestoneParentType) as MilestoneParentType;
         const result = await MilestonesController.find(
             orConditions,
-            parentType
+            parentType,
+            req.projectScope
         );
         res.send(result);
     } catch (error) {
@@ -35,7 +36,8 @@ app.post('/milestoneDates', async (req: Request, res: Response, next) => {
         const parentType = req.parsedBody.parentType as MilestoneParentType;
         const result = await MilestoneDatesController.find(
             orConditions,
-            parentType
+            parentType,
+            req.projectScope
         );
         res.send(result);
     } catch (error) {

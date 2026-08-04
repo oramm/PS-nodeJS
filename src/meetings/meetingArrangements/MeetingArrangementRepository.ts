@@ -1,6 +1,8 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
 import ToolsDb from '../../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../../tools/ProjectScope';
+import { ProjectScope } from '../../types/sessionTypes';
 import MeetingArrangement from './MeetingArrangement';
 
 export interface MeetingArrangementSearchParams {
@@ -18,6 +20,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
 
     async find(
         params?: MeetingArrangementSearchParams,
+        scope?: ProjectScope,
     ): Promise<MeetingArrangement[]> {
         const projectCondition = params?.projectOurId
             ? `Contracts.ProjectOurId="${params.projectOurId}"`
@@ -74,7 +77,8 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
                 AND ${contractCondition} 
                 AND ${caseCondition} 
                 AND ${meetingCondition}
-                AND ${idCondition}`;
+                AND ${idCondition}
+                AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}`;
 
         const result = await ToolsDb.getQueryCallbackAsync(sql);
         return this.processResult(result as any[]);

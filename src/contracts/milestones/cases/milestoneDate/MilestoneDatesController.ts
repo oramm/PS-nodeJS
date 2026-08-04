@@ -5,6 +5,7 @@ import MilestoneDate from './MilestoneDate';
 import MilestoneDateRepository, {
     MilestoneDatesSearchParams,
 } from './MilestoneDateRepository';
+import { ProjectScope } from '../../../../types/sessionTypes';
 
 /**
  * Controller dla MilestoneDate - warstwa orkiestracji
@@ -41,10 +42,11 @@ export default class MilestoneDatesController extends BaseController<
      */
     static async find(
         orConditions: MilestoneDatesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
+        parentType: MilestoneParentType = 'CONTRACT',
+        scope?: ProjectScope
     ): Promise<MilestoneDate[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions, parentType);
+        return await instance.repository.find(orConditions, parentType, scope);
     }
 
     /**

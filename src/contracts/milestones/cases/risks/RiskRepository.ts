@@ -1,5 +1,7 @@
 import ToolsDb from '../../../../tools/ToolsDb';
 import ToolsGd from '../../../../tools/ToolsGd';
+import { makeProjectScopeCondition } from '../../../../tools/ProjectScope';
+import { ProjectScope } from '../../../../types/sessionTypes';
 import Risk from './Risk';
 
 export type RisksSearchParams = {
@@ -16,7 +18,10 @@ export default class RiskRepository {
      * @param searchParams - Parametry wyszukiwania
      * @returns Promise<Risk[]>
      */
-    async find(searchParams: RisksSearchParams = {}): Promise<Risk[]> {
+    async find(
+        searchParams: RisksSearchParams = {},
+        scope?: ProjectScope
+    ): Promise<Risk[]> {
         const projectCondition = searchParams.projectId
             ? `Risks.ProjectOurId="${searchParams.projectId}"`
             : '1';
@@ -62,7 +67,8 @@ export default class RiskRepository {
             LEFT JOIN OurContractsData ON Milestones.ContractId = OurContractsData.Id
             LEFT JOIN MilestoneTypes_ContractTypes ON MilestoneTypes_ContractTypes.MilestoneTypeId=MilestoneTypes.Id AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
             LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId=MilestoneTypes.Id
-            WHERE ${projectCondition} AND ${contractCondition}`;
+            WHERE ${projectCondition} AND ${contractCondition}
+            AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
         return result.map((row) => this.mapRowToModel(row));

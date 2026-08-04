@@ -1,4 +1,6 @@
 import ToolsDb from '../../../../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../../../../tools/ProjectScope';
+import { ProjectScope } from '../../../../types/sessionTypes';
 
 export type CaseEventsSearchParams = {
     milestoneId?: number;
@@ -40,11 +42,17 @@ export default class CaseEventRepository {
      * @returns Promise<CaseEventRawData[]> - Surowe dane z bazy
      */
     async find(
-        searchParams: CaseEventsSearchParams = {}
+        searchParams: CaseEventsSearchParams = {},
+        scope?: ProjectScope
     ): Promise<CaseEventRawData[]> {
         const milestoneCondition = searchParams.milestoneId
             ? 'Milestones.Id=' + searchParams.milestoneId
             : '1';
+        // Obie gałęzie UNION joinują Contracts, więc ten sam warunek zawęża je tak samo.
+        const scopeCondition = makeProjectScopeCondition(
+            'Contracts.ProjectOurId',
+            scope
+        );
 
         const sql =
             'SELECT  Letters.Id, \n \t' +
@@ -76,6 +84,8 @@ export default class CaseEventRepository {
             'JOIN Persons ON Letters.EditorId=Persons.Id \n' +
             'WHERE ' +
             milestoneCondition +
+            ' AND ' +
+            scopeCondition +
             '\n \n' +
             'UNION \n \n' +
             'SELECT MeetingArrangements.Id, \n \t' +
@@ -107,6 +117,8 @@ export default class CaseEventRepository {
             'JOIN Persons ON MeetingArrangements.OwnerId=Persons.Id \n' +
             'WHERE ' +
             milestoneCondition +
+            ' AND ' +
+            scopeCondition +
             '\n \n' +
             'ORDER BY EventDate';
 

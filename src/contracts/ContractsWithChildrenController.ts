@@ -2,6 +2,7 @@ import { ContractsWithChildren } from './ContractTypes';
 import ContractsWithChildrenRepository, {
     ContractsWithChildrenSearchParams,
 } from './ContractsWithChildrenRepository';
+import { ProjectScope } from '../types/sessionTypes';
 
 /**
  * Controller dla ContractsWithChildren - warstwa aplikacji
@@ -22,8 +23,9 @@ export default class ContractsWithChildrenController {
      * @returns Kontrakty z pełną hierarchią dzieci
      */
     static async find(
-        orConditions: ContractsWithChildrenSearchParams[] = []
+        orConditions: ContractsWithChildrenSearchParams[] = [],
+        scope?: ProjectScope
     ): Promise<ContractsWithChildren[]> {
-        return await this.repository.find(orConditions);
+        return await this.repository.find(orConditions, scope);
     }
 }

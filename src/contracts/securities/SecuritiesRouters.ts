@@ -11,7 +11,10 @@ app.post('/securities', async (req: Request, res: Response, next) => {
 
         const orConditions = req.parsedBody.orConditions;
 
-        const result = await SecuritiesController.find(orConditions);
+        const result = await SecuritiesController.find(
+            orConditions,
+            req.projectScope
+        );
         res.send(result);
     } catch (error) {
         next(error);

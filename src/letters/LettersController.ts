@@ -34,6 +34,7 @@ import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
 import ApprovedDocsController from '../contracts/milestones/approvedDocs/ApprovedDocsController';
+import { ProjectScope } from '../types/sessionTypes';
 
 export default class LettersController extends BaseController<
     Letter,
@@ -63,7 +64,8 @@ export default class LettersController extends BaseController<
     static async find(
         orConditions: LetterSearchParams[],
         milestoneParentType: 'CONTRACT' | 'OFFER',
-        userData: UserData
+        userData: UserData,
+        scope?: ProjectScope
     ): Promise<Letter[]> {
         const instance = this.getInstance();
         // Repository zwraca już pełne instancje Letter (polimorfizm)
@@ -71,6 +73,7 @@ export default class LettersController extends BaseController<
             orConditions,
             milestoneParentType,
             userData,
+            scope,
         });
     }
 

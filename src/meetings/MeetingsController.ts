@@ -3,6 +3,7 @@ import Meeting from './Meeting';
 import MeetingValidator from './MeetingValidator';
 import BaseController from '../controllers/BaseController';
 import { MeetingCreatePayload } from '../types/types';
+import { ProjectScope } from '../types/sessionTypes';
 
 export default class MeetingsController extends BaseController<
     Meeting,
@@ -23,16 +24,20 @@ export default class MeetingsController extends BaseController<
 
     static async find(
         orConditions: MeetingSearchParams[] = [],
+        scope?: ProjectScope,
     ): Promise<Meeting[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        return await instance.repository.find(orConditions, scope);
     }
 
-    static async findFromDto(payload: {
-        orConditions?: MeetingSearchParams[];
-    }): Promise<Meeting[]> {
+    static async findFromDto(
+        payload: {
+            orConditions?: MeetingSearchParams[];
+        },
+        scope?: ProjectScope,
+    ): Promise<Meeting[]> {
         const normalized = MeetingValidator.validateFindPayload(payload);
-        return await this.find(normalized.orConditions);
+        return await this.find(normalized.orConditions, scope);
     }
 
     static async addFromDto(

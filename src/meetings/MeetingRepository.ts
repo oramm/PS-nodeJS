@@ -1,5 +1,7 @@
 import BaseRepository from '../repositories/BaseRepository';
 import ToolsDb from '../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 import Meeting from './Meeting';
 
 /**
@@ -30,7 +32,10 @@ export default class MeetingRepository extends BaseRepository<Meeting> {
      * @param orConditions - Warunki wyszukiwania (OR groups)
      * @returns Promise<Meeting[]> - Lista znalezionych spotkań
      */
-    async find(orConditions: MeetingSearchParams[] = []): Promise<Meeting[]> {
+    async find(
+        orConditions: MeetingSearchParams[] = [],
+        scope?: ProjectScope
+    ): Promise<Meeting[]> {
         const sql = `SELECT 
                 Meetings.Id,
                 Meetings.Name,
@@ -55,10 +60,10 @@ export default class MeetingRepository extends BaseRepository<Meeting> {
             LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
             JOIN ContractTypes ON ContractTypes.Id = Contracts.TypeId
             JOIN Projects ON Projects.OurId = Contracts.ProjectOurId
-            WHERE ${ToolsDb.makeOrGroupsConditions(
+            WHERE (${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
-            )}
+            )}) AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
             ORDER BY Meetings.Date DESC`;
 
         const result: any[] = await this.executeQuery(sql);

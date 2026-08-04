@@ -9,6 +9,8 @@ import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ToolsGd from '../tools/ToolsGd';
 import ToolsDate from '../tools/ToolsDate';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 import { ContractsWithChildren } from './ContractTypes';
 import Person from '../persons/Person';
 import Project from '../projects/Project';
@@ -64,15 +66,22 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
      * @returns Promise<ContractsWithChildren[]> - Kontrakty z hierarchią dzieci
      */
     async find(
-        orConditions: ContractsWithChildrenSearchParams[] = []
+        orConditions: ContractsWithChildrenSearchParams[] = [],
+        scope?: ProjectScope
     ): Promise<ContractsWithChildren[]> {
-        const conditions =
+        const orGroupsConditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
                       this.makeAndConditions.bind(this)
                   )
                 : '1';
+        // Zakres na zewnątrz grup OR: pusta lista orConditions oznacza tu "wszystko",
+        // więc bez tego AND rola z przypisaniami dostałaby całą bazę kontraktów.
+        const conditions = `(${orGroupsConditions}) AND ${makeProjectScopeCondition(
+            'Contracts.ProjectOurId',
+            scope
+        )}`;
 
         // WZORZEC: SQL inline w find() (jak w MilestoneRepository, CaseRepository)
         const sql = `SELECT  Tasks.Id,

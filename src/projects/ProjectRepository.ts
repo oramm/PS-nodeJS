@@ -3,6 +3,8 @@ import Project from './Project';
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import Setup from '../setup/Setup';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 
 export type ProjectSearchParams = {
     id?: number;
@@ -33,7 +35,10 @@ export default class ProjectRepository extends BaseRepository<Project> {
      * @param orConditions - Warunki wyszukiwania (OR groups)
      * @returns Promise<Project[]> - Lista znalezionych Projects
      */
-    async find(orConditions: ProjectSearchParams[] = []): Promise<Project[]> {
+    async find(
+        orConditions: ProjectSearchParams[] = [],
+        scope?: ProjectScope
+    ): Promise<Project[]> {
         const sql = `SELECT  Projects.Id,
                 Projects.OurId,
                 Projects.Name,
@@ -53,10 +58,10 @@ export default class ProjectRepository extends BaseRepository<Project> {
                 Projects.GoogleCalendarId, 
                 Projects.LastUpdated
                 FROM Projects
-                WHERE ${this.makeOrGroupsConditions(
+                WHERE (${this.makeOrGroupsConditions(
                     orConditions,
                     this.makeAndConditions.bind(this)
-                )}
+                )}) AND ${makeProjectScopeCondition('Projects.OurId', scope)}
                 GROUP BY Projects.OurId ASC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

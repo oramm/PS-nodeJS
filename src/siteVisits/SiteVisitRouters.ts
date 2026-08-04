@@ -4,6 +4,7 @@ import SiteVisitController from './SiteVisitController';
 import { SiteVisitInputDto } from './SiteVisitValidator';
 import { SiteVisitSearchParams } from './SiteVisitRepository';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
+import { ForbiddenError } from '../persons/projectAssignments/ProjectScopeGuard';
 
 // Rola 1/2 (ADMIN/ENVI_MANAGER) - przegląd wizyt wszystkich osób.
 function isAdminRole(req: Request): boolean {
@@ -23,8 +24,10 @@ async function hasModuleAccess(req: Request): Promise<boolean> {
 async function requireAccess(req: Request): Promise<number> {
     const personId = req.session.userData?.enviId;
     if (!personId) throw new Error('Musisz być zalogowany.');
+    // ForbiddenError, a nie zwykły Error: globalny handler mapuje 5xx na mail z raportem
+    // błędu do zespołu, a odmowa dostępu to normalna odpowiedź, nie awaria serwera.
     if (!(await hasModuleAccess(req)))
-        throw new Error('Brak uprawnień do rejestru wizyt na budowie.');
+        throw new ForbiddenError('Brak uprawnień do rejestru wizyt na budowie.');
     return personId;
 }
 
@@ -32,7 +35,8 @@ async function requireAccess(req: Request): Promise<number> {
 function requireAdmin(req: Request): number {
     const personId = req.session.userData?.enviId;
     if (!personId) throw new Error('Musisz być zalogowany.');
-    if (!isAdminRole(req)) throw new Error('Brak uprawnień do przeglądu wizyt.');
+    if (!isAdminRole(req))
+        throw new ForbiddenError('Brak uprawnień do przeglądu wizyt.');
     return personId;
 }
 
@@ -62,7 +66,9 @@ app.get('/site-visits/access', async (req: Request, res: Response, next: any) =>
 app.get('/site-visits/contracts', async (req: Request, res: Response, next: any) => {
     try {
         const personId = await requireAccess(req);
-        res.send(await SiteVisitController.getContracts(personId));
+        res.send(
+            await SiteVisitController.getContracts(personId, req.projectScope)
+        );
     } catch (error) {
         next(error);
     }
@@ -101,8 +107,7 @@ app.get(
         try {
             const personId = req.session.userData?.enviId;
             if (!personId) throw new Error('Musisz być zalogowany.');
-            const admin = isAdminRole(req);
-            if (!admin && !(await StaffMemberRepository.hasSiteVisitAccess(personId)))
+            if (!(await hasModuleAccess(req)))
                 throw new Error('Brak uprawnień.');
             const media = await SiteVisitController.getPhotoMedia(
                 req.params.gdFileId
@@ -179,7 +184,8 @@ app.post(
                 dto,
                 files,
                 personId,
-                authorName
+                authorName,
+                req.projectScope
             );
             res.send(result);
         } catch (error) {

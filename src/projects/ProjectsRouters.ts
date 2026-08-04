@@ -6,7 +6,10 @@ import Project from './Project';
 app.post('/projects', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await ProjectsController.find(orConditions);
+        const result = await ProjectsController.find(
+            orConditions,
+            req.projectScope
+        );
         res.send(result);
     } catch (error) {
         next(error);

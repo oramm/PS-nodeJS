@@ -8,6 +8,7 @@ import CaseTypesController from '../milestones/cases/caseTypes/CaseTypesControll
 import MilestonesController from '../milestones/MilestonesController';
 import { SecuritiesSearchParams, Security } from './Security';
 import SecurityRepository from './SecurityRepository';
+import { ProjectScope } from '../../types/sessionTypes';
 
 export default class SecuritiesController extends BaseController<
     Security,
@@ -26,9 +27,12 @@ export default class SecuritiesController extends BaseController<
         return SecuritiesController.instance;
     }
 
-    static async find(orConditions: SecuritiesSearchParams[]) {
+    static async find(
+        orConditions: SecuritiesSearchParams[],
+        scope?: ProjectScope
+    ) {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        return await instance.repository.find(orConditions, scope);
     }
 
     static async addFromDto(dto: any, auth?: OAuth2Client): Promise<Security> {

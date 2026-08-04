@@ -3,6 +3,7 @@ import { app } from '../../../index';
 import Case from './Case';
 import Setup from '../../../setup/Setup';
 import { Request, Response } from 'express';
+import ProjectScopeGuard from '../../../persons/projectAssignments/ProjectScopeGuard';
 
 /** Waliduje wartość statusu sprawy z klienta. Zwraca komunikat błędu albo undefined. */
 function validateCaseStatus(status: unknown): string | undefined {
@@ -16,7 +17,10 @@ function validateCaseStatus(status: unknown): string | undefined {
 app.post('/cases', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await CasesController.find(orConditions);
+        const result = await CasesController.find(
+            orConditions,
+            req.projectScope
+        );
         res.send(result);
     } catch (err) {
         if (err instanceof Error) {
@@ -33,6 +37,11 @@ app.post('/case', async (req: Request, res: Response, next) => {
             res.status(400).send(statusError);
             return;
         }
+        // Nowa sprawa nie ma jeszcze id - sprawdzamy kamień milowy, pod który trafia.
+        await ProjectScopeGuard.assertMilestoneInScope(
+            Number(req.parsedBody._parent?.id ?? req.parsedBody.milestoneId),
+            req.projectScope
+        );
         const caseItem = new Case({
             ...req.parsedBody,
         });
@@ -53,6 +62,11 @@ app.put('/case/:id', async (req: Request, res: Response, next) => {
             res.status(400).send(statusError);
             return;
         }
+        // Id z URL-a, nie z ciała żądania: ciało kontroluje wywołujący.
+        await ProjectScopeGuard.assertCaseInScope(
+            Number(req.params.id),
+            req.projectScope
+        );
         const itemFromClient = req.parsedBody;
         let item = new Case(itemFromClient);
         if (item._wasChangedToUniquePerMilestone)
@@ -73,6 +87,10 @@ app.put('/case/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/case/:id', async (req: Request, res: Response, next) => {
     try {
+        await ProjectScopeGuard.assertCaseInScope(
+            Number(req.params.id),
+            req.projectScope
+        );
         let item = new Case(req.body);
         console.log('delete');
 

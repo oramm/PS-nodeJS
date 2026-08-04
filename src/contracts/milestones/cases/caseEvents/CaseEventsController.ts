@@ -1,3 +1,4 @@
+import { ProjectScope } from '../../../../types/sessionTypes';
 import LetterEntityAssociationsController from '../../../../letters/associations/LetterEntityAssociationsController';
 import LettersController from '../../../../letters/LettersController';
 import Meeting from '../../../../meetings/Meeting';
@@ -43,10 +44,11 @@ export default class CaseEventsController {
      * @returns Promise<any[]> - Lista zdarzeń (Letter lub MeetingArrangement)
      */
     static async find(
-        searchParams: CaseEventsSearchParams = {}
+        searchParams: CaseEventsSearchParams = {},
+        scope?: ProjectScope
     ): Promise<any[]> {
         const instance = this.getInstance();
-        const rawData = await instance.repository.find(searchParams);
+        const rawData = await instance.repository.find(searchParams, scope);
         return instance.processCaseEventsResult(rawData, searchParams);
     }
 

@@ -52,7 +52,7 @@ export default class ToolsGapi {
     static async loginHandler(req: Request, res: Response) {
         try {
             // ⚠️ DEV MODE: Check for mock authentication
-            const { dev_mode, mock_user } = req.body;
+            const { dev_mode, mock_user, mock_role, mock_person_id } = req.body;
 
             if (dev_mode === true) {
                 // SECURITY: Only allow in development with explicit flag
@@ -70,15 +70,32 @@ export default class ToolsGapi {
                     '🔧 DEV MODE: Mock authentication - bypassing Google OAuth'
                 );
 
+                // Rola i osoba są sterowalne z żądania, żeby dało się przejść
+                // scenariusze ról ograniczonych (np. CONTRACT_WORKER z przypisanymi
+                // projektami). Domyślnie, jak dotąd, ADMIN.
+                const roleName = SystemRoleName[
+                    mock_role as keyof typeof SystemRoleName
+                ]
+                    ? (mock_role as SystemRoleName)
+                    : SystemRoleName.ADMIN;
+                const roleIds: Record<SystemRoleName, number> = {
+                    [SystemRoleName.ADMIN]: 1,
+                    [SystemRoleName.ENVI_MANAGER]: 2,
+                    [SystemRoleName.ENVI_EMPLOYEE]: 3,
+                    [SystemRoleName.ENVI_COOPERATOR]: 4,
+                    [SystemRoleName.EXTERNAL_USER]: 5,
+                    [SystemRoleName.CONTRACT_WORKER]: 6,
+                };
+
                 // Mock user data for Playwright/testing
                 req.session.userData = {
-                    enviId: 1,
+                    enviId: Number(mock_person_id) > 0 ? Number(mock_person_id) : 1,
                     googleId: 'mock-google-id-playwright',
                     systemEmail: 'playwright@test.local',
                     userName: mock_user || 'Playwright Test User',
                     picture: 'https://www.gravatar.com/avatar/?d=mp',
-                    systemRoleName: SystemRoleName.ADMIN,
-                    systemRoleId: 1,
+                    systemRoleName: roleName,
+                    systemRoleId: roleIds[roleName],
                 };
 
                 console.log(

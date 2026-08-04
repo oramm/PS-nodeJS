@@ -13,6 +13,8 @@ import {
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ToolsDb from '../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 import Setup from '../setup/Setup';
 import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
 import Tools from '../tools/Tools';
@@ -244,15 +246,20 @@ export default class ContractRepository extends BaseRepository<
      */
     async find(
         orConditions: ContractSearchParams[] = [],
+        scope?: ProjectScope,
     ): Promise<(ContractOur | ContractOther)[]> {
         const firstCondition = orConditions[0] ?? ({} as ContractSearchParams);
-        const conditions =
+        const orGroupsConditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
                       orConditions,
                       this.makeAndConditions.bind(this),
                   )
                 : '1';
+        const conditions = `(${orGroupsConditions}) AND ${makeProjectScopeCondition(
+            'mainContracts.ProjectOurId',
+            scope,
+        )}`;
 
         const sql = `SELECT mainContracts.Id, 
                     mainContracts.Alias, 

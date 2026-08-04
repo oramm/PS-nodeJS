@@ -1,5 +1,6 @@
 import Case from './Case';
 import CaseRepository, { CasesSearchParams } from './CaseRepository';
+import { ProjectScope } from '../../../types/sessionTypes';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsDb from '../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
@@ -169,9 +170,12 @@ export default class CasesController extends BaseController<
      * @param orConditions - Warunki wyszukiwania (OR groups)
      * @returns Promise<Case[]> - Lista znalezionych Cases
      */
-    static async find(orConditions: CasesSearchParams[] = []): Promise<Case[]> {
+    static async find(
+        orConditions: CasesSearchParams[] = [],
+        scope?: ProjectScope
+    ): Promise<Case[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        return await instance.repository.find(orConditions, scope);
     }
 
     /**

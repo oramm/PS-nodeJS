@@ -9,6 +9,7 @@ import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import Setup from '../setup/Setup';
 import Tools from '../tools/Tools';
 import ToolsDb from '../tools/ToolsDb';
+import { ProjectScope } from '../types/sessionTypes';
 import ToolsSheets from '../tools/ToolsSheets';
 import {
     CityData,
@@ -91,9 +92,12 @@ export default class ContractsController extends BaseController<
         return this.instance;
     }
 
-    static async find(orConditions: ContractSearchParams[] = []) {
+    static async find(
+        orConditions: ContractSearchParams[] = [],
+        scope?: ProjectScope
+    ) {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        return await instance.repository.find(orConditions, scope);
     }
 
     /**

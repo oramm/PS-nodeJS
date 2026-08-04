@@ -16,7 +16,7 @@ import { Request, Response } from 'express';
 
 app.get('/risks', async (req: Request, res: Response, next) => {
     try {
-        const result = await RisksController.find(req.query);
+        const result = await RisksController.find(req.query, req.projectScope);
         res.send(result);
     } catch (error) {
         next(error);
@@ -25,7 +25,7 @@ app.get('/risks', async (req: Request, res: Response, next) => {
 
 app.get('/risk/:id', async (req: Request, res: Response, next) => {
     try {
-        const result = await RisksController.find(req.params);
+        const result = await RisksController.find(req.params, req.projectScope);
         res.send(result);
     } catch (error) {
         next(error);

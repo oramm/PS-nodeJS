@@ -2,6 +2,8 @@ import mysql from 'mysql2/promise';
 import BaseRepository from '../repositories/BaseRepository';
 import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
+import { ProjectScope } from '../types/sessionTypes';
 import SiteVisit, { SiteVisitData, SiteVisitPhotoData } from './SiteVisit';
 
 export interface SiteVisitSearchParams {
@@ -65,8 +67,24 @@ export default class SiteVisitRepository extends BaseRepository<SiteVisit> {
      * poziomie kontraktu (ContractId) albo projektu (ProjectOurId) - w drugim
      * przypadku obejmuje wszystkie kontrakty projektu.
      */
-    async getAssignableContracts(personId: number): Promise<AssignableContract[]> {
+    async getAssignableContracts(
+        personId: number,
+        scope?: ProjectScope
+    ): Promise<AssignableContract[]> {
         const placeholders = INACTIVE_STATUSES.map(() => '?').join(', ');
+        // Pracownik kontraktowy nie ma ról w tabeli Roles - jego zakres wynika
+        // z przypisanych projektów, więc zamiast JOIN-a po rolach filtrujemy po nich.
+        const isProjectScoped = Boolean(scope);
+        const assignmentJoin = isProjectScoped
+            ? ''
+            : `JOIN Roles r ON (
+                r.ContractId = c.Id
+                OR (r.ProjectOurId IS NOT NULL AND r.ProjectOurId = c.ProjectOurId)
+            )`;
+        const assignmentCondition = isProjectScoped
+            ? makeProjectScopeCondition('c.ProjectOurId', scope)
+            : 'r.PersonId = ?';
+        const assignmentParams = isProjectScoped ? [] : [personId];
         // Miasto jest przypisane tylko do kontraktów WEWNĘTRZNYCH (OurContractsData).
         // Dla zewnętrznych bierzemy miasto powiązanego kontraktu wewnętrznego
         // (Contracts.OurIdRelated -> OurContractsData.OurId -> CityId).
@@ -87,15 +105,12 @@ export default class SiteVisitRepository extends BaseRepository<SiteVisit> {
             LEFT JOIN Cities ci ON ci.Id = oc.CityId
             LEFT JOIN OurContractsData relOc ON relOc.OurId = c.OurIdRelated
             LEFT JOIN Cities relCi ON relCi.Id = relOc.CityId
-            JOIN Roles r ON (
-                r.ContractId = c.Id
-                OR (r.ProjectOurId IS NOT NULL AND r.ProjectOurId = c.ProjectOurId)
-            )
-            WHERE r.PersonId = ?
+            ${assignmentJoin}
+            WHERE ${assignmentCondition}
               AND c.Status NOT IN (${placeholders})
             ORDER BY oc.OurId, c.OurIdRelated, c.Name`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
-            personId,
+            ...assignmentParams,
             ...INACTIVE_STATUSES,
         ])) as any[];
         return rows.map((r) => ({
@@ -114,9 +129,10 @@ export default class SiteVisitRepository extends BaseRepository<SiteVisit> {
     /** Pojedynczy kontrakt z listy dostępnych - do autoryzacji i pobrania GdFolderId. */
     async getAssignableContract(
         personId: number,
-        contractId: number
+        contractId: number,
+        scope?: ProjectScope
     ): Promise<AssignableContract | undefined> {
-        const contracts = await this.getAssignableContracts(personId);
+        const contracts = await this.getAssignableContracts(personId, scope);
         return contracts.find((c) => c.id === contractId);
     }
 

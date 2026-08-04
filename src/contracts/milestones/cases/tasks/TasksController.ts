@@ -6,6 +6,7 @@ import Milestone from '../../Milestone';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
 import { OtherContractData, OurContractData } from '../../../../types/types';
+import { ProjectScope } from '../../../../types/sessionTypes';
 import TaskRepository, { TasksSearchParams } from './TaskRepository';
 import Process from '../../../../processes/Process';
 import TasksTemplateForProcesssController from './taskTemplates/TasksTemplatesForProcessesController';
@@ -46,9 +47,12 @@ export default class TasksController extends BaseController<
      * @param searchParams - Parametry wyszukiwania
      * @returns Promise<Task[]> - Lista zadań
      */
-    static async find(searchParams: TasksSearchParams[] = []): Promise<Task[]> {
+    static async find(
+        searchParams: TasksSearchParams[] = [],
+        scope?: ProjectScope
+    ): Promise<Task[]> {
         const instance = this.getInstance();
-        return instance.repository.find(searchParams);
+        return instance.repository.find(searchParams, 'CONTRACT', scope);
     }
 
     // ==================== CREATE ====================

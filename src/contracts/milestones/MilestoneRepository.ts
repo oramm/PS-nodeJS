@@ -5,6 +5,8 @@ import mysql from 'mysql2/promise';
 import { MilestoneParentType, OfferData } from '../../types/types';
 import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
+import { makeProjectScopeCondition } from '../../tools/ProjectScope';
+import { ProjectScope } from '../../types/sessionTypes';
 
 export type MilestonesSearchParams = {
     projectId?: string;
@@ -35,7 +37,8 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
      */
     async find(
         orConditions: MilestonesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
+        parentType: MilestoneParentType = 'CONTRACT',
+        scope?: ProjectScope
     ): Promise<Milestone[]> {
         this.validateConditions(orConditions, parentType);
 
@@ -93,11 +96,11 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
             AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
         LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
         LEFT JOIN OurContractsData ON OurContractsData.Id=Milestones.ContractId
-        WHERE 
-        ${ToolsDb.makeOrGroupsConditions(
+        WHERE
+        (${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
-        )}  
+        )}) AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
             AND ${typeCondition}
         ORDER BY MilestoneTypes_ContractTypes.FolderNumber`;
 

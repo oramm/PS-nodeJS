@@ -1,8 +1,9 @@
 import mysql from 'mysql2/promise';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
-import { UserData } from '../types/sessionTypes';
+import { ProjectScope, UserData } from '../types/sessionTypes';
 import { SystemRoleName } from '../types/sessionTypes';
+import { makeProjectScopeCondition } from '../tools/ProjectScope';
 import { CaseData, ContractData, EntityData, OfferData, ProjectData } from '../types/types';
 import BaseRepository from '../repositories/BaseRepository';
 import Letter from './Letter';
@@ -45,6 +46,7 @@ export type LetterFindParams = {
     orConditions: LetterSearchParams[];
     milestoneParentType: 'CONTRACT' | 'OFFER';
     userData: UserData;
+    scope?: ProjectScope;
 };
 
 export default class LetterRepository extends BaseRepository<Letter> {
@@ -103,7 +105,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
      * @returns tablica instancji Letter (konkretne podklasy: OurLetterContract, IncomingLetterOffer, etc.)
      */
     async find(params: LetterFindParams): Promise<Letter[]> {
-        const { orConditions, milestoneParentType, userData } = params;
+        const { orConditions, milestoneParentType, userData, scope } = params;
         const milestoneParentTypeCondition =
             milestoneParentType === 'CONTRACT'
                 ? 'Milestones.ContractId IS NOT NULL'
@@ -194,11 +196,12 @@ export default class LetterRepository extends BaseRepository<Letter> {
             ${this.makeUserJoinCondition(
                 userData
             )} -- Dodawanie warunku dla EXTERNAL-USER
-            WHERE ${ToolsDb.makeOrGroupsConditions(
+            WHERE (${ToolsDb.makeOrGroupsConditions(
                 orConditions,
                 this.makeAndConditions.bind(this)
-            )}
+            )})
             AND ${milestoneParentTypeCondition}
+            AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
             GROUP BY Letters.Id
             ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
 

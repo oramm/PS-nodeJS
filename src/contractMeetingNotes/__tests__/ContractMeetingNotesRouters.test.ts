@@ -57,10 +57,37 @@ describe('ContractMeetingNotesRouters', () => {
 
         await readHandler(req, res, next);
 
+        // Drugi argument to zakres projektów zalogowanego (req.projectScope): dla ról bez
+        // ograniczeń jest undefined, dla pracownika kontraktowego zawęża wynik do
+        // przypisanych projektów.
         expect(ContractMeetingNotesController.findFromDto).toHaveBeenCalledWith(
             req.parsedBody,
+            undefined,
         );
         expect(res.send).toHaveBeenCalledWith(expected);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it('przekazuje zakres projektów do kontrolera dla roli ograniczonej', async () => {
+        const scope = { projectOurIds: ['2023.10'] };
+        const req = {
+            parsedBody: { orConditions: [{}] },
+            body: {},
+            projectScope: scope,
+        } as any;
+        const res = { send: jest.fn() } as any;
+        const next = jest.fn();
+
+        (
+            ContractMeetingNotesController.findFromDto as jest.Mock
+        ).mockResolvedValue([]);
+
+        await readHandler(req, res, next);
+
+        expect(ContractMeetingNotesController.findFromDto).toHaveBeenCalledWith(
+            req.parsedBody,
+            scope,
+        );
         expect(next).not.toHaveBeenCalled();
     });
 

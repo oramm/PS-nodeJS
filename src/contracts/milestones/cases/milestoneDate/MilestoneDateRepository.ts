@@ -1,6 +1,8 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../../../repositories/BaseRepository';
 import ToolsDb from '../../../../tools/ToolsDb';
+import { makeProjectScopeCondition } from '../../../../tools/ProjectScope';
+import { ProjectScope } from '../../../../types/sessionTypes';
 import {
     ContractTypeData,
     MilestoneParentType,
@@ -70,7 +72,8 @@ export default class MilestoneDateRepository extends BaseRepository<MilestoneDat
      */
     async find(
         orConditions: MilestoneDatesSearchParams[] = [],
-        parentType: MilestoneParentType = 'CONTRACT'
+        parentType: MilestoneParentType = 'CONTRACT',
+        scope?: ProjectScope
     ): Promise<MilestoneDate[]> {
         const typeCondition =
             parentType === 'CONTRACT'
@@ -147,12 +150,13 @@ export default class MilestoneDateRepository extends BaseRepository<MilestoneDat
         LEFT JOIN MilestoneDates ON Milestones.Id = MilestoneDates.MilestoneId
         LEFT JOIN Persons AS Admins ON OurContractsData.AdminId = Admins.Id
         LEFT JOIN Persons AS RelatedContractAdmins ON RelatedOurContractsData.AdminId = RelatedContractAdmins.Id
-        WHERE 
-        ${ToolsDb.makeOrGroupsConditions(
+        WHERE
+        (${ToolsDb.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
-        )}  
+        )})
             AND ${typeCondition}
+            AND ${makeProjectScopeCondition('MainContracts.ProjectOurId', scope)}
         ORDER BY MilestoneDates.EndDate, ContractId, FolderNumber ASC`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);

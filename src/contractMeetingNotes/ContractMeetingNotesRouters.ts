@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
 import ContractMeetingNotesController from './ContractMeetingNotesController';
+import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
 
 app.post('/contractMeetingNotes', async (req: Request, res: Response, next) => {
     try {
         const result = await ContractMeetingNotesController.findFromDto(
             req.parsedBody ?? req.body,
+            req.projectScope,
         );
         res.send(result);
     } catch (error) {
@@ -16,8 +18,13 @@ app.post('/contractMeetingNotes', async (req: Request, res: Response, next) => {
 app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
     try {
         const fallbackCreatedByPersonId = req.session.userData?.enviId;
+        const payload = req.parsedBody ?? req.body;
+        await ProjectScopeGuard.assertContractInScope(
+            Number(payload?.contractId),
+            req.projectScope,
+        );
         const item = await ContractMeetingNotesController.addFromDto(
-            req.parsedBody ?? req.body,
+            payload,
             fallbackCreatedByPersonId,
         );
 
@@ -29,6 +36,10 @@ app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
 
 app.put('/contractMeetingNote/:id', async (req: Request, res: Response, next) => {
     try {
+        await ProjectScopeGuard.assertContractMeetingNoteInScope(
+            Number(req.params.id),
+            req.projectScope,
+        );
         const item = await ContractMeetingNotesController.editFromDto({
             ...(req.parsedBody ?? req.body),
             id: parseInt(req.params.id, 10),
@@ -41,6 +52,10 @@ app.put('/contractMeetingNote/:id', async (req: Request, res: Response, next) =>
 
 app.delete('/contractMeetingNote/:id', async (req: Request, res: Response, next) => {
     try {
+        await ProjectScopeGuard.assertContractMeetingNoteInScope(
+            Number(req.params.id),
+            req.projectScope,
+        );
         await ContractMeetingNotesController.deleteById(
             parseInt(req.params.id, 10),
         );

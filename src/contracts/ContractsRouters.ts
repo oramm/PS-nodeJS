@@ -23,7 +23,10 @@ app.post('/contracts', async (req: Request, res: Response, next) => {
         let isArchived = false;
         if (typeof orConditions.isArchived === 'string')
             isArchived = orConditions.isArchived === 'true';
-        const result = await ContractsController.find(orConditions);
+        const result = await ContractsController.find(
+            orConditions,
+            req.projectScope,
+        );
         res.send(result);
     } catch (error) {
         next(error);
@@ -38,8 +41,10 @@ app.post(
             let isArchived = false;
             if (typeof orConditions.isArchived === 'string')
                 isArchived = orConditions.isArchived === 'true';
-            const result =
-                await ContractsWithChildrenController.find(orConditions);
+            const result = await ContractsWithChildrenController.find(
+                orConditions,
+                req.projectScope,
+            );
             res.send(result);
         } catch (error) {
             next(error);
@@ -52,8 +57,10 @@ app.post(
     async (req: Request, res: Response, next) => {
         try {
             const orConditions = req.parsedBody.orConditions;
-            const result =
-                await ContractsSettlementController.getSums(orConditions);
+            const result = await ContractsSettlementController.getSums(
+                orConditions,
+                req.projectScope,
+            );
             res.send(result);
         } catch (error) {
             next(error);

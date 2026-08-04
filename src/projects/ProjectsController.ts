@@ -6,6 +6,7 @@ import Project from './Project';
 import ProjectEntitiesController from './ProjectEntitiesController';
 import ProjectEntity from './ProjectEntity';
 import ProjectRepository, { ProjectSearchParams } from './ProjectRepository';
+import { ProjectScope } from '../types/sessionTypes';
 import {
     enqueueFidmanProjectPush,
     projectHasSyncedContract,
@@ -40,10 +41,11 @@ export default class ProjectsController extends BaseController<
      * @returns Promise<Project[]> - Lista znalezionych Projects
      */
     static async find(
-        orConditions: ProjectSearchParams[] = []
+        orConditions: ProjectSearchParams[] = [],
+        scope?: ProjectScope
     ): Promise<Project[]> {
         const instance = this.getInstance();
-        const projects = await instance.repository.find(orConditions);
+        const projects = await instance.repository.find(orConditions, scope);
 
         if (orConditions[0]?.onlyKeyData) return projects;
 

@@ -6,6 +6,8 @@ import ProcessesController from '../../../processes/ProcesesController';
 import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
 import Risk from './risks/Risk';
 import Milestone from '../Milestone';
+import { makeProjectScopeCondition } from '../../../tools/ProjectScope';
+import { ProjectScope } from '../../../types/sessionTypes';
 import ContractOur from '../../ContractOur';
 import ContractOther from '../../ContractOther';
 import { OfferData } from '../../../types/types';
@@ -71,7 +73,10 @@ export default class CaseRepository extends BaseRepository<Case> {
      * @param orConditions - Warunki wyszukiwania (OR groups)
      * @returns Promise<Case[]> - Lista znalezionych Cases
      */
-    async find(orConditions: CasesSearchParams[] = []): Promise<Case[]> {
+    async find(
+        orConditions: CasesSearchParams[] = [],
+        scope?: ProjectScope
+    ): Promise<Case[]> {
         const milestoneParentTypeCondition =
             orConditions[0]._contract?.id || orConditions[0].contractId
                 ? 'Milestones.ContractId IS NOT NULL'
@@ -133,11 +138,12 @@ export default class CaseRepository extends BaseRepository<Case> {
             ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId 
             AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
         LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = MilestoneTypes.Id
-        WHERE ${this.makeOrGroupsConditions(
+        WHERE (${this.makeOrGroupsConditions(
             orConditions,
             this.makeAndConditions.bind(this)
-        )}
+        )})
             AND ${milestoneParentTypeCondition}
+            AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
         ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
 
         const result: any[] = await this.executeQuery(sql);

@@ -1,5 +1,6 @@
 import Risk from './Risk';
 import RiskRepository, { RisksSearchParams } from './RiskRepository';
+import { ProjectScope } from '../../../../types/sessionTypes';
 
 /**
  * Controller dla Risk - warstwa aplikacji/serwisu
@@ -46,8 +47,11 @@ export default class RisksController {
      * @param searchParams - Parametry wyszukiwania
      * @returns Promise<Risk[]>
      */
-    static async find(searchParams: RisksSearchParams = {}): Promise<Risk[]> {
+    static async find(
+        searchParams: RisksSearchParams = {},
+        scope?: ProjectScope
+    ): Promise<Risk[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(searchParams);
+        return await instance.repository.find(searchParams, scope);
     }
 }

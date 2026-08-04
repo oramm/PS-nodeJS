@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { ProjectScope } from '../../types/sessionTypes';
 import MeetingArrangement from './MeetingArrangement';
 import MeetingArrangementRepository, {
     MeetingArrangementSearchParams,
@@ -26,14 +27,18 @@ export default class MeetingArrangementsController {
 
     static async find(
         params?: MeetingArrangementSearchParams,
+        scope?: ProjectScope,
     ): Promise<MeetingArrangement[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(params);
+        return await instance.repository.find(params, scope);
     }
 
-    static async findFromDto(payload: {
-        orConditions?: MeetingArrangementSearchParams[];
-    }): Promise<MeetingArrangement[]> {
+    static async findFromDto(
+        payload: {
+            orConditions?: MeetingArrangementSearchParams[];
+        },
+        scope?: ProjectScope,
+    ): Promise<MeetingArrangement[]> {
         const normalized =
             MeetingArrangementValidator.validateFindPayload(payload);
         if (normalized.orConditions.length === 0) {
@@ -41,7 +46,7 @@ export default class MeetingArrangementsController {
         }
         const results: MeetingArrangement[] = [];
         for (const condition of normalized.orConditions) {
-            const items = await this.find(condition);
+            const items = await this.find(condition, scope);
             results.push(...items);
         }
         return results;

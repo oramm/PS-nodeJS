@@ -2,6 +2,8 @@ import BaseRepository from '../../../../repositories/BaseRepository';
 import Task from './Task';
 import mysql from 'mysql2/promise';
 import Project from '../../../../projects/Project';
+import { makeProjectScopeCondition } from '../../../../tools/ProjectScope';
+import { ProjectScope } from '../../../../types/sessionTypes';
 import {
     OfferData,
     OtherContractData,
@@ -63,7 +65,8 @@ export default class TaskRepository extends BaseRepository<Task> {
 
     async find(
         orConditions: TasksSearchParams[] = [],
-        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT'
+        milestoneParentType: 'CONTRACT' | 'OFFER' = 'CONTRACT',
+        scope?: ProjectScope
     ): Promise<Task[]> {
         {
             const conditions =
@@ -152,8 +155,9 @@ export default class TaskRepository extends BaseRepository<Task> {
                     AND MilestoneTypes_ContractTypes.ContractTypeId = Contracts.TypeId
                 LEFT JOIN MilestoneTypes_Offers ON MilestoneTypes_Offers.MilestoneTypeId = Milestones.TypeId
                 LEFT JOIN Persons AS Owners ON Owners.Id = Tasks.OwnerId
-                WHERE ${conditions}
+                WHERE (${conditions})
                 AND ${milestoneParentTypeCondition}
+                AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
                 ORDER BY Contracts.Id, Milestones.Id, Cases.Id;`;
 
             const rows = await this.executeQuery(sql);

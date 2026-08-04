@@ -1,5 +1,6 @@
 import Person from './Person';
-import { UserData } from '../types/sessionTypes';
+import { SystemRoleName, UserData } from '../types/sessionTypes';
+import SessionRevoker from '../setup/Sessions/SessionRevoker';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
@@ -89,7 +90,9 @@ export default class PersonsController extends BaseController<
         conn: mysql.PoolConnection
     ): Promise<void> {
         if (!personId || !roleWasWritten) return;
-        if (systemRoleId === undefined || ![1, 2, 3].includes(systemRoleId))
+        // Rola 6 (CONTRACT_WORKER) też dostaje rekord, ale z wyzerowanymi flagami -
+        // dostęp do kilometrówki i wizyt na budowie włącza się jej świadomie, per osoba.
+        if (systemRoleId === undefined || ![1, 2, 3, 6].includes(systemRoleId))
             return;
         await StaffMemberRepository.ensureDefaultsForRole(
             personId,
@@ -164,6 +167,13 @@ export default class PersonsController extends BaseController<
             instance.repository.getPersonsWriteFields(fieldsToUpdate);
         const hasAccountFields = accountFieldsToSync.length > 0;
         const hasPersonFields = personFieldsToUpdate.length > 0;
+        // Rola sprzed zapisu - do porównania po commicie (patrz revokeSessionsOnRoleChange).
+        const roleIsBeingWritten = accountFieldsToSync.includes('systemRoleId');
+        const previousRoleId =
+            roleIsBeingWritten && person.id
+                ? (await instance.repository.getPersonAccountV2(person.id))
+                      ?.systemRoleId
+                : undefined;
 
         if (hasPersonFields && hasAccountFields) {
             await ToolsDb.transaction(async (conn) => {
@@ -211,6 +221,14 @@ export default class PersonsController extends BaseController<
             }
         }
         console.log(`Person ${person.name} ${person.surname} updated in db`);
+
+        if (person.id)
+            await this.revokeSessionsOnRoleChange(
+                person.id,
+                previousRoleId,
+                roleIsBeingWritten ? person.systemRoleId : undefined,
+            );
+
         return person;
     }
 
@@ -250,6 +268,14 @@ export default class PersonsController extends BaseController<
             const fieldsToUpdate = PersonsController.DEFAULT_EDIT_FIELDS;
             const accountFieldsToSync =
                 instance.repository.getAccountWriteFields(fieldsToUpdate);
+            // Rola sprzed zapisu - do porównania po commicie (patrz revokeSessionsOnRoleChange).
+            const roleIsBeingWritten =
+                accountFieldsToSync.includes('systemRoleId');
+            const previousRoleId =
+                roleIsBeingWritten && user.id
+                    ? (await instance.repository.getPersonAccountV2(user.id))
+                          ?.systemRoleId
+                    : undefined;
             const personFieldsToUpdate =
                 instance.repository.getPersonsWriteFields(fieldsToUpdate);
 
@@ -290,6 +316,13 @@ export default class PersonsController extends BaseController<
                 }
             }
             console.log(`User ${user.name} ${user.surname} updated in db`);
+
+            if (user.id)
+                await PersonsController.revokeSessionsOnRoleChange(
+                    user.id,
+                    previousRoleId,
+                    roleIsBeingWritten ? user.systemRoleId : undefined,
+                );
 
             // TODO:
             // NOTE: ScrumSheet importuje PersonsController, więc używamy dynamic import
@@ -359,6 +392,13 @@ export default class PersonsController extends BaseController<
             throw new Error('No account fields provided for v2 account upsert');
         }
 
+        // Rola sprzed zapisu - potrzebna, żeby po commicie wiedzieć, czy się zmieniła.
+        const roleIsBeingWritten = fieldsToSync.includes('systemRoleId');
+        const previousRoleId = roleIsBeingWritten
+            ? (await instance.repository.getPersonAccountV2(accountData.personId))
+                  ?.systemRoleId
+            : undefined;
+
         await ToolsDb.transaction(async (conn) => {
             await instance.repository.upsertPersonAccountInDb(
                 {
@@ -390,7 +430,34 @@ export default class PersonsController extends BaseController<
                 `Failed to load account after upsert for PersonId=${accountData.personId}`,
             );
         }
+
+        await this.revokeSessionsOnRoleChange(
+            accountData.personId,
+            previousRoleId,
+            roleIsBeingWritten ? account.systemRoleId : undefined,
+        );
+
         return account;
+    }
+
+    /**
+     * Po zmianie roli kasuje sesje tej osoby, żeby nowe uprawnienia obowiązywały od razu.
+     *
+     * Rola jest stemplowana w sesji przy logowaniu i nic jej później nie odświeża, a sesja
+     * z `rolling: true` nie wygasa osobie korzystającej z witryny na bieżąco. Bez tego kroku
+     * odebranie uprawnień nie zaczęłoby obowiązywać - stara, szersza rola zostałaby w sesji.
+     *
+     * Wołane PO commicie: dopóki zapis się nie powiódł, nie ma czego unieważniać.
+     */
+    private static async revokeSessionsOnRoleChange(
+        personId: number,
+        previousRoleId: number | undefined | null,
+        newRoleId: number | undefined | null,
+    ): Promise<void> {
+        if (newRoleId === undefined) return;
+        if (previousRoleId === newRoleId) return;
+
+        await SessionRevoker.revokeForPerson(personId);
     }
 
     static async getPersonProfileV2(personId: number) {
@@ -459,8 +526,11 @@ export default class PersonsController extends BaseController<
     static async getRegisteringEditors(userData: UserData): Promise<Person[]> {
         const loggedInPerson = await this.getPersonFromSessionUserData(userData);
 
-        // Jeśli zalogowany to cooperator, zwróć tylko siebie
-        if (userData.systemRoleName === 'ENVI_COOPERATOR') {
+        // Współpracownik i pracownik kontraktowy rejestrują wyłącznie na siebie
+        if (
+            userData.systemRoleName === 'ENVI_COOPERATOR' ||
+            userData.systemRoleName === SystemRoleName.CONTRACT_WORKER
+        ) {
             return [loggedInPerson];
         }
 

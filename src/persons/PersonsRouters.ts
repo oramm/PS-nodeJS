@@ -1,6 +1,7 @@
 import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
+import { SystemRoleName } from '../types/sessionTypes';
 
 const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'systemRoleId',
@@ -35,6 +36,23 @@ app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await PersonsController.find(orConditions);
+        // Pracownik kontraktowy dostaje tylko tyle, ile potrzebują listy wyboru osób
+        // (np. właściciel zadania). Reszta profilu - dane kontaktowe, podmiot, rola
+        // systemowa - nie jest mu do niczego potrzebna i nie ma po co wychodzić z serwera.
+        if (
+            req.session.userData?.systemRoleName ===
+            SystemRoleName.CONTRACT_WORKER
+        ) {
+            res.send(
+                result.map((person) => ({
+                    id: person.id,
+                    name: person.name,
+                    surname: person.surname,
+                    email: person.email,
+                })),
+            );
+            return;
+        }
         res.send(result);
     } catch (error) {
         next(error);

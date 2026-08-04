@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { app } from '../../index';
 import MeetingArrangementsController from './MeetingArrangementsController';
+import ProjectScopeGuard from '../../persons/projectAssignments/ProjectScopeGuard';
 
 app.post(
     '/meetingArrangements',
@@ -9,6 +10,7 @@ app.post(
             const result =
                 await MeetingArrangementsController.findFromDto(
                     req.parsedBody ?? req.body,
+                    req.projectScope,
                 );
             res.send(result);
         } catch (error) {
@@ -21,9 +23,12 @@ app.post(
     '/meetingArrangement',
     async (req: Request, res: Response, next) => {
         try {
-            const item = await MeetingArrangementsController.addFromDto(
-                req.parsedBody ?? req.body,
+            const payload = req.parsedBody ?? req.body;
+            await ProjectScopeGuard.assertCaseInScope(
+                Number(payload?.caseId ?? payload?._case?.id),
+                req.projectScope,
             );
+            const item = await MeetingArrangementsController.addFromDto(payload);
             res.send(item);
         } catch (error) {
             next(error);
@@ -35,6 +40,10 @@ app.put(
     '/meetingArrangement/:id',
     async (req: Request, res: Response, next) => {
         try {
+            await ProjectScopeGuard.assertMeetingArrangementInScope(
+                Number(req.params.id),
+                req.projectScope,
+            );
             const item = await MeetingArrangementsController.editFromDto({
                 ...(req.parsedBody ?? req.body),
                 id: parseInt(req.params.id, 10),
@@ -50,6 +59,10 @@ app.put(
     '/meetingArrangement/:id/status',
     async (req: Request, res: Response, next) => {
         try {
+            await ProjectScopeGuard.assertMeetingArrangementInScope(
+                Number(req.params.id),
+                req.projectScope,
+            );
             const { status } = req.parsedBody ?? req.body;
             const item = await MeetingArrangementsController.updateStatus(
                 parseInt(req.params.id, 10),
@@ -66,6 +79,10 @@ app.delete(
     '/meetingArrangement/:id',
     async (req: Request, res: Response, next) => {
         try {
+            await ProjectScopeGuard.assertMeetingArrangementInScope(
+                Number(req.params.id),
+                req.projectScope,
+            );
             await MeetingArrangementsController.deleteById(
                 parseInt(req.params.id, 10),
             );

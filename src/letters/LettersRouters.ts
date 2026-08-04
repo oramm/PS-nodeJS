@@ -10,9 +10,36 @@ import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import resolveRouteLetterId from './resolveRouteLetterId';
 import multer from 'multer';
+import ProjectScopeGuard, {
+    ForbiddenError,
+} from '../persons/projectAssignments/ProjectScopeGuard';
+import { ProjectScope } from '../types/sessionTypes';
 
 // Middleware do parsowania plików
 const uploadLetters = multer({ storage: multer.memoryStorage() });
+
+/**
+ * Sprawdza zakres dla NOWEGO pisma, którego jeszcze nie ma w bazie: bierzemy kontrakt
+ * z ciała żądania, a gdy go nie ma - pierwszą wskazaną sprawę. Gdy nie da się ustalić
+ * ani jednego, odmawiamy: bez punktu zaczepienia nie ma jak potwierdzić uprawnienia.
+ */
+async function assertNewLetterInScope(
+    payload: any,
+    scope?: ProjectScope,
+): Promise<void> {
+    if (!scope) return;
+    const contractId = Number(payload?._contract?.id);
+    if (Number.isInteger(contractId) && contractId > 0)
+        return ProjectScopeGuard.assertContractInScope(contractId, scope);
+
+    const caseId = Number(payload?._cases?.[0]?.id);
+    if (Number.isInteger(caseId) && caseId > 0)
+        return ProjectScopeGuard.assertCaseInScope(caseId, scope);
+
+    throw new ForbiddenError(
+        'Nie można ustalić kontraktu pisma - brak uprawnień.',
+    );
+}
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -21,7 +48,8 @@ app.post('/contractsLetters', async (req: Request, res: Response, next) => {
         const result = await LettersController.find(
             orConditions,
             'CONTRACT',
-            req.session.userData
+            req.session.userData,
+            req.projectScope
         );
         res.send(result);
     } catch (error) {
@@ -130,6 +158,11 @@ app.post(
                 }
             }
 
+            await assertNewLetterInScope(
+                initParamsFromClient,
+                req.projectScope,
+            );
+
             const item = LettersController.createProperLetter(initParamsFromClient);
 
             // Konwersja req.files do File[]
@@ -165,6 +198,11 @@ app.put(
     async (req: Request, res: Response, next) => {
         try {
             if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+
+            await ProjectScopeGuard.assertLetterInScope(
+                Number(req.params.id),
+                req.projectScope,
+            );
 
             // Przy multipart/form-data, parsedBody może być pusty - parsuj req.body ręcznie
             let initParamsFromClient = req.parsedBody;
@@ -213,6 +251,10 @@ app.put(
         try {
             if (!req.session.userData)
                 throw new Error('Użytkownik niezalogowany');
+            await ProjectScopeGuard.assertLetterInScope(
+                Number(req.params.id),
+                req.projectScope,
+            );
             // Id z adresu jest rozstrzygający; niezgodność w ciele żądania to błąd,
             // nie cicha korekta.
             req.parsedBody.id = resolveRouteLetterId(
@@ -241,6 +283,11 @@ app.put(
 app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        // Ta trasa nie ma id w adresie - jedyny dostępny cel jest w ciele żądania.
+        await ProjectScopeGuard.assertLetterInScope(
+            Number(req.body?.id),
+            req.projectScope,
+        );
         const item = LettersController.createProperLetter(req.body);
         if (!(item instanceof OurLetter))
             throw new Error('Nie można wyeksportować listu otrzymanego do PDF');
@@ -254,6 +301,10 @@ app.put('/exportOurLetterToPDF', async (req: Request, res: Response, next) => {
 app.put('/approveOurLetter/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        await ProjectScopeGuard.assertLetterInScope(
+            Number(req.params.id),
+            req.projectScope,
+        );
         // Id z adresu jest rozstrzygający; niezgodność w ciele żądania to błąd,
         // nie cicha korekta.
         req.body.id = resolveRouteLetterId(req.params.id, req.body.id);
@@ -280,6 +331,10 @@ app.get('/autoApproveOurLetters', async (req: Request, res: Response, next) => {
 app.delete('/letter/:id', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+        await ProjectScopeGuard.assertLetterInScope(
+            Number(req.params.id),
+            req.projectScope,
+        );
         // Id z adresu jest rozstrzygający. Ta trasa kasuje pismo razem z jego folderem
         // na Dysku, a cel brała wyłącznie z ciała żądania — adres był dekoracją.
         req.body.id = resolveRouteLetterId(req.params.id, req.body.id);

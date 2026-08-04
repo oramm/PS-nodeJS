@@ -14,6 +14,7 @@ import ContractMeetingNoteRepository, {
     ContractMeetingNoteCreateContext,
     ContractMeetingNoteSearchParams,
 } from './ContractMeetingNoteRepository';
+import { ProjectScope } from '../types/sessionTypes';
 
 export type { ContractMeetingNoteSearchParams };
 
@@ -48,17 +49,21 @@ export default class ContractMeetingNotesController extends BaseController<
 
     static async find(
         orConditions: ContractMeetingNoteSearchParams[] = [],
+        scope?: ProjectScope,
     ): Promise<ContractMeetingNote[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions);
+        return await instance.repository.find(orConditions, scope);
     }
 
-    static async findFromDto(payload: {
-        orConditions?: ContractMeetingNoteSearchParams[];
-    }): Promise<ContractMeetingNote[]> {
+    static async findFromDto(
+        payload: {
+            orConditions?: ContractMeetingNoteSearchParams[];
+        },
+        scope?: ProjectScope,
+    ): Promise<ContractMeetingNote[]> {
         const normalizedPayload =
             ContractMeetingNoteValidator.validateFindPayload(payload);
-        return await this.find(normalizedPayload.orConditions);
+        return await this.find(normalizedPayload.orConditions, scope);
     }
 
     static async addFromDto(
