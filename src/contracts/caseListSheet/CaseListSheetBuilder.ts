@@ -4,7 +4,7 @@ import Setup from '../../setup/Setup';
 import type { ContractsWithChildren } from '../ContractTypes';
 import {
     CaseListMatrix,
-    CaseListSheetParams,
+    CaseListSheetFilter,
     HyperlinkRow,
     LevelRun,
     RowGroup,
@@ -13,9 +13,9 @@ import {
 } from './CaseListSheetTypes';
 
 /**
- * Buduje macierz arkusza „Spis spraw" z drzewa kontraktu.
- * Czysta transformacja danych — bez Google API i bez bazy, dzięki czemu daje się
- * testować bez auth. I/O robi CaseListSheetController.
+ * Buduje macierz arkusza „Spis spraw" z drzewa kontraktu (albo wszystkich kontraktów
+ * projektu). Czysta transformacja danych — bez Google API i bez bazy, dzięki czemu daje
+ * się testować bez auth. I/O robi CaseListSheetController.
  */
 
 /** Wcięcie niełamliwymi spacjami — zwykłe wiodące spacje potrafi zjeść USER_ENTERED. */
@@ -27,9 +27,62 @@ const OWNER_HEADER = 'Osoba';
 /** Wiersz tytułu, wiersz opisu konfiguracji, pusty odstęp, wiersz nagłówków kolumn. */
 export const HEADER_ROW_INDEX = 3;
 
+/** Spis jednego kontraktu — kontrakt jest w tytule, drzewo zaczyna się od kamieni. */
 export function buildCaseListMatrix(
     contractWithChildren: ContractsWithChildren,
-    params: CaseListSheetParams,
+    params: CaseListSheetFilter,
+    context: { generatedAt: Date; personLabels: string[] }
+): CaseListMatrix {
+    return buildMatrix(
+        {
+            title: `Spis spraw - ${buildContractLabel(
+                contractWithChildren.contract
+            )}`,
+            titleFolderUrl: resolveFolderUrl(contractWithChildren.contract),
+            contractsWithChildren: [contractWithChildren],
+            withContractRows: false,
+        },
+        params,
+        context
+    );
+}
+
+/**
+ * Spis całego projektu — wszystkie jego kontrakty w jednym arkuszu. Kontrakt dostaje
+ * własny wiersz (poziom „Kontrakt"), a jego drzewo schodzi o jedno wcięcie niżej.
+ */
+export function buildProjectCaseListMatrix(
+    contractsWithChildren: ContractsWithChildren[],
+    params: CaseListSheetFilter,
+    context: {
+        generatedAt: Date;
+        personLabels: string[];
+        projectLabel: string;
+        projectFolderUrl?: string;
+    }
+): CaseListMatrix {
+    return buildMatrix(
+        {
+            title: `Spis spraw - ${context.projectLabel}`,
+            titleFolderUrl: context.projectFolderUrl,
+            contractsWithChildren,
+            withContractRows: true,
+        },
+        params,
+        context
+    );
+}
+
+type MatrixSource = {
+    title: string;
+    titleFolderUrl?: string;
+    contractsWithChildren: ContractsWithChildren[];
+    withContractRows: boolean;
+};
+
+function buildMatrix(
+    source: MatrixSource,
+    params: CaseListSheetFilter,
     context: { generatedAt: Date; personLabels: string[] }
 ): CaseListMatrix {
     const activeOnly = !params.includeFinished;
@@ -45,16 +98,13 @@ export function buildCaseListMatrix(
     // Hiperłącza do folderów na GD — zakładane osobnym żądaniem przez Controller.
     const linkRows: HyperlinkRow[] = [];
 
-    rows.push([
-        `Spis spraw - ${buildContractLabel(contractWithChildren.contract)}`,
-    ]);
-    const contractFolderUrl = resolveFolderUrl(contractWithChildren.contract);
-    if (contractFolderUrl)
+    rows.push([source.title]);
+    if (source.titleFolderUrl)
         linkRows.push({
             rowIndex: 0,
             columnIndex: 0,
             startIndex: 0,
-            url: contractFolderUrl,
+            url: source.titleFolderUrl,
         });
     rows.push([buildConfigLabel(params, context)]);
     rows.push(['']);
@@ -89,51 +139,115 @@ export function buildCaseListMatrix(
             });
     }
 
-    for (const { milestone, casesWithTasks } of contractWithChildren
-        .milestonesWithCases ?? []) {
-        if (activeOnly && isFinishedMilestone(milestone)) continue;
+    // Czy jakiś kontrakt już wylądował w arkuszu — po tym poznajemy, że kolejny
+    // potrzebuje odstępu (licznik pętli by nie wystarczył: archiwalne wypadają).
+    let anyContractEmitted = false;
 
-        emit(SHEET_LEVELS.MILESTONE, 0, buildMilestoneLabel(milestone), {
-            status: milestone.status,
-            // Kamienie nie mają pola uwag w bazie — kolumna zostaje pusta.
-            description: '',
-            folderUrl: resolveFolderUrl(milestone),
-        });
-        const milestoneChildrenStart = rows.length;
+    for (const contractWithChildren of source.contractsWithChildren) {
+        const contract: any = contractWithChildren.contract;
+        // Archiwalne kontrakty wycinamy tylko w spisie projektu — spis pojedynczego
+        // kontraktu robi się świadomie na konkretnym kontrakcie, więc go nie ukrywamy.
+        if (
+            source.withContractRows &&
+            activeOnly &&
+            isArchivalContract(contract)
+        )
+            continue;
 
-        for (const caseWithTasks of casesWithTasks ?? []) {
-            const caseItem: any = caseWithTasks.caseItem;
-            if (activeOnly && isClosedCase(caseItem)) continue;
-
-            emit(SHEET_LEVELS.CASE, 1, buildCaseLabel(caseItem), {
-                status: caseItem.status,
-                description: caseItem.description,
-                folderUrl: resolveFolderUrl(caseItem),
+        // Wiersz kontraktu tylko w spisie projektu — resztę drzewa spycha o wcięcie niżej.
+        const depthOffset = source.withContractRows ? 1 : 0;
+        if (source.withContractRows) {
+            // Pusty wiersz oddziela kontrakty. Poziom `null` trzyma go poza
+            // formatowaniem i poza grupami, więc zostaje widoczny także po zwinięciu
+            // drzewa poprzedniego kontraktu.
+            if (anyContractEmitted) {
+                rows.push(['']);
+                rowLevels.push(null);
+            }
+            emit(SHEET_LEVELS.CONTRACT, 0, buildContractLabel(contract), {
+                status: contract.status,
+                description: contract.comment,
+                folderUrl: resolveFolderUrl(contract),
             });
-            const caseChildrenStart = rows.length;
+            anyContractEmitted = true;
+        }
+        const contractChildrenStart = rows.length;
 
-            pushTaskRows(emit, caseWithTasks.tasks, 2, params, activeOnly);
+        for (const { milestone, casesWithTasks } of contractWithChildren
+            .milestonesWithCases ?? []) {
+            if (activeOnly && isFinishedMilestone(milestone)) continue;
 
-            for (const subCaseWithTasks of caseWithTasks.subCasesWithTasks ??
-                []) {
-                const subCase: any = subCaseWithTasks.caseItem;
-                if (activeOnly && isClosedCase(subCase)) continue;
+            emit(
+                SHEET_LEVELS.MILESTONE,
+                depthOffset,
+                buildMilestoneLabel(milestone),
+                {
+                    status: milestone.status,
+                    description: milestone.description,
+                    folderUrl: resolveFolderUrl(milestone),
+                }
+            );
+            const milestoneChildrenStart = rows.length;
 
-                emit(SHEET_LEVELS.SUBCASE, 2, buildCaseLabel(subCase), {
-                    status: subCase.status,
-                    description: subCase.description,
-                    folderUrl: resolveFolderUrl(subCase),
-                });
-                const subCaseChildrenStart = rows.length;
+            for (const caseWithTasks of casesWithTasks ?? []) {
+                const caseItem: any = caseWithTasks.caseItem;
+                if (activeOnly && isClosedCase(caseItem)) continue;
 
-                pushTaskRows(emit, subCaseWithTasks.tasks, 3, params, activeOnly);
-                pushGroup(groups, subCaseChildrenStart, rows.length);
+                emit(
+                    SHEET_LEVELS.CASE,
+                    depthOffset + 1,
+                    buildCaseLabel(caseItem),
+                    {
+                        status: caseItem.status,
+                        description: caseItem.description,
+                        folderUrl: resolveFolderUrl(caseItem),
+                    }
+                );
+                const caseChildrenStart = rows.length;
+
+                pushTaskRows(
+                    emit,
+                    caseWithTasks.tasks,
+                    depthOffset + 2,
+                    params,
+                    activeOnly
+                );
+
+                for (const subCaseWithTasks of caseWithTasks.subCasesWithTasks ??
+                    []) {
+                    const subCase: any = subCaseWithTasks.caseItem;
+                    if (activeOnly && isClosedCase(subCase)) continue;
+
+                    emit(
+                        SHEET_LEVELS.SUBCASE,
+                        depthOffset + 2,
+                        buildCaseLabel(subCase),
+                        {
+                            status: subCase.status,
+                            description: subCase.description,
+                            folderUrl: resolveFolderUrl(subCase),
+                        }
+                    );
+                    const subCaseChildrenStart = rows.length;
+
+                    pushTaskRows(
+                        emit,
+                        subCaseWithTasks.tasks,
+                        depthOffset + 3,
+                        params,
+                        activeOnly
+                    );
+                    pushGroup(groups, subCaseChildrenStart, rows.length);
+                }
+
+                pushGroup(groups, caseChildrenStart, rows.length);
             }
 
-            pushGroup(groups, caseChildrenStart, rows.length);
+            pushGroup(groups, milestoneChildrenStart, rows.length);
         }
 
-        pushGroup(groups, milestoneChildrenStart, rows.length);
+        if (source.withContractRows)
+            pushGroup(groups, contractChildrenStart, rows.length);
     }
 
     return {
@@ -172,7 +286,7 @@ export function collapseLevelRuns(
  * Data generowania celowo NIE wchodzi do nazwy (rozbiłaby nadpisywanie) — jest w arkuszu.
  */
 export function buildCaseListFileName(
-    params: CaseListSheetParams,
+    params: CaseListSheetFilter,
     personLabels: string[]
 ): string {
     const statusSegment = params.includeFinished
@@ -206,7 +320,7 @@ function lastNameOf(fullName: string): string {
 }
 
 function buildConfigLabel(
-    params: CaseListSheetParams,
+    params: CaseListSheetFilter,
     context: { generatedAt: Date; personLabels: string[] }
 ): string {
     const parts = [
@@ -244,7 +358,7 @@ function pushTaskRows(
     emit: RowEmitter,
     tasks: any[] | undefined,
     depth: number,
-    params: CaseListSheetParams,
+    params: CaseListSheetFilter,
     activeOnly: boolean
 ): void {
     for (const task of tasks ?? []) {
@@ -312,6 +426,13 @@ export function buildContractLabel(contract: any): string {
         .join(' | ');
 }
 
+/** Etykieta projektu w tytule spisu: ourId, alias, nazwa. */
+export function buildProjectLabel(project: any): string {
+    return [project.ourId, project.alias, project.name]
+        .filter(Boolean)
+        .join(' | ');
+}
+
 /** Nazwa kamienia jak w drzewie — sama .name bywa pusta. */
 function buildMilestoneLabel(milestone: any): string {
     return [milestone._type?._folderNumber, milestone._type?.name, milestone.name]
@@ -338,6 +459,10 @@ function resolveFolderUrl(entity: any): string | undefined {
     if (entity.gdFolderId)
         return `https://drive.google.com/drive/folders/${entity.gdFolderId}`;
     return undefined;
+}
+
+function isArchivalContract(contract: any): boolean {
+    return contract.status === Setup.ContractStatus.ARCHIVAL;
 }
 
 function isFinishedMilestone(milestone: any): boolean {

@@ -122,6 +122,8 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 Milestones.Name AS MilestoneName,
                 Milestones.ContractId,
                 Milestones.Status AS MilestoneStatus,
+                -- uwagi kamienia; nie mylić z MilestoneDateDescription (opis terminu)
+                Milestones.Description AS MilestoneDescription,
                 Milestones.GdFolderId AS MilestoneGdFolderId,
                 MilestoneDates.Id AS MilestoneDateId,
                 MilestoneDates.StartDate AS MilestoneDateStart,
@@ -455,6 +457,9 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 milestonesById[row.MilestoneId] = new Milestone({
                     id: row.MilestoneId,
                     name: row.MilestoneName ?? '',
+                    description: ToolsDb.sqlToString(
+                        row.MilestoneDescription ?? ''
+                    ),
                     gdFolderId: row.MilestoneGdFolderId ?? undefined,
                     status: row.MilestoneStatus ?? undefined,
                     _dates: [],
@@ -716,6 +721,7 @@ type ContractsWithChildrenRow = {
     MilestoneId: number;
     MilestoneName: string | null;
     MilestoneStatus: string | null;
+    MilestoneDescription: string | null;
     MilestoneGdFolderId: string | null;
 
     // MilestoneDate fields

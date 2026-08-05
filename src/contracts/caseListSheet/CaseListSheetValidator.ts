@@ -1,4 +1,7 @@
-import { CaseListSheetParams } from './CaseListSheetTypes';
+import {
+    CaseListSheetParams,
+    CaseListSheetProjectParams,
+} from './CaseListSheetTypes';
 
 /** Walidacja parametrów generowania spisu spraw (body requestu). */
 export default class CaseListSheetValidator {
@@ -15,6 +18,20 @@ export default class CaseListSheetValidator {
             contractId,
             includeFinished: body?.includeFinished === true,
             personIds,
+        };
+    }
+
+    /** Spis projektu — projekt identyfikuje OurId (tak samo wiąże kontrakty z projektem). */
+    static parseProjectParams(body: any): CaseListSheetProjectParams {
+        const raw = body?.projectOurId ?? body?.projectId;
+        const projectOurId = raw === undefined || raw === null ? '' : String(raw).trim();
+        if (!projectOurId)
+            throw new Error('Nieprawidłowy identyfikator projektu');
+
+        return {
+            projectOurId,
+            includeFinished: body?.includeFinished === true,
+            personIds: CaseListSheetValidator.parsePersonIds(body?.personIds),
         };
     }
 

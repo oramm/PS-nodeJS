@@ -4,16 +4,21 @@ import ToolsGd from '../../tools/ToolsGd';
 import ToolsSheets from '../../tools/ToolsSheets';
 import ContractsWithChildrenController from '../ContractsWithChildrenController';
 import { ContractsWithChildren } from '../ContractTypes';
+import ProjectsController from '../../projects/ProjectsController';
+import { ProjectScope } from '../../types/sessionTypes';
 import {
     buildCaseListFileName,
     buildCaseListMatrix,
     buildPersonLabel,
+    buildProjectCaseListMatrix,
+    buildProjectLabel,
     HEADER_ROW_INDEX,
 } from './CaseListSheetBuilder';
 import CaseListSheetValidator from './CaseListSheetValidator';
 import {
     CaseListMatrix,
     CaseListSheetParams,
+    CaseListSheetProjectParams,
     CaseListSheetResult,
     SHEET_LEVELS,
     SheetLevel,
@@ -34,6 +39,10 @@ const COLUMN_WIDTHS = [90, 460, 150, 400, 170];
  * warunkowe ma pierwszeństwo), więc statusy pozostają czytelne na każdym poziomie.
  */
 const LEVEL_FORMATS: Record<SheetLevel, any> = {
+    [SHEET_LEVELS.CONTRACT]: {
+        backgroundColor: gray(0.75),
+        textFormat: { bold: true, fontSize: 13 },
+    },
     [SHEET_LEVELS.MILESTONE]: {
         backgroundColor: gray(0.851),
         textFormat: { bold: true, fontSize: 12 },
@@ -90,26 +99,50 @@ export default class CaseListSheetController extends BaseController<any, any> {
      *  do generowania przechodzi przez ten sam Validator. */
     static async generate(
         body: unknown,
+        scope?: ProjectScope,
         auth?: OAuth2Client
     ): Promise<CaseListSheetResult> {
         const params = CaseListSheetValidator.parseParams(body);
         return await this.withAuth(
             async (_instance, authClient) =>
-                await CaseListSheetController.generateSheet(params, authClient),
+                await CaseListSheetController.generateSheet(
+                    params,
+                    scope,
+                    authClient
+                ),
+            auth
+        );
+    }
+
+    /** Spis całego projektu — wszystkie jego kontrakty w jednym arkuszu. */
+    static async generateForProject(
+        body: unknown,
+        scope?: ProjectScope,
+        auth?: OAuth2Client
+    ): Promise<CaseListSheetResult> {
+        const params = CaseListSheetValidator.parseProjectParams(body);
+        return await this.withAuth(
+            async (_instance, authClient) =>
+                await CaseListSheetController.generateProjectSheet(
+                    params,
+                    scope,
+                    authClient
+                ),
             auth
         );
     }
 
     private static async generateSheet(
         params: CaseListSheetParams,
+        scope: ProjectScope | undefined,
         auth: OAuth2Client
     ): Promise<CaseListSheetResult> {
         // statusType 'all' — filtrowanie statusów robimy w builderze, żeby jedno
         // miejsce decydowało o tym, co znaczy „bez zakończonych".
-        const [contractWithChildren] =
-            await ContractsWithChildrenController.find([
-                { contractId: params.contractId, statusType: 'all' },
-            ]);
+        const [contractWithChildren] = await ContractsWithChildrenController.find(
+            [{ contractId: params.contractId, statusType: 'all' }],
+            scope
+        );
         if (!contractWithChildren)
             throw new Error(`Nie znaleziono kontraktu ${params.contractId}`);
 
@@ -120,17 +153,82 @@ export default class CaseListSheetController extends BaseController<any, any> {
             );
 
         const personLabels = CaseListSheetController.resolvePersonLabels(
-            contractWithChildren,
+            [contractWithChildren],
             params.personIds
         );
         const matrix = buildCaseListMatrix(contractWithChildren, params, {
             generatedAt: new Date(),
             personLabels,
         });
-        const name = buildCaseListFileName(params, personLabels);
 
+        return await CaseListSheetController.writeSheet(auth, {
+            parentFolderId: contract.gdFolderId,
+            name: buildCaseListFileName(params, personLabels),
+            matrix,
+        });
+    }
+
+    /**
+     * Spis projektu ląduje w folderze projektu — obok siebie mogą stać spisy o różnych
+     * konfiguracjach, a spisy poszczególnych kontraktów zostają w folderach kontraktów.
+     */
+    private static async generateProjectSheet(
+        params: CaseListSheetProjectParams,
+        scope: ProjectScope | undefined,
+        auth: OAuth2Client
+    ): Promise<CaseListSheetResult> {
+        // ProjectRepository szuka OurId przez LIKE, więc trafienie trzeba domknąć na
+        // dokładne dopasowanie — inaczej „1" wybrałoby pierwszy z brzegu projekt.
+        const projects = await ProjectsController.find(
+            [{ ourId: params.projectOurId }],
+            scope
+        );
+        const project = projects.find((p) => p.ourId === params.projectOurId);
+        if (!project)
+            throw new Error(`Nie znaleziono projektu ${params.projectOurId}`);
+        if (!project.gdFolderId)
+            throw new Error(
+                'Projekt nie ma folderu na Google Drive - nie ma gdzie zapisać spisu'
+            );
+
+        const contractsWithChildren = await ContractsWithChildrenController.find(
+            [{ _project: project, statusType: 'all' }],
+            scope
+        );
+        if (!contractsWithChildren.length)
+            throw new Error(
+                `Projekt ${params.projectOurId} nie ma jeszcze kontraktów`
+            );
+
+        const personLabels = CaseListSheetController.resolvePersonLabels(
+            contractsWithChildren,
+            params.personIds
+        );
+        const matrix = buildProjectCaseListMatrix(contractsWithChildren, params, {
+            generatedAt: new Date(),
+            personLabels,
+            projectLabel: buildProjectLabel(project),
+            projectFolderUrl: project._gdFolderUrl,
+        });
+
+        return await CaseListSheetController.writeSheet(auth, {
+            parentFolderId: project.gdFolderId,
+            name: buildCaseListFileName(params, personLabels),
+            matrix,
+        });
+    }
+
+    /**
+     * Zapis arkusza do podfolderu „Spisy spraw": ta sama nazwa (= ta sama konfiguracja)
+     * nadpisuje istniejący plik, więc raz wysłany link dalej działa.
+     */
+    private static async writeSheet(
+        auth: OAuth2Client,
+        target: { parentFolderId: string; name: string; matrix: CaseListMatrix }
+    ): Promise<CaseListSheetResult> {
+        const { name, matrix } = target;
         const reportsFolder = await ToolsGd.setFolder(auth, {
-            parentId: contract.gdFolderId,
+            parentId: target.parentFolderId,
             name: REPORTS_FOLDER_NAME,
         });
         const existing = await ToolsGd.getFileMetaDataByNameAndMimeType(auth, {
@@ -193,32 +291,34 @@ export default class CaseListSheetController extends BaseController<any, any> {
     }
 
     /**
-     * Nazwy wybranych osób — z właścicieli zadań w tym kontrakcie (lista w oknie
-     * generowania pochodzi z tego samego źródła, więc każdy wybór jest rozwiązywalny).
+     * Nazwy wybranych osób — z właścicieli zadań w objętych spisem kontraktach (lista
+     * w oknie generowania pochodzi z tego samego źródła, więc każdy wybór jest
+     * rozwiązywalny).
      */
     private static resolvePersonLabels(
-        contractWithChildren: ContractsWithChildren,
+        contractsWithChildren: ContractsWithChildren[],
         personIds: number[]
     ): string[] {
         if (!personIds.length) return [];
         const labelsById = new Map<number, string>();
-        for (const { casesWithTasks } of contractWithChildren
-            .milestonesWithCases ?? [])
-            for (const caseWithTasks of casesWithTasks ?? []) {
-                const taskGroups = [
-                    caseWithTasks.tasks,
-                    ...(caseWithTasks.subCasesWithTasks ?? []).map(
-                        (s) => s.tasks
-                    ),
-                ];
-                for (const tasks of taskGroups)
-                    for (const task of (tasks ?? []) as any[])
-                        if (task.ownerId && task._owner)
-                            labelsById.set(
-                                task.ownerId,
-                                buildPersonLabel(task._owner)
-                            );
-            }
+        for (const contractWithChildren of contractsWithChildren)
+            for (const { casesWithTasks } of contractWithChildren
+                .milestonesWithCases ?? [])
+                for (const caseWithTasks of casesWithTasks ?? []) {
+                    const taskGroups = [
+                        caseWithTasks.tasks,
+                        ...(caseWithTasks.subCasesWithTasks ?? []).map(
+                            (s) => s.tasks
+                        ),
+                    ];
+                    for (const tasks of taskGroups)
+                        for (const task of (tasks ?? []) as any[])
+                            if (task.ownerId && task._owner)
+                                labelsById.set(
+                                    task.ownerId,
+                                    buildPersonLabel(task._owner)
+                                );
+                }
         return personIds.map((id) => labelsById.get(id) || `Osoba #${id}`);
     }
 

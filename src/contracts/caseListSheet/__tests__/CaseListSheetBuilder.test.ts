@@ -5,6 +5,7 @@ import type { ContractsWithChildren } from '../../ContractTypes';
 import {
     buildCaseListFileName,
     buildCaseListMatrix,
+    buildProjectCaseListMatrix,
     HEADER_ROW_INDEX,
 } from '../CaseListSheetBuilder';
 import CaseListSheetValidator from '../CaseListSheetValidator';
@@ -63,12 +64,16 @@ function makeTree(
         milestoneFolderId?: string;
         caseFolderId?: string;
         subCaseFolderId?: string;
+        contract?: any;
+        milestone?: any;
+        caseItem?: any;
     } = {}
 ): ContractsWithChildren {
     const casesWithTasks: any = {
         caseItem: makeCase({
             status: options.caseStatus,
             gdFolderId: options.caseFolderId ?? 'case-folder',
+            ...options.caseItem,
         }),
         tasks: options.tasks ?? [],
         subCasesWithTasks: options.subCase ? [options.subCase] : [],
@@ -87,13 +92,16 @@ function makeTree(
             ourId: 'UM/2024/17',
             alias: 'Kwiatowa',
             name: 'Przebudowa ul. Kwiatowej',
+            status: Setup.ContractStatus.IN_PROGRESS,
             gdFolderId: options.contractFolderId ?? 'contract-folder',
+            ...options.contract,
         },
         milestonesWithCases: [
             {
                 milestone: makeMilestone({
                     status: options.milestoneStatus,
                     gdFolderId: options.milestoneFolderId ?? 'milestone-folder',
+                    ...options.milestone,
                 }),
                 casesWithTasks: [casesWithTasks],
             },
@@ -121,6 +129,44 @@ function dataRows(values: any[][]) {
 function displayText(cell: any): string {
     return String(cell ?? '').replace(/^ +/, '');
 }
+
+/** Szerokość wcięcia nazwy w znakach. */
+function indentWidth(cell: any): number {
+    const text = String(cell ?? '');
+    return text.length - displayText(text).length;
+}
+
+describe('buildCaseListMatrix - kolumna Uwagi', () => {
+    it('niesie uwagi kamienia, sprawy, podsprawy i zadania', () => {
+        const matrix = buildCaseListMatrix(
+            makeTree({
+                milestone: { description: 'Uwaga kamienia' },
+                caseItem: { description: 'Uwaga sprawy' },
+                subCase: {
+                    caseItem: makeCase({
+                        id: 11,
+                        number: 2,
+                        description: 'Uwaga podsprawy',
+                    }),
+                    tasks: [
+                        makeTask({ id: 102, description: 'Uwaga zadania' }),
+                    ],
+                },
+            }),
+            makeParams(),
+            CONTEXT
+        );
+        // kamień, sprawa, podsprawa, zadanie podsprawy
+        const uwagi = dataRows(matrix.values).map((r) => r[3]);
+
+        expect(uwagi).toEqual([
+            'Uwaga kamienia',
+            'Uwaga sprawy',
+            'Uwaga podsprawy',
+            'Uwaga zadania',
+        ]);
+    });
+});
 
 describe('buildCaseListMatrix - linki do folderów na GD', () => {
     it('linkuje nazwy kontraktu, kamienia i sprawy', () => {
@@ -182,6 +228,168 @@ describe('buildCaseListMatrix - linki do folderów na GD', () => {
             expect(text.slice(0, link.startIndex)).toMatch(/^ *$/);
             expect(text[link.startIndex]).not.toBe(' ');
         }
+    });
+});
+
+describe('buildProjectCaseListMatrix - spis całego projektu', () => {
+    const PROJECT_CONTEXT = {
+        ...CONTEXT,
+        projectLabel: '2024/17 | Kwiatowa | Przebudowa dróg',
+        projectFolderUrl: 'https://drive.google.com/drive/folders/project-folder',
+    };
+
+    function projectMatrix(
+        contracts: ContractsWithChildren[],
+        params = makeParams()
+    ) {
+        return buildProjectCaseListMatrix(contracts, params, PROJECT_CONTEXT);
+    }
+
+    it('tytuł niesie projekt i linkuje do jego folderu', () => {
+        const matrix = projectMatrix([makeTree({ tasks: [makeTask()] })]);
+
+        expect(matrix.values[0][0]).toBe(
+            'Spis spraw - 2024/17 | Kwiatowa | Przebudowa dróg'
+        );
+        expect(matrix.linkRows[0]).toEqual({
+            rowIndex: 0,
+            columnIndex: 0,
+            startIndex: 0,
+            url: 'https://drive.google.com/drive/folders/project-folder',
+        });
+    });
+
+    it('każdy kontrakt dostaje wiersz, a jego drzewo schodzi o poziom niżej', () => {
+        const second = makeTree({
+            tasks: [makeTask({ id: 201, name: 'Zadanie drugiego kontraktu' })],
+            contract: {
+                id: 6,
+                ourId: 'UM/2024/18',
+                alias: 'Polna',
+                name: 'Przebudowa ul. Polnej',
+                gdFolderId: 'contract-2-folder',
+            },
+        });
+        const matrix = projectMatrix([
+            makeTree({ tasks: [makeTask({ name: 'Zadanie sprawy' })] }),
+            second,
+        ]);
+        const rows = dataRows(matrix.values);
+
+        expect(rows.map((r) => r[0])).toEqual([
+            SHEET_LEVELS.CONTRACT,
+            SHEET_LEVELS.MILESTONE,
+            SHEET_LEVELS.CASE,
+            SHEET_LEVELS.TASK,
+            // pusty wiersz odstępu między kontraktami
+            '',
+            SHEET_LEVELS.CONTRACT,
+            SHEET_LEVELS.MILESTONE,
+            SHEET_LEVELS.CASE,
+            SHEET_LEVELS.TASK,
+        ]);
+        expect(rows[0][1]).toBe('UM/2024/17 | Kwiatowa | Przebudowa ul. Kwiatowej');
+        expect(rows[5][1]).toBe('UM/2024/18 | Polna | Przebudowa ul. Polnej');
+        // wcięcia: kontrakt 0, kamień 1, sprawa 2, zadanie 3
+        expect(indentWidth(rows[1][1])).toBe(4);
+        expect(indentWidth(rows[2][1])).toBe(8);
+        expect(indentWidth(rows[3][1])).toBe(12);
+    });
+
+    it('odstęp rozdziela kontrakty, ale nie otwiera spisu i nie wpada w grupy', () => {
+        const second = makeTree({
+            tasks: [makeTask({ id: 201 })],
+            contract: { id: 6, ourId: 'UM/2024/18' },
+        });
+        const matrix = projectMatrix([
+            makeTree({ tasks: [makeTask()] }),
+            second,
+        ]);
+        const first = HEADER_ROW_INDEX + 1;
+        const spacerRow = first + 4;
+
+        // spis zaczyna się od razu kontraktem — odstęp tylko MIĘDZY kontraktami
+        expect(matrix.values[first][0]).toBe(SHEET_LEVELS.CONTRACT);
+        expect(matrix.values[spacerRow]).toEqual(['']);
+        // bez poziomu: żaden bieg formatowania ani grupa go nie obejmuje
+        expect(
+            matrix.levelRuns.some(
+                (run) => run.startRow <= spacerRow && run.endRow > spacerRow
+            )
+        ).toBe(false);
+        expect(
+            matrix.groups.some(
+                (group) =>
+                    group.startRow <= spacerRow && group.endRow > spacerRow
+            )
+        ).toBe(false);
+    });
+
+    it('linki startują za wcięciem także w spisie projektu', () => {
+        const matrix = projectMatrix([makeTree({ tasks: [makeTask()] })]);
+
+        const contractLink = matrix.linkRows.find((row) => row.rowIndex === 4);
+        const milestoneLink = matrix.linkRows.find((row) => row.rowIndex === 5);
+        const caseLink = matrix.linkRows.find((row) => row.rowIndex === 6);
+
+        expect(contractLink?.startIndex).toBe(0);
+        expect(contractLink?.url).toBe(
+            'https://drive.google.com/drive/folders/contract-folder'
+        );
+        expect(milestoneLink?.startIndex).toBe(4);
+        expect(caseLink?.startIndex).toBe(8);
+    });
+
+    it('zwija całe drzewo kontraktu w jedną grupę', () => {
+        const matrix = projectMatrix([
+            makeTree({ tasks: [makeTask({ name: 'Zadanie sprawy' })] }),
+        ]);
+        const first = HEADER_ROW_INDEX + 1;
+
+        // grupa kontraktu obejmuje kamień, sprawę i zadanie
+        expect(matrix.groups).toEqual(
+            expect.arrayContaining([{ startRow: first + 1, endRow: first + 4 }])
+        );
+    });
+
+    it('bez zakończonych: archiwalny kontrakt wypada z całym drzewem', () => {
+        const archival = makeTree({
+            tasks: [makeTask({ name: 'Zadanie archiwalnego' })],
+            contract: {
+                id: 6,
+                ourId: 'UM/2019/3',
+                status: Setup.ContractStatus.ARCHIVAL,
+            },
+        });
+        const contracts = [makeTree({ tasks: [makeTask()] }), archival];
+
+        const active = projectMatrix(contracts);
+        expect(
+            dataRows(active.values).filter(
+                (r) => r[0] === SHEET_LEVELS.CONTRACT
+            )
+        ).toHaveLength(1);
+
+        const all = projectMatrix(
+            contracts,
+            makeParams({ includeFinished: true })
+        );
+        expect(
+            dataRows(all.values).filter((r) => r[0] === SHEET_LEVELS.CONTRACT)
+        ).toHaveLength(2);
+    });
+
+    it('status i uwagi kontraktu trafiają do swoich kolumn', () => {
+        const matrix = projectMatrix([
+            makeTree({
+                tasks: [makeTask()],
+                contract: { comment: 'Umowa aneksowana' },
+            }),
+        ]);
+        const contractRow = dataRows(matrix.values)[0];
+
+        expect(contractRow[2]).toBe(Setup.ContractStatus.IN_PROGRESS);
+        expect(contractRow[3]).toBe('Umowa aneksowana');
     });
 });
 
@@ -516,6 +724,34 @@ describe('CaseListSheetValidator.parseParams - personIds', () => {
             CaseListSheetValidator.parseParams({ contractId: 5, personIds: [] })
                 .personIds
         ).toEqual([]);
+    });
+
+    it('spis projektu: przyjmuje OurId projektu pod obiema nazwami pola', () => {
+        expect(
+            CaseListSheetValidator.parseProjectParams({ projectOurId: '2024/17' })
+        ).toEqual({
+            projectOurId: '2024/17',
+            includeFinished: false,
+            personIds: [],
+        });
+        expect(
+            CaseListSheetValidator.parseProjectParams({
+                projectId: '2024/17',
+                includeFinished: true,
+                personIds: [2, 1],
+            })
+        ).toEqual({
+            projectOurId: '2024/17',
+            includeFinished: true,
+            personIds: [1, 2],
+        });
+    });
+
+    it('spis projektu: odrzuca brak identyfikatora projektu', () => {
+        expect(() => CaseListSheetValidator.parseProjectParams({})).toThrow();
+        expect(() =>
+            CaseListSheetValidator.parseProjectParams({ projectOurId: '  ' })
+        ).toThrow();
     });
 
     it('odrzuca śmieci zamiast identyfikatorów', () => {

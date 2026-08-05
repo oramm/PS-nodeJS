@@ -1,10 +1,20 @@
-/** Parametry generowania spisu spraw kontraktu (arkusz Google). */
-export interface CaseListSheetParams {
-    contractId: number;
+/** Filtry wspólne dla spisu kontraktu i spisu projektu. */
+export interface CaseListSheetFilter {
     /** true = wszystkie statusy; false = bez zakończonych/archiwalnych (Backlog zostaje) */
     includeFinished: boolean;
-    /** Pusta/pominięta = cały kontrakt. Jedna osoba => nazwisko w nazwie pliku zamiast kolumny. */
+    /** Pusta/pominięta = cały zakres. Jedna osoba => nazwisko w nazwie pliku zamiast kolumny. */
     personIds: number[];
+}
+
+/** Parametry generowania spisu spraw kontraktu (arkusz Google). */
+export interface CaseListSheetParams extends CaseListSheetFilter {
+    contractId: number;
+}
+
+/** Parametry generowania spisu spraw projektu — wszystkie jego kontrakty w jednym arkuszu. */
+export interface CaseListSheetProjectParams extends CaseListSheetFilter {
+    /** OurId projektu — tym kluczem kontrakty wiążą się z projektem (Contracts.ProjectOurId). */
+    projectOurId: string;
 }
 
 export interface CaseListSheetResult {
@@ -18,6 +28,8 @@ export interface CaseListSheetResult {
 
 /** Poziom w drzewie — wartość kolumny „Poziom" i zarazem głębokość wcięcia nazwy. */
 export const SHEET_LEVELS = {
+    /** Tylko w spisie projektu — w spisie kontraktu kontrakt jest w tytule arkusza. */
+    CONTRACT: 'Kontrakt',
     MILESTONE: 'Kamień',
     CASE: 'Sprawa',
     SUBCASE: 'Podsprawa',
