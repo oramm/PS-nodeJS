@@ -2,6 +2,7 @@ import { OAuth2Client } from 'google-auth-library';
 import BaseController from '../../controllers/BaseController';
 import ToolsGd from '../../tools/ToolsGd';
 import ToolsSheets from '../../tools/ToolsSheets';
+import ContractsController from '../ContractsController';
 import ContractsWithChildrenController from '../ContractsWithChildrenController';
 import { ContractsWithChildren } from '../ContractTypes';
 import ProjectsController from '../../projects/ProjectsController';
@@ -17,6 +18,7 @@ import {
 import CaseListSheetValidator from './CaseListSheetValidator';
 import {
     CaseListMatrix,
+    CaseListSheetFolderTarget,
     CaseListSheetParams,
     CaseListSheetProjectParams,
     CaseListSheetResult,
@@ -25,6 +27,7 @@ import {
 } from './CaseListSheetTypes';
 
 const SPREADSHEET_MIME = 'application/vnd.google-apps.spreadsheet';
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
 /** Podfolder na spisy — zakładany przy pierwszym generowaniu w folderze kontraktu. */
 const REPORTS_FOLDER_NAME = 'Spisy spraw';
 const SHEET_TITLE = 'Spis spraw';
@@ -130,6 +133,67 @@ export default class CaseListSheetController extends BaseController<any, any> {
                 ),
             auth
         );
+    }
+
+    /**
+     * Adres podfolderu „Spisy spraw" — okno pokazuje go jako link jeszcze przed
+     * generowaniem, żeby dało się zajrzeć do wcześniejszych spisów.
+     *
+     * Folderu tu NIE zakładamy: samo otwarcie okna nie może zaśmiecać Dysku katalogiem,
+     * z którego nikt nie skorzysta. Brak folderu (nic jeszcze nie generowano) = null
+     * i okno po prostu nie pokazuje linku.
+     */
+    static async findFolder(
+        body: unknown,
+        scope?: ProjectScope,
+        auth?: OAuth2Client
+    ): Promise<{ url: string | null }> {
+        const target = CaseListSheetValidator.parseFolderTarget(body);
+        return await this.withAuth(async (_instance, authClient) => {
+            const parentFolderId =
+                await CaseListSheetController.resolveParentFolderId(
+                    target,
+                    scope
+                );
+            if (!parentFolderId) return { url: null };
+
+            const reportsFolder =
+                await ToolsGd.getFileMetaDataByNameAndMimeType(authClient, {
+                    parentId: parentFolderId,
+                    fileName: REPORTS_FOLDER_NAME,
+                    mimeType: FOLDER_MIME,
+                });
+            return {
+                url: reportsFolder?.id
+                    ? ToolsGd.createGdFolderUrl(reportsFolder.id)
+                    : null,
+            };
+        }, auth);
+    }
+
+    /**
+     * Folder kontraktu albo projektu — ten, w którym leży podfolder ze spisami.
+     * Kontrakt bierzemy z ContractsController (a nie z drzewa jak przy generowaniu),
+     * bo do samego gdFolderId nie ma po co ciągnąć kamieni, spraw i zadań.
+     */
+    private static async resolveParentFolderId(
+        target: CaseListSheetFolderTarget,
+        scope: ProjectScope | undefined
+    ): Promise<string | undefined> {
+        if (target.projectOurId !== undefined) {
+            const projects = await ProjectsController.find(
+                [{ ourId: target.projectOurId }],
+                scope
+            );
+            return projects.find((p) => p.ourId === target.projectOurId)
+                ?.gdFolderId;
+        }
+
+        const [contract] = await ContractsController.find(
+            [{ id: target.contractId }],
+            scope
+        );
+        return (contract as any)?.gdFolderId;
     }
 
     private static async generateSheet(
@@ -287,6 +351,7 @@ export default class CaseListSheetController extends BaseController<any, any> {
             url: `https://docs.google.com/spreadsheets/d/${gdId}`,
             name,
             overwritten,
+            folderUrl: ToolsGd.createGdFolderUrl(reportsFolder.id as string),
         };
     }
 

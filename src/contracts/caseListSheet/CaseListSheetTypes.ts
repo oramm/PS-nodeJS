@@ -24,6 +24,15 @@ export interface CaseListSheetResult {
     name: string;
     /** Czy nadpisano istniejący arkusz (false = utworzono nowy). */
     overwritten: boolean;
+    /** Podfolder „Spisy spraw" — okno podmienia nim link w nagłówku, bo przy pierwszym
+     *  generowaniu folder dopiero tu powstaje. */
+    folderUrl: string;
+}
+
+/** Zakres, dla którego szukamy podfolderu ze spisami — kontrakt albo projekt. */
+export interface CaseListSheetFolderTarget {
+    contractId?: number;
+    projectOurId?: string;
 }
 
 /** Poziom w drzewie — wartość kolumny „Poziom" i zarazem głębokość wcięcia nazwy. */

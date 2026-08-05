@@ -17,6 +17,21 @@ app.post('/contractCaseListSheet', async (req: Request, res: Response, next) => 
     }
 });
 
+/** Adres podfolderu „Spisy spraw" — link w nagłówku okna generowania. */
+app.post('/caseListSheetFolder', async (req: Request, res: Response, next) => {
+    try {
+        if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
+
+        const result = await CaseListSheetController.findFolder(
+            req.parsedBody,
+            req.projectScope
+        );
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
 /** To samo dla całego projektu — jeden arkusz ze wszystkimi jego kontraktami. */
 app.post('/projectCaseListSheet', async (req: Request, res: Response, next) => {
     try {

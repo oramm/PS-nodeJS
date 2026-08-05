@@ -1,4 +1,5 @@
 import {
+    CaseListSheetFolderTarget,
     CaseListSheetParams,
     CaseListSheetProjectParams,
 } from './CaseListSheetTypes';
@@ -33,6 +34,28 @@ export default class CaseListSheetValidator {
             includeFinished: body?.includeFinished === true,
             personIds: CaseListSheetValidator.parsePersonIds(body?.personIds),
         };
+    }
+
+    /**
+     * Zakres dla wyszukania podfolderu ze spisami. Okno wysyła to samo `target`, co przy
+     * generowaniu, więc przyjmujemy obie postacie — projekt rozpoznajemy po jego polach.
+     *
+     * Identyfikator wraca do rozwiązania po stronie serwera (a nie samo `gdFolderId`
+     * z klienta), żeby przeglądanie Dysku trzymało się zakresu projektów użytkownika.
+     */
+    static parseFolderTarget(body: any): CaseListSheetFolderTarget {
+        const rawProject = body?.projectOurId ?? body?.projectId;
+        if (rawProject !== undefined && rawProject !== null) {
+            const projectOurId = String(rawProject).trim();
+            if (!projectOurId)
+                throw new Error('Nieprawidłowy identyfikator projektu');
+            return { projectOurId };
+        }
+
+        const contractId = Number(body?.contractId);
+        if (!Number.isInteger(contractId) || contractId <= 0)
+            throw new Error('Nieprawidłowy identyfikator kontraktu');
+        return { contractId };
     }
 
     private static parsePersonIds(raw: any): number[] {

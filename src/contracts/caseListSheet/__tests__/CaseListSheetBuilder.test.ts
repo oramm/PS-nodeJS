@@ -772,3 +772,36 @@ describe('CaseListSheetValidator.parseParams - personIds', () => {
         ).toThrow();
     });
 });
+
+describe('CaseListSheetValidator.parseFolderTarget', () => {
+    it('rozpoznaje zakres po tym samym target, który idzie przy generowaniu', () => {
+        expect(CaseListSheetValidator.parseFolderTarget({ contractId: 5 })).toEqual(
+            { contractId: 5 }
+        );
+        expect(
+            CaseListSheetValidator.parseFolderTarget({ projectOurId: '2024/17' })
+        ).toEqual({ projectOurId: '2024/17' });
+        expect(
+            CaseListSheetValidator.parseFolderTarget({ projectId: '2024/17' })
+        ).toEqual({ projectOurId: '2024/17' });
+    });
+
+    it('projekt ma pierwszeństwo - spis projektu wysyła tylko swój identyfikator', () => {
+        expect(
+            CaseListSheetValidator.parseFolderTarget({
+                projectOurId: '2024/17',
+                contractId: 5,
+            })
+        ).toEqual({ projectOurId: '2024/17' });
+    });
+
+    it('odrzuca brak i śmieci', () => {
+        expect(() => CaseListSheetValidator.parseFolderTarget({})).toThrow();
+        expect(() =>
+            CaseListSheetValidator.parseFolderTarget({ projectOurId: '  ' })
+        ).toThrow();
+        expect(() =>
+            CaseListSheetValidator.parseFolderTarget({ contractId: 'abc' })
+        ).toThrow();
+    });
+});
