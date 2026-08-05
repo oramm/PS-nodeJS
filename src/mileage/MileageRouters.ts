@@ -2,21 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import { app } from '../index';
 import MileageController from './MileageController';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
-import { SystemRoleName } from '../types/sessionTypes';
 import { ForbiddenError } from '../persons/projectAssignments/ProjectScopeGuard';
+import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 
 /**
  * Dostęp do kilometrówki wynika z flagi StaffMembers.IsDriver, nie z roli systemowej.
  * Pracownicy ENVI mają ją domyślnie włączoną (seed migracji), więc dla nich nic się
- * nie zmienia; pracownik kontraktowy dostaje ją tylko wtedy, gdy ktoś świadomie ją nada.
+ * nie zmienia; role zewnętrzne (pracownik kontraktowy, klient) dostają ją tylko wtedy,
+ * gdy ktoś świadomie ją nada.
  */
 async function hasModuleAccess(req: Request): Promise<boolean> {
     const personId = req.session.userData?.enviId;
     if (!personId) return false;
-    if (
-        req.session.userData?.systemRoleName !== SystemRoleName.CONTRACT_WORKER
-    )
-        return true;
+    const role = req.session.userData?.systemRoleName;
+    if (!role || !PROJECT_SCOPED_ROLES.includes(role)) return true;
     return StaffMemberRepository.isDriver(personId);
 }
 

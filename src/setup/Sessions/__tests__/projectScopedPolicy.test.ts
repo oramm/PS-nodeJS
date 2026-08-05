@@ -1,6 +1,4 @@
-import contractWorkerPolicy, {
-    isAllowedForContractWorker,
-} from '../contractWorkerPolicy';
+import projectScopedPolicy, { isAllowedForRole } from '../projectScopedPolicy';
 import { SystemRoleName } from '../../../types/sessionTypes';
 import ProjectAssignmentRepository from '../../../persons/projectAssignments/ProjectAssignmentRepository';
 
@@ -14,7 +12,7 @@ function makeSession(systemRoleName: SystemRoleName, systemRoleId: number) {
     return {
         enviId: 900,
         systemEmail: 'ktos@example.com',
-        userName: 'Pracownik Kontraktowy',
+        userName: 'Rola zakresowa',
         picture: '',
         systemRoleName,
         systemRoleId,
@@ -22,6 +20,18 @@ function makeSession(systemRoleName: SystemRoleName, systemRoleId: number) {
 }
 
 const CONTRACT_WORKER = makeSession(SystemRoleName.CONTRACT_WORKER, 6);
+const CLIENT = makeSession(SystemRoleName.CLIENT, 7);
+
+/** Zrąb uprawnień jest wspólny dla obu ról zakresowych - różnice testujemy osobno. */
+const SCOPED_ROLES: [string, ReturnType<typeof makeSession>][] = [
+    ['pracownik kontraktowy', CONTRACT_WORKER],
+    ['klient', CLIENT],
+];
+
+const allowed = (role: SystemRoleName) => (method: string, path: string) =>
+    isAllowedForRole(role, method, path);
+const workerAllows = allowed(SystemRoleName.CONTRACT_WORKER);
+const clientAllows = allowed(SystemRoleName.CLIENT);
 
 async function run(method: string, path: string, userData: any) {
     const req: any = { method, path, ip: '::1', session: { userData } };
@@ -39,18 +49,18 @@ async function run(method: string, path: string, userData: any) {
     };
     const next = jest.fn();
 
-    await contractWorkerPolicy(req, res, next);
+    await projectScopedPolicy(req, res, next);
     return { req, res, next };
 }
 
-describe('contractWorkerPolicy', () => {
+describe('projectScopedPolicy', () => {
     beforeEach(() => {
         mockedRepository.getAssignedProjectOurIds.mockResolvedValue([
             '2023.10',
         ]);
     });
 
-    describe('moduły zamknięte dla pracownika kontraktowego', () => {
+    describe('moduły zamknięte dla ról zakresowych', () => {
         // Wprost z ustaleń: bez faktur, ofert, dotacji i zarządzania użytkownikami.
         const BLOCKED: [string, string][] = [
             ['POST', '/invoices'],
@@ -97,20 +107,21 @@ describe('contractWorkerPolicy', () => {
             ['PUT', '/milestoneDate/5'],
             ['POST', '/security'],
             ['POST', '/city'],
-            ['GET', '/site-visits/admin'],
         ];
 
-        it.each(BLOCKED)('odmawia %s %s', async (method, path) => {
-            const { res, next } = await run(method, path, CONTRACT_WORKER);
+        describe.each(SCOPED_ROLES)('%s', (_label, userData) => {
+            it.each(BLOCKED)('odmawia %s %s', async (method, path) => {
+                const { res, next } = await run(method, path, userData);
 
-            expect(res.statusCode).toBe(403);
-            expect(next).not.toHaveBeenCalled();
+                expect(res.statusCode).toBe(403);
+                expect(next).not.toHaveBeenCalled();
+            });
         });
     });
 
     describe('trasy potrzebne do pracy operacyjnej', () => {
         const ALLOWED: [string, string][] = [
-            // start aplikacji - bez tych repozytoriów klient nie wstaje
+            // start aplikacji - bez tych repozytoriów aplikacja kliencka nie wstaje
             ['POST', '/persons'],
             ['POST', '/contractTypes'],
             ['POST', '/documentTemplates'],
@@ -143,38 +154,69 @@ describe('contractWorkerPolicy', () => {
             ['GET', '/mileage/access'],
         ];
 
-        it.each(ALLOWED)('przepuszcza %s %s', async (method, path) => {
-            const { res, next } = await run(method, path, CONTRACT_WORKER);
+        describe.each(SCOPED_ROLES)('%s', (_label, userData) => {
+            it.each(ALLOWED)('przepuszcza %s %s', async (method, path) => {
+                const { res, next } = await run(method, path, userData);
 
-            expect(res.statusCode).toBeUndefined();
-            expect(next).toHaveBeenCalled();
+                expect(res.statusCode).toBeUndefined();
+                expect(next).toHaveBeenCalled();
+            });
         });
     });
 
-    it('domyślnie odmawia trasie, o której nic nie wie - nowy endpoint nie otwiera się sam', async () => {
-        const { res, next } = await run(
-            'POST',
-            '/zupelnie-nowy-modul',
-            CONTRACT_WORKER
+    describe('przegląd wizyt - jedyna różnica między rolami', () => {
+        const OVERVIEW: [string, string][] = [
+            ['GET', '/site-visits/admin'],
+            ['GET', '/site-visits/admin/summary'],
+        ];
+
+        it.each(OVERVIEW)(
+            'klient dostaje %s %s (dane zawęża req.projectScope)',
+            async (method, path) => {
+                const { res, next } = await run(method, path, CLIENT);
+
+                expect(res.statusCode).toBeUndefined();
+                expect(next).toHaveBeenCalled();
+            }
         );
 
-        expect(res.statusCode).toBe(403);
-        expect(next).not.toHaveBeenCalled();
+        it.each(OVERVIEW)(
+            'pracownik kontraktowy nie dostaje %s %s',
+            async (method, path) => {
+                const { res, next } = await run(method, path, CONTRACT_WORKER);
+
+                expect(res.statusCode).toBe(403);
+                expect(next).not.toHaveBeenCalled();
+            }
+        );
     });
 
-    it('ustawia zakres projektów na żądaniu po przepuszczeniu', async () => {
-        const { req, next } = await run('POST', '/contracts', CONTRACT_WORKER);
+    describe.each(SCOPED_ROLES)('zakres projektów - %s', (_label, userData) => {
+        it('domyślnie odmawia trasie, o której nic nie wie - nowy endpoint nie otwiera się sam', async () => {
+            const { res, next } = await run(
+                'POST',
+                '/zupelnie-nowy-modul',
+                userData
+            );
 
-        expect(next).toHaveBeenCalled();
-        expect(req.projectScope).toEqual({ projectOurIds: ['2023.10'] });
-    });
+            expect(res.statusCode).toBe(403);
+            expect(next).not.toHaveBeenCalled();
+        });
 
-    it('brak przypisań daje pustą listę, a nie brak filtra', async () => {
-        mockedRepository.getAssignedProjectOurIds.mockResolvedValue([]);
+        it('ustawia zakres projektów na żądaniu po przepuszczeniu', async () => {
+            const { req, next } = await run('POST', '/contracts', userData);
 
-        const { req } = await run('POST', '/contracts', CONTRACT_WORKER);
+            expect(next).toHaveBeenCalled();
+            expect(req.projectScope).toEqual({ projectOurIds: ['2023.10'] });
+        });
 
-        expect(req.projectScope).toEqual({ projectOurIds: [] });
+        it('brak przypisań daje pustą listę, a nie brak filtra', async () => {
+            mockedRepository.getAssignedProjectOurIds.mockResolvedValue([]);
+
+            const { req } = await run('POST', '/contracts', userData);
+
+            expect(req.projectScope).toEqual({ projectOurIds: [] });
+        });
     });
 
     describe('pozostałe role', () => {
@@ -217,32 +259,40 @@ describe('contractWorkerPolicy', () => {
 
     describe('dopasowanie ścieżek', () => {
         it('ignoruje wielkość liter i końcowy ukośnik - tak jak robi to Express', () => {
-            expect(isAllowedForContractWorker('POST', '/Contracts')).toBe(true);
-            expect(isAllowedForContractWorker('POST', '/contracts/')).toBe(true);
+            expect(workerAllows('POST', '/Contracts')).toBe(true);
+            expect(workerAllows('POST', '/contracts/')).toBe(true);
         });
 
         it(':id dopasowuje jeden segment, nie kilka', () => {
-            expect(isAllowedForContractWorker('PUT', '/case/12')).toBe(true);
-            expect(isAllowedForContractWorker('PUT', '/case/12/status')).toBe(
-                false
-            );
+            expect(workerAllows('PUT', '/case/12')).toBe(true);
+            expect(workerAllows('PUT', '/case/12/status')).toBe(false);
         });
 
         it(':id to tylko cyfry - inaczej /site-visits/:id otworzyłoby /site-visits/admin', () => {
-            expect(isAllowedForContractWorker('GET', '/site-visits/12')).toBe(
-                true
-            );
-            expect(isAllowedForContractWorker('GET', '/site-visits/admin')).toBe(
+            expect(workerAllows('GET', '/site-visits/12')).toBe(true);
+            expect(workerAllows('GET', '/site-visits/admin')).toBe(false);
+            expect(workerAllows('GET', '/site-visits/admin/summary')).toBe(
                 false
             );
-            expect(
-                isAllowedForContractWorker('GET', '/site-visits/admin/summary')
-            ).toBe(false);
+            // Klient ma przegląd z jawnego wpisu, a nie z rozlanego :id - podgląd
+            // pojedynczej wizyty dalej wymaga identyfikatora liczbowego.
+            expect(clientAllows('GET', '/site-visits/admin')).toBe(true);
+            expect(clientAllows('GET', '/site-visits/admin/cokolwiek')).toBe(
+                false
+            );
         });
 
         it('rozróżnia metodę HTTP', () => {
-            expect(isAllowedForContractWorker('POST', '/entity')).toBe(true);
-            expect(isAllowedForContractWorker('PUT', '/entity/5')).toBe(false);
+            expect(workerAllows('POST', '/entity')).toBe(true);
+            expect(workerAllows('PUT', '/entity/5')).toBe(false);
+            // Przegląd wizyt to wyłącznie odczyt.
+            expect(clientAllows('POST', '/site-visits/admin')).toBe(false);
+        });
+
+        it('rola spoza mapy nie dostaje niczego z tej warstwy', () => {
+            expect(allowed(SystemRoleName.ADMIN)('POST', '/contracts')).toBe(
+                false
+            );
         });
     });
 });

@@ -15,16 +15,18 @@ export default class StaffMemberRepository {
      * flagi spójne z seedem migracji: pracownicy ENVI = kierowcy; rola 3 = scrum;
      * role 1,2 = faktury kosztowe + bank.
      *
-     * Rola 6 (CONTRACT_WORKER) dostaje wszystkie flagi na 0: to osoba z zewnątrz,
-     * więc kilometrówkę i wizyty na budowie włącza się jej pojedynczo, świadomą decyzją.
+     * Role zewnętrzne 6 (CONTRACT_WORKER) i 7 (CLIENT) dostają wszystkie flagi na 0:
+     * to osoby spoza ENVI, więc kilometrówkę i rejestrowanie wizyt na budowie włącza
+     * się im pojedynczo, świadomą decyzją. Klient i tak widzi raporty z wizyt bez tej
+     * flagi - ona rozstrzyga tylko o rejestrowaniu własnych (SiteVisitRouters).
      */
     static async ensureDefaultsForRole(
         personId: number,
         role: number,
         conn?: mysql.PoolConnection
     ): Promise<void> {
-        const isContractWorker = role === 6;
-        const isDriver = isContractWorker ? 0 : 1;
+        const isProjectScopedRole = role === 6 || role === 7;
+        const isDriver = isProjectScopedRole ? 0 : 1;
         const isInScrum = role === 3 ? 1 : 0;
         const hasElevated = role === 1 || role === 2 ? 1 : 0;
         const sql = `INSERT IGNORE INTO StaffMembers

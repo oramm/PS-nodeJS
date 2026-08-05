@@ -1,6 +1,7 @@
 import Person from './Person';
-import { SystemRoleName, UserData } from '../types/sessionTypes';
+import { UserData } from '../types/sessionTypes';
 import SessionRevoker from '../setup/Sessions/SessionRevoker';
+import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
 import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
@@ -90,9 +91,10 @@ export default class PersonsController extends BaseController<
         conn: mysql.PoolConnection
     ): Promise<void> {
         if (!personId || !roleWasWritten) return;
-        // Rola 6 (CONTRACT_WORKER) też dostaje rekord, ale z wyzerowanymi flagami -
-        // dostęp do kilometrówki i wizyt na budowie włącza się jej świadomie, per osoba.
-        if (systemRoleId === undefined || ![1, 2, 3, 6].includes(systemRoleId))
+        // Role 6 (CONTRACT_WORKER) i 7 (CLIENT) też dostają rekord, ale z wyzerowanymi
+        // flagami - dostęp do kilometrówki i rejestrowania wizyt włącza się im świadomie,
+        // per osoba.
+        if (systemRoleId === undefined || ![1, 2, 3, 6, 7].includes(systemRoleId))
             return;
         await StaffMemberRepository.ensureDefaultsForRole(
             personId,
@@ -526,10 +528,11 @@ export default class PersonsController extends BaseController<
     static async getRegisteringEditors(userData: UserData): Promise<Person[]> {
         const loggedInPerson = await this.getPersonFromSessionUserData(userData);
 
-        // Współpracownik i pracownik kontraktowy rejestrują wyłącznie na siebie
+        // Współpracownik i role zakresowe (pracownik kontraktowy, klient) rejestrują
+        // wyłącznie na siebie
         if (
             userData.systemRoleName === 'ENVI_COOPERATOR' ||
-            userData.systemRoleName === SystemRoleName.CONTRACT_WORKER
+            PROJECT_SCOPED_ROLES.includes(userData.systemRoleName)
         ) {
             return [loggedInPerson];
         }

@@ -85,6 +85,7 @@ export default class ToolsGapi {
                     [SystemRoleName.ENVI_COOPERATOR]: 4,
                     [SystemRoleName.EXTERNAL_USER]: 5,
                     [SystemRoleName.CONTRACT_WORKER]: 6,
+                    [SystemRoleName.CLIENT]: 7,
                 };
 
                 // Mock user data for Playwright/testing

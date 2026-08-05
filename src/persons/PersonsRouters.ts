@@ -1,7 +1,7 @@
 import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
-import { SystemRoleName } from '../types/sessionTypes';
+import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 
 const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'systemRoleId',
@@ -36,13 +36,12 @@ app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await PersonsController.find(orConditions);
-        // Pracownik kontraktowy dostaje tylko tyle, ile potrzebują listy wyboru osób
-        // (np. właściciel zadania). Reszta profilu - dane kontaktowe, podmiot, rola
-        // systemowa - nie jest mu do niczego potrzebna i nie ma po co wychodzić z serwera.
-        if (
-            req.session.userData?.systemRoleName ===
-            SystemRoleName.CONTRACT_WORKER
-        ) {
+        // Role zakresowe (pracownik kontraktowy, klient) dostają tylko tyle, ile
+        // potrzebują listy wyboru osób (np. właściciel zadania). Reszta profilu - dane
+        // kontaktowe, podmiot, rola systemowa - nie jest im do niczego potrzebna i nie ma
+        // po co wychodzić z serwera.
+        const role = req.session.userData?.systemRoleName;
+        if (role && PROJECT_SCOPED_ROLES.includes(role)) {
             res.send(
                 result.map((person) => ({
                     id: person.id,

@@ -19,7 +19,7 @@ import agentTokenAuth, {
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
 import requireSession from './setup/Sessions/requireSession';
-import contractWorkerPolicy from './setup/Sessions/contractWorkerPolicy';
+import projectScopedPolicy from './setup/Sessions/projectScopedPolicy';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
@@ -519,10 +519,11 @@ app.use(denyDestructiveForAgent);
 // per-route checks it backs up were missing on some of them.
 app.use(requireSession);
 
-// Rola CONTRACT_WORKER dociera tylko do tras z jawnej listy w tej warstwie i dostaje
-// tu policzony zakres projektów. Musi stać po requireSession (potrzebuje sesji) i przed
-// wszystkimi trasami, łącznie z rejestrowanymi inline poniżej. Dla pozostałych ról to no-op.
-app.use(contractWorkerPolicy);
+// Role zakresowe (CONTRACT_WORKER, CLIENT) docierają tylko do tras z jawnej listy w tej
+// warstwie i dostają tu policzony zakres projektów. Musi stać po requireSession (potrzebuje
+// sesji) i przed wszystkimi trasami, łącznie z rejestrowanymi inline poniżej. Dla pozostałych
+// ról to no-op.
+app.use(projectScopedPolicy);
 
 app.use((req, res, next) => {
     console.log(

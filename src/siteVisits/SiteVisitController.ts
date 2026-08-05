@@ -78,33 +78,44 @@ export default class SiteVisitController extends BaseController<
         return visit;
     }
 
-    /** [Przegląd] Wizyty wszystkich osób z filtrami (tylko rola 1/2 - gate w routerze). */
+    /**
+     * [Przegląd] Wizyty wszystkich osób z filtrami (gate w routerze: rola 1/2 albo klient).
+     * scope zawęża wynik do przypisanych projektów - undefined znaczy "bez ograniczeń".
+     */
     static async adminListVisits(
-        params: SiteVisitSearchParams
+        params: SiteVisitSearchParams,
+        scope?: ProjectScope
     ): Promise<SiteVisit[]> {
-        return this.getInstance().repository.find(params);
+        return this.getInstance().repository.find({ ...params, scope });
     }
 
     /** [Przegląd] Podsumowanie liczby wizyt wg osoby lub kontraktu. */
     static async adminSummary(
         groupBy: 'person' | 'contract',
-        params: SiteVisitSearchParams
+        params: SiteVisitSearchParams,
+        scope?: ProjectScope
     ): Promise<VisitSummaryRow[]> {
-        return this.getInstance().repository.getVisitsSummary(groupBy, params);
+        return this.getInstance().repository.getVisitsSummary(groupBy, {
+            ...params,
+            scope,
+        });
     }
 
     /**
      * Zwraca strumień bajtów zdjęcia z Google Drive (do proxy'owania przez Router),
      * dzięki czemu pliki wizyt nie muszą być publiczne. Dostęp = ktokolwiek z
      * uprawnieniem do modułu (gate w routerze) - jeśli ktoś może oglądać wizyty,
-     * może też oglądać ich zdjęcia. Sprawdzamy tylko, że fileId to realne zdjęcie wizyty.
+     * może też oglądać ich zdjęcia. Sprawdzamy, że fileId to realne zdjęcie wizyty,
+     * a dla ról zakresowych dodatkowo, że wizyta należy do przypisanego projektu.
      * Warstwę HTTP (nagłówki, pipe) obsługuje Router - Controller nie zna `res`.
      */
     static async getPhotoMedia(
-        gdFileId: string
+        gdFileId: string,
+        scope?: ProjectScope
     ): Promise<{ stream: Readable; mimeType?: string; name?: string }> {
         const exists = await this.getInstance().repository.findVisitByPhotoFileId(
-            gdFileId
+            gdFileId,
+            scope
         );
         if (!exists) throw new Error('Nie znaleziono zdjęcia.');
         return await this.withAuth((_instance, auth) =>

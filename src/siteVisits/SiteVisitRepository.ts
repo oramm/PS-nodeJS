@@ -13,6 +13,8 @@ export interface SiteVisitSearchParams {
     dateFrom?: string; // 'YYYY-MM-DD' (włącznie)
     dateTo?: string; // 'YYYY-MM-DD' (włącznie)
     text?: string; // szuka w opisie oraz nazwie/OurId kontraktu
+    /** Zakres projektów roli zakresowej; undefined = brak ograniczeń. */
+    scope?: ProjectScope;
 }
 
 /** Wiersz podsumowania w panelu przeglądu (grupowanie po osobie lub kontrakcie). */
@@ -170,6 +172,12 @@ export default class SiteVisitRepository extends BaseRepository<SiteVisit> {
             const like = `%${p.text}%`;
             values.push(like, like, like);
         }
+        // Wymuszony zakres roli - doklejany przez AND obok filtrów z żądania, więc
+        // żaden parametr z query stringa go nie obchodzi. Brak przypisań daje '0'.
+        if (p.scope)
+            conditions.push(
+                makeProjectScopeCondition('c.ProjectOurId', p.scope)
+            );
         return {
             clause: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '',
             values,
@@ -302,15 +310,21 @@ export default class SiteVisitRepository extends BaseRepository<SiteVisit> {
         }));
     }
 
-    /** Właściciel wizyty do której należy dane zdjęcie (autoryzacja proxy podglądu). */
+    /**
+     * Właściciel wizyty do której należy dane zdjęcie (autoryzacja proxy podglądu).
+     * Dla roli zakresowej zdjęcie z wizyty spoza przypisanych projektów nie istnieje.
+     */
     async findVisitByPhotoFileId(
-        gdFileId: string
+        gdFileId: string,
+        scope?: ProjectScope
     ): Promise<{ visitId: number; personId: number } | undefined> {
         const sql = `
             SELECT sv.Id AS visitId, sv.PersonId AS personId
             FROM SiteVisitPhotos ph
             JOIN SiteVisits sv ON sv.Id = ph.SiteVisitId
+            LEFT JOIN Contracts c ON c.Id = sv.ContractId
             WHERE ph.GdFileId = ?
+              AND ${makeProjectScopeCondition('c.ProjectOurId', scope)}
             LIMIT 1`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             gdFileId,

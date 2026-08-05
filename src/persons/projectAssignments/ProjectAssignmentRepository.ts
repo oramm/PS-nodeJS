@@ -8,7 +8,7 @@ export type AssignedProject = {
 
 /**
  * Przypisania osoby do projektów (tabela PersonProjects) - źródło zakresu danych
- * dla roli CONTRACT_WORKER. Klasa statyczna jak StaffMemberRepository: tabela jest
+ * dla ról zakresowych (CONTRACT_WORKER, CLIENT). Klasa statyczna jak StaffMemberRepository: tabela jest
  * czystym powiązaniem, bez modelu biznesowego i bez własnego CRUD-a w UI.
  */
 export default class ProjectAssignmentRepository {
@@ -58,7 +58,7 @@ export default class ProjectAssignmentRepository {
 
     /**
      * Ustawia komplet przypisań osoby (replace-all). Pusta lista czyści przypisania -
-     * tak wygląda zmiana roli na inną niż CONTRACT_WORKER.
+     * tak wygląda zmiana roli na inną niż zakresowa.
      */
     static async setAssignments(
         personId: number,

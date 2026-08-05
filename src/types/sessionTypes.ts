@@ -27,12 +27,13 @@ export enum SystemRoleName {
     ENVI_COOPERATOR = 'ENVI_COOPERATOR',
     EXTERNAL_USER = 'EXTERNAL_USER',
     CONTRACT_WORKER = 'CONTRACT_WORKER',
+    CLIENT = 'CLIENT',
 }
 
 /**
  * Projekty (Projects.OurId), do których zalogowany ma dostęp. Ustawiane przez
- * contractWorkerPolicy tylko dla roli CONTRACT_WORKER; dla pozostałych ról jest
- * undefined, co repozytoria interpretują jako brak ograniczeń.
+ * projectScopedPolicy dla ról ograniczonych zakresem (CONTRACT_WORKER, CLIENT);
+ * dla pozostałych ról jest undefined, co repozytoria interpretują jako brak ograniczeń.
  */
 export type ProjectScope = {
     projectOurIds: string[];

@@ -3,16 +3,17 @@ import { SystemRoleName } from '../../types/sessionTypes';
 import ProjectAssignmentRepository from '../../persons/projectAssignments/ProjectAssignmentRepository';
 
 /**
- * Warstwa autoryzacji dla roli CONTRACT_WORKER (pracownik kontraktowy).
+ * Warstwa autoryzacji dla ról ograniczonych do przypisanych projektów:
+ * CONTRACT_WORKER (pracownik kontraktowy) i CLIENT (klient).
  *
  * PO CO. requireSession odpowiada tylko na pytanie "czy jest sesja" - każdy zalogowany
- * dociera do każdej trasy. Pracownik kontraktowy to osoba z zewnątrz, która ma pracować
- * operacyjnie wyłącznie na przypisanych projektach i nie ma widzieć faktur, ofert,
- * dotacji ani zarządzania użytkownikami. Dla tej roli domyślna odpowiedź brzmi 403,
- * a dostęp dają wyłącznie trasy z listy poniżej.
+ * dociera do każdej trasy. Obie te role to osoby z zewnątrz, które pracują operacyjnie
+ * wyłącznie na przypisanych projektach i nie mają widzieć faktur, ofert, dotacji ani
+ * zarządzania użytkownikami. Dla nich domyślna odpowiedź brzmi 403, a dostęp dają
+ * wyłącznie trasy z list poniżej.
  *
  * DLACZEGO ALLOWLISTA, A NIE BLOKLISTA. Nowa trasa dodana w przyszłości ma być domyślnie
- * niedostępna dla tej roli. Blocklista milcząco otwierałaby każdy nowy endpoint.
+ * niedostępna dla tych ról. Blocklista milcząco otwierałaby każdy nowy endpoint.
  *
  * ZAKRES DANYCH TO OSOBNA SPRAWA. Przepuszczenie trasy nie znaczy, że rola widzi na niej
  * wszystko - req.projectScope ustawiany niżej zawęża odczyty do przypisanych projektów
@@ -27,12 +28,12 @@ import ProjectAssignmentRepository from '../../persons/projectAssignments/Projec
 type RoutePattern = { method: string; path: string };
 
 /**
- * Komplet tras dostępnych dla pracownika kontraktowego. Wszystko spoza listy = 403.
- * `:param` dopasowuje jeden segment ścieżki.
+ * Komplet tras wspólnych dla obu ról zakresowych. Wszystko spoza tej listy i spoza
+ * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
-const ALLOWED_ROUTES: RoutePattern[] = [
+const BASE_ROUTES: RoutePattern[] = [
     // --- Start aplikacji: repozytoria ładowane przez frontend dla każdego zalogowanego.
-    // Bez nich klient nie wstaje (MainControllerReact.setRepostories).
+    // Bez nich aplikacja kliencka nie wstaje (MainControllerReact.setRepostories).
     { method: 'POST', path: '/persons' }, // odpowiedź okrojona do danych podstawowych
     { method: 'POST', path: '/contractTypes' },
     { method: 'POST', path: '/documentTemplates' },
@@ -131,6 +132,29 @@ const ALLOWED_ROUTES: RoutePattern[] = [
     { method: 'POST', path: '/client-error' },
 ];
 
+/**
+ * Czego klient ma ponad pracownika kontraktowego: przegląd raportów z wizyt na budowie.
+ * Same trasy przeglądu zawężają dane do przypisanych projektów (SiteVisitRouters
+ * przekazuje req.projectScope do repozytorium) - tutaj rozstrzyga się tylko "czy w ogóle".
+ */
+const CLIENT_EXTRA_ROUTES: RoutePattern[] = [
+    { method: 'GET', path: '/site-visits/admin' },
+    { method: 'GET', path: '/site-visits/admin/summary' },
+];
+
+/**
+ * Role, których dostęp opisuje ta warstwa. Rola spoza tej mapy przechodzi dalej bez zmian
+ * i bez zakresu projektów.
+ */
+const ROUTES_BY_ROLE: Partial<Record<SystemRoleName, RoutePattern[]>> = {
+    [SystemRoleName.CONTRACT_WORKER]: BASE_ROUTES,
+    [SystemRoleName.CLIENT]: [...BASE_ROUTES, ...CLIENT_EXTRA_ROUTES],
+};
+
+export const PROJECT_SCOPED_ROLES = Object.keys(
+    ROUTES_BY_ROLE
+) as SystemRoleName[];
+
 /** Mirrors Express's default routing: case-insensitive, trailing slash ignored. */
 function normalizePath(path: string): string {
     const lower = path.toLowerCase();
@@ -157,37 +181,46 @@ function patternToRegExp(path: string): RegExp {
     return new RegExp(`^${escaped}$`);
 }
 
-const COMPILED_ROUTES = ALLOWED_ROUTES.map((route) => ({
-    method: route.method.toUpperCase(),
-    regExp: patternToRegExp(route.path),
-}));
+const COMPILED_ROUTES_BY_ROLE = new Map(
+    Object.entries(ROUTES_BY_ROLE).map(([role, routes]) => [
+        role,
+        routes.map((route) => ({
+            method: route.method.toUpperCase(),
+            regExp: patternToRegExp(route.path),
+        })),
+    ])
+);
 
-export function isAllowedForContractWorker(
+export function isAllowedForRole(
+    role: SystemRoleName | undefined,
     method: string,
     path: string
 ): boolean {
+    const compiled = role && COMPILED_ROUTES_BY_ROLE.get(role);
+    if (!compiled) return false;
     const normalized = normalizePath(path);
     const upperMethod = method.toUpperCase();
-    return COMPILED_ROUTES.some(
+    return compiled.some(
         (route) =>
             route.method === upperMethod && route.regExp.test(normalized)
     );
 }
 
-export default async function contractWorkerPolicy(
+export default async function projectScopedPolicy(
     req: Request,
     res: Response,
     next: NextFunction
 ): Promise<void> {
     const userData = req.session?.userData;
-    if (userData?.systemRoleName !== SystemRoleName.CONTRACT_WORKER)
-        return next();
+    if (!userData) return next();
+    const role = userData.systemRoleName;
+    if (!COMPILED_ROUTES_BY_ROLE.has(role)) return next();
 
-    if (!isAllowedForContractWorker(req.method, req.path)) {
+    if (!isAllowedForRole(role, req.method, req.path)) {
         // Głośno z rozmysłem: jeśli UI tej roli wywołuje trasę spoza listy, ten wpis
         // jest miejscem, w którym to widać - zamiast cichego "coś się nie ładuje".
         console.warn(
-            `[ContractWorkerPolicy] Odmowa:: method: ${req.method} path: ${req.path} personId: ${userData.enviId}`
+            `[ProjectScopedPolicy] Odmowa:: role: ${role} method: ${req.method} path: ${req.path} personId: ${userData.enviId}`
         );
         res.status(403).send({
             errorMessage: 'Brak uprawnień do tego zasobu.',
