@@ -44,7 +44,8 @@
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "test:offers": "jest src/offers",
-        "kill": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -State Listen).OwningProcess -Force\""
+        "kill": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -State Listen).OwningProcess -Force\"",
+        "gd:projects-ownership": "cross-env NODE_ENV=development ts-node src/scripts/gd-projects-ownership.ts"
     },
     "keywords": [],
     "author": "Marek Gazda",

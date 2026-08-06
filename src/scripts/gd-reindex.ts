@@ -30,7 +30,8 @@ loadEnv();
 
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import path from 'path';
 
 function arg(name: string, def?: string): string | undefined {
     const a = process.argv.slice(2);
@@ -41,6 +42,15 @@ function arg(name: string, def?: string): string | undefined {
     return n;
 }
 const flag = (n: string) => process.argv.slice(2).includes(`--${n}`);
+
+/** Katalog na raporty — wspólny z gd-backup i gd-move-test. */
+function outPath(name: string): string {
+    if (path.isAbsolute(name) || name.includes('/') || name.includes('\\'))
+        return name;
+    const dir = arg('outdir', 'gd-out')!;
+    mkdirSync(dir, { recursive: true });
+    return path.join(dir, name);
+}
 
 type ColumnRef = { table: string; column: string };
 
@@ -345,12 +355,19 @@ async function main() {
             : `[reindex] ⚠ Pozostało ${remaining} starych ID — sprawdź powyższe.`
     );
 
-    // dziennik wykonania (dowód + podstawa do rollbacku)
-    const logFile = `gd-reindex-log-${rollback ? 'rollback' : 'apply'}.json`;
+    // Dziennik wykonania (dowód do post-change-checklist). Znacznik czasu w nazwie,
+    // bo migracja idzie projekt po projekcie przez kilka dni — stała nazwa kasowałaby
+    // ślad po poprzednich przebiegach.
+    const at = new Date();
+    const stamp = at.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const logFile = outPath(
+        `gd-reindex-log-${rollback ? 'rollback' : 'apply'}-${stamp}.json`
+    );
     writeFileSync(
         logFile,
         JSON.stringify(
             {
+                at: at.toISOString(),
                 db: `${host}/${dbName}`,
                 map: mapPath,
                 rollback,

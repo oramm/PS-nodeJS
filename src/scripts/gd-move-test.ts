@@ -45,8 +45,53 @@ loadEnv();
 import { google, drive_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { keys } from '../setup/Sessions/credentials';
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import {
+    readFileSync,
+    writeFileSync,
+    appendFileSync,
+    existsSync,
+    mkdirSync,
+} from 'fs';
+import path from 'path';
 import http from 'http';
+
+/** Katalog na raporty — jak w gd-backup, żeby artefakty obu skryptów leżały razem. */
+function outPath(name: string): string {
+    if (path.isAbsolute(name) || name.includes('/') || name.includes('\\'))
+        return name;
+    const dir = arg('outdir', 'gd-out')!;
+    mkdirSync(dir, { recursive: true });
+    return path.join(dir, name);
+}
+
+/** Nazwa projektu → bezpieczny fragment nazwy pliku (ten sam wzorzec co w backupie). */
+function slugify(name: string, fallback: string): string {
+    return (
+        name
+            .replace(/[^A-Za-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 32) || fallback
+    );
+}
+
+/** Odczytuje nazwę folderu, żeby raporty dało się rozpoznać bez zaglądania w ID. */
+async function folderSlug(
+    drive: drive_v3.Drive,
+    folderId: string
+): Promise<string> {
+    try {
+        const meta = await withRetry(() =>
+            drive.files.get({
+                fileId: folderId,
+                fields: 'name',
+                supportsAllDrives: true,
+            })
+        );
+        return slugify(meta.data.name ?? folderId, folderId);
+    } catch {
+        return folderId;
+    }
+}
 
 function arg(name: string, def?: string): string | undefined {
     const a = process.argv.slice(2);
@@ -593,7 +638,6 @@ async function verifyTakeoverMode(clients: Clients) {
     const rootId = arg('verify-takeover');
     if (!rootId || rootId === 'true')
         throw new Error('Podaj --verify-takeover <folderId>.');
-    const snapFile = arg('before');
     const mapFile = arg('map', 'gd-takeover-map.json')!;
     const concurrency = Math.max(1, Number(arg('concurrency', '20')) || 20);
     const master = clients.masterEmail;
@@ -601,6 +645,12 @@ async function verifyTakeoverMode(clients: Clients) {
         version: 'v3',
         auth: clients.byEmail.get(master)!,
     });
+    const slug = await folderSlug(drive, rootId);
+    // Bez --before bierzemy snapshot tego projektu spod nazwy nadanej przy
+    // przejęciu — nie trzeba pamiętać ścieżki.
+    const defaultSnap = outPath(`gd-takeover-before-${slug}.jsonl`);
+    const snapFile =
+        arg('before') ?? (existsSync(defaultSnap) ? defaultSnap : undefined);
 
     // mapa oldId -> newId
     const map = new Map<string, string>();
@@ -668,12 +718,9 @@ async function verifyTakeoverMode(clients: Clients) {
             `  ${String(n).padStart(7)}  ${o}${o === master ? '  ✅' : '  ⛔ ZABLOKUJE PRZECIĄGNIĘCIE'}`
         );
     if (foreign.length) {
-        writeFileSync(
-            'gd-takeover-obce.txt',
-            foreign.join('\n'),
-            'utf8'
-        );
-        console.log(`\n  Lista cudzych obiektów: gd-takeover-obce.txt`);
+        const obceFile = outPath(`gd-takeover-obce-${slug}.txt`);
+        writeFileSync(obceFile, foreign.join('\n'), 'utf8');
+        console.log(`\n  Lista cudzych obiektów: ${obceFile}`);
     }
 
     let missing: string[] = [];
@@ -700,13 +747,10 @@ async function verifyTakeoverMode(clients: Clients) {
         console.log(`  Obiektów teraz:            ${total}`);
         console.log(`  ❌ NIEROZLICZONYCH:        ${missing.length}`);
         if (missing.length) {
-            writeFileSync(
-                'gd-takeover-nierozliczone.txt',
-                missing.join('\n'),
-                'utf8'
-            );
+            const missFile = outPath(`gd-takeover-nierozliczone-${slug}.txt`);
+            writeFileSync(missFile, missing.join('\n'), 'utf8');
             missing.slice(0, 10).forEach((m) => console.log('    ' + m));
-            console.log('    Pełna lista: gd-takeover-nierozliczone.txt');
+            console.log(`    Pełna lista: ${missFile}`);
         }
     } else {
         console.log(
@@ -757,6 +801,9 @@ async function takeoverMode(clients: Clients) {
         version: 'v3',
         auth: clients.byEmail.get(master)!,
     });
+    // Raporty nazywamy nazwą projektu — przy 92 przebiegach same ID są nieczytelne,
+    // a stałe nazwy plików kasowałyby diagnostykę poprzedniego projektu.
+    const slug = await folderSlug(masterDrive, rootId);
 
     const stat = {
         alreadyOwn: 0,
@@ -1026,7 +1073,15 @@ async function takeoverMode(clients: Clients) {
             // zamiennik/kopię tworzy master, oryginał jest cudzy.
             (f) => f.id !== excludeId && f.ownedByMe === true
         );
-        if (isFolder || !size) return found[0]?.id ?? undefined;
+        if (isFolder) return found[0]?.id ?? undefined;
+        // Pliki natywne Google (Dokumenty/Arkusze) NIE maja rozmiaru, wiec po
+        // samej nazwie nie da sie odroznic naszej kopii od INNEGO pliku o tej
+        // samej nazwie. Gdyby ktos dodal nowy Dokument o nazwie juz obecnej
+        // w folderze, uznalibysmy go za skopiowany i zarchiwizowali oryginal —
+        // cicha strata z drzewa. Dlatego dla nich rezygnujemy z dopasowania:
+        // najgorszy skutek to duplikat po awarii (widoczny, odwracalny),
+        // zamiast pominiecia realnego pliku.
+        if (!size) return undefined;
         return found.find((f) => Number(f.size) === size)?.id ?? undefined;
     }
 
@@ -1282,7 +1337,7 @@ async function takeoverMode(clients: Clients) {
     // SNAPSHOT PRZED — bez niego nie da się po fakcie udowodnić, że nic nie
     // zginęło, bo takeover modyfikuje oryginały (transfer, przeniesienie do archiwum)
     if (apply && !flag('no-snapshot')) {
-        const snapFile = `gd-takeover-before-${rootId}.jsonl`;
+        const snapFile = outPath(`gd-takeover-before-${slug}.jsonl`);
         console.log(`[takeover] Snapshot stanu PRZED → ${snapFile} ...`);
         const n = await snapshotTree(masterDrive, rootId, master, snapFile);
         console.log(`[takeover] Zapisano ${n} obiektów\n`);
@@ -1321,8 +1376,9 @@ async function takeoverMode(clients: Clients) {
     }
 
     if (failures.length) {
-        writeFileSync('gd-takeover-failures.txt', failures.join('\n'), 'utf8');
-        console.log(`\n[takeover] Lista problemow: gd-takeover-failures.txt`);
+        const failFile = outPath(`gd-takeover-failures-${slug}.txt`);
+        writeFileSync(failFile, failures.join('\n'), 'utf8');
+        console.log(`\n[takeover] Lista problemow: ${failFile}`);
     }
 
     console.log('\n=== PODSUMOWANIE PRZEJĘCIA ===');
@@ -1627,12 +1683,119 @@ async function cleanupMode(clients: Clients) {
     if (!apply) console.log('[cleanup] DRY-RUN. Dodaj --apply, aby usunąć.');
 }
 
+/**
+ * SAMODZIELNY SNAPSHOT drzewa (tylko odczyt) — do udowodnienia, że
+ * przeciągnięcie przez UI zachowuje identyfikatory. Zrób snapshot przed
+ * przeniesieniem, przeciągnij, zrób drugi i porównaj przez --compare-snapshots.
+ */
+async function snapshotMode(clients: Clients) {
+    const rootId = arg('snapshot');
+    if (!rootId || rootId === 'true')
+        throw new Error('Podaj --snapshot <folderId>.');
+    const master = clients.masterEmail;
+    const drive = google.drive({
+        version: 'v3',
+        auth: clients.byEmail.get(master)!,
+    });
+    const slug = await folderSlug(drive, rootId);
+    const label = arg('label', 'snap')!;
+    const out = outPath(`gd-tree-${slug}-${label}.jsonl`);
+    console.log(`[snapshot] Drzewo ${rootId} → ${out}`);
+    const n = await snapshotTree(drive, rootId, master, out);
+    console.log(`[snapshot] Zapisano ${n} obiektów (+ korzeń osobno).`);
+    // korzeń nie jest dzieckiem samego siebie, a jego ID też chcemy sprawdzić
+    const rootMeta = await withRetry(() =>
+        drive.files.get({
+            fileId: rootId,
+            fields: 'id,name,mimeType,driveId',
+            supportsAllDrives: true,
+        })
+    );
+    appendFileSync(
+        out,
+        JSON.stringify({
+            id: rootMeta.data.id,
+            name: rootMeta.data.name,
+            mimeType: rootMeta.data.mimeType,
+            owner: '(korzeń)',
+            size: 0,
+            path: '',
+            driveId: rootMeta.data.driveId ?? null,
+        }) + '\n',
+        'utf8'
+    );
+    console.log(
+        `[snapshot] Korzeń: ${rootMeta.data.name}  driveId=${rootMeta.data.driveId ?? '(Mój Dysk)'}`
+    );
+}
+
+/** Porównuje dwa snapshoty po ŚCIEŻCE i raportuje zmiany ID. */
+function compareSnapshotsMode() {
+    const a = arg('compare-snapshots');
+    const b = arg('with');
+    if (!a || a === 'true' || !b || b === 'true')
+        throw new Error(
+            'Użycie: --compare-snapshots <przed.jsonl> --with <po.jsonl>'
+        );
+    const load = (f: string) => {
+        const m = new Map<string, any>();
+        for (const line of readFileSync(f, 'utf8').split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            try {
+                const o = JSON.parse(line);
+                m.set(o.path, o);
+            } catch {}
+        }
+        return m;
+    };
+    const before = load(a);
+    const after = load(b);
+    console.log(`[cmp] PRZED: ${before.size} obiektów (${a})`);
+    console.log(`[cmp] PO:    ${after.size} obiektów (${b})\n`);
+
+    const changed: string[] = [];
+    const missing: string[] = [];
+    let same = 0;
+    for (const [p, o] of before) {
+        const n = after.get(p);
+        if (!n) {
+            missing.push(`${p}  (id=${o.id})`);
+            continue;
+        }
+        if (n.id === o.id) same++;
+        else changed.push(`${p}\n     przed: ${o.id}\n     po:    ${n.id}`);
+    }
+    const added = [...after.keys()].filter((p) => !before.has(p));
+
+    console.log(`  ID ZACHOWANE:    ${same}`);
+    console.log(`  ID ZMIENIONE:    ${changed.length}`);
+    console.log(`  BRAK w drugim:   ${missing.length}`);
+    console.log(`  NOWE w drugim:   ${added.length}`);
+    if (changed.length) {
+        console.log('\n=== ZMIENIONE ID ===');
+        changed.slice(0, 50).forEach((c) => console.log('  ' + c));
+        if (changed.length > 50)
+            console.log(`  ... i ${changed.length - 50} więcej`);
+    }
+    if (missing.length) {
+        console.log('\n=== BRAKUJĄCE ===');
+        missing.slice(0, 20).forEach((m) => console.log('  ' + m));
+    }
+    console.log(
+        changed.length === 0 && missing.length === 0
+            ? '\n[cmp] ✅ WSZYSTKIE ID ZACHOWANE — przeniesienie nie zmieniło identyfikatorów.'
+            : '\n[cmp] ⚠ Wykryto różnice — patrz wyżej.'
+    );
+}
+
 async function main() {
     if (flag('get-token')) return getTokenMode();
+    if (arg('compare-snapshots')) return compareSnapshotsMode();
     const clients = await loadClients();
     if (flag('inspect')) return inspectMode(clients);
     if (arg('cleanup')) return cleanupMode(clients);
     if (arg('transfer')) return transferMode(clients);
+    if (arg('snapshot')) return snapshotMode(clients);
     if (arg('verify-takeover')) return verifyTakeoverMode(clients);
     if (arg('takeover')) return takeoverMode(clients);
     return migrateMode(clients);
