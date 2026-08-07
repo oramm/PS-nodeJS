@@ -96,6 +96,32 @@ Każda zmiana ID trafia do `gd-takeover-map.jsonl` w formacie `{"old": "...", "n
 dopisywanym **na bieżąco** (nie na końcu), więc przerwanie procesu nie gubi wiedzy o tym,
 co już zostało zrobione.
 
+### Zgoda przy zmianie właściciela (pułapka)
+
+Zmiana właściciela między kontami konsumenckimi to transakcja dwustronna: właściciel
+**oferuje**, odbiorca **przyjmuje**. Google nie pozwala zrobić tego jednostronnie, bo
+własność obciąża limit miejsca odbiorcy.
+
+Pułapka: **utworzenie uprawnienia, które od razu niesie `pendingOwner`, jest odrzucane**
+(`consentRequiredForOwnershipTransfer`), gdy powiadomienie mailowe jest wyłączone —
+mail jest wtedy jedynym śladem zgody odbiorcy. Za to **podniesienie do `pendingOwner`
+uprawnienia już istniejącego przechodzi bez maila**.
+
+Dlatego transfer idzie trzema krokami:
+
+1. jeśli master nie ma wpisu uprawnienia → nadaj zwykłe `writer` (bez `pendingOwner`),
+2. podnieś to uprawnienie do `pendingOwner`,
+3. master przyjmuje własność (`transferOwnership: true`).
+
+Uwaga, która to spowodowała: master często ma dostęp do pliku przez **własność folderu
+nadrzędnego**, a to **nie tworzy wpisu uprawnienia na pliku**. W interfejsie Google
+wygląda to jak „udostępnione jako edytujący", ale `permissions.list` nie zwraca dla
+mastera nic, co dałoby się podnieść — stąd konieczność kroku 1.
+
+Objawia się to rzadko (1 plik na ~4 550 transferów w próbie), bo aplikacja nadaje
+`anyone/writer` wszystkiemu, co tworzy. Dotyczy plików wrzucanych **ręcznie przez
+ludzi**, z pominięciem aplikacji, udostępnianych imiennie.
+
 ### Kolejność operacji przy folderze bez tokenu
 
 1. utworzenie folderu zastępczego,
@@ -314,7 +340,8 @@ Przeciągnięcia: **1–3 dni przetwarzania w tle** po stronie Google.
 ## 7. Znane kwestie otwarte
 
 - ~~`sendNotificationEmail: false` niezweryfikowany~~ — **POTWIERDZONE 2026-08-06**:
-  transfer własności przechodzi bez powiadomień na koncie konsumenckim.
+  transfer własności przechodzi bez powiadomień, ale wymagało to poprawki
+  (patrz niżej: „Zgoda przy zmianie właściciela").
 - ~~`--apply` nigdy nie uruchomione~~ — **POTWIERDZONE 2026-08-06** na `tes.d.c.l`:
   428 obiektów, 1 transfer + 2 kopie + 3 foldery zastępcze, 4 oryginały do archiwum,
   0 błędów, 0 ponowień. Weryfikacja: 428/428 u mastera, 0 nierozliczonych.

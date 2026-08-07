@@ -4,6 +4,8 @@ import BankSyncController, { BankSyncError } from './BankSyncController';
 import { BankTransferFilters } from './BankTransferRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
+import StaffMemberRepository from '../staff/StaffMemberRepository';
+import { SystemRoleName } from '../types/sessionTypes';
 
 const controller = new BankSyncController();
 const transferRepo = new BankTransferRepository();
@@ -24,6 +26,67 @@ function requireAuth(req: Request, res: Response): boolean {
     }
     return true;
 }
+
+/**
+ * Dostęp do wyciągów bankowych wynika z flagi StaffMembers.HasBankAccess, nie z roli
+ * systemowej. Seed migracji nadał ją rolom 1 i 2, więc dla dotychczasowych użytkowników
+ * nic się nie zmienia; nadanie jej komuś spoza tych ról nie wymaga podnoszenia roli,
+ * a odebranie - obniżania jej.
+ *
+ * ADMIN wchodzi zawsze, niezależnie od flagi: flagi ustawia się dziś wprost w bazie,
+ * więc pomyłkowe wyzerowanie kolumny nie może odciąć wszystkim ścieżki naprawy.
+ */
+async function hasModuleAccess(req: Request): Promise<boolean> {
+    const userData = req.session?.userData;
+    if (!userData?.enviId) return false;
+    if (userData.systemRoleName === SystemRoleName.ADMIN) return true;
+    return StaffMemberRepository.hasBankAccess(userData.enviId);
+}
+
+// Czy zalogowany widzi moduł (do warunkowego menu po stronie klienta).
+// Rejestrowane PRZED bramką niżej, żeby samo pytanie o dostęp nie kończyło się 403.
+app.get(
+    '/bank-transfers/access',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            res.json({ hasAccess: await hasModuleAccess(req) });
+        } catch (error) {
+            next(error);
+        }
+    },
+);
+
+/**
+ * Bramka całego modułu w jednym miejscu zamiast sprawdzenia powtarzanego w każdej
+ * trasie: trasa dopisana tu w przyszłości jest domyślnie zamknięta, a nie domyślnie
+ * otwarta. Musi stać przed rejestracją tras poniżej - Express dopasowuje w kolejności.
+ * Dwa prefiksy, bo moduł wystawia i wyciągi (`/bank-statements`), i przelewy
+ * (`/bank-transfers`); jedna flaga rozstrzyga o obu.
+ */
+async function moduleGuard(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> {
+    try {
+        if (!req.session?.userData) {
+            res.status(401).json({ error: 'Użytkownik niezalogowany' });
+            return;
+        }
+        if (!(await hasModuleAccess(req))) {
+            res.status(403).json({
+                error: 'Brak uprawnień do wyciągów bankowych',
+            });
+            return;
+        }
+        next();
+    } catch (err) {
+        next(err);
+    }
+}
+
+app.use('/bank-statements', moduleGuard);
+app.use('/bank-transfers', moduleGuard);
 
 /**
  * POST /bank-statements

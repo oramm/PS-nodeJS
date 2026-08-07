@@ -85,4 +85,14 @@ export default class StaffMemberRepository {
     static isDriver(personId: number): Promise<boolean> {
         return this.hasFlag(personId, 'IsDriver');
     }
+
+    /** Czy dana osoba ma dostęp do faktur kosztowych (i jest aktywna). */
+    static hasCostInvoiceAccess(personId: number): Promise<boolean> {
+        return this.hasFlag(personId, 'HasCostInvoiceAccess');
+    }
+
+    /** Czy dana osoba ma dostęp do wyciągów bankowych (i jest aktywna). */
+    static hasBankAccess(personId: number): Promise<boolean> {
+        return this.hasFlag(personId, 'HasBankAccess');
+    }
 }

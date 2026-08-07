@@ -9,6 +9,9 @@ jest.mock('../../index', () => ({
         patch: jest.fn(),
         put: jest.fn(),
         delete: jest.fn(),
+        // Router montuje bramkę dostępu do modułu przez app.use — bez tego mocka
+        // samo załadowanie routera rzuca "app.use is not a function".
+        use: jest.fn(),
     },
 }));
 

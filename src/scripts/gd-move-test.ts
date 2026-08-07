@@ -876,15 +876,15 @@ async function takeoverMode(clients: Clients) {
         let mp = perms.find(
             (p) => (p.emailAddress || '').toLowerCase() === master
         );
-        if (mp) {
-            await withRetry(() =>
-                fromDrive.permissions.update({
-                    fileId,
-                    permissionId: mp!.id!,
-                    requestBody: { role: 'writer', pendingOwner: true },
-                })
-            );
-        } else {
+        // Gdy master nie ma jeszcze uprawnienia, nadajemy NAJPIERW zwykle
+        // `writer` — BEZ pendingOwner. Utworzenie uprawnienia, ktore od razu
+        // niesie pendingOwner, Google odrzuca (consentRequiredForOwnershipTransfer):
+        // przy kontach konsumenckich mail powiadamiajacy jest tam jedynym
+        // sladem zgody odbiorcy. Rozbicie na dwa kroki omija to bez maili —
+        // podniesienie ISTNIEJACEGO uprawnienia do pendingOwner jest dozwolone.
+        // Master miewa dostep do pliku przez wlasnosc folderu nadrzednego, ale
+        // to NIE tworzy wpisu uprawnienia, ktory dalo by sie podniesc.
+        if (!mp) {
             mp = (
                 await withRetry(() =>
                     fromDrive.permissions.create({
@@ -893,23 +893,29 @@ async function takeoverMode(clients: Clients) {
                             type: 'user',
                             role: 'writer',
                             emailAddress: master,
-                            pendingOwner: true,
                         },
-                        // Bez tego Google wysyla maila przy KAZDYM zaproszeniu —
-                        // przy ~250 tys. obiektow to 250 tys. wiadomosci do
-                        // mastera i niemal pewne dlawienie API.
                         sendNotificationEmail: false,
                         fields: 'id',
+                        supportsAllDrives: true,
                     })
                 )
             ).data;
         }
+        await withRetry(() =>
+            fromDrive.permissions.update({
+                fileId,
+                permissionId: mp!.id!,
+                requestBody: { role: 'writer', pendingOwner: true },
+                supportsAllDrives: true,
+            })
+        );
         await withRetry(() =>
             masterDrive.permissions.update({
                 fileId,
                 permissionId: mp!.id!,
                 requestBody: { role: 'owner' },
                 transferOwnership: true,
+                supportsAllDrives: true,
             })
         );
     }
