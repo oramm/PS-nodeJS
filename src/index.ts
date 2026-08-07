@@ -676,6 +676,7 @@ require('./contracts/milestones/milestoneTemplates/MilestoneTemplatesRouters');
 require('./contracts/milestones/cases/CasesRouters');
 require('./contracts/milestones/cases/caseTypes/CaseTypesRouters');
 require('./contracts/milestones/cases/caseTemplates/CaseTemplatesRouters');
+require('./contracts/contractTemplatesTree/ContractTemplatesTreeRouters');
 require('./contracts/MilestoneTypeContractTypeAssociations/MilestoneTypeContractTypeAssociationsRouters');
 
 require('./contracts/milestones/cases/tasks/TasksRouters');

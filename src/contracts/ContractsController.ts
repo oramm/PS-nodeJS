@@ -15,6 +15,7 @@ import {
     CityData,
     ContractRangePerContractData,
     ContractTypeData,
+    MilestoneTypeData,
 } from '../types/types';
 import Contract from './Contract';
 import ProjectRepository from '../projects/ProjectRepository';
@@ -42,6 +43,30 @@ import {
     isFidmanContractType,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from './fidmanSync/FidmanSync';
+import ContractTemplatesTreeController, {
+    MilestoneSelectionItem,
+    ResolvedCaseType,
+} from './contractTemplatesTree/ContractTemplatesTreeController';
+import { OptionalContractFolderKey } from './contractFolders/optionalContractFolders';
+
+/**
+ * Opcje jednorazowe dla tworzenia kontraktu: co użytkownik wybrał w drzewie
+ * struktury. NIE są stanem umowy - nie trafiają do bazy ani z powrotem do
+ * klienta, dlatego jadą osobnym parametrem, a nie polem modelu Contract.
+ */
+export type ContractCreationOptions = {
+    milestonesSelection?: MilestoneSelectionItem[];
+    foldersSelection?: OptionalContractFolderKey[];
+};
+
+/** Znormalizowany opis kamienia do utworzenia - wspólny dla obu ścieżek. */
+type MilestonePlanItem = {
+    _type: MilestoneTypeData;
+    name: string;
+    description: string;
+    /** Brak = użyj domyślnych szablonów spraw (ścieżka sprzed drzewa). */
+    caseTypes?: ResolvedCaseType[];
+};
 
 export type ContractSearchParams = {
     id?: number;
@@ -140,12 +165,15 @@ export default class ContractsController extends BaseController<
      * @param contract - instancja ContractOur lub ContractOther
      * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
      * @param taskId - ID zadania dla TaskStore (opcjonalny - dla progress tracking)
+     * @param options - wybór z drzewa struktury (kamienie/sprawy, foldery
+     * opcjonalne). Brak = zachowanie sprzed wprowadzenia drzewa.
      * @returns Zaktualizowany kontrakt z ID z bazy danych
      */
     static async add(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
-        taskId?: string
+        taskId?: string,
+        options?: ContractCreationOptions
     ): Promise<ContractOur | ContractOther> {
         const instance = this.getInstance();
 
@@ -177,7 +205,7 @@ export default class ContractsController extends BaseController<
             // Operacje Google Drive (jeśli auth dostępne)
             if (auth) {
                 if (taskId) TaskStore.update(taskId, 'Tworzę foldery', 4);
-                await contract.createFolders(auth);
+                await contract.createFolders(auth, options?.foldersSelection);
                 console.log('Contract folders created');
             }
 
@@ -247,7 +275,8 @@ export default class ContractsController extends BaseController<
                 await ContractsController.createDefaultMilestones(
                     contract,
                     auth,
-                    taskId || ''
+                    taskId || '',
+                    options?.milestonesSelection
                 );
                 console.log('Default milestones, cases & tasks created');
                 console.groupEnd();
@@ -288,14 +317,16 @@ export default class ContractsController extends BaseController<
      *
      * @param contract - instancja ContractOur lub ContractOther
      * @param taskId - ID zadania dla TaskStore (opcjonalny)
+     * @param options - wybór z drzewa struktury (opcjonalny)
      * @returns Zaktualizowany kontrakt z ID z bazy danych
      */
     static async addWithAuth(
         contract: ContractOur | ContractOther,
-        taskId?: string
+        taskId?: string,
+        options?: ContractCreationOptions
     ): Promise<ContractOur | ContractOther> {
         return await this.withAuth(async (instance, auth) => {
-            return await this.add(contract, auth, taskId);
+            return await this.add(contract, auth, taskId, options);
         });
     }
 
@@ -1123,37 +1154,62 @@ export default class ContractsController extends BaseController<
     }
 
     /**
-     * Tworzy domyślne milestones dla kontraktu
+     * Tworzy kamienie milowe kontraktu wraz ze sprawami i zadaniami.
      * Przeniesione z Contract.ts - Controller może orkiestrować inne Controllers
+     *
+     * @param selection - wybór z drzewa struktury. Brak (undefined/pusta lista)
+     * oznacza ścieżkę domyślną, identyczną z zachowaniem sprzed zmiany.
      */
     static async createDefaultMilestones(
         contract: Contract,
         auth: OAuth2Client,
-        taskId: string
+        taskId: string,
+        selection?: MilestoneSelectionItem[]
     ): Promise<Milestone[]> {
         const defaultMilestones: Milestone[] = [];
         const sessionTask = TaskStore.get(taskId);
 
-        const defaultMilestoneTemplates =
-            await MilestoneTemplatesController.find(
-                {
-                    isDefaultOnly: true,
-                    contractTypeId: contract.typeId,
-                },
-                'CONTRACT'
-            );
+        const plan: MilestonePlanItem[] = selection?.length
+            ? (
+                  await ContractTemplatesTreeController.resolveSelection(
+                      contract.typeId,
+                      selection
+                  )
+              ).map(({ milestoneType, name, description, caseTypes }) => ({
+                  _type: milestoneType,
+                  name,
+                  description,
+                  caseTypes,
+              }))
+            : (
+                  await MilestoneTemplatesController.find(
+                      { isDefaultOnly: true, contractTypeId: contract.typeId },
+                      'CONTRACT'
+                  )
+              ).map(({ _milestoneType, name, description }) => ({
+                  _type: _milestoneType,
+                  name,
+                  description,
+                  // brak caseTypes => createDefaultCases weźmie szablony spraw
+              }));
 
-        for (let i = 0; i < defaultMilestoneTemplates.length; i++) {
-            const template = defaultMilestoneTemplates[i];
+        // Sprawy wybrane dla konkretnego kamienia. Kluczem jest INSTANCJA
+        // kamienia, bo dwa kamienie mogą mieć ten sam typ.
+        const caseTypesByMilestone = new Map<Milestone, ResolvedCaseType[]>();
+        // Numeracja kamieni typu nieunikalnego, liczona w pamięci: dla nowego
+        // kontraktu baza jest pusta, więc getNextNumber() zwróciłby 1 każdemu.
+        const nextNumberByType = new Map<number, number>();
+
+        for (let i = 0; i < plan.length; i++) {
+            const planItem = plan[i];
             const startPercent = sessionTask?.percent || 0;
             const endPercent = 90;
-            const step =
-                (endPercent - startPercent) / defaultMilestoneTemplates.length;
+            const step = (endPercent - startPercent) / plan.length;
             const percent = startPercent + step * i;
             const milestone = new Milestone({
-                name: template.name,
-                description: template.description,
-                _type: template._milestoneType,
+                name: planItem.name,
+                description: planItem.description,
+                _type: planItem._type,
                 _contract: contract as any,
                 status: 'Nie rozpoczęty',
                 _dates: [
@@ -1170,11 +1226,16 @@ export default class ContractsController extends BaseController<
                 `Tworzę kamień milowy ${milestone._FolderNumber_TypeName_Name}`,
                 percent
             );
-            //zasymuluj numer kamienia nieunikalnego.
-            //UWAGA: założenie, że przy dodawaniu kamieni domyślnych nie będzie więcej niż jeden tego samego typu
+
             if (!milestone._type.isUniquePerContract) {
-                milestone.number = 1;
+                const typeId = milestone.typeId!;
+                const next = nextNumberByType.get(typeId) ?? 1;
+                milestone.number = next;
+                nextNumberByType.set(typeId, next + 1);
             }
+            if (planItem.caseTypes)
+                caseTypesByMilestone.set(milestone, planItem.caseTypes);
+
             await MilestonesController.createFolders(milestone, auth);
             defaultMilestones.push(milestone);
         }
@@ -1184,7 +1245,7 @@ export default class ContractsController extends BaseController<
         await MilestonesController.addBulkWithDatesAndCases(
             defaultMilestones,
             auth,
-            { isPartOfBatch: true }
+            { isPartOfBatch: true, caseTypesByMilestone }
         );
         console.log('Milestones with Cases and Tasks created');
 

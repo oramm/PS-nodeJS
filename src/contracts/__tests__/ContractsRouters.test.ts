@@ -179,4 +179,53 @@ describe('ContractsRouters', () => {
         );
         expect(next).not.toHaveBeenCalled();
     });
+
+    describe('przekazanie wyboru z drzewa struktury', () => {
+        it('podaje sanityzowany wybór do addWithAuth', async () => {
+            // Sama sanityzacja jest testowana przy
+            // ContractTemplatesTreeController.parseSelection - tutaj sprawdzamy
+            // wyłącznie, że router faktycznie ją wywołuje i przekazuje wynik.
+            (ContractsController.createContractFromDto as any).mockResolvedValue(
+                { id: 1 },
+            );
+            (ContractsController.addWithAuth as any).mockResolvedValue({ id: 1 });
+
+            const request = {
+                parsedBody: {
+                    _milestonesSelection: [
+                        { milestoneTypeId: 5, caseTypeIds: [1] },
+                        { milestoneTypeId: 5, caseTypeIds: [2] },
+                    ],
+                    _contractFoldersSelection: ['MEETING_PROTOCOLS', 'PISMA'],
+                },
+                session: { userData: { userName: 'tester' } },
+            } as any;
+            const response = {
+                status: jest.fn().mockReturnThis(),
+                send: jest.fn(),
+            } as any;
+
+            let backgroundPromise: Promise<unknown> | undefined;
+            const setImmediateSpy = jest
+                .spyOn(global, 'setImmediate')
+                .mockImplementation(((callback: (...args: any[]) => any) => {
+                    backgroundPromise = Promise.resolve().then(() => callback());
+                    return 0 as any;
+                }) as any);
+
+            try {
+                await createHandler(request, response, jest.fn());
+                await backgroundPromise;
+            } finally {
+                setImmediateSpy.mockRestore();
+            }
+
+            const options = (ContractsController.addWithAuth as jest.Mock).mock
+                .calls[0][2] as any;
+            expect(options.milestonesSelection).toEqual([
+                { milestoneTypeId: 5, caseTypeIds: [1, 2] },
+            ]);
+            expect(options.foldersSelection).toEqual(['MEETING_PROTOCOLS']);
+        });
+    });
 });

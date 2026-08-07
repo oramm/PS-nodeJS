@@ -18,6 +18,11 @@ import {
 import ContractRangeContract from './contractRangesContracts/ContractRangeContract';
 import CurrentSprintValidator from '../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
+import {
+    isFolderSelected,
+    optionalFoldersForContractType,
+    OptionalContractFolderKey,
+} from './contractFolders/optionalContractFolders';
 
 export default abstract class Contract
     extends BusinessObject
@@ -199,14 +204,38 @@ export default abstract class Contract
         });
     }
 
-    async createFolders(auth: OAuth2Client) {
+    /**
+     * Tworzy folder umowy i te foldery opcjonalne, które użytkownik wybrał.
+     *
+     * Pętla po katalogu zamiast osobnych bloków per folder: nazwa i pole na id
+     * są w jednym miejscu (optionalContractFolders), a dołożenie trzeciego
+     * folderu to jeden wiersz w katalogu, nie kolejny strażnik tutaj i kolejne
+     * nadpisanie w ContractOther.
+     *
+     * @param folders - klucze folderów wybranych przez użytkownika. Brak
+     * argumentu = twórz wszystkie (dzisiejsze zachowanie, m.in. ścieżka
+     * odtworzeniowa editFolder() i wywołania spoza rejestracji umowy).
+     */
+    async createFolders(
+        auth: OAuth2Client,
+        folders?: OptionalContractFolderKey[]
+    ) {
         const folder = await this.setContractRootFolder(auth);
         this.setGdFolderIdAndUrl(folder.id as string);
-        const meetingNotesFolder = await ToolsGd.setFolder(auth, {
-            parentId: <string>this.gdFolderId,
-            name: 'Notatki ze spotkań',
-        });
-        this.meetingProtocolsGdFolderId = <string>meetingNotesFolder.id;
+
+        // Nieznany typ traktujemy jak umowę ENVI - przy braku danych lepiej nie
+        // utworzyć folderu niż utworzyć zbędny.
+        const isOurContract = this._type?.isOur ?? true;
+
+        for (const definition of optionalFoldersForContractType(isOurContract)) {
+            if (!isFolderSelected(definition.key, folders)) continue;
+
+            const created = await ToolsGd.setFolder(auth, {
+                parentId: <string>this.gdFolderId,
+                name: definition.name,
+            });
+            (this as any)[definition.gdFolderIdField] = <string>created.id;
+        }
     }
 
     /**

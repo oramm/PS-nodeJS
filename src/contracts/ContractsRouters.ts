@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
-import ContractsController from './ContractsController';
+import ContractsController, {
+    ContractCreationOptions,
+} from './ContractsController';
+import ContractTemplatesTreeController from './contractTemplatesTree/ContractTemplatesTreeController';
+import { parseOptionalFoldersSelection } from './contractFolders/optionalContractFolders';
 import { app } from '../index';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
@@ -78,6 +82,17 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             true,
         );
 
+        // Wybór z drzewa struktury - czytany z DTO wprost, bo jest jednorazową
+        // instrukcją tworzenia, a nie stanem umowy (nie przechodzi przez model)
+        const creationOptions: ContractCreationOptions = {
+            milestonesSelection: ContractTemplatesTreeController.parseSelection(
+                req.parsedBody._milestonesSelection,
+            ),
+            foldersSelection: parseOptionalFoldersSelection(
+                req.parsedBody._contractFoldersSelection,
+            ),
+        };
+
         // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
@@ -94,7 +109,11 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         setImmediate(async () => {
             try {
                 // REFAKTORING: Użycie ContractsController.addWithAuth() zamiast ToolsGapi.gapiReguestHandler
-                await ContractsController.addWithAuth(contract, taskId);
+                await ContractsController.addWithAuth(
+                    contract,
+                    taskId,
+                    creationOptions,
+                );
                 TaskStore.complete(
                     taskId,
                     contract,

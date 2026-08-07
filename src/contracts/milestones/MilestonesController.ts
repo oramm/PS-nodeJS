@@ -19,6 +19,7 @@ import MilestoneRepository, {
 } from './MilestoneRepository';
 import ApprovedDocsController from './approvedDocs/ApprovedDocsController';
 import Setup from '../../setup/Setup';
+import type { ResolvedCaseType } from '../contractTemplatesTree/ContractTemplatesTreeController';
 
 /**
  * Controller dla Milestone - warstwa orkiestracji
@@ -100,13 +101,18 @@ export default class MilestonesController extends BaseController<
      *
      * @param milestones - Tablica Milestones do dodania (muszą mieć już utworzone foldery GD!)
      * @param auth - OAuth2Client dla operacji GD/Scrum
-     * @param options - Opcje: isPartOfBatch dla Scrum
+     * @param options - isPartOfBatch dla Scrum; caseTypesByMilestone to sprawy
+     * wybrane w drzewie struktury, kluczowane INSTANCJĄ kamienia (dwa kamienie
+     * mogą mieć ten sam typ). Kamień nieobecny w mapie dostaje sprawy domyślne.
      * @returns Promise<Milestone[]> - Dodane Milestones
      */
     static async addBulkWithDatesAndCases(
         milestones: Milestone[],
         auth: OAuth2Client,
-        options?: { isPartOfBatch?: boolean }
+        options?: {
+            isPartOfBatch?: boolean;
+            caseTypesByMilestone?: Map<Milestone, ResolvedCaseType[]>;
+        }
     ): Promise<Milestone[]> {
         const instance = this.getInstance();
 
@@ -121,6 +127,7 @@ export default class MilestonesController extends BaseController<
             );
             await MilestonesController.createDefaultCases(milestone, auth, {
                 isPartOfBatch: options?.isPartOfBatch ?? true,
+                caseTypes: options?.caseTypesByMilestone?.get(milestone),
             });
             console.groupEnd();
         }
@@ -445,17 +452,20 @@ export default class MilestonesController extends BaseController<
         if (!parentGdId)
             throw new Error('Contract or Offer folder id is not defined');
 
-        // 1. Ustaw numer (jeśli nieunikalny)
-        if (!milestone._type.isUniquePerContract) {
-            // Jeśli to oferta, contractId może nie być ustawione, ale wtedy isUniquePerContract powinno być true?
-            // W starej logice: WHERE TypeId = ? AND ContractId = ?
-            // Jeśli to oferta, to ContractId jest undefined.
-            // Sprawdźmy starą logikę setNumber:
-            // if (!this._type.isUniquePerContract) { ... WHERE ... ContractId = ? ... }
-            // Jeśli to oferta, to ContractId jest null/undefined. Zapytanie zwróci 0.
-            // Czy kamienie w ofertach mogą być nieunikalne?
-            // Zakładamy, że jeśli contractId istnieje, to używamy go.
-
+        // 1. Ustaw numer (jeśli nieunikalny i jeszcze nie nadany)
+        //
+        // Numer już nadany zostawiamy nietknięty. Dwa powody:
+        // - tworzenie wsadowe nadaje numery w pamięci, bo kamienie trafiają do
+        //   bazy dopiero po pętli folderów i getNextNumber() zwróciłby 1 każdemu;
+        // - editMilestoneFolder() woła tę metodę dla JUŻ ZAPISANEGO kamienia,
+        //   gdy folder zniknął z Dysku; przeliczenie zmieniłoby numer 2 na 3 i
+        //   rozjechało nazwę folderu z bazą.
+        if (
+            !milestone._type.isUniquePerContract &&
+            milestone.number === undefined
+        ) {
+            // Dla oferty contractId jest niezdefiniowane - wtedy numeru nie
+            // nadajemy (kamienie ofertowe są unikalne per oferta).
             if (milestone.contractId) {
                 const repo = new MilestoneRepository();
                 milestone.number = await repo.getNextNumber(
@@ -554,39 +564,53 @@ export default class MilestonesController extends BaseController<
     }
 
     /**
-     * Tworzy domyślne sprawy dla kamienia milowego
+     * Tworzy sprawy kamienia milowego.
      * Deleguje do CasesController.addBulkWithDefaultTasks()
      *
      * Hierarchia: Milestone → Cases → Tasks
      * MilestonesController przygotowuje Cases, CasesController tworzy je z Tasks
+     *
+     * @param parameters.caseTypes - sprawy wybrane w drzewie struktury. Brak =
+     * ścieżka domyślna po szablonach spraw, identyczna z zachowaniem sprzed
+     * wprowadzenia drzewa (z tej ścieżki korzystają też Oferty).
      */
     static async createDefaultCases(
         milestone: Milestone,
         auth: OAuth2Client,
-        parameters?: { isPartOfBatch: boolean }
+        parameters?: { isPartOfBatch?: boolean; caseTypes?: ResolvedCaseType[] }
     ) {
-        const defaultCaseItems: Case[] = [];
-        const caseTemplateRepo = new CaseTemplateRepository();
-
         if (!milestone._type.id)
             throw new Error('Milestone type id is not defined');
 
-        // 1. Pobierz szablony spraw (Repository)
-        const defaultCaseTemplates = await caseTemplateRepo.findByMilestoneType(
-            milestone._type.id,
-            {
-                isDefaultOnly: true,
-            }
-        );
-
-        console.log(milestone._contract?._type);
+        // 1. Ustal, z czego budujemy sprawy
+        const caseSources = parameters?.caseTypes
+            ? parameters.caseTypes.map((item) => ({
+                  name: item.name,
+                  description: item.description,
+                  _type: item.caseType,
+              }))
+            : (
+                  await new CaseTemplateRepository().findByMilestoneType(
+                      milestone._type.id,
+                      { isDefaultOnly: true }
+                  )
+              ).map((template) => ({
+                  name: template.name,
+                  description: template.description,
+                  _type: template._caseType,
+              }));
 
         // 2. Utwórz obiekty spraw (Model) - bez folderów GD
-        for (const template of defaultCaseTemplates) {
+        const defaultCaseItems: Case[] = [];
+        // Numeracja spraw typu nieunikalnego liczona w pamięci: w nowym kamieniu
+        // baza jest pusta, więc każda sprawa dostałaby to samo 1.
+        const nextNumberByType = new Map<number, number>();
+
+        for (const source of caseSources) {
             const caseItem = new Case({
-                name: template.name,
-                description: template.description,
-                _type: template._caseType,
+                name: source.name,
+                description: source.description,
+                _type: source._type,
                 _parent: milestone,
             });
 
@@ -594,7 +618,10 @@ export default class MilestonesController extends BaseController<
 
             // Logika biznesowa numeracji
             if (!caseItem._type.isUniquePerMilestone) {
-                caseItem.number = 1;
+                const typeId = caseItem.typeId!;
+                const next = nextNumberByType.get(typeId) ?? 1;
+                caseItem.number = next;
+                nextNumberByType.set(typeId, next + 1);
                 caseItem.setDisplayNumber();
             }
 

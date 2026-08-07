@@ -86,14 +86,9 @@ export default class ContractOther
         });
     }
 
-    async createFolders(auth: OAuth2Client) {
-        await super.createFolders(auth);
-        const materialCardsFolder = await ToolsGd.setFolder(auth, {
-            parentId: <string>this.gdFolderId,
-            name: 'Wnioski Materiałowe',
-        });
-        this.materialCardsGdFolderId = <string>materialCardsFolder.id;
-    }
+    // createFolders nie jest nadpisywane: „Wnioski Materiałowe" to wpis w
+    // optionalContractFolders z appliesTo: 'OTHER', więc pętla w
+    // Contract.createFolders tworzy je tylko dla umów zewnętrznych.
 
     async shouldBeInScrum() {
         if (this.ourIdRelated) return this.status !== 'Archiwalny';

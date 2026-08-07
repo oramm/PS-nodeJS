@@ -15,6 +15,7 @@ import ContractMeetingNoteRepository, {
     ContractMeetingNoteSearchParams,
 } from './ContractMeetingNoteRepository';
 import { ProjectScope } from '../types/sessionTypes';
+import { optionalFolderName } from '../contracts/contractFolders/optionalContractFolders';
 
 export type { ContractMeetingNoteSearchParams };
 
@@ -264,7 +265,9 @@ export default class ContractMeetingNotesController extends BaseController<
 
         const notesFolder = await ToolsGd.setFolder(authClient, {
             parentId: createContext.contractGdFolderId,
-            name: 'Notatki ze spotkań',
+            // Ta sama nazwa co przy rejestracji umowy - inaczej leniwe
+            // odtworzenie założyłoby DRUGI folder obok istniejącego.
+            name: optionalFolderName('MEETING_PROTOCOLS'),
         });
         const notesFolderId = String(notesFolder.id || '');
         if (!notesFolderId) {

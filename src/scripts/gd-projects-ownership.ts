@@ -98,7 +98,7 @@ async function listChildren(
         const res = await withRetry(() =>
             drive.files.list({
                 q: `'${parentId}' in parents and trashed = false`,
-                fields: 'nextPageToken, files(id,name,mimeType,ownedByMe,owners(emailAddress))',
+                fields: 'nextPageToken, files(id,name,mimeType,ownedByMe,driveId,owners(emailAddress))',
                 pageSize: 1000,
                 pageToken,
                 supportsAllDrives: true,
@@ -116,6 +116,8 @@ type Proj = {
     id: string;
     items: number;
     master: number;
+    /** obiekty juz na dysku wspoldzielonym — tam wlasnosc per-obiekt nie istnieje */
+    shared: number;
     byOwner: Map<string, number>;
     errors: number;
 };
@@ -174,6 +176,7 @@ async function main() {
         id: f.id!,
         items: 0,
         master: 0,
+        shared: 0,
         byOwner: new Map(),
         errors: 0,
     }));
@@ -200,6 +203,15 @@ async function main() {
                 const children = await listChildren(drive, job.folderId);
                 for (const c of children) {
                     job.p.items++;
+                    // Obiekt juz na dysku wspoldzielonym: nie ma wlasciciela
+                    // per-obiekt, wiec zliczanie go jako "obcy" bylo bledem —
+                    // przy migracji w toku dawalo falszywe alarmy.
+                    if (c.driveId) {
+                        job.p.shared++;
+                        if (c.mimeType === FOLDER)
+                            queue.push({ folderId: c.id!, p: job.p });
+                        continue;
+                    }
                     const owner = c.ownedByMe
                         ? me
                         : (c.owners?.[0]?.emailAddress ?? '(nieznany)');
@@ -271,7 +283,9 @@ async function main() {
                 String(r.foreign).padStart(7) +
                 String(r.withTok).padStart(10) +
                 String(r.noTok).padStart(8) +
-                (r.foreign === 0
+                (r.p.shared > 0 && r.foreign === 0
+                    ? '   PRZENIESIONY'
+                    : r.foreign === 0
                     ? '   NIE — gotowy'
                     : r.noTok === 0
                       ? '   tak, same transfery'
@@ -295,10 +309,10 @@ async function main() {
     );
 
     const csv = [
-        'projekt,folderId,razem,master,obce,transfer,kopia,wlascicieleBezTokenu',
+        'projekt,folderId,razem,master,naDyskuWspoldzielonym,obce,transfer,kopia,wlascicieleBezTokenu',
         ...rows.map(
             (r) =>
-                `"${r.p.name.replace(/"/g, '""')}",${r.p.id},${r.p.items},${r.p.master},` +
+                `"${r.p.name.replace(/"/g, '""')}",${r.p.id},${r.p.items},${r.p.master},${r.p.shared},` +
                 `${r.foreign},${r.withTok},${r.noTok},"${r.noTokOwners.join('; ')}"`
         ),
     ].join('\n');
