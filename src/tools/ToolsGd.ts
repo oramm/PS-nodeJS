@@ -204,6 +204,45 @@ export default class ToolsGd {
     }
 
     /**
+     * Znajduje plik, którego nazwa zaczyna się od podanego prefiksu (get, bez tworzenia).
+     * Dla cyklicznie generowanych plików, których nazwa niesie zmienną część (np. datę),
+     * a mimo to ma zostać jeden plik i jeden link.
+     *
+     * Dopasowanie nazwy robimy LOKALNIE, a nie w zapytaniu do Drive. `name contains` nie
+     * jest szukaniem podciągu: dla pola `name` Drive dopasowuje tokeny, więc prefiks
+     * kończący się separatorem (" - ") albo zawierający podkreślenia potrafi nie zwrócić
+     * nic i plik do nadpisania zostaje nieznaleziony. Zapytanie zawęża więc tylko folder
+     * i typ pliku, a `startsWith` rozstrzyga resztę.
+     *
+     * Gdy w folderze leży kilka pasujących plików (np. z czasów, gdy odnajdywanie nie
+     * działało), bierzemy najnowszy — to ten, który użytkownik ostatnio dostał.
+     */
+    static async getFileMetaDataByNamePrefixAndMimeType(
+        auth: OAuth2Client,
+        parameters: {
+            parentId: string;
+            namePrefix: string;
+            mimeType: string;
+            isTrashed?: boolean;
+        }
+    ) {
+        const isTrashed = parameters.isTrashed ?? false;
+        const drive = google.drive({ version: 'v3', auth });
+        const q = `'${parameters.parentId}' in parents and mimeType = '${parameters.mimeType}' and trashed = ${isTrashed}`;
+        const filesSchema = await drive.files.list({
+            q,
+            fields: 'files(id, name, createdTime)',
+            orderBy: 'createdTime desc',
+            pageSize: 1000,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+        });
+        return filesSchema.data.files?.find((file) =>
+            (file.name ?? '').startsWith(parameters.namePrefix)
+        );
+    }
+
+    /**
      * Sprawdza czy plik lub folder istnieje
      */
     static async fileOrFolderExists(

@@ -128,6 +128,14 @@ export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
             : '1';
         conditions.push(invoiceCondition);
 
+        if (searchParams.contractId) {
+            conditions.push(
+                mysql.format(`Invoices.ContractId = ?`, [
+                    searchParams.contractId,
+                ])
+            );
+        }
+
         if (searchParams.startDate) {
             conditions.push(
                 mysql.format(`Invoices.IssueDate >= ?`, [

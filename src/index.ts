@@ -655,6 +655,7 @@ require('./persons/publicProfileSubmission/PublicProfileSubmissionRouters');
 require('./entities/EntitiesRouters');
 require('./invoices/InvoicesRouters');
 require('./invoices/InvoiceItemsRouters');
+require('./invoices/summarySheet/InvoiceSummarySheetRouters');
 
 require('./costInvoices/CostInvoicesRouter');
 
