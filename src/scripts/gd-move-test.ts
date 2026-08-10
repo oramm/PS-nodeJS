@@ -634,8 +634,11 @@ async function snapshotTree(
  *   2. JEDNOLITA WŁASNOŚĆ — w drzewie nie został ANI JEDEN obiekt cudzy.
  *      To warunek konieczny, żeby przeciągnięcie na Shared Drive przeszło.
  */
-async function verifyTakeoverMode(clients: Clients) {
-    const rootId = arg('verify-takeover');
+async function verifyTakeoverMode(
+    clients: Clients,
+    rootOverride?: string
+): Promise<boolean> {
+    const rootId = rootOverride ?? arg('verify-takeover');
     if (!rootId || rootId === 'true')
         throw new Error('Podaj --verify-takeover <folderId>.');
     const mapFile = arg('map', 'gd-takeover-map.json')!;
@@ -761,11 +764,13 @@ async function verifyTakeoverMode(clients: Clients) {
     }
 
     const foreignN = total - (byOwner.get(master) ?? 0);
+    const ok = foreignN === 0 && missing.length === 0;
     console.log(
-        foreignN === 0 && missing.length === 0
+        ok
             ? '\n[verify] ✅ PRZEJĘCIE KOMPLETNE — całe drzewo należy do mastera, nic nie zginęło.'
             : '\n[verify] ⚠ PRZEJĘCIE NIEDOKOŃCZONE — NIE przeciągaj na Shared Drive.'
     );
+    return ok;
 }
 
 // ---------- tryb: przejęcie drzewa (transfer + copy, BEZ shared drive) ----------
@@ -786,10 +791,13 @@ async function verifyTakeoverMode(clients: Clients) {
  * Mapa oldId→newId (kopie i zamienniki) zapisywana PRZYROSTOWO do .jsonl —
  * awaria po godzinach nie kasuje wiedzy potrzebnej do reindexu bazy.
  */
-async function takeoverMode(clients: Clients) {
-    const rootId = arg('takeover');
+async function takeoverMode(clients: Clients, rootOverride?: string) {
+    const rootId = rootOverride ?? arg('takeover');
     if (!rootId || rootId === 'true')
         throw new Error('Podaj --takeover <folderId>.');
+    // licznik ponowien jest na poziomie modulu — zeruje go per projekt,
+    // zeby raport partii pokazywal dlawienie dla kazdego z osobna
+    retryCount = 0;
     const apply = flag('apply');
     const unlink = flag('unlink-originals');
     const archiveRoot = arg('archive');
@@ -869,12 +877,19 @@ async function takeoverMode(clients: Clients) {
                 await withRetry(() =>
                     fromDrive.permissions.list({
                         fileId,
-                        fields: 'permissions(id,emailAddress,role,pendingOwner)',
+                        fields: 'permissions(id,emailAddress,role,pendingOwner,permissionDetails(inherited))',
                     })
                 )
             ).data.permissions ?? [];
+        // UWAGA: permissions.list zwraca TAKZE uprawnienia DZIEDZICZONE z folderu
+        // nadrzednego, ale permissions.update dziala wylacznie na uprawnieniach
+        // nadanych BEZPOSREDNIO na pliku — proba aktualizacji dziedziczonego
+        // konczy sie "Permission not found: <id>". Dlatego dziedziczone traktujemy
+        // jak brak wpisu i tworzymy uprawnienie bezposrednie.
         let mp = perms.find(
-            (p) => (p.emailAddress || '').toLowerCase() === master
+            (p) =>
+                (p.emailAddress || '').toLowerCase() === master &&
+                !p.permissionDetails?.[0]?.inherited
         );
         // Gdy master nie ma jeszcze uprawnienia, nadajemy NAJPIERW zwykle
         // `writer` — BEZ pendingOwner. Utworzenie uprawnienia, ktore od razu
@@ -1794,6 +1809,51 @@ function compareSnapshotsMode() {
     );
 }
 
+/**
+ * TRYB WSADOWY — te same funkcje co pojedynczo, tylko w petli i w JEDNYM procesie.
+ * Eliminuje narzut ~3 min/projekt (4x kompilacja ts-node + 4x odswiezenie 16 tokenow).
+ * Caly stan istotny dla poprawnosci jest lokalny dla takeoverMode(), wiec kolejne
+ * projekty nie widza sie nawzajem — tak samo jak przy osobnych procesach.
+ * Przerywa przy pierwszym bledzie, zablokowanym oryginale lub nieudanej weryfikacji.
+ */
+async function batchTakeoverMode(clients: Clients) {
+    const listFile = arg('batch-takeover')!;
+    if (!existsSync(listFile))
+        throw new Error(`Brak pliku listy: ${listFile}`);
+    const jobs = readFileSync(listFile, 'utf8')
+        .split(/\r?\n/)
+        .map((l) => ({
+            id: l.split('#')[0].trim(),
+            label: (l.split('#')[1] ?? '').trim(),
+        }))
+        .filter((j) => j.id);
+    console.log(`[batch] Projektow: ${jobs.length}  |  APPLY=${flag('apply')}
+`);
+    const results: string[] = [];
+    for (let i = 0; i < jobs.length; i++) {
+        const j = jobs[i];
+        console.log(`
+########## [${i + 1}/${jobs.length}] ${j.label || j.id} ##########`);
+        await takeoverMode(clients, j.id);
+        if (!flag('apply')) {
+            results.push(`  ${j.label} — DRY-RUN`);
+            continue;
+        }
+        const ok = await verifyTakeoverMode(clients, j.id);
+        results.push(`  ${ok ? '✅' : '⛔'} ${j.label}`);
+        if (!ok) {
+            console.error(
+                `
+[batch] STOP na "${j.label}" — weryfikacja nie przeszla. ` +
+                    `Pozostale ${jobs.length - i - 1} projektow NIE zostalo tkniete.`
+            );
+            break;
+        }
+    }
+    console.log('\n=== PODSUMOWANIE PARTII ===');
+    results.forEach((r) => console.log(r));
+}
+
 async function main() {
     if (flag('get-token')) return getTokenMode();
     if (arg('compare-snapshots')) return compareSnapshotsMode();
@@ -1801,6 +1861,7 @@ async function main() {
     if (flag('inspect')) return inspectMode(clients);
     if (arg('cleanup')) return cleanupMode(clients);
     if (arg('transfer')) return transferMode(clients);
+    if (arg('batch-takeover')) return batchTakeoverMode(clients);
     if (arg('snapshot')) return snapshotMode(clients);
     if (arg('verify-takeover')) return verifyTakeoverMode(clients);
     if (arg('takeover')) return takeoverMode(clients);
