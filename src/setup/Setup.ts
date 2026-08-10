@@ -41,7 +41,6 @@ export default class Setup {
         offersRootFolderId: '0B2pP2WpBR244WDgzT0RHcmFCMW8',
         ourOfferTemplateGdId: '173TvhbPAgRD_08Ey5cq4PP8RxOmCh4vO-UjjzB5dGro',
         financialAidProgrammesRootFolderId: '1_RCqZ_uSYM0z-akgJwrQlBeaJW2OKn0T',
-        blankDocTemplateId: '1qPVaj0i4ZMnojnpKaIsn3ehkAwLuzxxultVLZ9NDRkc',
     };
 
     static ScrumSheet = {

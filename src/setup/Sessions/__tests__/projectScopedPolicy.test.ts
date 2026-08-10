@@ -96,7 +96,6 @@ describe('projectScopedPolicy', () => {
             ['GET', '/admin/bug-events'],
             ['POST', '/maintenance/personsRefresh'],
             ['POST', '/ai/analyze-document'],
-            ['POST', '/gdFolderDocument'],
             ['PUT', '/entity/5'],
             ['DELETE', '/entity/5'],
             ['POST', '/contractReact'],
