@@ -1,5 +1,5 @@
 import CostInvoiceRepository from './CostInvoiceRepository';
-import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostInvoiceStatus, PaymentStatus } from './CostInvoice';
+import CostInvoice, { CostInvoiceItem, CostInvoiceSync, PaymentStatus } from './CostInvoice';
 import KsefService, { PurchaseInvoiceListItem } from '../invoices/KSeF/KsefService';
 import { XMLParser } from 'fast-xml-parser';
 import { extractSaleDateFromFa, extractDueDateFromFa, extractPaymentMethodFromFa, extractPaymentInfoFromFa, extractInvoiceTypeFromFa } from './costInvoiceXmlHelpers';
@@ -10,12 +10,10 @@ import WhiteListClient from './whiteList/WhiteListClient';
 
 export class CostInvoiceError extends Error {
     statusCode: number;
-    details?: string[];
 
-    constructor(statusCode: number, message: string, details?: string[]) {
+    constructor(statusCode: number, message: string) {
         super(message);
         this.statusCode = statusCode;
-        this.details = details;
     }
 }
 
@@ -42,7 +40,7 @@ type CostInvoiceReparsePreviewItem = {
 /**
  * Controller dla faktur kosztowych
  *
- * Zarządza synchronizacją faktur zakupowych z KSeF oraz ich przeglądaniem i księgowaniem.
+ * Zarządza synchronizacją faktur zakupowych z KSeF oraz ich przeglądaniem.
  */
 export default class CostInvoiceController {
     private repository: CostInvoiceRepository;
@@ -391,12 +389,9 @@ export default class CostInvoiceController {
             grossAmount,
             currency,
             xmlContent: xml,
-            status: 'NEW' as CostInvoiceStatus,
             paymentStatus,
             paidAmount,
             paymentDate,
-            bookingPercentage: 100,
-            vatDeductionPercentage: 100,
         });
 
         invoice._items = items;
@@ -484,9 +479,6 @@ export default class CostInvoiceController {
                 vatRate,
                 vatValue,
                 grossValue,
-                isSelectedForBooking: true,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
 
             items.push(item);
@@ -632,22 +624,16 @@ export default class CostInvoiceController {
      * Pobierz wszystkie faktury z filtrami
      */
     async findAll(filters?: {
-        status?: string;
+        searchText?: string;
         dateFrom?: Date;
         dateTo?: Date;
         supplierNip?: string;
-        categoryId?: number;
         paymentStatus?: string;
         paymentMethod?: string;
     }): Promise<CostInvoice[]> {
-        const invoices = await this.repository.findAll(filters);
-
-        // Załaduj pozycje dla każdej faktury
-        for (const invoice of invoices) {
-            invoice._items = await this.repository.findItemsByInvoiceId(invoice.id!);
-        }
-
-        return invoices;
+        // ponytail: bez pozycji - lista ich nie pokazuje, a doładowanie to zapytanie
+        // na fakturę. Szczegóły faktury biorą pozycje z findById.
+        return await this.repository.findAll(filters);
     }
 
     /**
@@ -934,16 +920,9 @@ export default class CostInvoiceController {
         reparsed.ksefNumber = current.ksefNumber;
         reparsed.ksefAcquisitionDate = current.ksefAcquisitionDate;
         reparsed.syncId = current.syncId;
-        reparsed.status = current.status;
-        reparsed.bookingPercentage = current.bookingPercentage;
-        reparsed.vatDeductionPercentage = current.vatDeductionPercentage;
-        reparsed.categoryId = current.categoryId;
-        reparsed.bookedBy = current.bookedBy;
-        reparsed.bookedAt = current.bookedAt;
         reparsed.notes = current.notes;
         reparsed.createdAt = current.createdAt;
         reparsed.updatedAt = current.updatedAt;
-        reparsed._category = current._category;
         return reparsed;
     }
 
@@ -1039,51 +1018,17 @@ export default class CostInvoiceController {
     }
 
     /**
-     * Waliduj możliwość księgowania faktury i zwróć listę błędów
+     * Aktualizuj dane faktury edytowalne ręcznie: notatkę i stan płatności.
      */
-    async validateBooking(id: number): Promise<{ ok: boolean; errors: string[] }> {
-        const invoice = await this.getInvoiceWithItemsOrThrow(id);
-
-        try {
-            this.ensureBookingAllowed(invoice);
-            this.validateBookingData(invoice);
-            return { ok: true, errors: [] };
-        } catch (error: any) {
-            if (error instanceof CostInvoiceError && Array.isArray(error.details)) {
-                return { ok: false, errors: error.details };
-            }
-            if (error instanceof CostInvoiceError) {
-                return { ok: false, errors: [error.message] };
-            }
-            throw error;
-        }
-    }
-
-    /**
-     * Aktualizuj ustawienia księgowania faktury
-     */
-    async updateBookingSettings(
+    async updateSettings(
         id: number,
         settings: {
-            status?: CostInvoiceStatus | string;
-            bookingPercentage?: number | string;
-            vatDeductionPercentage?: number | string;
-            categoryId?: number | string;
             notes?: string;
             paymentStatus?: PaymentStatus | string;
             paidAmount?: number | string;
-            bookedBy?: number;
         },
     ): Promise<CostInvoice> {
         const invoice = await this.getInvoiceWithItemsOrThrow(id);
-
-        if (settings.status && !['NEW', 'EXCLUDED', 'BOOKED'].includes(settings.status)) {
-            throw new CostInvoiceError(400, `Nieprawidłowy status: ${settings.status}`);
-        }
-
-        if (settings.status && !invoice.isEditable) {
-            throw new CostInvoiceError(400, `Nie można edytować faktury w statusie ${invoice.status}`);
-        }
 
         // Walidacja płatności z kontekstem grossAmount
         if (settings.paymentStatus !== undefined || settings.paidAmount !== undefined) {
@@ -1101,20 +1046,6 @@ export default class CostInvoiceController {
 
         const fields: string[] = [];
 
-        if (settings.bookingPercentage !== undefined) {
-            const bookingPercentage = this.parsePercentage(settings.bookingPercentage, 'bookingPercentage');
-            invoice.bookingPercentage = bookingPercentage;
-            fields.push('bookingPercentage');
-        }
-        if (settings.vatDeductionPercentage !== undefined) {
-            const vatDeductionPercentage = this.parsePercentage(settings.vatDeductionPercentage, 'vatDeductionPercentage');
-            invoice.vatDeductionPercentage = vatDeductionPercentage;
-            fields.push('vatDeductionPercentage');
-        }
-        if (settings.categoryId !== undefined) {
-            invoice.categoryId = this.parseOptionalInt(settings.categoryId, 'categoryId');
-            fields.push('categoryId');
-        }
         if (settings.notes !== undefined) {
             invoice.notes = settings.notes;
             fields.push('notes');
@@ -1144,82 +1075,11 @@ export default class CostInvoiceController {
             }
         }
 
-        if (settings.status === 'BOOKED') {
-            if (!settings.bookedBy) {
-                throw new CostInvoiceError(403, 'Brak uprawnień do księgowania');
-            }
-            this.ensureBookingAllowed(invoice);
-            this.validateBookingData(invoice);
-
-            invoice.status = 'BOOKED';
-            invoice.bookedAt = new Date();
-            invoice.bookedBy = settings.bookedBy;
-            fields.push('status', 'bookedAt', 'bookedBy');
-        } else if (settings.status !== undefined) {
-            const nextStatus = settings.status as CostInvoiceStatus;
-            invoice.status = nextStatus;
-            fields.push('status');
-        }
-
         if (fields.length > 0) {
             await this.repository.update(invoice, fields);
         }
 
         return await this.getInvoiceWithItemsOrThrow(id);
-    }
-
-    /**
-     * Aktualizuj ustawienia księgowania pozycji faktury
-     */
-    async updateItemBookingSettings(
-        itemId: number,
-        invoiceId: number,
-        settings: {
-            isSelectedForBooking?: boolean;
-            bookingPercentage?: number;
-            vatDeductionPercentage?: number;
-            categoryId?: number;
-        },
-    ): Promise<void> {
-        // Sprawdź czy faktura jest edytowalna
-        const invoice = await this.repository.findById(invoiceId);
-        if (!invoice) {
-            throw new Error(`Faktura o ID ${invoiceId} nie istnieje`);
-        }
-        if (!invoice.isEditable) {
-            throw new Error(`Nie można edytować pozycji faktury w statusie ${invoice.status}`);
-        }
-
-        const item = new CostInvoiceItem({ id: itemId });
-        const fields: string[] = [];
-
-        if (settings.isSelectedForBooking !== undefined) {
-            item.isSelectedForBooking = settings.isSelectedForBooking;
-            fields.push('isSelectedForBooking');
-        }
-        if (settings.bookingPercentage !== undefined) {
-            item.bookingPercentage = settings.bookingPercentage;
-            fields.push('bookingPercentage');
-        }
-        if (settings.vatDeductionPercentage !== undefined) {
-            item.vatDeductionPercentage = settings.vatDeductionPercentage;
-            fields.push('vatDeductionPercentage');
-        }
-        if (settings.categoryId !== undefined) {
-            item.categoryId = settings.categoryId;
-            fields.push('categoryId');
-        }
-
-        if (fields.length > 0) {
-            await this.repository.updateItem(item, fields);
-        }
-    }
-
-    /**
-     * Pobierz wszystkie kategorie
-     */
-    async getCategories() {
-        return await this.repository.findAllCategories();
     }
 
     private async getInvoiceWithItemsOrThrow(id: number): Promise<CostInvoice> {
@@ -1231,14 +1091,6 @@ export default class CostInvoiceController {
         return invoice;
     }
 
-    private parsePercentage(value: number | string, fieldName: string): number {
-        const parsed = typeof value === 'string' ? Number.parseFloat(value) : value;
-        if (typeof parsed !== 'number' || Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
-            throw new CostInvoiceError(400, `Nieprawidłowa wartość ${fieldName} (0-100)`);
-        }
-        return parsed;
-    }
-
     private parseDecimal(value: number | string, fieldName: string): number {
         const parsed = typeof value === 'string' ? Number.parseFloat(value.replace(',', '.')) : value;
         if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
@@ -1247,68 +1099,6 @@ export default class CostInvoiceController {
         return parsed;
     }
 
-    private parseOptionalInt(value: number | string, fieldName: string): number | undefined {
-        if (value === null || value === undefined || value === '') return undefined;
-        const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : value;
-        if (!Number.isInteger(parsed) || parsed < 0) {
-            throw new CostInvoiceError(400, `Nieprawidłowa wartość ${fieldName}`);
-        }
-        return parsed;
-    }
-
-    private ensureBookingAllowed(invoice: CostInvoice) {
-        if (invoice.status === 'BOOKED') {
-            throw new CostInvoiceError(400, 'Faktura jest już zaksięgowana');
-        }
-        if (invoice.status !== 'NEW') {
-            throw new CostInvoiceError(400, `Nie można zaksięgować faktury w statusie ${invoice.status}`);
-        }
-    }
-
-    private validateBookingData(invoice: CostInvoice) {
-        const errors: string[] = [];
-        const items = invoice._items || [];
-        const selectedItems = items.filter((item) => item.isSelectedForBooking);
-
-        if (!this.isValidPercentage(invoice.bookingPercentage)) {
-            errors.push('Brak lub nieprawidłowy bookingPercentage (0-100)');
-        }
-        if (!this.isValidPercentage(invoice.vatDeductionPercentage)) {
-            errors.push('Brak lub nieprawidłowy vatDeductionPercentage (0-100)');
-        }
-
-        if (items.length > 0) {
-            if (selectedItems.length === 0) {
-                errors.push('Brak pozycji zaznaczonych do księgowania');
-            }
-
-            for (const item of selectedItems) {
-                if (!this.isValidPercentage(item.bookingPercentage)) {
-                    errors.push(`Pozycja ${item.lineNumber}: nieprawidłowy bookingPercentage (0-100)`);
-                }
-                if (!this.isValidPercentage(item.vatDeductionPercentage)) {
-                    errors.push(`Pozycja ${item.lineNumber}: nieprawidłowy vatDeductionPercentage (0-100)`);
-                }
-                if (!item.categoryId && !invoice.categoryId) {
-                    errors.push(`Pozycja ${item.lineNumber}: brak kategorii księgowania`);
-                }
-            }
-        } else {
-            if (!invoice.categoryId) {
-                errors.push('Brak kategorii księgowania');
-            }
-        }
-
-        if (errors.length > 0) {
-            throw new CostInvoiceError(400, 'Nie można zaksięgować faktury - błędy walidacji', errors);
-        }
-    }
-
-    private isValidPercentage(value: unknown): boolean {
-        if (value === null || value === undefined) return false;
-        const parsed = typeof value === 'string' ? Number.parseFloat(value.replace(',', '.')) : value;
-        return typeof parsed === 'number' && !Number.isNaN(parsed) && parsed >= 0 && parsed <= 100;
-    }
 }
 
 // =====================================================

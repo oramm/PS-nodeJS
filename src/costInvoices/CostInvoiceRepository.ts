@@ -1,6 +1,6 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2';
-import CostInvoice, { CostInvoiceItem, CostInvoiceSync, CostCategory } from './CostInvoice';
+import CostInvoice, { CostInvoiceItem, CostInvoiceSync } from './CostInvoice';
 import { toPaymentStatus } from './CostInvoiceValidator';
 import { buildPaymentMethodFilterSql } from './costInvoicePaymentMethodFilters';
 import { toWhiteListStatus, WhiteListStatus } from './whiteList/WhiteListClient';
@@ -32,10 +32,8 @@ export default class CostInvoiceRepository {
      */
     async findById(id: number): Promise<CostInvoice | null> {
         const sql = mysql.format(`
-            SELECT ci.*, 
-                   cc.Name AS CategoryName, cc.Color AS CategoryColor
+            SELECT ci.*
             FROM CostInvoices ci
-            LEFT JOIN CostCategories cc ON ci.CategoryId = cc.Id
             WHERE ci.Id = ?
         `, [id]);
         
@@ -49,10 +47,8 @@ export default class CostInvoiceRepository {
      */
     async findByKsefNumber(ksefNumber: string): Promise<CostInvoice | null> {
         const sql = mysql.format(`
-            SELECT ci.*, 
-                   cc.Name AS CategoryName, cc.Color AS CategoryColor
+            SELECT ci.*
             FROM CostInvoices ci
-            LEFT JOIN CostCategories cc ON ci.CategoryId = cc.Id
             WHERE ci.KsefNumber = ?
         `, [ksefNumber]);
         
@@ -66,11 +62,9 @@ export default class CostInvoiceRepository {
      */
     async findAll(filters?: {
         searchText?: string;
-        status?: string;
         dateFrom?: Date;
         dateTo?: Date;
         supplierNip?: string;
-        categoryId?: number;
         paymentStatus?: string;
         paymentMethod?: string;
     }): Promise<CostInvoice[]> {
@@ -88,10 +82,6 @@ export default class CostInvoiceRepository {
             params.push(searchText, searchText, searchText, searchText);
         }
 
-        if (filters?.status) {
-            conditions.push('ci.Status = ?');
-            params.push(filters.status);
-        }
         if (filters?.dateFrom) {
             conditions.push('ci.IssueDate >= ?');
             params.push(filters.dateFrom);
@@ -103,10 +93,6 @@ export default class CostInvoiceRepository {
         if (filters?.supplierNip) {
             conditions.push('ci.SupplierNip = ?');
             params.push(filters.supplierNip);
-        }
-        if (filters?.categoryId) {
-            conditions.push('ci.CategoryId = ?');
-            params.push(filters.categoryId);
         }
         if (filters?.paymentStatus || filters?.paymentMethod) {
             const optionalColumns = await this.getOptionalColumnsAvailability();
@@ -132,10 +118,8 @@ export default class CostInvoiceRepository {
         }
 
         const sql = mysql.format(`
-            SELECT ci.*, 
-                   cc.Name AS CategoryName, cc.Color AS CategoryColor
+            SELECT ci.*
             FROM CostInvoices ci
-            LEFT JOIN CostCategories cc ON ci.CategoryId = cc.Id
             WHERE ${conditions.join(' AND ')}
             ORDER BY ci.IssueDate DESC, ci.Id DESC
         `, params);
@@ -190,12 +174,8 @@ export default class CostInvoiceRepository {
             'GrossAmount',
             'Currency',
             'XmlContent',
-            'Status',
             ...(optionalColumns.paymentStatus ? ['PaymentStatus'] : []),
             ...(optionalColumns.paidAmount ? ['PaidAmount'] : []),
-            'BookingPercentage',
-            'VatDeductionPercentage',
-            'CategoryId',
             'Notes',
         ];
 
@@ -224,12 +204,8 @@ export default class CostInvoiceRepository {
             invoice.grossAmount,
             invoice.currency,
             invoice.xmlContent || null,
-            invoice.status,
             ...(optionalColumns.paymentStatus ? [invoice.paymentStatus] : []),
             ...(optionalColumns.paidAmount ? [invoice.paidAmount] : []),
-            invoice.bookingPercentage,
-            invoice.vatDeductionPercentage,
-            invoice.categoryId || null,
             invoice.notes || null,
         ];
 
@@ -356,14 +332,8 @@ export default class CostInvoiceRepository {
         const params: any[] = [];
 
         const fieldMap: Record<string, any> = {
-            status: invoice.status,
             paymentStatus: invoice.paymentStatus,
             paidAmount: invoice.paidAmount,
-            bookingPercentage: invoice.bookingPercentage,
-            vatDeductionPercentage: invoice.vatDeductionPercentage,
-            categoryId: invoice.categoryId,
-            bookedBy: invoice.bookedBy,
-            bookedAt: invoice.bookedAt,
             notes: invoice.notes,
         };
 
@@ -388,7 +358,7 @@ export default class CostInvoiceRepository {
 
     /**
      * Zaktualizuj pola wyprowadzane z XML (używane przez reparse).
-     * Nie resetuje ręcznie edytowanych pól (status, kategoria, notatki).
+     * Nie resetuje ręcznie edytowanych pól (notatki).
      */
     async updateParsedFields(
         id: number,
@@ -571,22 +541,11 @@ export default class CostInvoiceRepository {
             grossAmount: row.GrossAmount,
             currency: row.Currency,
             xmlContent: row.XmlContent,
-            status: row.Status,
             paymentStatus: toPaymentStatus(row.PaymentStatus),
             paidAmount: row.PaidAmount,
-            bookingPercentage: row.BookingPercentage,
-            vatDeductionPercentage: row.VatDeductionPercentage,
-            categoryId: row.CategoryId,
-            bookedBy: row.BookedBy,
-            bookedAt: row.BookedAt,
             notes: row.Notes,
             createdAt: row.CreatedAt,
             updatedAt: row.UpdatedAt,
-            _category: row.CategoryName ? {
-                id: row.CategoryId,
-                name: row.CategoryName,
-                color: row.CategoryColor,
-            } : undefined,
         });
     }
 
@@ -599,10 +558,8 @@ export default class CostInvoiceRepository {
      */
     async findItemsByInvoiceId(invoiceId: number): Promise<CostInvoiceItem[]> {
         const sql = mysql.format(`
-            SELECT cii.*, 
-                   cc.Name AS CategoryName, cc.Color AS CategoryColor
+            SELECT cii.*
             FROM CostInvoiceItems cii
-            LEFT JOIN CostCategories cc ON cii.CategoryId = cc.Id
             WHERE cii.CostInvoiceId = ?
             ORDER BY cii.LineNumber
         `, [invoiceId]);
@@ -619,10 +576,8 @@ export default class CostInvoiceRepository {
             INSERT INTO CostInvoiceItems (
                 CostInvoiceId, LineNumber, Description,
                 Quantity, Unit, UnitPrice,
-                NetValue, VatRate, VatValue, GrossValue,
-                IsSelectedForBooking, BookingPercentage, VatDeductionPercentage,
-                CategoryId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                NetValue, VatRate, VatValue, GrossValue
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             item.costInvoiceId,
             item.lineNumber,
@@ -634,51 +589,10 @@ export default class CostInvoiceRepository {
             item.vatRate,
             item.vatValue,
             item.grossValue,
-            item.isSelectedForBooking ? 1 : 0,
-            item.bookingPercentage,
-            item.vatDeductionPercentage,
-            item.categoryId || null,
         ]);
 
         const result = await ToolsDb.executeSQL(sql);
         return result.insertId;
-    }
-
-    /**
-     * Aktualizuj pozycję faktury
-     */
-    async updateItem(item: CostInvoiceItem, fields: string[]): Promise<void> {
-        if (!item.id) throw new Error('Cannot update item without ID');
-
-        const setClauses: string[] = [];
-        const params: any[] = [];
-
-        const fieldMap: Record<string, any> = {
-            isSelectedForBooking: item.isSelectedForBooking ? 1 : 0,
-            bookingPercentage: item.bookingPercentage,
-            vatDeductionPercentage: item.vatDeductionPercentage,
-            categoryId: item.categoryId,
-        };
-
-        for (const field of fields) {
-            if (field in fieldMap) {
-                const dbField = field === 'isSelectedForBooking' 
-                    ? 'IsSelectedForBooking' 
-                    : field.charAt(0).toUpperCase() + field.slice(1);
-                setClauses.push(`${dbField} = ?`);
-                params.push(fieldMap[field] ?? null);
-            }
-        }
-
-        if (setClauses.length === 0) return;
-
-        params.push(item.id);
-        const sql = mysql.format(
-            `UPDATE CostInvoiceItems SET ${setClauses.join(', ')} WHERE Id = ?`,
-            params
-        );
-        
-        await ToolsDb.executeSQL(sql);
     }
 
     private mapRowToItem(row: any): CostInvoiceItem {
@@ -694,15 +608,6 @@ export default class CostInvoiceRepository {
             vatRate: row.VatRate,
             vatValue: row.VatValue,
             grossValue: row.GrossValue,
-            isSelectedForBooking: !!row.IsSelectedForBooking,
-            bookingPercentage: row.BookingPercentage,
-            vatDeductionPercentage: row.VatDeductionPercentage,
-            categoryId: row.CategoryId,
-            _category: row.CategoryName ? {
-                id: row.CategoryId,
-                name: row.CategoryName,
-                color: row.CategoryColor,
-            } : undefined,
         });
     }
 
@@ -793,31 +698,5 @@ export default class CostInvoiceRepository {
             userId: row.UserId,
             status: row.Status,
         });
-    }
-
-    // =====================================================
-    // KATEGORIE
-    // =====================================================
-
-    /**
-     * Pobierz wszystkie aktywne kategorie
-     */
-    async findAllCategories(): Promise<CostCategory[]> {
-        const sql = `
-            SELECT * FROM CostCategories 
-            WHERE IsActive = 1 
-            ORDER BY SortOrder, Name
-        `;
-        
-        const result = await ToolsDb.getQueryCallbackAsync(sql) as any[];
-        return result.map((row: any) => new CostCategory({
-            id: row.Id,
-            name: row.Name,
-            parentId: row.ParentId,
-            color: row.Color,
-            vatDeductionDefault: row.VatDeductionDefault,
-            isActive: !!row.IsActive,
-            sortOrder: row.SortOrder,
-        }));
     }
 }

@@ -45,33 +45,20 @@ export default class CostInvoice {
     
     // Oryginalny XML
     xmlContent?: string;
-    
-    // Status księgowania
-    status: CostInvoiceStatus;
 
     // Status płatności
     paymentStatus: PaymentStatus;
     paidAmount: number;
-    
-    // Ustawienia księgowania
-    bookingPercentage: number;
-    vatDeductionPercentage: number;
-    
-    // Przypisania
-    categoryId?: number;
-    
-    // Audyt
-    bookedBy?: number;
-    bookedAt?: Date;
+
+    // Notatka własna do faktury
     notes?: string;
-    
+
     // Timestamps
     createdAt?: Date;
     updatedAt?: Date;
-    
+
     // Relacje (ładowane osobno)
     _items?: CostInvoiceItem[];
-    _category?: { id: number; name: string; color?: string };
 
     constructor(data: Partial<CostInvoice>) {
         const parseDecimal = (value: unknown, fallback = 0): number => {
@@ -110,37 +97,15 @@ export default class CostInvoice {
         
         this.xmlContent = data.xmlContent;
         
-        this.status = data.status || 'NEW';
         this.paymentStatus = data.paymentStatus || 'UNPAID';
         this.paidAmount = parseDecimal(data.paidAmount, 0);
-        this.bookingPercentage = parseDecimal(data.bookingPercentage, 100);
-        this.vatDeductionPercentage = parseDecimal(data.vatDeductionPercentage, 100);
-        
-        this.categoryId = data.categoryId;
-        
-        this.bookedBy = data.bookedBy;
-        this.bookedAt = data.bookedAt;
+
         this.notes = data.notes;
-        
+
         this.createdAt = data.createdAt;
         this.updatedAt = data.updatedAt;
-        
+
         this._items = data._items;
-        this._category = data._category;
-    }
-
-    /**
-     * Oblicza wartość netto do zaksięgowania
-     */
-    get bookableNetAmount(): number {
-        return this.netAmount * (this.bookingPercentage / 100);
-    }
-
-    /**
-     * Oblicza wartość VAT do odliczenia
-     */
-    get deductibleVatAmount(): number {
-        return this.vatAmount * (this.vatDeductionPercentage / 100);
     }
 
     /**
@@ -148,20 +113,6 @@ export default class CostInvoice {
      */
     get issueDateFormatted(): string {
         return ToolsDate.dateJsToSql(this.issueDate) || '';
-    }
-
-    /**
-     * Sprawdza czy faktura jest zaksięgowana
-     */
-    get isBooked(): boolean {
-        return this.status === 'BOOKED';
-    }
-
-    /**
-     * Sprawdza czy można edytować ustawienia księgowania
-     */
-    get isEditable(): boolean {
-        return this.status !== 'BOOKED';
     }
 
     /**
@@ -195,22 +146,11 @@ export default class CostInvoice {
             vatAmount: this.vatAmount,
             grossAmount: this.grossAmount,
             currency: this.currency,
-            status: this.status,
             paymentStatus: this.paymentStatus,
             paidAmount: this.paidAmount,
-            bookingPercentage: this.bookingPercentage,
-            vatDeductionPercentage: this.vatDeductionPercentage,
-            bookableNetAmount: this.bookableNetAmount,
-            deductibleVatAmount: this.deductibleVatAmount,
-            categoryId: this.categoryId,
-            bookedBy: this.bookedBy,
-            bookedAt: formatDate(this.bookedAt),
             notes: this.notes,
             createdAt: formatDate(this.createdAt),
             updatedAt: formatDate(this.updatedAt),
-            isEditable: this.isEditable,
-            isBooked: this.isBooked,
-            _category: this._category,
             _items: this._items?.map(item => ({
                 id: item.id,
                 lineNumber: item.lineNumber,
@@ -222,25 +162,10 @@ export default class CostInvoice {
                 vatRate: item.vatRate,
                 vatValue: item.vatValue,
                 grossValue: item.grossValue,
-                isSelectedForBooking: item.isSelectedForBooking,
-                bookingPercentage: item.bookingPercentage,
-                vatDeductionPercentage: item.vatDeductionPercentage,
-                bookableNetValue: item.bookableNetValue,
-                deductibleVatValue: item.deductibleVatValue,
-                categoryId: item.categoryId,
-                _category: item._category,
             })),
         };
     }
 }
-
-/**
- * Status faktury kosztowej
- * NEW - nowa, do przejrzenia
- * BOOKED - zaksięgowana
- * EXCLUDED - wykluczona
- */
-export type CostInvoiceStatus = 'NEW' | 'EXCLUDED' | 'BOOKED';
 
 /**
  * Status płatności faktury kosztowej
@@ -272,16 +197,6 @@ export class CostInvoiceItem {
     vatRate: number;
     vatValue: number;
     grossValue: number;
-    
-    // Księgowanie
-    isSelectedForBooking: boolean;
-    bookingPercentage: number;
-    vatDeductionPercentage: number;
-    
-    // Przypisania
-    categoryId?: number;
-    
-    _category?: { id: number; name: string; color?: string };
 
     constructor(data: Partial<CostInvoiceItem>) {
         this.id = data.id;
@@ -298,29 +213,6 @@ export class CostInvoiceItem {
         this.vatRate = data.vatRate ?? 23;
         this.vatValue = data.vatValue || 0;
         this.grossValue = data.grossValue || 0;
-        
-        this.isSelectedForBooking = data.isSelectedForBooking ?? true;
-        this.bookingPercentage = data.bookingPercentage ?? 100;
-        this.vatDeductionPercentage = data.vatDeductionPercentage ?? 100;
-        
-        this.categoryId = data.categoryId;
-        this._category = data._category;
-    }
-
-    /**
-     * Oblicza wartość netto do zaksięgowania
-     */
-    get bookableNetValue(): number {
-        if (!this.isSelectedForBooking) return 0;
-        return this.netValue * (this.bookingPercentage / 100);
-    }
-
-    /**
-     * Oblicza wartość VAT do odliczenia
-     */
-    get deductibleVatValue(): number {
-        if (!this.isSelectedForBooking) return 0;
-        return this.vatValue * (this.vatDeductionPercentage / 100);
     }
 }
 
@@ -354,28 +246,5 @@ export class CostInvoiceSync {
         this.errors = data.errors;
         this.userId = data.userId;
         this.status = data.status || 'RUNNING';
-    }
-}
-
-/**
- * Model kategorii kosztów
- */
-export class CostCategory {
-    id?: number;
-    name: string;
-    parentId?: number;
-    color?: string;
-    vatDeductionDefault: number;
-    isActive: boolean;
-    sortOrder: number;
-
-    constructor(data: Partial<CostCategory>) {
-        this.id = data.id;
-        this.name = data.name || '';
-        this.parentId = data.parentId;
-        this.color = data.color;
-        this.vatDeductionDefault = data.vatDeductionDefault ?? 100;
-        this.isActive = data.isActive ?? true;
-        this.sortOrder = data.sortOrder || 0;
     }
 }

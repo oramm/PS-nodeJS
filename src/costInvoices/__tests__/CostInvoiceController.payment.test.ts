@@ -15,7 +15,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
         mockRepository = (controller as any).repository;
     });
 
-    describe('updateBookingSettings - payment fields', () => {
+    describe('updateSettings - payment fields', () => {
         it('POSITIVE: Should update paymentStatus=PARTIALLY_PAID with valid paidAmount', async () => {
             // Arrange
             const invoiceId = 1;
@@ -29,11 +29,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -42,7 +39,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             mockRepository.update.mockResolvedValue(undefined);
 
             // Act
-            const result = await controller.updateBookingSettings(invoiceId, {
+            const result = await controller.updateSettings(invoiceId, {
                 paymentStatus: 'PARTIALLY_PAID',
                 paidAmount: 500,
             });
@@ -72,11 +69,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'PARTIALLY_PAID',
                 paidAmount: 500,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -85,7 +79,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             mockRepository.update.mockResolvedValue(undefined);
 
             // Act
-            const result = await controller.updateBookingSettings(invoiceId, {
+            const result = await controller.updateSettings(invoiceId, {
                 paymentStatus: 'UNPAID',
             });
 
@@ -114,11 +108,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -127,7 +118,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             mockRepository.update.mockResolvedValue(undefined);
 
             // Act
-            const result = await controller.updateBookingSettings(invoiceId, {
+            const result = await controller.updateSettings(invoiceId, {
                 paymentStatus: 'PAID',
             });
 
@@ -155,11 +146,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: -27.67,
                 grossAmount: -148,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -167,7 +155,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
             mockRepository.update.mockResolvedValue(undefined);
 
-            const result = await controller.updateBookingSettings(invoiceId, {
+            const result = await controller.updateSettings(invoiceId, {
                 paymentStatus: 'NOT_APPLICABLE',
             });
 
@@ -195,11 +183,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -208,7 +193,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
 
             // Act & Assert
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paymentStatus: 'INVALID_STATUS' as any,
                 })
             ).rejects.toThrow(/Nieprawidłowy status płatności/);
@@ -227,11 +212,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -240,7 +222,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
 
             // Act & Assert
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paidAmount: -100,
                 })
             ).rejects.toThrow(/nie może być ujemna/);
@@ -259,11 +241,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -272,7 +251,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
 
             // Act & Assert
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paidAmount: 1500,
                 })
             ).rejects.toThrow(/nie może przekroczyć kwoty brutto faktury/);
@@ -291,11 +270,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -304,7 +280,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
 
             // Act & Assert
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paymentStatus: 'PARTIALLY_PAID',
                     paidAmount: 0,
                 })
@@ -324,11 +300,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -337,7 +310,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
 
             // Act & Assert
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paymentStatus: 'PARTIALLY_PAID',
                     paidAmount: 1230,
                 })
@@ -356,11 +329,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: -27.67,
                 grossAmount: -148,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'UNPAID',
                 paidAmount: 0,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
             mockInvoice._items = [];
 
@@ -368,7 +338,7 @@ describe('CostInvoiceController - Payment Status Updates', () => {
             mockRepository.findItemsByInvoiceId.mockResolvedValue([]);
 
             await expect(
-                controller.updateBookingSettings(invoiceId, {
+                controller.updateSettings(invoiceId, {
                     paymentStatus: 'NOT_APPLICABLE',
                     paidAmount: 1,
                 })
@@ -391,11 +361,8 @@ describe('CostInvoiceController - Payment Status Updates', () => {
                 vatAmount: 230,
                 grossAmount: 1230,
                 currency: 'PLN',
-                status: 'NEW',
                 paymentStatus: 'PARTIALLY_PAID',
                 paidAmount: 600,
-                bookingPercentage: 100,
-                vatDeductionPercentage: 100,
             });
 
             // Act

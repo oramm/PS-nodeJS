@@ -11,13 +11,11 @@ const CostInvoiceRepository = jest.fn().mockImplementation(() => {
         update: jest.fn(),
         findItemsByInvoiceId: jest.fn(),
         createItem: jest.fn(),
-        updateItem: jest.fn(),
         findLastCompletedSync: jest.fn(),
         createSync: jest.fn(),
         completeSync: jest.fn(),
         updateSync: jest.fn(),
         findSyncById: jest.fn(),
-        findAllCategories: jest.fn(),
         updateWhiteList: jest.fn(),
     };
 });
