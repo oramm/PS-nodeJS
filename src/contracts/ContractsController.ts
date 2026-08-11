@@ -358,6 +358,8 @@ export default class ContractsController extends BaseController<
                 'startDate',
                 'endDate',
                 'guaranteeEndDate',
+                'warrantyEndDate',
+                'defectsNotificationEndDate',
                 'value',
                 'name',
             ];

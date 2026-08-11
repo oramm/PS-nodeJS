@@ -38,6 +38,10 @@ export default abstract class Contract
     startDate?: string;
     endDate?: string;
     guaranteeEndDate?: string;
+    warrantyEndDate?: string | null;
+    defectsNotificationEndDate?: string | null;
+    /** Tylko do odczytu (prefiks `_` => ToolsDb pomija przy zapisie) — zob. ContractData. */
+    _isFidmanIntegrated?: boolean;
     value?: string | number;
     _remainingNotScheduledValue?: string | number;
     _remainingNotIssuedValue?: string | number;
@@ -77,6 +81,24 @@ export default abstract class Contract
         );
     }
 
+    /** Terminy nieobowiązkowe (rękojmia, Okres Zgłaszania Wad). Trzy stany wejścia trzeba
+     *  rozróżnić, bo znaczą co innego dla zapisu — dokładnie ta sama logika co w
+     *  parseSettlementMethod() powyżej:
+     *    `undefined`  -> pola nie było w żądaniu; zwracamy `undefined`, ToolsDb je pomija,
+     *                    czyli edycja nieniosąca terminu nie kasuje wpisanego wcześniej;
+     *    `null`/`''`  -> użytkownik wyczyścił pole; zwracamy `null`, żeby w bazie faktycznie
+     *                    wylądował NULL (samo `undefined` zostawiłoby starą wartość);
+     *    data         -> normalizacja przez ToolsDate.
+     *  Osobna metoda, a nie gołe dateJsToSql(): dla pustego stringa dateJsToSql rzuca
+     *  („Invalid date format"), a pusto jest tu stanem normalnym, nie błędem. */
+    private static parseOptionalDate(
+        value: unknown
+    ): string | null | undefined {
+        if (value === undefined) return undefined;
+        if (value === null || value === '') return null;
+        return ToolsDate.dateJsToSql(value as string | Date) ?? null;
+    }
+
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
         super({ ...initParamObject, _dbTableName: 'Contracts' });
         this.id = initParamObject.id;
@@ -91,6 +113,13 @@ export default abstract class Contract
         this.guaranteeEndDate = ToolsDate.dateJsToSql(
             initParamObject.guaranteeEndDate
         );
+        this.warrantyEndDate = Contract.parseOptionalDate(
+            initParamObject.warrantyEndDate
+        );
+        this.defectsNotificationEndDate = Contract.parseOptionalDate(
+            initParamObject.defectsNotificationEndDate
+        );
+        this._isFidmanIntegrated = initParamObject._isFidmanIntegrated;
         if (initParamObject.value) {
             if (typeof initParamObject.value === 'string') {
                 initParamObject.value = initParamObject.value

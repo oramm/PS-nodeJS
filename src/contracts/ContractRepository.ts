@@ -22,6 +22,7 @@ import ContractEntityAssociationsHelper, {
     ContractEntityAssociation,
 } from './ContractEntityAssociationsHelper';
 import Entity from '../entities/Entity';
+import { isFidmanContractType } from './fidmanSync/FidmanSync';
 
 /**
  * Repozytorium dla operacji na kontraktach
@@ -270,6 +271,9 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.StartDate, 
                     mainContracts.EndDate, 
                     mainContracts.GuaranteeEndDate,
+                    mainContracts.WarrantyEndDate,
+                    mainContracts.DefectsNotificationEndDate,
+                    mainContracts.FidmanContractId,
                     mainContracts.Value,
                     mainContracts.Comment, 
                     mainContracts.Status, 
@@ -415,6 +419,41 @@ export default class ContractRepository extends BaseRepository<
                 (SUBSTRING_INDEX(ContractTypes.Name, ' ', 1) = ? AND mainContracts.SettlementMethod = ?)
             )`,
             ['Czerwony', 'LUMP_SUM', 'Żółty', 'MEASUREMENT'],
+        );
+    }
+
+    /**
+     * Filtr „Integracja z FIDmanem" na liście kontraktów. Analogicznie do filtra
+     * „dokumentacja zatwierdzona" w LetterRepository.makeAndConditions().
+     *
+     * Stan integracji czytamy WYŁĄCZNIE z trwałego linku `Contracts.FidmanContractId`
+     * (migracja 004: NULL = kontraktu nie ma w nowym FIDmanie), a nie ze statusu w
+     * FidmanSyncOutbox. Kolejka mówi o ostatniej próbie wysyłki, link o faktycznym stanie —
+     * kontrakt wpięty backfillem nie ma wpisu w kolejce, a jest zintegrowany.
+     *
+     * ŚWIADOMA DECYZJA: dopasowanie po `TypeId` z allowlisty syncu
+     * (Setup.FidmanSync.contractTypeIds, env FIDMAN_SYNC_CONTRACT_TYPE_IDS), a NIE po nazwie
+     * typu jak w makeAtypicalSettlementCondition() wyżej. Powód jest odwrotny niż tam: tamten
+     * filtr odpowiada na pytanie domenowe („czy ta umowa jest nietypowa"), a ten na techniczne
+     * („czy system to wyśle do FIDmana"). Skoro obiecuje wysyłkę, musi pytać dokładnie tym
+     * samym warunkiem, którym wysyłka jest bramkowana — isFidmanContractType(). Zakodowanie
+     * tego po nazwie wpuściłoby na listę „do zintegrowania" umowy typu „Czerwony ryczałtowy",
+     * którego sync dziś nie wysyła, czyli filtr obiecywałby coś, czego system nie zrobi.
+     */
+    private makeFidmanIntegrationCondition(
+        filter: 'INTEGRATED' | 'NOT_INTEGRATED',
+    ): string {
+        if (filter === 'INTEGRATED')
+            return 'mainContracts.FidmanContractId IS NOT NULL';
+
+        const typeIds = Setup.FidmanSync.contractTypeIds;
+        // Pusta allowlista = sync nie obsługuje żadnego typu, więc nie ma czego integrować.
+        // Zwracamy fałsz zamiast budować `IN ()`, które jest błędem składni SQL.
+        if (!typeIds.length) return '0';
+
+        return mysql.format(
+            `(mainContracts.FidmanContractId IS NULL AND mainContracts.TypeId IN (?))`,
+            [typeIds],
         );
     }
 
@@ -576,6 +615,17 @@ export default class ContractRepository extends BaseRepository<
             conditions.push(this.makeAtypicalSettlementCondition());
         }
 
+        if (
+            searchParams.fidmanIntegrationFilter === 'INTEGRATED' ||
+            searchParams.fidmanIntegrationFilter === 'NOT_INTEGRATED'
+        ) {
+            conditions.push(
+                this.makeFidmanIntegrationCondition(
+                    searchParams.fidmanIntegrationFilter,
+                ),
+            );
+        }
+
         if (isArchived) {
             conditions.push(
                 `mainContracts.Status = ${Setup.ContractStatus.ARCHIVAL}`,
@@ -734,6 +784,18 @@ export default class ContractRepository extends BaseRepository<
             startDate: row.StartDate,
             endDate: row.EndDate,
             guaranteeEndDate: row.GuaranteeEndDate,
+            warrantyEndDate: row.WarrantyEndDate,
+            defectsNotificationEndDate: row.DefectsNotificationEndDate,
+            // `undefined` (a nie `false`) w dwóch przypadkach: typ spoza synchronizacji oraz
+            // wiersz, który w ogóle nie niesie kolumny (zapytania spoza find()). Front rozróżnia
+            // „mógłby być zintegrowany, ale nie jest" od „nie wiem / nie ta liga" i w drugim
+            // przypadku nie rysuje plakietki wcale — `false` zamiast `undefined` kłamałoby, że
+            // kontrakt sprawdzono i linku nie ma.
+            _isFidmanIntegrated:
+                row.FidmanContractId === undefined ||
+                !isFidmanContractType(row.MainContractTypeId)
+                    ? undefined
+                    : row.FidmanContractId !== null,
             value: row.Value,
             _remainingNotScheduledValue: row.RemainingNotScheduledValue,
             _remainingNotIssuedValue: row.RemainingNotIssuedValue,
@@ -916,6 +978,10 @@ export type ContractSearchParams = {
     /** RZL-5: tylko kontrakty z akcentem odstępstwa (Czerwony+LUMP_SUM albo
      * Żółty+MEASUREMENT) — zob. makeAtypicalSettlementCondition(). */
     onlyAtypicalSettlement?: boolean;
+    /** Filtr integracji z FIDmanem — zob. makeFidmanIntegrationCondition().
+     *  `INTEGRATED` = ma trwały link; `NOT_INTEGRATED` = typ obsługiwany przez sync, ale bez
+     *  linku. Brak wartości nie zawęża niczego. */
+    fidmanIntegrationFilter?: 'INTEGRATED' | 'NOT_INTEGRATED';
     isArchived?: boolean;
     statuses?: string | string[];
     onlyKeyData?: boolean;
@@ -942,6 +1008,12 @@ type ContractRow = {
     StartDate: Date | string | null;
     EndDate: Date | string | null;
     GuaranteeEndDate: Date | string | null;
+    WarrantyEndDate: Date | string | null;
+    DefectsNotificationEndDate: Date | string | null;
+    /** Opcjonalna, bo mapRowToModel() obsługuje też wiersze z zapytań, które tej kolumny nie
+     *  wybierają — i rozróżnia „nie wybrano" (undefined) od „brak linku" (null). Typ bez
+     *  `?` sprawiłby, że porównanie `=== undefined` jest błędem TS2367 przy `strict: true`. */
+    FidmanContractId?: number | null;
     Value: number | null;
     RemainingNotScheduledValue?: number | null;
     RemainingNotIssuedValue?: number | null;

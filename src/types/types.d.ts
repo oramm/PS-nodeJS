@@ -43,6 +43,12 @@ export interface ContractData extends RepositoryDataItem {
     startDate?: string;
     endDate?: string;
     guaranteeEndDate?: string;
+    /** Koniec rękojmi za wady — instytucja ustawowa, odrębna od gwarancji.
+     *  Nieobowiązkowa: brak znaczy „termin nieustalony", nie „brak rękojmi". */
+    warrantyEndDate?: string | null;
+    /** Koniec Okresu Zgłaszania Wad (FIDIC DNP). Wypełniany tylko dla umów na roboty
+     *  typu Żółty i Czerwony; regułę pilnuje formularz, nie baza (zob. migracja 009). */
+    defectsNotificationEndDate?: string | null;
     _project: Project;
     status: string;
     gdFolderId?: string;
@@ -64,6 +70,11 @@ export interface ContractData extends RepositoryDataItem {
     lettersShortcutsInSubfolder?: boolean;
     approvedDocumentation?: boolean;
     settlementMethod?: SettlementMethod | null;
+    /** Stan integracji z FIDmanem, wyliczany przy odczycie z `Contracts.FidmanContractId`.
+     *  `undefined` = typ umowy w ogóle nie podlega synchronizacji (front nie rysuje wtedy
+     *  plakietki). Pole tylko do odczytu — prefiks `_` sprawia, że ToolsDb pomija je przy
+     *  zapisie, więc nie ma szansy nadpisać linku. */
+    _isFidmanIntegrated?: boolean;
 }
 
 export interface OurContractData extends ContractData {
