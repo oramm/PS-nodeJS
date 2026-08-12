@@ -703,6 +703,14 @@ require('./offers/OffersRouters');
 require('./offers/OfferBond/OfferBondsRouters');
 require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
+// Panel administracyjny. AdminPanelRouters MUSI być pierwszy - montuje bramkę
+// app.use('/admin', ...), która działa tylko na trasy zarejestrowane PO niej.
+require('./Admin/AdminPanelRouters');
+require('./Admin/Cars/CarsRouters');
+require('./Admin/AbsenceTypes/AbsenceTypesRouters');
+require('./Admin/StaffMembers/StaffMembersRouters');
+require('./Admin/TypesTree/TypesTreeRouters');
+
 require('./Admin/Cities/CitiesRouters');
 require('./Admin/ContractRanges/ContractRangesRouters');
 require('./bankSync/BankSyncRouter');
@@ -714,6 +722,11 @@ app.use(
         // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.
         // ponytail: jeden generyczny komunikat z nazwą klucza, bez mapowania per encja
         const isDuplicateEntry = (err as any)?.code === 'ER_DUP_ENTRY';
+        // Próba usunięcia wiersza słownika, do którego coś jeszcze się odwołuje,
+        // to również błąd użytkownika (409), a nie awaria serwera.
+        const isReferenced =
+            (err as any)?.code === 'ER_ROW_IS_REFERENCED_2' ||
+            (err as any)?.code === 'ER_ROW_IS_REFERENCED';
         // Błąd, który sam zna swój status HTTP (np. ForbiddenError z ProjectScopeGuard albo
         // walidacja wejścia), nie jest awarią serwera. Bez tego każda odmowa dostępu i każda
         // literówka użytkownika szłaby jako 500, czyli z mailem-raportem do zespołu.
@@ -724,7 +737,7 @@ app.use(
             explicitStatus < 500;
         const statusCode = hasExplicitClientStatus
             ? explicitStatus
-            : isDuplicateEntry
+            : isDuplicateEntry || isReferenced
               ? 409
               : 500;
 
@@ -732,7 +745,9 @@ app.use(
         const duplicateKey = isDuplicateEntry
             ? /for key '(.+?)'/.exec(rawMessage)?.[1]
             : undefined;
-        const message = isDuplicateEntry
+        const message = isReferenced
+            ? 'Nie można usunąć - rekord jest w użyciu.'
+            : isDuplicateEntry
             ? `Rekord o takich danych już istnieje${duplicateKey ? ` (${duplicateKey})` : ''}`
             : rawMessage;
 

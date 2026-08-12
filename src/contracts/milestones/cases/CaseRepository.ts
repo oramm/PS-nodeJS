@@ -225,7 +225,7 @@ export default class CaseRepository extends BaseRepository<Case> {
                 isDefault: row.IsDefault,
                 isUniquePerMilestone: row.IsUniquePerMilestone,
                 _allowedSubCaseTypeIds: row._allowedSubCaseTypeIds ?? [],
-                allowsSubCases: (row._allowedSubCaseTypeIds ?? []).length > 0,
+                _allowsSubCases: (row._allowedSubCaseTypeIds ?? []).length > 0,
                 milestoneTypeId: row.MilestoneTypeId,
                 folderNumber: row.CaseTypeFolderNumber,
                 _processes:

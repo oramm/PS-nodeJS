@@ -8,7 +8,7 @@ export default class CaseType extends BusinessObject {
     isDefault: boolean;
     isUniquePerMilestone: boolean;
     isSubCaseOnly: boolean;
-    allowsSubCases: boolean;
+    _allowsSubCases: boolean;
     _allowedSubCaseTypeIds: number[];
     _milestoneType: any;
     milestoneTypeId: number;
@@ -30,7 +30,7 @@ export default class CaseType extends BusinessObject {
         this.isUniquePerMilestone = initParamObject.isUniquePerMilestone;
         this.isSubCaseOnly = initParamObject.isSubCaseOnly ?? false;
         this._allowedSubCaseTypeIds = initParamObject._allowedSubCaseTypeIds ?? [];
-        this.allowsSubCases = this._allowedSubCaseTypeIds.length > 0;
+        this._allowsSubCases = this._allowedSubCaseTypeIds.length > 0;
         this._milestoneType = initParamObject._milestoneType;
         this.milestoneTypeId = initParamObject._milestoneType.id;
         this._processes = initParamObject._processes

@@ -47,8 +47,8 @@ export default class MilestoneTypeContractType extends BusinessObject {
         const params = [
             this.folderNumber,
             this.isDefault,
-            this.contractTypeId,
             this.milestoneTypeId,
+            this.contractTypeId,
         ];
         return await ToolsDb.executePreparedStmt(
             sql,

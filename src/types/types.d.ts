@@ -4,6 +4,47 @@ export interface RepositoryDataItem {
     id?: number;
 }
 
+/* ---------- Panel administracyjny: słowniki ---------- */
+
+/** Samochód służbowy (kilometrówka). Tabela Cars nie ma kolumny EditorId. */
+export interface CarData extends RepositoryDataItem {
+    brand: string;
+    model?: string | null;
+    licensePlateNumber: string;
+    mileageSpreadsheetId?: string | null;
+    mileageSheetGid?: number | null;
+    isActive: boolean;
+    comment?: string | null;
+}
+
+/** Typ nieobecności. Flagi sterują pulami, z których schodzi nieobecność. */
+export interface AbsenceTypeData extends RepositoryDataItem {
+    name: string;
+    color: string;
+    countsAgainstLimit: boolean;
+    countsAsCare: boolean;
+    /** Liczba nieobecności używających tego typu - pole wyliczane, tylko do odczytu. */
+    _usageCount?: number;
+}
+
+/** Uprawnienia funkcyjne osoby. Klucz naturalny to personId, nie id wiersza. */
+export interface StaffMemberData extends RepositoryDataItem {
+    personId: number;
+    isDriver: boolean;
+    isInScrum: boolean;
+    hasCostInvoiceAccess: boolean;
+    hasBankAccess: boolean;
+    canLogSiteVisits: boolean;
+    isActive: boolean;
+    /** Dane osoby z JOIN - tylko do odczytu, nie zapisywane. */
+    _personName?: string;
+    _personSurname?: string;
+    _personEmail?: string;
+    _systemRoleId?: number | null;
+    /** Czy osoba ma już wiersz w StaffMembers (false = same domyślne zera). */
+    _hasStaffRow?: boolean;
+}
+
 /** Typ rodzica Milestone - Contract lub Offer */
 export type MilestoneParentType = 'CONTRACT' | 'OFFER';
 
@@ -303,7 +344,7 @@ export interface CaseTypeData extends RepositoryDataItem {
     isDefault: boolean;
     isUniquePerMilestone: boolean;
     isSubCaseOnly?: boolean;
-    allowsSubCases?: boolean;
+    _allowsSubCases?: boolean;
     _allowedSubCaseTypeIds?: number[];
     _milestoneType: MilestoneType;
     gdFolderId?: string;

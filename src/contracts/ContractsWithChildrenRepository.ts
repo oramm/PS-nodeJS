@@ -516,7 +516,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     isUniquePerMilestone: Boolean(row.IsUniquePerMilestone),
                     _allowedSubCaseTypeIds:
                         subCaseTypeIdsMap.get(row.CaseTypeId ?? 0) ?? [],
-                    allowsSubCases:
+                    _allowsSubCases:
                         (subCaseTypeIdsMap.get(row.CaseTypeId ?? 0) ?? []).length > 0,
                     milestoneTypeId: row.MilestoneTypeId,
                     folderNumber: row.CaseTypeFolderNumber,

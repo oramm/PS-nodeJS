@@ -56,7 +56,7 @@ export default class CaseTypeRepository extends BaseRepository<CaseType> {
         }
         for (const ct of caseTypes) {
             ct._allowedSubCaseTypeIds = subCaseTypeIdsMap.get(ct.id!) ?? [];
-            ct.allowsSubCases = ct._allowedSubCaseTypeIds.length > 0;
+            ct._allowsSubCases = ct._allowedSubCaseTypeIds.length > 0;
         }
     }
 
