@@ -177,6 +177,34 @@ export default class Setup {
         rodzajOptions: ['pismo', 'mail'],
     };
 
+    /**
+     * Arkusze zaliczek i rejestru listów.
+     *
+     * Identyfikatory wyłącznie z env — w dev wskazują kopie, w produkcji pliki żywe,
+     * więc przejście na produkcję nie wymaga zmiany w kodzie. To jedyne zabezpieczenie
+     * przed zapisem w niewłaściwy plik: zapis jest zawsze rzeczywisty.
+     */
+    static PettyCash = {
+        get spreadsheetId(): string {
+            return process.env.PETTY_CASH_SPREADSHEET_ID ?? '';
+        },
+        get registerSpreadsheetId(): string {
+            return process.env.POSTAL_REGISTER_SPREADSHEET_ID ?? '';
+        },
+        /**
+         * Szablon linku do śledzenia przesyłki. `{number}` zastępujemy pełnym numerem
+         * w postaci, jakiej oczekuje wyszukiwarka Poczty: 20 znaków bez nawiasów,
+         * czyli `00` + 18 cyfr SSCC.
+         *
+         * Trzymane w env, bo adresu nie da się potwierdzić z dokumentacji, a błędny link
+         * w arkuszu księgowym jest gorszy niż jego brak. Pusta wartość = numer zapisany
+         * zwykłym tekstem, dokładnie jak dotąd.
+         */
+        get trackingUrlTemplate(): string {
+            return process.env.POSTAL_TRACKING_URL_TEMPLATE ?? '';
+        },
+    };
+
     static InvoiceStatus = {
         FOR_LATER: 'Na później',
         TO_DO: 'Do zrobienia',

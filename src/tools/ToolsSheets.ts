@@ -14,13 +14,21 @@ export default class ToolsSheets {
 
     static async getValues(
         auth: OAuth2Client,
-        parameters: { spreadsheetId: string; rangeA1: string }
+        parameters: {
+            spreadsheetId: string;
+            rangeA1: string;
+            /** 'FORMULA' zwraca formuly zamiast wynikow, a daty jako liczby seryjne */
+            valueRenderOption?: 'FORMATTED_VALUE' | 'UNFORMATTED_VALUE' | 'FORMULA';
+        }
     ) {
         const sheets = google.sheets({ version: 'v4', auth });
         const res = await sheets.spreadsheets.values.get({
             spreadsheetId: parameters.spreadsheetId,
             auth,
             range: parameters.rangeA1,
+            ...(parameters.valueRenderOption
+                ? { valueRenderOption: parameters.valueRenderOption }
+                : {}),
         });
         return res.data;
     }

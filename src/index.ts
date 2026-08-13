@@ -658,6 +658,7 @@ require('./invoices/InvoiceItemsRouters');
 require('./invoices/summarySheet/InvoiceSummarySheetRouters');
 
 require('./costInvoices/CostInvoicesRouter');
+require('./pettyCash/PettyCashRouter');
 
 require('./projects/ProjectsRouters');
 require('./mileage/MileageRouters');
