@@ -538,3 +538,38 @@ Notes:
 - Zabezpieczeniem przed zapisem w niewłaściwy plik zostają wyłącznie `PETTY_CASH_SPREADSHEET_ID`
   i `POSTAL_REGISTER_SPREADSHEET_ID`. `yarn pettycash:inspect` pozostaje odczytem bez zapisu i to on
   służy do obejrzenia żywego arkusza przed przełączeniem.
+
+Follow-up tego samego dnia, po pytaniu właściciela „czy jak coś usunę albo dopiszę ręcznie, to nie
+będzie problemów?". Przegląd obu ścieżek zapisu potwierdził własność główną — **moduł nigdy nie
+edytuje ani nie kasuje istniejącego wiersza** — i wykazał jedną usterkę raportowania:
+
+- **Formularz mówił „Zapisano" także wtedy, gdy nic nie zapisał.** Backend odpowiada 201 również na
+  pominięcie (ten sam wpis już w arkuszu), a ekran pokazywał zielony komunikat z powodem dopisanym
+  drobnym drukiem. Pominięcie w rejestrze nie było raportowane w ogóle. Teraz kolor zależy od tego,
+  czy cokolwiek powstało: zielone „Zapisano" albo żółte „Pominięto — nic nie zostało dopisane",
+  a obie ścieżki (rejestr i zaliczki) mają zawsze własną linię z wynikiem albo powodem.
+- Regułę wyciągnięto do `wroteAnything()` w `pettyCashApi.ts` z czterema testami zamiast testu
+  renderującego stronę — decyduje sam warunek, a nie znaczniki, więc sprawdzian nie potrzebuje DOM-u
+  ani mocków fetcha i routera.
+- Trzy pułapki obsługowe (ukryta kolumna znacznika, ręczny blok rejestru bez `=SUM`, kolizja skrótu
+  przy identycznej treści tego samego dnia) zapisane w `plan.md` jako materiał do runbooka z P7.
+
+Files touched — frontend: `src/Erp/PettyCash/pettyCashApi.ts`, `PettyCashEntryPage.tsx`,
+`pettyCashApi.test.ts` (new). 72 testy frontu, typecheck czysty.
+
+Drugi follow-up: **zależność skanera zepsuła CI frontendu** i wyszło to dopiero po commicie
+właściciela. `@zxing/library@0.23.0` deklaruje `engines.node >= 24.0.0`, a `build-pages.yml`
+przypinał Node 20; yarn 1 traktuje niezgodność silnika jako błąd twardy, więc
+`yarn install --frozen-lockfile` przewracał się przed jakąkolwiek kompilacją (`exit code 1`).
+Lokalnie nie było tego widać, bo na tej maszynie stoi Node 24.
+
+Poprawka: `node-version: "20"` → `"24"` w `.github/workflows/build-pages.yml`. Zamiast
+`--ignore-engines`, bo ograniczenie jest prawdziwe, a Node 20 i tak jest wycofywany z runnerów.
+
+Wniosek do zapamiętania: dodanie zależności do frontendu może przewrócić CI w sposób niewidoczny
+lokalnie, gdy lokalny Node jest nowszy od tego z workflow. Wersja z workflow jest tą, która
+rozstrzyga.
+
+Ostrzeżenie o `actions/checkout@v4` i `actions/setup-node@v4` na Node 20 zostawione — dotyczy
+środowiska samych akcji, nie tego ustawienia, akcje nadal działają, a podniesienie majorów to
+osobna zmiana w narzędziach CI, nie część naprawy builda.

@@ -587,6 +587,25 @@ Acceptance:
 
 Evidence: pre/post snapshots, Google version history entry, the runbook.
 
+**Runbook content, collected 2026-08-13 when the owner asked what breaks if he edits the sheets by
+hand.** The module never edits or deletes an existing row — it writes only into empty rows or rows it
+inserted itself, so manual entries are safe by construction. Three things are not obvious, and all
+three fail quietly:
+
+1. **The marker column is hidden** (`N` in petty cash, `I` in the register). Clearing a robot row by
+   selecting the *visible* columns leaves the marker behind. The row then looks empty but is not: it
+   is never reused, and that exact entry can never be added again, because the marker is the
+   idempotency key. Delete the whole row instead of clearing cells.
+2. **A hand-made register block with a literal total stops the writer.** The insertion point is found
+   by taking the highest block number in column A and looking for `=SUM(` below it. A total typed as
+   a plain number means no sum row is found, `findLastBlock` returns null, and every later dispatch is
+   refused with "nie znaleziono zadnego kompletnego bloku". A block with no number in column A is
+   milder: the new block is inserted above it — wrong order, no data loss.
+3. **The idempotency key is a content hash** over kind, date, document number, amounts and
+   description. Two entries identical in all of those on the same day collide, and the second is
+   refused. In the live sheet descriptions always differ (`p.Irena 12/2025` vs `Krzysiek 12/2025`),
+   so this is a footnote rather than a defect — but it is the reason the description is in the hash.
+
 ---
 
 ## 5. Out of scope for stage 1
