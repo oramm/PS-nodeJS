@@ -8,6 +8,8 @@ import {
     baselinePendingMigrations,
     buildMigrationPlan,
     computeMigrationChecksum,
+    CONNECT_ATTEMPTS,
+    connectWithRetry,
     getVerificationErrors,
     isExecutableMigrationPath,
     listMigrationFiles,
@@ -270,5 +272,102 @@ describe('migrate runner helpers', () => {
         expect(connection.executedSql).toEqual([]);
         expect(connection.appliedRecords).toHaveLength(1);
         expect(connection.appliedRecords[0].executionMillis).toBeNull();
+    });
+});
+
+describe('connectWithRetry', () => {
+    const socketError = (code: string) => Object.assign(new Error(code), { code });
+    const protocolError = () =>
+        Object.assign(new Error('Access denied'), {
+            code: 'ER_ACCESS_DENIED_ERROR',
+            sqlState: '28000',
+        });
+
+    /** Zbiera odczekane przerwy zamiast naprawdę czekać - test nie dotyka zegara. */
+    const recordingWait = () => {
+        const waits: number[] = [];
+        return {
+            waits,
+            wait: async (ms: number) => {
+                waits.push(ms);
+            },
+        };
+    };
+
+    const connectionStub = () => ({}) as any;
+
+    it('zwraca polaczenie z pierwszej proby i nie czeka', async () => {
+        const { waits, wait } = recordingWait();
+        let calls = 0;
+
+        const connection = await connectWithRetry(
+            async () => {
+                calls += 1;
+                return connectionStub();
+            },
+            CONNECT_ATTEMPTS,
+            wait,
+        );
+
+        expect(connection).toBeDefined();
+        expect(calls).toBe(1);
+        expect(waits).toEqual([]);
+    });
+
+    it('ponawia zerwane polaczenie i zwraca to, ktore sie udalo', async () => {
+        const { waits, wait } = recordingWait();
+        let calls = 0;
+
+        await connectWithRetry(
+            async () => {
+                calls += 1;
+                if (calls < 3) throw socketError('ECONNRESET');
+                return connectionStub();
+            },
+            CONNECT_ATTEMPTS,
+            wait,
+        );
+
+        expect(calls).toBe(3);
+        // przerwa rosnie z kazda proba, zeby nie dobijac sie w kolko w tej samej sekundzie
+        expect(waits).toEqual([500, 1000]);
+    });
+
+    it('poddaje sie po wyczerpaniu prob i oddaje ostatni blad', async () => {
+        const { waits, wait } = recordingWait();
+        let calls = 0;
+
+        await expect(
+            connectWithRetry(
+                async () => {
+                    calls += 1;
+                    throw socketError('ECONNRESET');
+                },
+                4,
+                wait,
+            ),
+        ).rejects.toThrow('ECONNRESET');
+
+        expect(calls).toBe(4);
+        expect(waits).toHaveLength(3);
+    });
+
+    it('nie ponawia bledu protokolu - zle haslo nie naprawi sie samo', async () => {
+        const { waits, wait } = recordingWait();
+        let calls = 0;
+
+        await expect(
+            connectWithRetry(
+                async () => {
+                    calls += 1;
+                    throw protocolError();
+                },
+                CONNECT_ATTEMPTS,
+                wait,
+            ),
+        ).rejects.toThrow('Access denied');
+
+        expect(calls).toBe(1);
+        expect(waits).toEqual([]);
     });
 });

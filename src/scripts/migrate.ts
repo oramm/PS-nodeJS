@@ -326,8 +326,51 @@ function buildMigrationConnectionOptions(): mysql.ConnectionOptions {
     };
 }
 
+export const CONNECT_ATTEMPTS = 8;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// Błąd protokołu MySQL niesie sqlState (np. odmowa dostępu). Błąd gniazda go nie ma
+// i tylko taki bywa przelotny, więc tylko taki ma sens ponawiać.
+function isTransientConnectError(error: unknown): boolean {
+    return !(error as { sqlState?: string } | null)?.sqlState;
+}
+
+/**
+ * Zestawienie połączenia bywa zrywane przez hosting bazy: w sierpniu 2026 ponad połowa
+ * prób z Heroku kończyła się `ECONNRESET` jeszcze przed uwierzytelnieniem, przy czym ta
+ * sama próba sekundę później przechodziła bez zarzutu. Przy jednym podejściu release
+ * phase stawał się rzutem monetą i blokował wdrożenia mimo poprawnego stanu migracji.
+ *
+ * Ponawianie jest opatrunkiem na cudzą infrastrukturę, nie naprawą — jeśli w logu widać
+ * regularnie po kilka nieudanych prób, problem leży po stronie hostingu i tam należy go
+ * zgłosić.
+ */
+export async function connectWithRetry(
+    connect: () => Promise<Connection>,
+    attempts: number = CONNECT_ATTEMPTS,
+    wait: (ms: number) => Promise<void> = sleep,
+): Promise<Connection> {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await connect();
+        } catch (error) {
+            const code = (error as { code?: string } | null)?.code ?? 'unknown';
+            if (attempt >= attempts || !isTransientConnectError(error)) {
+                throw error;
+            }
+            console.warn(
+                `[migrate] connect attempt ${attempt}/${attempts} failed (${code}), retrying`,
+            );
+            await wait(500 * attempt);
+        }
+    }
+}
+
 async function createMigrationConnection(): Promise<Connection> {
-    return mysql.createConnection(buildMigrationConnectionOptions());
+    return connectWithRetry(() =>
+        mysql.createConnection(buildMigrationConnectionOptions()),
+    );
 }
 
 async function ensureTrackingTable(
