@@ -606,6 +606,51 @@ three fail quietly:
    refused. In the live sheet descriptions always differ (`p.Irena 12/2025` vs `Krzysiek 12/2025`),
    so this is a footnote rather than a defect — but it is the reason the description is in the hash.
 
+### P8 — Podpowiadanie kwot i numeru z paragonu/faktury — IN PROGRESS 2026-08-14
+
+Zakres zawężony przez właściciela: **wypełniane są trzy pola** — kwota brutto, kwota netto
+i numer dokumentu. Reszta wpisu zostaje ręczna, bo kliknięcie rodzaju czy opisu jest szybsze
+niż sprawdzanie, czy model zgadł.
+
+Decyzja właściciela (2026-08-14): **OCR po stronie serwera**, tesseract, spójnie z pismami.
+Wariant „zdjęcie prosto do modelu rozpoznającego obrazy" został odrzucony — reguła „do AI
+trafia tekst, nigdy obraz" zostaje w mocy także dla paragonów.
+
+Zrobione:
+1. `ToolsAI.extractTextFromFile` przyjmuje teraz **obrazy** (`ocrImageWithTesseract`). Wcześniej
+   rzucał `Unsupported file type` na wszystkim poza PDF i DOCX, więc zdjęcie z telefonu — jedyne
+   wejście, jakie ma paragon papierowy — nie przechodziło w ogóle. Sprzątanie katalogu
+   tymczasowego wyciągnięte do `removeTempDir`, wspólne z gałęzią PDF.
+2. `src/pettyCash/documents/ReceiptAnalyzer.ts` — bramka kotwic, wywołanie modelu, normalizacja.
+3. `POST /pettyCash/documents/analyze` za tą samą bramką ról co reszta modułu.
+4. Front: `DocumentScanPanel.tsx` (`capture="environment"` — telefon otwiera aparat, komputer
+   degraduje się do wyboru pliku) i `applySuggestion` w formularzu.
+5. 13 testów części rozstrzygających bez modelu: bramka kotwic, parsowanie kwot, normalizacja.
+
+Decyzje warte zapamiętania:
+- **Bramka kotwic przed wywołaniem modelu.** Tekst musi zawierać i słowo pieniężne, i coś
+  wyglądającego na kwotę z groszami. Zdjęcie nie tego dokumentu albo OCR zwracający śmieci nie
+  idą dalej — model i tak nie znajdzie kwoty, której nie ma, a zapłacilibyśmy za wypełnienie
+  pola czymś prawdopodobnie wyglądającym.
+- **Brak wartości zostaje brakiem.** Nigdzie nie podstawiamy zera ani nie liczymy netto
+  z podatku. Puste pole rzuca się w oczy bardziej niż liczba wzięta z sufitu.
+- **Netto wyższe od brutto jest odrzucane** — to znak, że model pomylił pola. Zostaje samo
+  brutto, bo to ono decyduje o stanie portfela.
+- **Nieudany odczyt to nie błąd HTTP.** Endpoint oddaje 200 z `recognized:false` i wyjaśnieniem;
+  wpis dalej da się zrobić ręcznie, tak jak dotąd.
+
+Środowisko: zakładałem, że tesseract nie istnieje na dynie Heroku, bo standardowy buildpack Node
+go nie zawiera. **Właściciel twierdzi, że działa — pisma z niego korzystają.** Do rozstrzygnięcia
+`which tesseract && tesseract --list-langs` w konsoli, bo dwie rzeczy mogą to mylić:
+OCR w pismach odpala się dopiero poniżej 400 znaków wyciągniętego tekstu, a większość pism to
+PDF-y z warstwą tekstową i tesseract nigdy nie jest wołany; do tego kod woła `-l pol+eng`, więc
+brak słownika `pol` daje pusty wynik zamiast czytelnego błędu. Paragon ze zdjęcia nie ma warstwy
+tekstowej, więc tam tesseract jest jedyną drogą.
+
+Niesprawdzone: **skuteczność na prawdziwym paragonie.** Papier termiczny, zdjęcie pod kątem
+i drobny druk to najtrudniejszy materiał dla tesseracta, a błędna cyfra w kwocie jest gorsza niż
+jej brak. Potrzebne zdjęcie realnego paragonu do oceny, zanim ktokolwiek na tym polegnie.
+
 ---
 
 ## 5. Out of scope for stage 1

@@ -652,4 +652,26 @@ odpowiedz na pytanie „czy to pojdzie do arkusza" brzmi zawsze tak samo.
 Testy: 99 backendu (5 suit), 68 frontu (6 plikow), oba typechecki czyste. Zadnego testu nie
 trzeba bylo poprawiac — zaden nie dotykal flagi, co samo w sobie mowi, ile ona wnosila.
 
+### 2026-08-14 — Session 15, odblokowanie wdrozen
+
+Nie dotyczy samego modulu, ale blokowalo jego wdrozenie. Release phase na Heroku
+(`migrate.js verify`) konczyl sie `ECONNRESET` przy nawiazywaniu polaczenia; trzy wdrozenia
+z rzedu odrzucone. Po odrzuceniu czterech hipotez (modul zaliczek, liczba migracji,
+uprawnienia MySQL, blokada po adresie) zostala jedna, potwierdzona pomiarem: **zestawienie
+nowego polaczenia z baza zawodzi losowo, w ponad polowie prob**. Rozstrzygajacy dowod: z tego
+samego adresu, w odstepie dwoch sekund, jedna proba dostala reset, a druga przeszla.
+
+Aplikacja tego nie odczuwa, bo trzyma pule polaczen. Dyno wydania mialo jedno podejscie bez
+ponowienia, wiec wdrozenie bylo rzutem moneta.
+
+Zmiana: `connectWithRetry` w `src/scripts/migrate.ts` (osiem prob, przerwa rosnaca, ponawiane
+tylko bledy gniazda). Potwierdzone na produkcji - pierwsze wdrozenie po zmianie pokazalo dwie
+nieudane proby i sukces w trzeciej, calosc w 2,06 s.
+
+**Skutek dla P7:** wydanie zostalo promowane, wiec backend modulu zaliczek **jest juz na
+produkcji**, razem ze zmienna `PETTY_CASH_SPREADSHEET_ID` ustawiona 13.08. Poniewaz tryb
+probny zostal usuniety w sesji 14, zapis jest od tej chwili rzeczywisty i kieruje sie
+wylacznie tym, na co wskazuja identyfikatory w konfiguracji Heroku. Do zweryfikowania przez
+wlasciciela, zanim ktokolwiek uzyje formularza.
+
 Checkpoint status: P7 still open.

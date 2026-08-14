@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
-import { app } from '../index';
+import { app, upload } from '../index';
 import Setup from '../setup/Setup';
+import ReceiptAnalyzer from './documents/ReceiptAnalyzer';
 import { SystemRoleName } from '../types/sessionTypes';
 import PettyCashEntryController, {
     PettyCashError,
@@ -80,3 +81,40 @@ app.post('/pettyCash/entries', async (req: Request, res: Response, next) => {
         handle(error, res, next);
     }
 });
+
+/**
+ * POST /pettyCash/documents/analyze
+ * Zdjecie albo PDF paragonu/faktury -> podpowiedzi kwot i numeru dokumentu.
+ *
+ * Niczego nie zapisuje: oddaje wartosci do wstawienia w formularz, ktory czlowiek
+ * i tak oglada w podgladzie przed zatwierdzeniem. Blad rozpoznania nie jest wiec
+ * bledem systemu - dlatego przy nieudanym odczycie odpowiadamy 200 z `recognized:false`
+ * i wyjasnieniem, a nie kodem bledu.
+ */
+app.post(
+    '/pettyCash/documents/analyze',
+    upload.single('file') as any,
+    async (req: Request, res: Response, next) => {
+        try {
+            const file = (req as any).file as Express.Multer.File | undefined;
+            if (!file) {
+                res.status(400).json({ error: 'Brak pliku do analizy' });
+                return;
+            }
+            res.json(await ReceiptAnalyzer.analyze(file));
+        } catch (error) {
+            // Nieobslugiwany format albo brak tesseracta to nie awaria wpisu - czlowiek
+            // wpisuje dane recznie tak samo jak dotad.
+            console.warn('[pettyCash] analiza dokumentu nieudana:', error);
+            res.json({
+                documentNumber: null,
+                netAmount: null,
+                grossAmount: null,
+                recognized: false,
+                reason:
+                    'Nie udalo sie odczytac tego pliku. Wpisz kwoty i numer recznie, ' +
+                    'albo sprobuj z wyrazniejszym zdjeciem.',
+            });
+        }
+    },
+);

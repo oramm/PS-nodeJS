@@ -144,7 +144,62 @@ export default class ToolsAI {
             return value || '';
         }
 
+        // Zdjęcie z telefonu - jedyne wejście, jakie ma paragon papierowy. Tesseract czyta
+        // JPG/PNG wprost, więc w odróżnieniu od PDF nie ma tu kroku rasteryzacji.
+        if (file.mimetype.startsWith('image/')) {
+            return await this.ocrImageWithTesseract(file.buffer, file.mimetype);
+        }
+
         throw new Error('Unsupported file type for text extraction');
+    }
+
+    /** Rozszerzenie pliku tymczasowego - tesseract rozpoznaje format po zawartości, ale nie lubi jego braku. */
+    private static imageExtension(mimetype: string): string {
+        const subtype = mimetype.split('/')[1]?.toLowerCase() ?? '';
+        if (subtype === 'jpeg' || subtype === 'jpg') return 'jpg';
+        return subtype.replace(/[^a-z0-9]/g, '') || 'png';
+    }
+
+    /**
+     * OCR obrazu przez tesseract CLI. Wymaga `tesseract` w systemie - tak samo jak
+     * `ocrPdfWithTesseract`, z ktorym dzieli sposob wolania i sprzatanie.
+     */
+    static async ocrImageWithTesseract(
+        buffer: Buffer,
+        mimetype: string,
+    ): Promise<string> {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-img-'));
+        const imgPath = path.join(tmpDir, `input.${this.imageExtension(mimetype)}`);
+        const outBase = path.join(tmpDir, 'out');
+        fs.writeFileSync(imgPath, buffer);
+
+        try {
+            await execFile('tesseract', [imgPath, outBase, '-l', 'pol+eng']);
+            const outTxt = outBase + '.txt';
+            if (!fs.existsSync(outTxt)) {
+                console.warn(
+                    'ToolsAI.ocrImageWithTesseract - expected tesseract output missing for',
+                    imgPath,
+                );
+                return '';
+            }
+            return fs.readFileSync(outTxt, 'utf8').trim();
+        } finally {
+            this.removeTempDir(tmpDir);
+        }
+    }
+
+    private static removeTempDir(tmpDir: string): void {
+        try {
+            fs.readdirSync(tmpDir).forEach((f) => {
+                try {
+                    fs.unlinkSync(path.join(tmpDir, f));
+                } catch (e) {}
+            });
+            fs.rmdirSync(tmpDir);
+        } catch (e) {
+            console.warn('OCR cleanup failed', e);
+        }
     }
 
     /**
@@ -186,24 +241,14 @@ export default class ToolsAI {
 
             return fullText.trim();
         } finally {
-            // cleanup
-            try {
-                fs.readdirSync(tmpDir).forEach((f) => {
-                    try {
-                        fs.unlinkSync(path.join(tmpDir, f));
-                    } catch (e) {}
-                });
-                fs.rmdirSync(tmpDir);
-            } catch (e) {
-                console.warn('OCR cleanup failed', e);
-            }
+            this.removeTempDir(tmpDir);
         }
     }
 
     /**
      * Extract _model and _usage metadata from an OpenAI completion response
      */
-    private static extractCompletionMeta(completion: any): {
+    static extractCompletionMeta(completion: any): {
         _model?: string;
         _usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     } {

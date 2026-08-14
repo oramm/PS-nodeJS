@@ -557,6 +557,49 @@ edytuje ani nie kasuje istniejącego wiersza** — i wykazał jedną usterkę ra
 Files touched — frontend: `src/Erp/PettyCash/pettyCashApi.ts`, `PettyCashEntryPage.tsx`,
 `pettyCashApi.test.ts` (new). 72 testy frontu, typecheck czysty.
 
+---
+
+## 2026-08-14 — zablokowane wdrożenia: zawodne połączenie z bazą
+
+Nie dotyczy modułu zaliczek, ale zablokowało jego wdrożenie, więc trafia do tego dziennika.
+
+Objaw: release phase na Heroku (`migrate.js verify`) kończył się `ECONNRESET` przy
+`createConnection`. Trzy wdrożenia z rzędu odrzucone, w tym takie, które nie miało z bazą
+nic wspólnego.
+
+Diagnoza, po odrzuceniu czterech hipotez:
+- **nie moduł zaliczek** — pierwsza porażka (v530, 13.08 15:34) wystąpiła przy samej zmianie
+  zmiennej konfiguracyjnej, zanim kod trafił na Heroku; moduł nie dodał żadnej migracji;
+- **nie liczba migracji** — błąd pada w `createMigrationConnection`, zanim skrypt otworzy
+  pierwszy plik; `verify` niczego nie wykonuje, a lokalnie przechodzi (`repo=58 pending=0 drift=0`);
+- **nie uprawnienia MySQL** — lista dozwolonych hostów użytkownika zawiera `%`, a te same
+  poświadczenia łączą się skutecznie, gdy próba akurat się powiedzie;
+- **nie blokada po adresie** — z tego samego adresu, w odstępie dwóch sekund, jedna próba
+  dostała reset, a druga przeszła w całości. To był dowód rozstrzygający.
+
+Rzeczywista przyczyna: **zestawienie nowego połączenia z bazą zawodzi losowo, w ponad połowie
+prób** (6 porażek na 10 obserwowanych prób z Heroku). Aplikacja tego nie odczuwa, bo trzyma
+pulę połączeń; dyno wydania miało jedno podejście bez ponowienia, więc wdrożenie było rzutem
+monetą. Mechanizmu nie ustalono — albo część adresów NAT Amazona jest u Kylosa obłożona, albo
+serwer współdzielony ucina połączenia przy limicie. Zgłoszone do hostingu.
+
+Zmiana: `connectWithRetry` w `src/scripts/migrate.ts` — osiem prób, przerwa rosnąca od 0,5 s.
+Ponawiane są wyłącznie błędy gniazda; błąd protokołu MySQL (niesie `sqlState`, np. odmowa
+dostępu) leci od razu w górę, bo sam się nie naprawi. Każda nieudana próba zostawia linię
+w logu **celowo** — inaczej łatka schowałaby problem hostingu i nikt by o nim nie pamiętał.
+
+Files touched: `src/scripts/migrate.ts`, `src/scripts/__tests__/migrate.test.ts`
+
+Impact type: Ops
+
+Notes:
+- 11 testów w pliku przechodzi (7 istniejących + 4 nowe), typecheck czysty. Testy wstrzykują
+  własną funkcję czekania, więc nie dotykają zegara.
+- **Potwierdzone na produkcji**: pierwsze wdrożenie po zmianie pokazało dwie nieudane próby
+  i sukces w trzeciej, całość w 2,06 s. Wydanie przeszło.
+- Skuteczność: przy awaryjności ~60% jedno podejście dawało ~60% ryzyka; osiem prób schodzi
+  do ~1,7%.
+
 Drugi follow-up: **zależność skanera zepsuła CI frontendu** i wyszło to dopiero po commicie
 właściciela. `@zxing/library@0.23.0` deklaruje `engines.node >= 24.0.0`, a `build-pages.yml`
 przypinał Node 20; yarn 1 traktuje niezgodność silnika jako błąd twardy, więc
