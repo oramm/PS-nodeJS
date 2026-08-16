@@ -11,6 +11,7 @@ const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'microsoftId',
     'microsoftRefreshToken',
     'isActive',
+    'fidmanEnabled',
 ] as const;
 
 const parsePositiveInt = (raw: string, fieldName: string): number => {
@@ -186,6 +187,7 @@ app.put(
                 microsoftId: payload?.microsoftId,
                 microsoftRefreshToken: payload?.microsoftRefreshToken,
                 isActive: payload?.isActive,
+                fidmanEnabled: payload?.fidmanEnabled,
             });
             res.send(account);
         } catch (error) {

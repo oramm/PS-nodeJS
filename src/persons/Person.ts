@@ -21,6 +21,11 @@ export default class Person extends BusinessObject implements PersonData {
      * mieszkają w PersonProjects. Pole podróżuje tam i z powrotem, żeby klient
      * dostał z odpowiedzi to, co wysłał, i mógł zapisać przypisania po zapisie osoby. */
     _projectAssignments?: { ourId: string }[];
+    /** GLO-P1: flaga „użytkownik FIDmana". Nie jest kolumną Persons - mieszka
+     * w PersonAccounts. Pole podróżuje tam i z powrotem z tego samego powodu co
+     * _projectAssignments: klient dostaje z odpowiedzi to, co wysłał, i dopiero wtedy
+     * zapisuje ją trasą konta v2. Bez tego zaznaczenie ginęło po drodze. */
+    fidmanEnabled?: boolean;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Persons' });
@@ -45,5 +50,6 @@ export default class Person extends BusinessObject implements PersonData {
                 this.name.substring(0, 1) + this.surname.substring(0, 3);
         this._skillNames = initParamObject._skillNames;
         this._projectAssignments = initParamObject._projectAssignments;
+        this.fidmanEnabled = initParamObject.fidmanEnabled;
     }
 }

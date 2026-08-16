@@ -34,6 +34,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         'microsoftId',
         'microsoftRefreshToken',
         'isActive',
+        'fidmanEnabled',
     ] as const;
 
     static readonly PROFILE_FIELDS = [
@@ -114,7 +115,8 @@ export default class PersonRepository extends BaseRepository<Person> {
                     GoogleRefreshToken,
                     MicrosoftId,
                     MicrosoftRefreshToken,
-                    IsActive
+                    IsActive,
+                    FidmanEnabled
              FROM PersonAccounts
              WHERE PersonId = ?
              LIMIT 1`,
@@ -132,6 +134,50 @@ export default class PersonRepository extends BaseRepository<Person> {
             microsoftId: row.MicrosoftId ?? undefined,
             microsoftRefreshToken: row.MicrosoftRefreshToken ?? undefined,
             isActive: Boolean(row.IsActive),
+            fidmanEnabled: Boolean(row.FidmanEnabled),
+        };
+    }
+
+    /**
+     * GLO-P1 — dane osoby potrzebne do payloadu `user.upsert`, czytane w transakcji zapisu.
+     *
+     * SystemEmail bierzemy z PersonAccounts z zapasem na Persons (ten sam COALESCE, którym
+     * czyta fasada v2): PersonAccounts jest źródłem świeższym, ale nie każda osoba ma tam
+     * wypełniony adres. Telefon i podmiot są tylko w Persons.
+     */
+    async getFidmanUserSourceInConn(
+        conn: mysql.PoolConnection,
+        personId: number,
+    ): Promise<{
+        personId: number;
+        entityId: number | null;
+        name: string | null;
+        surname: string | null;
+        systemEmail: string | null;
+        cellphone: string | null;
+    } | undefined> {
+        const [rows] = await conn.query<any[]>(
+            `SELECT Persons.Id AS PersonId,
+                    Persons.EntityId AS EntityId,
+                    Persons.Name AS Name,
+                    Persons.Surname AS Surname,
+                    Persons.Cellphone AS Cellphone,
+                    COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail
+             FROM Persons
+             LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
+             WHERE Persons.Id = ?
+             LIMIT 1`,
+            [personId],
+        );
+        const row = rows[0];
+        if (!row) return undefined;
+        return {
+            personId: row.PersonId,
+            entityId: row.EntityId ?? null,
+            name: row.Name ?? null,
+            surname: row.Surname ?? null,
+            systemEmail: row.SystemEmail ?? null,
+            cellphone: row.Cellphone ?? null,
         };
     }
 
@@ -503,6 +549,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             microsoftId?: string;
             microsoftRefreshToken?: string;
             isActive?: boolean;
+            fidmanEnabled?: boolean;
         },
         conn: mysql.PoolConnection,
         fieldsToSync: Array<
@@ -513,6 +560,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'microsoftId'
             | 'microsoftRefreshToken'
             | 'isActive'
+            | 'fidmanEnabled'
         > = [
             'systemRoleId',
             'systemEmail',
@@ -521,6 +569,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             'microsoftId',
             'microsoftRefreshToken',
             'isActive',
+            'fidmanEnabled',
         ],
     ): Promise<void> {
         if (!person.id)
@@ -548,6 +597,9 @@ export default class PersonRepository extends BaseRepository<Person> {
             isActive:
                 fieldsToSync.includes('isActive') &&
                 person.isActive !== undefined,
+            fidmanEnabled:
+                fieldsToSync.includes('fidmanEnabled') &&
+                person.fidmanEnabled !== undefined,
         };
 
         if (!Object.values(syncFieldMap).some(Boolean)) return;
@@ -602,6 +654,10 @@ export default class PersonRepository extends BaseRepository<Person> {
                     setParts.push('IsActive = ?');
                     updateValues.push(person.isActive ? 1 : 0);
                 }
+                if (syncFieldMap.fidmanEnabled) {
+                    setParts.push('FidmanEnabled = ?');
+                    updateValues.push(person.fidmanEnabled ? 1 : 0);
+                }
 
                 updateValues.push(person.id);
                 await conn.execute(
@@ -647,6 +703,11 @@ export default class PersonRepository extends BaseRepository<Person> {
                     columns.push('IsActive');
                     placeholders.push('?');
                     insertValues.push(person.isActive ? 1 : 0);
+                }
+                if (syncFieldMap.fidmanEnabled) {
+                    columns.push('FidmanEnabled');
+                    placeholders.push('?');
+                    insertValues.push(person.fidmanEnabled ? 1 : 0);
                 }
 
                 await conn.execute(
@@ -755,8 +816,19 @@ export default class PersonRepository extends BaseRepository<Person> {
         );
     }
 
+    /**
+     * GLO-P1: flagę FIDmana wolno zapisać WYŁĄCZNIE trasą konta v2
+     * (PersonsController.upsertPersonAccountV2), bo tylko ona kolejkuje `user.upsert`.
+     * Ogólna trasa edycji osoby zapisałaby ją po cichu, bez pusha - i FIDman rozjechałby
+     * się z PS bez żadnego śladu. Dlatego pole wypada tu z listy pól konta do zapisu.
+     */
+    static readonly ACCOUNT_FIELDS_WRITABLE_ONLY_VIA_ACCOUNT_ROUTE = [
+        'fidmanEnabled',
+    ] as const;
+
     getAccountWriteFields(
         fieldsToUpdate: string[] = [],
+        options: { allowAccountRouteOnlyFields?: boolean } = {},
     ): Array<
         | 'systemRoleId'
         | 'systemEmail'
@@ -765,10 +837,17 @@ export default class PersonRepository extends BaseRepository<Person> {
         | 'microsoftId'
         | 'microsoftRefreshToken'
         | 'isActive'
+        | 'fidmanEnabled'
     > {
-        const accountFields = new Set<string>([
-            ...PersonRepository.ACCOUNT_FIELDS,
+        const restricted = new Set<string>([
+            ...PersonRepository.ACCOUNT_FIELDS_WRITABLE_ONLY_VIA_ACCOUNT_ROUTE,
         ]);
+        const accountFields = new Set<string>(
+            [...PersonRepository.ACCOUNT_FIELDS].filter(
+                (field) =>
+                    options.allowAccountRouteOnlyFields || !restricted.has(field),
+            ),
+        );
         return fieldsToUpdate.filter((field) =>
             accountFields.has(field),
         ) as Array<
@@ -779,6 +858,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'microsoftId'
             | 'microsoftRefreshToken'
             | 'isActive'
+            | 'fidmanEnabled'
         >;
     }
 

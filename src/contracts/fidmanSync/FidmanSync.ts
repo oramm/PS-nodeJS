@@ -36,7 +36,8 @@ type AnyContract = ContractOur | ContractOther;
 export type FidmanKind =
     | 'contract.upsert'
     | 'entity.upsert'
-    | 'project.upsert';
+    | 'project.upsert'
+    | 'user.upsert';
 
 export type FidmanRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
@@ -76,10 +77,28 @@ export type FidmanProjectPayload = FidmanProjectRef & {
     comment?: string;
 };
 
+/**
+ * GLO-P1 (D-GLO-4) — osoba z PS oznaczona jako „użytkownik FIDmana".
+ *
+ * Kształt jest kopią schematu zod po stronie FIDmana (apps/api/src/ps-sync/validation.ts,
+ * `userPayloadSchema`), bo to on decyduje o 200 albo 400. `email` to SystemEmail, czyli
+ * tożsamość logowania Google — nie adres kontaktowy.
+ */
+export type FidmanUserPayload = {
+    legacyPersonId: number;
+    legacyEntityId: number;
+    email: string;
+    name: string;
+    surname: string;
+    phone?: string;
+    enabled: boolean;
+};
+
 export type FidmanEnvelope =
     | { kind: 'contract.upsert'; payload: FidmanContractPayload }
     | { kind: 'entity.upsert'; payload: FidmanEntityPayload }
-    | { kind: 'project.upsert'; payload: FidmanProjectPayload };
+    | { kind: 'project.upsert'; payload: FidmanProjectPayload }
+    | { kind: 'user.upsert'; payload: FidmanUserPayload };
 
 export type FidmanIngestResponse = {
     created?: number;
@@ -215,6 +234,130 @@ export async function enqueueFidmanProjectPush(
     conn: mysql.PoolConnection
 ): Promise<number> {
     return enqueueRow(buildProjectUpsert(project), (project as any).id, conn);
+}
+
+// ==================== GLO-P1: user.upsert ====================
+
+/**
+ * Dane osoby potrzebne do zbudowania payloadu użytkownika. Zbierane w PS z dwóch miejsc:
+ * `Persons` (imię, nazwisko, telefon, podmiot) i `PersonAccounts` (SystemEmail, flaga).
+ */
+export type FidmanUserSource = {
+    personId?: number;
+    entityId?: number | null;
+    name?: string | null;
+    surname?: string | null;
+    /** PersonAccounts.SystemEmail (świeższe źródło niż Persons.SystemEmail — GLO-R0 pkt 4). */
+    systemEmail?: string | null;
+    /** PS Persons.Cellphone. */
+    cellphone?: string | null;
+};
+
+/**
+ * Twarde limity strony przyjmującej (fidschm.users). Przekroczenie po stronie FIDmana to
+ * 400 i wiersz FAILED w outboxie, więc PS odrzuca zapis wcześniej — użytkownik ma zobaczyć
+ * problem w formularzu, a nie w tabeli synchronizacji.
+ */
+export const FIDMAN_USER_LIMITS = {
+    name: 63,
+    surname: 32,
+    email: { min: 6, max: 96 },
+} as const;
+
+/** Ten sam wzorzec, którym FIDman sprawdza adres (apps/api/src/trpc/validation.ts). */
+const FIDMAN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const trimmedOrEmpty = (value: string | null | undefined): string =>
+    (value ?? '').trim();
+
+/**
+ * Sprawdza, czy z tej osoby da się zbudować payload, który FIDman przyjmie.
+ * Zwraca listę komunikatów po polsku; pusta lista = payload przejdzie.
+ *
+ * Ta funkcja nie zgaduje i niczego nie naprawia: obcięcie za długiego imienia dałoby
+ * w FIDmanie inne nazwisko niż w PS, a to gorsze niż odmowa zapisu.
+ */
+export function validateFidmanUserSource(source: FidmanUserSource): string[] {
+    const problems: string[] = [];
+    const email = trimmedOrEmpty(source.systemEmail);
+    const name = trimmedOrEmpty(source.name);
+    const surname = trimmedOrEmpty(source.surname);
+
+    if (!email) {
+        problems.push('Użytkownik FIDmana musi mieć e-mail systemowy.');
+    } else if (
+        email.length < FIDMAN_USER_LIMITS.email.min ||
+        !FIDMAN_EMAIL_PATTERN.test(email)
+    ) {
+        problems.push(
+            'E-mail systemowy użytkownika FIDmana ma nieprawidłowy format.'
+        );
+    } else if (email.length > FIDMAN_USER_LIMITS.email.max) {
+        problems.push(
+            `E-mail systemowy użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
+        );
+    }
+
+    if (!name) problems.push('Użytkownik FIDmana musi mieć imię.');
+    else if (name.length > FIDMAN_USER_LIMITS.name)
+        problems.push(
+            `Imię użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
+        );
+
+    if (!surname) problems.push('Użytkownik FIDmana musi mieć nazwisko.');
+    else if (surname.length > FIDMAN_USER_LIMITS.surname)
+        problems.push(
+            `Nazwisko użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
+        );
+
+    if (!source.entityId)
+        problems.push('Użytkownik FIDmana musi być przypisany do podmiotu.');
+
+    return problems;
+}
+
+/**
+ * Build the FIDman `user.upsert` envelope for a PS person flagged "użytkownik FIDmana".
+ *
+ * `phone` jedzie bez zmian, także gdy jest dłuższy niż kolumna FIDmana (varchar(16)):
+ * przycięcie po stronie PS dałoby numer, który wygląda na prawdziwy i nim nie jest.
+ * Pomijanie za długiego numeru jest świadomie po stronie FIDmana (PHONE_MAX_LEN
+ * w apps/api/src/ps-sync/handlers.ts) — dotyczy 2 osób ze 179 (pomiar GLO-R0).
+ */
+export function buildUserUpsert(
+    source: FidmanUserSource,
+    enabled: boolean
+): FidmanEnvelope {
+    const phone = trimmedOrEmpty(source.cellphone);
+    return {
+        kind: 'user.upsert',
+        payload: {
+            legacyPersonId: source.personId as number,
+            legacyEntityId: source.entityId as number,
+            email: trimmedOrEmpty(source.systemEmail),
+            name: trimmedOrEmpty(source.name),
+            surname: trimmedOrEmpty(source.surname),
+            ...(phone ? { phone } : {}),
+            enabled,
+        },
+    };
+}
+
+/**
+ * Kolejkuje `user.upsert` tą samą drogą co pozostałe rodzaje: wiersz outboxu powstaje
+ * w TEJ SAMEJ transakcji co zapis konta (L8), a dostawa jest wyłącznie post-commit.
+ * RefId = PS Persons.Id.
+ */
+export async function enqueueFidmanUserPush(
+    source: FidmanUserSource,
+    enabled: boolean,
+    conn: mysql.PoolConnection
+): Promise<number> {
+    return enqueueRow(
+        buildUserUpsert(source, enabled),
+        source.personId,
+        conn
+    );
 }
 
 function typeIdInClause(): { clause: string; ids: number[] } {
@@ -403,6 +546,16 @@ export function fidmanSkipReasonLabel(reason: string | null): string | null {
             return 'FIDman potrzebuje uzupełnienia danych kontrahenta, aby zaktualizować rekord.';
         case 'NO_NIP':
             return 'Brak numeru NIP kontrahenta — FIDman nie może dopasować/utworzyć rekordu bez NIP.';
+        // GLO-P1: powody pominięcia użytkownika (D-GLO-4 + GOOGLE_EMAIL_TAKEN z GLO-F3).
+        // Żaden z nich nie jest awarią — to odmowa zgadywania po stronie FIDmana.
+        case 'EMAIL_AMBIGUOUS':
+            return 'W FIDmanie jest więcej niż jedno konto z tym adresem — FIDman nie zgaduje, do którego dowiązać osobę z PS.';
+        case 'ENTITY_NOT_IN_FIDMAN':
+            return 'Podmiotu tej osoby nie ma jeszcze w FIDmanie — wchodzi tam dopiero z umową Żółtą/Czerwoną.';
+        case 'LAST_STARTUP_USER':
+            return 'To ostatnie włączone konto administratora FIDmana — nie zostanie wyłączone.';
+        case 'GOOGLE_EMAIL_TAKEN':
+            return 'Ten adres Google należy już do innego konta w FIDmanie.';
         default:
             return reason ? `Nieznany powód pominięcia: ${reason}` : null;
     }

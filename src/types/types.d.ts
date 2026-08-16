@@ -458,6 +458,8 @@ export interface PersonData extends RepositoryDataItem {
     _entity?: EntityData;
     _nameSurnameEmail?: string;
     systemEmail?: string;
+    /** GLO-P1: flaga konta (PersonAccounts), nie kolumna Persons — patrz Person.ts. */
+    fidmanEnabled?: boolean;
 }
 
 export interface PersonAccountV2Payload {
@@ -469,6 +471,8 @@ export interface PersonAccountV2Payload {
     microsoftId?: string;
     microsoftRefreshToken?: string;
     isActive?: boolean;
+    /** GLO-P1: osoba jest użytkownikiem FIDmana (logowanie kontem Google z SystemEmail). */
+    fidmanEnabled?: boolean;
 }
 
 export interface PersonProfileV2Payload {
