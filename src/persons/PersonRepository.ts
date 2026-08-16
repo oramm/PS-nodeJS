@@ -53,6 +53,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         return new EnviErrors.DbError(
             `SystemEmail '${systemEmail}' is already used by another person account.`,
             'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+            409,
         );
     }
 

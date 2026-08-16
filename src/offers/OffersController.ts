@@ -549,12 +549,20 @@ export default class OffersController extends BaseController<
                 let userFriendlyMessage =
                     'Wystąpił błąd podczas usuwania oferty.';
                 let errorCode = 'DB_ERROR';
+                // 500: nieznana awaria bazy. 409 dopiero wtedy, gdy wiemy, że to
+                // pomyłka użytkownika (oferta wciąż jest w użyciu).
+                let errorStatus: number | undefined;
                 if ('errno' in err && err.errno === 1451) {
                     userFriendlyMessage =
                         'Nie można usunąć oferty, ponieważ są dla niej zarejestrowane pisma. \n\n Aby usunąć ofertę należy najpierw usunąć wszystkie pisma z nią związane.';
                     errorCode = 'FOREIGN_KEY_CONSTRAINT';
+                    errorStatus = 409;
                 }
-                throw new EnviErrors.DbError(userFriendlyMessage, errorCode);
+                throw new EnviErrors.DbError(
+                    userFriendlyMessage,
+                    errorCode,
+                    errorStatus
+                );
             }
             throw err; // Rzucenie pierwotnego błędu, jeśli nie jest to instancja Error
         }

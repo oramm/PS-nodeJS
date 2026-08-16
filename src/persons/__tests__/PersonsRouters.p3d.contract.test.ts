@@ -1,4 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import EnviErrors from '../../tools/Errors';
+import { resolveHttpErrorStatus } from '../../tools/httpErrorStatus';
 
 const postMock = jest.fn();
 const putMock = jest.fn();
@@ -144,5 +146,35 @@ describe('PersonsRouters P3-D transition validation', () => {
         });
         expect(res.status).not.toHaveBeenCalled();
         expect(next).not.toHaveBeenCalled();
+    });
+
+    it('forwards a SystemEmail conflict as HTTP 409, not 500', async () => {
+        const req = {
+            params: { personId: '591' },
+            parsedBody: { systemEmail: 'duplicate@test.local' },
+            body: {},
+        } as any;
+        const res = {
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn(),
+            send: jest.fn(),
+        } as any;
+        const next = jest.fn();
+
+        PersonsController.upsertPersonAccountV2.mockRejectedValueOnce(
+            new EnviErrors.DbError(
+                "SystemEmail 'duplicate@test.local' is already used by another person account.",
+                'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+                409,
+            ),
+        );
+
+        await accountPutHandler(req, res, next);
+
+        expect(next).toHaveBeenCalledTimes(1);
+        const forwardedError = (next as any).mock.calls[0][0];
+        // 409 zamiast 500: klient nie ponawia zadania, zespol nie dostaje maila-raportu.
+        expect(resolveHttpErrorStatus(forwardedError)).toBe(409);
+        expect(res.send).not.toHaveBeenCalled();
     });
 });

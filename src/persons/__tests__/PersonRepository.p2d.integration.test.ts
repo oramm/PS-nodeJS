@@ -28,6 +28,7 @@ describe('PersonRepository P2-D idempotency hardening', () => {
         ).rejects.toMatchObject({
             name: 'DbError',
             code: 'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+            status: 409,
         });
 
         expect(mockConn.query).toHaveBeenCalledWith(
@@ -55,6 +56,7 @@ describe('PersonRepository P2-D idempotency hardening', () => {
         ).rejects.toMatchObject({
             name: 'DbError',
             code: 'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+            status: 409,
         });
     });
 

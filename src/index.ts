@@ -24,6 +24,11 @@ import projectScopedPolicy from './setup/Sessions/projectScopedPolicy';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
 import { resolveSeverity } from './bugEvents/BugPriority';
+import {
+    resolveHttpErrorStatus,
+    isDuplicateEntryError,
+    isRowReferencedError,
+} from './tools/httpErrorStatus';
 import { createHash, timingSafeEqual } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
@@ -721,27 +726,10 @@ app.use(
     async (err: unknown, req: Request, res: Response, next: NextFunction) => {
         console.error('Wystąpił błąd:', err);
 
-        // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.
         // ponytail: jeden generyczny komunikat z nazwą klucza, bez mapowania per encja
-        const isDuplicateEntry = (err as any)?.code === 'ER_DUP_ENTRY';
-        // Próba usunięcia wiersza słownika, do którego coś jeszcze się odwołuje,
-        // to również błąd użytkownika (409), a nie awaria serwera.
-        const isReferenced =
-            (err as any)?.code === 'ER_ROW_IS_REFERENCED_2' ||
-            (err as any)?.code === 'ER_ROW_IS_REFERENCED';
-        // Błąd, który sam zna swój status HTTP (np. ForbiddenError z ProjectScopeGuard albo
-        // walidacja wejścia), nie jest awarią serwera. Bez tego każda odmowa dostępu i każda
-        // literówka użytkownika szłaby jako 500, czyli z mailem-raportem do zespołu.
-        const explicitStatus = (err as any)?.status;
-        const hasExplicitClientStatus =
-            Number.isInteger(explicitStatus) &&
-            explicitStatus >= 400 &&
-            explicitStatus < 500;
-        const statusCode = hasExplicitClientStatus
-            ? explicitStatus
-            : isDuplicateEntry || isReferenced
-              ? 409
-              : 500;
+        const isDuplicateEntry = isDuplicateEntryError(err);
+        const isReferenced = isRowReferencedError(err);
+        const statusCode = resolveHttpErrorStatus(err);
 
         const rawMessage = err instanceof Error ? err.message : 'Nieznany błąd';
         const duplicateKey = isDuplicateEntry
