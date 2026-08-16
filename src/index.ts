@@ -19,6 +19,7 @@ import agentTokenAuth, {
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
 import requireSession from './setup/Sessions/requireSession';
+import { resolveSessionSecrets } from './setup/Sessions/sessionSecret';
 import projectScopedPolicy from './setup/Sessions/projectScopedPolicy';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
 import BugEventRepository from './bugEvents/BugEventRepository';
@@ -491,7 +492,7 @@ app.use(
             collectionName: 'sessions',
         }),
         name: 'connect.sid',
-        secret: 'your-random-secret-19890913007',
+        secret: resolveSessionSecrets(),
         resave: false,
         saveUninitialized: false,
         rolling: true,
