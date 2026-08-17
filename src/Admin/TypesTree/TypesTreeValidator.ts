@@ -9,6 +9,9 @@ export type NewMilestoneTypeDto = {
     contractTypeId: number;
     folderNumber: string;
     isDefault: boolean;
+    /** Nazwa i opis kamienia zakładanego automatycznie; puste = weź z typu. */
+    templateName: string;
+    templateDescription: string;
 };
 
 export type NewCaseTypeDto = {
@@ -22,6 +25,11 @@ export type NewCaseTypeDto = {
     isSubCaseOnly: boolean;
     /** Typy spraw, pod którymi ten typ może wystąpić jako podsprawa. */
     parentCaseTypeIds: number[];
+    /** Nazwa i opis sprawy zakładanej automatycznie; puste = weź z typu. */
+    templateName: string;
+    templateDescription: string;
+    /** Zadania zakładane razem ze sprawą. */
+    taskTemplates: { name: string; description: string; status: string }[];
 };
 
 /**
@@ -39,6 +47,14 @@ export default class TypesTreeValidator {
             description: this.optionalText(dto.description, 'Opis', 250),
             isUniquePerContract: !!dto.isUniquePerContract,
             isInScrumByDefault: !!dto.isInScrumByDefault,
+            // Szablon wisi na TYPIE kamienia, a flaga „domyślny” na krawędzi
+            // z typem umowy - nazwa jest więc wspólna dla wszystkich typów umów.
+            templateName: this.optionalText(dto.templateName, 'Nazwa kamienia', 150),
+            templateDescription: this.optionalText(
+                dto.templateDescription,
+                'Opis kamienia',
+                300
+            ),
             contractTypeId: this.requireId(dto.contractTypeId, 'typu umowy'),
             // Kolumna FolderNumber to CHAR(2) - dłuższa wartość zostałaby obcięta po cichu.
             folderNumber: this.requireText(dto.folderNumber, 'Numer folderu', 2),
@@ -75,7 +91,34 @@ export default class TypesTreeValidator {
             isInScrumByDefault: !!dto.isInScrumByDefault,
             isSubCaseOnly,
             parentCaseTypeIds,
+            templateName: this.optionalText(dto.templateName, 'Nazwa sprawy', 160),
+            templateDescription: this.optionalText(
+                dto.templateDescription,
+                'Opis sprawy',
+                300
+            ),
+            taskTemplates: this.parseTaskTemplates(dto.taskTemplates),
         };
+    }
+
+    /** Zadania startowe z formularza. Pozycje bez nazwy pomijamy - to puste wiersze. */
+    private static parseTaskTemplates(
+        value: any
+    ): { name: string; description: string; status: string }[] {
+        if (value === undefined || value === null || value === '') return [];
+        const asArray = Array.isArray(value) ? value : [value];
+
+        return asArray
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+                name: this.requireText(item.name, 'Nazwa zadania', 150),
+                description: this.optionalText(
+                    item.description,
+                    'Opis zadania',
+                    300
+                ),
+                status: this.optionalText(item.status, 'Status zadania', 20),
+            }));
     }
 
     /**

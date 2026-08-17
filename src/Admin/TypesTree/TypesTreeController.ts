@@ -100,9 +100,53 @@ export default class TypesTreeController {
                 },
                 conn
             );
+
+            await this.syncMilestoneTemplate(
+                {
+                    templateId: null,
+                    milestoneTypeId: Number(milestoneType.id),
+                    isDefault: payload.isDefault,
+                    name: payload.templateName,
+                    description: payload.templateDescription,
+                },
+                conn
+            );
         });
 
         return await this.getTree();
+    }
+
+    /**
+     * Dba o to, żeby oznaczenie „powstaje automatycznie” miało pokrycie w szablonie.
+     *
+     * Sama flaga nie wystarczy: zapytanie budujące strukturę nowej umowy startuje
+     * od tabeli szablonów, więc krawędź z IsDefault bez szablonu nic nie tworzy.
+     * Szablonu NIE kasujemy przy odznaczeniu flagi - przechowuje nazwę i opis,
+     * a przy sprawach jest dodatkowo kotwicą dla zadań startowych.
+     */
+    private static async syncMilestoneTemplate(
+        params: {
+            templateId: number | null;
+            milestoneTypeId: number;
+            isDefault: boolean;
+            name: string;
+            description: string;
+        },
+        conn?: any
+    ): Promise<void> {
+        const shouldExist =
+            params.isDefault || !!params.templateId || !!params.name || !!params.description;
+        if (!shouldExist) return;
+
+        await this.repository.upsertMilestoneTemplateInDb(
+            {
+                templateId: params.templateId,
+                milestoneTypeId: params.milestoneTypeId,
+                name: params.name,
+                description: params.description,
+            },
+            conn
+        );
     }
 
     /**
@@ -134,6 +178,17 @@ export default class TypesTreeController {
                     contractTypeId: payload.contractTypeId,
                     folderNumber: payload.folderNumber,
                     isDefault: payload.isDefault,
+                },
+                conn
+            );
+
+            await this.syncMilestoneTemplate(
+                {
+                    templateId: current._templateId,
+                    milestoneTypeId: payload.id,
+                    isDefault: payload.isDefault,
+                    name: payload.templateName,
+                    description: payload.templateDescription,
                 },
                 conn
             );
@@ -170,8 +225,58 @@ export default class TypesTreeController {
             payload.id,
             payload.parentCaseTypeIds
         );
+        await this.syncCaseTemplate({
+            templateId: current._templateId,
+            caseTypeId: payload.id,
+            isDefault: payload.isDefault,
+            name: payload.templateName,
+            description: payload.templateDescription,
+            taskTemplates: payload.taskTemplates,
+        });
 
         return await this.getTree();
+    }
+
+    /**
+     * Dba o szablon sprawy i jej zadania startowe.
+     *
+     * Ta sama zasada co przy kamieniach: flaga bez szablonu nic nie tworzy.
+     * Dodatkowo szablon jest kotwicą dla zadań - zapytanie o zadania startowe
+     * filtruje przez CaseTemplates.CaseTypeId, więc skasowanie szablonu odcięłoby
+     * zadania także przy sprawach zakładanych RĘCZNIE.
+     */
+    private static async syncCaseTemplate(params: {
+        templateId: number | null;
+        caseTypeId: number;
+        isDefault: boolean;
+        name: string;
+        description: string;
+        taskTemplates: { name: string; description: string; status: string }[];
+    }): Promise<void> {
+        const shouldExist =
+            params.isDefault ||
+            !!params.templateId ||
+            !!params.name ||
+            !!params.description ||
+            params.taskTemplates.length > 0;
+        if (!shouldExist) return;
+
+        await ToolsDb.transaction(async (conn) => {
+            const templateId = await this.repository.upsertCaseTemplateInDb(
+                {
+                    templateId: params.templateId,
+                    caseTypeId: params.caseTypeId,
+                    name: params.name,
+                    description: params.description,
+                },
+                conn
+            );
+            await this.repository.replaceTaskTemplatesInDb(
+                templateId,
+                params.taskTemplates,
+                conn
+            );
+        });
     }
 
     /** Dodaje typ sprawy pod wskazanym typem kamienia milowego. */
@@ -194,11 +299,20 @@ export default class TypesTreeController {
         // Powiązania z rodzicami dopiero po wstawieniu - wcześniej nie ma numeru,
         // do którego można je przypiąć. Walidacja poszła wcześniej, więc typ nie
         // zostanie zapisany z listą, której baza by nie przyjęła.
-        if (caseType.id)
+        if (caseType.id) {
             await this.repository.replaceSubCaseTypeLinksInDb(
                 Number(caseType.id),
                 payload.parentCaseTypeIds
             );
+            await this.syncCaseTemplate({
+                templateId: null,
+                caseTypeId: Number(caseType.id),
+                isDefault: payload.isDefault,
+                name: payload.templateName,
+                description: payload.templateDescription,
+                taskTemplates: payload.taskTemplates,
+            });
+        }
 
         return await this.getTree();
     }
