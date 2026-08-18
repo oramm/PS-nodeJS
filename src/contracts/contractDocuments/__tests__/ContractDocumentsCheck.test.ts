@@ -14,7 +14,17 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
-const mockFilesList = jest.fn<any>();
+/** Jawny typ, a nie `jest.fn<any>()`: przy tym drugim `mock.calls[0][0]` ma typ `unknown`,
+ *  a `yarn build` uruchamia `tsc` po CALYM projekcie razem z testami — deploy Heroku padal
+ *  na dostepie do pol argumentu (TS2571/TS18046). */
+type DriveListParams = {
+    q?: string;
+    fields?: string;
+    pageSize?: number;
+    supportsAllDrives?: boolean;
+    includeItemsFromAllDrives?: boolean;
+};
+const mockFilesList = jest.fn<(params: DriveListParams) => Promise<any>>();
 
 jest.mock('../../../tools/ToolsDb');
 jest.mock('../../../setup/Sessions/ToolsGapi');
@@ -52,7 +62,7 @@ function mockDrive(options: {
     subfoldersOf?: Record<string, string[]>;
 }) {
     const { filesIn = {}, subfoldersOf = {} } = options;
-    mockFilesList.mockImplementation(async ({ q }: any) => {
+    mockFilesList.mockImplementation(async ({ q }: DriveListParams) => {
         const asksForFiles = String(q).includes('mimeType !=');
         const parents = [...String(q).matchAll(/'([^']+)' in parents/g)].map((m) => m[1]);
         if (asksForFiles)
@@ -73,16 +83,27 @@ function mockDrive(options: {
     });
 }
 
-/** Id umów zapisanych jako „umowa jest" / „brak umowy". */
+/**
+ * Id umów zapisanych jako „umowa jest" / „brak umowy".
+ *
+ * Czytamy je z TREŚCI zapytania, nie z parametrów: saveResults wstawia listę id przez
+ * mysql.format i przekazuje do executeSQL gotowy SQL bez parametrów, bo executeSQL woła
+ * conn.execute(), a zapytania przygotowane nie rozwijają tablicy w `IN (?)`.
+ */
 function savedIds() {
     const calls = (ToolsDb.executeSQL as jest.Mock).mock.calls as any[][];
-    const find = (flag: string) =>
-        calls.find(([sql]) => String(sql).includes(`ContractDocumentPresent = ${flag}`));
-    return {
-        present: (find('1')?.[1] as any[])?.[0] ?? [],
-        missing: (find('0')?.[1] as any[])?.[0] ?? [],
-        updateCount: calls.length,
+    const idsFor = (flag: string) => {
+        const call = calls.find(([sql]) =>
+            String(sql).includes(`ContractDocumentPresent = ${flag}`),
+        );
+        const inList = call && String(call[0]).match(/IN \(([^)]*)\)/);
+        if (!inList) return [];
+        return inList[1]
+            .split(',')
+            .map((id) => Number(id.trim()))
+            .filter((id) => Number.isFinite(id));
     };
+    return { present: idsFor('1'), missing: idsFor('0'), updateCount: calls.length };
 }
 
 describe('runContractDocumentsCheck', () => {
@@ -194,7 +215,7 @@ describe('runContractDocumentsCheck', () => {
 
             await runContractDocumentsCheck(10);
 
-            const q = String(mockFilesList.mock.calls[0][0].q);
+            const q = String(mockFilesList.mock.calls[0][0].q ?? '');
             expect(q).toContain("mimeType != 'application/vnd.google-apps.folder'");
             // Skrót ma własny typ MIME i nie jest folderem, więc wpada pod ten sam warunek.
             expect(q).not.toContain('application/pdf');
@@ -208,7 +229,7 @@ describe('runContractDocumentsCheck', () => {
             await runContractDocumentsCheck(10);
 
             const params = mockFilesList.mock.calls[0][0];
-            expect(String(params.q)).toContain('trashed = false');
+            expect(String(params.q ?? '')).toContain('trashed = false');
             expect(params.supportsAllDrives).toBe(true);
             expect(params.includeItemsFromAllDrives).toBe(true);
         });
