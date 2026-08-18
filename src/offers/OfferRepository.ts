@@ -17,7 +17,7 @@ export type OffersSearchParams = {
     submissionDeadlineTo?: string;
     statuses?: string[];
     _city?: City;
-    _type?: ContractType;
+    _type?: ContractType | ContractType[];
     searchText?: string;
     offerBondStatuses: string[];
 };
@@ -204,6 +204,15 @@ export default class OfferRepository extends BaseRepository<Offer> {
         if (searchParams.id) {
             conditions.push(mysql.format(`Offers.Id = ?`, [searchParams.id]));
         }
+        const typeIds = this.makeTypeIds(searchParams._type);
+        if (typeIds.length) {
+            conditions.push(
+                mysql.format(
+                    `Offers.TypeId IN (${typeIds.map(() => '?').join(',')})`,
+                    typeIds
+                )
+            );
+        }
         if (searchParams._city?.id) {
             conditions.push(
                 mysql.format(`Cities.Id = ?`, [searchParams._city.id])
@@ -261,6 +270,20 @@ export default class OfferRepository extends BaseRepository<Offer> {
         }
 
         return conditions.length > 0 ? conditions.join(' AND ') : '1';
+    }
+
+    /**
+     * Filtr typu kontraktu przyjmuje pojedynczy typ albo listę typów
+     * (selektor na liście ofert jest wielokrotnego wyboru)
+     */
+    private makeTypeIds(
+        type: ContractType | ContractType[] | undefined
+    ): number[] {
+        if (!type) return [];
+        const types = Array.isArray(type) ? type : [type];
+        return types
+            .map((item) => item?.id)
+            .filter((id): id is number => !!id);
     }
 
     /**
