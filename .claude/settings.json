@@ -4,5 +4,21 @@
     "github@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "WebSearch",
+      "WebFetch(*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(rm -rf*)",
+      "Bash(rmdir /S*)",
+      "Bash(cmd /c rmdir*)",
+      "Bash(DROP TABLE*)",
+      "Bash(TRUNCATE TABLE*)"
+    ]
   }
 }

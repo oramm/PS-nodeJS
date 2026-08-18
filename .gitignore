@@ -44,3 +44,6 @@ tmp/db-migration-state/
 # tresci listow, numery faktur, kwoty i adresy e-mail - NIE commitowac!)
 # Regenerowane lokalnie przez: yarn pettycash:inspect
 tmp/pettycash-sheet-structure*.json
+
+# Prywatne nadpisania Claude Code (per maszyna)
+.claude/settings.local.json
