@@ -33,8 +33,7 @@ import { loadEnv } from '../setup/loadEnv';
 loadEnv();
 
 import { google, drive_v3 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
-import { oAuthClient } from '../setup/Sessions/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import {
     appendFileSync,
     readFileSync,
@@ -128,14 +127,6 @@ async function withRetry<T>(fn: () => Promise<T>, max = 10): Promise<T> {
     }
 }
 
-async function getAuth(): Promise<OAuth2Client> {
-    const refreshToken = process.env.REFRESH_TOKEN;
-    if (!refreshToken) throw new Error('Brak REFRESH_TOKEN w .env');
-    oAuthClient.setCredentials({ refresh_token: refreshToken });
-    const t = await oAuthClient.getAccessToken();
-    if (!t.token) throw new Error('Nie udało się pobrać access tokenu');
-    return oAuthClient;
-}
 
 async function listChildren(
     drive: drive_v3.Drive,
@@ -1164,7 +1155,7 @@ async function batchMode(drive: drive_v3.Drive) {
 }
 
 async function main() {
-    const auth = await getAuth();
+    const auth = await ToolsGapi.getBackgroundAuth();
     const drive = google.drive({ version: 'v3', auth });
     if (arg('batch')) return batchMode(drive);
     if (flag('snapshot')) return snapshotMode(drive);

@@ -116,6 +116,14 @@ export interface ContractData extends RepositoryDataItem {
      *  plakietki). Pole tylko do odczytu — prefiks `_` sprawia, że ToolsDb pomija je przy
      *  zapisie, więc nie ma szansy nadpisać linku. */
     _isFidmanIntegrated?: boolean;
+    /** Kontrola „czy wgrano umowę na Dysk" (migracja 010). `true` = sprawdzono i brakuje,
+     *  `false` = sprawdzono i jest, `undefined` = NIE sprawdzano (umowa bez sprawy „umowa"
+     *  albo kontrola tam nie dotarła). Front rysuje plakietkę wyłącznie przy `true`. */
+    _isContractDocumentMissing?: boolean;
+    /** Kiedy kontrola ostatnio to ustaliła — bez tego flaga nie mówi, czy opisuje dziś. */
+    _contractDocumentCheckedAt?: string;
+    /** Folder, w którym umowa ma leżeć. Plakietka braku jest odnośnikiem prowadzącym tam. */
+    _contractDocumentFolderUrl?: string;
 }
 
 export interface OurContractData extends ContractData {

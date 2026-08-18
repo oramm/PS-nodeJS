@@ -14,8 +14,7 @@
 import { loadEnv } from '../setup/loadEnv';
 loadEnv();
 
-import { OAuth2Client } from 'google-auth-library';
-import { oAuthClient } from '../setup/Sessions/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ToolsDb from '../tools/ToolsDb';
 import ToolsGd from '../tools/ToolsGd';
 import CaseTypeFolderRepository from '../contracts/milestones/cases/caseTypes/CaseTypeFolderRepository';
@@ -28,14 +27,6 @@ type MissingPair = {
     sampleGdFolderId: string;
 };
 
-async function getAuth(): Promise<OAuth2Client> {
-    const refreshToken = process.env.REFRESH_TOKEN;
-    if (!refreshToken) throw new Error('Brak REFRESH_TOKEN w .env');
-    oAuthClient.setCredentials({ refresh_token: refreshToken });
-    const tokens = await oAuthClient.getAccessToken();
-    if (!tokens.token) throw new Error('Nie udało się pobrać access tokenu z Google');
-    return oAuthClient;
-}
 
 async function getMissingPairs(): Promise<MissingPair[]> {
     const rows = (await ToolsDb.getQueryCallbackAsync(
@@ -67,7 +58,7 @@ async function main() {
     if (pairs.length === 0) return;
 
     console.log('[backfill] Autoryzacja GD...');
-    const auth = await getAuth();
+    const auth = await ToolsGapi.getBackgroundAuth();
 
     const repository = new CaseTypeFolderRepository();
     let resolved = 0;

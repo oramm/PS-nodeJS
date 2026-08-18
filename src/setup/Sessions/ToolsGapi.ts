@@ -21,6 +21,26 @@ type GapiFunction<TArgs extends any[] = any[], TResult = any> = (
 ) => Promise<TResult>;
 
 export default class ToolsGapi {
+    /**
+     * Autoryzacja do Google dla pracy BEZ użytkownika: zadań cyklicznych, skryptów
+     * jednorazowych i wywołań tokenem agenta. Zamiast sesji bierze długoterminowy
+     * `REFRESH_TOKEN` ze środowiska i wymienia go na token dostępu.
+     *
+     * Wyciągnięte tutaj, bo ten sam blok był przepisany co do znaku w czterech skryptach
+     * (gd-check-trashed-cases, gd-audit-ownership, gd-backup, backfill-case-type-folders).
+     * Wygaśnięcie albo rotacja tokenu to teraz jedno miejsce do poprawienia, nie pięć.
+     * Mieszka w ToolsGapi, bo tu mieszka `oAuthClient`, na którym operuje.
+     */
+    static async getBackgroundAuth(): Promise<OAuth2Client> {
+        const refreshToken = process.env.REFRESH_TOKEN;
+        if (!refreshToken) throw new Error('Brak REFRESH_TOKEN w .env');
+        oAuthClient.setCredentials({ refresh_token: refreshToken });
+        const tokens = await oAuthClient.getAccessToken();
+        if (!tokens.token)
+            throw new Error('Nie udało się pobrać access tokenu z Google');
+        return oAuthClient;
+    }
+
     static scopes = [
         'https://www.googleapis.com/auth/tasks',
         'https://www.googleapis.com/auth/documents',

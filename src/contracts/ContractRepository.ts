@@ -23,6 +23,7 @@ import ContractEntityAssociationsHelper, {
 } from './ContractEntityAssociationsHelper';
 import Entity from '../entities/Entity';
 import { isFidmanContractType } from './fidmanSync/FidmanSync';
+import ToolsGd from '../tools/ToolsGd';
 
 /**
  * Repozytorium dla operacji na kontraktach
@@ -274,6 +275,9 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.WarrantyEndDate,
                     mainContracts.DefectsNotificationEndDate,
                     mainContracts.FidmanContractId,
+                    mainContracts.ContractDocumentPresent,
+                    mainContracts.ContractDocumentCheckedAt,
+                    ${this.makeContractDocumentFolderColumn()},
                     mainContracts.Value,
                     mainContracts.Comment, 
                     mainContracts.Status, 
@@ -457,6 +461,46 @@ export default class ContractRepository extends BaseRepository<
         );
     }
 
+    /**
+     * Folder, w którym ma leżeć umowa — ten sam, który sprawdza kontrola
+     * (ContractDocumentsCheck). Potrzebny na liście, bo plakietka „Uzupełnij umowę na dysku"
+     * jest odnośnikiem prowadzącym wprost tam, gdzie plik ma trafić.
+     *
+     * Podzapytanie, a nie kolejny JOIN: umowa bywa powiązana z kilkoma sprawami „umowa"
+     * (zmierzone: 21 umów), a JOIN zwielokrotniłby przez to wiersze całej listy. LIMIT 1
+     * wystarcza — do odnośnika bierzemy pierwszy z brzegu, a o tym, czy umowy brakuje,
+     * i tak rozstrzyga flaga policzona ze WSZYSTKICH folderów.
+     */
+    private makeContractDocumentFolderColumn(): string {
+        const caseTypeIds = Setup.ContractDocuments.caseTypeIds;
+        if (!caseTypeIds.length) return 'NULL AS ContractDocumentFolderId';
+
+        return mysql.format(
+            `(SELECT DocumentCases.GdFolderId
+                FROM Milestones AS DocumentMilestones
+                JOIN Cases AS DocumentCases
+                  ON DocumentCases.MilestoneId = DocumentMilestones.Id
+               WHERE DocumentMilestones.ContractId = mainContracts.Id
+                 AND DocumentCases.TypeId IN (?)
+                 AND DocumentCases.GdFolderId IS NOT NULL
+                 AND DocumentCases.GdFolderId <> ''
+               LIMIT 1) AS ContractDocumentFolderId`,
+            [caseTypeIds],
+        );
+    }
+
+    /**
+     * Filtr „Umowa na dysku" — pokaż umowy, w których kontrola nie znalazła pliku.
+     *
+     * Warunek jest wprost na `= 0`, a NIE `IS NULL OR = 0`. `NULL` znaczy „nie sprawdzano"
+     * (umowa bez sprawy „umowa", czyli starsza struktura folderów, albo kontrola tam jeszcze
+     * nie dotarła) i wrzucenie go do tego filtra pokazywałoby jako braki ok. 166 umów,
+     * w których nikt niczego nie zaniedbał.
+     */
+    private makeContractDocumentCondition(): string {
+        return 'mainContracts.ContractDocumentPresent = 0';
+    }
+
     private makeLimit(limit: number | undefined): string {
         if (!limit || !Number.isInteger(limit) || limit <= 0) return '';
         return mysql.format(`LIMIT ?`, [limit]);
@@ -624,6 +668,10 @@ export default class ContractRepository extends BaseRepository<
                     searchParams.fidmanIntegrationFilter,
                 ),
             );
+        }
+
+        if (searchParams.onlyMissingContractDocument) {
+            conditions.push(this.makeContractDocumentCondition());
         }
 
         if (isArchived) {
@@ -796,6 +844,18 @@ export default class ContractRepository extends BaseRepository<
                 !isFidmanContractType(row.MainContractTypeId)
                     ? undefined
                     : row.FidmanContractId !== null,
+            // Tylko jawne 0 znaczy „sprawdzono, brakuje". `NULL` = nie sprawdzano i front NIE
+            // rysuje wtedy plakietki — inaczej starsze umowy o innej strukturze folderów
+            // (ok. 166 z 785) wyglądałyby na zaniedbane.
+            _isContractDocumentMissing:
+                row.ContractDocumentPresent === undefined ||
+                row.ContractDocumentPresent === null
+                    ? undefined
+                    : Number(row.ContractDocumentPresent) === 0,
+            _contractDocumentCheckedAt: row.ContractDocumentCheckedAt ?? undefined,
+            _contractDocumentFolderUrl: row.ContractDocumentFolderId
+                ? ToolsGd.createGdFolderUrl(row.ContractDocumentFolderId)
+                : undefined,
             value: row.Value,
             _remainingNotScheduledValue: row.RemainingNotScheduledValue,
             _remainingNotIssuedValue: row.RemainingNotIssuedValue,
@@ -982,6 +1042,10 @@ export type ContractSearchParams = {
      *  `INTEGRATED` = ma trwały link; `NOT_INTEGRATED` = typ obsługiwany przez sync, ale bez
      *  linku. Brak wartości nie zawęża niczego. */
     fidmanIntegrationFilter?: 'INTEGRATED' | 'NOT_INTEGRATED';
+    /** Filtr „tylko z brakującą umową na dysku": kontrola sprawdziła i nie znalazła pliku.
+     *  Umowy nigdy niesprawdzane (brak sprawy „umowa") nie wpadają — zob.
+     *  makeContractDocumentCondition(). Flaga logiczna, bo opcja jest jedna. */
+    onlyMissingContractDocument?: boolean;
     isArchived?: boolean;
     statuses?: string | string[];
     onlyKeyData?: boolean;
@@ -1014,6 +1078,9 @@ type ContractRow = {
      *  wybierają — i rozróżnia „nie wybrano" (undefined) od „brak linku" (null). Typ bez
      *  `?` sprawiłby, że porównanie `=== undefined` jest błędem TS2367 przy `strict: true`. */
     FidmanContractId?: number | null;
+    ContractDocumentPresent?: number | null;
+    ContractDocumentCheckedAt?: Date | string | null;
+    ContractDocumentFolderId?: string | null;
     Value: number | null;
     RemainingNotScheduledValue?: number | null;
     RemainingNotIssuedValue?: number | null;

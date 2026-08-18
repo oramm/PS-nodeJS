@@ -514,6 +514,43 @@ export default class Setup {
     }
 
     /**
+     * Konfiguracja kontroli „czy wgrano umowę na Dysk".
+     * Odczytywana lazily (getter), po loadEnv(). Bez sekretów — kontrola korzysta
+     * z REFRESH_TOKEN przez ToolsGapi.getBackgroundAuth().
+     *
+     * Format w .env:
+     *   CONTRACT_DOCUMENT_CASE_TYPE_IDS="85,75"   # id typów spraw trzymających umowę (CSV)
+     *   CONTRACT_DOCUMENT_CHECK_BATCH_LIMIT="50"  # ile umów na jedno wywołanie endpointu
+     *
+     * Typy spraw siedzą w env, a NIE na sztywno w kodzie, z tego samego powodu co
+     * FIDMAN_SYNC_CONTRACT_TYPE_IDS: słownik CaseTypes jest danymi i może się zmienić bez
+     * deployu. Zaszycie ich w module powtórzyłoby błąd APPROVED_DOCS_CONTRACT_TYPE_IDS
+     * z frontu, który repo wskazuje jako precedens kruchości.
+     *
+     * Domyślne 85 („Umowa i zmiany" — umowy ENVI) i 75 („Umowa" — umowy wykonawców)
+     * zmierzone na bazie: to jedyne typy spraw, pod którymi realnie leży plik umowy.
+     *
+     * Limit partii NIE jest optymalizacją, tylko wymogiem: Heroku ucina żądanie HTTP po
+     * 30 sekundach, a pełny przebieg po ~620 umowach jest zbyt blisko tej granicy.
+     */
+    static get ContractDocuments() {
+        const rawTypeIds =
+            process.env.CONTRACT_DOCUMENT_CASE_TYPE_IDS ?? '85,75';
+        const caseTypeIds = rawTypeIds
+            .split(',')
+            .map((part) => parseInt(part.trim(), 10))
+            .filter((id) => Number.isInteger(id));
+        const rawBatchLimit = Number(
+            process.env.CONTRACT_DOCUMENT_CHECK_BATCH_LIMIT ?? '50'
+        );
+        const batchLimit =
+            Number.isInteger(rawBatchLimit) && rawBatchLimit > 0
+                ? rawBatchLimit
+                : 50;
+        return { caseTypeIds, batchLimit };
+    }
+
+    /**
      * Konfiguracja integracji lookup PS ENVI -> GUS BIR (NIP-G1).
      * Tylko surowa wartość z .env — odczytywana lazily (getter), po loadEnv().
      * Sekret (klucz) NIE trafia do SB ani repo — tylko nazwa env (.env.example).

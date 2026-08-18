@@ -16,8 +16,7 @@ import { loadEnv } from '../setup/loadEnv';
 loadEnv();
 
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
-import { oAuthClient } from '../setup/Sessions/ToolsGapi';
+import ToolsGapi from '../setup/Sessions/ToolsGapi';
 import ToolsDb from '../tools/ToolsDb';
 import { writeFileSync } from 'fs';
 import path from 'path';
@@ -37,14 +36,6 @@ type CheckResult =
     | { status: 'no_access'; id: number; name: string | null; gdFolderId: string }
     | { status: 'ok'; id: number; name: string | null; gdFolderId: string };
 
-async function getAuth(): Promise<OAuth2Client> {
-    const refreshToken = process.env.REFRESH_TOKEN;
-    if (!refreshToken) throw new Error('Brak REFRESH_TOKEN w .env');
-    oAuthClient.setCredentials({ refresh_token: refreshToken });
-    const tokens = await oAuthClient.getAccessToken();
-    if (!tokens.token) throw new Error('Nie udało się pobrać access tokenu z Google');
-    return oAuthClient;
-}
 
 type DbFilters = {
     contractId?: number;
@@ -151,7 +142,7 @@ async function main() {
     }
 
     console.log('[gd-check] Autoryzacja GD...');
-    const auth = await getAuth();
+    const auth = await ToolsGapi.getBackgroundAuth();
     const drive = google.drive({ version: 'v3', auth });
 
     console.log('[gd-check] Pobieranie spraw z DB...');

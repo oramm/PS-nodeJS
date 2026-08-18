@@ -42,6 +42,9 @@ export default abstract class Contract
     defectsNotificationEndDate?: string | null;
     /** Tylko do odczytu (prefiks `_` => ToolsDb pomija przy zapisie) — zob. ContractData. */
     _isFidmanIntegrated?: boolean;
+    _isContractDocumentMissing?: boolean;
+    _contractDocumentCheckedAt?: string;
+    _contractDocumentFolderUrl?: string;
     value?: string | number;
     _remainingNotScheduledValue?: string | number;
     _remainingNotIssuedValue?: string | number;
@@ -120,6 +123,12 @@ export default abstract class Contract
             initParamObject.defectsNotificationEndDate
         );
         this._isFidmanIntegrated = initParamObject._isFidmanIntegrated;
+        this._isContractDocumentMissing =
+            initParamObject._isContractDocumentMissing;
+        this._contractDocumentCheckedAt =
+            initParamObject._contractDocumentCheckedAt;
+        this._contractDocumentFolderUrl =
+            initParamObject._contractDocumentFolderUrl;
         if (initParamObject.value) {
             if (typeof initParamObject.value === 'string') {
                 initParamObject.value = initParamObject.value

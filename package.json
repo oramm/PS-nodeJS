@@ -39,6 +39,7 @@
         "gd:move-test": "cross-env NODE_ENV=development ts-node src/scripts/gd-move-test.ts",
         "gd:reindex": "cross-env NODE_ENV=development ts-node src/scripts/gd-reindex.ts",
         "gd:scan-perms": "cross-env NODE_ENV=development ts-node src/scripts/gd-scan-permissions.ts",
+        "gd:user-access": "cross-env NODE_ENV=development ts-node src/scripts/gd-user-access.ts",
         "gd:backup": "cross-env NODE_ENV=development ts-node src/scripts/gd-backup.ts",
         "check:cycles": "madge --circular --extensions ts,tsx src",
         "test": "jest",
