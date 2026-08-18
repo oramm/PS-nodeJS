@@ -27,6 +27,12 @@ export function loadEnv(): void {
         process.env.KSEF_ENVIRONMENT = rootKsefEnvironment;
     }
 
+    assertDevSessionStoreIsolated(
+        nodeEnv,
+        process.env.MONGO_URI,
+        rootEnv.parsed?.MONGO_URI,
+    );
+
     const ksefEnvironment = process.env.KSEF_ENVIRONMENT || 'test';
     const isProductionKsef = ksefEnvironment === 'production';
     const testToken = process.env.KSEF_TOKEN?.trim();
@@ -58,6 +64,7 @@ export function loadEnv(): void {
     console.log(
         `[ENV] DB target: ${process.env.DB_HOST}/${process.env.DB_NAME}`,
     );
+    console.log(`[ENV] Session store: ${describeMongoTarget(process.env.MONGO_URI)}`);
     console.log(`[ENV] KSeF environment: ${ksefEnvironment}`);
     if (ksefTokenSource === 'missing') {
         console.warn(
@@ -71,4 +78,33 @@ export function loadEnv(): void {
     console.log(
         `[ENV] KSeF API: ${ksefApiBaseUrl}${ksefApiOverride ? ' (override)' : ''}`,
     );
+}
+
+/**
+ * Dev nie moze dzielic magazynu sesji z produkcja. `.env.development` nadpisuje MySQL, ale
+ * dopoki nie nadpisze MONGO_URI, wartosc spada do `.env` i wskazuje produkcyjny Atlas.
+ * Wtedy SessionRevoker.revokeForPerson kasuje sesje prawdziwych uzytkownikow (2026-08-17).
+ */
+export function assertDevSessionStoreIsolated(
+    nodeEnv: string,
+    effectiveUri: string | undefined,
+    rootEnvUri: string | undefined,
+): void {
+    if (nodeEnv !== 'development') return;
+    if (!rootEnvUri || effectiveUri !== rootEnvUri) return;
+
+    throw new Error(
+        '[ENV] NODE_ENV=development uzywa MONGO_URI z .env, czyli produkcyjnego magazynu sesji. ' +
+            'Sesje deweloperskie trafilyby do produkcyjnej kolekcji sessions, a zmiana roli ' +
+            'wylogowalaby prawdziwych uzytkownikow. Ustaw wlasne MONGO_URI w .env.development.',
+    );
+}
+
+/** Host i baza z URI, bez loginu i hasla. */
+export function describeMongoTarget(uri: string | undefined): string {
+    if (!uri) return 'brak MONGO_URI';
+    const [scheme, rest] = uri.split('://');
+    if (!rest) return uri;
+    const hostAndPath = rest.slice(rest.indexOf('@') + 1).split('?')[0];
+    return `${scheme}://${hostAndPath}`;
 }
