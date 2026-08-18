@@ -47,12 +47,54 @@ export default class PersonRepository extends BaseRepository<Person> {
         super('Persons');
     }
 
+    /**
+     * Pola konta nie sa kolumnami `Persons` - mieszkaja w `PersonAccounts`. Model `Person`
+     * wozi je tam i z powrotem (zeby klient dostal z odpowiedzi to, co wyslal), a generyczny
+     * INSERT w ToolsDb bierze KAZDE pole bez prefiksu `_`. Bez tego filtra `fidmanEnabled`
+     * trafialo do `INSERT INTO Persons` i cale dodawanie osoby konczylo sie
+     * 500 "Unknown column 'FidmanEnabled'".
+     *
+     * Filtr stoi tutaj, a nie w wywolujacych, bo wywolujacych sa dwa
+     * (`PersonsController.add` i `addNewSystemUser`) i oba zerowaly recznie tylko
+     * `systemRoleId` i `systemEmail` - kazde nowe pole konta powtarzaloby ten blad.
+     * Konto zapisuje wylacznie `upsertPersonAccountInDb`.
+     */
+    async addInDb(
+        entity: Person,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+    ): Promise<any> {
+        const personRow: any = { ...entity };
+        for (const field of PersonRepository.ACCOUNT_FIELDS)
+            delete personRow[field];
+
+        await ToolsDb.addInDb(
+            this.tableName,
+            personRow,
+            externalConn,
+            isPartOfTransaction,
+        );
+        // ToolsDb ustawia id na obiekcie, ktory wstawia - czyli na kopii. Wolajacy czeka
+        // na id w swoim obiekcie (POST /person oddaje je klientowi, ktory dopiero nim
+        // woła trase konta v2), wiec przepisujemy je z powrotem.
+        entity.id = personRow.id;
+        return entity;
+    }
+
+    /**
+     * Konflikt unikalnego SystemEmail to blad uzytkownika (409), nie awaria serwera.
+     * Bez `status` globalny handler w src/index.ts mapowal go na 500 - z mailem-raportem
+     * do zespolu przy kazdej literowce w formularzu.
+     */
     private makeSystemEmailConflictError(
         systemEmail: string,
     ): EnviErrors.DbError {
-        return new EnviErrors.DbError(
-            `SystemEmail '${systemEmail}' is already used by another person account.`,
-            'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+        return Object.assign(
+            new EnviErrors.DbError(
+                `SystemEmail '${systemEmail}' is already used by another person account.`,
+                'PERSON_ACCOUNT_SYSTEM_EMAIL_CONFLICT',
+            ),
+            { status: 409 },
         );
     }
 
