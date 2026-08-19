@@ -103,4 +103,71 @@ describe('Contract folder structure', () => {
 
         expect(contract._folderName).toBe('K ENVI');
     });
+
+    /**
+     * Konsorcjum: folder nazwał człowiek po liderze, a reguła nazewnicza bierze
+     * pierwszego wykonawcę z listy i o liderze nic nie wie. Zapis kontraktu nie
+     * może przemianować takiego folderu. Para testów, bo sam brak wywołania
+     * niczego nie dowodzi - przypadek z jednym wykonawcą pokazuje, że zmiana
+     * nazwy w ogóle działa.
+     */
+    describe('editFolder rename guard', () => {
+        const makeContractOther = (contractors: any[]) =>
+            new ContractOther({
+                id: 1767,
+                alias: 'Z.2 OŚII',
+                number: '3/ZP/2024',
+                name: 'Roboty budowlane',
+                status: 'Aktywny',
+                comment: '',
+                gdFolderId: 'contract-folder-1767',
+                _type: { id: 2, name: 'RB', isOur: false },
+                _project: {
+                    id: 1,
+                    ourId: 'PRJ-1',
+                    gdFolderId: 'project-folder-1',
+                },
+                _contractors: contractors,
+            } as any);
+
+        beforeEach(() => {
+            jest.spyOn(
+                ToolsGd,
+                'getFileOrFolderMetaDataById'
+            ).mockResolvedValue({
+                id: 'contract-folder-1767',
+                name: 'K Z.2 OŚII WUPRINZ',
+            } as any);
+        });
+
+        it('does not rename an existing folder when the contract has several contractors', async () => {
+            const updateFolderSpy = jest
+                .spyOn(ToolsGd, 'updateFolder')
+                .mockResolvedValue({} as any);
+            const contract = makeContractOther([
+                { id: 537, name: 'Terlan S.A.', shortName: 'Terlan S.A.' },
+                { id: 265, name: 'WUPRINŻ S.A.', shortName: 'WUPRINZ' },
+            ]);
+
+            await contract.editFolder({} as any);
+
+            expect(updateFolderSpy).not.toHaveBeenCalled();
+        });
+
+        it('renames an existing folder when the contract has a single contractor', async () => {
+            const updateFolderSpy = jest
+                .spyOn(ToolsGd, 'updateFolder')
+                .mockResolvedValue({} as any);
+            const contract = makeContractOther([
+                { id: 265, name: 'WUPRINŻ S.A.', shortName: 'WUPRINZ' },
+            ]);
+
+            await contract.editFolder({} as any);
+
+            expect(updateFolderSpy).toHaveBeenCalledWith(expect.anything(), {
+                id: 'contract-folder-1767',
+                name: 'K Z.2 OŚII WUPRINZ',
+            });
+        });
+    });
 });

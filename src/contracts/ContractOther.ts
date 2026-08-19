@@ -66,6 +66,24 @@ export default class ContractOther
             .join(' ');
     }
 
+    /**
+     * Konsorcjum: nazwy folderu nie da się wyprowadzić z danych kontraktu.
+     *
+     * setFolderName() bierze `_contractors[0]`, czyli pierwszego z listy, a lider
+     * konsorcjum nie jest w PS nigdzie zapisany (Contracts_Entities ma tylko
+     * ContractRole, bez znacznika lidera). Kolejność jest przypadkowa: przy
+     * odczycie z bazy to sortowanie alfabetyczne po Entities.Name, a przy zapisie
+     * z klienta to kolejność w payloadzie. Człowiek nazywa taki folder po liderze,
+     * więc zapis kontraktu nie ma prawa nadpisać tego własnym zgadywaniem.
+     *
+     * Sufit tego uproszczenia: przy konsorcjum zmiana aliasu NIE przeniesie się
+     * na nazwę folderu - trzeba ją poprawić ręcznie na Dysku. Zniknie dopiero
+     * wtedy, gdy PS zacznie zapisywać lidera konsorcjum.
+     */
+    protected canRenameExistingFolder(): boolean {
+        return (this._contractors?.length ?? 0) <= 1;
+    }
+
     getType(ourId: string): string {
         return ourId.substring(ourId.indexOf('.') + 1, ourId.lastIndexOf('.'));
     }

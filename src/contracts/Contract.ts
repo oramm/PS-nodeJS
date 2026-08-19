@@ -333,14 +333,21 @@ export default abstract class Contract
     async editFolder(auth: OAuth2Client) {
         //sytuacja normalna - folder itnieje
         if (this.gdFolderId) {
+            let existingFolder;
             try {
-                await ToolsGd.getFileOrFolderMetaDataById(
+                existingFolder = await ToolsGd.getFileOrFolderMetaDataById(
                     auth,
                     this.gdFolderId
                 );
             } catch (err) {
                 console.log('folder not found, creating new one');
                 return await this.createFolders(auth);
+            }
+            if (!this.canRenameExistingFolder()) {
+                console.log(
+                    `Zostawiam nazwę folderu ${this.gdFolderId} bez zmian - nie wynika jednoznacznie z danych kontraktu`
+                );
+                return existingFolder;
             }
             return await ToolsGd.updateFolder(auth, {
                 name: this._folderName,
@@ -349,6 +356,16 @@ export default abstract class Contract
         }
         //kamień nie miał wcześniej typu albo coś poszło nie tak przy tworzeniu folderu
         else return await this.createFolders(auth);
+    }
+
+    /**
+     * Czy zapis kontraktu może przemianować ISTNIEJĄCY folder na Dysku.
+     *
+     * Tworzenia folderu to nie dotyczy: przy zakładaniu kontraktu nie ma jeszcze
+     * czyjej nazwy nadpisać. Chroniona jest tylko nazwa, która już na Dysku stoi.
+     */
+    protected canRenameExistingFolder(): boolean {
+        return true;
     }
 
     async deleteFolder(auth: OAuth2Client) {
