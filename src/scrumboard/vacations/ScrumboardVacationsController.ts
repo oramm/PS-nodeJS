@@ -21,6 +21,9 @@ export interface VacationPersonRow {
     careDays: number;
     careUsedDays: number;
     careRemainingDays: number;
+    holidayDays: number;
+    holidayUsedDays: number;
+    holidayRemainingDays: number;
     absences: ScrumboardAbsence[];
 }
 
@@ -31,6 +34,8 @@ export interface VacationsYearData {
         name: string;
         color: string;
         countsAgainstLimit: boolean;
+        countsAsCare: boolean;
+        countsAsHoliday: boolean;
     }[];
     rows: VacationPersonRow[];
 }
@@ -115,10 +120,15 @@ export default class ScrumboardVacationsController extends BaseController<
             const personAbsences = absencesByPerson.get(id) ?? [];
             const usedDays = sumUsed(personAbsences, (a) => a._countsAgainstLimit);
             const careUsedDays = sumUsed(personAbsences, (a) => a._countsAsCare);
+            const holidayUsedDays = sumUsed(
+                personAbsences,
+                (a) => a._countsAsHoliday
+            );
             const entitlement = entitlementByPerson.get(id);
             const limitDays = entitlement?.limitDays ?? 0;
             const carryoverDays = entitlement?.carryoverDays ?? 0;
             const careDays = entitlement?.careDays ?? 0;
+            const holidayDays = entitlement?.holidayDays ?? 0;
             return {
                 personId: id,
                 personName: `${person.name ?? ''} ${person.surname ?? ''}`.trim(),
@@ -130,6 +140,9 @@ export default class ScrumboardVacationsController extends BaseController<
                 careDays,
                 careUsedDays,
                 careRemainingDays: careDays - careUsedDays,
+                holidayDays,
+                holidayUsedDays,
+                holidayRemainingDays: holidayDays - holidayUsedDays,
                 absences: personAbsences,
             };
         });
@@ -141,6 +154,8 @@ export default class ScrumboardVacationsController extends BaseController<
                 name: t.name,
                 color: t.color,
                 countsAgainstLimit: t.countsAgainstLimit,
+                countsAsCare: t.countsAsCare,
+                countsAsHoliday: t.countsAsHoliday,
             })),
             rows,
         };
@@ -158,12 +173,13 @@ export default class ScrumboardVacationsController extends BaseController<
     /**
      * Blokuje zapis nieobecności, gdy przekracza roczną pulę:
      *   - 'vacation' => limit urlopu (bieżący + zaległy), typy z CountsAgainstLimit;
-     *   - 'care'     => pula opieki (CareDays), typy z CountsAsCare.
-     * Walidacja względem roku daty początkowej.
-     * ponytail: przypadek zakresu na przełomie roku pomijany jako marginalny.
+     *   - 'care'     => pula opieki (CareDays), typy z CountsAsCare;
+     *   - 'holiday'  => pula wolnego za święta (HolidayDays), typy z CountsAsHoliday.
+     * Walidacja względem roku daty początkowej - i to wystarcza, bo
+     * ScrumboardValidator.parseDateRange nie przepuszcza zakresu przez granicę roku.
      */
     private async assertWithinPool(
-        kind: 'vacation' | 'care',
+        kind: 'vacation' | 'care' | 'holiday',
         personId: number,
         dateFrom: string,
         dateTo: string,
@@ -184,10 +200,16 @@ export default class ScrumboardVacationsController extends BaseController<
         const pool =
             kind === 'care'
                 ? entitlement?.careDays ?? 0
+                : kind === 'holiday'
+                ? entitlement?.holidayDays ?? 0
                 : (entitlement?.limitDays ?? 0) +
                   (entitlement?.carryoverDays ?? 0);
         const counts = (a: ScrumboardAbsence) =>
-            kind === 'care' ? a._countsAsCare : a._countsAgainstLimit;
+            kind === 'care'
+                ? a._countsAsCare
+                : kind === 'holiday'
+                ? a._countsAsHoliday
+                : a._countsAgainstLimit;
         const alreadyUsed = absences
             .filter((a) => counts(a) && a.id !== excludeAbsenceId)
             .reduce(
@@ -203,16 +225,25 @@ export default class ScrumboardVacationsController extends BaseController<
             yearEnd
         );
         if (alreadyUsed + requested > pool) {
-            const label = kind === 'care' ? 'dni opieki' : 'dni urlopu';
+            const label =
+                kind === 'care'
+                    ? 'dni opieki'
+                    : kind === 'holiday'
+                    ? 'dni wolnego za święta'
+                    : 'dni urlopu';
             throw new Error(
                 `Brak dostępnych ${label} (pula: ${pool}, wykorzystane: ${alreadyUsed}, żądane: ${requested}).`
             );
         }
     }
 
-    /** Waliduje pulę właściwą dla typu (urlop / opieka); typy bez puli pomija. */
+    /** Waliduje pulę właściwą dla typu (urlop / opieka / za święta); typy bez puli pomija. */
     private async assertTypeWithinPool(
-        type: { countsAgainstLimit: boolean; countsAsCare: boolean },
+        type: {
+            countsAgainstLimit: boolean;
+            countsAsCare: boolean;
+            countsAsHoliday: boolean;
+        },
         personId: number,
         dateFrom: string,
         dateTo: string,
@@ -220,6 +251,8 @@ export default class ScrumboardVacationsController extends BaseController<
     ): Promise<void> {
         if (type.countsAsCare)
             await this.assertWithinPool('care', personId, dateFrom, dateTo, excludeAbsenceId);
+        else if (type.countsAsHoliday)
+            await this.assertWithinPool('holiday', personId, dateFrom, dateTo, excludeAbsenceId);
         else if (type.countsAgainstLimit)
             await this.assertWithinPool('vacation', personId, dateFrom, dateTo, excludeAbsenceId);
     }
@@ -288,20 +321,22 @@ export default class ScrumboardVacationsController extends BaseController<
         await this.getInstance().repository.deleteById(id);
     }
 
-    /** Ustawia roczny wymiar urlopu (bieżący + zaległy + opieka) dla osoby (UPSERT). */
+    /** Ustawia roczny wymiar urlopu (bieżący + zaległy + opieka + za święta) dla osoby (UPSERT). */
     static async setLimit(
         personId: number,
         year: number,
         limitDays: number,
         carryoverDays: number,
-        careDays: number
+        careDays: number,
+        holidayDays: number
     ) {
         return this.getInstance().entitlementRepository.upsert(
             personId,
             year,
             limitDays,
             carryoverDays,
-            careDays
+            careDays,
+            holidayDays
         );
     }
 

@@ -4,7 +4,7 @@ import { AbsenceTypeData } from '../../types/types';
 /**
  * Typ nieobecności (słownik urlopowy).
  *
- * Flagi countsAgainstLimit / countsAsCare NIE są kosmetyką - kontroler urlopów
+ * Flagi countsAgainstLimit / countsAsCare / countsAsHoliday NIE są kosmetyką - kontroler urlopów
  * wybiera na ich podstawie pulę, z której schodzi nieobecność. Zmiana flagi na
  * istniejącym typie przelicza salda wstecz dla wszystkich osób i lat.
  *
@@ -19,6 +19,7 @@ export default class AbsenceType
     color: string;
     countsAgainstLimit: boolean;
     countsAsCare: boolean;
+    countsAsHoliday: boolean;
     _usageCount?: number;
 
     constructor(initParamObject: any) {
@@ -28,6 +29,7 @@ export default class AbsenceType
         this.color = initParamObject.color;
         this.countsAgainstLimit = initParamObject.countsAgainstLimit;
         this.countsAsCare = initParamObject.countsAsCare;
+        this.countsAsHoliday = initParamObject.countsAsHoliday;
         this._usageCount = initParamObject._usageCount;
     }
 }

@@ -30,6 +30,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
             _typeColor: row.TypeColor,
             _countsAgainstLimit: !!row.CountsAgainstLimit,
             _countsAsCare: !!row.CountsAsCare,
+            _countsAsHoliday: !!row.CountsAsHoliday,
         });
     }
 
@@ -57,7 +58,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
                 a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
                 t.Name AS TypeName, t.Color AS TypeColor,
-                t.CountsAgainstLimit, t.CountsAsCare
+                t.CountsAgainstLimit, t.CountsAsCare, t.CountsAsHoliday
             FROM ScrumboardAbsences a
             JOIN ScrumboardAbsenceTypes t ON t.Id = a.TypeId
             ${where}
@@ -72,7 +73,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
                 a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
                 t.Name AS TypeName, t.Color AS TypeColor,
-                t.CountsAgainstLimit, t.CountsAsCare
+                t.CountsAgainstLimit, t.CountsAsCare, t.CountsAsHoliday
             FROM ScrumboardAbsences a
             JOIN ScrumboardAbsenceTypes t ON t.Id = a.TypeId
             WHERE a.Id = ?`;

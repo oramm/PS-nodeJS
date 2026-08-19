@@ -11,12 +11,23 @@ describe('AbsenceTypeValidator', () => {
         expect(result.color).toBe('#0d6efd');
     });
 
-    it('domyślnie schodzi z limitu urlopu, ale nie z puli opieki', () => {
+    it('domyślnie schodzi z limitu urlopu, ale nie z puli opieki ani za święta', () => {
         const result = AbsenceTypeValidator.validateCreatePayload({
             name: 'Szkolenie',
         });
         expect(result.countsAgainstLimit).toBe(true);
         expect(result.countsAsCare).toBe(false);
+        expect(result.countsAsHoliday).toBe(false);
+    });
+
+    it('przenosi flagę puli za święta z payloadu', () => {
+        const result = AbsenceTypeValidator.validateCreatePayload({
+            name: 'Wolne za święto',
+            countsAgainstLimit: false,
+            countsAsHoliday: true,
+        });
+        expect(result.countsAsHoliday).toBe(true);
+        expect(result.countsAgainstLimit).toBe(false);
     });
 
     it.each([['0d6efd'], ['#0d6ef'], ['niebieski'], ['#0d6efdff']])(
@@ -59,5 +70,48 @@ describe('AbsenceTypeValidator', () => {
                 id: '3',
             }).id
         ).toBe(3);
+    });
+
+    it.each([
+        [{ countsAgainstLimit: true, countsAsCare: true }],
+        [{ countsAgainstLimit: true, countsAsHoliday: true }],
+        [{ countsAgainstLimit: false, countsAsCare: true, countsAsHoliday: true }],
+    ])('odrzuca typ schodzący z dwóch pul naraz: %o', (flags) => {
+        expect(() =>
+            AbsenceTypeValidator.validateCreatePayload({
+                name: 'Dziwny typ',
+                ...flags,
+            })
+        ).toThrow(/najwyżej z jednej puli/);
+    });
+
+    it('sama pula za święta przechodzi, gdy limit urlopu wyłączony', () => {
+        const result = AbsenceTypeValidator.validateCreatePayload({
+            name: 'Wolne za święto',
+            countsAgainstLimit: false,
+            countsAsHoliday: true,
+        });
+        expect(result.countsAsHoliday).toBe(true);
+        expect(result.countsAgainstLimit).toBe(false);
+        expect(result.countsAsCare).toBe(false);
+    });
+
+    it('wskazanie innej puli wyłącza domyślny limit urlopu, zamiast robić konflikt', () => {
+        const result = AbsenceTypeValidator.validateCreatePayload({
+            name: 'Opieka',
+            countsAsCare: true,
+        });
+        expect(result.countsAsCare).toBe(true);
+        expect(result.countsAgainstLimit).toBe(false);
+    });
+
+    it('ale jawny konflikt nadal jest błędem', () => {
+        expect(() =>
+            AbsenceTypeValidator.validateCreatePayload({
+                name: 'Opieka',
+                countsAgainstLimit: true,
+                countsAsCare: true,
+            })
+        ).toThrow(/najwyżej z jednej puli/);
     });
 });

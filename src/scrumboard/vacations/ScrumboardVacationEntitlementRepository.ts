@@ -7,6 +7,7 @@ export interface VacationEntitlement {
     limitDays: number;
     carryoverDays: number;
     careDays: number;
+    holidayDays: number;
 }
 
 /** Repozytorium rocznego wymiaru urlopu per osoba. Klucz (PersonId, Year) → UPSERT. */
@@ -22,11 +23,12 @@ export default class ScrumboardVacationEntitlementRepository extends BaseReposit
             limitDays: Number(row.LimitDays),
             carryoverDays: Number(row.CarryoverDays),
             careDays: Number(row.CareDays),
+            holidayDays: Number(row.HolidayDays),
         };
     }
 
     async find(year: number): Promise<VacationEntitlement[]> {
-        const sql = `SELECT PersonId, Year, LimitDays, CarryoverDays, CareDays
+        const sql = `SELECT PersonId, Year, LimitDays, CarryoverDays, CareDays, HolidayDays
             FROM ScrumboardVacationEntitlements WHERE Year = ?`;
         const rows = await ToolsDb.getQueryCallbackAsync(sql, undefined, [year]);
         return (Array.isArray(rows) ? rows : []).map((row) =>
@@ -34,28 +36,31 @@ export default class ScrumboardVacationEntitlementRepository extends BaseReposit
         );
     }
 
-    /** Ustawia wymiar urlopu (bieżący + zaległy + opieka) dla osoby w danym roku (UPSERT). */
+    /** Ustawia wymiar urlopu (bieżący + zaległy + opieka + za święta) dla osoby w danym roku (UPSERT). */
     async upsert(
         personId: number,
         year: number,
         limitDays: number,
         carryoverDays: number,
-        careDays: number
+        careDays: number,
+        holidayDays: number
     ): Promise<VacationEntitlement> {
         const sql = `INSERT INTO ScrumboardVacationEntitlements
-                (PersonId, Year, LimitDays, CarryoverDays, CareDays)
-            VALUES (?, ?, ?, ?, ?)
+                (PersonId, Year, LimitDays, CarryoverDays, CareDays, HolidayDays)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 LimitDays = VALUES(LimitDays),
                 CarryoverDays = VALUES(CarryoverDays),
-                CareDays = VALUES(CareDays)`;
+                CareDays = VALUES(CareDays),
+                HolidayDays = VALUES(HolidayDays)`;
         await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             personId,
             year,
             limitDays,
             carryoverDays,
             careDays,
+            holidayDays,
         ]);
-        return { personId, year, limitDays, carryoverDays, careDays };
+        return { personId, year, limitDays, carryoverDays, careDays, holidayDays };
     }
 }

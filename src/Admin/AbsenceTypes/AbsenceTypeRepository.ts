@@ -31,6 +31,7 @@ export default class AbsenceTypeRepository extends BaseRepository<AbsenceType> {
                 ScrumboardAbsenceTypes.Color,
                 ScrumboardAbsenceTypes.CountsAgainstLimit,
                 ScrumboardAbsenceTypes.CountsAsCare,
+                ScrumboardAbsenceTypes.CountsAsHoliday,
                 COUNT(ScrumboardAbsences.Id) AS UsageCount
             FROM ScrumboardAbsenceTypes
             LEFT JOIN ScrumboardAbsences
@@ -71,6 +72,7 @@ export default class AbsenceTypeRepository extends BaseRepository<AbsenceType> {
             color: row.Color,
             countsAgainstLimit: !!row.CountsAgainstLimit,
             countsAsCare: !!row.CountsAsCare,
+            countsAsHoliday: !!row.CountsAsHoliday,
             _usageCount: Number(row.UsageCount ?? 0),
         });
     }

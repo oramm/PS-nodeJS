@@ -31,15 +31,35 @@ export default class AbsenceTypeValidator {
                 'Kolor musi być zapisany jako sześć znaków szesnastkowych, np. #0d6efd.'
             );
 
+        const countsAsCare =
+            dto.countsAsCare === undefined ? false : !!dto.countsAsCare;
+        const countsAsHoliday =
+            dto.countsAsHoliday === undefined ? false : !!dto.countsAsHoliday;
+        // Domyślnie typ schodzi z limitu urlopu - ale tylko wtedy, gdy nadawca nie wskazał
+        // innej puli. Bez tego payload {name, countsAsCare: true} dostawałby 400 za konflikt
+        // dwóch pul, którego sam nie zgłosił: druga flaga wzięłaby się z domyślnej wartości.
+        const countsAgainstLimit =
+            dto.countsAgainstLimit === undefined
+                ? !countsAsCare && !countsAsHoliday
+                : !!dto.countsAgainstLimit;
+
+        // Pule są rozłączne: kontroler urlopów sprawdza dostępne dni względem JEDNEJ
+        // puli (opieka, potem za święta, potem limit urlopu), ale salda roczne sumują
+        // każdą flagę osobno. Typ z dwiema flagami zjadałby dwie pule, będąc sprawdzanym
+        // względem jednej - salda rozjechałyby się cicho i wstecz. Panel ma trzy niezależne
+        // przełączniki, więc jedyne miejsce, gdzie da się to zatrzymać, jest tutaj.
+        if ([countsAgainstLimit, countsAsCare, countsAsHoliday].filter(Boolean).length > 1)
+            throw new BadRequestError(
+                'Typ nieobecności może schodzić najwyżej z jednej puli: ' +
+                    'limitu urlopu, opieki albo wolnego za święta.'
+            );
+
         return {
             name,
             color,
-            countsAgainstLimit:
-                dto.countsAgainstLimit === undefined
-                    ? true
-                    : !!dto.countsAgainstLimit,
-            countsAsCare:
-                dto.countsAsCare === undefined ? false : !!dto.countsAsCare,
+            countsAgainstLimit,
+            countsAsCare,
+            countsAsHoliday,
         } as AbsenceTypeData;
     }
 

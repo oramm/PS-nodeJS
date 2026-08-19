@@ -352,14 +352,15 @@ app.put(
                 'personId'
             );
             const year = ScrumboardValidator.parseYear(req.params.year);
-            const { limitDays, carryoverDays, careDays } =
+            const { limitDays, carryoverDays, careDays, holidayDays } =
                 ScrumboardValidator.parseVacationLimit(req.parsedBody);
             const result = await ScrumboardVacationsController.setLimit(
                 personId,
                 year,
                 limitDays,
                 carryoverDays,
-                careDays
+                careDays,
+                holidayDays
             );
             ScrumboardEvents.broadcast('absence-changed', {
                 action: 'limit',

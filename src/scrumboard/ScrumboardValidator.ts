@@ -1,7 +1,14 @@
+import { BadRequestError } from '../persons/projectAssignments/ProjectScopeGuard';
 import Setup from '../setup/Setup';
 import { parseDateOnly } from './vacations/vacationDateUtils';
 
-/** Walidacja payloadów scrumboarda (osobna klasa wg konwencji). */
+/**
+ * Walidacja payloadów scrumboarda (osobna klasa wg konwencji).
+ *
+ * Wszystko tutaj to błędy WEJŚCIA, więc BadRequestError (400), nie goły Error.
+ * Goły Error middleware mapuje na 500 z mailem-raportem do zespołu - literówka
+ * użytkownika nie jest awarią serwera.
+ */
 export default class ScrumboardValidator {
     private static readonly allowedStatuses = new Set(
         Object.values(Setup.TaskStatus)
@@ -11,7 +18,7 @@ export default class ScrumboardValidator {
     static parseTaskStatus(body: any): string {
         const status = body?.status;
         if (typeof status !== 'string' || !this.allowedStatuses.has(status))
-            throw new Error(`Nieprawidłowy status zadania: ${status}`);
+            throw new BadRequestError(`Nieprawidłowy status zadania: ${status}`);
         return status;
     }
 
@@ -19,14 +26,14 @@ export default class ScrumboardValidator {
         if (value === null || value === undefined || value === '') return null;
         const num = Number(value);
         if (Number.isNaN(num) || num < 0)
-            throw new Error(`Nieprawidłowa wartość pola ${field}`);
+            throw new BadRequestError(`Nieprawidłowa wartość pola ${field}`);
         return num;
     }
 
     static parseId(raw: string, field = 'id'): number {
         const id = Number(raw);
         if (!Number.isInteger(id) || id <= 0)
-            throw new Error(`Nieprawidłowe ${field}`);
+            throw new BadRequestError(`Nieprawidłowe ${field}`);
         return id;
     }
 
@@ -56,7 +63,7 @@ export default class ScrumboardValidator {
             if (field in (body ?? {}))
                 result[field] = this.toNullableHours(body[field], field);
         if (Object.keys(result).length === 0)
-            throw new Error('Brak pól godzin do aktualizacji');
+            throw new BadRequestError('Brak pól godzin do aktualizacji');
         return result;
     }
 
@@ -78,7 +85,7 @@ export default class ScrumboardValidator {
         for (const field of required) {
             const num = Number(body?.[field]);
             if (Number.isNaN(num) || num < 0)
-                throw new Error(`Nieprawidłowa wartość pola ${field}`);
+                throw new BadRequestError(`Nieprawidłowa wartość pola ${field}`);
             result[field] = num;
         }
         return result as any;
@@ -88,7 +95,7 @@ export default class ScrumboardValidator {
     static parseYear(raw: any): number {
         const year = Number(raw);
         if (!Number.isInteger(year) || year < 2000 || year > 2100)
-            throw new Error(`Nieprawidłowy rok: ${raw}`);
+            throw new BadRequestError(`Nieprawidłowy rok: ${raw}`);
         return year;
     }
 
@@ -96,7 +103,7 @@ export default class ScrumboardValidator {
         if (value === null || value === undefined || value === '') return null;
         const note = String(value).trim();
         if (note.length > 500)
-            throw new Error('Notatka jest zbyt długa (max 500 znaków)');
+            throw new BadRequestError('Notatka jest zbyt długa (max 500 znaków)');
         return note || null;
     }
 
@@ -104,7 +111,17 @@ export default class ScrumboardValidator {
         const dateFrom = parseDateOnly(body?.dateFrom, 'dateFrom');
         const dateTo = parseDateOnly(body?.dateTo, 'dateTo');
         if (dateTo < dateFrom)
-            throw new Error('Data końcowa nie może być wcześniejsza niż początkowa');
+            throw new BadRequestError('Data końcowa nie może być wcześniejsza niż początkowa');
+        // Pule (urlop, opieka, wolne za święta) rozliczają się rocznikami, a walidacja
+        // dostępnych dni patrzy na rok daty początkowej. Zakres przez sylwestra schodziłby
+        // w całości ze starego rocznika, cicho zawyżając jego zużycie i zaniżając nowy.
+        // Granica roku jest niewidoczna w kalendarzu, więc zamiast dzielić zakres po cichu
+        // za użytkownika, każemy wpisać dwa - wtedy widać, ile schodzi z której puli.
+        if (dateFrom.slice(0, 4) !== dateTo.slice(0, 4))
+            throw new BadRequestError(
+                'Nieobecność na przełomie roku wpisz osobno dla każdego roku - ' +
+                    'pule dni rozliczają się rocznikami.'
+            );
         return { dateFrom, dateTo };
     }
 
@@ -137,15 +154,16 @@ export default class ScrumboardValidator {
     private static parseDayAmount(value: any, field: string): number {
         const num = Number(value);
         if (Number.isNaN(num) || num < 0 || num > 366)
-            throw new Error(`Nieprawidłowa liczba dni w polu ${field}`);
+            throw new BadRequestError(`Nieprawidłowa liczba dni w polu ${field}`);
         return num;
     }
 
-    /** Wymiar urlopu: bieżący + zaległy + pula opieki, wszystkie >= 0. */
+    /** Wymiar urlopu: bieżący + zaległy + pula opieki + pula za święta, wszystkie >= 0. */
     static parseVacationLimit(body: any): {
         limitDays: number;
         carryoverDays: number;
         careDays: number;
+        holidayDays: number;
     } {
         return {
             limitDays: this.parseDayAmount(body?.limitDays, 'limitDays'),
@@ -154,6 +172,10 @@ export default class ScrumboardValidator {
                 'carryoverDays'
             ),
             careDays: this.parseDayAmount(body?.careDays ?? 0, 'careDays'),
+            holidayDays: this.parseDayAmount(
+                body?.holidayDays ?? 0,
+                'holidayDays'
+            ),
         };
     }
 }

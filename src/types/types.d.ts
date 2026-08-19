@@ -23,6 +23,7 @@ export interface AbsenceTypeData extends RepositoryDataItem {
     color: string;
     countsAgainstLimit: boolean;
     countsAsCare: boolean;
+    countsAsHoliday: boolean;
     /** Liczba nieobecności używających tego typu - pole wyliczane, tylko do odczytu. */
     _usageCount?: number;
 }
