@@ -439,9 +439,12 @@ async function transferMode(clients: Clients) {
 
     // zbierz obiekty własności `from`: wskazany obiekt + (dla folderu) całe poddrzewo
     const targets: drive_v3.Schema$File[] = [];
+    // Metadane czytamy kontem WLASCICIELA, nie mastera: przenoszony plik moze
+    // lezec poza drzewem projektow i byc masterowi zupelnie nieznany. Master
+    // i tak nie potrzebuje wczesniejszego dostepu — uprawnienie dostaje w kroku 1.
     const rootMeta = (
         await withRetry(() =>
-            masterDrive.files.get({
+            fromDrive.files.get({
                 fileId: rootId,
                 fields: 'id,name,mimeType,owners(emailAddress)',
                 supportsAllDrives: true,
@@ -484,22 +487,22 @@ async function transferMode(clients: Clients) {
                 await withRetry(() =>
                     fromDrive.permissions.list({
                         fileId: t.id!,
-                        fields: 'permissions(id,emailAddress,role,pendingOwner)',
+                        fields: 'permissions(id,emailAddress,role,pendingOwner,permissionDetails(inherited))',
                     })
                 )
             ).data.permissions ?? [];
+            // Dziedziczone z folderu nadrzednego traktujemy jak brak wpisu —
+            // permissions.update dziala tylko na uprawnieniach BEZPOSREDNICH
+            // (inaczej "Permission not found: <id>").
             let toPerm = perms.find(
-                (p) => (p.emailAddress || '').toLowerCase() === to
+                (p) =>
+                    (p.emailAddress || '').toLowerCase() === to &&
+                    !p.permissionDetails?.[0]?.inherited
             );
-            if (toPerm) {
-                await withRetry(() =>
-                    fromDrive.permissions.update({
-                        fileId: t.id!,
-                        permissionId: toPerm!.id!,
-                        requestBody: { role: 'writer', pendingOwner: true },
-                    })
-                );
-            } else {
+            // Uprawnienie utworzone OD RAZU z flaga pendingOwner jej nie zapisuje
+            // (a przy wylaczonym mailu bywa wprost odrzucane). Dlatego najpierw
+            // nadajemy zwykly `writer`, a dopiero potem podnosimy do pendingOwner.
+            if (!toPerm) {
                 toPerm = (
                     await withRetry(() =>
                         fromDrive.permissions.create({
@@ -508,13 +511,22 @@ async function transferMode(clients: Clients) {
                                 type: 'user',
                                 role: 'writer',
                                 emailAddress: to,
-                                pendingOwner: true,
                             },
+                            sendNotificationEmail: false,
                             fields: 'id',
+                            supportsAllDrives: true,
                         })
                     )
                 ).data;
             }
+            await withRetry(() =>
+                fromDrive.permissions.update({
+                    fileId: t.id!,
+                    permissionId: toPerm!.id!,
+                    requestBody: { role: 'writer', pendingOwner: true },
+                    supportsAllDrives: true,
+                })
+            );
             console.log('   1. inicjacja (pendingOwner) ✓');
 
             // 2. AKCEPTACJA (tokenem to)
@@ -1364,7 +1376,25 @@ async function takeoverMode(clients: Clients, rootOverride?: string) {
         console.log(`[takeover] Zapisano ${n} obiektów\n`);
     }
 
-    queue.push({ srcId: rootId, dstId: rootId, path: [], inArchived: false });
+    // Sciezka w archiwum MUSI zaczynac sie od nazwy przejmowanego korzenia,
+    // inaczej originaly z roznych projektow ladują na plask w korzeniu archiwum
+    // (i przy zbieznych nazwach folderow moglyby sie skleic).
+    const rootName =
+        (
+            await withRetry(() =>
+                masterDrive.files.get({
+                    fileId: rootId,
+                    fields: 'name',
+                    supportsAllDrives: true,
+                })
+            )
+        ).data.name || rootId;
+    queue.push({
+        srcId: rootId,
+        dstId: rootId,
+        path: [rootName],
+        inArchived: false,
+    });
     await Promise.all(Array.from({ length: concurrency }, worker));
     console.log();
 
