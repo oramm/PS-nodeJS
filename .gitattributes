@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Instalator Second Brain jest serwowany bajt w bajt takim, jaki lezy w repo rdzenia -
+# normalizacja koncow linii zmienialaby plik .cmd wydawany na Windowsa (Heroku checkoutuje na LF).
+assets/sb-installer/** -text
