@@ -433,47 +433,89 @@ process.on('unhandledRejection', (reason, promise) => {
     // Podobnie jak powyżej, możemy tutaj dodać kod do łagodnego zamykania aplikacji
 });
 
-setInterval(() => {
-    void bugEventCaptureService.flushPendingWindows();
-}, 30_000);
+// Zadania w tle (BugEvents flush, AQM drain, FIDman drain). Jeden wspolny helper
+// zamiast trzech osobnych setInterval:
+//  - blokada ponownego wejscia: kolejny tick jest POMIJANY, dopoki poprzedni przebieg
+//    trwa. Bez tego wolny przebieg (np. drainer czekajacy na wolne polaczenie z puli)
+//    nakladal sie na kolejne i mnozyl zapotrzebowanie na polaczenia dokladnie wtedy,
+//    gdy bylo ich najmniej.
+//  - brama srodowiskowa: na Heroku NODE_ENV=production, wiec tam zadania dzialaja bez
+//    zmian. Lokalnie NODE_ENV zawsze przychodzi z pliku .env (development), wiec
+//    zadania nie ruszaja w ZADNYM trybie uruchomienia, takze pod `yarn start:prod` -
+//    lokalna furtka to BACKGROUND_JOBS=true. Galaz "brak NODE_ENV = produkcja"
+//    dotyczy wylacznie srodowisk bez pliku .env, czyli Heroku.
+//  - unref: timer nigdy nie trzyma petli zdarzen przy zyciu.
+const nodeEnv = process.env.NODE_ENV || 'production';
+const backgroundJobsEnabled =
+    nodeEnv === 'production' || process.env.BACKGROUND_JOBS === 'true';
+
+function startBackgroundJob(
+    name: string,
+    intervalMs: number,
+    job: () => Promise<unknown>,
+): void {
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+        console.log(`[bg:${name}] wylaczony (interwal=${intervalMs}ms)`);
+        return;
+    }
+    if (!backgroundJobsEnabled) {
+        console.log(
+            `[bg:${name}] wylaczony poza produkcja (NODE_ENV=${nodeEnv}; ustaw BACKGROUND_JOBS=true, zeby wlaczyc lokalnie)`,
+        );
+        return;
+    }
+
+    // 0 = brak trwajacego przebiegu; inaczej znacznik czasu jego startu.
+    let runningSince = 0;
+
+    const timer = setInterval(() => {
+        if (runningSince) {
+            const runningForS = Math.round((Date.now() - runningSince) / 1000);
+            // Przebieg trwa dluzej niz interwal. Przyczyna moze byc kolejka puli albo
+            // zawieszone wywolanie HTTP w samym zadaniu - tego stad nie rozroznimy.
+            console.warn(
+                `[bg:${name}] poprzedni przebieg trwa ${runningForS}s - tick pominiety`,
+            );
+            return;
+        }
+        runningSince = Date.now();
+        // job() jest wolane WEWNATRZ try, wiec takze synchroniczny wyjatek trafia do
+        // catch, a finally zawsze zwalnia blokade. Inaczej jeden rzut zablokowalby
+        // zadanie na stale.
+        void (async () => {
+            try {
+                await job();
+            } catch (err) {
+                console.error(`[bg:${name}] blad przebiegu:`, err);
+            } finally {
+                runningSince = 0;
+            }
+        })();
+    }, intervalMs);
+    // Do not keep the event loop alive solely for the background job.
+    if (typeof timer.unref === 'function') timer.unref();
+
+    console.log(`[bg:${name}] wlaczony, interwal ${intervalMs}ms`);
+}
+
+startBackgroundJob('bugEvents-flush', 30_000, () =>
+    bugEventCaptureService.flushPendingWindows(),
+);
 
 // WS10 — AQM outbox drainer (L8): re-send PENDING/FAILED contract pushes on an
-// interval with attempt-based backoff. Non-blocking (void) and fully swallowed
-// (drainAqmOutbox never throws); a drain error can never break the server.
+// interval with attempt-based backoff. Fully swallowed by startBackgroundJob;
+// a drain error can never break the server.
 // Interval from env AQM_SYNC_DRAIN_INTERVAL_MS (default 60s; 0 disables).
-{
-    const drainIntervalMs = Setup.AqmSync.drainIntervalMs;
-    if (drainIntervalMs > 0) {
-        const drainTimer = setInterval(() => {
-            void drainAqmOutbox().catch((err) =>
-                console.error('[AqmSync] scheduled drain error:', err),
-            );
-        }, drainIntervalMs);
-        // Do not keep the event loop alive solely for the drainer.
-        if (typeof drainTimer.unref === 'function') drainTimer.unref();
-    } else {
-        console.log('[AqmSync] outbox drainer disabled (AQM_SYNC_DRAIN_INTERVAL_MS=0)');
-    }
-}
+startBackgroundJob('aqmSync-drain', Setup.AqmSync.drainIntervalMs, () =>
+    drainAqmOutbox(),
+);
 
 // SYNC-P1 — FIDman outbox drainer (L8): backstop re-send of PENDING/FAILED PS→FIDman
 // pushes on an interval. Separate table (FidmanSyncOutbox) from the AQM drainer.
-// Non-blocking (void) and fully swallowed (drainFidmanOutbox never throws).
 // Interval from env FIDMAN_SYNC_DRAIN_INTERVAL_MS (default 60s; 0 disables).
-{
-    const drainIntervalMs = Setup.FidmanSync.drainIntervalMs;
-    if (drainIntervalMs > 0) {
-        const drainTimer = setInterval(() => {
-            void drainFidmanOutbox().catch((err) =>
-                console.error('[FidmanSync] scheduled drain error:', err),
-            );
-        }, drainIntervalMs);
-        // Do not keep the event loop alive solely for the drainer.
-        if (typeof drainTimer.unref === 'function') drainTimer.unref();
-    } else {
-        console.log('[FidmanSync] outbox drainer disabled (FIDMAN_SYNC_DRAIN_INTERVAL_MS=0)');
-    }
-}
+startBackgroundJob('fidmanSync-drain', Setup.FidmanSync.drainIntervalMs, () =>
+    drainFidmanOutbox(),
+);
 
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method))

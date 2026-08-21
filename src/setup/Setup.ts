@@ -2,9 +2,53 @@ import { ImapFlowOptions, Logger } from 'imapflow';
 import mysql from 'mysql2/promise';
 
 export default class Setup {
+    /**
+     * Pula polaczen MySQL. Budzet calego konta to `max_user_connections = 20`,
+     * dzielony z dobowym dynem Schedulera, faza release i sesjami administracyjnymi.
+     *
+     * `maxIdle` MUSI byc mniejsze od `connectionLimit` - inaczej mysql2 w ogole nie
+     * uruchamia zbieracza bezczynnych polaczen (base/pool.js:29), a polaczenie raz
+     * otwarte lezy zajete az do `wait_timeout` serwera, czyli 8 godzin. Dyno Eco
+     * usypia i budzi sie pod nowym adresem, wiec kazda taka sierota zjada slot
+     * konta do nastepnego poranka.
+     *
+     * `idleTimeout` krotszy od cyklu drainerow (60 s) sprowadza pule do zera miedzy
+     * cyklami, wiec zasypiajace dyno zostawia najwyzej jedna sierote zamiast
+     * kompletu polaczen. Kosztem jest jeden handshake na minute w spoczynku.
+     *
+     * `queueLimit` ogranicza DLUGOSC kolejki, nie czas czekania - mysql2 3.14.5 nie
+     * ma opcji limitujacej czas oczekiwania na polaczenie. Dotychczasowe `0` jest
+     * falsy, wiec kolejka rosla bez konca i zadanie wisialo, az Heroku ubil je po
+     * 30 s. Setka stoi nad realnym pikiem (6 osob x 12 zadan Dashboardu), a blad
+     * "Queue limit reached." nie jest bledem polaczenia, wiec nie wywoluje resetPool.
+     */
     static get dbConfig(): mysql.PoolOptions {
+        const envInt = (raw: string | undefined, fallback: number): number => {
+            const trimmed = raw?.trim();
+            if (!trimmed) return fallback;
+            const value = Number(trimmed);
+            return Number.isInteger(value) && value >= 0 ? value : fallback;
+        };
+        const connectionLimit = Math.max(
+            2,
+            envInt(process.env.DB_CONNECTION_LIMIT, 8)
+        );
+        const maxIdle = Math.max(
+            1,
+            Math.min(
+                envInt(process.env.DB_MAX_IDLE, connectionLimit - 1),
+                connectionLimit - 1
+            )
+        );
+        const idleTimeout = Math.max(
+            1000,
+            envInt(process.env.DB_IDLE_TIMEOUT_MS, 45000)
+        );
+
         return {
-            connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
+            connectionLimit,
+            maxIdle,
+            idleTimeout,
             host: process.env.DB_HOST,
             user: process.env.DB_USER,
             password: process.env.DB_PASSWORD,
@@ -12,7 +56,7 @@ export default class Setup {
             multipleStatements: process.env.DB_MULTIPLE_STATEMENTS !== 'false',
             timezone: '+00:00',
             waitForConnections: true,
-            queueLimit: 0,
+            queueLimit: envInt(process.env.DB_QUEUE_LIMIT, 100),
             enableKeepAlive: true,
             keepAliveInitialDelay: 0,
             connectTimeout: 10000,
