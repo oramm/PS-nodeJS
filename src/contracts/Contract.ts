@@ -55,6 +55,11 @@ export default abstract class Contract
     _ourIdOrNumber_Name?: string;
     _ourIdOrNumber_Alias?: string;
     _contractors?: EntityData[];
+    /** Lider konsorcjum: Id podmiotu z `_contractors`. Pole pomocnicze (prefiks `_`),
+     *  bo znacznik mieszka na wierszu powiązania kontrakt-podmiot, nie na kontrakcie.
+     *  Przy odczycie wypełniane z powiązania oznaczonego jako lider, przy zapisie
+     *  przychodzi z żądania. Brak = kontrakt bez lidera. */
+    _leaderEntityId?: number;
     _engineers?: EntityData[];
     _employers?: EntityData[];
     status: string;
@@ -100,6 +105,59 @@ export default abstract class Contract
         if (value === undefined) return undefined;
         if (value === null || value === '') return null;
         return ToolsDate.dateJsToSql(value as string | Date) ?? null;
+    }
+
+    /** Lider konsorcjum na początek listy wykonawców.
+     *
+     *  Reguła nazywania folderu (`ContractOther.setFolderName()`) bierze pierwszego
+     *  wykonawcę i tak zostaje — zmienia się to, KTO jest pierwszy, a nie reguła.
+     *  Dzięki temu lider wychodzi też wszędzie indziej, gdzie wykonawcy się wypisują,
+     *  bez dopisywania warunku „jeśli konsorcjum" w każdym z tych miejsc.
+     *
+     *  Przestawiamy wyłącznie lidera, reszta zostaje w kolejności, w jakiej przyszła
+     *  (przy odczycie z bazy alfabetycznie po nazwie, przy zapisie w kolejności
+     *  z żądania). Bez wskazanego lidera lista wraca nietknięta, czyli kontrakt bez
+     *  lidera zachowuje się dokładnie tak jak przed wprowadzeniem znacznika. */
+    private static putLeaderFirst<Type extends { id?: number | string }>(
+        contractors: Type[],
+        leaderEntityId?: number
+    ): Type[] {
+        if (leaderEntityId === undefined) return contractors;
+        const leader = contractors.filter((contractor) =>
+            Contract.isSameEntityId(contractor.id, leaderEntityId)
+        );
+        if (!leader.length) return contractors;
+        return [
+            ...leader,
+            ...contractors.filter(
+                (contractor) =>
+                    !Contract.isSameEntityId(contractor.id, leaderEntityId)
+            ),
+        ];
+    }
+
+    /** Identyfikator podmiotu bywa liczbą z bazy i napisem z formularza. Porównanie
+     *  przez samo `===` mówiłoby wtedy „ta firma nie jest na liście", choć jest —
+     *  a komunikat o tym wysłałby właściciela na poszukiwanie nieistniejącego błędu
+     *  w danych. Porównujemy więc po wartości liczbowej. */
+    static isSameEntityId(
+        entityId: number | string | undefined | null,
+        leaderEntityId: number | undefined
+    ): boolean {
+        if (leaderEntityId === undefined) return false;
+        if (entityId === undefined || entityId === null || entityId === '')
+            return false;
+        return Number(entityId) === leaderEntityId;
+    }
+
+    /** Wskazanie lidera z żądania sprowadzone do liczby - patrz `isSameEntityId`.
+     *  Pusto (brak pola, `null`, pusty napis) znaczy „bez lidera", czyli stan normalny.
+     *  Wartość, która liczbą nie jest, zwracamy jako `NaN`, żeby walidator mógł ją
+     *  odrzucić komunikatem, zamiast po cichu potraktować jak brak wskazania. */
+    private static parseLeaderEntityId(value: unknown): number | undefined {
+        if (value === undefined || value === null || value === '')
+            return undefined;
+        return Number(value);
     }
 
     constructor(initParamObject: any, conn?: mysql.PoolConnection) {
@@ -180,9 +238,13 @@ export default abstract class Contract
         this.meetingProtocolsGdFolderId =
             initParamObject.meetingProtocolsGdFolderId;
 
-        this._contractors = initParamObject._contractors
-            ? initParamObject._contractors
-            : [];
+        this._leaderEntityId = Contract.parseLeaderEntityId(
+            initParamObject._leaderEntityId
+        );
+        this._contractors = Contract.putLeaderFirst(
+            initParamObject._contractors ?? [],
+            this._leaderEntityId
+        );
         this._engineers = initParamObject._engineers
             ? initParamObject._engineers
             : [];

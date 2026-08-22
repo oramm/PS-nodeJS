@@ -22,6 +22,7 @@ import ProjectRepository from '../projects/ProjectRepository';
 import ToolsGd from '../tools/ToolsGd';
 import ContractEntityController from './ContractEntityController';
 import ContractEntityRepository from './ContractEntityRepository';
+import ContractLeaderValidator from './ContractLeaderValidator';
 import ContractOther from './ContractOther';
 import ContractOur from './ContractOur';
 import ContractRangeContractRepository from './contractRangesContracts/ContractRangeContractRepository';
@@ -105,6 +106,13 @@ export default class ContractsController extends BaseController<
     // Repository dla asocjacji
     private static rangeRepository = new ContractRangeContractRepository();
 
+    /** Pola żądania, których obecność oznacza „ten zapis przepisuje powiązania z podmiotami". */
+    private static readonly entityKeys = [
+        '_employers',
+        '_engineers',
+        '_contractors',
+    ];
+
     constructor() {
         super(new ContractRepository());
     }
@@ -178,6 +186,9 @@ export default class ContractsController extends BaseController<
         const instance = this.getInstance();
 
         this.ensureAliasPresent(contract);
+        // Przed czymkolwiek: błędne wskazanie lidera ma zatrzymać zapis, zanim
+        // powstanie folder na Dysku i zanim cokolwiek wejdzie do bazy.
+        ContractLeaderValidator.validate(contract);
 
         // Walidacja biznesowa
         if (await instance.repository.isUniquePerProject(contract)) {
@@ -351,6 +362,34 @@ export default class ContractsController extends BaseController<
         try {
             this.ensureAliasPresent(contract, fieldsToUpdate);
 
+            // Czy ten zapis w ogóle przepisuje powiązania z podmiotami. Liczone TUTAJ,
+            // przed krokiem folderowym, a nie dopiero w transakcji: od tego zależy, czy
+            // wskazanie lidera z żądania ma prawo cokolwiek zmienić.
+            const anyEntityToUpdate =
+                !fieldsToUpdate ||
+                ContractsController.entityKeys.some((key) =>
+                    fieldsToUpdate.includes(key)
+                );
+
+            // Edycja częściowa, która powiązań nie dotyka, NIE zapisze znacznika lidera
+            // w bazie. Gdyby mimo to wskazanie z żądania zostało w instancji, bramka
+            // przemianowania otworzyłaby się na lidera, którego baza nie dostała, i nazwa
+            // folderu klienta rozjechałaby się z bazą - nieodwracalnie, bo Dysk to pliki,
+            // nie kopie. Wskazanie spoza zakresu zapisu ma więc nie istnieć dla tego zapisu.
+            // Nie zmieniamy przy tym kolejności `_contractors`: model ustawił ją przy budowie
+            // instancji, a bramka i tak stoi zamknięta przy dwóch wykonawcach bez wskazania.
+            if (!anyEntityToUpdate && contract._leaderEntityId !== undefined) {
+                console.log(
+                    'Wskazanie lidera pominięte - ta edycja nie przepisuje powiązań z podmiotami'
+                );
+                contract._leaderEntityId = undefined;
+            }
+
+            // Po neutralizacji wskazania spoza zakresu: walidujemy wyłącznie to, co ten
+            // zapis faktycznie niesie do bazy. Przed operacjami na Dysku i przed transakcją,
+            // żeby zapis z liderem spoza listy wykonawców nie odbył się połowicznie.
+            ContractLeaderValidator.validate(contract);
+
             // Lista pól które wymagają tylko update DB (bez GD/Scrum)
             const onlyDbFields = [
                 'status',
@@ -465,12 +504,9 @@ export default class ContractsController extends BaseController<
                     fieldsToUpdate
                 );
 
-                // 2. Update asocjacji Entity
-                const entityKeys = ['_employers', '_engineers', '_contractors'];
-                const anyEntityToUpdate =
-                    !fieldsToUpdate ||
-                    entityKeys.some((key) => fieldsToUpdate.includes(key));
-
+                // 2. Update asocjacji Entity - ten sam warunek, który wyżej zdecydował
+                // o losie wskazania lidera. Jedno wyliczenie, żeby krok folderowy i zapis
+                // powiązań nie mogły się rozjechać.
                 if (anyEntityToUpdate) {
                     console.log('Edytuję powiązania z podmiotami');
                     await ContractEntityController.editAssociations(

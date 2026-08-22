@@ -36,11 +36,14 @@ export default class ContractEntityController extends BaseController<
         const instance = this.getInstance();
 
         if (contract._contractors?.length) {
+            // Lidera przenosimy tylko przy wykonawcach - przy zamawiającym
+            // i inżynierze nie ma czego wskazywać.
             await instance.repository.addAssociations(
                 contract,
                 contract._contractors,
                 'CONTRACTOR',
-                conn
+                conn,
+                contract._leaderEntityId
             );
         }
         if (contract._engineers?.length) {

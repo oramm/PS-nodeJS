@@ -443,6 +443,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                           }
                         : undefined,
                     _contractors: contractors.map((item) => item._entity),
+                    // Kolejność wykonawców ustawia model (lider na początek) - tak samo
+                    // jak w ContractRepository. Tutaj tylko przekazujemy, kto nim jest.
+                    _leaderEntityId:
+                        ContractEntityAssociationsHelper.findLeaderEntityId(
+                            contractors
+                        ),
                     _engineers: engineers.map((item) => item._entity),
                     _employers: employers.map((item) => item._entity),
                 };

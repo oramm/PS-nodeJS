@@ -8,6 +8,8 @@ import ToolsDb from '../tools/ToolsDb';
  */
 export type ContractEntityAssociation = {
     contractRole: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER';
+    /** Lider konsorcjum — znacznik na wierszu powiązania (`Contracts_Entities.IsLeader`). */
+    isLeader?: boolean;
     _contract: {
         id: number;
         ourId?: string; // OurId z OurContractsData (jeśli kontrakt jest "our")
@@ -26,6 +28,23 @@ export type ContractEntityAssociation = {
  * - ContractsWithChildrenRepository
  */
 export default class ContractEntityAssociationsHelper {
+    /**
+     * Id podmiotu oznaczonego jako lider konsorcjum wśród podanych powiązań.
+     *
+     * Znacznik dotyczy wyłącznie wykonawców — po stronie zamawiającego i inżyniera
+     * lider nie ma sensu, więc pozostałe role są tu pomijane, choćby przyszły w liście.
+     * `undefined` = nikt nie jest wskazany; to stan normalny, nie brak danych.
+     */
+    static findLeaderEntityId(
+        associations: ContractEntityAssociation[]
+    ): number | undefined {
+        return associations.find(
+            (association) =>
+                association.contractRole === 'CONTRACTOR' &&
+                association.isLeader
+        )?._entity?.id;
+    }
+
     /**
      * Pobiera listę asocjacji Contract-Entity z bazy danych
      *
@@ -63,6 +82,7 @@ export default class ContractEntityAssociationsHelper {
                 Contracts_Entities.ContractId,
                 Contracts_Entities.EntityId,
                 Contracts_Entities.ContractRole,
+                Contracts_Entities.IsLeader,
                 OurContractsData.OurId AS ContractOurId,
                 Entities.Name,
                 Entities.ShortName,
@@ -98,6 +118,7 @@ export default class ContractEntityAssociationsHelper {
         for (const row of result) {
             const item: ContractEntityAssociation = {
                 contractRole: row.ContractRole,
+                isLeader: !!row.IsLeader,
                 _contract: {
                     id: row.ContractId,
                     ourId: row.ContractOurId || undefined,

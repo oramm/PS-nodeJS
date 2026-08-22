@@ -891,6 +891,12 @@ export default class ContractRepository extends BaseRepository<
                 isOur: row.TypeIsOur,
             }),
             _contractors: contractors.map((item) => item._entity),
+            // Kolejność wykonawców ustawia model (lider na początek). Tutaj tylko
+            // przekazujemy, kto nim jest — wynika to ze znacznika na powiązaniu.
+            _leaderEntityId:
+                ContractEntityAssociationsHelper.findLeaderEntityId(
+                    contractors
+                ),
             _engineers: engineers.map((item) => item._entity),
             _employers: employers.map((item) => item._entity),
             _contractRangesPerContract: rangesPerContract,

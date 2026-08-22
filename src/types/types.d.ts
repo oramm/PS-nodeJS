@@ -105,6 +105,11 @@ export interface ContractData extends RepositoryDataItem {
     _ourIdOrNumber_Name?: string;
     _lastUpdated?: string;
     _contractors?: Entity[];
+    /** Lider konsorcjum: Id podmiotu z `_contractors`. Prefiks `_` nie jest ozdobą —
+     *  znacznik jest przechowywany na wierszu powiązania (`Contracts_Entities.IsLeader`),
+     *  a nie na kontrakcie, więc ToolsDb ma to pole pominąć przy zapisie `Contracts`.
+     *  Brak wartości = kontrakt bez wskazanego lidera; to stan normalny, nie brak danych. */
+    _leaderEntityId?: number;
     _engineers?: Entity[];
     _employers?: Entity[];
     _contractRangesPerContract?: ContractRangePerContractData[];

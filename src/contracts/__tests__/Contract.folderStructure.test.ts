@@ -105,11 +105,14 @@ describe('Contract folder structure', () => {
     });
 
     /**
-     * Konsorcjum: folder nazwał człowiek po liderze, a reguła nazewnicza bierze
-     * pierwszego wykonawcę z listy i o liderze nic nie wie. Zapis kontraktu nie
-     * może przemianować takiego folderu. Para testów, bo sam brak wywołania
-     * niczego nie dowodzi - przypadek z jednym wykonawcą pokazuje, że zmiana
-     * nazwy w ogóle działa.
+     * Konsorcjum BEZ wskazanego lidera: folder nazwał człowiek po liderze, a reguła
+     * nazewnicza bierze pierwszego wykonawcę z listy i bez znacznika nie wie, kto nim
+     * jest. Zapis kontraktu nie może wtedy przemianować takiego folderu. Para testów,
+     * bo sam brak wywołania niczego nie dowodzi - przypadek z jednym wykonawcą pokazuje,
+     * że zmiana nazwy w ogóle działa.
+     *
+     * Przypadek konsorcjum ZE wskazanym liderem (wariant (b) decyzji `G-LDR-5`, gdzie
+     * przemianowanie jest dozwolone) siedzi razem z resztą lidera w ContractLeader.test.ts.
      */
     describe('editFolder rename guard', () => {
         const makeContractOther = (contractors: any[]) =>
@@ -140,7 +143,7 @@ describe('Contract folder structure', () => {
             } as any);
         });
 
-        it('does not rename an existing folder when the contract has several contractors', async () => {
+        it('does not rename an existing folder when the contract has several contractors and no leader', async () => {
             const updateFolderSpy = jest
                 .spyOn(ToolsGd, 'updateFolder')
                 .mockResolvedValue({} as any);

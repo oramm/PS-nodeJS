@@ -67,21 +67,43 @@ export default class ContractOther
     }
 
     /**
-     * Konsorcjum: nazwy folderu nie da się wyprowadzić z danych kontraktu.
+     * Konsorcjum: nazwa folderu idzie za JAWNIE wskazanym liderem, albo nie idzie wcale.
      *
-     * setFolderName() bierze `_contractors[0]`, czyli pierwszego z listy, a lider
-     * konsorcjum nie jest w PS nigdzie zapisany (Contracts_Entities ma tylko
-     * ContractRole, bez znacznika lidera). Kolejność jest przypadkowa: przy
-     * odczycie z bazy to sortowanie alfabetyczne po Entities.Name, a przy zapisie
-     * z klienta to kolejność w payloadzie. Człowiek nazywa taki folder po liderze,
-     * więc zapis kontraktu nie ma prawa nadpisać tego własnym zgadywaniem.
+     * setFolderName() bierze `_contractors[0]`, czyli pierwszego z listy. Bez wskazanego
+     * lidera „pierwszy" nic nie znaczy: przy odczycie z bazy to porządek alfabetyczny po
+     * Entities.Name, przy zapisie z klienta kolejność w payloadzie. Człowiek nazywa taki
+     * folder po liderze, więc dopóki lidera nie wskazał, zapis nie ma prawa nadpisać
+     * jego nazwy własnym zgadywaniem. Gdy wskazał - model stawia lidera na czele listy
+     * (Contract.putLeaderFirst), wyliczona nazwa niesie JEGO skrót i wolno ją zapisać.
      *
-     * Sufit tego uproszczenia: przy konsorcjum zmiana aliasu NIE przeniesie się
-     * na nazwę folderu - trzeba ją poprawić ręcznie na Dysku. Zniknie dopiero
-     * wtedy, gdy PS zacznie zapisywać lidera konsorcjum.
+     * Wariant (b) decyzji `G-LDR-5`, wybrany przez ownera 2026-08-22 świadomie wbrew
+     * rekomendacji planu, którą był wariant (a) („bramka zostaje bezwarunkowo").
+     * Powód: skoro człowiek jawnie wskazuje lidera na ekranie, nazwa folderu ma za tym iść.
+     *
+     * SUFIT tego wariantu, czyli czego on NIE załatwia:
+     *  1. Błędnie wskazany lider przemianowuje folder klienta przy następnym zapisie,
+     *     NIEODWRACALNIE (Dysk to pliki, nie kopie). Różnica wobec stanu sprzed bramki
+     *     jest jedna: dzieje się to na jawne wskazanie człowieka na ekranie, a nie po cichu.
+     *  2. Konsorcjum BEZ wskazanego lidera dalej nie przenosi zmiany aliasu na nazwę
+     *     folderu - trzeba ją poprawić ręcznie na Dysku.
+     *  3. To samo dotyczy kontraktu, który w danym zapisie nie ma ŻADNEGO wykonawcy:
+     *     zmiana aliasu nie dojdzie do nazwy folderu, dopóki wykonawca nie zostanie
+     *     wpisany. Cena przyjęta świadomie - tańsza niż skasowanie nazwy nadanej ręcznie.
      */
     protected canRenameExistingFolder(): boolean {
-        return (this._contractors?.length ?? 0) <= 1;
+        const contractors = this._contractors ?? [];
+        // Pusta lista to „nie wiem, kto jest wykonawcą", a nie „nie ma czego zgadywać".
+        // Wyliczona nazwa byłaby wtedy `K <alias>`, bez skrótu firmy, i skasowałaby nazwę
+        // nadaną ręcznie po liderze. Brak danych nie może otwierać bramki - to jest ta sama
+        // zasada, dla której konsorcjum bez wskazanego lidera też jej nie otwiera.
+        if (contractors.length === 0) return false;
+        // Jeden wykonawca - nazwa wynika z danych jednoznacznie, jak przed packiem LDR.
+        if (contractors.length === 1) return true;
+        // Porównanie z `_contractors[0]`, a nie samo „lider jest ustawiony": tylko wtedy
+        // wyliczona nazwa faktycznie niesie skrót lidera. Lider spoza listy wykonawców
+        // (odrzucany przy zapisie przez ContractLeaderValidator) niczego tu nie otwiera.
+        if (this._leaderEntityId === undefined) return false;
+        return Contract.isSameEntityId(contractors[0]?.id, this._leaderEntityId);
     }
 
     getType(ourId: string): string {

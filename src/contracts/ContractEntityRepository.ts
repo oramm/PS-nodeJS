@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import BaseRepository from '../repositories/BaseRepository';
+import Contract from './Contract';
 import ContractEntity from './ContractEntity';
 import Entity from '../entities/Entity';
 import ContractOur from './ContractOur';
@@ -25,6 +26,7 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
     protected mapRowToModel(row: any): ContractEntity {
         return new ContractEntity({
             contractRole: row.ContractRole,
+            isLeader: !!row.IsLeader,
             _contract: {
                 id: row.ContractId,
             },
@@ -62,6 +64,7 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
             (assoc) =>
                 new ContractEntity({
                     contractRole: assoc.contractRole,
+                    isLeader: assoc.isLeader ?? false,
                     _contract: assoc._contract,
                     _entity: assoc._entity,
                 })
@@ -74,12 +77,16 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
      * @param entities - Lista encji do powiązania (EntityData lub Entity)
      * @param role - Rola encji (CONTRACTOR, ENGINEER, EMPLOYER)
      * @param conn - Połączenie do bazy danych (dla transakcji)
+     * @param leaderEntityId - Id podmiotu-lidera konsorcjum. Nieobowiązkowy; bez niego
+     *   żaden wiersz nie dostaje znacznika, czyli zachowanie jest identyczne jak przed
+     *   dołożeniem kolumny IsLeader. Sensowny wyłącznie dla roli CONTRACTOR.
      */
     async addAssociations(
         contract: { id?: number },
         entities: EntityData[] | Entity[],
         role: 'CONTRACTOR' | 'ENGINEER' | 'EMPLOYER',
-        conn: mysql.PoolConnection
+        conn: mysql.PoolConnection,
+        leaderEntityId?: number
     ): Promise<void> {
         if (!contract.id)
             throw new Error('Contract ID is required for associations');
@@ -88,6 +95,7 @@ export default class ContractEntityRepository extends BaseRepository<ContractEnt
                 _contract: { id: contract.id },
                 _entity: entity,
                 contractRole: role,
+                isLeader: Contract.isSameEntityId(entity.id, leaderEntityId),
             });
             await ToolsDb.addInDb(this.tableName, association, conn);
         }
