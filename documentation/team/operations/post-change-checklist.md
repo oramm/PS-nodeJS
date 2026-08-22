@@ -63,6 +63,40 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-08-22 - Contracts_Entities.IsLeader (lider konsorcjum)
+
+### Scope
+
+- New optional column `Contracts_Entities.IsLeader`: which contractor of a consortium is its leader. The marker sits on the contract-entity link row — not on the contract, and not as a new `ContractRole` enum value; the reasoning and the rejected alternatives are in the migration header.
+- File number is `011` because `010` is carried by **two** different files in this directory. Take the next free number by listing the directory, not by counting.
+
+### Impact
+
+- DB: `Contracts_Entities` gains `IsLeader TINYINT(1) NOT NULL DEFAULT 0`. Additive and optional — no existing row changes meaning, nothing becomes required, and a contract with no leader stays a normal state rather than missing data.
+- ENV: none. No new key, `.env.example` untouched.
+- Deploy: **the migration must be applied on kylos BEFORE the code is pushed.** The Heroku `release: migrate verify` gate fails on ANY migration file it does not find in the ledger, not only on a drift. Pushing first fails the release and production keeps serving the previous version.
+
+### Required Actions
+
+- Applied on local `envikons_myEnvi` and `envikons_local` on 2026-08-22. **NOT applied on kylos** — production rollout is a separate, owner-gated step.
+- Rollout order is mandatory, not a suggestion: production DB backup → `migrate apply` on kylos (`apply`, never `baseline` — baseline records the file as applied without running it) → push `PS-nodeJS` `main`, which is the production deploy itself (no staging) → push `ENVI.ProjectSite` `master` last, because a screen asking for a field the API does not know yet is broken.
+- Run `npx jest src/contracts` and `npx tsc --noEmit`.
+
+### Verification
+
+- Read `information_schema.COLUMNS` for `Contracts_Entities` before and after. A green `migrate verify` and a row in `SchemaMigrations` are NOT evidence here.
+- `SELECT COUNT(*), SUM(IsLeader) FROM Contracts_Entities` — the sum must be `0` straight after the migration: no contract may acquire a leader by accident.
+
+### Rollback
+
+- `src/contracts/migrations/011_add_is_leader_to_contracts_entities_down.sql` exists: `ALTER TABLE Contracts_Entities DROP COLUMN IF EXISTS IsLeader`. It destroys data — dump the marked rows first: `SELECT ContractId, EntityId, ContractRole, IsLeader FROM Contracts_Entities WHERE IsLeader = 1`.
+
+### Links
+
+- `src/contracts/migrations/011_add_is_leader_to_contracts_entities.sql`
+- `src/contracts/migrations/011_add_is_leader_to_contracts_entities_down.sql`
+- `documentation/team/operations/db-changes.md`
+
 ## 2026-08-01 - MailScans (znacznik ostatniego skanu skrzynki)
 
 ### Scope
