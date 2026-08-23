@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import { app } from '../../index';
+import ContractsController from '../ContractsController';
 import {
     getFidmanContractSyncStatus,
     getFidmanNipGapReport,
-    retryFidmanContractSync,
+    retryOrPushFidmanContract,
 } from './FidmanSync';
 
 /**
@@ -17,9 +18,14 @@ import {
  *     -> FidmanSyncStatus (see FidmanSync.ts) for the badge + skip-reason "awizo"
  *        on the contract list/card.
  *   POST /contract/:id/fidmanSync/retry
- *     -> manual "dopchnij synchronizację": re-delivers the latest FAILED/SKIPPED
- *        row via deliverOutboxRow (P1 code, not reimplemented). 404 when there is
- *        no FAILED/SKIPPED row to retry.
+ *     -> manual "dopchnij synchronizację" (WYK-2 zadanie 4). Ponawia ostatni wiersz
+ *        FAILED/SKIPPED, a gdy takiego nie ma — buduje ładunek od nowa z ŻYWEJ umowy
+ *        i wysyła, bo to jest stan każdej nowej umowy po zaznaczeniu „Objęta
+ *        synchronizacją" oraz każdej, której ostatnia wysyłka się udała.
+ *        Umowa nieprzechodząca bramki -> 409 z powodem i BEZ wpisu w kolejce.
+ *        404 zostaje wyłącznie dla „nie ma takiej umowy".
+ *        Umowę składa TA TRASA (ContractsController.find), tak jak robi to
+ *        src/scripts/fidman-backfill.ts — moduł syncu nie importuje kontrolera.
  *   GET  /fidmanSync/gaps
  *     -> SYNC-P3 "awizowanie braków": FidmanNipGapReport — entities missing a
  *        valid NIP that are parties of synced-type contracts, plus synced-type
@@ -48,11 +54,24 @@ app.post(
             const contractId = parseInt(req.params.id, 10);
             if (!contractId)
                 throw new Error('Brak wymaganego parametru: id kontraktu');
-            const result = await retryFidmanContractSync(contractId);
-            if (!result.ok) {
+            // Żywa umowa RAZEM ZE STRONAMI — `find({ id })` dokleja _employers/_engineers/
+            // _contractors (ContractRepository.setContractPartsbySearchParams), więc ładunek
+            // ma z czego powstać. Ta sama cegła, której używa skrypt masowego dopchnięcia.
+            const [contract] = (await ContractsController.find([
+                { id: contractId },
+            ])) as any[];
+            if (!contract) {
                 res.status(404).send({
-                    error: 'Brak wpisu FAILED/SKIPPED do ponowienia dla tego kontraktu',
+                    error: 'Nie znaleziono umowy o podanym identyfikatorze',
                 });
+                return;
+            }
+
+            const result = await retryOrPushFidmanContract(contract);
+            if (!result.ok) {
+                // 409 — żądanie zrozumiałe, ale stan umowy na wysyłkę nie pozwala.
+                // Ciało `{ error }` jak dotąd, bo front wstawia je do alertu werbatim.
+                res.status(409).send({ error: result.message });
                 return;
             }
             res.send(result.status);

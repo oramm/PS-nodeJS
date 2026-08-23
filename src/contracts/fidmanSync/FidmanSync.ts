@@ -647,13 +647,14 @@ export async function getFidmanContractSyncStatus(
  * FAILED/SKIPPED `contract.upsert` outbox row for a contract using the SAME
  * `deliverOutboxRow` P1 uses (no reimplementation of the HTTP/status logic).
  *
- * // ponytail: re-delivers the row's existing Payload snapshot rather than
- * // rebuilding it from live contract/entity data — rebuilding would require
- * // re-joining the full contract (employers/engineers/contractors) here, which
- * // duplicates ContractsController's assembly logic. In practice a source-data
- * // fix (contract edit or Entity edit) already re-enqueues a fresh row via the
- * // existing P1 wiring, so "dopchnij" is for retrying a transient delivery
- * // failure, not for re-snapshotting stale payloads.
+ * Ponawia migawkę `Payload` z wiersza, a nie stan żywej umowy — i to zostaje.
+ * Przypadek „umowa nie ma czego ponawiać" obsługuje `retryOrPushFidmanContract()`
+ * niżej (WYK-2, zadanie 4); ta funkcja pozostaje wąska i zwraca wtedy `NOT_FOUND`.
+ *
+ * Uwaga historyczna: wcześniejszy komentarz w tym miejscu odrzucał przebudowę ładunku,
+ * bo „dublowałaby logikę składania umowy z kontrolera". Powód wygasł — składa ją dziś
+ * `src/scripts/fidman-backfill.ts` przez `ContractsController.find()` i tą samą cegłą
+ * idzie router, więc druga ścieżka składania nie powstaje.
  */
 export async function retryFidmanContractSync(
     contractId: number
@@ -675,6 +676,58 @@ export async function retryFidmanContractSync(
     if (!row) return { ok: false, reason: 'NOT_FOUND' };
 
     await deliverOutboxRow(row);
+    return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
+}
+
+/** Powód odmowy dopchnięcia — jedno gotowe zdanie po polsku, bo front wstawia je do alertu
+ *  werbatim (ENVI.ProjectSite `src/Contracts/ContractsList/Modals/fidmanSyncService.ts`,
+ *  `retryFidmanSync()` czyta wyłącznie `body.error`). Mówi o obu członach bramki naraz,
+ *  bo `isFidmanSyncEligible()` jest koniunkcją: typ z allowlisty ORAZ znacznik. */
+export const FIDMAN_NOT_ELIGIBLE_MESSAGE =
+    'Umowa nie jest objęta synchronizacją z FIDmanem: włącz znacznik „Objęta synchronizacją" albo sprawdź typ umowy.';
+
+export type FidmanPushOutcome =
+    | { ok: true; status: FidmanSyncStatus }
+    | { ok: false; reason: 'NOT_ELIGIBLE'; message: string };
+
+/**
+ * WYK-2 zadanie 4 — pełna akcja „dopchnij synchronizację", czyli warunek, pod którym
+ * właściciel zgodził się na „nowa umowa domyślnie wykluczona" (`Q-WYK-1`).
+ *
+ * Trzy przypadki, w tej kolejności:
+ *  1. umowa NIE przechodzi bramki (`isFidmanSyncEligible`) -> odmowa z powodem i ANI JEDNEGO
+ *     zapisu: sprawdzenie stoi PRZED odczytem kolejki, bo cztery martwe wiersze `FAILED`
+ *     należą właśnie do umów wykluczonych i ponowienie któregoś odtworzyłoby umowę
+ *     w FIDmanie — dokładnie to, czemu ten pack zapobiega;
+ *  2. jest wiersz `FAILED`/`SKIPPED` -> zastane zachowanie bez zmian, ponawiamy migawkę;
+ *  3. nie ma czego ponawiać (umowa nigdy nie poszła ALBO ostatnia wysyłka się udała)
+ *     -> ładunek budowany od nowa z ŻYWEJ umowy przekazanej przez wywołującego.
+ *
+ * Funkcja jest liściem: dostaje gotowy obiekt umowy razem ze stronami i sama nie sięga
+ * po `ContractsController` — kierunek zależności kontroler -> moduł syncu zostaje
+ * jednostronny (zob. `ContractsController.ts`, import `enqueueFidmanContractPush`).
+ * Umowę składa wywołujący, tą samą cegłą co `src/scripts/fidman-backfill.ts`.
+ */
+export async function retryOrPushFidmanContract(
+    contract: AnyContract
+): Promise<FidmanPushOutcome> {
+    if (!isFidmanSyncEligible(contract)) {
+        return {
+            ok: false,
+            reason: 'NOT_ELIGIBLE',
+            message: FIDMAN_NOT_ELIGIBLE_MESSAGE,
+        };
+    }
+
+    const contractId = (contract as any).id as number;
+
+    const retried = await retryFidmanContractSync(contractId);
+    if (retried.ok) return retried;
+
+    const outboxId = await ToolsDb.transaction<number>(async (conn) =>
+        enqueueFidmanContractPush(contract, conn)
+    );
+    await tryDeliverAfterCommit(outboxId);
     return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
 }
 
