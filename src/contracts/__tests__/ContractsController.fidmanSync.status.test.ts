@@ -130,6 +130,11 @@ describe('ContractsController.add() -> FidmanSyncOutbox status read (SYNC-P2 red
     const makeContract = () => ({
         alias: 'FID-TEST',
         typeId: 3,
+        // WYK-1: od migracji 012 sam typ nie wystarcza — umowa musi mieć jeszcze włączony
+        // znacznik „Objęta synchronizacją", żeby w ogóle wejść do kolejki. Ten zestaw ma
+        // dowodzić czegoś innego (nieudana dostawa nie psuje zapisu umowy), więc znacznik
+        // jest tu ustawiony jawnie, a nie pominięty.
+        fidmanSyncEnabled: true,
         _type: { id: 3, name: 'IK', isOur: true },
         number: '001',
         name: 'Umowa FIDman',

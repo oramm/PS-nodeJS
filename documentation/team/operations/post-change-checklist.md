@@ -63,6 +63,43 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-08-23 - Contracts.FidmanSyncEnabled (zakres synchronizacji do FIDmana)
+
+### Scope
+
+- New column `Contracts.FidmanSyncEnabled` (migration `012`): whether a contract is in scope of the PS -> FIDman sync. Until now the scope was decided by contract type alone, so any edit of any allowlisted-type contract recreated it in FIDman — including contracts deliberately deleted there. The owner reversed the rule: everything is excluded by default, only explicitly marked contracts go out.
+- The outbox gate is now `isFidmanSyncEligible()` (type allowlist AND the marker) instead of `isFidmanContractType()` alone, in both the add and the edit path of `ContractsController`.
+- Project and entity scope is derived from the marker on their contracts (`projectHasSyncedContract` / `entityHasSyncedContract`); neither gets its own column.
+- The "Integracja z FIDmanem" contract-list filter and `src/scripts/fidman-backfill.ts` follow the same condition.
+
+### Impact
+
+- DB: `Contracts` gained `FidmanSyncEnabled TINYINT(1) NOT NULL DEFAULT 0`. No rows are updated by the migration.
+- ENV: none.
+- Deploy: **behaviour changes the moment this ships.** After the migration every contract has `0`, so the sync to FIDman stops for ALL contracts until the marker is switched on by name. This is intended, but it means server code and migration must go out together, and the marker backfill is a separate, owner-gated step.
+
+### Required Actions
+
+- Apply migration `012` before deploying this server code (the gate queries the column; old schema + new code = failing query).
+- Before the production migration, confirm the outbox has zero `PENDING` rows — the gate guards the ENTRANCE to the queue, so anything already queued is out of its reach.
+- After the migration, switch the marker on by contract id for the contracts that are meant to stay in FIDman. Until then nothing syncs.
+- Note for delivery: rows already sitting in the queue as `FAILED`/`SKIPPED` can still be delivered by the drainer under the old rule. If any of them belongs to a contract meant to be excluded, close those rows explicitly.
+
+### Verification
+
+- Local `envikons_local`: `information_schema.COLUMNS` confirms `tinyint(1)`, `IS_NULLABLE = NO`, `COLUMN_DEFAULT = 0`; all 802 contracts read `0` after the migration.
+- Tests: contract edit without the marker enqueues nothing, contract edit with the marker enqueues as before (positive control), a project whose contracts are all excluded enqueues nothing, and a contract save that does not carry the marker leaves the column out of the `UPDATE` entirely.
+
+### Rollback
+
+- `012_add_fidman_sync_enabled_to_contracts_down.sql` drops the column. Back up rows with the marker set first — it records a human decision per contract and no script can recompute it. Roll the server code back together with the schema.
+
+### Links
+
+- `src/contracts/migrations/012_add_fidman_sync_enabled_to_contracts.sql`
+- `src/contracts/migrations/012_add_fidman_sync_enabled_to_contracts_down.sql`
+- `src/contracts/fidmanSync/FidmanSync.ts` (`isFidmanSyncEligible`)
+
 ## 2026-08-22 - Contracts_Entities.IsLeader (lider konsorcjum)
 
 ### Scope

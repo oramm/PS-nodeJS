@@ -116,6 +116,13 @@ export interface ContractData extends RepositoryDataItem {
     _contractRangesNames?: string[];
     lettersShortcutsInSubfolder?: boolean;
     approvedDocumentation?: boolean;
+    /** „Objęta synchronizacją" (WYK-1, migracja 012, `Contracts.FidmanSyncEnabled`) — zgoda
+     *  na wysyłkę tej umowy do FIDmana. Zapisywalne, więc BEZ prefiksu `_`; nie mylić
+     *  z `_isFidmanIntegrated` niżej, które mówi o fakcie dokonanym, nie o zgodzie.
+     *  `undefined` = pola nie było w żądaniu; ToolsDb je wtedy pomija, czyli zapis
+     *  nieniosący znacznika nie kasuje wartości w bazie. Bramka wysyłki traktuje
+     *  `undefined` jak „wykluczona" (fail-closed). */
+    fidmanSyncEnabled?: boolean;
     settlementMethod?: SettlementMethod | null;
     /** Stan integracji z FIDmanem, wyliczany przy odczycie z `Contracts.FidmanContractId`.
      *  `undefined` = typ umowy w ogóle nie podlega synchronizacji (front nie rysuje wtedy

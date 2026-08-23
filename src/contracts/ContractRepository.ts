@@ -275,6 +275,7 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.WarrantyEndDate,
                     mainContracts.DefectsNotificationEndDate,
                     mainContracts.FidmanContractId,
+                    mainContracts.FidmanSyncEnabled,
                     mainContracts.ContractDocumentPresent,
                     mainContracts.ContractDocumentCheckedAt,
                     ${this.makeContractDocumentFolderColumn()},
@@ -436,13 +437,18 @@ export default class ContractRepository extends BaseRepository<
      * kontrakt wpięty backfillem nie ma wpisu w kolejce, a jest zintegrowany.
      *
      * ŚWIADOMA DECYZJA: dopasowanie po `TypeId` z allowlisty syncu
-     * (Setup.FidmanSync.contractTypeIds, env FIDMAN_SYNC_CONTRACT_TYPE_IDS), a NIE po nazwie
+     * (Setup.FidmanSync.contractTypeIds, env FIDMAN_SYNC_CONTRACT_TYPE_IDS) ORAZ po znaczniku
+     * `FidmanSyncEnabled` („Objęta synchronizacją", WYK-1, migracja 012), a NIE po nazwie
      * typu jak w makeAtypicalSettlementCondition() wyżej. Powód jest odwrotny niż tam: tamten
      * filtr odpowiada na pytanie domenowe („czy ta umowa jest nietypowa"), a ten na techniczne
      * („czy system to wyśle do FIDmana"). Skoro obiecuje wysyłkę, musi pytać dokładnie tym
-     * samym warunkiem, którym wysyłka jest bramkowana — isFidmanContractType(). Zakodowanie
-     * tego po nazwie wpuściłoby na listę „do zintegrowania" umowy typu „Czerwony ryczałtowy",
-     * którego sync dziś nie wysyła, czyli filtr obiecywałby coś, czego system nie zrobi.
+     * samym warunkiem, którym wysyłka jest bramkowana — isFidmanSyncEligible(), czyli typ
+     * z allowlisty I włączony znacznik. Sam typ wpuściłby na listę „do zintegrowania" umowy
+     * wykluczone znacznikiem, czyli filtr obiecywałby coś, czego system nie zrobi — a to jest
+     * dokładnie ta pomyłka, przed którą ten akapit ostrzegał przed WYK-1.
+     *
+     * `INTEGRATED` znacznika NIE sprawdza i to jest zamierzone: trwały link `FidmanContractId`
+     * to fakt dokonany, a wykluczenie umowy z dalszej synchronizacji nie wypisuje jej z FIDmana.
      */
     private makeFidmanIntegrationCondition(
         filter: 'INTEGRATED' | 'NOT_INTEGRATED',
@@ -456,7 +462,9 @@ export default class ContractRepository extends BaseRepository<
         if (!typeIds.length) return '0';
 
         return mysql.format(
-            `(mainContracts.FidmanContractId IS NULL AND mainContracts.TypeId IN (?))`,
+            `(mainContracts.FidmanContractId IS NULL
+              AND mainContracts.TypeId IN (?)
+              AND mainContracts.FidmanSyncEnabled = 1)`,
             [typeIds],
         );
     }
@@ -866,6 +874,15 @@ export default class ContractRepository extends BaseRepository<
             materialCardsGdFolderId: row.MaterialCardsGdFolderId,
             lettersShortcutsInSubfolder: !!row.LettersShortcutsInSubfolder,
             approvedDocumentation: !!row.ApprovedDocumentation,
+            // WYK-1: trójstanowo jak FidmanContractId wyżej, a nie gołym `!!`. Wiersz z
+            // zapytania, które tej kolumny nie wybiera, ma zostać `undefined` — bramka wysyłki
+            // jest fail-closed, więc `undefined` i tak znaczy „nie wysyłaj", ale zapis takiego
+            // obiektu z powrotem do bazy nie ma prawa wyzerować cudzej wartości (`false` by to
+            // zrobiło, `undefined` jest przez ToolsDb pomijane).
+            fidmanSyncEnabled:
+                row.FidmanSyncEnabled === undefined
+                    ? undefined
+                    : !!row.FidmanSyncEnabled,
             // `|| null`, a nie `?? null`: przy pustym sql_mode (produkcja) niedozwolona wartość
             // ENUM wchodzi do bazy jako pusty string, którego `IS NULL` nie złapie. Zmierzone.
             settlementMethod: row.SettlementMethod || null,
@@ -1084,6 +1101,9 @@ type ContractRow = {
      *  wybierają — i rozróżnia „nie wybrano" (undefined) od „brak linku" (null). Typ bez
      *  `?` sprawiłby, że porównanie `=== undefined` jest błędem TS2367 przy `strict: true`. */
     FidmanContractId?: number | null;
+    /** WYK-1: opcjonalne z tego samego powodu co FidmanContractId wyżej — wiersz z zapytania,
+     *  które tej kolumny nie wybiera, ma je jako `undefined`, a nie jako 0. */
+    FidmanSyncEnabled?: number | null;
     ContractDocumentPresent?: number | null;
     ContractDocumentCheckedAt?: Date | string | null;
     ContractDocumentFolderId?: string | null;

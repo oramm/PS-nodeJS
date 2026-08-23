@@ -41,7 +41,7 @@ import {
 } from './aqmSync/AqmSync';
 import {
     enqueueFidmanContractPush,
-    isFidmanContractType,
+    isFidmanSyncEligible,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from './fidmanSync/FidmanSync';
 import ContractTemplatesTreeController, {
@@ -245,9 +245,11 @@ export default class ContractsController extends BaseController<
                     aqmOutboxId = await enqueueAqmPush(contract, conn);
                 }
 
-                // 5. SYNC-P1: jeśli typ FIDman (3/4) → wpis outbox w TEJ SAMEJ
-                // transakcji (L8). Osobna tabela, ta sama gwarancja atomowości.
-                if (isFidmanContractType(contract.typeId)) {
+                // 5. SYNC-P1 + WYK-1: wpis outbox w TEJ SAMEJ transakcji (L8), ale
+                // tylko gdy umowa ma JEDNOCZEŚNIE typ z allowlisty i włączony znacznik
+                // „Objęta synchronizacją". Nowa umowa rodzi się wykluczona, więc bez
+                // jawnego włączenia nie wychodzi tu nic — to jest cała zmiana WYK-1.
+                if (isFidmanSyncEligible(contract)) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
                         conn
@@ -536,9 +538,11 @@ export default class ContractsController extends BaseController<
                     aqmOutboxId = await enqueueAqmPush(contract, conn);
                 }
 
-                // 5. SYNC-P1: jeśli typ FIDman (3/4) → wpis outbox w TEJ SAMEJ
-                // transakcji (L8). Osobna tabela, ta sama gwarancja atomowości.
-                if (isFidmanContractType(contract.typeId)) {
+                // 5. SYNC-P1 + WYK-1: wpis outbox w TEJ SAMEJ transakcji (L8), ale
+                // tylko gdy umowa ma JEDNOCZEŚNIE typ z allowlisty i włączony znacznik
+                // „Objęta synchronizacją". Edycja umowy wykluczonej nie tworzy wiersza
+                // w kolejce — to jest reguła właściciela „żadna edycja jej nie przywróci".
+                if (isFidmanSyncEligible(contract)) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
                         conn

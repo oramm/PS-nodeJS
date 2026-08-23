@@ -1,0 +1,37 @@
+-- Migracja: znacznik „Objęta synchronizacją" przy umowie (zakres wysyłki PS -> FIDman)
+-- Data: 2026-08-23
+--
+-- Kontekst: do dziś o tym, czy umowa jedzie do FIDmana, decydował wyłącznie jej typ
+-- (allowlista TypeId z env FIDMAN_SYNC_CONTRACT_TYPE_IDS, domyślnie 3 i 4 — Żółty, Czerwony).
+-- To znaczyło, że „jest synchronizowana" nie było stanem umowy, tylko skutkiem ubocznym tego,
+-- jakiego jest typu — i że dowolna edycja umowy odtwarzała ją w FIDmanie, także wtedy, gdy
+-- świadomie usunięto ją tam jako wydmuszkę. Decyzja właściciela z 2026-08-21 odwraca zasadę:
+-- domyślnie wykluczone jest wszystko, a jawnie włączone są tylko te umowy, które w nowym
+-- FIDmanie mają być. Pełne uzasadnienie i odrzucone warianty:
+-- 20_projects/Aplikacje/PS.APP.01/plans/2026-08-23-wyk-wykluczenia-synchronizacji-plan.md
+-- oraz 20_projects/Aplikacje/PS.APP.01/decisions/2026-08-23-wyk-ustalenia.md.
+--
+-- DWA STANY, nie trzy — dlatego kolumna jest NOT NULL, a nie NULL-owalna (inaczej niż
+-- ContractDocumentPresent z migracji 010):
+--   0  = umowa NIE jest objęta synchronizacją. To jest stan domyślny i to jest odpowiedź,
+--        a nie brak odpowiedzi — „nie wiem" znaczyłoby tutaj „może wyjść", czyli dokładnie
+--        to, co decyzja właściciela wyklucza.
+--   1  = umowa jest objęta synchronizacją i ma prawo wejść do kolejki wysyłkowej.
+--
+-- DEFAULT 0 jest częścią mechanizmu, nie wygodą: nowa umowa rodzi się wykluczona nawet wtedy,
+-- gdy zapisujący ją klient (formularz albo skill agenta) o istnieniu znacznika nie wie.
+-- Znacznik składa się z bramką typu umowy, a nie zastępuje jej — do FIDmana wychodzi wyłącznie
+-- umowa, która ma JEDNOCZEŚNIE typ z allowlisty i znacznik ustawiony na 1.
+--
+-- Znacznik siedzi WYŁĄCZNIE przy umowie. Projekty i podmioty własnego znacznika nie dostają:
+-- ich zakres wynika z tego, czy mają choć jedną umowę ze znacznikiem (Q-WYK-2 = A). Drugie
+-- pole dawałoby drugi stan, który może się rozjechać z pierwszym.
+--
+-- Ta migracja nie zmienia ani jednego wiersza poza schematem: po jej zastosowaniu WSZYSTKIE
+-- umowy mają 0, czyli synchronizacja przestaje wychodzić dla wszystkich, dopóki znacznik nie
+-- zostanie imiennie włączony. To jest zamierzone i jest osobnym checkpointem (WYK-3).
+--
+-- MariaDB 10.6 → ADD COLUMN IF NOT EXISTS (wzorzec 011_add_is_leader_to_contracts_entities.sql).
+
+ALTER TABLE Contracts
+    ADD COLUMN IF NOT EXISTS FidmanSyncEnabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Czy umowa jest objeta synchronizacja do FIDmana (0=wykluczona - stan domyslny, 1=objeta). Bramkuje WEJSCIE do kolejki FidmanSyncOutbox lacznie z warunkiem typu umowy: wychodzi tylko to, co ma typ z allowlisty I ten znacznik. Zakres projektow i podmiotow wyprowadza sie z tego znacznika przy umowach, wlasnego pola nie maja.';

@@ -70,6 +70,13 @@ export default abstract class Contract
     _contractRangesNames?: string[] = [];
     lettersShortcutsInSubfolder: boolean;
     approvedDocumentation: boolean;
+    /** WYK-1: „Objęta synchronizacją" — czy umowa ma prawo wyjść do FIDmana.
+     *  Zapisywalne (bez prefiksu `_`), w odróżnieniu od `_isFidmanIntegrated` powyżej, które
+     *  jest wyliczanym przy odczycie faktem („umowa JUŻ jest w FIDmanie, bo ma trwały link").
+     *  To pole mówi o zgodzie na wysyłkę, tamto o stanie dokonanym — mogą się różnić i to jest
+     *  poprawne: wykluczenie umowy nie wypisuje jej z FIDmana.
+     *  Opcjonalne świadomie — zob. parseOptionalBoolean(). */
+    fidmanSyncEnabled?: boolean;
     settlementMethod?: SettlementMethod | null;
 
     /** Walidacja na wejściu, a nie w bazie: produkcja (MariaDB) ma PUSTY `sql_mode`, więc
@@ -105,6 +112,22 @@ export default abstract class Contract
         if (value === undefined) return undefined;
         if (value === null || value === '') return null;
         return ToolsDate.dateJsToSql(value as string | Date) ?? null;
+    }
+
+    /** Znacznik „Objęta synchronizacją" (WYK-1). Ta sama logika trzech stanów wejścia co
+     *  w parseSettlementMethod() i parseOptionalDate() powyżej, a NIE `!!` jak przy
+     *  pozostałych polach prawda/fałsz — i to jest tu różnica, która decyduje o mechanizmie:
+     *    `undefined` -> pola nie było w żądaniu; ToolsDb je pomija (isValidDbAttribute),
+     *                   więc zapis nieniosący znacznika NIE kasuje wartości w bazie.
+     *                   Przy dodawaniu umowy pominięcie oddaje głos DEFAULT 0 kolumny,
+     *                   czyli nowa umowa rodzi się wykluczona;
+     *    cokolwiek innego -> jawne true/false ląduje w bazie jako 1/0.
+     *  Gdyby tu stało `!!`, każdy zapis umowy przez klienta nieznającego pola (formularz
+     *  sprzed WYK-2, skill agenta wpisujący dane z umowy) po cichu wyłączałby synchronizację
+     *  i umowa wypadałaby z zakresu bez śladu w logu. */
+    private static parseOptionalBoolean(value: unknown): boolean | undefined {
+        if (value === undefined) return undefined;
+        return !!value;
     }
 
     /** Lider konsorcjum na początek listy wykonawców.
@@ -280,6 +303,9 @@ export default abstract class Contract
         this.lettersShortcutsInSubfolder =
             !!initParamObject.lettersShortcutsInSubfolder;
         this.approvedDocumentation = !!initParamObject.approvedDocumentation;
+        this.fidmanSyncEnabled = Contract.parseOptionalBoolean(
+            initParamObject.fidmanSyncEnabled
+        );
         this.settlementMethod = Contract.parseSettlementMethod(
             initParamObject.settlementMethod
         );

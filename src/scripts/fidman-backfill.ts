@@ -30,6 +30,7 @@ import ContractsController from '../contracts/ContractsController';
 import {
     buildContractPayload,
     enqueueFidmanContractPush,
+    isFidmanSyncEligible,
 } from '../contracts/fidmanSync/FidmanSync';
 import { isValidNipChecksum } from '../contracts/aqmSync/AqmSync';
 
@@ -60,6 +61,7 @@ async function main() {
     const partyEntityIds = new Set<number>();
     const noNipEntityIds = new Set<number>();
     let qualify = 0;
+    let syncDisabled = 0;
 
     const alreadyEnqueuedIds = apply
         ? new Set(
@@ -79,6 +81,14 @@ async function main() {
     let alreadyEnqueued = 0;
 
     for (const contract of contracts) {
+        // WYK-1: ten skrypt przechodzi dokładnie tą samą bramką, co zapis umowy w
+        // kontrolerze. Bez tego jedno uruchomienie `--apply` dopchnęłoby do FIDmana
+        // wszystkie umowy objętego typu, w tym te świadomie wykluczone, i cofnęłoby
+        // cały mechanizm jednym poleceniem.
+        if (!isFidmanSyncEligible(contract)) {
+            syncDisabled += 1;
+            continue;
+        }
         if (!contract.startDate || !contract.endDate) {
             needsDataIds.push(contract.id);
             continue;
@@ -113,6 +123,9 @@ async function main() {
     console.log(`[FidmanBackfill] mode=${apply ? 'apply' : 'dry-run'}`);
     console.log(`[FidmanBackfill] type ids in scope: ${typeIds.join(',')}`);
     console.log(`[FidmanBackfill] total in scope (non-Archiwalny): ${contracts.length}`);
+    console.log(
+        `[FidmanBackfill] wykluczone znacznikiem „Objęta synchronizacją" (FidmanSyncEnabled <> 1): ${syncDisabled}`
+    );
     console.log(`[FidmanBackfill] qualify (would enter): ${qualify}`);
     console.log(
         `[FidmanBackfill]   - NEEDS_DATA: ${needsDataIds.length} ids=[${needsDataIds.join(', ')}]`
@@ -135,8 +148,14 @@ async function main() {
     // Reuse buildContractPayload just to prove the exact payload shape a real
     // apply run would enqueue for the first qualifying contract (dry-run only,
     // never sent/written).
+    // WYK-1: próbka też przechodzi bramką znacznika — inaczej pokazywałaby ładunek umowy,
+    // której `--apply` i tak by nie zakolejkował, czyli kłamałaby o tym, co skrypt zrobi.
     const sample = contracts.find(
-        (c) => c.startDate && c.endDate && !needsDataIds.includes(c.id)
+        (c) =>
+            isFidmanSyncEligible(c) &&
+            c.startDate &&
+            c.endDate &&
+            !needsDataIds.includes(c.id)
     );
     if (sample) {
         console.log(

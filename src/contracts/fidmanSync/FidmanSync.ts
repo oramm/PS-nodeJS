@@ -115,6 +115,30 @@ export function isFidmanContractType(typeId: number | undefined): boolean {
     return Setup.FidmanSync.contractTypeIds.includes(typeId);
 }
 
+/**
+ * WYK-1 — pełna bramka wejścia do kolejki wysyłkowej. Umowa ma prawo wyjść do FIDmana
+ * tylko wtedy, gdy JEDNOCZEŚNIE ma typ z allowlisty ORAZ ma włączony znacznik
+ * „Objęta synchronizacją" (Contracts.FidmanSyncEnabled, migracja 012).
+ *
+ * Fail-closed: `undefined` znaczy „nie wiem", a nie wiedzieć znaczy tutaj nie wysyłać.
+ * Taki stan ma obiekt umowy zbudowany z żądania, które znacznika nie niosło, oraz wiersz
+ * z zapytania, które kolumny nie wybiera — w obu wypadkach jedyna bezpieczna odpowiedź to
+ * „nie", bo decyzja właściciela brzmi: domyślnie wykluczone jest wszystko.
+ *
+ * `isFidmanContractType()` zostaje osobno i nietknięte — allowlista typów to nadal warunek
+ * konieczny, a znacznik go nie zastępuje, tylko dokłada. Znacznik nie może rozszerzyć zakresu
+ * ponad typy, które FIDman w ogóle przyjmuje.
+ */
+export function isFidmanSyncEligible(contract: {
+    typeId?: number;
+    fidmanSyncEnabled?: boolean;
+}): boolean {
+    return (
+        isFidmanContractType(contract.typeId) &&
+        contract.fidmanSyncEnabled === true
+    );
+}
+
 // ponytail: PS Entity has no `fax` column (see src/entities/Entity.ts); the brief
 // lists fax but the source field does not exist, so it is omitted. FIDman applies
 // its own defaults/no-clobber for anything we do not send.
@@ -377,7 +401,14 @@ async function runGuardQuery(
     return Array.isArray(rows) && rows.length > 0;
 }
 
-/** True when the entity is a party of ≥1 synced-type contract. */
+/**
+ * True when the entity is a party of ≥1 contract that is actually in scope of the sync.
+ *
+ * WYK-1: „w zakresie" to od teraz typ z allowlisty ORAZ włączony znacznik przy umowie —
+ * ten sam warunek, którym bramkowana jest wysyłka samej umowy (isFidmanSyncEligible),
+ * tylko wyrażony w SQL. Podmiot własnego znacznika nie ma i mieć nie będzie (Q-WYK-2 = A):
+ * jego zakres wynika wyłącznie z umów, przy których stoi.
+ */
 export async function entityHasSyncedContract(
     entityId: number | undefined,
     conn?: mysql.PoolConnection
@@ -387,12 +418,18 @@ export async function entityHasSyncedContract(
     const sql = `SELECT 1
                  FROM Contracts_Entities ce
                  JOIN Contracts c ON c.Id = ce.ContractId
-                 WHERE ce.EntityId = ? AND c.TypeId IN (${clause})
+                 WHERE ce.EntityId = ? AND c.TypeId IN (${clause}) AND c.FidmanSyncEnabled = 1
                  LIMIT 1`;
     return runGuardQuery(sql, [entityId, ...ids], conn);
 }
 
-/** True when the project (by OurId) is the parent of ≥1 synced-type contract. */
+/**
+ * True when the project (by OurId) is the parent of ≥1 contract in scope of the sync.
+ *
+ * WYK-1: warunek dokładnie jak w entityHasSyncedContract powyżej. Projekt idzie do FIDmana
+ * tylko wtedy, gdy ma choć jedną umowę ze znacznikiem — projekt, którego wszystkie umowy są
+ * wykluczone, nie tworzy wiersza w kolejce (Q-WYK-2 = A, bez własnego pola przy projekcie).
+ */
 export async function projectHasSyncedContract(
     projectOurId: string | undefined,
     conn?: mysql.PoolConnection
@@ -401,7 +438,7 @@ export async function projectHasSyncedContract(
     if (!projectOurId || ids.length === 0) return false;
     const sql = `SELECT 1
                  FROM Contracts c
-                 WHERE c.ProjectOurId = ? AND c.TypeId IN (${clause})
+                 WHERE c.ProjectOurId = ? AND c.TypeId IN (${clause}) AND c.FidmanSyncEnabled = 1
                  LIMIT 1`;
     return runGuardQuery(sql, [projectOurId, ...ids], conn);
 }

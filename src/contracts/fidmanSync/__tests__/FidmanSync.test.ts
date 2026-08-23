@@ -20,6 +20,7 @@ jest.mock('../../../tools/ToolsDb');
 import ToolsDb from '../../../tools/ToolsDb';
 import {
     isFidmanContractType,
+    isFidmanSyncEligible,
     buildContractPayload,
     buildEntityUpsert,
     buildProjectUpsert,
@@ -75,6 +76,51 @@ describe('isFidmanContractType (env allowlist — type filter)', () => {
         process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS = '3, 4, 7';
         expect(isFidmanContractType(7)).toBe(true);
         expect(isFidmanContractType(5)).toBe(false);
+    });
+});
+
+/**
+ * WYK-1 — pełna bramka wejścia do kolejki: typ z allowlisty ORAZ znacznik
+ * „Objęta synchronizacją" (Contracts.FidmanSyncEnabled, migracja 012).
+ * Decyzja właściciela: domyślnie wykluczone jest wszystko, więc brak odpowiedzi
+ * (`undefined`) znaczy „nie wysyłaj", a nie „pewnie można".
+ */
+describe('isFidmanSyncEligible (typ + znacznik)', () => {
+    const ORIG = process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS;
+    beforeEach(() => {
+        delete process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS;
+    });
+    afterAll(() => {
+        if (ORIG === undefined) delete process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS;
+        else process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS = ORIG;
+    });
+
+    it('typ z allowlisty ORAZ włączony znacznik → wpuszcza', () => {
+        expect(
+            isFidmanSyncEligible({ typeId: 3, fidmanSyncEnabled: true })
+        ).toBe(true);
+        expect(
+            isFidmanSyncEligible({ typeId: 4, fidmanSyncEnabled: true })
+        ).toBe(true);
+    });
+
+    it('typ z allowlisty, ale znacznik wyłączony → nie wpuszcza', () => {
+        expect(
+            isFidmanSyncEligible({ typeId: 3, fidmanSyncEnabled: false })
+        ).toBe(false);
+    });
+
+    it('brak znacznika w obiekcie → nie wpuszcza (fail-closed, nie „pewnie tak")', () => {
+        expect(isFidmanSyncEligible({ typeId: 3 })).toBe(false);
+    });
+
+    it('znacznik nie omija allowlisty typów', () => {
+        expect(
+            isFidmanSyncEligible({ typeId: 5, fidmanSyncEnabled: true })
+        ).toBe(false);
+        expect(
+            isFidmanSyncEligible({ fidmanSyncEnabled: true })
+        ).toBe(false);
     });
 });
 
@@ -324,6 +370,27 @@ describe('party/parent guards', () => {
 
         (ToolsDb.getQueryCallbackAsync as any).mockResolvedValueOnce([]);
         expect(await projectHasSyncedContract('PRJ-001')).toBe(false);
+    });
+
+    // WYK-1: zakres projektu i podmiotu ma wynikać ZE ZNACZNIKA przy umowach, a nie
+    // z samego typu. Gdyby warunek wypadł z zapytania, projekt złożony wyłącznie
+    // z umów wykluczonych nadal jechałby do FIDmana — po cichu, bo obie funkcje
+    // dalej zwracałyby sensownie wyglądający wynik.
+    it('oba zapytania bramkujące pytają o znacznik, nie tylko o typ umowy', async () => {
+        (ToolsDb.getQueryCallbackAsync as any).mockResolvedValue([]);
+
+        await entityHasSyncedContract(123);
+        await projectHasSyncedContract('PRJ-001');
+
+        const zapytania = (
+            ToolsDb.getQueryCallbackAsync as jest.Mock
+        ).mock.calls.map((call: any) => String(call[0]));
+
+        expect(zapytania).toHaveLength(2);
+        for (const sql of zapytania) {
+            expect(sql).toContain('FidmanSyncEnabled = 1');
+            expect(sql).toContain('TypeId IN');
+        }
     });
 });
 
