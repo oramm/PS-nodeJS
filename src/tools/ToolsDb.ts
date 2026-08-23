@@ -23,6 +23,32 @@ export default class ToolsDb {
             connection.query("SET time_zone = '+00:00'");
         });
 
+        // Bramka nawrotu (HNG-4). Nadmiarowe zwolnienie nie opróżnia puli - duplikuje
+        // wpis w kolejce wolnych połączeń, a sprzątacz bezczynnych krąży potem po tym
+        // duplikacie bez końca i zamraża pętlę zdarzeń Node. Objaw pojawia się dopiero
+        // po `idleTimeout`, jako niemy zawis całej aplikacji bez jednej linii w logu.
+        // Ta bramka ma zrobić hałas od razu, w chwili pomyłki.
+        // SUFIT: widzi wyłącznie duplikat w kolejce wolnych. Jeśli w tym momencie ktoś
+        // czeka na połączenie, mysql2 wręcza mu je z pominięciem kolejki i nie emituje
+        // 'release' - podwójne wydanie tego samego gniazda przechodzi wtedy niezauważone.
+        // Melduje też po fakcie i niczemu nie zapobiega: duplikat już leży w kolejce.
+        // Stoi na wewnętrznym polu `mysql2`, więc aktualizacja biblioteki może ją uciszyć
+        // bez żadnego błędu - dlatego milczy zamiast wybuchać, gdy pola nie zastanie.
+        pool.on('release', (connection) => {
+            const free = (pool as any).pool?._freeConnections;
+            if (!free) return;
+            let count = 0;
+            for (let i = 0; i < free.length; i++)
+                if (free.get(i) === connection) count++;
+            if (count > 1)
+                console.error(
+                    `[DB][BLAD] połączenie ${connection.threadId} leży w kolejce wolnych ${count} razy ` +
+                        '- ktoś zwolnił cudze połączenie (pominięty isPartOfTransaction?). ' +
+                        'Ślad wywołania:',
+                    new Error('duplikat w kolejce wolnych połączeń').stack
+                );
+        });
+
         return pool;
     }
 
@@ -319,6 +345,10 @@ export default class ToolsDb {
         tableName: string,
         object: any,
         externalConn?: mysql.PoolConnection,
+        // Od HNG-4 znacznik nie rozstrzyga już o zwolnieniu ani o zatwierdzeniu - o obu
+        // decyduje własność połączenia. Został jako deklaracja intencji wywołującego
+        // i jedyne zabezpieczenie przed "jestem w transakcji" bez cudzego połączenia.
+        // Nie przywracać go do warunków niżej: to była ta usterka.
         isPartOfTransaction?: boolean
     ) {
         if (!externalConn && isPartOfTransaction)
@@ -340,7 +370,7 @@ export default class ToolsDb {
             const result = await conn.execute(stmt.string, stmt.values);
             object.id = (<any>result)[0].insertId;
 
-            if (!isPartOfTransaction) await conn.commit();
+            if (!externalConn) await conn.commit();
 
             return object;
         } catch (e) {
@@ -355,10 +385,15 @@ export default class ToolsDb {
 
             throw e;
         } finally {
-            if (!externalConn || !isPartOfTransaction) {
+            if (!externalConn) {
                 conn.release();
                 console.log(
                     `addInDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
+            } else {
+                console.log(
+                    `addInDb ${tableName}:: conn NOT released - wlascicielem jest wywolujacy`,
                     conn.threadId
                 );
             }
@@ -419,7 +454,7 @@ export default class ToolsDb {
             const result = await conn.execute(stmt.string, stmt.values);
             const newObject = result[0];
 
-            if (!isPartOfTransaction) await conn.commit();
+            if (!externalConn) await conn.commit();
 
             return { ...object, ...newObject };
         } catch (e) {
@@ -435,10 +470,15 @@ export default class ToolsDb {
 
             throw e;
         } finally {
-            if (!externalConn || !isPartOfTransaction) {
+            if (!externalConn) {
                 conn.release();
                 console.log(
                     `editInDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
+            } else {
+                console.log(
+                    `editInDb ${tableName}:: conn NOT released - wlascicielem jest wywolujacy`,
                     conn.threadId
                 );
             }
@@ -467,7 +507,7 @@ export default class ToolsDb {
             await conn.execute(`DELETE FROM ${tableName} WHERE Id =?`, [
                 object.id,
             ]);
-            if (!isPartOfTransaction) await conn.commit();
+            if (!externalConn) await conn.commit();
             console.log(`object deleted from ${tableName}`);
             return object;
         } catch (e) {
@@ -477,10 +517,15 @@ export default class ToolsDb {
             );
             throw e;
         } finally {
-            if (!isPartOfTransaction || !externalConn) {
+            if (!externalConn) {
                 conn.release();
                 console.log(
                     `deleteFromDb ${tableName}:: conn released`,
+                    conn.threadId
+                );
+            } else {
+                console.log(
+                    `deleteFromDb ${tableName}:: conn NOT released - wlascicielem jest wywolujacy`,
                     conn.threadId
                 );
             }
@@ -508,16 +553,21 @@ export default class ToolsDb {
                 this.prepareValueToPreparedStmtSql(item)
             );
             await conn.execute(sql, params);
-            if (!isPartOfTransaction) await conn.commit();
+            if (!externalConn) await conn.commit();
             return object;
         } catch (e) {
             if (!externalConn) await conn.rollback();
             throw e;
         } finally {
-            if (!isPartOfTransaction || !externalConn) {
+            if (!externalConn) {
                 conn.release();
                 console.log(
                     `executePreparedStmt:: conn released`,
+                    conn.threadId
+                );
+            } else {
+                console.log(
+                    `executePreparedStmt:: conn NOT released - wlascicielem jest wywolujacy`,
                     conn.threadId
                 );
             }
