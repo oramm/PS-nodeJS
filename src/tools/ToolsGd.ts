@@ -531,6 +531,7 @@ export default class ToolsGd {
         const fileSchema = await drive.files.get({
             fileId: id,
             fields: 'id, name, mimeType, parents, trashed, shortcutDetails',
+            supportsAllDrives: true,
         });
         return fileSchema.data;
     }
@@ -541,6 +542,8 @@ export default class ToolsGd {
         const filesSchema = await drive.files.list({
             q: `shortcutDetails.targetId = '${targetId}' and trashed = false`,
             fields: 'files(id, name, parents)',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
         return filesSchema.data.files || [];
     }
