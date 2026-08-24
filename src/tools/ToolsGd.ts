@@ -198,7 +198,11 @@ export default class ToolsGd {
         const drive = google.drive({ version: 'v3', auth });
         const escapedFileName = parameters.fileName.replace(/'/g, "\\'");
         const q = `name = '${escapedFileName}' and '${parameters.parentId}' in parents and mimeType = '${parameters.mimeType}' and trashed = ${isTrashed}`;
-        const filesSchema = await drive.files.list({ q });
+        const filesSchema = await drive.files.list({
+            q,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+        });
         if (filesSchema.data.files && filesSchema.data.files.length)
             return filesSchema.data.files[0];
     }
