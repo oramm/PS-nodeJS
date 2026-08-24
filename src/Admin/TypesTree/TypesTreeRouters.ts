@@ -1,5 +1,7 @@
+import { Request, Response } from 'express';
 import { app } from '../../index';
 import TypesTreeController from './TypesTreeController';
+import { hasTypesTreeReadAccess } from './typesTreeReadAccess';
 
 /**
  * Widok hierarchii typów: typ umowy → typ kamienia → typ sprawy → typ podsprawy.
@@ -7,6 +9,30 @@ import TypesTreeController from './TypesTreeController';
  *
  * Jedno wywołanie zwraca cały graf - bez paginacji i filtrów.
  */
+
+/**
+ * Podglad hierarchii dla wszystkich pracownikow ENVI.
+ *
+ * DLACZEGO POZA PREFIKSEM /admin. Bramka panelu zamyka CALY prefiks i ma to robic
+ * dalej - to jej wartosc. Trasa tylko do odczytu stoi wiec obok niej, z wlasna,
+ * szersza bramka rolowa. Zapis zostaje pod /admin, wiec ENVI_EMPLOYEE go nie dosiegnie
+ * nawet znajac adres.
+ *
+ * Lista rol i sama bramka siedza w `typesTreeReadAccess` - osobno, zeby dalo sie je
+ * przetestowac bez podnoszenia calego serwera.
+ */
+app.get('/typesTree', async (req: Request, res: Response, next: any) => {
+    try {
+        if (!hasTypesTreeReadAccess(req)) {
+            res.status(403).send({ errorMessage: 'Brak uprawnien do hierarchii typow' });
+            return;
+        }
+        const result = await TypesTreeController.getTree();
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
 
 app.get('/admin/typesTree', async (req: any, res: any, next: any) => {
     try {
