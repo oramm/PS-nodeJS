@@ -63,6 +63,41 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-08-25 - WYK-3: FidmanSyncEnabled rollout to production
+
+### Scope
+
+- Migration `012` applied on kylos, server and client deployed, and the marker switched on by contract id for the 30 contracts that are meant to stay in FIDman. Everything else is now excluded, which is the point: an edit of an excluded contract no longer recreates it in FIDman, so the FIDman-side cleanup of the 150 shells can finally hold.
+- Six dead `FAILED` outbox rows closed administratively (`SENT`, original error preserved in `LastError`). Five belonged to contracts on the deletion list; the sixth carried a July snapshot of a contract that stays in scope. All six were superseded by a later successful send for the same contract, and all six would have revived had anyone raised the drainer attempt limit.
+
+### Impact
+
+- DB: `Contracts.FidmanSyncEnabled` added (migration `012`, ledger id 65, `ExecutionMillis=86`); 30 rows set to `1`; 6 `FidmanSyncOutbox` rows moved `FAILED` -> `SENT`.
+- ENV: none. No new key, `.env.example` untouched.
+- Deploy: **yes.** Release **v554** = commit `7da039b` on `erp-envi`, current, no "release command failed", `web.1` up. Client `ENVI.ProjectSite` `master` = `e2eb745`.
+
+### Required Actions
+
+- The order used was DB backup -> migration -> **switch the 30 markers on** -> deploy. This differs from the original plan (deploy before the switch) on purpose: with the column all zeros, deploying first opens a window in which NOTHING syncs. Switching first keeps the old type-only rule in force until the deploy lands, so there is no gap.
+- The negative control on production (edit an excluded contract, confirm no queue row and no change in FIDman) is a separate owner-gated step (`WYK-4`), not part of this rollout.
+
+### Verification
+
+- Pre-flight on live production: outbox `PENDING` = 0; allowlisted types still 180, all linked, zero links outside those types; the set to enable recomputed from scratch = **30**, matching bucket (c) of the RAT report by FIDman id with zero differences.
+- After the write, read back through a second, independent connection: exactly 30 contracts with the marker, **zero of them outside the allowlisted types**, **zero of them on the 150-contract deletion list**, zero `FAILED`, zero `PENDING`.
+- Server suite: 1253 passed, 3 failed — the same three pre-existing env-dependent failures (`KsefXmlBuilder` 2, `OffersController` 1). No new reds.
+- Smoke: a real user `POST /letterReact` returned 200 on v554 ninety seconds after the deploy.
+
+### Rollback
+
+- Restore point: `C:\systems-dev\ps-envi\backups\kylos-przed-wyk3-20260825-1006.sql` (full dump taken immediately before the migration).
+- `012_..._down.sql` drops the column and destroys the marker, which is a human decision per contract that no script can recompute. Dump `SELECT Id, Number, FidmanSyncEnabled FROM Contracts WHERE FidmanSyncEnabled = 1` first and roll the server code back together with the schema.
+
+### Links
+
+- `src/contracts/fidmanSync/FidmanSync.ts` (`isFidmanSyncEligible`, `retryOrPushFidmanContract`)
+- 20_projects/Aplikacje/PS.APP.01/plans/2026-08-23-wyk-wykluczenia-synchronizacji-plan.md
+
 ## 2026-08-23 - Contracts.FidmanSyncEnabled (zakres synchronizacji do FIDmana)
 
 ### Scope
