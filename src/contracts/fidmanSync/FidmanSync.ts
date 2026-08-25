@@ -443,6 +443,42 @@ export async function projectHasSyncedContract(
     return runGuardQuery(sql, [projectOurId, ...ids], conn);
 }
 
+/**
+ * Znacznik „Objęta synchronizacją" jednej umowy, odczytany wprost z bazy.
+ *
+ * WYK-2B: PS ma dwie trasy zapisu umowy i tylko formularz niesie ten znacznik — ekran
+ * terminów i pulpit składają umowę z cienkiego obiektu, w którym go nie ma. Bez tego odczytu
+ * bramka widzi wtedy `undefined`, czyli „wykluczona", i umowa WŁĄCZONA po cichu nie jedzie
+ * do FIDmana. Rozstrzygnięcie właściciela z 2026-08-24: cisza w żądaniu ma znaczyć
+ * „sprawdź w bazie".
+ *
+ * Zwraca `undefined`, a nie `false`, gdy umowy o tym identyfikatorze nie ma. To rozróżnienie
+ * jest celowe: wołający ma wtedy zostać przy fail-closed z własnego powodu, zamiast dostać
+ * „wykluczona" wyprodukowane przez ten helper i uznać je za odczyt z bazy.
+ *
+ * Połączenie przekazuje się jak w bramkach zakresu wyżej (zob. runGuardQuery i jej wołających
+ * w ProjectsController/EntitiesController): odczyt w trakcie transakcji MUSI iść tym samym
+ * `conn`. Wzięcie drugiego połączenia z puli, gdy pierwsze jest zajęte przez transakcję, to
+ * gotowy scenariusz zakleszczenia na wyczerpanej puli.
+ */
+export async function readContractFidmanSyncEnabled(
+    contractId: number | undefined,
+    conn?: mysql.PoolConnection
+): Promise<boolean | undefined> {
+    if (contractId == null) return undefined;
+    const sql = `SELECT FidmanSyncEnabled
+                 FROM Contracts
+                 WHERE Id = ?
+                 LIMIT 1`;
+    const rows = conn
+        ? ((await conn.query(sql, [contractId]))[0] as any[])
+        : ((await ToolsDb.getQueryCallbackAsync(sql, undefined, [
+              contractId,
+          ])) as any[]);
+    if (!Array.isArray(rows) || rows.length === 0) return undefined;
+    return !!rows[0].FidmanSyncEnabled;
+}
+
 type OutboxRow = {
     Id: number;
     Kind: FidmanKind;

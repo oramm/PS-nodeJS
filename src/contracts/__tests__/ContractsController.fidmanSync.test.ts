@@ -218,7 +218,13 @@ describe('ContractsController.edit() — WYK-1: znacznik „Objęta synchronizac
         expect(FidmanSync.tryDeliverAfterCommit).not.toHaveBeenCalled();
     });
 
-    it('edycja umowy, której żądanie w ogóle nie niesie znacznika, nie tworzy wiersza w kolejce (fail-closed)', async () => {
+    // WYK-2B zmienił regułę, którą ten test opisywał: samo „żądanie nie niesie znacznika"
+    // NIE wystarcza już do niekolejkowania — musi jeszcze baza mówić „wykluczona".
+    // W tym pliku moduł synchronizacji jest zamockowany w całości, więc dociągnięcie
+    // z bazy zwraca `undefined`, co odpowiada umowie, której w bazie nie ma. Tytuł mówi
+    // dziś dokładnie tyle, ile sprawdza ciało. Przypadek „żądanie milczy, ale baza mówi
+    // WŁĄCZONA" pokrywa ContractsController.wyk2b.test.ts, na prawdziwym odczycie.
+    it('edycja umowy, której ani żądanie nie niesie znacznika, ani baza go nie potwierdza, nie tworzy wiersza w kolejce (fail-closed)', async () => {
         await editContract(makeContract(undefined));
 
         expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();

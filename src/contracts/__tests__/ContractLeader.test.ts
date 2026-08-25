@@ -44,8 +44,17 @@ beforeEach(() => {
     (toolsDb.sqlToString as any).mockImplementation((value: any) => value);
     (toolsDb.makeOrConditionFromValueOrArray as any).mockReturnValue('1');
     (toolsDb.getQueryCallbackAsync as any).mockResolvedValue([]);
+    // Połączenie transakcyjne musi umieć `query`: od WYK-2B edycja umowy typu objętego
+    // synchronizacją dociąga tym samym połączeniem znacznik „Objęta synchronizacją",
+    // gdy żądanie go nie niesie (ContractsController.edit, krok 5). Pusty wynik znaczy
+    // „umowy nie ma w bazie", czyli bramka zostaje zamknięta — dokładnie tak, jak te
+    // testy zakładały wcześniej, gdy o wyniku rozstrzygało samo puste pole na obiekcie.
+    // Ten plik sprawdza nazwę folderu i kolejność wykonawców, nie kolejkę wysyłkową.
     (toolsDb.transaction as any).mockImplementation(
-        async (callback: any) => await callback({} as any)
+        async (callback: any) =>
+            await callback({
+                query: async () => [[], undefined],
+            } as any)
     );
     (toolsDb.addInDb as any).mockImplementation(
         async (tableName: string, data: any) => {

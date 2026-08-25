@@ -42,6 +42,7 @@ import {
 import {
     enqueueFidmanContractPush,
     isFidmanSyncEligible,
+    readContractFidmanSyncEnabled,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from './fidmanSync/FidmanSync';
 import ContractTemplatesTreeController, {
@@ -542,7 +543,41 @@ export default class ContractsController extends BaseController<
                 // tylko gdy umowa ma JEDNOCZEŚNIE typ z allowlisty i włączony znacznik
                 // „Objęta synchronizacją". Edycja umowy wykluczonej nie tworzy wiersza
                 // w kolejce — to jest reguła właściciela „żadna edycja jej nie przywróci".
-                if (isFidmanSyncEligible(contract)) {
+                //
+                // WYK-2B: żądanie, które o znaczniku MILCZY, znaczy „sprawdź w bazie",
+                // a nie „wykluczona". Znacznik niesie tylko formularz umowy; ekran
+                // terminów i pulpit składają umowę z cienkiego obiektu bez niego, więc
+                // bez tego odczytu umowa WŁĄCZONA zapisana tamtą trasą przestawałaby
+                // po cichu jechać do FIDmana — bez śladu w logu, bo w bazie nic się
+                // nie psuje, po prostu nie powstaje wiersz w kolejce.
+                //
+                // Warunek to `=== undefined`, a NIE fałszywość: jawne `false`
+                // z żądania nadal wygrywa z bazą, bo wykluczyć umowę trzeba móc.
+                //
+                // Wartość ląduje w zmiennej lokalnej i CELOWO nie jest wpisywana na
+                // obiekt umowy. Po pierwsze pole na obiekcie musi zostać `undefined`,
+                // żeby warstwa zapisu dalej pomijała kolumnę (pułapka 1) — przy zmiennej
+                // lokalnej jest to niemożliwe do złamania z konstrukcji, a nie pilnowane
+                // kolejnością instrukcji w tym bloku. Po drugie obie trasy odsyłają
+                // zwróconą umowę do klienta, więc mutacja dokładałaby cienkiemu obiektowi
+                // pole, którego nie przysłał, i klient odesłałby je w kolejnym zapisie
+                // już jako wartość jawną — potencjalnie nieświeżą.
+                //
+                // Odczyt stoi PO editInDb i idzie tym samym połączeniem transakcyjnym,
+                // jak bramki zakresu w ProjectsController/EntitiesController: decyzja
+                // opiera się na stanie spójnym z zapisem, który właśnie poszedł, a pula
+                // połączeń nie dostaje drugiego żądania w trakcie własnej transakcji.
+                const fidmanSyncEnabledForGate =
+                    contract.fidmanSyncEnabled === undefined
+                        ? await readContractFidmanSyncEnabled(contract.id, conn)
+                        : contract.fidmanSyncEnabled;
+
+                if (
+                    isFidmanSyncEligible({
+                        typeId: contract.typeId,
+                        fidmanSyncEnabled: fidmanSyncEnabledForGate,
+                    })
+                ) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
                         conn
