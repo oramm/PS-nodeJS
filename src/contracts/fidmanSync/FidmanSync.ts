@@ -732,9 +732,11 @@ export type FidmanPushOutcome =
  *
  * Trzy przypadki, w tej kolejności:
  *  1. umowa NIE przechodzi bramki (`isFidmanSyncEligible`) -> odmowa z powodem i ANI JEDNEGO
- *     zapisu: sprawdzenie stoi PRZED odczytem kolejki, bo cztery martwe wiersze `FAILED`
- *     należą właśnie do umów wykluczonych i ponowienie któregoś odtworzyłoby umowę
- *     w FIDmanie — dokładnie to, czemu ten pack zapobiega;
+ *     zapisu: sprawdzenie stoi PRZED odczytem kolejki, bo martwe wiersze `FAILED` zastane
+ *     na produkcji należały właśnie do umów wykluczonych (pomiar 2026-08-25: pięć z sześciu)
+ *     i ponowienie któregoś odtworzyłoby umowę w FIDmanie — dokładnie to, czemu ten pack
+ *     zapobiega. Tamte sześć zamknięto w `WYK-3`, ale bramka nie zależy od tego sprzątania:
+ *     następny nieudany wiersz powstanie tak samo;
  *  2. jest wiersz `FAILED`/`SKIPPED` -> zastane zachowanie bez zmian, ponawiamy migawkę;
  *  3. nie ma czego ponawiać (umowa nigdy nie poszła ALBO ostatnia wysyłka się udała)
  *     -> ładunek budowany od nowa z ŻYWEJ umowy przekazanej przez wywołującego.

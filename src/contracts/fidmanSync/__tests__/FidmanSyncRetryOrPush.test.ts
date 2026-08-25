@@ -264,8 +264,9 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
     });
 
     it('umowa wykluczona, która ma zastany martwy wpis FAILED: odmawia i NIE ponawia tego wpisu — wykluczenie stoi przed kolejką', async () => {
-        // To są te cztery wiersze FAILED z produkcji należące do umów przeznaczonych do
-        // usunięcia. Gdyby bramka stała za odczytem kolejki, jedno kliknięcie „dopchnij"
+        // To są te wiersze FAILED z produkcji należące do umów przeznaczonych do
+        // usunięcia (pomiar 2026-08-25: pięć z sześciu; zamknięte w WYK-3, ale kolejny taki
+        // wiersz powstanie tak samo). Gdyby bramka stała za odczytem kolejki, jedno kliknięcie „dopchnij"
         // odtworzyłoby taką umowę w FIDmanie — czyli dokładnie to, czemu pack zapobiega.
         latest = {
             Id: OLD_OUTBOX_ID,
