@@ -446,6 +446,33 @@ function Invoke-StepN2b {
 # `-WindowStyle Hidden` on the powershell.exe target, so no console ever flashes. Ceiling:
 # if a future install path is guaranteed elevated, collapse back to one
 # Register-ScheduledTask with two triggers.
+function Set-ZadanieChodziNaBaterii {
+  # schtasks.exe NIE MA przelacznika na te trzy ustawienia, a jego domysly brzmia:
+  # nie startuj na baterii, przerwij gdy laptop na nia przejdzie, nie nadrabiaj przegapionego
+  # przebiegu. Zmierzone 2026-08-27 na wszystkich trzech zadaniach na maszynie wlasciciela -
+  # nikt tego nie wybieral, tak po prostu wychodzi. U kogos, kto pracuje na laptopie bez
+  # zasilacza, oznacza to, ze SYNCHRONIZACJA NIE CHODZI WCALE.
+  #
+  # PULAPKA, ZMIERZONA, NIE ZALOZONA: instalator swiadomie omija Register-ScheduledTask, bo ten
+  # wymaga administratora - ale Set-ScheduledTask na JUZ ISTNIEJACYM zadaniu tego uzytkownika
+  # dziala BEZ podniesienia uprawnien. Sprawdzone 2026-08-27 na zadaniu jednorazowym, na koncie
+  # bez uprawnien administratora: True/True/False -> False/False/True. Stad ta droga.
+  #
+  # Porazka jest LOGOWANA, NIE RZUCANA: laptop bez tej poprawki dziala dalej (gorzej, ale
+  # dziala), a instalacja przerwana w polowie zostawia czlowieka z niczym.
+  param([string]$Nazwa)
+  try {
+    $z = Get-ScheduledTask -TaskName $Nazwa -ErrorAction Stop
+    $z.Settings.DisallowStartIfOnBatteries = $false
+    $z.Settings.StopIfGoingOnBatteries     = $false
+    $z.Settings.StartWhenAvailable         = $true
+    Set-ScheduledTask -InputObject $z -ErrorAction Stop | Out-Null
+    Log "[bateria] '$Nazwa' chodzi teraz takze na samej baterii i nadrabia przegapiony przebieg"
+  } catch {
+    Log "[bateria] NIE UDALO SIE zdjac ustawien bateryjnych z '$Nazwa' ($($_.Exception.Message)). Na samej baterii to zadanie NIE BEDZIE chodzic."
+  }
+}
+
 function Write-N3PullLauncher {
   # ponytail: point schtasks /tr and the Startup shortcut at a one-line -File launcher rather
   # than an inline -Command. The old inline `-Command "New-Item -ItemType Directory ..."`
@@ -486,6 +513,7 @@ function Invoke-StepN3 {
       Log "[N3] ERROR: schtasks /create for '$TaskName' failed (exit $LASTEXITCODE)"
     } else {
       Log "[N3] periodic task '$TaskName' registered/updated (idempotent via /f)"
+      Set-ZadanieChodziNaBaterii -Nazwa $TaskName
     }
   }
 
@@ -594,6 +622,149 @@ function Write-SyncRunLauncher {
   $dir = Split-Path $Path -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
   Set-JsonFileNoBom -LiteralPath $Path -Content ($body + "`r`n")   # reused BOM-less text writer
+}
+
+# -- W5: znak ENVI na skrocie "Synchronizuj teraz" (prosba wlasciciela 2026-08-22) --
+#
+# ZADNEGO BINARIUM W REPO ANI W PACZCE. Rezydent rysuje swoja ikone kodem od N2 (warunek
+# R2: rdzen nie jest aplikacja do zainstalowania, tylko zestawem skryptow) i skrot trzyma
+# sie tej samej zasady - plik .ico powstaje przy instalacji, w katalogu konfiguracyjnym
+# uzytkownika, obok silnika i rezydenta.
+#
+# TEN SAM RYSUNEK, CO IKONA W ZASOBNIKU - sprawdzane, nie deklarowane. Geometria ponizej
+# jest kopia New-EnviTurbinePath z sync/sb-tray.ps1. KOPIA, a nie wywolanie tamtej funkcji:
+# instalator chodzi takze wtedy, gdy rezydenta na maszynie jeszcze nie ma (pierwszy przebieg,
+# paczka nie doszla z Dysku), a wciaganie kodu z cudzego pliku w trakcie instalacji dokladalo
+# by tu droge awarii, ktorej ten skrypt nie potrzebuje. Przed rozjazdem kopii pilnuje test
+# w test-bootstrap-units.ps1: renderuje OBA rysunki - ten stad i ten wyciety z prawdziwego
+# sb-tray.ps1 - i porownuje je piksel po pikselu, a osobno sprawdza obie zielenie.
+#
+# BEZ PARAMETRU OBROTU, bo ikona skrotu jest STATYCZNA (decyzja wlasciciela 2026-08-22).
+# Rezydent ma w swojej wersji parametr $Obrot na animacje stanu PRACUJE; tutaj go nie ma
+# i nie ma byc. Zywa ikona pulpitu bylaby DRUGIM nosnikiem stanu, czego zabrania D-4, a do
+# tego Windows trzyma ikony pulpitu w pamieci podrecznej i odswieza je niechetnie - pulpit
+# pokazywalby stan sprzed godziny, czyli nieprawde w miejscu, ktore mialo wzmocnic
+# "aplikacja komunikuje prawde".
+#
+# STATYCZNA NIE ZNACZY PIONOWA (R7, 2026-08-26). Znak stoi pod skosem -25 stopni, tak jak
+# w firmowym logo - to ten sam kat, ktory New-EnviTurbinePath w sb-tray.ps1 trzyma jako
+# wartosc domyslna, czyli jako stan spoczynku. Liczba jest tu wpisana wprost, bo ta funkcja
+# jest swiadoma kopia i niczego z tamtego pliku nie czyta; rozjazdu pilnuje sprawdzian 6,
+# ktory ma osobna kontrole negatywna na wypadek, gdyby skos wypadl z OBU kopii naraz.
+function New-ZnakEnviPath {
+  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $path.FillMode = [System.Drawing.Drawing2D.FillMode]::Winding
+  for ($i = 0; $i -lt 4; $i++) {
+    $m = New-Object System.Drawing.Drawing2D.Matrix
+    $m.Translate(50, 50)
+    $m.Rotate(($i * 90.0) - 25.0)
+    $m.Translate(26, -26)
+    $m.Rotate(-38.0)
+    $p2 = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $p2.AddEllipse(-21, -29, 42, 58)
+    $p2.Transform($m)
+    $path.AddPath($p2, $false)
+    $p2.Dispose(); $m.Dispose()
+  }
+  return $path
+}
+
+function New-ZnakEnviBitmap {
+  param([int]$Px)
+  $bmp = New-Object System.Drawing.Bitmap $Px, $Px
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $g.Clear([System.Drawing.Color]::Transparent)
+  $g.ScaleTransform(($Px / 100.0), ($Px / 100.0))
+  # Zielen stanu OK z sb-tray.ps1: jasna wyprobkowana ze znaku, ciemna z kanonu marki.
+  $c1 = [System.Drawing.Color]::FromArgb(255, 155, 190, 114)
+  $c2 = [System.Drawing.Color]::FromArgb(255, 46, 107, 51)
+  $path = New-ZnakEnviPath
+  $br = New-Object System.Drawing.Drawing2D.LinearGradientBrush `
+        (New-Object System.Drawing.Point 6, 2), (New-Object System.Drawing.Point 94, 98), $c1, $c2
+  $g.FillPath($br, $path)
+  $br.Dispose(); $path.Dispose(); $g.Dispose()
+  return $bmp
+}
+
+function ConvertTo-ObrazIco {
+  # Jeden obraz w formacie, ktorego plik .ico uzywa od zawsze: naglowek DIB, potem piksele
+  # OD DOLU DO GORY, potem maska. Maska jest wyzerowana celowo - przy 32 bitach na piksel
+  # o przezroczystosci decyduje kanal alfa, a nie ona.
+  param([System.Drawing.Bitmap]$Bmp)
+  $w = $Bmp.Width; $h = $Bmp.Height
+  $kopia = New-Object System.Drawing.Bitmap $Bmp
+  $kopia.RotateFlip([System.Drawing.RotateFlipType]::RotateNoneFlipY)
+  $rect = New-Object System.Drawing.Rectangle 0, 0, $w, $h
+  $dane = $kopia.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $xor = New-Object byte[] ($w * $h * 4)
+  for ($y = 0; $y -lt $h; $y++) {
+    [System.Runtime.InteropServices.Marshal]::Copy([System.IntPtr]::Add($dane.Scan0, $y * $dane.Stride), $xor, $y * $w * 4, $w * 4)
+  }
+  $kopia.UnlockBits($dane); $kopia.Dispose()
+  $maskStride = [int][Math]::Floor(($w + 31) / 32) * 4
+  $and = New-Object byte[] ($maskStride * $h)
+
+  $ms = New-Object System.IO.MemoryStream
+  $bw = New-Object System.IO.BinaryWriter $ms
+  $bw.Write([int]40); $bw.Write([int]$w); $bw.Write([int]($h * 2))
+  $bw.Write([int16]1); $bw.Write([int16]32)
+  $bw.Write([int]0); $bw.Write([int]($xor.Length + $and.Length))
+  $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0); $bw.Write([int]0)
+  $bw.Write($xor); $bw.Write($and)
+  $bw.Flush()
+  $out = $ms.ToArray()
+  $bw.Dispose(); $ms.Dispose()
+  return , $out
+}
+
+function Write-ZnakEnviIco {
+  # Zwraca sciezke pliku, gdy sie udalo, i $null, gdy nie. NIGDY nie przerywa instalacji:
+  # brak ladnej ikony jest drobiazgiem, a przerwany bootstrap - awaria. Stad calosc w try
+  # i stad Add-Type w srodku, a nie na gorze pliku (maszyna bez System.Drawing dostaje
+  # ikonke systemowa i idzie dalej, zamiast wywrocic caly przebieg).
+  #
+  # SZESC ROZMIAROW, bo Windows bierze rozny w roznych miejscach: 16 przy nazwie pliku,
+  # 32 w menu Start, 48 na pulpicie przy domyslnym ustawieniu, 256 przy "bardzo duze ikony".
+  # Rozmiaru, ktorego w pliku nie ma, powloka nie dorysuje ladnie - przeskaluje najblizszy.
+  param([string]$Path, [int[]]$Rozmiary = @(16, 24, 32, 48, 64, 256))
+  try {
+    Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+    $obrazy = @()
+    foreach ($px in $Rozmiary) {
+      $b = New-ZnakEnviBitmap -Px $px
+      $obrazy += , (ConvertTo-ObrazIco -Bmp $b)
+      $b.Dispose()
+    }
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter $ms
+    $bw.Write([int16]0); $bw.Write([int16]1); $bw.Write([int16]$Rozmiary.Count)
+    $offset = 6 + (16 * $Rozmiary.Count)
+    for ($i = 0; $i -lt $Rozmiary.Count; $i++) {
+      # 256 zapisuje sie w katalogu jako 0 - jeden bajt na rozmiar nie pomiesci liczby 256.
+      $bajt = if ($Rozmiary[$i] -ge 256) { 0 } else { $Rozmiary[$i] }
+      $bw.Write([byte]$bajt); $bw.Write([byte]$bajt); $bw.Write([byte]0); $bw.Write([byte]0)
+      $bw.Write([int16]1); $bw.Write([int16]32)
+      $bw.Write([int]$obrazy[$i].Length); $bw.Write([int]$offset)
+      $offset += $obrazy[$i].Length
+    }
+    foreach ($o in $obrazy) { $bw.Write($o) }
+    $bw.Flush()
+    $bajty = $ms.ToArray()
+    $bw.Dispose(); $ms.Dispose()
+    $dir = Split-Path $Path -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    # Zapis przez plik tymczasowy i podmiana: gdyby zapis padl w polowie, na dysku zostalby
+    # ODCIETY plik .ico - a skrot wskazujacy na odciety plik pokazuje PUSTE miejsce, czyli
+    # dokladnie ten skutek, ktoremu ma zapobiec zapasowa ikonka systemowa.
+    $tmp = "$Path.tmp"
+    [System.IO.File]::WriteAllBytes($tmp, $bajty)
+    Move-Item -LiteralPath $tmp -Destination $Path -Force
+    return $Path
+  } catch {
+    Log "[N3b] nie udalo sie narysowac znaku ENVI ($($_.Exception.Message))"
+    return $null
+  }
 }
 
 function Invoke-StepN3b {
@@ -708,6 +879,7 @@ function Invoke-StepN3b {
       Log "[N3b] ERROR: schtasks /create dla '$SyncTaskName' nie powiodlo sie (exit $LASTEXITCODE)"
     } else {
       Log "[N3b] zadanie '$SyncTaskName' zarejestrowane/zaktualizowane (idempotentnie, /f)"
+      Set-ZadanieChodziNaBaterii -Nazwa $SyncTaskName
     }
   }
 
@@ -725,6 +897,25 @@ function Invoke-StepN3b {
   # blob + restarting explorer.exe on an employee's machine) is exactly the kind of fragile
   # trick this installer avoids. The summary below tells the user the two clicks instead.
   $manualArgs = '-WindowStyle Hidden -NoProfile -File "{0}" -Manual' -f $SyncRunLauncher
+
+  # W5: znak ENVI zamiast systemowej ikonki Windows. Plik rysowany tuz przed skrotami, zeby
+  # ponowny przebieg instalatora odswiezyl go razem z nimi (idempotentnie, nadpisaniem).
+  $ikonaPlik = Join-Path $enviDir 'envi-znak.ico'
+  if ($PSCmdlet.ShouldProcess($ikonaPlik, 'narysuj znak ENVI do pliku .ico')) {
+    if (Write-ZnakEnviIco -Path $ikonaPlik) { Log "[N3b] znak ENVI narysowany: $ikonaPlik" }
+  }
+  # SPRAWDZONE ODCZYTEM, NIE ZALOZONE. Sciezka wlasnego pliku wchodzi do skrotu wylacznie
+  # wtedy, gdy plik naprawde lezy na dysku - inaczej skrot pokazywalby PUSTE miejsce, czyli
+  # wygladalby na zepsuty, a to jest gorzej niz ikonka Windows, ktora stala tu do dzis.
+  # Warunek dziala takze wstecz: przy nieudanym rysowaniu, ale zachowanym pliku z poprzedniej
+  # instalacji, skrot zostaje przy znaku ENVI zamiast cofac sie do ikonki systemowej.
+  $ikonaSkrotu = '%SystemRoot%\System32\shell32.dll,46'
+  if (Test-Path -LiteralPath $ikonaPlik) {
+    $ikonaSkrotu = "$ikonaPlik,0"
+  } else {
+    Log "[N3b] pliku znaku ENVI nie ma - skroty dostaja ikonke systemowa, jak dotad (nigdy pusta)"
+  }
+
   $wsh = New-Object -ComObject WScript.Shell
   foreach ($dir in @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('Desktop'))) {
     if (-not $dir) { continue }
@@ -735,12 +926,47 @@ function Invoke-StepN3b {
       $sc.Arguments = $manualArgs
       $sc.WindowStyle = 7
       # Explicit icon: without it the shortcut inherits the PowerShell console icon, which on a
-      # desktop reads as "some script", not as a button belonging to Second Brain.
-      $sc.IconLocation = '%SystemRoot%\System32\shell32.dll,46'
+      # desktop reads as "some script", not as a button belonging to Second Brain. Do 2026-08-23
+      # stala tu ikonka z shell32.dll - systemowa, czyli nadal "jakis skrypt Windows". Od W5
+      # jest to znak ENVI, ten sam co przy zegarze; $ikonaSkrotu wyzej pilnuje zapasu.
+      $sc.IconLocation = $ikonaSkrotu
       $sc.Description = 'Second Brain: wyslij i pobierz teraz zmiany z obszaru projektowego'
       $sc.Save()
       Log "[N3b] skrot 'Synchronizuj teraz' zapisany: $lnkPath"
     }
+  }
+
+  # Autostart rezydenta ikony. DO 2026-08-27 NIE BYLO GO WCALE - zmierzone: ani w folderze
+  # Autostart, ani w HKCU/HKLM Run, ani w harmonogramie. Ikone podnosil wylacznie silnik przy
+  # swoim cogodzinnym przebiegu, czyli po wlaczeniu komputera stala DO GODZINY bez ikony,
+  # a na samej baterii - wobec ustawien wyzej - nie wstawala w ogole.
+  #
+  # Ten sam mechanizm, ktorego N3 uzywa juz dla pobierania kanonu (skrot w folderze Autostart,
+  # WScript.Shell): wyzwalacz "przy logowaniu" w harmonogramie wymaga administratora, skrot nie.
+  # Nie budujemy tu niczego nowego.
+  #
+  # DWA REZYDENTY NIE POWSTANA - i to nie jest zalozenie: sb-tray.ps1 trzyma zamek nazwany
+  # ('Local\...') i protokol ustepowania, wiec kopia uruchomiona pozniej albo ustepuje, albo
+  # przejmuje miejsce po starszej. Ten skrot wchodzi wiec w istniejacy mechanizm, a nie obok niego.
+  $trayPath = Join-Path $enviDir 'sb-tray.ps1'
+  $trayStan = Join-Path $enviDir 'project-sync.state.json'
+  $startupDirTray = [Environment]::GetFolderPath('Startup')
+  if ($startupDirTray) {
+    $trayLnk = Join-Path $startupDirTray 'ENVI-SB-Ikona.lnk'
+    if ($PSCmdlet.ShouldProcess($trayLnk, 'utworz/zaktualizuj skrot autostartu rezydenta ikony')) {
+      $sct = $wsh.CreateShortcut($trayLnk)   # idempotentnie: CreateShortcut+Save nadpisuje w miejscu
+      $sct.TargetPath = 'powershell.exe'
+      # Argumenty CO DO ZNAKU takie same, jak sklada silnik przy podnoszeniu rezydenta -
+      # inaczej rezydent z autostartu liczylby sciezki towarzyszace inaczej niz ten z silnika.
+      $sct.Arguments = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -StatePath "{1}"' -f $trayPath, $trayStan
+      $sct.WindowStyle = 7
+      $sct.IconLocation = $ikonaSkrotu
+      $sct.Description = 'Second Brain: ikona stanu przy zegarze (start przy logowaniu)'
+      $sct.Save()
+      Log "[N3b] skrot autostartu ikony zapisany: $trayLnk"
+    }
+  } else {
+    Log "[N3b] nie znalazlem folderu Autostart - ikona wstanie dopiero przy przebiegu silnika, jak dotad"
   }
 
   Log "[N3b] synchronizacja obszaru projektowego - koniec"
