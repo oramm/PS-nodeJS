@@ -287,6 +287,43 @@ export default class OffersController extends BaseController<
     }
 
     /**
+     * Baza pilnuje, żeby nie powstały dwie oferty o tym samym skrócie, zamawiającym,
+     * dacie utworzenia i typie. Surowy komunikat MySQL ("Duplicate entry ... for key
+     * unique_alias_employername_creationdate_typeid") nic nie mówi osobie rejestrującej
+     * ofertę, więc tłumaczymy go na zdanie po ludzku. Pozostałe błędy bazy przepuszczamy
+     * bez zmian - tłumaczymy tylko to, co potrafimy nazwać.
+     */
+    private static translateOfferDbError(
+        err: unknown,
+        offer: Offer,
+        operation: 'add' | 'edit' = 'add'
+    ): unknown {
+        const dbError = err as { errno?: number; code?: string };
+        const isDuplicate =
+            dbError?.errno === 1062 || dbError?.code === 'ER_DUP_ENTRY';
+        if (!isDuplicate) return err;
+
+        const employer = offer.employerName ? ` dla "${offer.employerName}"` : '';
+        const creationDate = offer.creationDate
+            ? ` z datą utworzenia ${ToolsDate.dateYMDtoDMY(offer.creationDate)}`
+            : '';
+        const type = offer._type?.name ? ` (typ ${offer._type.name})` : '';
+
+        // Przy rejestracji trop jest inny niż przy edycji: tam oferta mogła zapisać się
+        // przy wcześniejszej, pozornie nieudanej próbie, tu kolidujemy z cudzym wpisem.
+        const hint =
+            operation === 'add'
+                ? 'Sprawdź listę ofert przed ponowną próbą - jeśli poprzednie podejście zakończyło się komunikatem o błędzie, oferta i tak mogła zostać zapisana.'
+                : 'Taką ofertę ma już inny wpis na liście. Zmień skrót, zamawiającego, datę utworzenia albo typ - te cztery cechy razem muszą być niepowtarzalne.';
+
+        return new EnviErrors.DbError(
+            `Oferta "${offer.alias}"${employer}${creationDate}${type} jest już zarejestrowana.\n\n` +
+                hint,
+            'DUPLICATE_OFFER'
+        );
+    }
+
+    /**
      * Add new offer (base logic for all offer types)
      * PRIVATE: Called by addOurOffer/addExternalOffer
      */
@@ -306,7 +343,11 @@ export default class OffersController extends BaseController<
             console.log('Offer folder created');
 
             TaskStore.update(taskId, 'Zapisuję ofertę do bazy', 30);
-            await instance.repository.addInDb(offer);
+            try {
+                await instance.repository.addInDb(offer);
+            } catch (err) {
+                throw this.translateOfferDbError(err, offer, 'add');
+            }
             console.log('Offer added in db');
 
             console.group(
@@ -462,12 +503,16 @@ export default class OffersController extends BaseController<
             }
             console.log('Offer folder edited');
             TaskStore.update(taskId, 'Edytuję ofertę w bazie', 50);
-            await instance.repository.editInDb(
-                offer,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
+            try {
+                await instance.repository.editInDb(
+                    offer,
+                    undefined,
+                    undefined,
+                    fieldsToUpdate
+                );
+            } catch (err) {
+                throw this.translateOfferDbError(err, offer, 'edit');
+            }
             console.log('Offer edited in db');
             TaskStore.update(taskId, 'Edytuję kamienie milowe', 80);
             await OffersController.createOfferEvaluationMilestoneOrCases(

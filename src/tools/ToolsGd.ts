@@ -411,12 +411,21 @@ export default class ToolsGd {
         try {
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>fileData.id;
+            // Bez bieżącego rodzica removeParents byłoby puste, a Drive czyta to jako
+            // "dopisz drugiego rodzica, starego zostaw". Element na Dysku współdzielonym
+            // może mieć dokładnie jednego, więc taki ruch kończy się odmową Google.
+            // Zgłaszamy to od razu i po ludzku, zamiast wysyłać wadliwe żądanie.
+            const currentParents = fileData.parents?.join(',');
+            if (!currentParents)
+                throw new Error(
+                    `ToolsGd.moveFileOrFolder:: brak bieżącego folderu nadrzędnego (pole parents) dla ${fileId} - nie da się przenieść. Podaj parents jawnie albo pobierz metadane przez getFileOrFolderMetaDataById.`
+                );
 
             console.log(`Przenoszę do nowego folderu plik ${fileId} ...`);
 
             await drive.files.update({
                 fileId: fileId,
-                removeParents: fileData.parents?.join(','),
+                removeParents: currentParents,
                 addParents: newParentFolderId,
                 supportsAllDrives: true,
             });
