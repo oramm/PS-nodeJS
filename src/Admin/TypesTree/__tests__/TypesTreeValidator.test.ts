@@ -271,3 +271,58 @@ describe('TypesTreeValidator - typ kamienia', () => {
         ).toThrow(/2 znak/);
     });
 });
+
+describe('TypesTreeValidator - podpięcie istniejącego typu kamienia', () => {
+    const baseAttach = { milestoneTypeId: 5, contractTypeId: 10, folderNumber: '09' };
+
+    it('przepuszcza samo powiązanie i nie przenosi nazwy ani opisu', () => {
+        // Nazwa i opis należą do typu i są wspólne dla wszystkich typów umów.
+        // Gdyby przeszły tędy, podpięcie po cichu przemianowałoby typ u wszystkich.
+        const result: any = TypesTreeValidator.validateAttachMilestoneType({
+            ...baseAttach,
+            isDefault: true,
+            name: 'Nazwa, która nie ma prawa tu dojechać',
+            description: 'ani opis',
+        });
+
+        expect(result).toEqual({
+            milestoneTypeId: 5,
+            contractTypeId: 10,
+            folderNumber: '09',
+            isDefault: true,
+        });
+    });
+
+    it('przyjmuje numer folderu dostarczony jako liczba', () => {
+        // to samo źródło problemu co przy dodawaniu typu: "9" -> 9
+        const result = TypesTreeValidator.validateAttachMilestoneType({
+            ...baseAttach,
+            folderNumber: 9,
+        });
+        expect(result.folderNumber).toBe('9');
+    });
+
+    it('pilnuje limitu dwóch znaków numeru folderu', () => {
+        expect(() =>
+            TypesTreeValidator.validateAttachMilestoneType({
+                ...baseAttach,
+                folderNumber: '123',
+            })
+        ).toThrow(/2 znak/);
+    });
+
+    it('odrzuca brak typu kamienia albo typu umowy', () => {
+        expect(() =>
+            TypesTreeValidator.validateAttachMilestoneType({
+                ...baseAttach,
+                milestoneTypeId: undefined,
+            })
+        ).toThrow(/typu kamienia/);
+        expect(() =>
+            TypesTreeValidator.validateAttachMilestoneType({
+                ...baseAttach,
+                contractTypeId: 0,
+            })
+        ).toThrow(/typu umowy/);
+    });
+});

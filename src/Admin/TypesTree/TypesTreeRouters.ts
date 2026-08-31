@@ -64,6 +64,23 @@ app.post('/admin/typesTree/caseType', async (req: any, res: any, next: any) => {
     }
 });
 
+// Podpięcie ISTNIEJĄCEGO typu kamienia pod kolejny typ umowy. Osobna trasa od dodawania,
+// bo to inna operacja: nie powstaje żaden typ, tylko wiersz powiązania. Typy spraw jadą
+// z kamieniem automatycznie - wiszą pod nim, nie pod typem umowy.
+app.post(
+    '/admin/typesTree/contractTypeMilestoneType',
+    async (req: any, res: any, next: any) => {
+        try {
+            const result = await TypesTreeController.attachMilestoneTypeFromDto(
+                req.parsedBody
+            );
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 // Brak tras usuwania: typy nie mają kolumny statusu ani flagi aktywności, więc
 // jedyną formą usunięcia byłby DELETE, a ten i tak blokuje klucz obcy dla typów
 // w użyciu. Wycofywanie typów to osobny temat, wymagający zmiany schematu.
