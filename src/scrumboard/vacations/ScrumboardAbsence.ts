@@ -4,6 +4,9 @@ export interface ScrumboardAbsenceData {
     typeId: number;
     dateFrom: string; // 'YYYY-MM-DD'
     dateTo: string; // 'YYYY-MM-DD'
+    /** 'HH:MM' albo null. Oba czasy null = cały dzień. */
+    startTime?: string | null;
+    endTime?: string | null;
     workingDaysCount?: number;
     note?: string | null;
     createdByPersonId?: number | null;
@@ -16,13 +19,19 @@ export interface ScrumboardAbsenceData {
     _countsAsHoliday?: boolean;
 }
 
-/** Nieobecność jako zakres dat (odpowiednik zaznaczenia w arkuszu "urlopy"). */
+/**
+ * Nieobecność jako zakres dat (odpowiednik zaznaczenia w arkuszu "urlopy").
+ * Od packa GOD także jako część jednego dnia: wtedy startTime i endTime są wypełnione,
+ * dateFrom = dateTo, a workingDaysCount jest ułamkiem (4 h = 0,5 dnia).
+ */
 export default class ScrumboardAbsence implements ScrumboardAbsenceData {
     id?: number;
     personId: number;
     typeId: number;
     dateFrom: string;
     dateTo: string;
+    startTime: string | null;
+    endTime: string | null;
     workingDaysCount: number;
     note?: string | null;
     createdByPersonId?: number | null;
@@ -39,6 +48,9 @@ export default class ScrumboardAbsence implements ScrumboardAbsenceData {
         this.typeId = data.typeId;
         this.dateFrom = data.dateFrom;
         this.dateTo = data.dateTo;
+        this.startTime = data.startTime ?? null;
+        this.endTime = data.endTime ?? null;
+        // sterownik oddaje DECIMAL jako tekst ("0.50"), więc konwersja jest konieczna
         this.workingDaysCount = Number(data.workingDaysCount ?? 0);
         this.note = data.note ?? null;
         this.createdByPersonId = data.createdByPersonId ?? null;

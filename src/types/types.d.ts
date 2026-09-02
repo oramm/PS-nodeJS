@@ -24,8 +24,12 @@ export interface AbsenceTypeData extends RepositoryDataItem {
     countsAgainstLimit: boolean;
     countsAsCare: boolean;
     countsAsHoliday: boolean;
+    /** Czy ten typ wolno wpisać na część dnia (godziny od-do), a nie tylko na całe dni. */
+    allowsPartialDay: boolean;
     /** Liczba nieobecności używających tego typu - pole wyliczane, tylko do odczytu. */
     _usageCount?: number;
+    /** Ile z nich jest wpisanych na godziny - pole wyliczane, tylko do odczytu. */
+    _partialUsageCount?: number;
 }
 
 /** Uprawnienia funkcyjne osoby. Klucz naturalny to personId, nie id wiersza. */

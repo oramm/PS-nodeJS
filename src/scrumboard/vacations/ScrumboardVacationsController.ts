@@ -1,12 +1,17 @@
 import BaseController from '../../controllers/BaseController';
+import { BadRequestError } from '../../persons/projectAssignments/ProjectScopeGuard';
 import { getScrumboardPersons } from '../ScrumboardPersons';
 import ScrumboardAbsence from './ScrumboardAbsence';
 import ScrumboardAbsenceRepository from './ScrumboardAbsenceRepository';
 import ScrumboardAbsenceTypeRepository from './ScrumboardAbsenceTypeRepository';
 import ScrumboardVacationEntitlementRepository from './ScrumboardVacationEntitlementRepository';
 import {
-    countWeekdays,
-    countWeekdaysInWindow,
+    countWorkMinutes,
+    countWorkMinutesInWindow,
+    daysToMinutes,
+    formatAbsenceTerm,
+    formatDays,
+    minutesToDays,
     prevCurrentNextWeekWindows,
 } from './vacationDateUtils';
 
@@ -36,6 +41,7 @@ export interface VacationsYearData {
         countsAgainstLimit: boolean;
         countsAsCare: boolean;
         countsAsHoliday: boolean;
+        allowsPartialDay: boolean;
     }[];
     rows: VacationPersonRow[];
 }
@@ -96,8 +102,10 @@ export default class ScrumboardVacationsController extends BaseController<
             entitlements.map((e) => [e.personId, e])
         );
 
-        // suma dni roboczych (pon-pt) nieobecności danego roku spełniających predykat
-        const sumUsed = (
+        // Suma MINUT nieobecności danego roku spełniających predykat. Rachunek idzie
+        // w minutach (dzień = 480), na dni przeliczamy dopiero przy zwracaniu wiersza -
+        // inaczej sumowanie ułamków dnia dryfowałoby i psuło porównania z pulą.
+        const sumUsedMinutes = (
             list: ScrumboardAbsence[],
             pick: (a: ScrumboardAbsence) => boolean | undefined
         ) =>
@@ -106,9 +114,11 @@ export default class ScrumboardVacationsController extends BaseController<
                 .reduce(
                     (sum, a) =>
                         sum +
-                        countWeekdaysInWindow(
+                        countWorkMinutesInWindow(
                             a.dateFrom,
                             a.dateTo,
+                            a.startTime,
+                            a.endTime,
                             yearStart,
                             yearEnd
                         ),
@@ -118,9 +128,15 @@ export default class ScrumboardVacationsController extends BaseController<
         const rows: VacationPersonRow[] = persons.map((person) => {
             const id = person.id as number;
             const personAbsences = absencesByPerson.get(id) ?? [];
-            const usedDays = sumUsed(personAbsences, (a) => a._countsAgainstLimit);
-            const careUsedDays = sumUsed(personAbsences, (a) => a._countsAsCare);
-            const holidayUsedDays = sumUsed(
+            const usedMinutes = sumUsedMinutes(
+                personAbsences,
+                (a) => a._countsAgainstLimit
+            );
+            const careUsedMinutes = sumUsedMinutes(
+                personAbsences,
+                (a) => a._countsAsCare
+            );
+            const holidayUsedMinutes = sumUsedMinutes(
                 personAbsences,
                 (a) => a._countsAsHoliday
             );
@@ -135,14 +151,22 @@ export default class ScrumboardVacationsController extends BaseController<
                 personAlias: person._alias,
                 limitDays,
                 carryoverDays,
-                usedDays,
-                remainingDays: limitDays + carryoverDays - usedDays,
+                usedDays: minutesToDays(usedMinutes),
+                // reszta liczona w minutach i przeliczana raz - odejmowanie ułamków dnia
+                // potrafiłoby dać 1,4999999999 zamiast 1,5
+                remainingDays: minutesToDays(
+                    daysToMinutes(limitDays + carryoverDays) - usedMinutes
+                ),
                 careDays,
-                careUsedDays,
-                careRemainingDays: careDays - careUsedDays,
+                careUsedDays: minutesToDays(careUsedMinutes),
+                careRemainingDays: minutesToDays(
+                    daysToMinutes(careDays) - careUsedMinutes
+                ),
                 holidayDays,
-                holidayUsedDays,
-                holidayRemainingDays: holidayDays - holidayUsedDays,
+                holidayUsedDays: minutesToDays(holidayUsedMinutes),
+                holidayRemainingDays: minutesToDays(
+                    daysToMinutes(holidayDays) - holidayUsedMinutes
+                ),
                 absences: personAbsences,
             };
         });
@@ -156,6 +180,7 @@ export default class ScrumboardVacationsController extends BaseController<
                 countsAgainstLimit: t.countsAgainstLimit,
                 countsAsCare: t.countsAsCare,
                 countsAsHoliday: t.countsAsHoliday,
+                allowsPartialDay: t.allowsPartialDay,
             })),
             rows,
         };
@@ -166,8 +191,53 @@ export default class ScrumboardVacationsController extends BaseController<
         const type = (await this.typeRepository.find()).find(
             (t) => t.id === typeId
         );
-        if (!type) throw new Error(`Nieznany typ nieobecności: ${typeId}`);
+        if (!type)
+            throw new BadRequestError(`Nieznany typ nieobecności: ${typeId}`);
         return type;
+    }
+
+    /**
+     * Odrzuca godziny dla typu, który wolno brać wyłącznie na całe dni.
+     * O tym, które to typy, decyduje flaga w panelu administracyjnym (decyzja ownera D1) -
+     * system NIE zna prawnych różnic między opieką, urlopem a wolnym za święto.
+     */
+    private assertTypeAllowsPartialDay(
+        type: { name: string; allowsPartialDay: boolean },
+        startTime: string | null
+    ): void {
+        if (startTime && !type.allowsPartialDay)
+            throw new BadRequestError(
+                `Typ «${type.name}» można wpisać tylko na całe dni.`
+            );
+    }
+
+    /**
+     * Blokuje drugą nieobecność tej samej osoby w terminie już zajętym (decyzja ownera D5).
+     * Działa na CAŁY zakres, nie tylko na dzień identyczny: opieka 12 sierpnia w czasie
+     * urlopu 10-14 sierpnia jest odrzucana. Godzin celowo nie porównujemy - dzień zajęty
+     * jest zajęty, bo widok miesięczny i tak pokazałby tylko jedną z dwóch nieobecności,
+     * a kalendarz zacząłby kłamać. Przy edycji własny wiersz jest pomijany.
+     */
+    private async assertNoOverlap(
+        personId: number,
+        dateFrom: string,
+        dateTo: string,
+        excludeAbsenceId?: number
+    ): Promise<void> {
+        const overlapping = (
+            await this.repository.find({
+                rangeStart: dateFrom,
+                rangeEnd: dateTo,
+                personIds: [personId],
+            })
+        ).filter((a) => a.id !== excludeAbsenceId);
+        if (overlapping.length === 0) return;
+        const conflict = overlapping[0];
+        throw new BadRequestError(
+            `Ta osoba ma już nieobecność w tym terminie: «${conflict._typeName}», ` +
+                `${formatAbsenceTerm(conflict.dateFrom, conflict.dateTo)}. ` +
+                'Zmień termin albo popraw tamten wpis.'
+        );
     }
 
     /**
@@ -183,6 +253,8 @@ export default class ScrumboardVacationsController extends BaseController<
         personId: number,
         dateFrom: string,
         dateTo: string,
+        startTime: string | null,
+        endTime: string | null,
         excludeAbsenceId?: number
     ): Promise<void> {
         const year = Number(dateFrom.slice(0, 4));
@@ -210,29 +282,44 @@ export default class ScrumboardVacationsController extends BaseController<
                 : kind === 'holiday'
                 ? a._countsAsHoliday
                 : a._countsAgainstLimit;
-        const alreadyUsed = absences
+        // Porównanie idzie w minutach. Na ułamkach dnia wniosek mieszczący się co do
+        // minuty bywałby odrzucany przez dryf zmiennoprzecinkowy - użytkownik zobaczyłby
+        // "brak dni" przy pustej puli na papierze.
+        const poolMinutes = daysToMinutes(pool);
+        const alreadyUsedMinutes = absences
             .filter((a) => counts(a) && a.id !== excludeAbsenceId)
             .reduce(
                 (sum, a) =>
                     sum +
-                    countWeekdaysInWindow(a.dateFrom, a.dateTo, yearStart, yearEnd),
+                    countWorkMinutesInWindow(
+                        a.dateFrom,
+                        a.dateTo,
+                        a.startTime,
+                        a.endTime,
+                        yearStart,
+                        yearEnd
+                    ),
                 0
             );
-        const requested = countWeekdaysInWindow(
+        const requestedMinutes = countWorkMinutesInWindow(
             dateFrom,
             dateTo,
+            startTime,
+            endTime,
             yearStart,
             yearEnd
         );
-        if (alreadyUsed + requested > pool) {
+        if (alreadyUsedMinutes + requestedMinutes > poolMinutes) {
             const label =
                 kind === 'care'
                     ? 'dni opieki'
                     : kind === 'holiday'
                     ? 'dni wolnego za święta'
                     : 'dni urlopu';
-            throw new Error(
-                `Brak dostępnych ${label} (pula: ${pool}, wykorzystane: ${alreadyUsed}, żądane: ${requested}).`
+            throw new BadRequestError(
+                `Brak dostępnych ${label} (pula: ${formatDays(pool)}, ` +
+                    `wykorzystane: ${formatDays(minutesToDays(alreadyUsedMinutes))}, ` +
+                    `żądane: ${formatDays(minutesToDays(requestedMinutes))}).`
             );
         }
     }
@@ -247,14 +334,23 @@ export default class ScrumboardVacationsController extends BaseController<
         personId: number,
         dateFrom: string,
         dateTo: string,
+        startTime: string | null,
+        endTime: string | null,
         excludeAbsenceId?: number
     ): Promise<void> {
-        if (type.countsAsCare)
-            await this.assertWithinPool('care', personId, dateFrom, dateTo, excludeAbsenceId);
+        const args = [
+            personId,
+            dateFrom,
+            dateTo,
+            startTime,
+            endTime,
+            excludeAbsenceId,
+        ] as const;
+        if (type.countsAsCare) await this.assertWithinPool('care', ...args);
         else if (type.countsAsHoliday)
-            await this.assertWithinPool('holiday', personId, dateFrom, dateTo, excludeAbsenceId);
+            await this.assertWithinPool('holiday', ...args);
         else if (type.countsAgainstLimit)
-            await this.assertWithinPool('vacation', personId, dateFrom, dateTo, excludeAbsenceId);
+            await this.assertWithinPool('vacation', ...args);
     }
 
     /** Tworzy nieobecność. Zwraca zapisany rekord (z Id i policzonymi dniami). */
@@ -264,46 +360,76 @@ export default class ScrumboardVacationsController extends BaseController<
             typeId: number;
             dateFrom: string;
             dateTo: string;
+            startTime: string | null;
+            endTime: string | null;
             note: string | null;
         },
         createdByPersonId?: number
     ): Promise<ScrumboardAbsence> {
         const instance = this.getInstance();
         const type = await instance.getType(values.typeId);
-        await instance.assertTypeWithinPool(
-            type,
+        instance.assertTypeAllowsPartialDay(type, values.startTime);
+        await instance.assertNoOverlap(
             values.personId,
             values.dateFrom,
             values.dateTo
         );
+        await instance.assertTypeWithinPool(
+            type,
+            values.personId,
+            values.dateFrom,
+            values.dateTo,
+            values.startTime,
+            values.endTime
+        );
         const absence = new ScrumboardAbsence({
             ...values,
-            workingDaysCount: countWeekdays(values.dateFrom, values.dateTo),
+            workingDaysCount: minutesToDays(
+                countWorkMinutes(
+                    values.dateFrom,
+                    values.dateTo,
+                    values.startTime,
+                    values.endTime
+                )
+            ),
             createdByPersonId: createdByPersonId ?? null,
         });
         const id = await instance.repository.insert(absence);
         return (await instance.repository.findById(id)) ?? absence;
     }
 
-    /** Edytuje nieobecność (typ, zakres, notatka). */
+    /** Edytuje nieobecność (typ, zakres, godziny, notatka). */
     static async editAbsence(
         id: number,
         values: {
             typeId: number;
             dateFrom: string;
             dateTo: string;
+            startTime: string | null;
+            endTime: string | null;
             note: string | null;
         }
     ): Promise<ScrumboardAbsence> {
         const instance = this.getInstance();
         const existing = await instance.repository.findById(id);
-        if (!existing) throw new Error(`Nie znaleziono urlopu o id ${id}`);
+        if (!existing)
+            throw new BadRequestError(`Nie znaleziono urlopu o id ${id}`);
         const type = await instance.getType(values.typeId);
+        instance.assertTypeAllowsPartialDay(type, values.startTime);
+        // przy edycji własny wiersz nie jest kolizją sam ze sobą
+        await instance.assertNoOverlap(
+            existing.personId,
+            values.dateFrom,
+            values.dateTo,
+            id
+        );
         await instance.assertTypeWithinPool(
             type,
             existing.personId,
             values.dateFrom,
             values.dateTo,
+            values.startTime,
+            values.endTime,
             id
         );
         const updated = new ScrumboardAbsence({
@@ -311,7 +437,14 @@ export default class ScrumboardVacationsController extends BaseController<
             ...values,
             id,
             personId: existing.personId,
-            workingDaysCount: countWeekdays(values.dateFrom, values.dateTo),
+            workingDaysCount: minutesToDays(
+                countWorkMinutes(
+                    values.dateFrom,
+                    values.dateTo,
+                    values.startTime,
+                    values.endTime
+                )
+            ),
         });
         await instance.repository.update(updated);
         return (await instance.repository.findById(id)) ?? updated;
@@ -343,6 +476,7 @@ export default class ScrumboardVacationsController extends BaseController<
     /**
      * Liczba dni urlopu (dni robocze, WSZYSTKIE typy - liczy się kto jest nieobecny)
      * w tygodniu poprzednim/bieżącym/następnym, per osoba scrumboardu.
+     * Od packa GOD liczby bywają ułamkowe (część dnia), np. 1,5.
      * Wyłącznie informacyjne dla zakładki Planowanie.
      */
     static async getWeekCounts(today = new Date()): Promise<VacationWeekCount[]> {
@@ -362,29 +496,32 @@ export default class ScrumboardVacationsController extends BaseController<
         for (const id of personIds)
             byPerson.set(id, { personId: id, prev: 0, current: 0, next: 0 });
 
+        // liczniki zbieramy w minutach, na dni przeliczamy raz, na wyjściu
         for (const absence of absences) {
             const counts = byPerson.get(absence.personId);
             if (!counts) continue;
-            counts.prev += countWeekdaysInWindow(
-                absence.dateFrom,
-                absence.dateTo,
-                windows.prev[0],
-                windows.prev[1]
-            );
-            counts.current += countWeekdaysInWindow(
-                absence.dateFrom,
-                absence.dateTo,
-                windows.current[0],
-                windows.current[1]
-            );
-            counts.next += countWeekdaysInWindow(
-                absence.dateFrom,
-                absence.dateTo,
-                windows.next[0],
-                windows.next[1]
-            );
+            const inWindow = (window: [string, string]) =>
+                countWorkMinutesInWindow(
+                    absence.dateFrom,
+                    absence.dateTo,
+                    absence.startTime,
+                    absence.endTime,
+                    window[0],
+                    window[1]
+                );
+            counts.prev += inWindow(windows.prev);
+            counts.current += inWindow(windows.current);
+            counts.next += inWindow(windows.next);
         }
 
-        return persons.map((p) => byPerson.get(p.id as number)!);
+        return persons.map((p) => {
+            const counts = byPerson.get(p.id as number)!;
+            return {
+                personId: counts.personId,
+                prev: minutesToDays(counts.prev),
+                current: minutesToDays(counts.current),
+                next: minutesToDays(counts.next),
+            };
+        });
     }
 }

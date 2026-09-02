@@ -119,3 +119,120 @@ export function prevCurrentNextWeekWindows(today: Date): {
         next: makeWindow(1),
     };
 }
+
+// ---------------------------------------------------------------------------
+// Nieobecność na część dnia. Jednostką rachunku są MINUTY (liczby całkowite),
+// nie ułamki dnia: rachunek na ułamkach dryfuje (0,1 + 0,2 = 0,30000000000000004),
+// a sprawdzanie puli to porównanie "wykorzystane + żądane > pula" - dryf o jedną
+// milionową odrzuciłby poprawny wniosek komunikatem o braku dni.
+// Na dni przelicza się dopiero przy wyświetleniu i przy zapisie kolumny.
+// ---------------------------------------------------------------------------
+
+/** Ile minut pracy ma pełny dzień. Stała biznesowa (8 h = 1 dzień), decyzja ownera. */
+export const MINUTES_PER_DAY = 480;
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** Waliduje i normalizuje 'HH:MM' (przyjmuje też 'HH:MM:SS' z bazy). */
+export function parseTimeOnly(value: unknown, field = 'godzina'): string {
+    const candidate = typeof value === 'string' ? value.trim().slice(0, 5) : '';
+    if (!TIME_RE.test(candidate))
+        throw new Error(`Nieprawidłowy format pola ${field} (oczekiwano HH:MM)`);
+    return candidate;
+}
+
+/** Normalizuje kolumnę TIME z bazy do 'HH:MM'; NULL zostaje nullem. */
+export function dbTimeToStr(value: unknown): string | null {
+    if (value === null || value === undefined || value === '') return null;
+    if (value instanceof Date) return value.toISOString().slice(11, 16);
+    return String(value).slice(0, 5);
+}
+
+/** Minuty od północy dla 'HH:MM'. */
+export function timeToMinutes(hhmm: string): number {
+    const [hours, minutes] = hhmm.split(':').map(Number);
+    return hours * 60 + minutes;
+}
+
+/**
+ * Minuty pracy nieobecności. Cały dzień (godziny puste) = dni robocze * 480.
+ * Część dnia = różnica "do" minus "od"; z definicji mieści się w jednym dniu roboczym,
+ * więc dzień nieroboczy daje zero (walidator i tak takiego wpisu nie przepuszcza).
+ */
+export function countWorkMinutes(
+    fromStr: string,
+    toStr: string,
+    startTime?: string | null,
+    endTime?: string | null
+): number {
+    if (startTime && endTime)
+        return countWeekdays(fromStr, toStr) > 0
+            ? timeToMinutes(endTime) - timeToMinutes(startTime)
+            : 0;
+    return countWeekdays(fromStr, toStr) * MINUTES_PER_DAY;
+}
+
+/** Jak countWorkMinutes, ale tylko w części wspólnej z oknem [windowFrom, windowTo]. */
+export function countWorkMinutesInWindow(
+    fromStr: string,
+    toStr: string,
+    startTime: string | null | undefined,
+    endTime: string | null | undefined,
+    windowFrom: string,
+    windowTo: string
+): number {
+    if (startTime && endTime) {
+        // część dnia stoi w jednym dniu, więc albo wpada w okno w całości, albo wcale
+        if (fromStr < windowFrom || fromStr > windowTo) return 0;
+        return countWorkMinutes(fromStr, toStr, startTime, endTime);
+    }
+    return (
+        countWeekdaysInWindow(fromStr, toStr, windowFrom, windowTo) *
+        MINUTES_PER_DAY
+    );
+}
+
+/** Minuty na dni - do prezentacji i do kolumny DECIMAL(5,2). Całe dni zostają całe. */
+export function minutesToDays(minutes: number): number {
+    return Math.round((minutes / MINUTES_PER_DAY) * 100) / 100;
+}
+
+/** Dni (także ułamkowe pule z bazy) na minuty. 0,1 dnia = 48 min, zawsze całkowite. */
+export function daysToMinutes(days: number): number {
+    return Math.round(days * MINUTES_PER_DAY);
+}
+
+/** Liczba dni po polsku: przecinek, do dwóch miejsc, bez końcowych zer ("1,5", "26"). */
+export function formatDays(days: number): string {
+    return String(Math.round(days * 100) / 100).replace('.', ',');
+}
+
+const MONTHS_GENITIVE = [
+    'stycznia',
+    'lutego',
+    'marca',
+    'kwietnia',
+    'maja',
+    'czerwca',
+    'lipca',
+    'sierpnia',
+    'września',
+    'października',
+    'listopada',
+    'grudnia',
+];
+
+/**
+ * Termin nieobecności po ludzku, do komunikatów błędu:
+ * "18 września", "14-16 września", "28 września - 3 października".
+ */
+export function formatAbsenceTerm(fromStr: string, toStr: string): string {
+    const from = toDate(fromStr);
+    const to = toDate(toStr);
+    const monthFrom = MONTHS_GENITIVE[from.getMonth()];
+    const monthTo = MONTHS_GENITIVE[to.getMonth()];
+    if (fromStr === toStr) return `${from.getDate()} ${monthFrom}`;
+    if (from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear())
+        return `${from.getDate()}–${to.getDate()} ${monthTo}`;
+    return `${from.getDate()} ${monthFrom} – ${to.getDate()} ${monthTo}`;
+}
