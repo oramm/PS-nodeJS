@@ -616,3 +616,42 @@ rozstrzyga.
 Ostrzeżenie o `actions/checkout@v4` i `actions/setup-node@v4` na Node 20 zostawione — dotyczy
 środowiska samych akcji, nie tego ustawienia, akcje nadal działają, a podniesienie majorów to
 osobna zmiana w narzędziach CI, nie część naprawy builda.
+
+---
+
+## 2026-09-03 — pole pomocnicze VAT w formularzu
+
+Podsumowanie:
+- Na życzenie właściciela formularz zaliczek dostał pole „VAT" między „Netto" a „Brutto", dla rodzajów
+  „paragon" i „zakup z fakturą" (poczta jest zwolniona z VAT, więc tam pola nie ma). Powód: paragon
+  podaje zwykle brutto i sumę podatku, a arkusz chce netto i brutto, więc wpisujący liczył netto w głowie.
+- Pole jest wyłącznie pomocnicze: nie należy do stanu formularza (`react-hook-form`), nie wchodzi do
+  payloadu i nie trafia do arkusza — podgląd wiersza pod formularzem nie zmienił się.
+- Reguła: netto i VAT to para, z której ostatnio wpisana wartość jest źródłem, a druga wynika z brutto.
+  Wpisane VAT (przed albo po brutto) daje netto = brutto − VAT; wpisane netto zwraca polu VAT rolę
+  podglądu, który pokazuje brutto − netto do sprawdzenia z paragonem. Zmiana rodzaju, podpowiedź ze
+  zdjęcia i zapis wpisu wracają do trybu podglądu. Edycja netto i brutto w tabeli pod formularzem
+  przechodzi tą samą ścieżką, więc obie powierzchnie zachowują się tak samo.
+- Pole nie blokuje zapisu samo z siebie: VAT nie-liczba, ujemny albo nie niższy od brutto dostaje
+  komunikat pod polem, a błąd i tak wychodzi na netto, które z niego wynika.
+- Decyzja z P8 „nie liczymy netto z podatku" dotyczy modelu rozpoznającego dokument i zostaje w mocy:
+  tu netto liczy się z wartości wpisanej przez człowieka, który patrzy na paragon.
+
+Files touched — frontend:
+- `src/Erp/PettyCash/vatAmount.ts` (new), `src/Erp/PettyCash/vatAmount.test.ts` (new),
+  `src/Erp/PettyCash/PettyCashEntryPage.tsx`
+
+Impact type: UI
+
+Notes:
+- 82 testy frontu w module (72 dotychczasowe + 10 nowych), typecheck czysty. Backend nietknięty —
+  payload bez zmian.
+- Sprawdzone w przeglądarce na lokalnym backendzie z logowaniem deweloperskim, bez zapisu do arkuszy:
+  brutto 112,98 i VAT 21,13 → netto 91,85; netto 91,00 → VAT 21,98; VAT 23 i potem brutto 123 →
+  netto 100,00; VAT 200 przy brutto 123 → netto −77,00 z komunikatami pod netto i pod VAT.
+- Otwarte dla właściciela, jeśli ma zdanie: kolejność pól. „Netto | VAT | Brutto" czyta się jak równanie
+  i zachowuje kolejność arkusza; paragon podaje brutto przed VAT, więc możliwa jest odwrotna.
+
+Follow-up tego samego dnia, po decyzji właściciela: kolejność pól zmieniona na **Brutto, VAT, Netto**
+(jak na paragonie: suma, potem podatek), a zdanie objaśniające pod polami usunięte jako zbędne.
+Zostaje tylko podpowiedź po najechaniu na pole VAT. Testy i typecheck bez zmian: 82 testy, czysto.

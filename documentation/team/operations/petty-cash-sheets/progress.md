@@ -675,3 +675,15 @@ wylacznie tym, na co wskazuja identyfikatory w konfiguracji Heroku. Do zweryfiko
 wlasciciela, zanim ktokolwiek uzyje formularza.
 
 Checkpoint status: P7 still open.
+
+### 2026-09-03 — Session 16, pole pomocnicze VAT
+
+Na życzenie właściciela: paragon podaje zwykle brutto i sumę podatku, a arkusz chce netto i brutto,
+więc wpisujący liczył netto w głowie. Formularz dostał pole „VAT" w wierszu kwot, w kolejności
+Brutto, VAT, Netto jak na paragonie (tylko paragon i zakup z fakturą), bez podpisu pod polami. Wpisane VAT daje netto z brutto; wpisane netto pokazuje w polu VAT różnicę
+brutto − netto do sprawdzenia z paragonem. Pole jest wyłącznie pomocnicze — nie idzie do payloadu ani
+do arkusza, podgląd wiersza bez zmian. Logika w `vatAmount.ts` z 10 testami; 82 testy modułu we
+froncie, typecheck czysty; przepływy sprawdzone w przeglądarce na kopiach, bez zapisu. Backend
+nietknięty.
+
+Checkpoint status: P7 still open.
