@@ -59,6 +59,22 @@ describe('StaffMemberValidator', () => {
         expect(result.id).toBeUndefined();
     });
 
+    it('ignoruje pola konta - rolę, e-mail systemowy i FIDmana zapisuje wyłącznie trasa konta v2', () => {
+        // Klient wysyła cały wiersz scalony z formularzem, więc te pola przychodzą tu
+        // przy każdym zapisie. Gdyby walidator je przepuścił, panel znów pisałby rolę
+        // własną drogą - bez unieważnienia sesji i bez pusha do FIDmana.
+        const result: any = StaffMemberValidator.validateUpdatePayload({
+            personId: 42,
+            ...allFlags,
+            systemRoleId: 1,
+            systemEmail: 'ktos@envi.com.pl',
+            fidmanEnabled: true,
+        });
+        expect(result.systemRoleId).toBeUndefined();
+        expect(result.systemEmail).toBeUndefined();
+        expect(result.fidmanEnabled).toBeUndefined();
+    });
+
     it('rzuca BadRequestError ze statusem 400', () => {
         expect(() =>
             StaffMemberValidator.validateUpdatePayload({ personId: 0 })

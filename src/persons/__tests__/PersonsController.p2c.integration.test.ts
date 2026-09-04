@@ -20,7 +20,14 @@ describe('PersonsController P2-C endpoint compatibility', () => {
         (PersonsController as any).instance = undefined;
     });
 
-    it('freezes legacy account-field writes in Persons when WRITE_DUAL=false', async () => {
+    /**
+     * PER-2 odwrócił trzy testy, które stały tu wcześniej. Do 2026-09-03 wymagały one, żeby
+     * `editFromDto` z `_fieldsToUpdate: ['systemRoleId'|'systemEmail']` zapisywał konto -
+     * to była zamrożona zgodność wsteczna z czasu migracji v2. Od PER-2 konto ma jedną drogę
+     * zapisu (`upsertPersonAccountV2`), bo tylko ona unieważnia sesje po zmianie roli,
+     * zakłada domyślne flagi i kolejkuje push do FIDmana. Historia w progresie packa PER.
+     */
+    it('ignores account fields on editFromDto even when the client asks for them', async () => {
         const { default: PersonsController } = await import('../PersonsController');
         const editSpy = jest
             .spyOn(PersonRepository.prototype, 'editInDb')
@@ -35,21 +42,18 @@ describe('PersonsController P2-C endpoint compatibility', () => {
                 name: 'Legacy',
                 surname: 'Endpoint',
                 systemRoleId: 2,
+                systemEmail: 'per2.escalation@test.local',
                 _entity: { id: 1 },
             },
-            ['systemRoleId'],
+            ['systemRoleId', 'systemEmail'],
         );
 
+        expect(upsertSpy).not.toHaveBeenCalled();
+        expect(ToolsDb.transaction).not.toHaveBeenCalled();
         expect(editSpy).not.toHaveBeenCalled();
-        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
-        expect(upsertSpy).toHaveBeenCalledWith(
-            expect.objectContaining({ id: 210001, systemRoleId: 2 }),
-            mockConn,
-            ['systemRoleId'],
-        );
     });
 
-    it('editing only systemRoleId does not sync/clear systemEmail in PersonAccounts', async () => {
+    it('still writes person fields and leaves the account alone', async () => {
         const { default: PersonsController } = await import('../PersonsController');
         const editSpy = jest
             .spyOn(PersonRepository.prototype, 'editInDb')
@@ -61,28 +65,28 @@ describe('PersonsController P2-C endpoint compatibility', () => {
         await PersonsController.editFromDto(
             {
                 id: 210002,
-                name: 'Role',
-                surname: 'Only',
-                systemRoleId: 4,
+                name: 'Person',
+                surname: 'Fields',
+                systemRoleId: 1,
                 _entity: { id: 1 },
             },
-            ['systemRoleId'],
+            ['name', 'surname', 'systemRoleId'],
         );
 
-        expect(editSpy).not.toHaveBeenCalled();
-        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
-        expect(upsertSpy).toHaveBeenCalledWith(
-            expect.objectContaining({ id: 210002, systemRoleId: 4 }),
-            mockConn,
-            ['systemRoleId'],
+        expect(editSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 210002 }),
+            undefined,
+            undefined,
+            ['name', 'surname'],
         );
+        expect(upsertSpy).not.toHaveBeenCalled();
     });
 
-    it('editing only systemEmail does not sync/clear systemRoleId in PersonAccounts', async () => {
+    it('ignores account fields also when the client sends no field list', async () => {
         const { default: PersonsController } = await import('../PersonsController');
-        const editSpy = jest
-            .spyOn(PersonRepository.prototype, 'editInDb')
-            .mockResolvedValue(undefined as any);
+        jest.spyOn(PersonRepository.prototype, 'editInDb').mockResolvedValue(
+            undefined as any,
+        );
         const upsertSpy = jest
             .spyOn(PersonRepository.prototype, 'upsertPersonAccountInDb')
             .mockResolvedValue(undefined);
@@ -90,24 +94,35 @@ describe('PersonsController P2-C endpoint compatibility', () => {
         await PersonsController.editFromDto(
             {
                 id: 210003,
-                name: 'Email',
-                surname: 'Only',
-                systemEmail: 'p2c.partial@test.local',
+                name: 'Default',
+                surname: 'Fields',
+                systemRoleId: 1,
+                systemEmail: 'per2.default@test.local',
                 _entity: { id: 1 },
             },
-            ['systemEmail'],
+            [],
         );
 
-        expect(editSpy).not.toHaveBeenCalled();
-        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
-        expect(upsertSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: 210003,
-                systemEmail: 'p2c.partial@test.local',
-            }),
-            mockConn,
-            ['systemEmail'],
+        expect(upsertSpy).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Znalezisko PER-2: `editUserFromDto` (zaszła trasa PUT /user/:id) czytało TĘ SAMĄ stałą
+     * co `editFromDto`, więc wycięcie z niej pól konta odcięłoby zapis konta trasie, która
+     * wg D-PER-5 (a) ma dalej działać - jest jedyną, która odświeża arkusz scruma. Test
+     * pilnuje rozdziału obu list; pełnego przebiegu trasy nie da się tu sprawdzić, bo
+     * `withAuth` sięga po token Google.
+     */
+    it('keeps account fields only on the legacy user field list', async () => {
+        const { default: PersonsController } = await import('../PersonsController');
+        const legacyFields = (PersonsController as any).LEGACY_USER_EDIT_FIELDS;
+        const defaultFields = (PersonsController as any).DEFAULT_EDIT_FIELDS;
+
+        expect(legacyFields).toEqual(
+            expect.arrayContaining(['systemRoleId', 'systemEmail']),
         );
+        expect(defaultFields).not.toContain('systemRoleId');
+        expect(defaultFields).not.toContain('systemEmail');
     });
 
     it('freezes legacy account fields in Persons on addNewSystemUser', async () => {

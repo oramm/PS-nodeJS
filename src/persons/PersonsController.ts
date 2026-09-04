@@ -40,7 +40,28 @@ export default class PersonsController extends BaseController<
 
     // ponytail: fallback gdy caller nie przesle _fieldsToUpdate (stare formularze) -
     // bez tego getPersonsWriteFields/getAccountWriteFields ciszej zwracaja [] i nic sie nie zapisuje
+    //
+    // PER-2: pola konta (systemRoleId, systemEmail) wypadly z tej listy. Konto ma jedna droge
+    // zapisu - upsertPersonAccountV2 - bo tylko ona uniewaznia sesje po zmianie roli, zaklada
+    // domyslne flagi i kolejkuje push do FIDmana. Trasa edycji osoby pisala je rownolegle,
+    // czym rozjechala role u 6 osob na produkcji (pomiar 2026-09-03).
     private static readonly DEFAULT_EDIT_FIELDS = [
+        'name',
+        'surname',
+        'position',
+        'email',
+        'cellphone',
+        'phone',
+        'comment',
+    ];
+
+    /**
+     * Pola zaszlej trasy PUT /user/:id (editUserFromDto). Osobna lista, bo ta trasa MUSI
+     * dalej zapisywac konto - jest jedyna, ktora odswieza arkusz scruma po zmianie osoby
+     * (D-PER-5, wariant (a): zostaje za bramka roli). Wspolna stala z DEFAULT_EDIT_FIELDS
+     * odcielaby jej zapis konta po cichu.
+     */
+    private static readonly LEGACY_USER_EDIT_FIELDS = [
         'name',
         'surname',
         'position',
@@ -175,80 +196,31 @@ export default class PersonsController extends BaseController<
 
     /**
      * UPDATE
-     * Edytuje osobę (tylko DB).
+     * Edytuje osobę (tylko DB) - WYŁĄCZNIE dane osoby, nigdy konto.
+     *
+     * PER-2: pola konta są tu odfiltrowane niezależnie od tego, co przyśle klient. Sama lista
+     * domyślna nie wystarczy - `_fieldsToUpdate` przychodzi z żądania, więc bez tego filtra
+     * `PUT /person/:id` z `_fieldsToUpdate: ['systemRoleId']` dalej zapisywałby rolę drugą,
+     * cichą drogą (bez unieważnienia sesji i bez pusha do FIDmana). Konto zapisuje
+     * `upsertPersonAccountV2`.
      */
     static async edit(
         person: Person,
         fieldsToUpdate: string[],
     ): Promise<Person> {
         const instance = this.getInstance();
-        const accountFieldsToSync =
-            instance.repository.getAccountWriteFields(fieldsToUpdate);
         const personFieldsToUpdate =
             instance.repository.getPersonsWriteFields(fieldsToUpdate);
-        const hasAccountFields = accountFieldsToSync.length > 0;
-        const hasPersonFields = personFieldsToUpdate.length > 0;
-        // Rola sprzed zapisu - do porównania po commicie (patrz revokeSessionsOnRoleChange).
-        const roleIsBeingWritten = accountFieldsToSync.includes('systemRoleId');
-        const previousRoleId =
-            roleIsBeingWritten && person.id
-                ? (await instance.repository.getPersonAccountV2(person.id))
-                      ?.systemRoleId
-                : undefined;
 
-        if (hasPersonFields && hasAccountFields) {
-            await ToolsDb.transaction(async (conn) => {
-                await instance.repository.editInDb(
-                    person,
-                    conn,
-                    true,
-                    personFieldsToUpdate,
-                );
-                await instance.repository.upsertPersonAccountInDb(
-                    person,
-                    conn,
-                    accountFieldsToSync,
-                );
-                await this.ensureStaffMemberForRole(
-                    person.id,
-                    person.systemRoleId,
-                    accountFieldsToSync.includes('systemRoleId'),
-                    conn,
-                );
-            });
-        } else {
-            if (hasPersonFields) {
-                await instance.repository.editInDb(
-                    person,
-                    undefined,
-                    undefined,
-                    personFieldsToUpdate,
-                );
-            }
-            if (hasAccountFields) {
-                await ToolsDb.transaction(async (conn) => {
-                    await instance.repository.upsertPersonAccountInDb(
-                        person,
-                        conn,
-                        accountFieldsToSync,
-                    );
-                    await this.ensureStaffMemberForRole(
-                        person.id,
-                        person.systemRoleId,
-                        accountFieldsToSync.includes('systemRoleId'),
-                        conn,
-                    );
-                });
-            }
+        if (personFieldsToUpdate.length > 0) {
+            await instance.repository.editInDb(
+                person,
+                undefined,
+                undefined,
+                personFieldsToUpdate,
+            );
         }
         console.log(`Person ${person.name} ${person.surname} updated in db`);
-
-        if (person.id)
-            await this.revokeSessionsOnRoleChange(
-                person.id,
-                previousRoleId,
-                roleIsBeingWritten ? person.systemRoleId : undefined,
-            );
 
         return person;
     }
@@ -281,12 +253,14 @@ export default class PersonsController extends BaseController<
      * @deprecated Używaj editFromDto() dla danych osobowych i upsertPersonAccountV2() dla konta.
      * UWAGA: v2 nie synchronizuje ScrumSheet automatycznie - metoda zostanie wycofana po dodaniu tej funkcjonalności do v2.
      * Router powinien wywoływać tę metodę.
+     * Zostaje wg D-PER-5 wariant (a) - powód przy trasie PUT /user/:id w PersonsRouters.ts
+     * i przy LEGACY_USER_EDIT_FIELDS wyżej.
      */
     static async editUserFromDto(userData: any): Promise<Person> {
         return await this.withAuth(async (instance, auth) => {
             const user = new Person(userData);
 
-            const fieldsToUpdate = PersonsController.DEFAULT_EDIT_FIELDS;
+            const fieldsToUpdate = PersonsController.LEGACY_USER_EDIT_FIELDS;
             const accountFieldsToSync =
                 instance.repository.getAccountWriteFields(fieldsToUpdate);
             // Rola sprzed zapisu - do porównania po commicie (patrz revokeSessionsOnRoleChange).
@@ -602,7 +576,7 @@ export default class PersonsController extends BaseController<
      * CREATE SYSTEM USER (DTO)
      * Tworzy użytkownika systemowego z kontem w jednym żądaniu.
      * @deprecated Używaj addFromDto() do utworzenia osoby, a następnie upsertPersonAccountV2() do dodania konta.
-     * Metoda zostanie usunięta w kolejnej wersji major.
+     * Zostaje wg D-PER-5 wariant (a) - powód przy trasie POST /systemUser w PersonsRouters.ts.
      */
     static async addNewSystemUser(userData: {
         name: string;

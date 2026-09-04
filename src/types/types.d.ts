@@ -32,6 +32,22 @@ export interface AbsenceTypeData extends RepositoryDataItem {
     _partialUsageCount?: number;
 }
 
+/**
+ * Stan ostatniej wysyłki konta osoby do FIDmana: ostatni wiersz `user.upsert` tej osoby
+ * w kolejce `FidmanSyncOutbox` (D-PER-8). `requestedEnabled` mówi, czy ta wysyłka włączała
+ * (true), czy wyłączała (false) konto; null = nie wiadomo (uszkodzony payload).
+ * Tylko do odczytu - stan zmienia zapis konta trasą v2 i drainer kolejki.
+ */
+export interface FidmanUserSyncStatus {
+    status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+    requestedEnabled: boolean | null;
+    skipReason: string | null;
+    skipReasonLabel: string | null;
+    lastError: string | null;
+    attempts: number;
+    updatedAt: string | null;
+}
+
 /** Uprawnienia funkcyjne osoby. Klucz naturalny to personId, nie id wiersza. */
 export interface StaffMemberData extends RepositoryDataItem {
     personId: number;
@@ -45,9 +61,19 @@ export interface StaffMemberData extends RepositoryDataItem {
     _personName?: string;
     _personSurname?: string;
     _personEmail?: string;
+    /** Nazwa podmiotu osoby (JOIN Entities) - pokazywana w komórce „Osoba". */
+    _entityName?: string | null;
     _systemRoleId?: number | null;
+    /**
+     * Konto osoby (PersonAccounts) - w tym module TYLKO do odczytu. Rolę, e-mail systemowy
+     * i flagę FIDmana zapisuje wyłącznie PUT /v2/persons/:personId/account.
+     */
+    _systemEmail?: string | null;
+    _fidmanEnabled?: boolean;
     /** Czy osoba ma już wiersz w StaffMembers (false = same domyślne zera). */
     _hasStaffRow?: boolean;
+    /** Ostatnia wysyłka konta do FIDmana; null = nigdy nie wysyłano. Tylko do odczytu. */
+    _fidmanSync?: FidmanUserSyncStatus | null;
 }
 
 /** Typ rodzica Milestone - Contract lub Offer */
@@ -498,6 +524,12 @@ export interface PersonAccountV2Payload {
     isActive?: boolean;
     /** GLO-P1: osoba jest użytkownikiem FIDmana (logowanie kontem Google z SystemEmail). */
     fidmanEnabled?: boolean;
+    /**
+     * Tylko w odpowiedzi PUT /v2/persons/:personId/account (D-PER-10, pack PER): zapis dotyczył
+     * WŁASNEJ roli wołającego, więc serwer skasował jego sesję - kolejne żądania dostaną 401,
+     * a klient ma powiedzieć człowiekowi, dlaczego, i przejść do logowania. Nigdy nie zapisywane.
+     */
+    _selfSessionRevoked?: boolean;
 }
 
 export interface PersonProfileV2Payload {

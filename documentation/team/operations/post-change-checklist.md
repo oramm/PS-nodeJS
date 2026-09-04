@@ -63,6 +63,50 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-04 - Persons and accounts: one account write path, role gates on account and person routes (pack PER)
+
+### Scope
+
+- `PUT /admin/staffMember/:personId` writes module flags and `isActive` only; `systemRoleId` in the body is ignored. Role, system e-mail, FIDman flag and project scope go exclusively through `PUT /v2/persons/:personId/account` (the only path that invalidates sessions, seeds default flags and queues the FIDman `user.upsert` push).
+- New module `src/setup/Sessions/requireUserManagementRole.ts`: `USER_MANAGEMENT_ROLES` (ADMIN, ENVI_MANAGER) gates `GET/PUT /v2/persons/:id/account`, `PUT /v2/persons/:id/project-assignments` and the legacy `PUT /user/:id`, `POST /systemUser`; `STAFF_ROLES` (ADMIN, ENVI_MANAGER, ENVI_EMPLOYEE) gates `POST /person`, `PUT /person/:id`, `DELETE /person/:id`. Gates answer `403 { errorMessage: 'Brak uprawnień do zarządzania kontami' }` directly, not via `next(error)` (that would become a 500 with an error report to the team).
+- `PUT /person/:id` no longer writes account fields (`systemRoleId`, `systemEmail`); legacy `PUT /user/:id` keeps its own field list and still does (kept on purpose: it is the only route that refreshes the scrum sheet).
+- `POST /admin/staffMembers` returns `SystemEmail`, `FidmanEnabled`, `EntityName` and `_fidmanSync` (the person's most recent `user.upsert` outbox row: status, skip reason with its label, last error, attempts, date, direction), and accepts `scope: 'permissions' | 'users' | 'all'` (default `permissions` = has a StaffMembers row; any unknown value resolves to `permissions`, never wider), `_entities`, `personId`; `includeWithoutPermissions` is gone.
+- Fix: saving flags from the admin panel for a person with a scoped role (CONTRACT_WORKER, CLIENT) no longer deletes that person's project assignments (the old client handler read the role from the response and got `undefined`).
+- `PUT /v2/persons/:personId/account` recognises a caller changing their **own** role: after the save it destroys the caller's own session through the session middleware and answers with `_selfSessionRevoked: true`, so the client can explain and log out. Before this fix the session-touch at response end failed (`Unable to find the session to touch`, the controller had already deleted the session from the store) and the error middleware tried to answer twice (`Cannot set headers after they are sent`) - an error report on every self role change. Pre-existing bug, exposed by the owner's own test.
+- Frontend counterpart (separate repo, `master`): the "Dodawanie użytkowników" window is removed, `#/admin/systemUsers` redirects to `#/admin/staffMembers`, account creation moves to "Personel i uprawnienia".
+
+### Impact
+
+- DB: none. No schema change, no migration. The columns used (`PersonAccounts.FidmanEnabled`, `FidmanSyncOutbox.Kind = 'user.upsert'`) have been on production since 2026-08-16 (pack GLO).
+- ENV: none.
+- Deploy: **server before client.** Old client with the new server: role changes made from the admin panel are silently not applied (flags are), and ENVI_EMPLOYEE still sees a menu entry that now answers 403. New client with the old server: the role is written by two paths at once. Keep the gap between the two deploys short.
+- Behaviour change visible the moment this ships: ENVI_COOPERATOR, EXTERNAL_USER, CONTRACT_WORKER and CLIENT sessions get 403 on account and person routes (they never had a screen for them); ENVI_EMPLOYEE loses account creation and role editing but keeps the address book.
+
+### Required Actions
+
+- Deploy in order: backend `main` (the Heroku `release` gate has no new migration to verify), then frontend `master` (GitHub Pages via Actions).
+- Until the frontend is deployed, do not edit persons with a scoped role from the admin panel (the production bug fixed here).
+- Smoke test on production as ADMIN: open "Personel i uprawnienia", toggle and revert one flag on your own account, open `#/admin/systemUsers` (must redirect). Do not enable the FIDman checkbox as a test - it queues a real push.
+
+### Verification
+
+- `npx tsc --noEmit` clean. Full suite on the tree to be committed (2026-09-04, after the owner's review fixes): 1406 passed, 3 failed - the pre-existing ones (`KsefXmlBuilder` 2, `OffersController` 1), 3 skipped. `GusBirService` passes once `bir1` is installed (`yarn install --frozen-lockfile`); it was not a code failure. `yarn check:cycles`: no new cycle (8 pre-existing).
+- Live probes on the local server with mock sessions per role (2026-09-03): EXTERNAL_USER and ENVI_EMPLOYEE get 403 on every account route; ENVI_EMPLOYEE still gets 200 on `POST /persons` and `PUT /person/:id`; ADMIN and ENVI_MANAGER get 200 on `GET .../account`; no session gets 401. `systemRoleId` in the flags body does not change the role; the FIDman queue receives `user.upsert` from the panel.
+- Own-role change reproduced locally with a mock session: before the fix 200 + a new bug-event pair per attempt; after the fix 200 with `_selfSessionRevoked: true`, next request 401, bug-event count unchanged.
+- Local dev DB only; production untouched.
+
+### Rollback
+
+- Revert the source commit and redeploy (server first, then the client revert). No data rollback: no schema change; accounts created through the new window are ordinary rows.
+
+### Links
+
+- `src/setup/Sessions/requireUserManagementRole.ts`
+- `src/persons/PersonsRouters.ts`
+- `src/Admin/StaffMembers/StaffMembersController.ts`
+- `src/Admin/StaffMembers/StaffMemberAdminRepository.ts` (scope, `_fidmanSync`)
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-03-per-personel-i-konta-progress.md` (session 7)
+
 ## 2026-09-02 - Absence type dictionary carries `allowsPartialDay`
 
 ### Scope

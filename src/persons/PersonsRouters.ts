@@ -2,6 +2,9 @@ import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
 import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
+import requireUserManagementRole, {
+    requireStaffRole,
+} from '../setup/Sessions/requireUserManagementRole';
 
 const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'systemRoleId',
@@ -64,14 +67,18 @@ app.post('/persons', async (req: Request, res: Response, next) => {
  * Body: { name, surname, entityId, position?, email?, cellphone?, phone?, comment? }
  * Returns: Person
  */
-app.post('/person', async (req: Request, res: Response, next) => {
-    try {
-        const item = await PersonsController.addFromDto(req.body);
-        res.send(item);
-    } catch (error) {
-        next(error);
-    }
-});
+app.post(
+    '/person',
+    requireStaffRole,
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = await PersonsController.addFromDto(req.body);
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
 
 /**
  * Edytuje dane osoby.
@@ -79,37 +86,53 @@ app.post('/person', async (req: Request, res: Response, next) => {
  * Body: { id, _fieldsToUpdate: string[], ...fields }
  * Returns: Person
  */
-app.put('/person/:id', async (req: Request, res: Response, next) => {
-    try {
-        const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
-        const item = await PersonsController.editFromDto(
-            req.parsedBody,
-            fieldsToUpdate,
-        );
-        res.send(item);
-    } catch (error) {
-        next(error);
-    }
-});
+app.put(
+    '/person/:id',
+    requireStaffRole,
+    async (req: Request, res: Response, next) => {
+        try {
+            const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
+            const item = await PersonsController.editFromDto(
+                req.parsedBody,
+                fieldsToUpdate,
+            );
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
 
 /**
  * Edytuje użytkownika z synchronizacją ScrumSheet.
  * @deprecated Używaj PUT /person/:id dla danych osobowych i PUT /v2/persons/:id/account dla konta.
  * UWAGA: v2 nie synchronizuje ScrumSheet automatycznie - endpoint zostanie wycofany po dodaniu tej funkcjonalności do v2.
+ *
+ * PER-5, decyzja D-PER-5 wariant (a) (2026-09-03): trasa ZOSTAJE, za bramką
+ * `requireUserManagementRole`. Front nie woła jej od PER-3 (ekran „Dodawanie użytkowników"
+ * skasowany w PER-5), ale to jedyna droga, która po zmianie osoby odświeża arkusz scruma
+ * (`Setup.scrumSheetSyncEnabled`, env `SCRUM_SHEET_SYNC_ENABLED`). Usunięcie to wariant (b):
+ * wymaga potwierdzenia ownera, że synchronizacja arkusza jest na produkcji wyłączona -
+ * inaczej ktoś kiedyś włączy przełącznik i trasa będzie potrzebna. Do tego czasu nie kasować
+ * i nie rozszerzać; przy kasowaniu zaktualizować test kontraktowy PersonsRouters.p3d.
  * Params: id
  * Body: { id, name?, surname?, systemRoleId?, systemEmail?, ...fields }
  * Returns: Person
  */
-app.put('/user/:id', async (req: Request, res: Response, next) => {
-    try {
-        const item = await PersonsController.editUserFromDto(
-            req.parsedBody ?? req.body,
-        );
-        res.send(item);
-    } catch (error) {
-        next(error);
-    }
-});
+app.put(
+    '/user/:id',
+    requireUserManagementRole,
+    async (req: Request, res: Response, next) => {
+        try {
+            const item = await PersonsController.editUserFromDto(
+                req.parsedBody ?? req.body,
+            );
+            res.send(item);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
 
 /**
  * Usuwa osobę z bazy danych.
@@ -117,30 +140,44 @@ app.put('/user/:id', async (req: Request, res: Response, next) => {
  * Body: { id }
  * Returns: { id }
  */
-app.delete('/person/:id', async (req: Request, res: Response, next) => {
-    try {
-        const result = await PersonsController.deleteFromDto(req.body);
-        res.send(result);
-    } catch (error) {
-        next(error);
-    }
-});
+app.delete(
+    '/person/:id',
+    requireStaffRole,
+    async (req: Request, res: Response, next) => {
+        try {
+            const result = await PersonsController.deleteFromDto(req.body);
+            res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
 
 /**
  * Tworzy użytkownika systemowego z kontem w jednym żądaniu.
  * @deprecated Używaj POST /person do utworzenia osoby, a następnie PUT /v2/persons/:personId/account do dodania konta.
- * Endpoint zostanie usunięty w kolejnej wersji major.
+ *
+ * PER-5, decyzja D-PER-5 wariant (a) (2026-09-03): trasa ZOSTAJE, za bramką
+ * `requireUserManagementRole`, choć front nie woła jej od PER-3 (zakładanie użytkownika idzie
+ * POST /person → PUT /v2/.../account), a w odróżnieniu od trasy v2 nie kolejkuje pusha do
+ * FIDmana ani nie unieważnia sesji. Owner nie wybrał usunięcia (wariant (b)) - obie zaszłe
+ * trasy konta idą razem; kasowanie to osobna zmiana z aktualizacją testu kontraktowego
+ * PersonsRouters.p3d. Nie rozszerzać.
  * Body: { name, surname, entityId, systemRoleId, systemEmail, position?, email?, cellphone?, phone?, comment? }
  * Returns: Person
  */
-app.post('/systemUser', async (req: Request, res: Response, next) => {
-    try {
-        const newUser = await PersonsController.addNewSystemUser(req.body);
-        res.send(newUser);
-    } catch (error) {
-        next(error);
-    }
-});
+app.post(
+    '/systemUser',
+    requireUserManagementRole,
+    async (req: Request, res: Response, next) => {
+        try {
+            const newUser = await PersonsController.addNewSystemUser(req.body);
+            res.send(newUser);
+        } catch (error) {
+            next(error);
+        }
+    },
+);
 
 /**
  * Pobiera konto systemowe osoby (v2).
@@ -149,6 +186,7 @@ app.post('/systemUser', async (req: Request, res: Response, next) => {
  */
 app.get(
     '/v2/persons/:personId/account',
+    requireUserManagementRole,
     async (req: Request, res: Response, next) => {
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');
@@ -162,13 +200,57 @@ app.get(
 );
 
 /**
+ * Zapis WŁASNEJ roli (D-PER-10, 2026-09-04): wołający zmienia rolę osobie, którą sam jest.
+ *
+ * Kontroler po zmianie roli kasuje z magazynu WSZYSTKIE sesje tej osoby (żeby nowa rola
+ * obowiązywała od razu), a więc i bieżącą sesję wołającego. Odpowiedź wychodzi, ale mechanizm
+ * sesji przy końcu odpowiedzi próbuje odświeżyć sesję w magazynie, nie znajduje jej
+ * („Unable to find the session to touch") i przekazuje błąd do globalnej obsługi, która próbuje
+ * odpowiedzieć drugi raz („Cannot set headers after they are sent") - raport błędu do zespołu
+ * za każdym razem, gdy administrator zmienia rolę sobie. Błąd starszy niż pack PER; wyszedł,
+ * gdy owner testował na sobie.
+ *
+ * Rozwiązanie: rozpoznać zapis własnej roli PRZED zapisem, a PO zapisie skasować własną sesję
+ * przez mechanizm sesji (req.session.destroy) - wtedy przy końcu odpowiedzi nie ma czego
+ * odświeżać. Klient dostaje w odpowiedzi `_selfSessionRevoked: true` i sam prowadzi człowieka
+ * do logowania. Odrzucone (D-PER-10): blokada zmiany własnej roli; podmiana roli w bieżącej
+ * sesji zamiast kasowania (front musiałby odświeżać menu i słowniki ról).
+ *
+ * Porównanie z rolą w sesji, nie z bazą: sesja ma stempel roli z logowania, a jeśli ktoś
+ * zmienił wołającemu rolę wcześniej, jego sesja już nie istnieje i tu nie dojdzie.
+ */
+function isOwnRoleChange(
+    req: Request,
+    personId: number,
+    requestedRoleId: unknown,
+): boolean {
+    const userData = req.session?.userData;
+    if (!userData || Number(userData.enviId) !== personId) return false;
+    if (
+        requestedRoleId === undefined ||
+        requestedRoleId === null ||
+        requestedRoleId === ''
+    )
+        return false;
+    return Number(requestedRoleId) !== Number(userData.systemRoleId);
+}
+
+function destroyOwnSession(req: Request): Promise<void> {
+    return new Promise((resolve) => {
+        if (!req.session) return resolve();
+        req.session.destroy(() => resolve());
+    });
+}
+
+/**
  * Tworzy lub aktualizuje konto systemowe osoby (v2).
  * Params: personId
  * Body: PersonAccountV2Payload (systemRoleId?, systemEmail?, googleId?, googleRefreshToken?, microsoftId?, microsoftRefreshToken?, isActive?)
- * Returns: PersonAccountV2Payload
+ * Returns: PersonAccountV2Payload (+ `_selfSessionRevoked: true`, gdy zapis dotyczył własnej roli)
  */
 app.put(
     '/v2/persons/:personId/account',
+    requireUserManagementRole,
     async (req: Request, res: Response, next) => {
         try {
             const personId = parsePositiveInt(req.params.personId, 'personId');
@@ -178,6 +260,11 @@ app.put(
                     error: 'Brak danych konta do aktualizacji. Przekaż co najmniej jedno pole konta.',
                 });
             }
+            const ownRoleChange = isOwnRoleChange(
+                req,
+                personId,
+                payload?.systemRoleId,
+            );
             const account = await PersonsController.upsertPersonAccountV2({
                 personId,
                 systemRoleId: payload?.systemRoleId,
@@ -189,6 +276,11 @@ app.put(
                 isActive: payload?.isActive,
                 fidmanEnabled: payload?.fidmanEnabled,
             });
+            if (ownRoleChange) {
+                await destroyOwnSession(req);
+                res.send({ ...account, _selfSessionRevoked: true });
+                return;
+            }
             res.send(account);
         } catch (error) {
             next(error);

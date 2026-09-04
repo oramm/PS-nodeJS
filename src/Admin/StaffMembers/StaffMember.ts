@@ -1,5 +1,5 @@
 import BusinessObject from '../../BussinesObject';
-import { StaffMemberData } from '../../types/types';
+import { FidmanUserSyncStatus, StaffMemberData } from '../../types/types';
 
 /**
  * Uprawnienia funkcyjne osoby.
@@ -25,8 +25,12 @@ export default class StaffMember
     _personName?: string;
     _personSurname?: string;
     _personEmail?: string;
+    _entityName?: string | null;
     _systemRoleId?: number | null;
+    _systemEmail?: string | null;
+    _fidmanEnabled?: boolean;
     _hasStaffRow?: boolean;
+    _fidmanSync?: FidmanUserSyncStatus | null;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'StaffMembers' });
@@ -41,7 +45,11 @@ export default class StaffMember
         this._personName = initParamObject._personName;
         this._personSurname = initParamObject._personSurname;
         this._personEmail = initParamObject._personEmail;
+        this._entityName = initParamObject._entityName;
         this._systemRoleId = initParamObject._systemRoleId;
+        this._systemEmail = initParamObject._systemEmail;
+        this._fidmanEnabled = initParamObject._fidmanEnabled;
         this._hasStaffRow = initParamObject._hasStaffRow;
+        this._fidmanSync = initParamObject._fidmanSync ?? null;
     }
 }

@@ -7,6 +7,9 @@ import StaffMembersController from './StaffMembersController';
  *
  * Brak POST i DELETE celowo: panel edytuje flagi istniejących osób,
  * nie zakłada i nie kasuje ludzi. Parametr :personId to Persons.Id.
+ *
+ * PUT zapisuje WYŁĄCZNIE flagi modułów i „aktywny". Rolę, e-mail systemowy i flagę
+ * FIDmana klient wysyła osobno na PUT /v2/persons/:personId/account (PersonsRouters).
  */
 
 app.post('/admin/staffMembers', async (req: any, res: any, next: any) => {

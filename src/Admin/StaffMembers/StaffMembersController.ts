@@ -37,7 +37,13 @@ export default class StaffMembersController extends BaseController<
     }
 
     /**
-     * Zapisuje flagi osoby i zwraca odczytany stan.
+     * Zapisuje flagi i „aktywny" osoby i zwraca odczytany stan.
+     *
+     * Tylko flagi. Rola, e-mail systemowy i flaga FIDmana w treści są ignorowane -
+     * konto ma jedną drogę zapisu, PUT /v2/persons/:personId/account, bo tylko ona
+     * unieważnia sesje po zmianie roli i kolejkuje push do FIDmana (pack PER).
+     * Klient woła ją osobno, PO zapisie flag: domyślne flagi zakładane przy zmianie
+     * roli (INSERT IGNORE) trafiają wtedy na istniejący wiersz i niczego nie nadpisują.
      *
      * Ponowny odczyt jest konieczny: upsert nie zwraca kolumn wyliczanych po
      * stronie bazy ani danych osoby z JOIN, więc bez tego frontend dostałby
@@ -47,24 +53,19 @@ export default class StaffMembersController extends BaseController<
         const payload = StaffMemberValidator.validateUpdatePayload(dto);
         const instance = this.getInstance();
 
-        // Wyszukanie bez zawężania - edytujemy też osoby, które nie mają jeszcze
-        // wiersza uprawnień, a domyślnie lista ich nie pokazuje.
+        // Wyszukanie bez zawężania - edytujemy też osoby, które nie są jeszcze
+        // użytkownikami (brak e-maila systemowego i wiersza flag), a domyślny zakres
+        // listy ich nie pokazuje.
         const [person] = await instance.repository.find([
-            { personId: payload.personId, includeWithoutPermissions: true },
+            { personId: payload.personId, scope: 'all' },
         ]);
         if (!person)
             throw new BadRequestError('Osoba o podanym numerze nie istnieje.');
 
         await instance.repository.upsertInDb(new StaffMember(payload));
 
-        if (payload.systemRoleId !== undefined)
-            await instance.repository.updateSystemRoleInDb(
-                payload.personId,
-                payload.systemRoleId
-            );
-
         const [updated] = await instance.repository.find([
-            { personId: payload.personId, includeWithoutPermissions: true },
+            { personId: payload.personId, scope: 'all' },
         ]);
         return updated;
     }

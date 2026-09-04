@@ -19,21 +19,17 @@ export default class StaffMemberValidator {
         'isActive',
     ] as const;
 
-    static validateUpdatePayload(dto: any): StaffMemberData & { systemRoleId?: number } {
+    /**
+     * Pola konta (systemRoleId, systemEmail, fidmanEnabled) w treści są IGNOROWANE,
+     * nie odrzucane: klient wysyła cały wiersz scalony z formularzem, a konto zapisuje
+     * osobnym żądaniem trasą PUT /v2/persons/:personId/account - jedyną, która
+     * unieważnia sesje po zmianie roli i kolejkuje push do FIDmana (pack PER).
+     */
+    static validateUpdatePayload(dto: any): StaffMemberData {
         if (!dto || typeof dto !== 'object')
             throw new BadRequestError('Brak danych uprawnień.');
 
         const payload: any = { personId: this.requirePersonId(dto.personId) };
-
-        // Rola zakresowa (pracownik kontraktowy, klient) jest tu dozwolona - formularz
-        // pokazuje wtedy wybór projektów i zapisuje je osobnym żądaniem, tak samo
-        // jak ekran użytkowników.
-        if (dto.systemRoleId !== undefined && dto.systemRoleId !== null && dto.systemRoleId !== '') {
-            const systemRoleId = Number(dto.systemRoleId);
-            if (!Number.isInteger(systemRoleId) || systemRoleId <= 0)
-                throw new BadRequestError('Nieprawidłowa rola systemowa.');
-            payload.systemRoleId = systemRoleId;
-        }
 
         for (const flag of this.FLAGS) {
             const value = dto[flag];
