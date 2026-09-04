@@ -146,6 +146,7 @@ export default class PettyCashEntry {
 
             case 'INVOICE':
             case 'RECEIPT':
+            case 'FUEL':
                 if (netAmount === null || grossAmount === null)
                     errors.push('Wpis z dokumentem wymaga kwoty netto i brutto.');
                 else if (netAmount > grossAmount)
