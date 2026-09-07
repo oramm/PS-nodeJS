@@ -46,19 +46,22 @@ export default class LetterEventsController {
         const instance = this.getInstance();
 
         try {
-            // Pobierz poprzednie wydarzenia tego typu
-            const previousEvents = await this.find([
-                {
-                    letterId: letterEvent.letterId,
-                    eventType: Setup.LetterEventType.SENT,
-                },
-            ]);
-
-            // Oblicz numer wersji
-            letterEvent.versionNumber =
-                previousEvents.filter(
-                    (event) => event.eventType === Setup.LetterEventType.SENT
-                ).length + 1;
+            // Numer wersji liczymy WYŁĄCZNIE dla zdarzenia wysłania — tak samo jak
+            // przy ofertach (OfferEventsController.addNew). Warunek zginął przy
+            // przenoszeniu wzorca z ofert do pism i licznik uruchamiał się przy
+            // każdym zdarzeniu: przy rejestracji i przy zatwierdzeniu pisma szło
+            // do bazy zapytanie z dwoma złączeniami, z definicji puste, bo zdarzeń
+            // wysłania pism nie tworzy dziś nic (jedyna metoda, która mogłaby je
+            // założyć — sendMailWithLetter — nie jest przez nikogo wołana).
+            if (letterEvent.eventType === Setup.LetterEventType.SENT) {
+                const previousEvents = await this.find([
+                    {
+                        letterId: letterEvent.letterId,
+                        eventType: Setup.LetterEventType.SENT,
+                    },
+                ]);
+                letterEvent.versionNumber = previousEvents.length + 1;
+            }
 
             console.group('Creating new LetterEvent');
             // Użyj Repository zamiast letterEvent.addInDb()
@@ -69,7 +72,22 @@ export default class LetterEventsController {
             console.log('LetterEvent added to db');
             console.groupEnd();
         } catch (err) {
-            await this.delete(letterEvent);
+            // Sprzątamy tylko to, co faktycznie powstało. Bezwarunkowe `delete`
+            // wywracało się tu na własnym `if (!letterEvent.id) throw` i to TEN
+            // błąd wychodził na zewnątrz zamiast prawdziwej przyczyny — a linijka
+            // `throw err` niżej nie miała szansy się wykonać. Ponieważ zdarzenie
+            // zakładane jest na samym końcu rejestracji pisma, mylny komunikat
+            // trafiał prosto do użytkownika, razem z wycofaniem całego pisma.
+            if (letterEvent.id) {
+                try {
+                    await this.delete(letterEvent);
+                } catch (deleteErr) {
+                    console.error(
+                        `LetterEvent ${letterEvent.id}: nie udało się wycofać zdarzenia po błędzie zapisu:`,
+                        deleteErr
+                    );
+                }
+            }
             throw err;
         }
     }

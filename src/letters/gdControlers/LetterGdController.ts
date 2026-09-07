@@ -21,7 +21,12 @@ export default abstract class LetterGdController {
             parents: [this.makeParentFolderGdId(letterData)],
         });
 
-        ToolsGd.createPermissions(auth, { fileId: <string>letterFolder.id });
+        // `driveId` znamy z odpowiedzi na utworzenie folderu — bez tego
+        // createPermissions dopytywałoby o to Google osobnym zapytaniem
+        ToolsGd.createPermissions(auth, {
+            fileId: <string>letterFolder.id,
+            driveId: letterFolder.driveId ?? null,
+        });
         return letterFolder;
     }
 

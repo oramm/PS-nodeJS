@@ -369,28 +369,16 @@ export default class LettersController extends BaseController<
         userData: UserData
     ): Promise<void> {
         try {
-            // 1. Utwórz folder GD dla pisma
-            const gdFolder =
-                await letter._letterGdController.createLetterFolder(auth, {
-                    ...letter,
-                });
-            letter.gdFolderId = <string>gdFolder.id;
-            letter._gdFolderUrl = ToolsGd.createGdFolderUrl(letter.gdFolderId);
-
-            // 2. Utwórz plik dokumentu GD
-            const letterGdFile = await letter.createLetterFile(auth);
-            letter.gdDocumentId = <string>letterGdFile.documentId;
-            letter._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
-                letter.gdDocumentId
-            );
-
-            // 3. Dodaj do bazy danych (z transakcją i asocjacjami)
+            // 1. Zapis do bazy PRZED Dyskiem. Numer pisma nadaje baza, więc dopóki
+            //    wiersza nie ma, nie da się nazwać ani folderu, ani dokumentu.
+            //    Wcześniej kolejność była odwrotna: folder powstawał jako
+            //    „NO_NUMBER_YET <data>: Wychodzące”, dokument jako „undefined <data>”,
+            //    a zaraz po zapisie oba trzeba było przemianować — dwa zapytania do
+            //    Google (~1,6 s każde) wyłącznie po to, żeby naprawić nazwy nadane
+            //    chwilę wcześniej. Kolumny GdFolderId i GdDocumentId dopuszczają
+            //    puste, więc wiersz może chwilę poczekać na identyfikatory z Dysku.
             await LettersController.addNew(letter);
 
-            // 4. Przygotuj operacje post-DB
-            const ourLetterGdFile = letter.makeLetterGdFileController(
-                letter._template
-            );
             // Validator gwarantuje że number istnieje, addNew() ustawia number = id
             if (!letter.number || !letter.creationDate) {
                 throw new Error(
@@ -398,21 +386,41 @@ export default class LettersController extends BaseController<
                 );
             }
 
+            // Ta sama nazwa dla folderu i dokumentu — dokładnie ta, którą wcześniej
+            // nadawało przemianowanie po zapisie.
             const folderName = letter._letterGdController.makeFolderName(
                 letter.number.toString(),
                 letter.creationDate
             );
 
+            // 2. Folder pisma — od razu pod nazwą docelową
+            const gdFolder =
+                await letter._letterGdController.createLetterFolder(auth, {
+                    ...letter,
+                });
+            letter.gdFolderId = <string>gdFolder.id;
+            letter._gdFolderUrl = ToolsGd.createGdFolderUrl(letter.gdFolderId);
+
+            // 3. Dokument pisma — również od razu pod nazwą docelową
+            const letterGdFile = await letter.createLetterFile(auth, folderName);
+            letter.gdDocumentId = <string>letterGdFile.documentId;
+            letter._documentOpenUrl = ToolsGd.createDocumentOpenUrl(
+                letter.gdDocumentId
+            );
+
+            // 4. Dopisz identyfikatory z Dysku do zapisanego już wiersza
+            await LettersController.edit(letter, [
+                'gdFolderId',
+                'gdDocumentId',
+            ]);
+
+            // 5. Przygotuj operacje po utworzeniu dokumentu
+            const ourLetterGdFile = letter.makeLetterGdFileController(
+                letter._template
+            );
+
             const postDbPromises: Promise<any>[] = [
                 ourLetterGdFile.updateTextRunsInNamedRanges(auth),
-                ToolsGd.updateFolder(auth, {
-                    id: letter.gdFolderId,
-                    name: folderName,
-                }),
-                ToolsGd.updateFile(auth, {
-                    id: letter.gdDocumentId,
-                    name: folderName,
-                }),
             ];
 
             if (files.length > 0) {
@@ -421,26 +429,52 @@ export default class LettersController extends BaseController<
                 );
             }
 
-            // 5. Utwórz skróty w folderach Cases
+            // 6. Utwórz skróty w folderach Cases
             await createCaseShortcuts(auth, letter);
 
-            // 6. Wykonaj wszystkie operacje post-DB
+            // 7. Wykonaj wszystkie operacje post-DB
             await Promise.all(postDbPromises);
             console.log('Finished all post-DB operations including shortcuts.');
 
-            // 6b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
+            // 7b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
             await this.registerApprovedDocumentation(auth, letter);
 
-            // 7. Utwórz Letter Event
+            // 8. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
-            // Rollback w przypadku błędu - używamy LettersController.delete
-            if (letter.id) await this.delete(letter);
-            letter._letterGdController.deleteFromGd(
-                auth,
-                null,
-                letter.gdFolderId
-            );
+            // Wycofanie. Obie części sprzątamy NIEZALEŻNIE od siebie: wcześniej
+            // kasowanie wiersza szło pierwsze i bez zabezpieczenia, więc jego błąd
+            // zabierał ze sobą sprzątanie Dysku i zostawał osierocony folder.
+            // Kasowanie na Dysku nie było też oczekiwane (`await`), przez co jego
+            // błąd stawał się nieobsłużonym odrzuceniem obietnicy. Po odwróceniu
+            // kolejności wiersz w bazie istnieje ZANIM powstanie cokolwiek na
+            // Dysku, więc `gdFolderId` bywa tu teraz puste i trzeba to sprawdzić —
+            // bez tego `deleteFromGd` rzucałoby NoGdIdError zamiast prawdziwej
+            // przyczyny błędu.
+            if (letter.gdFolderId) {
+                try {
+                    await letter._letterGdController.deleteFromGd(
+                        auth,
+                        null,
+                        letter.gdFolderId
+                    );
+                } catch (cleanupErr) {
+                    console.error(
+                        `Pismo ${letter.id}: nie udało się usunąć folderu ${letter.gdFolderId} z Dysku:`,
+                        cleanupErr
+                    );
+                }
+            }
+            if (letter.id) {
+                try {
+                    await LettersController.delete(letter);
+                } catch (cleanupErr) {
+                    console.error(
+                        `Pismo ${letter.id}: nie udało się wycofać wiersza z bazy:`,
+                        cleanupErr
+                    );
+                }
+            }
             throw err;
         }
     }

@@ -45,10 +45,13 @@ export default abstract class OurLetter
 
     /** Tworzy plik z dokumentem i ustawia this.gdDocumentId
      * PUBLIC: wywoływana z LettersController.addNewOurLetter()
+     *
+     * `fileName` podaje wywołujący, gdy zna już nazwę docelową — czyli po zapisie
+     * pisma w bazie, bo dopiero ona nadaje numer.
      */
-    async createLetterFile(auth: OAuth2Client) {
+    async createLetterFile(auth: OAuth2Client, fileName?: string) {
         const ourLetterGdFile = this.makeLetterGdFileController(this._template);
-        const document = await ourLetterGdFile.create(auth);
+        const document = await ourLetterGdFile.create(auth, fileName);
         if (!document.documentId) throw new EnviErrors.NoGdIdError();
         this.gdDocumentId = document.documentId;
         return document;
