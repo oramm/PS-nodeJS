@@ -263,9 +263,9 @@ describe('OffersController', () => {
             const unknownOffer = {} as any;
 
             // Act & Assert
-            await expect(OffersController.delete(unknownOffer)).rejects.toThrow(
-                'Unknown offer type'
-            );
+            await expect(
+                OffersController.delete(unknownOffer, undefined, mockAuth)
+            ).rejects.toThrow('Unknown offer type');
         });
     });
 

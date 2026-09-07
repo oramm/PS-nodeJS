@@ -2,14 +2,14 @@ jest.mock('../../../setup/Setup', () => ({
     __esModule: true,
     default: {
         KSeF: {
-            nip: '7471917575',
+            nip: '1234567890',
             seller: {
-                name: 'ENVI KONSULTING s.c. Marek Gazda, Lucyna Stecuła',
-                street: 'ul. Brzechwy 3',
-                city: 'Brzeg',
-                postalCode: '49-305',
-                bankAccount: '48 1020 3668 0000 5502 0678 7115',
-                bankName: 'PKO BP',
+                name: 'Test Company Sp. z o.o.',
+                street: 'ul. Testowa 25',
+                city: 'Kraków',
+                postalCode: '31-503',
+                bankAccount: 'PL61109010140000071219812874',
+                bankName: 'Test Bank',
             },
         },
     },
