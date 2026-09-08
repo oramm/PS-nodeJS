@@ -34,7 +34,14 @@ export default class ExternalOfferGdController extends OfferGdController {
             }),
         ]);
 
-        return { offerContentFolder, specsFolder };
+        // setFolder oddaje metadane bez pola parents (Drive pytany jest tylko o id),
+        // a moveFileOrFolder buduje z niego removeParents. Rodzica znamy - to folder
+        // oferty, w którym oba podfoldery właśnie powstały - więc podajemy go wprost.
+        const parents = [offerData.gdFolderId];
+        return {
+            offerContentFolder: { ...offerContentFolder, parents },
+            specsFolder: { ...specsFolder, parents },
+        };
     }
 
     async getMakeOfferCaseFolderId(

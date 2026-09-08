@@ -136,8 +136,14 @@ export default abstract class BaseController<
             const refreshToken = process.env.REFRESH_TOKEN;
             if (!refreshToken) throw new Error("Can't get refresh token");
 
-            // Ustaw credentials
-            oAuthClient.setCredentials({ refresh_token: refreshToken });
+            // Ustaw credentials TYLKO gdy klient ich jeszcze nie ma albo dotyczą
+            // innego konta. `setCredentials` podmienia cały komplet danych, więc
+            // wołane bezwarunkowo kasowało ważny jeszcze access token i zmuszało
+            // do wymiany refresh tokenu przy KAŻDYM żądaniu (~0,1-0,3 s). Klient
+            // jest współdzielony w całym procesie i sam odświeża token, gdy ten
+            // wygaśnie, więc wystarczy go nie czyścić.
+            if (oAuthClient.credentials?.refresh_token !== refreshToken)
+                oAuthClient.setCredentials({ refresh_token: refreshToken });
 
             // ✅ POPRAWKA: Wymuś pobranie access tokenu (jak w ToolsGapi.getNewCredentials)
             const tokens = await oAuthClient.getAccessToken();

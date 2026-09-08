@@ -8,6 +8,10 @@ import { AbsenceTypeData } from '../../types/types';
  * wybiera na ich podstawie pulę, z której schodzi nieobecność. Zmiana flagi na
  * istniejącym typie przelicza salda wstecz dla wszystkich osób i lat.
  *
+ * allowsPartialDay mówi, czy ten typ wolno wpisać na część dnia (godziny od-do).
+ * O tym decyduje wyłącznie ta flaga - system NIE zna prawnych różnic między opieką,
+ * urlopem wypoczynkowym a wolnym za święto (decyzja ownera D1, pack GOD).
+ *
  * UWAGA: tabela ScrumboardAbsenceTypes nie ma kolumny EditorId - nie przekazuj `_editor`.
  */
 export default class AbsenceType
@@ -20,7 +24,9 @@ export default class AbsenceType
     countsAgainstLimit: boolean;
     countsAsCare: boolean;
     countsAsHoliday: boolean;
+    allowsPartialDay: boolean;
     _usageCount?: number;
+    _partialUsageCount?: number;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'ScrumboardAbsenceTypes' });
@@ -30,6 +36,8 @@ export default class AbsenceType
         this.countsAgainstLimit = initParamObject.countsAgainstLimit;
         this.countsAsCare = initParamObject.countsAsCare;
         this.countsAsHoliday = initParamObject.countsAsHoliday;
+        this.allowsPartialDay = initParamObject.allowsPartialDay;
         this._usageCount = initParamObject._usageCount;
+        this._partialUsageCount = initParamObject._partialUsageCount;
     }
 }

@@ -38,7 +38,12 @@ export default class OfferGdController {
             parents: [cityFolder.id as string],
         });
 
-        ToolsGd.createPermissions(auth, { fileId: <string>offerFolder.id });
+        // `driveId` znamy z odpowiedzi na utworzenie folderu — bez tego
+        // createPermissions dopytywałoby o to Google osobnym zapytaniem
+        ToolsGd.createPermissions(auth, {
+            fileId: <string>offerFolder.id,
+            driveId: offerFolder.driveId ?? null,
+        });
         return offerFolder;
     }
 

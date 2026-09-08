@@ -54,12 +54,19 @@ export default class AbsenceTypeValidator {
                     'limitu urlopu, opieki albo wolnego za święta.'
             );
 
+        // Domyślnie WOLNO brać na godziny - tak samo, jak domyślnie stoi kolumna w bazie.
+        // Wyjątki wskazuje owner kratką w panelu; kod ich nie zna i nie zgaduje
+        // (decyzja D1: system nie egzekwuje prawnych różnic między typami).
+        const allowsPartialDay =
+            dto.allowsPartialDay === undefined ? true : !!dto.allowsPartialDay;
+
         return {
             name,
             color,
             countsAgainstLimit,
             countsAsCare,
             countsAsHoliday,
+            allowsPartialDay,
         } as AbsenceTypeData;
     }
 

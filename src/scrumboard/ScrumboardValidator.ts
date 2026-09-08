@@ -1,6 +1,13 @@
 import { BadRequestError } from '../persons/projectAssignments/ProjectScopeGuard';
 import Setup from '../setup/Setup';
-import { parseDateOnly } from './vacations/vacationDateUtils';
+import {
+    MINUTES_PER_DAY,
+    isWeekend,
+    parseDateOnly,
+    parseTimeOnly,
+    timeToMinutes,
+    toDate,
+} from './vacations/vacationDateUtils';
 
 /**
  * Walidacja payloadów scrumboarda (osobna klasa wg konwencji).
@@ -107,9 +114,18 @@ export default class ScrumboardValidator {
         return note || null;
     }
 
+    /** Opakowuje błąd czystej funkcji dat w 400 - zły format daty to literówka, nie awaria. */
+    private static parseDateField(value: any, field: string): string {
+        try {
+            return parseDateOnly(value, field);
+        } catch (error) {
+            throw new BadRequestError((error as Error).message);
+        }
+    }
+
     private static parseDateRange(body: any): { dateFrom: string; dateTo: string } {
-        const dateFrom = parseDateOnly(body?.dateFrom, 'dateFrom');
-        const dateTo = parseDateOnly(body?.dateTo, 'dateTo');
+        const dateFrom = this.parseDateField(body?.dateFrom, 'dateFrom');
+        const dateTo = this.parseDateField(body?.dateTo, 'dateTo');
         if (dateTo < dateFrom)
             throw new BadRequestError('Data końcowa nie może być wcześniejsza niż początkowa');
         // Pule (urlop, opieka, wolne za święta) rozliczają się rocznikami, a walidacja
@@ -125,18 +141,94 @@ export default class ScrumboardValidator {
         return { dateFrom, dateTo };
     }
 
+    /**
+     * Godziny nieobecności na część dnia. Puste oba pola = cały dzień, czyli zachowanie
+     * sprzed packa GOD. Reguła spójności "albo oba puste, albo oba wypełnione i wtedy
+     * DateFrom = DateTo" jest pilnowana tutaj, a nie więzem w bazie.
+     *
+     * Czego NIE sprawdzamy w tym miejscu: czy typ nieobecności w ogóle dopuszcza część dnia
+     * i czy termin nie koliduje z inną nieobecnością - jedno i drugie wymaga bazy,
+     * więc siedzi w kontrolerze.
+     */
+    private static parseTimes(
+        body: any,
+        dateFrom: string,
+        dateTo: string
+    ): { startTime: string | null; endTime: string | null } {
+        const isEmpty = (value: any) =>
+            value === null || value === undefined || value === '';
+        const rawStart = body?.startTime;
+        const rawEnd = body?.endTime;
+        if (isEmpty(rawStart) && isEmpty(rawEnd))
+            return { startTime: null, endTime: null };
+        if (isEmpty(rawStart) || isEmpty(rawEnd))
+            throw new BadRequestError(
+                'Podaj obie godziny — początkową i końcową — albo żadnej.'
+            );
+
+        let startTime: string;
+        let endTime: string;
+        try {
+            startTime = parseTimeOnly(rawStart, 'startTime');
+            endTime = parseTimeOnly(rawEnd, 'endTime');
+        } catch (error) {
+            throw new BadRequestError((error as Error).message);
+        }
+
+        // Pełne godziny, bez minut (decyzja ownera 2026-09-02). Okno i tak podpowiada
+        // krokiem godzinowym, ale źródłem prawdy zostaje serwer.
+        if (!/^\d{2}:00$/.test(startTime) || !/^\d{2}:00$/.test(endTime))
+            throw new BadRequestError(
+                'Nieobecność godzinową wpisuje się w pełnych godzinach — bez minut.'
+            );
+
+        if (dateFrom !== dateTo)
+            throw new BadRequestError(
+                'Część dnia wpisz na jeden dzień — podaj tę samą datę początkową i końcową.'
+            );
+        if (isWeekend(toDate(dateFrom)))
+            throw new BadRequestError(
+                'To dzień wolny — nieobecności godzinowej nie ma z czego odjąć.'
+            );
+
+        const minutes = timeToMinutes(endTime) - timeToMinutes(startTime);
+        if (minutes <= 0)
+            throw new BadRequestError(
+                'Godzina końcowa musi być późniejsza niż początkowa.'
+            );
+        // 8 h i więcej to już cały dzień pracy. Bez tej bramki ten sam fakt dałoby się
+        // zapisać dwoma sposobami, a saldo zależałoby od tego, który wybrał wpisujący.
+        if (minutes >= MINUTES_PER_DAY)
+            throw new BadRequestError(
+                'To cały dzień pracy — przełącz na tryb «Całe dni».'
+            );
+
+        return { startTime, endTime };
+    }
+
     /** Payload utworzenia urlopu. */
     static parseAbsenceCreate(body: any): {
         personId: number;
         typeId: number;
         dateFrom: string;
         dateTo: string;
+        startTime: string | null;
+        endTime: string | null;
         note: string | null;
     } {
         const personId = this.parseId(body?.personId, 'personId');
         const typeId = this.parseId(body?.typeId, 'typeId');
         const { dateFrom, dateTo } = this.parseDateRange(body);
-        return { personId, typeId, dateFrom, dateTo, note: this.parseNote(body?.note) };
+        const { startTime, endTime } = this.parseTimes(body, dateFrom, dateTo);
+        return {
+            personId,
+            typeId,
+            dateFrom,
+            dateTo,
+            startTime,
+            endTime,
+            note: this.parseNote(body?.note),
+        };
     }
 
     /** Payload edycji urlopu (bez zmiany osoby). */
@@ -144,11 +236,21 @@ export default class ScrumboardValidator {
         typeId: number;
         dateFrom: string;
         dateTo: string;
+        startTime: string | null;
+        endTime: string | null;
         note: string | null;
     } {
         const typeId = this.parseId(body?.typeId, 'typeId');
         const { dateFrom, dateTo } = this.parseDateRange(body);
-        return { typeId, dateFrom, dateTo, note: this.parseNote(body?.note) };
+        const { startTime, endTime } = this.parseTimes(body, dateFrom, dateTo);
+        return {
+            typeId,
+            dateFrom,
+            dateTo,
+            startTime,
+            endTime,
+            note: this.parseNote(body?.note),
+        };
     }
 
     private static parseDayAmount(value: any, field: string): number {

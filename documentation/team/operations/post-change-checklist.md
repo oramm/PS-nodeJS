@@ -63,6 +63,164 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-04 - Persons and accounts: one account write path, role gates on account and person routes (pack PER)
+
+### Scope
+
+- `PUT /admin/staffMember/:personId` writes module flags and `isActive` only; `systemRoleId` in the body is ignored. Role, system e-mail, FIDman flag and project scope go exclusively through `PUT /v2/persons/:personId/account` (the only path that invalidates sessions, seeds default flags and queues the FIDman `user.upsert` push).
+- New module `src/setup/Sessions/requireUserManagementRole.ts`: `USER_MANAGEMENT_ROLES` (ADMIN, ENVI_MANAGER) gates `GET/PUT /v2/persons/:id/account`, `PUT /v2/persons/:id/project-assignments` and the legacy `PUT /user/:id`, `POST /systemUser`; `STAFF_ROLES` (ADMIN, ENVI_MANAGER, ENVI_EMPLOYEE) gates `POST /person`, `PUT /person/:id`, `DELETE /person/:id`. Gates answer `403 { errorMessage: 'Brak uprawnień do zarządzania kontami' }` directly, not via `next(error)` (that would become a 500 with an error report to the team).
+- `PUT /person/:id` no longer writes account fields (`systemRoleId`, `systemEmail`); legacy `PUT /user/:id` keeps its own field list and still does (kept on purpose: it is the only route that refreshes the scrum sheet).
+- `POST /admin/staffMembers` returns `SystemEmail`, `FidmanEnabled`, `EntityName` and `_fidmanSync` (the person's most recent `user.upsert` outbox row: status, skip reason with its label, last error, attempts, date, direction), and accepts `scope: 'permissions' | 'users' | 'all'` (default `permissions` = has a StaffMembers row; any unknown value resolves to `permissions`, never wider), `_entities`, `personId`; `includeWithoutPermissions` is gone.
+- Fix: saving flags from the admin panel for a person with a scoped role (CONTRACT_WORKER, CLIENT) no longer deletes that person's project assignments (the old client handler read the role from the response and got `undefined`).
+- `PUT /v2/persons/:personId/account` recognises a caller changing their **own** role: after the save it destroys the caller's own session through the session middleware and answers with `_selfSessionRevoked: true`, so the client can explain and log out. Before this fix the session-touch at response end failed (`Unable to find the session to touch`, the controller had already deleted the session from the store) and the error middleware tried to answer twice (`Cannot set headers after they are sent`) - an error report on every self role change. Pre-existing bug, exposed by the owner's own test.
+- Frontend counterpart (separate repo, `master`): the "Dodawanie użytkowników" window is removed, `#/admin/systemUsers` redirects to `#/admin/staffMembers`, account creation moves to "Personel i uprawnienia".
+
+### Impact
+
+- DB: none. No schema change, no migration. The columns used (`PersonAccounts.FidmanEnabled`, `FidmanSyncOutbox.Kind = 'user.upsert'`) have been on production since 2026-08-16 (pack GLO).
+- ENV: none.
+- Deploy: **server before client.** Old client with the new server: role changes made from the admin panel are silently not applied (flags are), and ENVI_EMPLOYEE still sees a menu entry that now answers 403. New client with the old server: the role is written by two paths at once. Keep the gap between the two deploys short.
+- Behaviour change visible the moment this ships: ENVI_COOPERATOR, EXTERNAL_USER, CONTRACT_WORKER and CLIENT sessions get 403 on account and person routes (they never had a screen for them); ENVI_EMPLOYEE loses account creation and role editing but keeps the address book.
+
+### Required Actions
+
+- Deploy in order: backend `main` (the Heroku `release` gate has no new migration to verify), then frontend `master` (GitHub Pages via Actions).
+- Until the frontend is deployed, do not edit persons with a scoped role from the admin panel (the production bug fixed here).
+- Smoke test on production as ADMIN: open "Personel i uprawnienia", toggle and revert one flag on your own account, open `#/admin/systemUsers` (must redirect). Do not enable the FIDman checkbox as a test - it queues a real push.
+
+### Verification
+
+- `npx tsc --noEmit` clean. Full suite on the tree to be committed (2026-09-04, after the owner's review fixes): 1406 passed, 3 failed - the pre-existing ones (`KsefXmlBuilder` 2, `OffersController` 1), 3 skipped. `GusBirService` passes once `bir1` is installed (`yarn install --frozen-lockfile`); it was not a code failure. `yarn check:cycles`: no new cycle (8 pre-existing).
+- Live probes on the local server with mock sessions per role (2026-09-03): EXTERNAL_USER and ENVI_EMPLOYEE get 403 on every account route; ENVI_EMPLOYEE still gets 200 on `POST /persons` and `PUT /person/:id`; ADMIN and ENVI_MANAGER get 200 on `GET .../account`; no session gets 401. `systemRoleId` in the flags body does not change the role; the FIDman queue receives `user.upsert` from the panel.
+- Own-role change reproduced locally with a mock session: before the fix 200 + a new bug-event pair per attempt; after the fix 200 with `_selfSessionRevoked: true`, next request 401, bug-event count unchanged.
+- Local dev DB only; production untouched.
+
+### Rollback
+
+- Revert the source commit and redeploy (server first, then the client revert). No data rollback: no schema change; accounts created through the new window are ordinary rows.
+
+### Links
+
+- `src/setup/Sessions/requireUserManagementRole.ts`
+- `src/persons/PersonsRouters.ts`
+- `src/Admin/StaffMembers/StaffMembersController.ts`
+- `src/Admin/StaffMembers/StaffMemberAdminRepository.ts` (scope, `_fidmanSync`)
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-03-per-personel-i-konta-progress.md` (session 7)
+
+## 2026-09-02 - Absence type dictionary carries `allowsPartialDay`
+
+### Scope
+
+- `AbsenceTypeData`, the `AbsenceType` model, the dictionary `SELECT` and `AbsenceTypeValidator` all carry `allowsPartialDay`. Default is `true`, matching the column default; the write path needs no change because `ToolsDb` maps model fields to columns.
+- Frontend: a checkbox in the absence-type modal and a "Na godziny" column in the list. `AbsenceTypesSearch` column widths were re-balanced to total 11, because `FilterableTableRow` renders the row action menu as a separate `Col xs="1"` outside `tableStructure`.
+- No hard-coded rule ties partial days to any type name. `L4` is off only because migration `005` seeded it that way; the panel can turn it on.
+
+### Impact
+
+- DB: no schema change. `ScrumboardAbsenceTypes.AllowsPartialDay` comes from migration `005`, which must already be applied.
+- ENV: none in the repo. Note for whoever runs this locally: the XAMPP `mysql` service is set to manual start and `Start-Service` needs elevation; `mysqld --defaults-file=C:\xampp\mysql\bin\my.ini --standalone` brings the same instance up without it.
+- Deploy: **server before client.** The client now sends and reads `allowsPartialDay`; a server without this change would drop it silently on save.
+
+### Required Actions
+
+- Local dev only. Nothing applied or deployed to production.
+- When verifying UI locally, unregister the app's service worker first (`envi-pwa-v3` cache). It served a stale `bundle.js` during this work while the dev server was already serving new code - a visual review would have confirmed a screen that no longer existed. Warning sign: `transferSize: 0` for `bundle.js`.
+
+### Verification
+
+- `npx tsc --noEmit` clean in both repos. Dictionary validator suite 21 passed (5 new). Frontend `vitest` 120 passed. Full server suite: 1342 passed, 3 failed - five more green than before this change and no new red; the failures are the known `KsefXmlBuilder` (2) and `OffersController` (1) plus `GusBirService`, whose suite cannot resolve the `bir1` module on this machine.
+- Live UI: the list shows the new column with Tak for five types and Nie for `L4`, matching the database. In an active row all six columns (five from `tableStructure` plus the action menu) share the same `top`, so the menu did not wrap; no horizontal overflow; the modal's save button stays inside the dialog; layout also checked at 375 px width.
+- Round trip measured both ways: checkbox on -> `AllowsPartialDay = 1` -> `POST /scrumboard/vacation` with hours on `L4` returns 200 and stores 0.5 day; checkbox off -> `0` -> the same request returns 400 with the contract message.
+- Known pre-existing wart, not introduced here: right after saving a type, the "Użyć" column shows `0` until the list is refreshed, because the edit route returns the validator payload, which carries no usage count.
+
+### Rollback
+
+- Revert the source changes. The database column can stay: an unread column changes nothing for the old code.
+
+### Links
+
+- `src/Admin/AbsenceTypes/AbsenceTypeValidator.ts`
+- `src/scrumboard/migrations/005_add_partial_day_absences.sql`
+
+## 2026-09-01 - Partial-day absences (hours): server logic, local only
+
+### Scope
+
+- Vacation accounting switched to whole minutes (`MINUTES_PER_DAY = 480`); days are derived only for display and for the stored `WorkingDaysCount`. Fractions never accumulate, so a pool that fits to the minute is not rejected by float drift.
+- `POST /scrumboard/vacation` and `PUT /scrumboard/vacation/:id` accept `startTime` / `endTime` (`"HH:MM"` or null; both null = whole day, the pre-existing behaviour).
+- Six input rejections, all `400` via `BadRequestError`: type does not allow partial days, hours on a multi-day range, hours on a weekend, end not later than start, 8 h or more, and a date range already taken by another absence of the same person.
+- `GET /scrumboard/vacations` and `/scrumboard/vacations/weekCounts` may now return fractional day counts; the type dictionary in the year payload carries `allowsPartialDay`.
+- Two adjacent throws converted from bare `Error` to `BadRequestError` (unknown absence type, pool exhausted) and a malformed date now yields `400` — all three were user input errors that used to surface as `500` with an error report to the team.
+- No schema change in this step; migration `005` is the prerequisite.
+
+### Impact
+
+- DB: no schema change. Migration `005` must already be applied, otherwise `StartTime` / `EndTime` do not exist and every read of the vacations screen fails.
+- ENV: none.
+- Deploy: **server before client.** The client has no hour fields yet, so shipping the server alone is safe; shipping a client that sends hours to a server without this change is not.
+- Behaviour change visible to users the moment this ships: a second absence for the same person in an already occupied date range is refused. Production was checked on 2026-09-01 and holds no such overlaps, so no existing row is trapped; re-check right before the production migration.
+
+### Required Actions
+
+- Local dev DB only. Nothing applied or deployed to production.
+- Re-run the overlap check on production before the rollout of this code.
+
+### Verification
+
+- `npx tsc --noEmit` clean. Full suite: 1337 passed, 3 failed - the three pre-existing ones (`KsefXmlBuilder` 2, `OffersController` 1) plus `GusBirService` whose suite cannot resolve the `bir1` module on this machine. Nothing in the scrumboard area is red.
+- 60 new tests across `vacationPartialDay.test.ts`, `vacationsControllerPartialDay.test.ts` and the extended `ScrumboardValidator.test.ts`, including a negative control: for whole-day ranges the new minute-based arithmetic returns numbers identical to `countWeekdays`.
+- Live routes on the local server, person `test test`: 4 h of care saved as `0.5` day; a second 4 h filled a 2-day pool exactly to the minute and was accepted; one more hour was refused with `Brak dostępnych dni opieki (pula: 2, wykorzystane: 2, żądane: 0,13)`. All six contract rejections returned `400` with the contract wording. Edit walked 4 h -> 2 h -> whole day -> two days without a self-collision. Weekly counters returned `0.5`.
+- Every test row was deleted afterwards and the temporarily raised care pool restored; the absence table returned to its pre-test fingerprint.
+
+### Rollback
+
+- Revert the source changes; `005` may stay applied, since empty `StartTime` / `EndTime` mean a whole day and the old code ignores both columns.
+
+### Links
+
+- `src/scrumboard/vacations/vacationDateUtils.ts`
+- `src/scrumboard/vacations/ScrumboardVacationsController.ts`
+- `src/scrumboard/ScrumboardValidator.ts`
+
+## 2026-09-01 - Partial-day absences (hours): schema only, local DB
+
+### Scope
+
+- `ScrumboardAbsenceTypes.AllowsPartialDay` (BOOLEAN, default TRUE): per-type switch "this type may be taken in hours". Seeded FALSE for `L4`.
+- `ScrumboardAbsences.StartTime` / `EndTime` (TIME, nullable): both NULL means a whole day, so every existing row stays valid without conversion.
+- `ScrumboardAbsences.WorkingDaysCount` widened from `INT` to `DECIMAL(5,2)` to hold a fraction of a day.
+- No application code changed in this step; reading, validation and UI land in later checkpoints.
+
+### Impact
+
+- DB: three columns added/changed on the two vacation tables. The 20 existing absence rows are untouched.
+- ENV: none.
+- Deploy: apply `src/scrumboard/migrations/005_add_partial_day_absences.sql` before deploying code that reads `startTime`/`endTime` or writes fractional day counts.
+
+### Required Actions
+
+- Applied on local `envi_16_06` on 2026-09-01 with the MySQL CLI, not with `yarn migrate:apply`: the local ledger holds 6 of the repo's 64 migrations, so `apply` would have run 58 unrelated pending migrations against the dev DB.
+- **NOT applied on kylos.** Production rollout is a separate, owner-gated step.
+- On production use the runner (`yarn migrate:apply`) so the release `migrate verify` gate stays green, then read the effect back: a green verify is not evidence.
+
+### Verification
+
+- Pre-check: `AllowsPartialDay`, `StartTime`, `EndTime` absent; `WorkingDaysCount int(11)`.
+- Post-check by schema read (`SHOW CREATE TABLE`): all three columns present with intended types and comments; `L4` = 0, the other five types = 1.
+- Data untouched: 20 rows, `MD5(GROUP_CONCAT(...))` fingerprint identical before and after (`da2d2e00...`), every `StartTime`/`EndTime` NULL.
+- Idempotency: second run exits 0 with `Note (Code 1060) Duplicate column name` only; fingerprint and column counts unchanged (11 / 7).
+- Runtime: `GET /scrumboard/vacations?year=2026` returns HTTP 200 and `workingDaysCount` is still a JSON number. mysql2 hands `DECIMAL` back as a string (`"7.00"`); `ScrumboardAbsence` normalises it with `Number()`.
+- Rollback exercised, not just written: the `_down` file dropped the three columns and restored `WorkingDaysCount int(11)`, and the data fingerprint returned to its pre-migration value. `005` was then re-applied, so the dev DB sits in the intended end state.
+
+### Rollback
+
+- `src/scrumboard/migrations/005_add_partial_day_absences_down.sql`. Destructive once hourly absences exist: `INT` rounds the fractions and dropping the TIME columns loses the hours. Check both guard counts are 0 first (queries in the file header).
+
+### Links
+
+- `src/scrumboard/migrations/005_add_partial_day_absences.sql`
+- `src/scrumboard/migrations/005_add_partial_day_absences_down.sql`
+
 ## 2026-08-25 - WYK-3: FidmanSyncEnabled rollout to production
 
 ### Scope

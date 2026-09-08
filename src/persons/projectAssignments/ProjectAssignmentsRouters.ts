@@ -1,26 +1,13 @@
 import { app } from '../../index';
 import { Request, Response, NextFunction } from 'express';
-import { SystemRoleName } from '../../types/sessionTypes';
 import ProjectAssignmentRepository from './ProjectAssignmentRepository';
 import { BadRequestError } from './ProjectScopeGuard';
-
-/** Przypisania nadaje ten, kto zarządza użytkownikami (ekran "Dodaj użytkownika"). */
-const MANAGING_ROLES = [
-    SystemRoleName.ADMIN,
-    SystemRoleName.ENVI_MANAGER,
-    SystemRoleName.ENVI_EMPLOYEE,
-];
-
-function requireUserManagementRole(
-    req: Request,
-    res: Response,
-    next: NextFunction
-) {
-    const role = req.session?.userData?.systemRoleName;
-    if (!role || !MANAGING_ROLES.includes(role))
-        return res.status(403).send({ errorMessage: 'Forbidden' });
-    next();
-}
+/**
+ * Przypisania nadaje ten, kto zarządza użytkownikami - ta sama lista ról co trasy konta.
+ * Bramka mieszkała tu jako funkcja lokalna, przez co trasy konta nie dostały jej wcale
+ * (PER-2); teraz jest jedna, wspólna.
+ */
+import requireUserManagementRole from '../../setup/Sessions/requireUserManagementRole';
 
 const parsePersonId = (raw: string): number => {
     const value = Number(raw);

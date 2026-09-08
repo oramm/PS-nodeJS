@@ -21,6 +21,10 @@ export default class AbsenceTypeRepository extends BaseRepository<AbsenceType> {
     /**
      * Zwraca typy wraz z liczbą użyć - panel musi pokazać, dlaczego usunięcie
      * typu jest zablokowane (ScrumboardAbsences.TypeId ma ON DELETE RESTRICT).
+     *
+     * Osobno liczy nieobecności wpisane NA GODZINY. Panel ostrzega przed zdjęciem
+     * kratki "można brać na godziny", gdy takie wpisy istnieją: zostają w kalendarzu
+     * i dalej się liczą, ale przestają dawać się edytować, dopóki kratka nie wróci.
      */
     async find(
         orConditions: AbsenceTypesSearchParams[] = [{}]
@@ -32,7 +36,9 @@ export default class AbsenceTypeRepository extends BaseRepository<AbsenceType> {
                 ScrumboardAbsenceTypes.CountsAgainstLimit,
                 ScrumboardAbsenceTypes.CountsAsCare,
                 ScrumboardAbsenceTypes.CountsAsHoliday,
-                COUNT(ScrumboardAbsences.Id) AS UsageCount
+                ScrumboardAbsenceTypes.AllowsPartialDay,
+                COUNT(ScrumboardAbsences.Id) AS UsageCount,
+                SUM(ScrumboardAbsences.StartTime IS NOT NULL) AS PartialUsageCount
             FROM ScrumboardAbsenceTypes
             LEFT JOIN ScrumboardAbsences
                 ON ScrumboardAbsences.TypeId = ScrumboardAbsenceTypes.Id
@@ -73,7 +79,9 @@ export default class AbsenceTypeRepository extends BaseRepository<AbsenceType> {
             countsAgainstLimit: !!row.CountsAgainstLimit,
             countsAsCare: !!row.CountsAsCare,
             countsAsHoliday: !!row.CountsAsHoliday,
+            allowsPartialDay: !!row.AllowsPartialDay,
             _usageCount: Number(row.UsageCount ?? 0),
+            _partialUsageCount: Number(row.PartialUsageCount ?? 0),
         });
     }
 }

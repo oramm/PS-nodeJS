@@ -14,6 +14,20 @@ export type NewMilestoneTypeDto = {
     templateDescription: string;
 };
 
+/**
+ * Podpięcie ISTNIEJĄCEGO typu kamienia do kolejnego typu umowy.
+ *
+ * Nie ma tu nazwy ani opisu: te należą do samego typu i są wspólne dla wszystkich
+ * typów umów. Do powiązania należy wyłącznie numer folderu i „powstaje automatycznie",
+ * więc tylko te dwie rzeczy da się tu ustawić.
+ */
+export type AttachMilestoneTypeDto = {
+    milestoneTypeId: number;
+    contractTypeId: number;
+    folderNumber: string;
+    isDefault: boolean;
+};
+
 export type NewCaseTypeDto = {
     milestoneTypeId: number;
     name: string;
@@ -38,6 +52,26 @@ export type NewCaseTypeDto = {
  * i wygenerował mail-raport awarii przy każdej literówce użytkownika.
  */
 export default class TypesTreeValidator {
+    /**
+     * Podpięcie istniejącego typu kamienia pod kolejny typ umowy.
+     *
+     * Numer folderu NIE musi być w tym typie umowy niepowtarzalny - baza tego nie
+     * wymaga, a w danych takie pary już są (w IK numer 07 mają dwa typy). Nowy typ
+     * może więc świadomie przejąć numer typu wycofywanego.
+     */
+    static validateAttachMilestoneType(dto: any): AttachMilestoneTypeDto {
+        if (!dto || typeof dto !== 'object')
+            throw new BadRequestError('Brak danych powiązania.');
+
+        return {
+            milestoneTypeId: this.requireId(dto.milestoneTypeId, 'typu kamienia'),
+            contractTypeId: this.requireId(dto.contractTypeId, 'typu umowy'),
+            // Kolumna FolderNumber to CHAR(2) - dłuższa wartość zostałaby obcięta po cichu.
+            folderNumber: this.requireText(dto.folderNumber, 'Numer folderu', 2),
+            isDefault: !!dto.isDefault,
+        };
+    }
+
     static validateNewMilestoneType(dto: any): NewMilestoneTypeDto {
         if (!dto || typeof dto !== 'object')
             throw new BadRequestError('Brak danych typu kamienia milowego.');

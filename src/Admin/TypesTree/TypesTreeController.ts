@@ -117,6 +117,67 @@ export default class TypesTreeController {
     }
 
     /**
+     * Podpina ISTNIEJĄCY typ kamienia do kolejnego typu umowy.
+     *
+     * Ten sam typ bywa używany przez kilka typów umów i tak ma być - dotąd dało się to
+     * zapisać wyłącznie przy zakładaniu NOWEGO typu, więc ponowne użycie istniejącego
+     * wymagało ręcznego wiersza w bazie.
+     *
+     * Powstaje wyłącznie wiersz powiązania. Samego typu nie ruszamy: nazwa, opis i flagi
+     * należą do niego i są wspólne dla wszystkich typów umów, więc zmiana czegokolwiek
+     * z tego poziomu byłaby zmianą u wszystkich. Do powiązania należy tylko numer folderu
+     * i „powstaje automatycznie".
+     *
+     * TYPÓW SPRAW NIE PODPINA SIĘ OSOBNO - wiszą pod kamieniem, nie pod typem umowy,
+     * więc jadą razem z nim.
+     *
+     * Bez transakcji, bo to jeden INSERT. Szablonu też nie dotykamy: należy do typu,
+     * a nie do powiązania. Jeśli typ szablonu nie ma, drzewo pokaże pomarańczową
+     * przerywaną linię - ten sam sygnał, co przy każdym innym „domyślny bez szablonu".
+     */
+    static async attachMilestoneTypeFromDto(dto: any): Promise<TypesTreeDto> {
+        const payload = TypesTreeValidator.validateAttachMilestoneType(dto);
+
+        const milestoneTypes = await this.repository.findMilestoneTypes();
+        if (!milestoneTypes.some((type) => type.id === payload.milestoneTypeId))
+            throw new BadRequestError(
+                'Typ kamienia o podanym numerze nie istnieje.'
+            );
+
+        // Kamienie ofertowe mają własną gałąź (MilestoneTypes_Offers) i własne miejsce
+        // w kodzie - Setup rozpoznaje je po numerze. Wpuszczenie ich między umowy
+        // pozwoliłoby zakładać kamień ofertowy na kontrakcie. Bramka stoi tutaj, a nie
+        // tylko na liście w panelu, bo listę da się ominąć znając adres trasy.
+        const offerEdges = await this.repository.findOfferMilestoneTypes();
+        if (
+            offerEdges.some(
+                (edge) => edge.milestoneTypeId === payload.milestoneTypeId
+            )
+        )
+            throw new BadRequestError(
+                'Kamienie ofertowe należą do gałęzi ofert i nie podpina się ich do typu umowy.'
+            );
+
+        // Sprawdzamy przed zapisem, bo unikalny indeks na parze (typ kamienia, typ umowy)
+        // zwróciłby komunikat o naruszeniu klucza - prawdziwy, ale nie do przeczytania.
+        const edges = await this.repository.findContractTypeMilestoneTypes();
+        if (
+            edges.some(
+                (edge) =>
+                    edge.milestoneTypeId === payload.milestoneTypeId &&
+                    edge.contractTypeId === payload.contractTypeId
+            )
+        )
+            throw new BadRequestError(
+                'Ten typ kamienia jest już podpięty do tego typu umowy.'
+            );
+
+        await this.repository.addContractTypeMilestoneTypeInDb(payload);
+
+        return await this.getTree();
+    }
+
+    /**
      * Dba o to, żeby oznaczenie „powstaje automatycznie” miało pokrycie w szablonie.
      *
      * Sama flaga nie wystarczy: zapytanie budujące strukturę nowej umowy startuje

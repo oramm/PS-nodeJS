@@ -142,6 +142,16 @@ describe('PettyCashEntry - kwoty wlasciwe dla rodzaju', () => {
         );
     });
 
+    it('tankowanie ma reguly kwot jak paragon i wymaga numeru dokumentu', () => {
+        expect(cardPurchase({ entryKind: 'FUEL' }).consistencyErrors()).toEqual([]);
+        expect(
+            cardPurchase({
+                entryKind: 'FUEL',
+                documentNumber: null,
+            }).consistencyErrors()
+        ).toContainEqual(expect.stringContaining('wymaga numeru dokumentu'));
+    });
+
     it('wyplata zaliczki przechodzi tylko z rozliczeniem ADVANCE', () => {
         const advance = new PettyCashEntry({
             entryKind: 'ADVANCE',

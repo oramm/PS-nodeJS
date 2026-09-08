@@ -10,6 +10,15 @@ export default class ToolsDocs {
         return await docs.documents.get({ auth, documentId });
     }
     /**Tworzy nowe NamedRanges - uywać tylko przy inicjaji, bo wykasuje istniejące NamedRanges
+     *
+     * JEDEN odczyt dokumentu i JEDNA paczka zmian. Wcześniej ta metoda czytała
+     * dokument, potem `clearNamedRanges` czytało go drugi raz, a
+     * `refreshNamedRangesFromTags` trzeci - przy niezmienionej treści między
+     * odczytami. Każdy odczyt to ~1 s (odpowiedź rzędu 90 kB dla szablonu pisma),
+     * więc dwa zbędne kosztowały ~2 s przy każdej rejestracji pisma i oferty.
+     * Kasowanie i zakładanie zakresów idzie teraz jedną paczką: kasowania są
+     * w niej przed zakładaniem, czyli w tej samej kolejności co wcześniej.
+     *
      * https://developers.google.com/docs/api/samples/output-json?hl=en
      */
     static async initNamedRangesFromTags(
@@ -20,12 +29,14 @@ export default class ToolsDocs {
         const tags = this.getTagsForNamedRanges(document);
         if (!tags.length) throw new Error('No tags for namedRanges found');
 
-        await this.clearNamedRanges(auth, documentId);
-        const namedRangesCreated = await this.refreshNamedRangesFromTags(
-            auth,
-            documentId,
-        );
-        return namedRangesCreated;
+        const requests = [
+            ...this.makeDeleteNamedRangeRequests(document),
+            ...this.makeCreateNamedRangeRequests(document),
+        ];
+        if (!requests.length) return;
+
+        await this.batchUpdateDocument(auth, requests, documentId);
+        return true;
     }
     /**Tworzy nowe NamedRanges z tagów z szablonu - używać do uzupełniania namedRanges w dokumentcie
      * Nie usuwa istniejących NamedRanges i nie nadpisuje ich
@@ -35,38 +46,60 @@ export default class ToolsDocs {
         auth: OAuth2Client,
         documentId: string,
     ) {
-        console.group('---refreshNamedRangesFromTags::');
         const document = (await this.getDocument(auth, documentId)).data;
-        if (!document || !document.body || !document.body.content)
-            throw new Error('No template document found or template empty');
-
-        const content = document.body.content;
-
-        let requests: docs_v1.Schema$Request[] = [];
-        const paragraphs = this.getAllParagraphElementsFromDocument(content);
-        paragraphs.forEach((element) => {
-            if (element.paragraph) {
-                const paragraphRequests = this.createNameRangeRequestsFromTextRun(
-                    element.paragraph,
-                );
-                paragraphRequests.forEach((request) => {
-                    const name = request.createNamedRange?.name;
-                    let namedRange;
-                    if (!name) return;
-                    console.log(
-                        `RangeName:: ${name}, s-e: ${request.createNamedRange?.range?.startIndex}-${request.createNamedRange?.range?.endIndex}`,
-                    );
-                    namedRange = this.getNamedRangeByName(document, name);
-                    if (!namedRange) requests.push(request);
-                });
-            }
-        });
+        const requests = this.makeCreateNamedRangeRequests(document);
 
         if (!requests.length) return;
         // Wyslij prośby o utworzenie namedRange
         await this.batchUpdateDocument(auth, requests, documentId);
-        console.groupEnd();
         return requests.length > 0;
+    }
+
+    /** Prośby o założenie zakresów nazwanych na tagach `#ENVI#...#`, których
+     *  dokument jeszcze nie ma. Liczone z już wczytanego dokumentu, bez sięgania
+     *  do Google - dzięki temu wywołujący decyduje, ile razy dokument czyta. */
+    private static makeCreateNamedRangeRequests(
+        document: docs_v1.Schema$Document,
+    ): docs_v1.Schema$Request[] {
+        if (!document || !document.body || !document.body.content)
+            throw new Error('No template document found or template empty');
+
+        const requests: docs_v1.Schema$Request[] = [];
+        const paragraphs = this.getAllParagraphElementsFromDocument(
+            document.body.content,
+        );
+        paragraphs.forEach((element) => {
+            if (!element.paragraph) return;
+            const paragraphRequests = this.createNameRangeRequestsFromTextRun(
+                element.paragraph,
+            );
+            paragraphRequests.forEach((request) => {
+                const name = request.createNamedRange?.name;
+                if (!name) return;
+                if (!this.getNamedRangeByName(document, name))
+                    requests.push(request);
+            });
+        });
+        return requests;
+    }
+
+    /** Prośby o skasowanie wszystkich zakresów nazwanych, jakie dokument ma.
+     *  Liczone z już wczytanego dokumentu, bez sięgania do Google. */
+    private static makeDeleteNamedRangeRequests(
+        document: docs_v1.Schema$Document,
+    ): docs_v1.Schema$Request[] {
+        const requests: docs_v1.Schema$Request[] = [];
+        if (!document.namedRanges) return requests;
+
+        Object.values(document.namedRanges).forEach((namedRange) => {
+            if (namedRange.namedRanges)
+                requests.push({
+                    deleteNamedRange: {
+                        name: namedRange.namedRanges[0].name,
+                    },
+                });
+        });
+        return requests;
     }
 
     private static createNameRangeRequestsFromTextRun(
@@ -126,55 +159,68 @@ export default class ToolsDocs {
         return match.rangeName.trim();
     }
 
-    /** Wypełnia wszystie namedRanges w dokumentcie nową treścią */
+    /** Wypełnia wszystie namedRanges w dokumentcie nową treścią.
+     *
+     *  JEDNA paczka zmian na cały dokument. Wcześniej każde pole (data, numer,
+     *  adres, opis, kontekst, DW, treść) szło osobnym zapytaniem do Google, jedno
+     *  po drugim - przy sześciu polach sześć podróży po ~1 s.
+     *
+     *  Scalenie jest bezpieczne, bo NIC się nie zmienia w arytmetyce indeksów:
+     *  pozycje i tak liczone były z JEDNEGO, wczytanego na początku dokumentu i
+     *  nigdy nie odświeżane między zapytaniami. Poprawność opierała się już wtedy
+     *  wyłącznie na kolejności malejącej (`sortNamedRangesDescending`) - zmiana
+     *  w dalszej części dokumentu nie przesuwa indeksów w części wcześniejszej.
+     *  Google wykonuje prośby z paczki po kolei, więc kolejność jest ta sama,
+     *  co przy osobnych zapytaniach.
+     */
     static async updateTextRunsInNamedRanges(
         auth: OAuth2Client,
         documentId: string,
         newData: { rangeName: string; newText: string }[],
     ) {
-        const notMatchedData = [...newData];
         const document = (await this.getDocument(auth, documentId)).data;
+        if (!document.namedRanges) return;
 
-        if (document.namedRanges) {
-            //this.sortNamedRangesDescending() zwraca nową tablicę posortowaną
-            const namedRangesSorted = this.sortNamedRangesDescending(
-                document.namedRanges,
+        const notMatchedData = [...newData];
+        const requests: docs_v1.Schema$Request[] = [];
+
+        //this.sortNamedRangesDescending() zwraca nową tablicę posortowaną
+        const namedRangesSorted = this.sortNamedRangesDescending(
+            document.namedRanges,
+        );
+        for (const sharingNameNamedRanges of namedRangesSorted) {
+            if (!sharingNameNamedRanges.namedRanges) continue;
+            const dataElement = newData.find(
+                (item) => item.rangeName === sharingNameNamedRanges.name,
             );
-            console.log(`updateTextRunsInNamedRanges:: sortedNamedRanges:`);
-            for (const sharingNameNamedRanges of namedRangesSorted) {
-                for (const dataElement of newData) {
-                    //jeśli obiekt w data pasuje do jednego z namedRange.name - usuń go z notMatchedData
-                    if (
-                        sharingNameNamedRanges.name == dataElement.rangeName &&
-                        sharingNameNamedRanges.namedRanges
-                    ) {
-                        const index = notMatchedData.findIndex(
-                            (obj) => obj.rangeName === dataElement.rangeName,
-                        );
-                        notMatchedData.splice(index, 1);
-                        console.log(
-                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText})`,
-                        );
-                        console.group();
-                        await this.updateTextRunInNamedRange(
-                            auth,
-                            document,
-                            sharingNameNamedRanges.namedRanges[0],
-                            dataElement.newText,
-                        );
-                        console.groupEnd();
-                        console.log(
-                            `updateTextRunInNamedRange(${sharingNameNamedRanges.namedRanges[0].name},${dataElement.newText}) DONE`,
-                        );
-                        continue;
-                    }
-                }
-            }
-            if (notMatchedData.length > 0)
-                console.log(
-                    'Some tags did not match any of namedRanges %o:',
-                    notMatchedData,
-                );
+            if (!dataElement) continue;
+
+            const index = notMatchedData.findIndex(
+                (obj) => obj.rangeName === dataElement.rangeName,
+            );
+            if (index !== -1) notMatchedData.splice(index, 1);
+
+            requests.push(
+                ...this.makeNamedRangeContentRequests(
+                    document,
+                    sharingNameNamedRanges.namedRanges[0],
+                    dataElement.newText,
+                ),
+            );
+        }
+
+        if (notMatchedData.length > 0)
+            console.log(
+                'Some tags did not match any of namedRanges %o:',
+                notMatchedData,
+            );
+
+        if (!requests.length) return;
+        try {
+            await this.batchUpdateDocument(auth, requests, documentId);
+        } catch (error) {
+            console.log(JSON.stringify(requests));
+            throw error;
         }
     }
 
@@ -186,6 +232,34 @@ export default class ToolsDocs {
         newText: string,
         style?: docs_v1.Schema$TextStyle,
     ) {
+        const requests = this.makeNamedRangeContentRequests(
+            document,
+            namedRange,
+            newText,
+            style,
+        );
+        try {
+            // Wprowadź tekst i style
+            await this.batchUpdateDocument(
+                auth,
+                requests,
+                <string>document.documentId,
+            );
+        } catch (error) {
+            console.log(JSON.stringify(requests));
+            throw error;
+        }
+    }
+
+    /** Prośby o podmianę treści pojedynczego zakresu nazwanego, policzone
+     *  z już wczytanego dokumentu. Nie wysyła niczego do Google - dzięki temu
+     *  wywołujący może zebrać prośby z wielu zakresów i wysłać je jedną paczką. */
+    private static makeNamedRangeContentRequests(
+        document: docs_v1.Schema$Document,
+        namedRange: docs_v1.Schema$NamedRange,
+        newText: string,
+        style?: docs_v1.Schema$TextStyle,
+    ): docs_v1.Schema$Request[] {
         if (!document.body?.content)
             throw new Error(
                 `Document ${document.title} has no content: ${namedRange.name}`,
@@ -227,30 +301,16 @@ export default class ToolsDocs {
             endIndex,
         );
 
-        this.LogInConsoleParagraphsAndTextruns(
-            requestIndexes,
-            textRunAndParenElement,
-        );
-
-        const requests = this.makeTextRunUpdateRequests(
+        return this.makeTextRunUpdateRequests(
             requestIndexes,
             newText,
             <string>namedRange.name,
             style,
         );
-        try {
-            // Wprowadź tekst i style
-            await this.batchUpdateDocument(
-                auth,
-                requests,
-                <string>document.documentId,
-            );
-        } catch (error) {
-            console.log(JSON.stringify(requests));
-            throw error;
-        }
     }
-    /**Używana w updateTextRunInNamedRange() */
+    /**@deprecated Zrzut akapitów i textRunów do konsoli, używany przy diagnozowaniu
+     * zakresów nazwanych. Wypisywany był dla KAŻDEGO pola przy każdej rejestracji
+     * pisma, razem z treścią akapitów. Zostaje na czas diagnozy, nie jest wołany. */
     private static LogInConsoleParagraphsAndTextruns(
         requestIndexes: {
             namedRangeStartIndex: number;
@@ -498,19 +558,8 @@ export default class ToolsDocs {
      */
     static async clearNamedRanges(auth: OAuth2Client, documentId: string) {
         let document = (await this.getDocument(auth, documentId)).data;
-        const requests: docs_v1.Schema$Request[] = [];
+        const requests = this.makeDeleteNamedRangeRequests(document);
 
-        if (document.namedRanges) {
-            Object.values(document.namedRanges).forEach((namedRange) => {
-                if (namedRange.namedRanges) {
-                    requests.push({
-                        deleteNamedRange: {
-                            name: namedRange.namedRanges[0].name,
-                        },
-                    });
-                }
-            });
-        }
         if (requests.length > 0)
             await this.batchUpdateDocument(
                 auth,

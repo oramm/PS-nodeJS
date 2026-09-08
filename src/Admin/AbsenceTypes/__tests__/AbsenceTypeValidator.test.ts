@@ -115,3 +115,55 @@ describe('AbsenceTypeValidator', () => {
         ).toThrow(/najwyżej z jednej puli/);
     });
 });
+
+describe('AbsenceTypeValidator - flaga „można brać na godziny"', () => {
+    it('domyślnie WOLNO brać na godziny, tak jak stoi kolumna w bazie', () => {
+        expect(
+            AbsenceTypeValidator.validateCreatePayload({ name: 'Szkolenie' })
+                .allowsPartialDay
+        ).toBe(true);
+    });
+
+    it('zdjęta kratka w panelu trafia do payloadu jako false', () => {
+        expect(
+            AbsenceTypeValidator.validateCreatePayload({
+                name: 'L4',
+                countsAgainstLimit: false,
+                allowsPartialDay: false,
+            }).allowsPartialDay
+        ).toBe(false);
+    });
+
+    it('ta sama flaga przechodzi przy edycji', () => {
+        const result = AbsenceTypeValidator.validateUpdatePayload({
+            id: 5,
+            name: 'L4',
+            countsAgainstLimit: false,
+            allowsPartialDay: false,
+        });
+        expect(result.id).toBe(5);
+        expect(result.allowsPartialDay).toBe(false);
+    });
+
+    it('flaga jest niezależna od puli - typ bez puli może chodzić na godziny', () => {
+        const result = AbsenceTypeValidator.validateCreatePayload({
+            name: 'Bezpłatny',
+            countsAgainstLimit: false,
+            allowsPartialDay: true,
+        });
+        expect(result.countsAgainstLimit).toBe(false);
+        expect(result.countsAsCare).toBe(false);
+        expect(result.countsAsHoliday).toBe(false);
+        expect(result.allowsPartialDay).toBe(true);
+    });
+
+    it('nie ma zaszytej reguły „L4 zawsze na całe dni" - decyduje owner, nie kod', () => {
+        expect(
+            AbsenceTypeValidator.validateCreatePayload({
+                name: 'L4',
+                countsAgainstLimit: false,
+                allowsPartialDay: true,
+            }).allowsPartialDay
+        ).toBe(true);
+    });
+});

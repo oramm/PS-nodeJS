@@ -27,8 +27,8 @@ export default abstract class OurLetterGdFile extends DocumentGdFile {
      *  2. Tworzy namedRanges z tagów w szablonie
      *   - osobną funkcją w pliku trzeba ustawić namedRages
      */
-    async create(auth: OAuth2Client) {
-        let document = await super.create(auth);
+    async create(auth: OAuth2Client, fileName?: string) {
+        let document = await super.create(auth, fileName);
         if (!document.documentId)
             throw new Error(
                 'Letter file not created!' + this.enviDocumentData.id

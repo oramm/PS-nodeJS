@@ -334,7 +334,9 @@ export default class ToolsGd {
         };
         const filesSchema = await drive.files.create({
             requestBody: fileMetadata,
-            fields: 'id',
+            // `driveId` bierzemy tą samą odpowiedzią, żeby createPermissions nie
+            // musiało o to pytać osobnym zapytaniem
+            fields: 'id, driveId',
             supportsAllDrives: true,
         });
         //console.log('New Gd folder Id: ', filesSchema.data.id);
@@ -359,7 +361,11 @@ export default class ToolsGd {
                 name: parameters.name,
                 parents: [parameters.parentId],
             })) as drive_v3.Schema$File;
-            await this.createPermissions(auth, { fileId: folder.id as string });
+            // `driveId` znamy z odpowiedzi na utworzenie folderu
+            await this.createPermissions(auth, {
+                fileId: folder.id as string,
+                driveId: folder.driveId ?? null,
+            });
         }
         if (typeof folder.id != 'string')
             throw new Error('Nie utworzono folderu');
@@ -411,12 +417,21 @@ export default class ToolsGd {
         try {
             const drive = google.drive({ version: 'v3', auth });
             const fileId = <string>fileData.id;
+            // Bez bieżącego rodzica removeParents byłoby puste, a Drive czyta to jako
+            // "dopisz drugiego rodzica, starego zostaw". Element na Dysku współdzielonym
+            // może mieć dokładnie jednego, więc taki ruch kończy się odmową Google.
+            // Zgłaszamy to od razu i po ludzku, zamiast wysyłać wadliwe żądanie.
+            const currentParents = fileData.parents?.join(',');
+            if (!currentParents)
+                throw new Error(
+                    `ToolsGd.moveFileOrFolder:: brak bieżącego folderu nadrzędnego (pole parents) dla ${fileId} - nie da się przenieść. Podaj parents jawnie albo pobierz metadane przez getFileOrFolderMetaDataById.`
+                );
 
             console.log(`Przenoszę do nowego folderu plik ${fileId} ...`);
 
             await drive.files.update({
                 fileId: fileId,
-                removeParents: fileData.parents?.join(','),
+                removeParents: currentParents,
                 addParents: newParentFolderId,
                 supportsAllDrives: true,
             });
@@ -475,6 +490,9 @@ export default class ToolsGd {
                     name: copyName,
                     parents: [destFolderId],
                 },
+                // `driveId` bierzemy tą samą odpowiedzią, żeby createPermissions nie
+                // musiało o to pytać osobnym zapytaniem
+                fields: 'id, name, mimeType, driveId',
                 supportsAllDrives: true,
             });
             console.log(`Skopiowano plik ${originFileId}`);
@@ -596,6 +614,12 @@ export default class ToolsGd {
      * zablokowanym udostępnianiu zewnętrznym Google odrzuciłby to wywołanie.
      * Uprawnienia podane jawnie (np. konkretny użytkownik) są nadawane zawsze.
      *
+     * `driveId` podaje wywołujący, gdy tworzył plik i zna już odpowiedź: pytanie
+     * o dysk to osobne zapytanie do Google (~0,3 s), a `files.create` i `files.copy`
+     * potrafią zwrócić `driveId` w tej samej odpowiedzi, w której zwracają `id`.
+     * Wartość `undefined` znaczy "nie wiem" i wtedy pytamy tak jak wcześniej;
+     * `null` znaczy "sprawdzone, to nie jest dysk współdzielony".
+     *
      * https://developers.google.com/drive/api/v3/manage-sharing#create_a_permission
      */
     static async createPermissions(
@@ -605,16 +629,22 @@ export default class ToolsGd {
             permissions?: [
                 { type: string; role: string; emailAddress?: string }
             ];
+            driveId?: string | null;
         }
     ) {
         const drive = google.drive({ version: 'v3', auth });
         if (!parameters.permissions) {
-            const { data } = await drive.files.get({
-                fileId: parameters.fileId,
-                fields: 'driveId',
-                supportsAllDrives: true,
-            });
-            if (data.driveId) return; // Dysk współdzielony - dostęp z członkostwa
+            const driveId =
+                parameters.driveId !== undefined
+                    ? parameters.driveId
+                    : (
+                          await drive.files.get({
+                              fileId: parameters.fileId,
+                              fields: 'driveId',
+                              supportsAllDrives: true,
+                          })
+                      ).data.driveId;
+            if (driveId) return; // Dysk współdzielony - dostęp z członkostwa
             parameters.permissions = [{ type: 'anyone', role: 'writer' }];
         }
         for (const permission of parameters.permissions) {

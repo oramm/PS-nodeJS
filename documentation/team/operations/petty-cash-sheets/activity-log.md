@@ -616,3 +616,174 @@ rozstrzyga.
 Ostrzeżenie o `actions/checkout@v4` i `actions/setup-node@v4` na Node 20 zostawione — dotyczy
 środowiska samych akcji, nie tego ustawienia, akcje nadal działają, a podniesienie majorów to
 osobna zmiana w narzędziach CI, nie część naprawy builda.
+
+---
+
+## 2026-09-03 — pole pomocnicze VAT w formularzu
+
+Podsumowanie:
+- Na życzenie właściciela formularz zaliczek dostał pole „VAT" między „Netto" a „Brutto", dla rodzajów
+  „paragon" i „zakup z fakturą" (poczta jest zwolniona z VAT, więc tam pola nie ma). Powód: paragon
+  podaje zwykle brutto i sumę podatku, a arkusz chce netto i brutto, więc wpisujący liczył netto w głowie.
+- Pole jest wyłącznie pomocnicze: nie należy do stanu formularza (`react-hook-form`), nie wchodzi do
+  payloadu i nie trafia do arkusza — podgląd wiersza pod formularzem nie zmienił się.
+- Reguła: netto i VAT to para, z której ostatnio wpisana wartość jest źródłem, a druga wynika z brutto.
+  Wpisane VAT (przed albo po brutto) daje netto = brutto − VAT; wpisane netto zwraca polu VAT rolę
+  podglądu, który pokazuje brutto − netto do sprawdzenia z paragonem. Zmiana rodzaju, podpowiedź ze
+  zdjęcia i zapis wpisu wracają do trybu podglądu. Edycja netto i brutto w tabeli pod formularzem
+  przechodzi tą samą ścieżką, więc obie powierzchnie zachowują się tak samo.
+- Pole nie blokuje zapisu samo z siebie: VAT nie-liczba, ujemny albo nie niższy od brutto dostaje
+  komunikat pod polem, a błąd i tak wychodzi na netto, które z niego wynika.
+- Decyzja z P8 „nie liczymy netto z podatku" dotyczy modelu rozpoznającego dokument i zostaje w mocy:
+  tu netto liczy się z wartości wpisanej przez człowieka, który patrzy na paragon.
+
+Files touched — frontend:
+- `src/Erp/PettyCash/vatAmount.ts` (new), `src/Erp/PettyCash/vatAmount.test.ts` (new),
+  `src/Erp/PettyCash/PettyCashEntryPage.tsx`
+
+Impact type: UI
+
+Notes:
+- 82 testy frontu w module (72 dotychczasowe + 10 nowych), typecheck czysty. Backend nietknięty —
+  payload bez zmian.
+- Sprawdzone w przeglądarce na lokalnym backendzie z logowaniem deweloperskim, bez zapisu do arkuszy:
+  brutto 112,98 i VAT 21,13 → netto 91,85; netto 91,00 → VAT 21,98; VAT 23 i potem brutto 123 →
+  netto 100,00; VAT 200 przy brutto 123 → netto −77,00 z komunikatami pod netto i pod VAT.
+- Otwarte dla właściciela, jeśli ma zdanie: kolejność pól. „Netto | VAT | Brutto" czyta się jak równanie
+  i zachowuje kolejność arkusza; paragon podaje brutto przed VAT, więc możliwa jest odwrotna.
+
+Follow-up tego samego dnia, po decyzji właściciela: kolejność pól zmieniona na **Brutto, VAT, Netto**
+(jak na paragonie: suma, potem podatek), a zdanie objaśniające pod polami usunięte jako zbędne.
+Zostaje tylko podpowiedź po najechaniu na pole VAT. Testy i typecheck bez zmian: 82 testy, czysto.
+
+---
+
+## 2026-09-04 — tankowanie: kilometrówka i zaliczki podane sobie z ręki
+
+Podsumowanie:
+- Zgłoszenie właściciela: „przy dodawaniu kilometrówki z tankowaniem pokazuj okno dodawania zaliczek
+  i na odwrót". Tankowanie zostawia ślad w dwóch arkuszach — kilometrówka notuje licznik, zaliczki
+  pieniądze — i żaden z tych wpisów nie zastąpi drugiego (w arkuszu kilometrówki nie ma kolumny
+  kwotowej, w zaliczkach nie ma licznika). Każde rozwiązanie oznacza więc dwa zapisy.
+- Decyzja właściciela (3 pytania, warianty przedstawione z makietą): **dwa ekrany po kolei**, a nie
+  pola doklejone do jednego formularza ani panel boczny. Powód odrzucenia pól: reguły zaliczek
+  (netto-VAT-brutto, płatnik, sposób zapłaty, skan) musiałyby żyć w drugim miejscu, a jeden przycisk
+  robiłby dwa zapisy do dwóch arkuszy — nieudany drugi daje wpis zrobiony w połowie. Panel boczny na
+  telefonie i tak zajmuje cały ekran, więc kosztuje kod bez zysku.
+- Drugie i trzecie rozstrzygnięcie właściciela: przejście **przyciskiem na ekranie po zapisie**
+  (nie samo otwarcie okna), a tankowanie po stronie zaliczek rozpoznawane przez **nowy rodzaj wpisu
+  „paliwo (tankowanie)"**, nie po treści opisu ani po polu pomocniczym.
+
+Co się zmieniło:
+- Nowy rodzaj wpisu `FUEL`. Kwotowo zachowuje się jak paragon (netto i brutto, wymagany numer
+  dokumentu) — osobny rodzaj istnieje po to, żeby wpis dało się skojarzyć z kilometrówką. Arkusz
+  i writer bez zmian: rodzaj nigdzie nie steruje kolumnami poza regułami kwot w modelu.
+- Kilometrówka po zapisie z celem „tankowanie" pokazuje na liście pojazdów propozycję dopisania
+  paragonu. Przycisk otwiera formularz zaliczek wypełniony: rodzaj „paliwo", data tankowania, opis
+  `paliwo <marka model> <nr rej>`, a stan licznika w polu „Uwaga" — po nim kojarzy się wiersz
+  zaliczek z wierszem kilometrówki. Kwoty zostają puste (od tego jest paragon albo skan).
+- Odwrotnie: po zapisaniu wpisu rodzaju „paliwo" zaliczki proponują dopisanie tankowania do
+  kilometrówki. Lista pojazdów pyta wtedy o auto, a formularz otwiera się z zaznaczonym tankowaniem
+  i datą wpisu; kierowcy zostaje sam stan licznika.
+- Przy okazji dziura, która blokowała cały pomysł na telefonie: w widoku uproszczonym kilometrówki
+  „Cel wyjazdu" jest ukryty, więc **tankowania nie dało się tam w ogóle zaznaczyć** — a to ono barwi
+  wiersz arkusza i uruchamia paragon. Doszedł jeden przełącznik „Tankowanie" na całą szerokość;
+  data i licznik tankowania idą wtedy z wartości domyślnych, tak jak dotąd w widoku pełnym.
+- Bramki: propozycja paragonu pokazuje się tylko pracownikom ENVI (zaliczki są dla nich, kierowca
+  spoza ENVI dostałby 403), a propozycja tankowania — tylko przy dostępie do kilometrówki
+  (`mileage/access`, flaga IsDriver). Nie proponujemy też powrotu temu, kto właśnie przyszedł
+  z drugiej strony.
+
+Założenie do ewentualnej korekty przez właściciela:
+- Rodzaj „paliwo" podpowiada zapłatę **kartą firmową** (tak wygląda tankowanie w arkuszu: wiersz
+  z lustrzaną kolumną wpływu). Pole zostaje do zmiany jednym kliknięciem.
+
+Files touched — backend:
+- `src/pettyCash/pettyCashTypes.ts`, `src/pettyCash/PettyCashEntry.ts`,
+  `src/pettyCash/__tests__/PettyCashEntry.test.ts`
+
+Files touched — frontend (ENVI.ProjectSite):
+- `src/Mileage/fuelHandoff.ts` (new), `src/Mileage/labels.ts` (new),
+  `src/Mileage/labels.test.ts` (new), `src/Mileage/MileagePage.tsx`,
+  `src/Erp/PettyCash/PettyCashEntryPage.tsx`, `src/Erp/PettyCash/pettyCashApi.ts`,
+  `src/Erp/PettyCash/PettyCashValidationSchema.ts`, `src/Erp/PettyCash/previewRows.ts`
+
+Impact type: UI + model domenowy (nowy rodzaj wpisu)
+
+Notes:
+- Backend: 113 testów modułu przechodzi (`node --max-old-space-size=6144 node_modules/jest/bin/jest.js
+  src/pettyCash --runInBand`). Front: 87 testów (82 w module zaliczek, 5 nowych dla formaterów
+  kilometrówki), `npx tsc --noEmit` czysto.
+- Sprawdzone w przeglądarce na lokalnym backendzie, w widoku telefonu (375 px), **bez zapisu do
+  arkuszy**: przełącznik tankowania, propozycja paragonu po zapisie, formularz zaliczek wypełniony
+  z przekazania, podpowiedź i wybór auta w drugą stronę. Samego zapisu nie wywoływano — identyfikator
+  arkusza kilometrówki bierze się z bazy (`Cars`), a lokalna kopia bazy wskazuje arkusz produkcyjny.
+- Nie sprawdzono na żywym urządzeniu dotykowym: widok uproszczony włącza się na `pointer: coarse`,
+  w podglądzie emulowanym.
+
+Follow-up tego samego dnia, po obejrzeniu pierwszej wersji przez właściciela. Trzy poprawki:
+
+1. **Widok uproszczony kilometrówki wraca bez zmian.** Przełącznik „Tankowanie" na telefonie
+   usunięty - właściciel wskazał, że cel wyjazdu wybiera się tam przełącznikiem „Pełny formularz",
+   więc nowe pole w domyślnym widoku było zbędne.
+2. **Formularz zaliczek przy rodzaju „paliwo" ma teraz komplet danych tankowania.** Doszła lista
+   samochodów (ta sama trasa `mileage/vehicles`, którą czyta kilometrówka) i pole „Stan licznika".
+   Opis wpisuje się sam z wybranego auta w formacie `Paliwo <marka model nr rej>` i chodzi za autem,
+   dopóki jest nasz - ręcznie zmienionego nie nadpisujemy. Stan licznika nie jest osobną kolumną
+   arkusza: wchodzi do kolumny uwagi, a gdy wpisano też uwagę, licznik idzie pierwszy
+   (`licznik 150 480 km, do pełna`). Regułę trzyma `fuelNote.ts` z testami, a podgląd wiersza
+   pokazuje wtedy uwagę jako komórkę wyliczaną - jak „kto zapłacił", które też składa się z dwóch pól.
+   Dzięki temu przekazanie do kilometrówki niesie już wszystko: datę, auto i licznik, więc wpis
+   kilometrówki otwiera się gotowy do zapisania, bez pytania o auto na liście pojazdów.
+3. **Propozycje przejścia między modułami wyciszone.** Zamiast obramowanej karty z pytaniem
+   („Paragon za paliwo nie trafia do kilometrówki...") jest zwykły przycisk i jedno zdanie pod nim,
+   mówiące, co się po kliknięciu stanie. Właściciel: poprzednia wersja czytała się jak ostrzeżenie,
+   że zrobiło się coś źle, a to jest poprawna ścieżka.
+
+Przy okazji dwie usterki znalezione podczas oglądania w przeglądarce:
+- `mileage/vehicles` oddaje identyfikator auta jako **liczbę**, a lista wyboru operuje napisem -
+  porównanie `item.id === values.vehicleId` milczało, więc opis się nie wpisywał. Identyfikator
+  jest teraz normalizowany do napisu w `fetchVehicles`, czyli na granicy modułu.
+- Lista wyboru auta dostaje wartość wprost (`value={values.vehicleId}`), bo przy wejściu
+  z kilometrówki auto jest znane, zanim dojadą opcje - inaczej pole pokazywało „Wybierz auto"
+  mimo wypełnionego formularza.
+
+Files touched — frontend (ENVI.ProjectSite):
+- `src/Mileage/vehiclesApi.ts` (new), `src/Erp/PettyCash/fuelNote.ts` (new),
+  `src/Erp/PettyCash/fuelNote.test.ts` (new), `src/Mileage/fuelHandoff.ts`,
+  `src/Mileage/MileagePage.tsx`, `src/Erp/PettyCash/PettyCashEntryPage.tsx`,
+  `src/Erp/PettyCash/PettyCashValidationSchema.ts`, `src/Erp/PettyCash/previewRows.ts`,
+  `src/Erp/PettyCash/previewRows.test.ts`
+- usunięte: `src/Mileage/labels.ts`, `src/Mileage/labels.test.ts` (formatowanie licznika przeniosło
+  się do `fuelNote.ts`, bo to zaliczki składają uwagę)
+
+Backend bez zmian w tej turze (rodzaj `FUEL` z wcześniejszego wpisu zostaje).
+
+Notes:
+- Front: 502 testy całego projektu przechodzą, `npx tsc --noEmit` czysto.
+- Sprawdzone w przeglądarce (375 px, bez zapisu do arkuszy): wybór auta wypełnia opis, licznik
+  i uwaga składają się w kolumnie uwagi w zadanej kolejności, obie propozycje przejścia prowadzą
+  do drugiego formularza z kompletem danych.
+- **Pułapka podglądu:** aplikacja rejestruje service worker PWA (`envi-pwa-v3`) na `/docs/`, który
+  serwuje `bundle.js` z pamięci podręcznej. Po zmianie kodu przeglądarka potrafi pokazywać stary
+  ekran mimo poprawnej przebudowy - trzeba wyrejestrować service worker i wyczyścić `caches`.
+
+Dwie drobne poprawki tego samego dnia, po kolejnym przejrzeniu przez wlasciciela:
+- Lista rodzajow z kwotami dokumentu stala w trzech miejscach (formularz, walidacja, podglad wiersza);
+  zostala jedna stala `KINDS_WITH_DOCUMENT` w `pettyCashApi.ts`. Blokada listy aut przy nieudanym
+  pobraniu usunieta - zostawiala martwe pole wymagane z napisem o wczytywaniu.
+- Oba przyciski przejscia miedzy modulami maja teraz szerokosc przycisku zapisu na swoim ekranie
+  (`d-grid`, w zaliczkach dodatkowo `size="lg"` jak "Zatwierdz"), a zdanie pod nimi jest wysrodkowane.
+
+Blad zgloszony przez wlasciciela przy testach na zywym module i naprawiony tego samego dnia:
+po przyjsciu z kilometrowki i zapisaniu zaliczki **kolejne** wpisy paliwowe na tym samym ekranie
+nie proponowaly przejscia do kilometrowki. Powod: warunek pytal o stan trasy (`fuelFromMileage`),
+ktory zyje do konca wizyty na ekranie, a nie o to, ktory konkretnie wpis przyszedl z podpowiedzia.
+Podpowiedz jest teraz zuzywana po pierwszym zapisie (stan komponentu zamiast odczytu trasy),
+wiec drugi i kazdy nastepny wpis proponuje kilometrowke normalnie. Objaw znikal po zmianie
+zakladki i powrocie, bo ekran montowal sie od nowa - stad mylacy trop.
+
+Sprawdzone przejsciem calej sciezki dwa razy w przegladarce, z podstawiona odpowiedzia serwera
+(`window.fetch` przechwycony w konsoli strony) - bez zapisu do arkuszy: pierwszy wpis bez propozycji,
+drugi z propozycja, uwaga wiersza `licznik 150 900 km, do pelna`, przejscie otwiera kilometrowke
+z data i licznikiem.

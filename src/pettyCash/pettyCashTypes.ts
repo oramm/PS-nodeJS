@@ -19,6 +19,9 @@ export const ENTRY_KINDS = [
     'INVOICE',
     /** paragon albo faktura uproszczona (poza KSeF) */
     'RECEIPT',
+    /** paliwo: paragon albo faktura za tankowanie. Kwoty jak w RECEIPT - osobny
+     *  rodzaj istnieje po to, zeby wpis dalo sie skojarzyc z kilometrowka */
+    'FUEL',
     /** wydatek bez dokumentu; kwota trafia do kolumny "BEZ FV / PARAGON" */
     'NO_DOCUMENT',
     /** wyplata zaliczki; kwota tylko w kolumnie wplywu, wydatek 0,00 */

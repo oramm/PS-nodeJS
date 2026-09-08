@@ -15,6 +15,9 @@ export interface InvoicesSearchParams {
     contractId?: number;
     _contract?: Contract;
     searchText?: string;
+    entityId?: number;
+    _entity?: { id?: number };
+    _entities?: { id?: number }[];
     issueDateFrom?: string;
     issueDateTo?: string;
     statuses?: string[];
@@ -132,6 +135,13 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             _totalNetValue: row.TotalValue,
             gdFolderId: row.ContractGdFolderId,
             _parent: {
+                ourId: row.ProjectOurId,
+                name: row.ProjectName,
+                gdFolderId: row.ProjectGdFolderId,
+            },
+            // Klasa Contract czyta projekt wylacznie z `_project`; samo `_parent` przepada,
+            // przez co lista faktur nie znala numeru projektu (wiersz listy go pokazuje).
+            _project: {
                 ourId: row.ProjectOurId,
                 name: row.ProjectName,
                 gdFolderId: row.ProjectGdFolderId,
@@ -476,6 +486,30 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                 mysql.format(`Invoices.ContractId = ?`, [contractId])
             );
         }
+        // Filtr podmiotu jest wielokrotnego wyboru i dziala jak odbiorcy w rejestrze pism:
+        // KAZDY wybrany podmiot musi wystapic na fakturze - jako nabywca albo jako podmiot trzeci
+        // (nowa lista InvoiceThirdParties albo stare pole ThirdPartyEntityId). Dwa podmioty zawezaja
+        // wynik do faktur, w ktorych sa oba naraz (decyzja wlasciciela 2026-08-31, wariant B).
+        const entityIds = [
+            ...(searchParams._entities || []).map((entity) => entity?.id),
+            searchParams._entity?.id,
+            searchParams.entityId,
+        ].filter((id): id is number => typeof id === 'number');
+        entityIds.forEach((entityId) => {
+            conditions.push(
+                mysql.format(
+                    `(Invoices.EntityId = ?
+                        OR Invoices.ThirdPartyEntityId = ?
+                        OR EXISTS (
+                            SELECT 1
+                            FROM InvoiceThirdParties
+                            WHERE InvoiceThirdParties.InvoiceId = Invoices.Id
+                                AND InvoiceThirdParties.EntityId = ?
+                        ))`,
+                    [entityId, entityId, entityId]
+                )
+            );
+        });
         if (searchParams.issueDateFrom) {
             conditions.push(
                 mysql.format(`Invoices.IssueDate >= ?`, [

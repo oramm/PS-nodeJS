@@ -1,7 +1,7 @@
 import BaseRepository from '../../repositories/BaseRepository';
 import ToolsDb from '../../tools/ToolsDb';
 import ScrumboardAbsence from './ScrumboardAbsence';
-import { dbDateToStr } from './vacationDateUtils';
+import { dbDateToStr, dbTimeToStr } from './vacationDateUtils';
 
 export interface AbsenceSearchParams {
     /** zwraca nieobecności zachodzące na przedział [rangeStart, rangeEnd] (włącznie) */
@@ -23,6 +23,8 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
             typeId: row.TypeId,
             dateFrom: dbDateToStr(row.DateFrom),
             dateTo: dbDateToStr(row.DateTo),
+            startTime: dbTimeToStr(row.StartTime),
+            endTime: dbTimeToStr(row.EndTime),
             workingDaysCount: row.WorkingDaysCount,
             note: row.Note,
             createdByPersonId: row.CreatedByPersonId,
@@ -56,7 +58,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
-                a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
+                a.StartTime, a.EndTime, a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
                 t.Name AS TypeName, t.Color AS TypeColor,
                 t.CountsAgainstLimit, t.CountsAsCare, t.CountsAsHoliday
             FROM ScrumboardAbsences a
@@ -71,7 +73,7 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
 
     async findById(id: number): Promise<ScrumboardAbsence | undefined> {
         const sql = `SELECT a.Id, a.PersonId, a.TypeId, a.DateFrom, a.DateTo,
-                a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
+                a.StartTime, a.EndTime, a.WorkingDaysCount, a.Note, a.CreatedByPersonId,
                 t.Name AS TypeName, t.Color AS TypeColor,
                 t.CountsAgainstLimit, t.CountsAsCare, t.CountsAsHoliday
             FROM ScrumboardAbsences a
@@ -85,13 +87,16 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
     /** Wstawia nieobecność, zwraca nadane Id. */
     async insert(absence: ScrumboardAbsence): Promise<number> {
         const sql = `INSERT INTO ScrumboardAbsences
-                (PersonId, TypeId, DateFrom, DateTo, WorkingDaysCount, Note, CreatedByPersonId)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`;
+                (PersonId, TypeId, DateFrom, DateTo, StartTime, EndTime,
+                 WorkingDaysCount, Note, CreatedByPersonId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const result: any = await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             absence.personId,
             absence.typeId,
             absence.dateFrom,
             absence.dateTo,
+            absence.startTime,
+            absence.endTime,
             absence.workingDaysCount,
             absence.note,
             absence.createdByPersonId,
@@ -101,12 +106,15 @@ export default class ScrumboardAbsenceRepository extends BaseRepository<Scrumboa
 
     async update(absence: ScrumboardAbsence): Promise<void> {
         const sql = `UPDATE ScrumboardAbsences
-            SET TypeId = ?, DateFrom = ?, DateTo = ?, WorkingDaysCount = ?, Note = ?
+            SET TypeId = ?, DateFrom = ?, DateTo = ?, StartTime = ?, EndTime = ?,
+                WorkingDaysCount = ?, Note = ?
             WHERE Id = ?`;
         await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             absence.typeId,
             absence.dateFrom,
             absence.dateTo,
+            absence.startTime,
+            absence.endTime,
             absence.workingDaysCount,
             absence.note,
             absence.id,

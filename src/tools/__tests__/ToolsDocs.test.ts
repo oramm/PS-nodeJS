@@ -160,6 +160,63 @@ describe('ToolsDocs', () => {
         );
     });
 
+    it('updateTextRunsInNamedRanges sends ONE batch for all ranges, ordered from the end of the document', async () => {
+        const document = makeDocument([
+            'Numer: #ENVI#number#\n',
+            'Opis: #ENVI#description#\n',
+        ]) as any;
+        document.documentId = 'doc-1';
+        document.namedRanges = {
+            number: {
+                name: 'number',
+                namedRanges: [
+                    { name: 'number', ranges: [{ startIndex: 8, endIndex: 21 }] },
+                ],
+            },
+            description: {
+                name: 'description',
+                namedRanges: [
+                    {
+                        name: 'description',
+                        ranges: [{ startIndex: 18, endIndex: 36 }],
+                    },
+                ],
+            },
+        };
+
+        jest.spyOn(ToolsDocs, 'getDocument').mockResolvedValue({
+            data: document,
+        } as any);
+        const batchUpdateSpy = jest
+            .spyOn(ToolsDocs as any, 'batchUpdateDocument')
+            .mockResolvedValue(undefined);
+
+        await ToolsDocs.updateTextRunsInNamedRanges({} as any, 'doc-1', [
+            { rangeName: 'number', newText: '123' },
+            { rangeName: 'description', newText: 'Opis pisma' },
+        ]);
+
+        // Jedno zapytanie do Google zamiast jednego na pole
+        expect(batchUpdateSpy).toHaveBeenCalledTimes(1);
+
+        const [, requests, documentId] = batchUpdateSpy.mock.calls[0];
+        expect(documentId).toBe('doc-1');
+
+        // Kolejność malejąca: zakres dalszy w dokumencie (description, 18)
+        // musi być obsłużony PRZED wcześniejszym (number, 8), bo inaczej
+        // wstawienie tekstu przesunęłoby indeksy jeszcze nieprzetworzonego zakresu.
+        const deletedNames = (requests as any[])
+            .filter((request) => request.deleteNamedRange)
+            .map((request) => request.deleteNamedRange.name);
+        expect(deletedNames).toEqual(['description', 'number']);
+
+        // Obie treści trafiły do tej samej paczki
+        const insertedTexts = (requests as any[])
+            .filter((request) => request.insertText)
+            .map((request) => request.insertText.text);
+        expect(insertedTexts).toEqual(['Opis pisma', '123']);
+    });
+
     it('insertAgendaStructure deletes the whole AGENDA_SECTION placeholder without leaving trailing hash', async () => {
         const document = makeDocument(['#ENVI#AGENDA_SECTION#\n']) as any;
         document.documentId = 'doc-1';
