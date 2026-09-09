@@ -7,6 +7,10 @@ export default class Entity extends BusinessObject implements EntityData {
     shortName?: string;
     address?: string;
     taxNumber?: string;
+    /** GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna). */
+    regon?: string;
+    /** GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba. */
+    krs?: string;
     www?: string;
     email?: string;
     phone?: string;
@@ -28,8 +32,14 @@ export default class Entity extends BusinessObject implements EntityData {
                 this.shortName = shortName;
             }
             this.address = initParamObject.address;
+            // GUS-1: normalizacja NIP-u NIE dzieje się tutaj, tylko w
+            // EntitiesController (normalizedTaxNumber). Import normalizeNip z
+            // contracts/aqmSync/AqmSync zamknąłby cykl Entity -> AqmSync ->
+            // ContractOur -> Entity, który wywraca `yarn check:cycles`.
             if (initParamObject.taxNumber)
                 this.taxNumber = initParamObject.taxNumber;
+            if (initParamObject.regon) this.regon = initParamObject.regon;
+            if (initParamObject.krs) this.krs = initParamObject.krs;
             this.www = initParamObject.www;
             this.email = initParamObject.email;
             this.phone = initParamObject.phone;

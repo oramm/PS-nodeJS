@@ -492,6 +492,10 @@ export interface EntityData extends RepositoryDataItem {
     shortName?: string;
     address?: string;
     taxNumber?: string;
+    /** GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna). */
+    regon?: string;
+    /** GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba. */
+    krs?: string;
     www?: string;
     email?: string;
     phone?: string;

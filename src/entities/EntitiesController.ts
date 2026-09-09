@@ -8,9 +8,48 @@ import {
     entityHasSyncedContract,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from '../contracts/fidmanSync/FidmanSync';
-import { isValidNipChecksum } from '../contracts/aqmSync/AqmSync';
+import { isValidNipChecksum, normalizeNip } from '../contracts/aqmSync/AqmSync';
 
 export type { EntitiesSearchParams };
+
+/** Dane podmiotu przyjmowane z formularza przy dodawaniu i edycji. */
+type EntityWriteData = {
+    name?: string;
+    shortName?: string;
+    address?: string;
+    taxNumber?: string;
+    regon?: string;
+    krs?: string;
+    www?: string;
+    email?: string;
+    phone?: string;
+};
+
+/**
+ * GUS-1 / D-GUS-5 — NIP wchodzi do zapisu zawsze jako 10 cyfr.
+ *
+ * Powód: TaxNumber ma klucz unikalny, a mimo to 8 par podmiotów na produkcji dzieli
+ * ten sam NIP — jeden wpisano z myślnikami, drugi bez, więc dla bazy to dwa różne
+ * teksty. Bez normalizacji na wejściu REGON i KRS zdublują się tak samo.
+ *
+ * Normalizujemy WYŁĄCZNIE wtedy, gdy po odrzuceniu znaków niebędących cyframi zostaje
+ * dokładnie 10 cyfr. Gołe `replace(/\D/g,'')` zamieniłoby zagraniczny numer „FR-123-XYZ"
+ * na „123", czyli skasowałoby dane podmiotu, który z polskim NIP-em nie ma nic wspólnego.
+ * Numer, którego nie da się odczytać jako polskiego NIP-u, zostaje dokładnie taki, jaki był.
+ *
+ * Brak NIP-u zostaje brakiem: undefined i pusty tekst przechodzą nietknięte, nigdy nie
+ * zamieniają się w ''.
+ *
+ * Normalizacja nie ma wpływu na bramkę isValidNipChecksum w editEntity — ta i tak
+ * normalizuje sobie wejście sama, więc podmioty niebędące stroną umowy synchronizowanej
+ * z FIDmanem edytują się dokładnie jak dotąd.
+ */
+function withNormalizedNip<T extends EntityWriteData>(entityData: T): T {
+    if (!entityData?.taxNumber) return entityData;
+    const digits = normalizeNip(entityData.taxNumber);
+    if (digits.length !== 10) return entityData;
+    return { ...entityData, taxNumber: digits };
+}
 
 export default class EntitiesController extends BaseController<
     Entity,
@@ -50,15 +89,9 @@ export default class EntitiesController extends BaseController<
      * @param entityData - Dane encji do dodania
      * @returns Promise<Entity> - Dodana encja
      */
-    static async add(entityData: {
-        name: string;
-        shortName?: string;
-        address?: string;
-        taxNumber?: string;
-        www?: string;
-        email?: string;
-        phone?: string;
-    }): Promise<Entity> {
+    static async add(
+        entityData: EntityWriteData & { name: string }
+    ): Promise<Entity> {
         const instance = this.getInstance();
         return await instance.addEntity(entityData);
     }
@@ -70,18 +103,12 @@ export default class EntitiesController extends BaseController<
      * @param entityData - Dane encji do dodania
      * @returns Promise<Entity> - Dodana encja
      */
-    private async addEntity(entityData: {
-        name: string;
-        shortName?: string;
-        address?: string;
-        taxNumber?: string;
-        www?: string;
-        email?: string;
-        phone?: string;
-    }): Promise<Entity> {
+    private async addEntity(
+        entityData: EntityWriteData & { name: string }
+    ): Promise<Entity> {
         console.group('EntitiesController.addEntity()');
         try {
-            const entity = new Entity(entityData);
+            const entity = new Entity(withNormalizedNip(entityData));
             // SYNC-P3: no NIP guard here — a brand-new entity has no id yet, so it
             // cannot already be a party of a contract (associations only reference
             // existing entity ids, see ContractEntityController.addAssociations).
@@ -120,16 +147,9 @@ export default class EntitiesController extends BaseController<
      * @param entityData - Dane encji do aktualizacji
      * @returns Promise<Entity> - Zaktualizowana encja
      */
-    static async edit(entityData: {
-        id: number;
-        name?: string;
-        shortName?: string;
-        address?: string;
-        taxNumber?: string;
-        www?: string;
-        email?: string;
-        phone?: string;
-    }): Promise<Entity> {
+    static async edit(
+        entityData: EntityWriteData & { id: number }
+    ): Promise<Entity> {
         const instance = this.getInstance();
         return await instance.editEntity(entityData);
     }
@@ -141,19 +161,12 @@ export default class EntitiesController extends BaseController<
      * @param entityData - Dane encji do aktualizacji
      * @returns Promise<Entity> - Zaktualizowana encja
      */
-    private async editEntity(entityData: {
-        id: number;
-        name?: string;
-        shortName?: string;
-        address?: string;
-        taxNumber?: string;
-        www?: string;
-        email?: string;
-        phone?: string;
-    }): Promise<Entity> {
+    private async editEntity(
+        entityData: EntityWriteData & { id: number }
+    ): Promise<Entity> {
         console.group('EntitiesController.editEntity()');
         try {
-            const entity = new Entity(entityData);
+            const entity = new Entity(withNormalizedNip(entityData));
             if (entity.shortName) {
                 const duplicate = await this.repository.find([
                     { shortName: entity.shortName },
@@ -189,6 +202,8 @@ export default class EntitiesController extends BaseController<
                             'shortName',
                             'address',
                             'taxNumber',
+                            'regon',
+                            'krs',
                             'www',
                             'email',
                             'phone',

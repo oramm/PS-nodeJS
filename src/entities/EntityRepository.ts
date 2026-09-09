@@ -23,6 +23,8 @@ export default class EntityRepository extends BaseRepository<Entity> {
             shortName: row.ShortName,
             address: row.Address,
             taxNumber: row.TaxNumber,
+            regon: row.Regon,
+            krs: row.Krs,
             www: row.Www,
             email: row.Email,
             phone: row.Phone,
@@ -43,6 +45,8 @@ export default class EntityRepository extends BaseRepository<Entity> {
                             Entities.ShortName,
                             Entities.Address,
                             Entities.TaxNumber,
+                            Entities.Regon,
+                            Entities.Krs,
                             Entities.Www,
                             Entities.Email,
                             Entities.Phone
