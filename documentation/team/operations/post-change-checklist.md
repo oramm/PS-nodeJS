@@ -63,6 +63,35 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-09 - GUS_BIR_KEY set on production (GUS-0)
+
+### Scope
+
+- Enabled the GUS BIR lookup (`POST /entities/lookup-nip`, "Pobierz z GUS" button) on production by setting the `GUS_BIR_KEY` config var on `erp-envi` (release v570). No code change.
+
+### Impact
+
+- DB: none.
+- ENV: `GUS_BIR_KEY` added on `erp-envi` (value from the local secret pointer `C:\systems-dev\common-resources\secrets\gus-bir.env`, never in repo/docs).
+- Deploy: config-only release v570.
+
+### Required Actions
+
+- None. FIDman keeps its own dormant lookup until its `.env.prod` gets the same key (separate decision).
+
+### Verification
+
+- Live smoke with agent token: known NIP -> 200 with name/address/REGON/KRS; bad checksum -> 400; valid-but-unknown NIP -> 404.
+
+### Rollback
+
+- `heroku config:unset GUS_BIR_KEY -a erp-envi` (endpoint returns 503 again, nothing else affected).
+
+### Links
+
+- Plan: SB `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md`
+- `src/entities/gusBir/GusBirService.ts`, `src/entities/EntitiesRouters.ts`
+
 ## 2026-09-04 - Persons and accounts: one account write path, role gates on account and person routes (pack PER)
 
 ### Scope
