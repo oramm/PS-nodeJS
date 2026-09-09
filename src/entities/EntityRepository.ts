@@ -234,23 +234,4 @@ export default class EntityRepository extends BaseRepository<Entity> {
         );
         return conditions.join(' AND ');
     }
-
-    private processEntitiesResult(result: any[]): Entity[] {
-        let newResult: Entity[] = [];
-
-        for (const row of result) {
-            const item = new Entity({
-                id: row.Id,
-                name: ToolsDb.sqlToString(row.Name),
-                shortName: ToolsDb.sqlToString(row.ShortName),
-                address: ToolsDb.sqlToString(row.Address),
-                taxNumber: row.TaxNumber,
-                www: row.Www,
-                email: row.Email,
-                phone: row.Phone,
-            });
-            newResult.push(item);
-        }
-        return newResult;
-    }
 }
