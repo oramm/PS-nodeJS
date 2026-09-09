@@ -28,7 +28,7 @@ type EntityWriteData = {
 /**
  * GUS-1 / D-GUS-5 — NIP wchodzi do zapisu zawsze jako 10 cyfr.
  *
- * Powód: TaxNumber ma klucz unikalny, a mimo to 8 par podmiotów na produkcji dzieli
+ * Powód: TaxNumber ma klucz unikalny, a mimo to 4 pary podmiotów na produkcji dzielą (odczyt 2026-09-09)
  * ten sam NIP — jeden wpisano z myślnikami, drugi bez, więc dla bazy to dwa różne
  * teksty. Bez normalizacji na wejściu REGON i KRS zdublują się tak samo.
  *

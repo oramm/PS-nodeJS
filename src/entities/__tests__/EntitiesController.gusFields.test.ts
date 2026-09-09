@@ -3,7 +3,7 @@
  *
  *  1. D-GUS-5: NIP zapisuje się zawsze jako 10 cyfr, niezależnie od tego, czy człowiek
  *     wpisał go z myślnikami czy bez. To jedyne, co sprawia, że klucz unikalny na
- *     TaxNumber cokolwiek znaczy — dziś 8 par podmiotów na produkcji dzieli ten sam NIP
+ *     TaxNumber cokolwiek znaczy — dziś 4 pary podmiotów na produkcji dzielą ten sam NIP
  *     wyłącznie dlatego, że dla bazy „123-456-32-18" i „1234563218" to dwa różne teksty.
  *     Osobno: numer, którego nie da się odczytać jako polskiego NIP-u (zagraniczny, pusty),
  *     ma zostać nietknięty — normalizacja nie ma prawa kasować danych.
