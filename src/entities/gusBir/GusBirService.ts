@@ -86,6 +86,15 @@ function extractKrs(detail: any): string | undefined {
     return krs;
 }
 
+/**
+ * GUS-3 / pułapka P-5 — uchwyt do jednej sesji z rejestrem GUS.
+ *
+ * Biblioteka `bir1` loguje się do GUS przy pierwszym zapytaniu i trzyma sesję (ważną
+ * godzinę) w obiekcie. Typ jest celowo nieprzezroczysty: poza serwisem nikt nie ma
+ * wołać metod `bir1` wprost, uchwyt służy wyłącznie do przekazania go do lookupByNip.
+ */
+export type GusBirSession = { readonly __gusBirSession: unique symbol };
+
 export default class GusBirService {
     /** Brak klucza w env -> lookup jest fail-closed (503 po stronie routera). */
     static isConfigured(): boolean {
@@ -93,17 +102,35 @@ export default class GusBirService {
     }
 
     /**
+     * GUS-3 / pułapka P-5 — otwiera JEDNĄ sesję z rejestrem GUS do wielokrotnego użycia.
+     *
+     * Pojedyncze „Pobierz z GUS" z ekranu tego nie potrzebuje i dalej tworzy sesję samo.
+     * Potrzebuje tego przebieg partiami: bez tego każdy z ~385 podmiotów logowałby się
+     * do GUS osobno, czyli podwajał liczbę wywołań usługi i czas przebiegu.
+     */
+    static openSession(): GusBirSession {
+        if (!this.isConfigured()) throw new GusBirNotConfiguredError();
+        // Lazy require: only touch bir1 (and its GUS SOAP session) when actually configured/called.
+        const Bir = require('bir1').default;
+        return new Bir({ key: Setup.GusBir.key }) as GusBirSession;
+    }
+
+    /**
      * Wyszukuje podmiot po NIP (zakłada, że NIP już przeszedł isValidNipChecksum
      * po stronie routera). Rzuca GusBirNotConfiguredError / GusBirNotFoundError;
      * inne błędy (sieć/GUS) propagują się nienaruszone do routera (-> 500/next).
+     *
+     * `session` (GUS-3): gdy podana, zapytanie idzie istniejącą sesją zamiast otwierać
+     * nową. Pominięta = zachowanie sprzed GUS-3, czyli sesja na jedno zapytanie.
      */
-    static async lookupByNip(nip: string): Promise<GusBirEntity> {
+    static async lookupByNip(
+        nip: string,
+        session?: GusBirSession
+    ): Promise<GusBirEntity> {
         if (!this.isConfigured()) throw new GusBirNotConfiguredError();
 
-        // Lazy require: only touch bir1 (and its GUS SOAP session) when actually configured/called.
-        const Bir = require('bir1').default;
         const { BirError } = require('bir1');
-        const bir = new Bir({ key: Setup.GusBir.key });
+        const bir: any = session ?? this.openSession();
 
         let basic: any;
         try {

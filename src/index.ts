@@ -34,6 +34,7 @@ import {
 import Setup from './setup/Setup';
 import { drainAqmOutbox } from './contracts/aqmSync/AqmSync';
 import { drainFidmanOutbox } from './contracts/fidmanSync/FidmanSync';
+import { runGusSweepUntilDone } from './entities/gusBir/GusSweep';
 
 declare global {
     namespace Express {
@@ -862,6 +863,30 @@ if (process.env.BUGFIX_RETENTION_CRON_ENABLED === 'true') {
             await runBugRetention();
         } catch (error) {
             console.error('[BugFixCron] Retention failed:', error);
+        }
+    });
+}
+
+/**
+ * GUS-3 / D-GUS-3 — miesięczne porównanie całego słownika podmiotów z rejestrem GUS.
+ * Domyślnie 1. dnia miesiąca o 5:30. Podmioty zmieniają nazwy i adresy rzadko, a GUS
+ * aktualizuje rejestr z opóźnieniem tygodni, więc częściej nie ma po co.
+ *
+ * DOMYŚLNIE WYŁĄCZONY. Włączenie na produkcji to osobny checkpoint (GUS-5), po migracji
+ * kolumn GUS na bazie produkcyjnej — dziś ich tam nie ma.
+ *
+ * PUŁAPKA P-2: na Heroku dyno usypia, więc to wyzwolenie może się w danym miesiącu
+ * po prostu nie odbyć. Nic się wtedy nie psuje — kolejka „najdawniej sprawdzone
+ * pierwsze" dogania sama przy następnym wywołaniu, ręcznym albo za miesiąc.
+ */
+if (process.env.GUS_SWEEP_CRON_ENABLED === 'true') {
+    const expr = process.env.GUS_SWEEP_CRON_EXPRESSION || '30 5 1 * *';
+    cron.schedule(expr, async () => {
+        try {
+            const summary = await runGusSweepUntilDone();
+            console.log('[GusSweepCron] przebieg zakończony:', summary);
+        } catch (error) {
+            console.error('[GusSweepCron] przebieg nie powiódł się:', error);
         }
     });
 }

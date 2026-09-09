@@ -7,6 +7,9 @@ import GusBirService, {
     GusBirNotFoundError,
 } from './gusBir/GusBirService';
 import { GUS_ACCEPTABLE_FIELDS } from './gusBir/GusCompare';
+import { runGusSweep } from './gusBir/GusSweep';
+import { buildGusReport } from './gusBir/GusReport';
+import adminPanelGuard from '../Admin/adminPanelGuard';
 
 app.post('/entities', async (req: Request, res: Response, next) => {
     try {
@@ -56,6 +59,59 @@ app.post('/entities/lookup-nip', async (req: Request, res: Response, next) => {
         next(error);
     }
 });
+
+/**
+ * GUS-3 — przebieg całego słownika partiami i zestawienie do sprzątania.
+ *
+ * KOLEJNOŚĆ REJESTRACJI. Obie trasy stoją PRZED trasami z `:id` celowo, choć zmierzone
+ * zachowanie Expressa 4.21 mówi, że kolizji tu nie ma: `/entities/gus/sweep` ma trzy
+ * segmenty, a `/entities/:id/gus/check` cztery, więc żaden wzorzec nie łapie cudzego
+ * adresu (sprawdzone uruchomieniem, nie rozumowaniem — trafiał zawsze właściwy handler).
+ * Kolejność jest tu zabezpieczeniem na przyszłość: gdyby ktoś dopisał `/entities/:id`
+ * albo `/entities/:id/gus`, trasa nazwana wprost dalej wygra.
+ *
+ * DOSTĘP. Obie za bramką panelu administracyjnego — ten sam warunek roli co prefiks
+ * `/admin` (ADMIN albo ENVI_MANAGER), tylko przypięty do trasy, bo adres nie zaczyna się
+ * od `/admin`. Przebieg pyta zewnętrzny rejestr ~385 razy i zapisuje status całemu
+ * słownikowi; to nie jest czynność dla dowolnego zalogowanego pracownika.
+ *
+ * Cron woła runGusSweepUntilDone WPROST (src/index.ts), z pominięciem tej trasy —
+ * harmonogram nie ma sesji, więc nie miałby jak przejść przez bramkę.
+ */
+app.post(
+    '/entities/gus/sweep',
+    adminPanelGuard,
+    async (req: Request, res: Response, next) => {
+        try {
+            const rawLimit = req.body?.limit;
+            const limit =
+                rawLimit === undefined || rawLimit === null
+                    ? undefined
+                    : Number(rawLimit);
+            if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0))
+                return res.status(400).json({
+                    error: 'limit musi być dodatnią liczbą całkowitą',
+                });
+
+            const summary = await runGusSweep(limit);
+            res.json(summary);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+app.get(
+    '/entities/gus/report',
+    adminPanelGuard,
+    async (req: Request, res: Response, next) => {
+        try {
+            res.json(await buildGusReport());
+        } catch (error) {
+            next(error);
+        }
+    }
+);
 
 /**
  * GUS-2 — kody odpowiedzi dla odmowy sprawdzenia albo przyjęcia.
