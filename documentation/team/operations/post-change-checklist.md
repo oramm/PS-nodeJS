@@ -63,6 +63,44 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-09 - GUS entity sync: code complete, DO NOT DEPLOY yet (GUS-1..GUS-4b)
+
+### Scope
+
+- Backend and frontend for the GUS registry comparison are finished and committed **locally only**
+  (PS-nodeJS `main`: `6e759fe`..`b8c6d05`; ENVI.ProjectSite `master`: `694dd13`, `017cec1`).
+- Nothing was changed on production. No migration was run on production. No push was made.
+
+### Required Actions
+
+- **BLOCKER - do not push or deploy either repository until migration
+  `src/entities/migrations/002_add_regon_krs_gus_status.sql` has been applied on production.**
+  The code reads and writes `Entities.Regon`, `Entities.Krs`, `Entities.GusStatus`,
+  `Entities.GusCheckedAt`, `Entities.GusSnapshot`; production has none of these columns, so a
+  deploy before the migration breaks the entity list and entity save. The frontend repo deploys
+  production on push to `master`.
+- Note that a colleague's push to a shared branch carries these commits along with it.
+- Release sequence, gated by owner GO (`G-GUS-2`) with a backup taken first: back up `Entities`
+  -> apply `002` -> verify columns via `information_schema` (the migration ledger can lie) ->
+  push backend and frontend -> first full sweep -> enable `GUS_SWEEP_CRON_ENABLED`.
+
+### Verification
+
+- Local only: frontend `npx vitest run` 535/535, `npx tsc --noEmit` clean, backend `jest src/entities`
+  135/135. Visual review done against the local copy `envikons_myenvi`.
+- Production reads only; the GUS registry was not queried during the closing session.
+
+### Rollback
+
+- Nothing to roll back on production - nothing was changed there. Local migration has a verified
+  `_down` file.
+
+### Links
+
+- `src/entities/migrations/002_add_regon_krs_gus_status.sql`
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md`
+
+
 ## 2026-09-09 - GUS_BIR_KEY set on production (GUS-0)
 
 ### Scope
