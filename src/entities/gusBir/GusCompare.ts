@@ -313,18 +313,86 @@ function citiesAgree(
 }
 
 /**
- * ADRES — różnica jest co do rzeczy, gdy to inny punkt na mapie: inny kod pocztowy
- * albo inna miejscowość. Reszta idzie jako różnica zapisu.
+ * Numery domów z adresu, sprowadzone do wspólnej postaci. „15 lok. 6", „15/6" i „15 m. 6"
+ * mają dać to samo, „nr 2C" to po prostu „2C".
+ *
+ * Zwracany jest sam numer budynku: z ciągu liczb stojących obok siebie liczy się pierwsza,
+ * bo dalsze to mieszkanie („15/6") albo koniec zakresu („11-19"), a o tym, pod którym
+ * budynkiem siedzi podmiot, nic nie mówią. Liczba, przed którą stoi wyraz, zaczyna nowy
+ * ciąg — dzięki temu „ul. 3 Maja 4" daje numery 3 i 4, a nie jeden z nich, i adres z „3
+ * Maja" nie rozjeżdża się z tym samym adresem zapisanym inaczej.
+ *
+ * Pięciocyfrowa liczba to kod pocztowy po normalizacji (35-303 na 35303), nie numer domu.
+ */
+function houseNumbers(value: unknown): string[] {
+    const text = normalizeForCompare(withPlainDashes(value))
+        .replace(/\b\d{5}\b/g, ' ')
+        .replace(/\b(nr|lok|m)\b/g, ' ')
+        // „46 d" i „46D" to ten sam budynek: litera stojąca luzem wraca do numeru
+        .replace(/\b(\d+)\s+([a-z])\b/g, '$1$2');
+    const result: string[] = [];
+    let previousWasNumber = false;
+    for (const token of text.split(/[\s\-/\\]+/).filter(Boolean)) {
+        const isNumber = /^\d+[a-z]?$/.test(token);
+        if (isNumber && !previousWasNumber) result.push(token);
+        previousWasNumber = isNumber;
+    }
+    return result;
+}
+
+/**
+ * Wyrazy nazwy ulicy: adres bez kodu pocztowego, bez numerów i bez nazwy miejscowości
+ * (tej z własnej strony — po drugiej bywa inna konwencja, patrz `citiesAgree`).
+ *
+ * Pojedyncza litera wypada: to inicjał imienia („ul. F.M. Lanciego"), a nie nazwa.
+ */
+function streetWords(value: unknown, ownCities: string[]): string[] {
+    const cityWords = new Set(ownCities.flatMap((city) => city.split(' ')));
+    return significantTokens(withPlainDashes(value)).filter(
+        (token) =>
+            token.length > 1 && !/\d/.test(token) && !cityWords.has(token)
+    );
+}
+
+/**
+ * Skrót wyrazu: „Ks." to „Księcia", „Św." — „Świętego", „gen. ST." — „gen. Stanisława",
+ * „b-pa" — „biskupa". Litery skrótu muszą się ułożyć w kolejności liter pełnego wyrazu;
+ * warunek działa tylko dla najwyżej trzech liter, bo dłuższy wyraz to już nazwa, nie skrót.
+ */
+function isShortFormOf(token: string, word: string): boolean {
+    if (token.length > 3 || word.length <= token.length) return false;
+    let matched = 0;
+    for (const letter of word) if (letter === token[matched]) matched++;
+    return matched === token.length;
+}
+
+/** Czy wszystkie wyrazy z `inner` da się odnaleźć w `outer` (odmiana i skrót w cenie). */
+function wordsContained(inner: string[], outer: string[]): boolean {
+    return inner.every((word) =>
+        outer.some(
+            (other) =>
+                other === word ||
+                isSameStem(other, word) ||
+                isShortFormOf(word, other)
+        )
+    );
+}
+
+/**
+ * ADRES — różnica jest co do rzeczy, gdy to inny punkt na mapie: inny kod pocztowy, inna
+ * miejscowość, inny numer domu albo inna ulica. Reszta idzie jako różnica zapisu.
  *
  * Gdy którejkolwiek ze stron nie da się odczytać kodu ani miejscowości, różnica zostaje
  * istotna: lepiej pokazać za dużo, niż zamieść pod dywan prawdziwą rozbieżność.
  *
- * CZEGO TA REGUŁA ŚWIADOMIE NIE ŁAPIE: ulicy i numeru domu. Podmiot pod inną ulicą
- * w tej samej miejscowości zejdzie do różnicy zapisu. Powód jest zmierzony, nie
- * teoretyczny: 112 z 242 różnic to ta sama miejscowość i ten sam kod przy innym zapisie
- * ulicy, bo rejestr rozwija imiona („Kościuszki" na „Tadeusza Kościuszki"). Żadna mała
- * reguła nie odróżni tego od prawdziwej przeprowadzki, a słownik nazw ulic to nie jest
- * mała reguła.
+ * ULICA — ta sama zasada zawierania, co przy nazwie podmiotu. Rejestr rozwija imię
+ * („Kościuszki" na „Tadeusza Kościuszki"), więc wyrazy jednej strony zawarte w wyrazach
+ * drugiej to różnica zapisu. Nazwy, które nie zawierają się w żadną stronę („Spacerowa"
+ * wobec „Kwiatowa"), mówią o innym miejscu — i to nawet przy zgodnym numerze domu.
+ *
+ * CZEGO TA REGUŁA ŚWIADOMIE NIE ŁAPIE: różnicy tam, gdzie strona wpisała sam numer bez
+ * nazwy ulicy (numeracja wiejska) — nazwa pustej strony zawiera się w czymkolwiek. Numer
+ * domu i tak jest wtedy porównywany.
  */
 function classifyAddress(inPs: string, inGus: string): GusDifferenceKind {
     const psCodes = postalCodes(inPs);
@@ -342,6 +410,24 @@ function classifyAddress(inPs: string, inGus: string): GusDifferenceKind {
 
     if (!intersects(psCodes, gusCodes)) return 'MATERIAL';
     if (!citiesAgree(inPs, inGus, psCities, gusCities)) return 'MATERIAL';
+
+    const psNumbers = houseNumbers(inPs);
+    const gusNumbers = houseNumbers(inGus);
+    if (
+        psNumbers.length > 0 &&
+        gusNumbers.length > 0 &&
+        !intersects(psNumbers, gusNumbers)
+    )
+        return 'MATERIAL';
+
+    const psStreet = streetWords(inPs, psCities);
+    const gusStreet = streetWords(inGus, gusCities);
+    if (
+        !wordsContained(psStreet, gusStreet) &&
+        !wordsContained(gusStreet, psStreet)
+    )
+        return 'MATERIAL';
+
     return 'WORDING';
 }
 

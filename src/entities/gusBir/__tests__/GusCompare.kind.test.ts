@@ -73,6 +73,38 @@ describe('compareWithGus — różnica co do rzeczy zapala DIFF', () => {
         expect(result.status).toBe('DIFF');
     });
 
+    it('rekord 309: ta sama ulica, inny numer domu — to inny budynek', () => {
+        const result = verdict(
+            { address: 'ul. Niepodległości 1, 57-400 Nowa Ruda' },
+            { address: 'ul. Niepodległości 2, 57-400 Nowa Ruda' }
+        );
+        expect(result.status).toBe('DIFF');
+    });
+
+    it('rekord 415: inna ulica w tej samej miejscowości', () => {
+        const result = verdict(
+            { address: 'ul. Spacerowa 4, 05-822 Milanówek' },
+            { address: 'ul. Kwiatowa 6A, 05-822 Milanówek' }
+        );
+        expect(result.status).toBe('DIFF');
+    });
+
+    it('rekord 451: rejestr przeniósł podmiot z numeru we wsi na ulicę w mieście', () => {
+        const result = verdict(
+            { address: 'Lasowice 48, 59-330 Ścinawa' },
+            { address: 'ul. Królowej Jadwigi 2, 59-330 Ścinawa' }
+        );
+        expect(result.status).toBe('DIFF');
+    });
+
+    it('rekord 522: numeracja wiejska „101" wobec „10/1" — dwa różne budynki', () => {
+        const result = verdict(
+            { address: 'Nieszczyce 101, 59-305 Rudna' },
+            { address: '10/1, 59-305 Nieszczyce' }
+        );
+        expect(result.status).toBe('DIFF');
+    });
+
     it('adresu bez kodu pocztowego nie da się ocenić, więc zostaje istotny', () => {
         const result = verdict(
             { address: 'ul. Sławięcicka 19' },
@@ -149,6 +181,54 @@ describe('compareWithGus — sam inny zapis zapala DIFF_MINOR', () => {
                 name: 'LEON SZUTURMA PRZEDSIĘBIORSTWO BUDOWLANE"COMPLEX-BUD"',
                 address: 'ul. Klonowa 4, 55-200 Stanowice',
             }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 489: inicjały imion i „lok." wobec pełnych imion i ukośnika', () => {
+        const result = verdict(
+            { address: 'ul. F.M. Lanciego 15 lok. 6, 02-792 Warszawa' },
+            { address: 'ul. Franciszka Marii Lanciego 15/6, 02-792 Warszawa' }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 199: „nr 2C" wobec „2C/10" — numer mieszkania nie zmienia budynku', () => {
+        const result = verdict(
+            { address: 'ul. Waszczyka nr 2C, 65-664 Zielona Góra' },
+            { address: 'ul. Jerzego Waszczyka 2C/10, 65-664 Zielona Góra' }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 266: rejestr podaje zakres numerów „11-19"', () => {
+        const result = verdict(
+            { address: 'ul Opolska 11, 52-010 Wrocław' },
+            { address: 'ul. Opolska 11-19/1, 52-010 Wrocław' }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 297: litera przy numerze raz doklejona, raz oddzielona spacją', () => {
+        const result = verdict(
+            { address: 'Tarnów Grodkowski 46 d, 49-200 Grodków' },
+            { address: '46D, 49-200 Tarnów Grodkowski' }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 589: skrót „Ks. J." wobec rozwiniętego „Księcia Józefa"', () => {
+        const result = verdict(
+            { address: 'ul. Ks. J. Poniatowskiego 24A, 32-700 Bochnia' },
+            { address: 'ul. Księcia Józefa Poniatowskiego 24A, 32-700 Bochnia' }
+        );
+        expect(result.status).toBe('DIFF_MINOR');
+    });
+
+    it('rekord 290: PS nie ma numeru domu — rejestr mówi więcej, nie co innego', () => {
+        const result = verdict(
+            { address: 'ul. Żołnierzy II AWP, 59-920 Bogatynia' },
+            { address: 'ul. Żołnierzy II AWP 20, 59-920 Bogatynia' }
         );
         expect(result.status).toBe('DIFF_MINOR');
     });
