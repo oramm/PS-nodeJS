@@ -15,6 +15,7 @@ function toGusStatus(value: unknown): GusStatus {
         'NOT_CHECKED',
         'OK',
         'DIFF',
+        'DIFF_MINOR',
         'NOT_FOUND',
         'CLOSED',
         'ERROR',
@@ -156,11 +157,16 @@ export default class EntityRepository extends BaseRepository<Entity> {
      * więc zostaje w bazie dokładnie takie, jakie było.
      *
      * Data sprawdzenia zostaje nietknięta: przyjęcie nie jest nowym pytaniem do GUS-u.
+     *
+     * GUS-4a: `conn` pozwala wykonać ten zapis w cudzej transakcji. Kontroler tego
+     * używa, żeby wiersz kolejki synchronizacji z FIDmanem powstał razem z zapisem
+     * albo wcale (SYNC-P1). Pominięty `conn` = zapis sam dla siebie, jak dotąd.
      */
     async applyGusValues(
         id: number,
         values: Partial<Record<GusAcceptableField, string>>,
-        status: GusStatus
+        status: GusStatus,
+        conn?: mysql.PoolConnection
     ): Promise<void> {
         const setClauses: string[] = [];
         const params: any[] = [];
@@ -179,7 +185,7 @@ export default class EntityRepository extends BaseRepository<Entity> {
             `UPDATE Entities SET ${setClauses.join(', ')} WHERE Id = ?`,
             params
         );
-        await ToolsDb.executeSQL(sql);
+        await ToolsDb.executeSQL(sql, [], conn);
     }
 
     private makeAndConditions(searchParams: EntitiesSearchParams): string {

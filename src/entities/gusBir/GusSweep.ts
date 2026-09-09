@@ -135,7 +135,7 @@ async function countRemaining(): Promise<number> {
 }
 
 function emptyCounters(): GusSweepCounters {
-    return { OK: 0, DIFF: 0, NOT_FOUND: 0, CLOSED: 0, ERROR: 0 };
+    return { OK: 0, DIFF: 0, DIFF_MINOR: 0, NOT_FOUND: 0, CLOSED: 0, ERROR: 0 };
 }
 
 function summaryOf(

@@ -13,11 +13,19 @@
  * prawie każdy podmiot dostałby DIFF i plakietka zamieniłaby się w szum.
  */
 
-/** Słownik stanów kolumny Entities.GusStatus (migracja 002). Pilnuje go kod, nie ENUM. */
+/**
+ * Słownik stanów kolumny Entities.GusStatus (migracja 002). Pilnuje go kod, nie ENUM,
+ * dlatego dopisanie stanu nie wymaga migracji — kolumna to varchar(16).
+ *
+ * GUS-4a: `DIFF` znaczy „jest co najmniej jedna różnica co do rzeczy”, `DIFF_MINOR` —
+ * „tę samą treść rejestr zapisuje inaczej”. Podział wziął się z pomiaru: pierwszy pełny
+ * przebieg dał różnicę przy 242 z 379 podmiotów i plakietka w tej postaci byłaby szumem.
+ */
 export type GusStatus =
     | 'NOT_CHECKED'
     | 'OK'
     | 'DIFF'
+    | 'DIFF_MINOR'
     | 'NOT_FOUND'
     | 'CLOSED'
     | 'ERROR';
@@ -50,16 +58,26 @@ export type GusComparableEntity = {
     krs?: string | null;
 };
 
+/**
+ * GUS-4a — rodzaj różnicy.
+ *
+ * `MATERIAL` — co do rzeczy: rejestr pokazuje inny punkt na mapie albo inny podmiot.
+ * `WORDING` — zapisu: ta sama treść zapisana inaczej (rejestr rozwija imię w nazwie
+ * ulicy, PS trzyma nazwę skróconą, inna interpunkcja, odwrócony porządek adresu).
+ */
+export type GusDifferenceKind = 'MATERIAL' | 'WORDING';
+
 export type GusDifference = {
     field: GusAcceptableField;
     /** Wartość zapisana w PS — tak jak jest, bez normalizacji. */
     inPs: string;
     /** Wartość z rejestru GUS — tak jak przyszła, bez normalizacji. */
     inGus: string;
+    kind: GusDifferenceKind;
 };
 
 export type GusCompareResult = {
-    status: Extract<GusStatus, 'OK' | 'DIFF' | 'CLOSED'>;
+    status: Extract<GusStatus, 'OK' | 'DIFF' | 'DIFF_MINOR' | 'CLOSED'>;
     differences: GusDifference[];
 };
 
@@ -133,6 +151,218 @@ export function isSameAfterNormalization(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * GUS-4a — wyrazy, które nic nie znaczą przy dopasowaniu nazwy: spójniki, przyimki,
+ * skróty adresowe i formy prawne (te po normalizeForCompare są jednym tokenem).
+ */
+const NOISE_TOKENS = new Set([
+    'w', 'we', 'i', 'z', 'ze', 'na', 'do', 'przy', 'oraz', 'nr', 'lok', 'im', 'm',
+    'ul', 'al', 'os', 'pl',
+    'sp', 'spzoo', 'sa', 'spk', 'spj', 'spp', 'sc', 'ska',
+]);
+
+/** Skróty, po których zaczyna się ulica — koniec nazwy miejscowości. */
+const STREET_MARKERS = new Set(['ul', 'al', 'os', 'pl']);
+
+/**
+ * Tekst rozbity na wyrazy. Poza normalizacją do porównania lecą jeszcze ukośniki
+ * i cudzysłowy: w danych zastanych trafiają się w środku nazwy (rekordy 289 i 692)
+ * i bez tego rozbijają wyraz na dwa kawałki, których nigdzie nie da się odnaleźć.
+ */
+function allTokens(value: unknown): string[] {
+    return normalizeForCompare(value)
+        .replace(/[\\/"'`]/g, ' ')
+        .split(/[\s\-–—]+/)
+        .filter((token) => token.length > 0);
+}
+
+/** Same wyrazy znaczące — bez spójników, skrótów adresowych i form prawnych. */
+function significantTokens(value: unknown): string[] {
+    return allTokens(value).filter((token) => !NOISE_TOKENS.has(token));
+}
+
+/** Ten sam wyraz w innej odmianie: „Będzinie" i „Będzin", „Wodociągów" i „Wodociągi". */
+function isSameStem(a: string, b: string): boolean {
+    const shorter = Math.min(a.length, b.length);
+    if (shorter < 5) return false;
+    let common = 0;
+    while (common < shorter && a[common] === b[common]) common++;
+    return common >= 5 && common >= shorter - 3;
+}
+
+/**
+ * Skrótowiec branżowy: „MPWiK" to pierwsze litery „Miejskie Przedsiębiorstwo Wodociągów
+ * i Kanalizacji", „ZWiK" — „Zakład Wodociągów i Kanalizacji". Tak PS zapisuje spory
+ * kawałek słownika i nie jest to wiadomość o innym podmiocie.
+ *
+ * Litery muszą się ułożyć w kolejności słów rejestru; słowa pominięte po drodze nie
+ * przeszkadzają, bo PS skraca nierówno („ZWIK" bez „i").
+ */
+function isAcronymOf(token: string, words: string[]): boolean {
+    if (token.length < 3) return false;
+    let matched = 0;
+    for (const word of words) {
+        if (matched < token.length && word[0] === token[matched]) matched++;
+    }
+    return matched === token.length;
+}
+
+/** Czy wyraz z nazwy w PS da się odnaleźć w tym, co podaje rejestr. */
+function isTokenCovered(
+    token: string,
+    gusNameWords: string[],
+    haystack: string[]
+): boolean {
+    if (haystack.includes(token)) return true;
+    if (haystack.some((word) => isSameStem(word, token))) return true;
+    return isAcronymOf(token, gusNameWords);
+}
+
+/**
+ * NAZWA — różnica jest co do rzeczy, gdy któregoś ze znaczących wyrazów nazwy z PS
+ * nie da się odnaleźć w tym, co podaje rejestr. Wtedy albo pod tym NIP-em siedzi inny
+ * podmiot („INIKO Grupa MGGP", a rejestr mówi „HTS"), albo doszło do zmiany nazwy
+ * prawnej („MPWiK w Krakowie", a rejestr „Wodociągi Miasta Krakowa").
+ *
+ * Odwrotnie: gdy wszystko z PS jest w rejestrze, to rejestr po prostu mówi więcej —
+ * pełna nazwa prawna zamiast skróconej albo handlowej. To jest różnica zapisu.
+ *
+ * Do przeszukania wchodzi też adres z rejestru, bo PS dokleja do nazwy skróconej
+ * miasto siedziby („MPWiK Żywiec") — miasto zgodne z adresem rejestru niczemu nie
+ * przeczy.
+ */
+function classifyName(inPs: string, snapshot: GusSnapshot): GusDifferenceKind {
+    const psWords = significantTokens(inPs);
+    if (psWords.length === 0) return 'WORDING';
+    const gusNameWords = allTokens(snapshot.name);
+    const haystack = [
+        ...significantTokens(snapshot.name),
+        ...significantTokens(snapshot.address),
+    ];
+    return psWords.every((word) => isTokenCovered(word, gusNameWords, haystack))
+        ? 'WORDING'
+        : 'MATERIAL';
+}
+
+/** Mysliniki dlugie na zwykle: kod „34–300” ma znaczyć to samo co „34-300”. */
+function withPlainDashes(value: unknown): string {
+    return String(value ?? '').replace(/[–—]/g, '-');
+}
+
+/** Kody pocztowe z tekstu, sprowadzone do pięciu cyfr (35-303 i 35303 to ten sam kod). */
+function postalCodes(value: unknown): string[] {
+    const found = withPlainDashes(value).match(/\b\d{2}-?\d{3}\b/g) ?? [];
+    return found.map((code) => code.replace('-', ''));
+}
+
+/**
+ * Miejscowości z tekstu adresu: to, co stoi tuż za kodem pocztowym, aż do przecinka,
+ * do początku ulicy albo do pierwszej liczby.
+ *
+ * Zaczepienie o kod pocztowy zamiast o pozycję w tekście jest tu celowe: adres jest
+ * w PS jednym polem i bywa zapisany w obu porządkach — „59-300 Lubin, ul. Rzeźnicza 4"
+ * i „ul. Rzeźnicza 4, 59-300 Lubin" dają tę samą miejscowość. Kodów bywa w polu więcej
+ * niż jeden (dopisek „adres korespond.:"), stąd lista, nie pojedyncza wartość.
+ */
+function cities(value: unknown): string[] {
+    const text = withPlainDashes(value);
+    const result: string[] = [];
+    const pattern = /\b\d{2}-?\d{3}\b([^,;]*)/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+        const words: string[] = [];
+        for (const word of allTokens(match[1])) {
+            if (STREET_MARKERS.has(word) || /\d/.test(word)) break;
+            if (NOISE_TOKENS.has(word)) continue;
+            words.push(word);
+        }
+        if (words.length > 0) result.push(words.join(' '));
+    }
+    return result;
+}
+
+/** Czy zbiory mają część wspólną (z tolerancją na odmianę wyrazu). */
+function intersects(a: string[], b: string[]): boolean {
+    return a.some((x) => b.some((y) => x === y || isSameStem(x, y)));
+}
+
+/**
+ * Czy obie strony mówią o tej samej miejscowości.
+ *
+ * Poza wprost porównaniem miejscowości dopuszczamy jeszcze jeden układ: nazwa
+ * miejscowości z jednej strony stoi gdzie indziej w adresie drugiej strony. Tak wygląda
+ * wieś z pocztą w miasteczku obok — PS pisze „Bystrzyca Dolna 55A, 58-100 Świdnica”
+ * (adres pocztowy), rejestr „55A, 58-100 Bystrzyca Dolna” (miejscowość). To ten sam
+ * punkt na mapie zapisany dwoma konwencjami.
+ *
+ * Ten luz działa wyłącznie przy zgodnym kodzie pocztowym — sprawdzenie kodu idzie
+ * wcześniej i odcina przypadki spod innego adresu.
+ */
+function citiesAgree(
+    inPs: string,
+    inGus: string,
+    psCities: string[],
+    gusCities: string[]
+): boolean {
+    if (intersects(psCities, gusCities)) return true;
+    const psText = normalizeForCompare(inPs);
+    const gusText = normalizeForCompare(inGus);
+    return (
+        gusCities.some((city) => psText.includes(city)) ||
+        psCities.some((city) => gusText.includes(city))
+    );
+}
+
+/**
+ * ADRES — różnica jest co do rzeczy, gdy to inny punkt na mapie: inny kod pocztowy
+ * albo inna miejscowość. Reszta idzie jako różnica zapisu.
+ *
+ * Gdy którejkolwiek ze stron nie da się odczytać kodu ani miejscowości, różnica zostaje
+ * istotna: lepiej pokazać za dużo, niż zamieść pod dywan prawdziwą rozbieżność.
+ *
+ * CZEGO TA REGUŁA ŚWIADOMIE NIE ŁAPIE: ulicy i numeru domu. Podmiot pod inną ulicą
+ * w tej samej miejscowości zejdzie do różnicy zapisu. Powód jest zmierzony, nie
+ * teoretyczny: 112 z 242 różnic to ta sama miejscowość i ten sam kod przy innym zapisie
+ * ulicy, bo rejestr rozwija imiona („Kościuszki" na „Tadeusza Kościuszki"). Żadna mała
+ * reguła nie odróżni tego od prawdziwej przeprowadzki, a słownik nazw ulic to nie jest
+ * mała reguła.
+ */
+function classifyAddress(inPs: string, inGus: string): GusDifferenceKind {
+    const psCodes = postalCodes(inPs);
+    const gusCodes = postalCodes(inGus);
+    const psCities = cities(inPs);
+    const gusCities = cities(inGus);
+
+    if (
+        psCodes.length === 0 ||
+        gusCodes.length === 0 ||
+        psCities.length === 0 ||
+        gusCities.length === 0
+    )
+        return 'MATERIAL';
+
+    if (!intersects(psCodes, gusCodes)) return 'MATERIAL';
+    if (!citiesAgree(inPs, inGus, psCities, gusCities)) return 'MATERIAL';
+    return 'WORDING';
+}
+
+/**
+ * GUS-4a — rodzaj pojedynczej różnicy.
+ *
+ * REGON i KRS zostają zawsze istotne: to numery nadane przez rejestr, więc albo się
+ * zgadzają, albo mówią o innym podmiocie — nie ma tu „innego zapisu tej samej treści".
+ */
+function classifyDifference(
+    field: GusAcceptableField,
+    inPs: string,
+    inGus: string,
+    snapshot: GusSnapshot
+): GusDifferenceKind {
+    if (field === 'name') return classifyName(inPs, snapshot);
+    if (field === 'address') return classifyAddress(inPs, inGus);
+    return 'MATERIAL';
+}
+
+/**
  * Porównuje rekord PS z migawką GUS i wydaje werdykt.
  *
  * Różnicą jest wyłącznie sprzeczność: obie strony mają wartość i te wartości znaczą
@@ -141,9 +371,13 @@ export function isSameAfterNormalization(a: unknown, b: unknown): boolean {
  * dostałby DIFF i plakietka nic by nie mówiła). Puste pole po stronie GUS też nie jest
  * różnicą: rejestr nie zaprzecza temu, czego nie podaje.
  *
- * `CLOSED` bije `DIFF`: gdy GUS podaje datę zakończenia działalności, to jest
- * najważniejsza wiadomość o tym podmiocie. Lista różnic i tak wraca, bo ekran (GUS-4)
- * pokazuje ją obok plakietki.
+ * WERDYKT JEST DWUSTOPNIOWY (GUS-4a, decyzja właściciela 2026-09-09). `DIFF` zapala się
+ * tylko wtedy, gdy jest co najmniej jedna różnica co do rzeczy. Gdy wszystkie różnice są
+ * zapisu, wychodzi `DIFF_MINOR` — cicha lista do jednorazowego przejrzenia, nie alarm.
+ *
+ * `CLOSED` bije jedno i drugie: gdy GUS podaje datę zakończenia działalności, to jest
+ * najważniejsza wiadomość o tym podmiocie. Lista różnic i tak wraca, bo ekran pokazuje
+ * ją obok plakietki.
  */
 export function compareWithGus(
     entity: GusComparableEntity,
@@ -156,13 +390,17 @@ export function compareWithGus(
         const inGus = String(snapshot[field] ?? '').trim();
         if (!inPs || !inGus) continue;
         if (isSameAfterNormalization(inPs, inGus)) continue;
-        differences.push({ field, inPs, inGus });
+        differences.push({
+            field,
+            inPs,
+            inGus,
+            kind: classifyDifference(field, inPs, inGus, snapshot),
+        });
     }
 
     const isClosed = !!String(snapshot.closedAt ?? '').trim();
     if (isClosed) return { status: 'CLOSED', differences };
-    return {
-        status: differences.length > 0 ? 'DIFF' : 'OK',
-        differences,
-    };
+    if (differences.length === 0) return { status: 'OK', differences };
+    const hasMaterial = differences.some((diff) => diff.kind === 'MATERIAL');
+    return { status: hasMaterial ? 'DIFF' : 'DIFF_MINOR', differences };
 }

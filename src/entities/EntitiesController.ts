@@ -239,6 +239,13 @@ export default class EntitiesController extends BaseController<
      * (korespondencyjny, oddział) — wtedy rekord dalej różni się od rejestru i status ma
      * to mówić. Przy pełnym przyjęciu wychodzi z tego OK. Zakończona działalność zostaje
      * zakończoną działalnością niezależnie od tego, co przyjęto.
+     *
+     * GUS-4a — PRZYJĘCIE ZASILA KOLEJKĘ SYNCHRONIZACJI Z FIDmanem. Zapis idzie wąską
+     * instrukcją i omija editEntity, więc bez tego przyjęcie nazwy albo adresu dla
+     * podmiotu będącego stroną umowy synchronizowanej z FIDmanem nigdy by tam nie
+     * dojechało. Wzorzec ten sam co w editEntity (SYNC-P1): wiersz kolejki w TEJ SAMEJ
+     * transakcji co zapis, wysyłka ściśle po commicie, a jej awaria nie ma prawa
+     * wywrócić przyjęcia.
      */
     static async gusAccept(
         id: number,
@@ -287,7 +294,37 @@ export default class EntitiesController extends BaseController<
             ...values,
         };
         const { status, differences } = compareWithGus(afterAccept, snapshot);
-        await instance.repository.applyGusValues(id, values, status);
+
+        // Do FIDmana idzie tylko nazwa i adres. REGON i KRS są po stronie FIDmana
+        // polem własnym i synchronizacja ich nie przenosi, więc przyjęcie samego REGON-u
+        // nie ma czego tam wysłać.
+        //
+        // Bramki NIP-u z editEntity tu NIE MA i być nie może: accept nie zmienia NIP-u,
+        // więc podmiot, który ma w PS numer nie do odczytania, ma się dalej zapisywać
+        // dokładnie tak jak dotąd — inaczej ta zmiana zablokowałaby przyjęcie danych
+        // rekordom, które najbardziej ich potrzebują.
+        const goesToFidman =
+            applied.includes('name') || applied.includes('address');
+        let fidmanOutboxId: number | undefined;
+
+        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            await instance.repository.applyGusValues(id, values, status, conn);
+            if (!goesToFidman) return;
+            if (!(await entityHasSyncedContract(id, conn))) return;
+            // Do kolejki idzie podmiot JUŻ po przyjęciu — stąd przyjęte wartości
+            // nałożone na odczytany rekord.
+            Object.assign(entity, values);
+            fidmanOutboxId = await enqueueFidmanEntityPush(entity, conn);
+        });
+
+        if (fidmanOutboxId !== undefined)
+            await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
+                console.error(
+                    '[FidmanSync] post-commit push (gus accept) error:',
+                    err
+                )
+            );
+
         return { ok: true, id, applied, status, differences };
     }
 

@@ -14,7 +14,10 @@
 --
 -- GusStatus jest NOT NULL DEFAULT 'NOT_CHECKED', bo „jeszcze nie sprawdzano" jest
 --   odpowiedzią, a nie brakiem odpowiedzi — każdy podmiot ma zdefiniowany stan od
---   pierwszej chwili. Słownik wartości: NOT_CHECKED, OK, DIFF, NOT_FOUND, CLOSED, ERROR.
+--   pierwszej chwili. Słownik wartości: NOT_CHECKED, OK, DIFF, DIFF_MINOR, NOT_FOUND,
+--   CLOSED, ERROR. DIFF_MINOR dopisano w GUS-4a bez migracji — mieści się w VARCHAR(16),
+--   a słownika pilnuje kod. Migracja nie weszła jeszcze na produkcję, więc zmienia się
+--   tu tylko komentarz; kopia lokalna ma starą treść komentarza kolumny.
 --   Pilnuje go kod, nie ENUM: dołożenie stanu ma być zmianą kodu, a nie migracją
 --   przebudowującą tabelę. Ten sam wybór co przy WhiteListStatus (costInvoices/004).
 --
@@ -34,7 +37,7 @@ ALTER TABLE Entities
         COMMENT 'Numer KRS (rejestr przedsiebiorcow), 10 cyfr z wiodacymi zerami'
         AFTER Regon,
     ADD COLUMN IF NOT EXISTS GusStatus VARCHAR(16) NOT NULL DEFAULT 'NOT_CHECKED'
-        COMMENT 'Wynik ostatniego porownania z GUS: NOT_CHECKED, OK, DIFF, NOT_FOUND, CLOSED, ERROR'
+        COMMENT 'Wynik ostatniego porownania z GUS: NOT_CHECKED, OK, DIFF, DIFF_MINOR, NOT_FOUND, CLOSED, ERROR'
         AFTER Krs,
     ADD COLUMN IF NOT EXISTS GusCheckedAt DATETIME NULL
         COMMENT 'Kiedy ostatnio porownano podmiot z rejestrem GUS'

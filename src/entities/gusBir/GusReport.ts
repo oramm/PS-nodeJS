@@ -3,10 +3,17 @@ import ToolsDb from '../../tools/ToolsDb';
 import { GusStatus } from './GusCompare';
 
 /**
- * GUS-3 — cztery listy do sprzątania słownika podmiotów.
+ * GUS-3 — listy do sprzątania słownika podmiotów. Od GUS-4a jest ich pięć.
  *
  * Pack GUS, checkpoint GUS-3, zadanie 4:
  *   20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md
+ *
+ * OSOBNA LISTA RÓŻNIC ZAPISU (GUS-4a). `diff` to podmioty, przy których rejestr mówi
+ * coś co do rzeczy — to jest lista do reakcji. `diffMinor` to podmioty, przy których
+ * rejestr zapisuje tę samą treść inaczej (pełna nazwa prawna zamiast skróconej,
+ * rozwinięte imię w nazwie ulicy, odwrócony porządek adresu) — to jest lista do
+ * jednorazowego przejrzenia, nie do pilnowania. Podział wziął się z pomiaru: bez niego
+ * jedna lista miałaby 242 pozycje z 379 sprawdzonych podmiotów.
  *
  * To są dane dla zakładki panelu administracyjnego z GUS-4. Sam odczyt, ani jednego zapisu:
  * co zrobić z duplikatem albo z podmiotem po zakończonej działalności, rozstrzyga człowiek
@@ -39,7 +46,10 @@ export type GusReport = {
     duplicateNips: GusDuplicateGroup[];
     withoutNip: GusReportEntity[];
     closed: GusReportEntity[];
+    /** Różnice co do rzeczy — lista do reakcji. */
     diff: GusReportEntity[];
+    /** Różnice samego zapisu — cicha lista do przejrzenia. */
+    diffMinor: GusReportEntity[];
 };
 
 const ENTITY_COLUMNS = `Entities.Id,
@@ -114,13 +124,15 @@ async function selectDuplicateNips(): Promise<GusDuplicateGroup[]> {
 }
 
 export async function buildGusReport(): Promise<GusReport> {
-    const [duplicateNips, withoutNip, closed, diff] = await Promise.all([
-        selectDuplicateNips(),
-        selectEntities(
-            `(Entities.TaxNumber IS NULL OR TRIM(Entities.TaxNumber) = '')`
-        ),
-        selectByStatus('CLOSED'),
-        selectByStatus('DIFF'),
-    ]);
-    return { duplicateNips, withoutNip, closed, diff };
+    const [duplicateNips, withoutNip, closed, diff, diffMinor] =
+        await Promise.all([
+            selectDuplicateNips(),
+            selectEntities(
+                `(Entities.TaxNumber IS NULL OR TRIM(Entities.TaxNumber) = '')`
+            ),
+            selectByStatus('CLOSED'),
+            selectByStatus('DIFF'),
+            selectByStatus('DIFF_MINOR'),
+        ]);
+    return { duplicateNips, withoutNip, closed, diff, diffMinor };
 }

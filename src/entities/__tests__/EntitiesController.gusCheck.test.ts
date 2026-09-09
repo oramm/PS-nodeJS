@@ -11,6 +11,10 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 jest.mock('../../tools/ToolsDb');
+// GUS-4a: przyjęcie danych chodzi teraz w transakcji i zagląda do kolejki FIDmana.
+// Tu sprawdzamy sam zapis, więc synchronizacja jest zamockowana na głucho; ma własny
+// plik testów (EntitiesController.gusAcceptFidman.test.ts).
+jest.mock('../../contracts/fidmanSync/FidmanSync');
 jest.mock('../gusBir/GusBirService', () => {
     const actual = jest.requireActual('../gusBir/GusBirService') as any;
     return {
@@ -62,6 +66,9 @@ describe('EntitiesController.gusCheck — zapisuje werdykt, nie dane podmiotu (G
         jest.clearAllMocks();
         (GusBirService.isConfigured as jest.Mock).mockReturnValue(true);
         (ToolsDb.executeSQL as any).mockResolvedValue({});
+        (ToolsDb.transaction as jest.Mock).mockImplementation(
+            async (cb: any) => cb({} as any)
+        );
         mockEntityRow(ENVI_ROW);
     });
 
