@@ -24,6 +24,12 @@ export type GusBirEntity = {
     address: string;
     regon?: string;
     krs?: string;
+    /**
+     * GUS-2: data zakończenia działalności z rejestru (pusta = podmiot działa).
+     * GUS podaje ją przy wyszukaniu, a dla osób prawnych powtarza w pełnym raporcie —
+     * raport jest świeższy, więc gdy go pobrano i coś w nim jest, ma pierwszeństwo.
+     */
+    closedAt?: string;
 };
 
 export class GusBirNotConfiguredError extends Error {
@@ -64,6 +70,12 @@ export function buildAddress(fields: AddressFields): string {
         .join(' ')
         .trim();
     return [street, cityLine].filter((v) => v && v.trim()).join(', ');
+}
+
+/** Pusty tekst i same białe znaki znaczą tu „GUS nic nie podał", nie „wartość pusta". */
+function textOrUndefined(raw: unknown): string | undefined {
+    const text = String(raw ?? '').trim();
+    return text ? text : undefined;
 }
 
 /** True gdy KRS znaczy faktycznie KRS (rejestr przedsiębiorców), nie inny rejestr/ewidencja GUS. */
@@ -109,6 +121,9 @@ export default class GusBirService {
             miejscowosc: basic?.Miejscowosc,
         };
         let krs: string | undefined;
+        let closedAt: string | undefined = textOrUndefined(
+            basic?.DataZakonczeniaDzialalnosci
+        );
 
         // Detailed report only for legal entities (head office, 9-digit REGON) —
         // that's where GUS carries the registry/KRS number; sole traders never
@@ -126,6 +141,9 @@ export default class GusBirService {
                     };
                 }
                 krs = extractKrs(detail);
+                closedAt =
+                    textOrUndefined(detail?.praw_dataZakonczeniaDzialalnosci) ??
+                    closedAt;
             } catch {
                 // Report failure (transient GUS glitch etc.) -> keep the search() address, no KRS.
             }
@@ -136,6 +154,7 @@ export default class GusBirService {
             address: buildAddress(addressFields),
             regon: basic?.Regon ? String(basic.Regon).trim() : undefined,
             krs,
+            closedAt,
         };
     }
 }

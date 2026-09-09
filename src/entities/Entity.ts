@@ -1,5 +1,6 @@
 import BusinessObject from '../BussinesObject';
 import { EntityData } from '../types/types';
+import type { GusSnapshot, GusStatus } from './gusBir/GusCompare';
 
 export default class Entity extends BusinessObject implements EntityData {
     id?: number;
@@ -15,6 +16,19 @@ export default class Entity extends BusinessObject implements EntityData {
     email?: string;
     phone?: string;
     bankAccountNumber?: string | null;
+    /**
+     * GUS-2 — wynik ostatniego porównania z rejestrem GUS, migawka odpowiedzi i data
+     * sprawdzenia. Te trzy pola ustawia WYŁĄCZNIE EntityRepository przy odczycie z bazy
+     * i zapisuje wyłącznie EntityRepository.updateGusResult / applyGusSnapshot.
+     *
+     * Celowo NIE są brane z initParamObject: konstruktor obsługuje też dane z formularza,
+     * a addInDb zapisuje każdy zdefiniowany atrybut. Gdyby konstruktor je przepisywał,
+     * front mógłby ustawić dowolny status i migawkę przy zwykłym zapisie podmiotu — a to
+     * łamie D-GUS-1 („GUS proponuje, człowiek przyjmuje", i tylko trasą /gus/accept).
+     */
+    gusStatus?: GusStatus;
+    gusCheckedAt?: Date | null;
+    gusSnapshot?: GusSnapshot | null;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Entities' });

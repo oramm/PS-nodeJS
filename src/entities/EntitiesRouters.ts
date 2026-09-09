@@ -6,6 +6,7 @@ import GusBirService, {
     GusBirNotConfiguredError,
     GusBirNotFoundError,
 } from './gusBir/GusBirService';
+import { GUS_ACCEPTABLE_FIELDS } from './gusBir/GusCompare';
 
 app.post('/entities', async (req: Request, res: Response, next) => {
     try {
@@ -52,6 +53,77 @@ app.post('/entities/lookup-nip', async (req: Request, res: Response, next) => {
         if (error instanceof GusBirNotFoundError) {
             return res.status(404).json({ error: error.message });
         }
+        next(error);
+    }
+});
+
+/**
+ * GUS-2 — kody odpowiedzi dla odmowy sprawdzenia albo przyjęcia.
+ * 404 nieznany podmiot, 400 nie ma o co zapytać albo nie ma czego przyjąć,
+ * 503 brak klucza GUS (fail-closed, tak samo jak przy /entities/lookup-nip).
+ */
+const GUS_REFUSAL_HTTP_STATUS: Record<string, number> = {
+    ENTITY_NOT_FOUND: 404,
+    NO_USABLE_NIP: 400,
+    GUS_NOT_CONFIGURED: 503,
+    NO_SNAPSHOT: 400,
+    NO_FIELDS: 400,
+};
+
+/** Numer podmiotu ze ścieżki; cokolwiek innego niż liczba dodatnia to 400. */
+function parseEntityId(raw: unknown): number | undefined {
+    const id = Number(raw);
+    return Number.isInteger(id) && id > 0 ? id : undefined;
+}
+
+// GUS-2: pyta rejestr GUS o ten jeden podmiot i zapisuje SAM werdykt.
+// Nazwa i adres podmiotu nie są tu dotykane (D-GUS-1) — od tego jest /gus/accept niżej.
+app.post('/entities/:id/gus/check', async (req: Request, res: Response, next) => {
+    try {
+        const id = parseEntityId(req.params.id);
+        if (!id)
+            return res
+                .status(400)
+                .json({ error: 'Nieprawidłowy numer podmiotu w adresie' });
+
+        const result = await EntitiesController.gusCheck(id);
+        if (!result.ok)
+            return res
+                .status(GUS_REFUSAL_HTTP_STATUS[result.reason] ?? 400)
+                .json({ error: result.message, reason: result.reason });
+        res.json(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// GUS-2 / D-GUS-1: jedyna droga, którą dane z GUS wchodzą do podmiotu.
+// Body: { fields: ['name', 'address', 'regon', 'krs'] } — przepisywane są tylko te wskazane.
+app.post('/entities/:id/gus/accept', async (req: Request, res: Response, next) => {
+    try {
+        const id = parseEntityId(req.params.id);
+        if (!id)
+            return res
+                .status(400)
+                .json({ error: 'Nieprawidłowy numer podmiotu w adresie' });
+
+        const requested = Array.isArray(req.body?.fields) ? req.body.fields : [];
+        const fields = GUS_ACCEPTABLE_FIELDS.filter((field) =>
+            requested.includes(field)
+        );
+        if (fields.length === 0)
+            return res.status(400).json({
+                error: 'Nie wskazano żadnego pola do przyjęcia (dozwolone: name, address, regon, krs)',
+                reason: 'NO_FIELDS',
+            });
+
+        const result = await EntitiesController.gusAccept(id, fields);
+        if (!result.ok)
+            return res
+                .status(GUS_REFUSAL_HTTP_STATUS[result.reason] ?? 400)
+                .json({ error: result.message, reason: result.reason });
+        res.json(result);
+    } catch (error) {
         next(error);
     }
 });

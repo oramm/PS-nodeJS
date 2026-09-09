@@ -9,8 +9,55 @@ import {
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from '../contracts/fidmanSync/FidmanSync';
 import { isValidNipChecksum, normalizeNip } from '../contracts/aqmSync/AqmSync';
+import GusBirService, {
+    GusBirNotConfiguredError,
+    GusBirNotFoundError,
+} from './gusBir/GusBirService';
+import {
+    compareWithGus,
+    GUS_ACCEPTABLE_FIELDS,
+    GusAcceptableField,
+    GusDifference,
+    GusSnapshot,
+    GusStatus,
+} from './gusBir/GusCompare';
 
 export type { EntitiesSearchParams };
+
+/** Powód, dla którego sprawdzenia albo przyjęcia nie da się wykonać. Router tłumaczy go na kod HTTP. */
+export type GusRefusalReason =
+    | 'ENTITY_NOT_FOUND'
+    | 'NO_USABLE_NIP'
+    | 'GUS_NOT_CONFIGURED'
+    | 'NO_SNAPSHOT'
+    | 'NO_FIELDS';
+
+export type GusRefusal = {
+    ok: false;
+    reason: GusRefusalReason;
+    message: string;
+};
+
+export type GusCheckResult =
+    | {
+          ok: true;
+          id: number;
+          status: GusStatus;
+          checkedAt: Date;
+          snapshot: GusSnapshot | null;
+          differences: GusDifference[];
+      }
+    | GusRefusal;
+
+export type GusAcceptResult =
+    | {
+          ok: true;
+          id: number;
+          applied: GusAcceptableField[];
+          status: GusStatus;
+          differences: GusDifference[];
+      }
+    | GusRefusal;
 
 /** Dane podmiotu przyjmowane z formularza przy dodawaniu i edycji. */
 type EntityWriteData = {
@@ -79,6 +126,169 @@ export default class EntitiesController extends BaseController<
     ): Promise<Entity[]> {
         const instance = this.getInstance();
         return await instance.repository.find(searchParams);
+    }
+
+    // ==================== GUS: sprawdzenie i przyjęcie ====================
+    /**
+     * GUS-2 — pyta rejestr GUS o jeden podmiot, porównuje odpowiedź z tym, co jest w PS,
+     * i zapisuje sam werdykt.
+     *
+     * D-GUS-1: nazwa, adres, REGON i KRS podmiotu NIE są tu dotykane, choćby GUS podawał
+     * co innego. Zmienia je dopiero człowiek, trasą /gus/accept. Zapis idzie wąską
+     * instrukcją EntityRepository.updateGusResult, która wymienia z nazwy tylko trzy
+     * kolumny wyniku porównania.
+     *
+     * Awaria GUS-u (sieć, przerwa w usłudze) kończy się statusem ERROR i niczym więcej —
+     * fail-open, tak samo jak w Białej liście KAS: zewnętrzny rejestr nie ma prawa
+     * zepsuć rekordu w PS. Poprzednia migawka zostaje wtedy nietknięta.
+     *
+     * Brak klucza GUS to nie jest awaria rejestru, tylko brak konfiguracji, dlatego nie
+     * zapisuje ERROR-a: cały słownik dostałby fałszywy stan przez jedną pustą zmienną.
+     */
+    static async gusCheck(id: number): Promise<GusCheckResult> {
+        const instance = this.getInstance();
+        const entity = (await instance.repository.find([{ id }]))[0];
+        if (!entity)
+            return {
+                ok: false,
+                reason: 'ENTITY_NOT_FOUND',
+                message: `Nie ma podmiotu o numerze ${id}`,
+            };
+
+        const nip = normalizeNip(entity.taxNumber);
+        if (!isValidNipChecksum(nip))
+            return {
+                ok: false,
+                reason: 'NO_USABLE_NIP',
+                message: entity.taxNumber
+                    ? `Podmiot „${entity.name}" ma wpisany numer „${entity.taxNumber}", którego nie da się odczytać jako polskiego NIP-u. GUS wyszukuje wyłącznie po poprawnym NIP-ie, więc nie ma o co zapytać.`
+                    : `Podmiot „${entity.name}" nie ma NIP-u. GUS wyszukuje wyłącznie po numerze, więc nie ma o co zapytać.`,
+            };
+
+        if (!GusBirService.isConfigured())
+            return {
+                ok: false,
+                reason: 'GUS_NOT_CONFIGURED',
+                message:
+                    'Wyszukiwanie GUS nie jest skonfigurowane (brak GUS_BIR_KEY)',
+            };
+
+        const checkedAt = new Date();
+        try {
+            const found = await GusBirService.lookupByNip(nip);
+            const snapshot: GusSnapshot = {
+                name: found.name,
+                address: found.address,
+                regon: found.regon,
+                krs: found.krs,
+                closedAt: found.closedAt,
+            };
+            const { status, differences } = compareWithGus(entity, snapshot);
+            await instance.repository.updateGusResult(id, {
+                status,
+                checkedAt,
+                snapshot,
+            });
+            return { ok: true, id, status, checkedAt, snapshot, differences };
+        } catch (error) {
+            if (error instanceof GusBirNotConfiguredError)
+                return {
+                    ok: false,
+                    reason: 'GUS_NOT_CONFIGURED',
+                    message: error.message,
+                };
+            if (error instanceof GusBirNotFoundError) {
+                // Rejestr nie zna tego NIP-u — stara migawka jest nieaktualna, więc znika.
+                await instance.repository.updateGusResult(id, {
+                    status: 'NOT_FOUND',
+                    checkedAt,
+                    snapshot: null,
+                });
+                return {
+                    ok: true,
+                    id,
+                    status: 'NOT_FOUND',
+                    checkedAt,
+                    snapshot: null,
+                    differences: [],
+                };
+            }
+            console.error('[GusCheck] awaria zapytania do GUS:', error);
+            // Fail-open: sam status, migawka bez zmian (pominięta w instrukcji UPDATE).
+            await instance.repository.updateGusResult(id, {
+                status: 'ERROR',
+                checkedAt,
+            });
+            return {
+                ok: true,
+                id,
+                status: 'ERROR',
+                checkedAt,
+                snapshot: entity.gusSnapshot ?? null,
+                differences: [],
+            };
+        }
+    }
+
+    /**
+     * GUS-2 / D-GUS-1 — przepisuje z zapisanej migawki WYŁĄCZNIE pola wskazane w żądaniu.
+     * To jedyna droga, którą dane z GUS wchodzą do podmiotu.
+     *
+     * Status po przyjęciu nie jest wpisywany na sztywno, tylko liczony jeszcze raz dla
+     * rekordu po zmianie. Człowiek może przyjąć samą nazwę i zostawić adres celowo inny
+     * (korespondencyjny, oddział) — wtedy rekord dalej różni się od rejestru i status ma
+     * to mówić. Przy pełnym przyjęciu wychodzi z tego OK. Zakończona działalność zostaje
+     * zakończoną działalnością niezależnie od tego, co przyjęto.
+     */
+    static async gusAccept(
+        id: number,
+        fields: GusAcceptableField[]
+    ): Promise<GusAcceptResult> {
+        const instance = this.getInstance();
+        const entity = (await instance.repository.find([{ id }]))[0];
+        if (!entity)
+            return {
+                ok: false,
+                reason: 'ENTITY_NOT_FOUND',
+                message: `Nie ma podmiotu o numerze ${id}`,
+            };
+
+        const snapshot = entity.gusSnapshot;
+        if (!snapshot)
+            return {
+                ok: false,
+                reason: 'NO_SNAPSHOT',
+                message: `Podmiot „${entity.name}" nie ma zapisanej odpowiedzi z GUS — najpierw sprawdź go w rejestrze, potem przyjmuj.`,
+            };
+
+        const values: Partial<Record<GusAcceptableField, string>> = {};
+        for (const field of GUS_ACCEPTABLE_FIELDS) {
+            if (!fields.includes(field)) continue;
+            const value = String(snapshot[field] ?? '').trim();
+            // Rejestr nie podał tej wartości — przyjęcie pustki skasowałoby dane z PS.
+            if (!value) continue;
+            values[field] = value;
+        }
+
+        const applied = Object.keys(values) as GusAcceptableField[];
+        if (applied.length === 0)
+            return {
+                ok: false,
+                reason: 'NO_FIELDS',
+                message:
+                    'Nie wskazano żadnego pola do przyjęcia albo GUS nie podał dla wskazanych pól żadnej wartości.',
+            };
+
+        const afterAccept = {
+            name: entity.name,
+            address: entity.address,
+            regon: entity.regon,
+            krs: entity.krs,
+            ...values,
+        };
+        const { status, differences } = compareWithGus(afterAccept, snapshot);
+        await instance.repository.applyGusValues(id, values, status);
+        return { ok: true, id, applied, status, differences };
     }
 
     // ==================== CREATE ====================
