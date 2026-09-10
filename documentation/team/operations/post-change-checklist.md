@@ -63,43 +63,51 @@ Copy the block below for each new change:
 
 ## Active Entries
 
-## 2026-09-09 - GUS entity sync: code complete, DO NOT DEPLOY yet (GUS-1..GUS-4b)
+## 2026-09-10 - GUS entity sync released to production (GUS-5)
 
 ### Scope
 
-- Backend and frontend for the GUS registry comparison are finished and committed **locally only**
-  (PS-nodeJS `main`: `6e759fe`..`b8c6d05`; ENVI.ProjectSite `master`: `694dd13`, `017cec1`).
-- Nothing was changed on production. No migration was run on production. No push was made.
+- Migration `src/entities/migrations/002_add_regon_krs_gus_status.sql` applied on kylos; backend `6420821` deployed
+  (Heroku v571, `migrate verify passed`); frontend `017cec1` deployed (GitHub Pages).
+- First full sweep of the entity dictionary run on a one-off dyno (`runGusSweepUntilDone`): 416 checked, 21 batches,
+  remaining 0. Monthly cron enabled.
+- Owner decision D-GUS-5 executed: entities 773 and 714 got their own NIP (via `PUT /entity/:id`); entities 299 and
+  38 had `TaxNumber` set to NULL directly in the DB (the edit route skips an empty `taxNumber` and still answers
+  with `null` - see Known issues).
+
+### Impact
+
+- DB (production): `Entities.Regon`, `Entities.Krs`, `Entities.GusStatus`, `Entities.GusCheckedAt`,
+  `Entities.GusSnapshot` added (`SchemaMigrations` Id 67, `AppliedBy=oram`, `ExecutionMillis=326`, verified in
+  `information_schema`); 416 rows got a GUS verdict; 4 rows changed `TaxNumber`.
+- ENV: `GUS_SWEEP_CRON_ENABLED=true` on `erp-envi` (release v572); `GUS_SWEEP_CRON_EXPRESSION` left at default.
+- Deploy: backend v571 (code), v572 (config); frontend Pages run for `017cec1`.
 
 ### Required Actions
 
-- **BLOCKER - do not push or deploy either repository until migration
-  `src/entities/migrations/002_add_regon_krs_gus_status.sql` has been applied on production.**
-  The code reads and writes `Entities.Regon`, `Entities.Krs`, `Entities.GusStatus`,
-  `Entities.GusCheckedAt`, `Entities.GusSnapshot`; production has none of these columns, so a
-  deploy before the migration breaks the entity list and entity save. The frontend repo deploys
-  production on push to `master`.
-- Note that a colleague's push to a shared branch carries these commits along with it.
-- Release sequence, gated by owner GO (`G-GUS-2`) with a backup taken first: back up `Entities`
-  -> apply `002` -> verify columns via `information_schema` (the migration ledger can lie) ->
-  push backend and frontend -> first full sweep -> enable `GUS_SWEEP_CRON_ENABLED`.
+- None for release. Backlog (vault, PS.APP.01): empty GUS answer is classified `OK` (entity 776); edit route cannot
+  clear a NIP; entity 670 has a NIP with a bad checksum; five test entities sit in `ERROR`.
 
 ### Verification
 
-- Local only: frontend `npx vitest run` 535/535, `npx tsc --noEmit` clean, backend `jest src/entities`
-  135/135. Visual review done against the local copy `envikons_myenvi`.
-- Production reads only; the GUS registry was not queried during the closing session.
+- Backup before schema change: `C:\systems-dev\ps-enviackups\kylos-przed-gus5-20260910-1021.sql` (12.9 MB,
+  104 tables, `Dump completed`).
+- Pre-push gates: backend `jest src/entities` 135/135, frontend `tsc` clean + `vitest` 535/535.
+- Smoke with agent token: `POST /entities` 200, 497 rows carrying `gusStatus`; `POST /entities/776/gus/check` 200.
+- Status distribution read from DB after the sweep: DIFF_MINOR 157, OK 151, DIFF 94, NOT_CHECKED 82, CLOSED 6,
+  ERROR 6, NOT_FOUND 2; zero NIP duplicates.
 
 ### Rollback
 
-- Nothing to roll back on production - nothing was changed there. Local migration has a verified
-  `_down` file.
+- Code: revert to Heroku v570 / previous Pages build. Schema: `002_add_regon_krs_gus_status_down.sql` (drops the five
+  columns, loses verdicts) plus deleting the `SchemaMigrations` row - only after a fresh backup. NIP changes: values
+  before the change are in the backup above (773 `896-13-08-068`, 714 `753-23-91-051`, 299 `6750000065`, 38 `8733218153`).
+- Cron: `heroku config:unset GUS_SWEEP_CRON_ENABLED -a erp-envi`.
 
 ### Links
 
-- `src/entities/migrations/002_add_regon_krs_gus_status.sql`
-- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md`
-
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-progress.md`
+- `src/entities/gusBir/GusSweep.ts`, `src/entities/EntitiesRouters.ts`
 
 ## 2026-09-09 - GUS_BIR_KEY set on production (GUS-0)
 
