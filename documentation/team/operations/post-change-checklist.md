@@ -90,7 +90,7 @@ Copy the block below for each new change:
 
 ### Verification
 
-- Backup before schema change: `C:\systems-dev\ps-enviackups\kylos-przed-gus5-20260910-1021.sql` (12.9 MB,
+- Backup before schema change: `C:\systems-dev\ps-envi\backups\kylos-przed-gus5-20260910-1021.sql` (12.9 MB,
   104 tables, `Dump completed`).
 - Pre-push gates: backend `jest src/entities` 135/135, frontend `tsc` clean + `vitest` 535/535.
 - Smoke with agent token: `POST /entities` 200, 497 rows carrying `gusStatus`; `POST /entities/776/gus/check` 200.
