@@ -63,6 +63,49 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-10 - REGON/KRS clearing on entity edit (REG-1)
+
+### Scope
+
+- `PUT /entity/:id` with an empty `regon` or `krs` now clears the column (NULL). Same defect the GPO pack fixed
+  for `taxNumber`: the Entity constructor skips a field it has nothing to fill, and the UPDATE is built from the
+  fields present on the object, so an empty form field meant "leave alone", not "clear".
+- The single-field NIP helper is gone: one rule now covers all three numbers (taxNumber, regon, krs).
+- Frontend untouched - the entity modal already submits a cleared field as an empty value.
+
+### Impact
+
+- DB: none (no migration, no schema change; per-record data change only when a user clears a number).
+- ENV: none.
+- Deploy: backend `d07e616` -> Heroku **v578** (`succeeded`, current). Frontend not deployed - nothing changed
+  there. Owner gave GO 2026-09-10.
+
+### Required Actions
+
+- None. REGON and KRS are not part of the FIDman entity payload (verified by reading the payload builder), so
+  no downstream system needs a re-push. No production data needs repair: this fixes future writes only.
+
+### Verification
+
+- Negative control red before the fix (4 of 6 cases in `EntitiesController.clearRegonKrs.test.ts`), green after.
+- Gates: backend `tsc` clean, `jest src/entities` 155/155 (149 before this pack); frontend `tsc` clean.
+  `EntitiesController.clearNip.test.ts` still green with no change to its assertions.
+- Clearing proven on local `envikons_myEnvi` by DB read after a real `PUT /entity/749`: Regon `000529820` -> NULL,
+  Krs `0000123456` -> NULL, TaxNumber and Name untouched; clearing only `regon` leaves `krs` in place. Test record
+  restored afterwards (whole table back to 0 entities with REGON or KRS).
+- Post-release smoke on production (read-only): `POST /entities` with the agent token -> HTTP 200, 498 entities.
+- Pre-existing `check:cycles` failures (8 cycles, all in ScrumSheet/persons/contracts) are untouched by this
+  commit - it adds no imports outside its own test file.
+
+### Rollback
+
+- Code only: revert the commit and redeploy. Nothing to undo in the DB or the environment.
+
+### Links
+
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-10-reg-czyszczenie-regonu-i-krs-progress.md`
+- `src/entities/EntitiesController.ts`, `src/entities/Entity.ts`, `src/types/types.d.ts`
+
 ## 2026-09-10 - GUS multi-record lookup + NIP clearing + GUS status filter (GPO-1..GPO-3)
 
 ### Scope
@@ -105,7 +148,7 @@ Copy the block below for each new change:
 
 ### Links
 
-- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-10-gpo-poprawki-po-packu-gus-progress.md`
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/archive/2026-09-10-gpo-poprawki-po-packu-gus-progress.md`
 - `src/entities/gusBir/GusBirService.ts`, `src/entities/EntitiesController.ts`, `src/entities/EntityRepository.ts`
 
 ## 2026-09-10 - GUS entity sync released to production (GUS-5)
