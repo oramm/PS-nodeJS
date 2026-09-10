@@ -7,8 +7,8 @@ trasy: zamkniecie zakletego kregu "zeby zainstalowac SB, musisz juz miec dostep 
 SB konfiguruje").
 
 - Zrodlo: `envi-konsulting/ENVI.SB.Rdzen`, `bootstrap/`
-- Commit, z ktorego pochodzi ta kopia: `216dcab220bf90ebf54e9d100c00a579cd19f8ac`
-- Skopiowano: 2026-08-27
+- Commit, z ktorego pochodzi ta kopia: `b98b5a5`
+- Skopiowano: 2026-09-10 (wydanie rdzenia 0.13.0)
 
 **Uwaga z 2026-08-27.** Ta kopia stala rozjechana od 2026-08-21 (`bootstrap.ps1` mniejszy
 o 8,6 kB). Skutek byl gorszy niz sama nieaktualnosc: straznik ponizej rzuca wyjatkiem, wyjatek

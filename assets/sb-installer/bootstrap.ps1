@@ -485,6 +485,13 @@ function Write-N3PullLauncher {
   # lives under $env:USERPROFILE, which is space-free for essentially every real account.
   param([string]$Path)
   $body = @(
+    # B3: jedna linia, ktora zdejmuje cala klase awarii "zadanie w tle wisi w nieskonczonosc":
+    # bez niej git przy wygaslych poswiadczeniach czeka na wpisanie hasla, ktorego w ukrytym
+    # oknie nikt nie wpisze. Z nia git konczy sie bledem, ktory ladnie w logu.
+    "`$env:GIT_TERMINAL_PROMPT = '0'"
+    # Menedzer poswiadczen Gita (GCM) wystawia WLASNE okno logowania i o GIT_TERMINAL_PROMPT
+    # nie wie - w ukrytym zadaniu nikt go nie zobaczy, wiec proces wisi (zmierzone w Z8).
+    "`$env:GCM_INTERACTIVE = 'never'"
     "if (-not (Test-Path -LiteralPath '$VaultPath\.git')) { return }"
     "New-Item -ItemType Directory -Force -Path '$VaultPath\.envi' | Out-Null"
     "git -C '$VaultPath' pull --ff-only *>> '$LogFile'"
@@ -496,7 +503,11 @@ function Write-N3PullLauncher {
 
 function Invoke-StepN3 {
   Log "[N3] scheduled auto-pull step starting"
-  $launcherArgs = '-WindowStyle Hidden -NoProfile -File "{0}"' -f $PullLauncher
+  # -ExecutionPolicy Bypass: na swiezym Windows 11 zasada wykonywania to Restricted, wiec
+  # `powershell.exe -File launcher.ps1` konczy sie kodem 1 i zadanie jest martwe (zmierzone
+  # 2026-09-08). Ten sam wzorzec ma juz skrot ikony w N3b. Bypass nie wnosi cudzyslowow,
+  # wiec re-parsowanie `schtasks /tr` (patrz komentarz przy Write-N3PullLauncher) zostaje bez zmian.
+  $launcherArgs = '-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $PullLauncher
   $trCmd = "powershell.exe $launcherArgs"
 
   if ($PSCmdlet.ShouldProcess($PullLauncher, 'write hidden git-pull launcher script')) {
@@ -531,7 +542,76 @@ function Invoke-StepN3 {
     Log "[N3] at-logon shortcut written: $lnkPath"
   }
 
+  # P2: rola 'konsument' nie ma obszaru projektowego, wiec JEDYNYM jej pierwszym przebiegiem
+  # jest pobranie kanonu. Team dostaje swoj pierwszy przebieg w N3b (silnik).
+  $roleN3 = if ($script:InstallRoleResult) { $script:InstallRoleResult.Role } else { 'consumer' }
+  if ($roleN3 -ne 'team' -and $PSCmdlet.ShouldProcess($PullLauncher, 'uruchom pobranie kanonu raz, synchronicznie')) {
+    Log "[N3] pierwsze pobranie kanonu - startuje i czekam"
+    $wynikPull = Wait-ProcesBezPytaniaOHaslo -Argumenty @('-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PullLauncher))
+    Log ("[N3] pierwsze pobranie kanonu zakonczone ({0})" -f $wynikPull)
+  }
+
   Log "[N3] scheduled auto-pull step done"
+}
+
+# -- B3: uruchomienie procesu, ktory NIE MA PRAWA wisiec na pytaniu o haslo --
+function Wait-ProcesBezPytaniaOHaslo {
+  # Pierwsze pobranie kanonu i pierwszy przebieg silnika wolaja gita w UKRYTYM oknie. Gdy
+  # poswiadczenia wygasly, git czeka na haslo, ktorego nikt tam nie wpisze - proces stoi do
+  # konca limitu, a instalator do 2026-09-09 czytal potem ExitCode ZYWEGO procesu i pisal
+  # do logu "(kod )", czyli nic. Trzy rzeczy naraz: zmienne srodowiskowe, ktore proces
+  # potomny dziedziczy i przez ktore git konczy sie bledem zamiast pytac; ubicie WYLACZNIE
+  # tego jednego procesu po numerze, gdy limit minie; i zdanie w logu, ktore mowi prawde.
+  param([string[]]$Argumenty, [int]$LimitSek = 300)
+  $stare = @{}
+  foreach ($n in @('GIT_TERMINAL_PROMPT', 'GCM_INTERACTIVE')) { $stare[$n] = [Environment]::GetEnvironmentVariable($n) }
+  $env:GIT_TERMINAL_PROMPT = '0'
+  $env:GCM_INTERACTIVE = 'never'
+  try {
+    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $Argumenty -WindowStyle Hidden -PassThru
+    $p | Wait-Process -Timeout $LimitSek -ErrorAction SilentlyContinue
+    if (-not $p.HasExited) {
+      # Drzewo, nie jeden proces: pod powershell.exe siedza git.exe, git-remote-https i GCM,
+      # a Stop-Process zabija wylacznie rodzica i zostawia wnuki wiszace na oknie hasla.
+      & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null
+      return ("przerwano po {0} s" -f $LimitSek)
+    }
+    return ("kod {0}" -f $p.ExitCode)
+  } finally {
+    foreach ($n in @($stare.Keys)) { [Environment]::SetEnvironmentVariable($n, $stare[$n]) }
+  }
+}
+
+# -- P2: dwa odczyty, z ktorych zyje podsumowanie. Oba pytaja SYSTEM, nie instalator. --
+function Test-RezydentDziala {
+  # Fakt = proces powershell, ktorego wiersz polecenia nazywa TEN plik rezydenta. Sciezka
+  # jednoznaczna, wiec piaskownica ze swoja kopia nie widzi rezydenta produkcyjnego i odwrotnie.
+  param([string]$TrayPath)
+  try {
+    return [bool](@(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($TrayPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count)
+  } catch { return $false }
+}
+function Get-StanPrzebiegu {
+  # B3a: pole 'zapisano' jest stemplem POCZATKU przebiegu - silnik zapisuje stan zaraz po
+  # starcie (project-sync.ps1, Write-State -Faza 'zainicjowana'), wiec sama ta godzina NIE
+  # mowi, ze przebieg sie udal. Faze oddajemy razem z godzina i to wyzej decyduje, co
+  # pokazac czlowiekowi. Brak pliku = nie bylo przebiegu.
+  param([string]$StatePath)
+  if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) { return $null }
+  $s = $null
+  try { $s = Get-Content -LiteralPath $StatePath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
+  if (-not $s) { return $null }
+  return @{ Czas = [string]$s.zapisano; Faza = [string]$s.faza; Opis = [string]$s.faza_opis }
+}
+
+function Get-StanCzas {
+  # Godzina przebiegu WYLACZNIE dla stanu koncowego 'udana'. Kazda inna faza to przebieg,
+  # ktory sie nie zakonczyl, i wtedy godzina bylaby nieprawda w miejscu, ktore ma ja mowic.
+  param([string]$StatePath)
+  $s = Get-StanPrzebiegu -StatePath $StatePath
+  if ($s -and $s.Faza -eq 'udana') { return $s.Czas }
+  return $null
 }
 
 # -- N3b: project-area sync (repo B), team role only, idempotent, added in T6 --
@@ -616,7 +696,12 @@ function Write-SyncRunLauncher {
   # only the -Manual switch differs between the two callers (task: without, shortcut: with).
   param([string]$Path, [string]$EnginePath, [string]$RepoPath)
   $body = @(
-    'param([switch]$Manual)'
+    # Te same dwie linie, co w Write-N3PullLauncher: silnik project-sync.ps1 sam ich NIE
+    # ustawia (sprawdzone odczytem), a GCM wystawia wlasne okno niezaleznie od
+    # GIT_TERMINAL_PROMPT - w ukrytym zadaniu nikt go nie zobaczy (zmierzone w Z8).
+    'param([switch]$Manual)'   # param() MUSI byc pierwsza instrukcja skryptu
+    "`$env:GIT_TERMINAL_PROMPT = '0'"
+    "`$env:GCM_INTERACTIVE = 'never'"
     "& '$EnginePath' -RepoPath '$RepoPath' -Manual:`$Manual"
   ) -join "`r`n"
   $dir = Split-Path $Path -Parent
@@ -767,14 +852,19 @@ function Write-ZnakEnviIco {
   }
 }
 
-function Invoke-StepN3b {
-  Log "[N3b] synchronizacja obszaru projektowego (repo B) - start"
-  $role = if ($script:InstallRoleResult) { $script:InstallRoleResult.Role } else { 'consumer' }
-  if ($role -ne 'team') {
-    Log "[N3b] rola: konsument - synchronizacja obszaru projektowego nie dotyczy tej roli, nic nie robie"
-    Log "[N3b] synchronizacja obszaru projektowego - koniec"
-    return
-  }
+function Install-RdzenZDysku {
+  # B1: rdzen z paczki na Dysku instaluje sie dla OBU rol, i to jest cala roznica wobec
+  # reszty N3b. Konsument dostaje silnik na dysk WYLACZNIE po to, zeby N5 mogl go wolac
+  # z -TylkoSkille - bez tego rola 'konsument' nie dostawala skilli w ogole. Konsument nie
+  # dostaje ani zadania w harmonogramie, ani rezydenta, ani pierwszego przebiegu silnika.
+  # (Skutek nazwany wprost i swiadomy: samoaktualizacja rdzenia z N6 u konsumenta nie
+  # chodzi, bo nie ma zadania, ktore by ja odpalalo.)
+  #
+  # D4: sync-config.yaml powstaje TUTAJ, a nie dopiero w N5. Powod: pierwszy przebieg
+  # silnika (nizej w N3b) czytal konfiguracje, ktorej N5 jeszcze nie zapisal, i zostawial
+  # w stanie "skille: 0 / 0 (brak konfiguracji celow)" az do nastepnej godziny. Ten sam
+  # warunek "nie nadpisuj prawdziwej konfiguracji" - jedna funkcja, wolana stad i z N5.
+  # Zwraca $true, gdy rdzen jest na dysku i mozna isc dalej.
 
   # N4: rdzen przyjezdza z paczki na Dysku (D-2). Katalog wydan lezy obok .skills,
   # ktory N1 juz odnalazl na tej maszynie - bez niego nie ma skad brac rdzenia.
@@ -782,8 +872,7 @@ function Invoke-StepN3b {
   if (-not $coreRoot) {
     if (-not $script:SkillDriveRoot -or -not (Test-Path -LiteralPath $script:SkillDriveRoot)) {
       Log "[N3b] Dysk Google nie jest osiagalny, a rdzen przyjezdza wlasnie stamtad - pomijam podmiane rdzenia, obecna wersja zostaje nietknieta. Zaloguj sie do Dysku i uruchom bootstrap.cmd jeszcze raz."
-      Log "[N3b] synchronizacja obszaru projektowego - koniec"
-      return
+      return $false
     }
     $coreRoot = Join-Path (Split-Path $script:SkillDriveRoot -Parent) '.rdzen'
   }
@@ -791,16 +880,12 @@ function Invoke-StepN3b {
   $manifest = Get-RdzenManifest -CoreRoot $coreRoot
   if (-not $manifest) {
     Log "[N3b] nie widze wydania rdzenia w '$coreRoot' - pomijam podmiane rdzenia, obecna wersja zostaje nietknieta"
-    Log "[N3b] synchronizacja obszaru projektowego - koniec"
-    return
+    return $false
   }
   Log "[N3b] wydanie rdzenia na Dysku: $($manifest.wersja) (paczka $($manifest.paczka), wydane $($manifest.data))"
 
   $rozpakowane = Expand-RdzenPaczka -CoreRoot $coreRoot -Manifest $manifest
-  if (-not $rozpakowane) {
-    Log "[N3b] synchronizacja obszaru projektowego - koniec"
-    return
-  }
+  if (-not $rozpakowane) { return $false }
 
   # DWA pliki, nie jeden: silnik szuka rezydenta ikony obok siebie ($PSScriptRoot),
   # a do 2026-08-21 nie instalowal go nikt - maszyna dostawala silnik bez ikony,
@@ -861,6 +946,25 @@ function Invoke-StepN3b {
     Log "[N3b] manifest zainstalowanego rdzenia zapisany: $manifestLokalny (zrodlo wydan: $coreRoot)"
   }
 
+  # D4: konfiguracja celow skilli MUSI istniec przed pierwszym przebiegiem silnika nizej.
+  Set-EnviSyncConfigJesliTrzeba -SourceG $script:SkillDriveRoot -Skad 'N3b'
+  return $true
+}
+
+function Invoke-StepN3b {
+  Log "[N3b] rdzen z Dysku i synchronizacja obszaru projektowego - start"
+  if (-not (Install-RdzenZDysku)) {
+    Log "[N3b] rdzen z Dysku i synchronizacja obszaru projektowego - koniec"
+    return
+  }
+  $enviDir = Split-Path $SyncEnginePath -Parent
+  $role = if ($script:InstallRoleResult) { $script:InstallRoleResult.Role } else { 'consumer' }
+  if ($role -ne 'team') {
+    Log "[N3b] rola: konsument - rdzen jest na dysku (N5 wola go po skille), ale zadanie w tle, skroty, rezydent ikony i przebieg silnika nie dotycza tej roli"
+    Log "[N3b] rdzen z Dysku i synchronizacja obszaru projektowego - koniec"
+    return
+  }
+
   if ($PSCmdlet.ShouldProcess($SyncRunLauncher, 'zapisz launcher project-sync-run.ps1 (schtasks-safe -File launcher, D4)')) {
     Write-SyncRunLauncher -Path $SyncRunLauncher -EnginePath $SyncEnginePath -RepoPath $ProjectsClonePath
     Log "[N3b] launcher zapisany: $SyncRunLauncher"
@@ -869,7 +973,7 @@ function Invoke-StepN3b {
   # Periodic sync: schtasks.exe HOURLY trigger, WITHOUT -Manual (D4) - the scheduled/automatic
   # path the engine itself gates on mass-change and contact-data checks. Non-elevated, /f =
   # idempotent overwrite, same mechanism as N3's own periodic task above.
-  $syncLauncherArgs = '-WindowStyle Hidden -NoProfile -File "{0}"' -f $SyncRunLauncher
+  $syncLauncherArgs = '-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $SyncRunLauncher
   $syncTrCmd = "powershell.exe $syncLauncherArgs"
   $syncAction = "schtasks /create /tn $SyncTaskName /tr <hidden -File sync launcher> /sc HOURLY /mo $SyncEveryHours /f"
   if ($PSCmdlet.ShouldProcess($SyncTaskName, $syncAction)) {
@@ -896,7 +1000,7 @@ function Invoke-StepN3b {
   # 1607 and Win11 keeps it blocked, and the alternative (writing the opaque Taskband registry
   # blob + restarting explorer.exe on an employee's machine) is exactly the kind of fragile
   # trick this installer avoids. The summary below tells the user the two clicks instead.
-  $manualArgs = '-WindowStyle Hidden -NoProfile -File "{0}" -Manual' -f $SyncRunLauncher
+  $manualArgs = '-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}" -Manual' -f $SyncRunLauncher
 
   # W5: znak ENVI zamiast systemowej ikonki Windows. Plik rysowany tuz przed skrotami, zeby
   # ponowny przebieg instalatora odswiezyl go razem z nimi (idempotentnie, nadpisaniem).
@@ -969,24 +1073,57 @@ function Invoke-StepN3b {
     Log "[N3b] nie znalazlem folderu Autostart - ikona wstanie dopiero przy przebiegu silnika, jak dotad"
   }
 
-  Log "[N3b] synchronizacja obszaru projektowego - koniec"
+  # -- P2: pierwszy start - rezydent ikony i jeden przebieg silnika --
+  # ZAMEK SPRAWDZONY ODCZYTEM, NIE ZALOZONY: sb-tray.ps1 liczy nazwe muteksu z MD5 sciezki
+  # pliku stanu ('Local\ENVI-SB-Tray-<hash>', sb-tray.ps1:151-156) i drugi egzemplarz na tym
+  # samym pliku stanu albo konczy sie kodem 3, albo przejmuje ikone po starszym kodzie.
+  # Instalator nie musi wiec sam liczyc procesow: wystarczy uruchomic i poczekac NA FAKT.
+  if ($PSCmdlet.ShouldProcess($trayPath, 'uruchom rezydenta ikony i poczekaj, az proces bedzie widoczny')) {
+    if (Test-Path -LiteralPath $trayPath) {
+      if (Test-RezydentDziala -TrayPath $trayPath) {
+        Log "[N3b] rezydent ikony juz dziala - nie uruchamiam drugiego"
+      } else {
+        Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $trayPath), '-StatePath', ('"{0}"' -f $trayStan)) -WindowStyle Hidden | Out-Null
+        $doKiedy = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $doKiedy -and -not (Test-RezydentDziala -TrayPath $trayPath)) { Start-Sleep -Milliseconds 500 }
+        Log ("[N3b] rezydent ikony po starcie: {0}" -f $(if (Test-RezydentDziala -TrayPath $trayPath) { 'dziala' } else { 'NIE WSTAL w 30 s' }))
+      }
+    } else {
+      Log "[N3b] nie ma pliku rezydenta ($trayPath) - ikony nie ma czym uruchomic"
+    }
+  }
+  if ($PSCmdlet.ShouldProcess($SyncRunLauncher, 'uruchom silnik raz, synchronicznie, i poczekaj na plik stanu')) {
+    Log "[N3b] pierwszy przebieg silnika - startuje i czekam (do 5 min)"
+    $wynikSync = Wait-ProcesBezPytaniaOHaslo -Argumenty @('-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $SyncRunLauncher))
+    Log ("[N3b] proces pierwszego przebiegu: {0}" -f $wynikSync)
+    # B3a: godzina TYLKO dla stanu koncowego; kazda inna faza to przebieg, ktory sie nie zakonczyl.
+    $stanPrzebiegu = Get-StanPrzebiegu -StatePath $trayStan
+    $czasPrzebiegu = if (-not $stanPrzebiegu) { 'nie bylo - plik stanu nie powstal' }
+                     elseif ($stanPrzebiegu.Faza -eq 'udana') { $stanPrzebiegu.Czas }
+                     else { "nie zakonczyl sie ({0})" -f $stanPrzebiegu.Opis }
+    Log ("[N3b] pierwszy przebieg: {0}" -f $czasPrzebiegu)
+  }
+
+  Log "[N3b] rdzen z Dysku i synchronizacja obszaru projektowego - koniec"
 }
 
 # -- N4: Obsidian shortcut + vault separation, idempotent --
-# ponytail: shortcut targets explorer.exe with an obsidian://open?path=<encoded path> URI
+# ponytail: shortcut targets explorer.exe with an obsidian://open?vault=...&file=_index URI
 # argument - the standard non-admin trick for firing a registered protocol handler from a
 # .lnk (a .lnk's TargetPath normally expects a real file-system path, not a URL; explorer.exe
 # accepts a URL argument and hands it to ShellExecute, which resolves the protocol). This
 # avoids hardcoding Obsidian.exe's install path, which varies by Squirrel-installer version
-# under %LOCALAPPDATA%\Obsidian\. Vault registration in obsidian.json is attempted only if
-# that file already exists (Obsidian has run at least once on this machine); if absent,
-# registration is skipped on purpose - the obsidian://open?path= URI registers the vault
-# itself the first time it is opened, so nothing is lost by not hand-authoring the file.
+# under %LOCALAPPDATA%\Obsidian\. The vault= form resolves the vault BY NAME, so obsidian.json
+# registration below is not optional garnish - it is what makes this URI resolvable at all
+# (see the block in Invoke-StepN4, which creates obsidian.json when Obsidian never ran).
 # Ceiling: Start Menu only, no desktop shortcut (plan says Start Menu is enough).
 function Get-ObsidianVaultUri {
   # non-mutating: builds the URI string only, safe under -WhatIf
   param([string]$Path)
-  return 'obsidian://open?path=' + [uri]::EscapeDataString($Path)
+  # vault= + file= (nie path=): otwiera vault OD RAZU na notatce startowej. Nazwa vaultu to
+  # nazwa folderu; file= bez rozszerzenia .md, tak jak dokumentuje to Obsidian.
+  $vaultName = Split-Path $Path.TrimEnd([char]92) -Leaf
+  return 'obsidian://open?vault=' + [uri]::EscapeDataString($vaultName) + '&file=_index'
 }
 
 function New-N4VaultId {
@@ -1036,7 +1173,13 @@ function Invoke-StepN4 {
 
   # Start Menu shortcut (per-user, non-admin safe - same folder class as N3's Startup shortcut)
   $startMenuDir = [Environment]::GetFolderPath('Programs')
-  $lnkPath = Join-Path $startMenuDir 'ENVI Kanon (Obsidian).lnk'
+  # Stara nazwa ("Kanon") sugerowala folder, ktorego nie ma - kasujemy ja idempotentnie.
+  $lnkStary = Join-Path $startMenuDir 'ENVI Kanon (Obsidian).lnk'
+  if (Test-Path -LiteralPath $lnkStary) {
+    Remove-Item -LiteralPath $lnkStary -Force
+    Log "[N4] usunieto stary skrot: $lnkStary"
+  }
+  $lnkPath = Join-Path $startMenuDir 'ENVI Second Brain.lnk'
   if ($PSCmdlet.ShouldProcess($lnkPath, "create/update Start Menu shortcut opening $VaultPath as an Obsidian vault")) {
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($lnkPath)
@@ -1271,89 +1414,18 @@ function New-EnviSyncConfig {
   $configDir = Split-Path $ConfigPath -Parent
   if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
   # Reuses N4's Set-JsonFileNoBom: it is just a BOM-less text writer, not JSON-specific -
-  # the same BOM caution applies to YAML read by Python's `open(..., encoding="utf-8")`.
+  # the same BOM caution applies to the YAML read by the sync engine (P3).
   Set-JsonFileNoBom -LiteralPath $ConfigPath -Content (($lines -join "`n") + "`n")
 }
 
-function Get-SyncSkillsScript {
-  # ponytail: the sync TOOL is itself one of the packages it syncs - `envi-skill-sync.skill`
-  # sits in $SkillDriveRoot next to every other .skill (verified: the ZIP carries
-  # scripts/sync-skills.py, _frontmatter.py, semver_compare.py). So a standalone installer
-  # copy needs no extra distribution channel: unzip that one package to TEMP and run it from
-  # there. This closes the old N7 "sync-skills.py not found" gap without shipping a second
-  # copy that could drift from the released one.
-  # Ceiling: the staged copy is throwaway - real skills still land in the configured targets;
-  # nothing on this path is kept or version-tracked.
-  $inVault = Join-Path $PSScriptRoot '..\..\..\..\.claude\skills\envi-skill-sync\scripts\sync-skills.py'
-  if (Test-Path -LiteralPath $inVault) {
-    Log "[N5] using sync-skills.py from the vault this installer ships inside of"
-    return (Resolve-Path -LiteralPath $inVault).Path
-  }
-
-  $pkg = Join-Path $SkillDriveRoot 'envi-skill-sync.skill'
-  if (-not (Test-Path -LiteralPath $pkg)) {
-    Log "[N5] WARNING: envi-skill-sync.skill not found in '$SkillDriveRoot' - skills sync skipped this run"
-    return $null
-  }
-  # -WhatIf:$false na calym stagingu, i to nie jest obejscie kontroli: pod -WhatIf
-  # Copy-Item nie kopiowal, a Expand-Archive i tak probowal rozpakowac nieistniejacy plik,
-  # wiec KAZDY suchy przebieg instalatora umieral tutaj - instalatora nie dalo sie
-  # sprawdzic inaczej niz uruchamiajac go na zywej maszynie. Katalog jest jednorazowy,
-  # w TEMP, i nie zmienia niczego na maszynie uzytkownika.
-  $stage = Join-Path $env:TEMP 'envi-skill-sync-bootstrap'
-  if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }
-  New-Item -ItemType Directory -Path $stage -Force -WhatIf:$false | Out-Null
-  # Expand-Archive only accepts a .zip extension, and a .skill IS a zip - copy, then expand.
-  $zip = Join-Path $stage 'envi-skill-sync.zip'
-  Copy-Item -LiteralPath $pkg -Destination $zip -Force -WhatIf:$false
-  Expand-Archive -LiteralPath $zip -DestinationPath $stage -Force -WhatIf:$false
-  $staged = Join-Path $stage 'scripts\sync-skills.py'
-  if (-not (Test-Path -LiteralPath $staged)) {
-    Log "[N5] WARNING: envi-skill-sync.skill unpacked but scripts\sync-skills.py is missing - skills sync skipped this run"
-    return $null
-  }
-  Log "[N5] sync tooling bootstrapped from $pkg"
-  return $staged
-}
-
-function Install-PythonIfMissing {
-  # ponytail: probe by RUNNING python, not by Get-Command. Windows ships a Microsoft Store
-  # execution alias named python.exe that Get-Command happily finds but which only opens the
-  # Store - a false positive that would make the sync fail in a confusing way. sync-skills.py
-  # needs no third-party package (its frontmatter parser is PyYAML-first with a stdlib
-  # fallback), so a bare interpreter is enough.
-  $ver = & { python --version 2>&1 }
-  if ($LASTEXITCODE -eq 0 -and "$ver" -match 'Python 3') {
-    Log "[N5] $ver present"
-    return $true
-  }
-  $label = 'Python 3 (Python.Python.3.12)'
-  if (-not $PSCmdlet.ShouldProcess($label, 'winget install --id Python.Python.3.12')) { return $false }
-  Log "[N5] python not usable - installing $label ..."
-  winget install --id Python.Python.3.12 --exact --silent --accept-package-agreements --accept-source-agreements
-  if ($LASTEXITCODE -ne 0) {
-    Log "[N5] WARNING: winget install for $label exited $LASTEXITCODE - skills sync skipped this run"
-    return $false
-  }
-  Sync-PathFromRegistry
-  $ver = & { python --version 2>&1 }
-  if ($LASTEXITCODE -eq 0 -and "$ver" -match 'Python 3') {
-    Log "[N5] $ver installed"
-    return $true
-  }
-  Log "[N5] WARNING: python still not usable after install - skills sync skipped this run (re-run bootstrap.cmd, a new shell picks up PATH)"
-  return $false
-}
-
-function Invoke-N5SkillsSync {
-  if (-not (Test-Path -LiteralPath $SkillDriveRoot)) {
-    Log "[N5] Google Drive skills path not reachable: '$SkillDriveRoot'. Sign in to Google Drive with the ENVI account that holds the skills folder, then re-run bootstrap.cmd. (Full sign-in checklist = N6.) Skills sync skipped this run - idempotent, not a hard fail."
-    return
-  }
-  Log "[N5] skills source reachable: $SkillDriveRoot"
-
-  $enviHome = Join-Path $env:USERPROFILE '.envi'
-  $syncConfigPath = Join-Path $enviHome 'sync-config.yaml'
+function Set-EnviSyncConfigJesliTrzeba {
+  # D4: JEDEN dom warunku "nie nadpisuj prawdziwej konfiguracji". Wolane dwa razy - z N3b
+  # (zeby pierwszy przebieg silnika mial juz cele skilli; do 2026-09-09 konfiguracja
+  # powstawala dopiero w N5, wiec stan po instalacji mowil "skille: 0 / 0 (brak
+  # konfiguracji celow)" az do nastepnej godziny) i z N5 (bo Dysk mogl pojawic sie po
+  # drodze). Drugie wywolanie nie ma nic do roboty, gdy pierwsze zapisalo.
+  param([string]$SourceG, [string]$Skad = 'N5')
+  $syncConfigPath = Join-Path (Join-Path $env:USERPROFILE '.envi') 'sync-config.yaml'
   # A config left by an EARLIER bootstrap may carry the old blank 'claude:' path. Treat that
   # as "not configured yet" and rewrite it, so an employee who already ran the installer once
   # gets the fix on the next run instead of being told to edit YAML by hand. A config with a
@@ -1375,36 +1447,58 @@ function Invoke-N5SkillsSync {
       $legacyPattern = '(?m)^\s*claude:[ \t]*\r?\n[ \t]*path:[ \t]*' + [regex]::Escape($legacySkillsPath) + '[ \t]*\r?$'
       if ($existing -match $legacyPattern) {
         $needsConfig = $true
-        Log "[N5] $syncConfigPath still points 'claude:' at the retired pre-T3 vault ($legacySkillsPath) - treating as stale, will rewrite"
+        Log "[$Skad] $syncConfigPath still points 'claude:' at the retired pre-T3 vault ($legacySkillsPath) - treating as stale, will rewrite"
       }
     }
   }
   if (-not $needsConfig) {
-    Log "[N5] $syncConfigPath already configured - skip config generation"
-  } else {
-    $target = $syncConfigPath
-    $action = "write sync-config.yaml (source_g=$SkillDriveRoot, claude=$VaultPath\.claude\skills, codex+copilot enabled)"
-    if ($PSCmdlet.ShouldProcess($target, $action)) {
-      New-EnviSyncConfig -ConfigPath $syncConfigPath -SourceG $SkillDriveRoot -VaultForSkills $VaultPath
-      Log "[N5] wrote $syncConfigPath (claude target = $VaultPath\.claude\skills)"
-    }
-  }
-
-  $syncScript = Get-SyncSkillsScript
-  if (-not $syncScript) { return }
-  if (-not (Install-PythonIfMissing)) {
+    Log "[$Skad] $syncConfigPath already configured - skip config generation"
     return
   }
-  $target = 'skills sync (sync-skills.py)'
-  $action = "python `"$syncScript`""
+  if (-not $SourceG) {
+    Log "[$Skad] nie znam sciezki skilli na Dysku - konfiguracji celow nie zapisuje w tym przebiegu"
+    return
+  }
+  $action = "write sync-config.yaml (source_g=$SourceG, claude=$VaultPath\.claude\skills, codex+copilot enabled)"
+  if ($PSCmdlet.ShouldProcess($syncConfigPath, $action)) {
+    New-EnviSyncConfig -ConfigPath $syncConfigPath -SourceG $SourceG -VaultForSkills $VaultPath
+    Log "[$Skad] wrote $syncConfigPath (claude target = $VaultPath\.claude\skills)"
+  }
+}
+
+
+function Invoke-N5SkillsSync {
+  if (-not (Test-Path -LiteralPath $SkillDriveRoot)) {
+    Log "[N5] Google Drive skills path not reachable: '$SkillDriveRoot'. Sign in to Google Drive with the ENVI account that holds the skills folder, then re-run bootstrap.cmd. (Full sign-in checklist = N6.) Skills sync skipped this run - idempotent, not a hard fail."
+    return
+  }
+  Log "[N5] skills source reachable: $SkillDriveRoot"
+
+  Set-EnviSyncConfigJesliTrzeba -SourceG $SkillDriveRoot -Skad 'N5'
+
+  # P3: skille kopiuje SILNIK (project-sync.ps1 -TylkoSkille), a nie Python.
+  # Powod: swiezy Windows 11 ma pod nazwa `python` atrape ze sklepu, ktora otwiera
+  # Store zamiast wykonac skrypt - a rdzen i tak jedzie na kazda maszyne.
+  if (-not (Test-Path -LiteralPath $SyncEnginePath)) {
+    Log "[N5] sync engine not installed yet ('$SyncEnginePath') - skills sync skipped this run"
+    return
+  }
+  $target = 'skills sync (project-sync.ps1 -TylkoSkille)'
+  $action = "powershell -File `"$SyncEnginePath`" -TylkoSkille -SkillDriveRoot `"$SkillDriveRoot`""
   if ($PSCmdlet.ShouldProcess($target, $action)) {
     Log "[N5] running skills sync ..."
-    python $syncScript
-    if ($LASTEXITCODE -ne 0) {
-      Log "[N5] WARNING: sync-skills.py exited $LASTEXITCODE"
-    } else {
-      Log "[N5] skills sync done"
+    $out = & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath `
+             -TylkoSkille -SkillDriveRoot $SkillDriveRoot 2>&1
+    foreach ($linia in @($out)) { Log "[N5] $linia" }
+    $m = [regex]::Match(($out -join "`n"), 'SKILLE-PODSUMOWANIE zainstalowane=(\d+) na_dysku=(\d+)')
+    # D1: OBIE liczby z tego samego zrodla. Silnik liczy: zainstalowane = paczki, ktore po
+    # kroku sa w porzadku we WSZYSTKICH swoich wlaczonych celach na tej maszynie; na_dysku =
+    # paczki majace tu co najmniej jeden cel. Liczenie katalogow w vaultcie dawalo "35 / 33".
+    if ($m.Success) {
+      $script:SkilleZainstalowane = [int]$m.Groups[1].Value
+      $script:SkilleNaDysku = [int]$m.Groups[2].Value
     }
+    Log "[N5] skills sync done (szczegoly per skill w project-sync.log)"
   }
 }
 
@@ -1537,6 +1631,45 @@ if ($sumRole -eq 'team') {
 Log ("Skille na Dysku Google:            {0}  [{1}]" -f $SkillDriveRoot, $(if ($sumSkills) { 'OK' } else { 'BRAK' }))
 Log ("Skille w Twoim vaultcie:           {0} szt." -f $vaultSkillCount)
 Log ("Obsidian - vaulty zarejestrowane:  {0}" -f $(if ($sumObsidian) { 'OK' } else { 'BRAK' }))
+# P2: trzy linie odczytane z systemu po zakonczeniu krokow, nie z tego, co kroki zamierzaly.
+$sumEnviDir = Split-Path $SyncEnginePath -Parent
+# B2: rezydent ikony i silnik sa CZESCIA ROLI 'czlonek zespolu'. Konsument nie dostaje ich
+# z zalozenia (patrz Install-RdzenZDysku), wiec linia "Ikona ... nie" i pozycja "do zrobienia"
+# opisywalyby u niego usterke, ktorej nie ma - ta sama klasa myslenia, co przy 20_projects.
+$sumTray = $false
+$sumPrzebieg = $null
+$sumPrzebiegOpis = $null
+if ($sumRole -eq 'team') {
+  $sumTray = Test-RezydentDziala -TrayPath (Join-Path $sumEnviDir 'sb-tray.ps1')
+  # B3a: godzine podajemy tylko dla stanu koncowego 'udana'; kazda inna faza znaczy, ze
+  # przebieg sie NIE zakonczyl, i wtedy mowimy, czym stoi.
+  $stanSum = Get-StanPrzebiegu -StatePath (Join-Path $sumEnviDir 'project-sync.state.json')
+  if ($stanSum -and $stanSum.Faza -eq 'udana') { $sumPrzebieg = $stanSum.Czas }
+  elseif ($stanSum) { $sumPrzebiegOpis = ("nie zakonczyl sie ({0})" -f $stanSum.Opis) }
+  Log ("Ikona przy zegarze (rezydent):     {0}" -f $(if ($sumTray) { 'dziala' } else { 'nie' }))
+  Log ("Pierwszy przebieg:                 {0}" -f $(if ($sumPrzebieg) { $sumPrzebieg } else { $(if ($sumPrzebiegOpis) { $sumPrzebiegOpis } else { 'nie bylo' }) }))
+} else {
+  # Konsument nie ma silnika: jego pierwszym przebiegiem jest pobranie kanonu, a slad
+  # zostawia sam git - FETCH_HEAD dostaje nowa date przy kazdym pobraniu.
+  $fh = Join-Path $VaultPath '.git\FETCH_HEAD'
+  if (Test-Path -LiteralPath $fh) { $sumPrzebieg = (Get-Item -LiteralPath $fh).LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss') }
+  Log ("Pierwsze pobranie kanonu:          {0}" -f $(if ($sumPrzebieg) { $sumPrzebieg } else { 'nie bylo' }))
+}
+Log ("Skille:                            {0} / {1} aktualne" -f `
+  $(if ($null -ne $script:SkilleZainstalowane) { $script:SkilleZainstalowane } else { '?' }), `
+  $(if ($null -ne $script:SkilleNaDysku) { $script:SkilleNaDysku } else { '?' }))
+# Zasada 'Restricted' nie zostawia sladu w logu silnika, bo skrypt w ogole nie startuje -
+# jedynym sygnalem jest kod ostatniego wyniku w harmonogramie (0 = OK, 267011 = jeszcze nie bylo).
+$todoZadania = @()
+foreach ($zad in @($TaskName, $SyncTaskName)) {
+  if ($zad -eq $SyncTaskName -and $sumRole -ne 'team') { continue }
+  $wynik = $null
+  try { $wynik = (Get-ScheduledTaskInfo -TaskName $zad -ErrorAction Stop).LastTaskResult } catch { }
+  Log ("Zadanie '{0}': ostatni wynik {1}" -f $zad, $(if ($null -ne $wynik) { $wynik } else { 'nieznany (zadania nie ma?)' }))
+  if ($null -ne $wynik -and $wynik -ne 0 -and $wynik -ne 267011) {
+    $todoZadania += ("Zadanie w tle '{0}' skonczylo sie bledem (kod {1}). Uruchom bootstrap.cmd jeszcze raz; jesli kod wroci, wyslij bootstrap.log wlascicielowi." -f $zad, $wynik)
+  }
+}
 Log ""
 $todo = @()
 if (-not $sumCanon) { $todo += "Kanon sie nie sciagnal. Uruchom bootstrap.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli GitHub odmawia dostepu - popros wlasciciela o zaproszenie do zespolu (organizacji) i przyjmij je mailem." }
@@ -1547,6 +1680,12 @@ if ($sumRole -eq 'team' -and $sumProjects -and -not $sumSyncTask) { $todo += "Sy
 if (-not $sumSkills) { $todo += "Skille sa niewidoczne. Zaloguj sie w aplikacji Dysk Google na konto firmowe, poczekaj az pojawi sie dysk w Eksploratorze, potem uruchom bootstrap.cmd jeszcze raz." }
 if ($sumSkills -and $vaultSkillCount -eq 0) { $todo += "Skille sie nie skopiowaly. Uruchom bootstrap.cmd jeszcze raz; jesli to nie pomoze, wyslij ten plik bootstrap.log wlascicielowi." }
 if (-not $sumObsidian) { $todo += "Obsidian nie ma zarejestrowanego vaultu. Zamknij Obsidiana calkowicie i uruchom bootstrap.cmd jeszcze raz." }
+# P2: kazde "nie" z trzech linii wyzej ma tu swoja pozycje - inaczej podsumowanie mowiloby
+# o usterce i zostawialo czlowieka bez jednego ruchu, ktorym da sie ja odkrecic.
+if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy zegarze nie dziala. Wyloguj sie i zaloguj ponownie (skrot w Autostarcie podniesie ja sam) albo uruchom bootstrap.cmd jeszcze raz." }
+if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom bootstrap.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij bootstrap.log wlascicielowi." }
+if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij bootstrap.log wlascicielowi." }
+$todo += $todoZadania
 if ($todo.Count -eq 0) {
   Log ("Nic nie zostalo do zrobienia recznie. Otworz Obsidiana - Twoj vault ({0}) powinien byc od razu widoczny." -f $(if ($sumRole -eq 'team') { 'kanon + obszar projektowy' } else { 'kanon' }))
 } else {

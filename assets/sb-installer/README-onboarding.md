@@ -51,12 +51,12 @@ Całą resztę załatwia jeden plik: **`bootstrap.cmd`**.
 1. Uruchamiasz `bootstrap.cmd` (dwuklik).
 2. W pewnym momencie w przeglądarce pojawi się prośba o zalogowanie do GitHuba — to jednorazowa, bezpieczna autoryzacja (tzw. logowanie kodem urządzenia). Potwierdzasz i to wszystko — nie wpisujesz żadnych haseł do samego instalatora.
 3. Dalej wszystko dzieje się automatycznie:
-   - na komputerze pojawia się **jeden** folder — Twój Second Brain — a w Menu Start skrót, który go otwiera w Obsidianie,
+   - na komputerze pojawia się **jeden** folder — Twój Second Brain — a w Menu Start skrót **„ENVI Second Brain”**, który otwiera go w Obsidianie od razu na notatce startowej,
    - w tym folderze jest wiedza firmowa (**tylko do odczytu**) oraz — jeśli pracujesz zespołowo nad projektami — osobny obszar projektowy, w którym możesz zapisywać zmiany,
    - wiedza firmowa sama, cicho, odświeża się w tle co kilka godzin (i przy każdym logowaniu) — nie musisz nic klikać, nie zobaczysz żadnego czarnego okienka konsoli,
    - do niczego z tego nie są potrzebne uprawnienia administratora ani znajomość komend git — ich w ogóle nie zobaczysz.
 
-**Ważne — koniecznie przeczytaj:** w Twoim vaultcie jedna część (wiedza firmowa) jest **tylko do czytania** — to materiał referencyjny, nie da się jej przypadkowo zepsuć. Druga część (obszar projektowy) jest edytowalna, jeśli pracujesz w zespole nad projektami. Swoje własne, prywatne notatki możesz zapisywać po prostu **w tym samym vaultcie**, w dowolnym innym miejscu — nie musisz zakładać ani wybierać żadnego drugiego vaultu.
+**Ważne — koniecznie przeczytaj:** Otwierasz cały folder ENVI-Kanon — w Obsidianie i dla agenta. Piszesz w `20_projects`, czytasz `40_wiki`. `40_wiki` na Twoim komputerze jest tylko do odczytu i nadpisuje się samo — ręczna zmiana tam zniknie. Linki między folderami działają, bo to jeden vault. Zielona ikona przy zegarze (pod strzałką) pokazuje stan synchronizacji; „Synchronizuj teraz” wysyła Twoje zmiany od razu.
 
 **Jeśli pracujesz zespołowo:** instalator sam rozpoznaje, że masz dostęp do wspólnego obszaru projektowego, i nie musisz nic w tej sprawie wybierać ani ustawiać. Dostajesz wtedy dodatkowo skrót **"Synchronizuj teraz (Second Brain)"** w dwóch miejscach: **na pulpicie** i w Menu Start. Poznasz go po **zielonym znaku ENVI** (turbina) — tym samym, który program pokazuje przy zegarze, więc oba miejsca wyglądają tak samo i nie trzeba szukać skrótu wśród innych ikon. Kliknij go, kiedy chcesz od razu wysłać swoje zmiany i pobrać zmiany innych osób, zamiast czekać na automatyczne odświeżenie w tle. Po kliknięciu zobaczysz krótkie powiadomienie z wynikiem: wysłano, nie było nic nowego do wysłania, albo trzeba czyjejś pomocy. Nic więcej nie musisz robić.
 
