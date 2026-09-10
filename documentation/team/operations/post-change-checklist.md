@@ -103,7 +103,7 @@ Copy the block below for each new change:
 
 ### Links
 
-- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-10-reg-czyszczenie-regonu-i-krs-progress.md`
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/archive/2026-09-10-reg-czyszczenie-regonu-i-krs-progress.md`
 - `src/entities/EntitiesController.ts`, `src/entities/Entity.ts`, `src/types/types.d.ts`
 
 ## 2026-09-10 - GUS multi-record lookup + NIP clearing + GUS status filter (GPO-1..GPO-3)
