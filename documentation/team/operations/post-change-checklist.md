@@ -76,13 +76,16 @@ Copy the block below for each new change:
 
 - DB: none (no migration, no data change from this commit).
 - ENV: none.
-- Deploy: backend push to `main` = Heroku release; frontend push to `master` = Pages build. Owner-gated.
+- Deploy: backend `8526fce` -> Heroku **v576** (current, no release-command failure); frontend `8240bb5` ->
+  Pages run 34505705720 green. Owner gave GO 2026-09-10.
 
 ### Required Actions
 
-- AFTER the release: re-check the 9 production entities that currently sit at `OK` with an empty snapshot
-  (201, 323, 331, 450, 524, 525, 691, 765, 776) - the code fix does not repair rows already written. Either
-  `POST /entities/:id/gus/check` per row, or clear `GusCheckedAt` on those rows so the monthly sweep picks them up.
+- ~~AFTER the release: re-check the 9 production entities that sat at `OK` with an empty snapshot~~ **DONE
+  2026-09-10 after v576**: all 9 (201, 323, 331, 450, 524, 525, 691, 765, 776) re-checked via
+  `POST /entities/:id/gus/check` with the agent token. New verdicts read back from the production DB:
+  DIFF 2, DIFF_MINOR 6, OK 1 - every one now carries the registry name. Control query after the run:
+  entities at `OK` with an empty snapshot = **0**.
 
 ### Verification
 
