@@ -14,10 +14,16 @@ export default class Entity extends BusinessObject implements EntityData {
      * drugim podmiocie bez numeru.
      */
     taxNumber?: string | null;
-    /** GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna). */
-    regon?: string;
-    /** GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba. */
-    krs?: string;
+    /**
+     * GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna).
+     * REG-1 / D-REG-2: `null` znaczy „wyczyść numer w bazie", jak przy taxNumber wyżej.
+     */
+    regon?: string | null;
+    /**
+     * GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba.
+     * REG-1 / D-REG-2: `null` znaczy „wyczyść numer w bazie".
+     */
+    krs?: string | null;
     www?: string;
     email?: string;
     phone?: string;

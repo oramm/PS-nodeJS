@@ -98,18 +98,28 @@ function withNormalizedNip<T extends EntityWriteData>(entityData: T): T {
     return { ...entityData, taxNumber: digits };
 }
 
+/** REG-1 / D-REG-1: numery podmiotu, ktore da sie z formularza skasowac. */
+const CLEARABLE_NUMBERS = ['taxNumber', 'regon', 'krs'] as const;
+
 /**
- * GPO-2 / D-GPO-3 — czy formularz PROSI o wyczyszczenie NIP-u.
+ * REG-1 / D-REG-1 — o skasowanie KTORYCH numerów prosi formularz.
  *
- * Trzeba odróżnić dwie różne rzeczy, które konstruktor Entity zwijał do jednej: pole
+ * Trzeba odróżnić dwie różne rzeczy, które konstruktor Entity zwija do jednej: pole
  * puste („skasuj numer") i pole w ogóle niepodane („nie ruszaj"). Bez tego rozróżnienia
  * trasa edycji odpowiadała, że numer wyczyściła, a w bazie zostawała stara wartość
- * (zmierzone na produkcji 2026-09-10, sesja GUS-5).
+ * (zmierzone na produkcji 2026-09-10 dla NIP-u, sesja GUS-5; REGON i KRS miały tę samą wadę).
+ *
+ * Jedna reguła na trzy numery, nie trzy bliźniacze funkcje (D-REG-1) — trzy kopie tej samej
+ * myśli rozjechałyby się przy pierwszej zmianie. Lista jest zamknięta celowo: nazwa, adres
+ * i telefon mają dziś inne zachowanie i nie zmieniamy go przy okazji.
  */
-function asksToClearTaxNumber(entityData: EntityWriteData): boolean {
-    return (
-        entityData?.taxNumber !== undefined &&
-        String(entityData.taxNumber ?? '').trim() === ''
+function numbersAskedToClear(
+    entityData: EntityWriteData
+): (typeof CLEARABLE_NUMBERS)[number][] {
+    return CLEARABLE_NUMBERS.filter(
+        (field) =>
+            entityData?.[field] !== undefined &&
+            String(entityData[field] ?? '').trim() === ''
     );
 }
 
@@ -429,9 +439,11 @@ export default class EntitiesController extends BaseController<
         console.group('EntitiesController.editEntity()');
         try {
             const entity = new Entity(withNormalizedNip(entityData));
-            // GPO-2 / D-GPO-3: puste pole NIP kasuje kolumnę wprost. Bramka FIDmana niżej
-            // i tak nie wypuści takiego zapisu dla strony umowy synchronizowanej.
-            if (asksToClearTaxNumber(entityData)) entity.taxNumber = null;
+            // REG-1 / D-REG-2: puste pole numeru kasuje kolumnę wprost, wartością pustą
+            // w sensie bazy (`null`), a nie pustym tekstem. Bramka FIDmana niżej i tak nie
+            // wypuści zapisu bez NIP-u dla strony umowy synchronizowanej.
+            for (const field of numbersAskedToClear(entityData))
+                entity[field] = null;
             if (entity.shortName) {
                 const duplicate = await this.repository.find([
                     { shortName: entity.shortName },
