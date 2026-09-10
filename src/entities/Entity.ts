@@ -7,7 +7,13 @@ export default class Entity extends BusinessObject implements EntityData {
     name?: string;
     shortName?: string;
     address?: string;
-    taxNumber?: string;
+    /**
+     * GPO-2 / D-GPO-3: `null` znaczy „wyczyść numer w bazie" i tak samo trafia do UPDATE-a.
+     * Pola nieobecnego UPDATE nie rusza, więc bez tej wartości nie da się skasować NIP-u.
+     * Pusty tekst tu nie wchodzi: kolumna ma klucz unikalny, a '' powtórzyłoby się przy
+     * drugim podmiocie bez numeru.
+     */
+    taxNumber?: string | null;
     /** GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna). */
     regon?: string;
     /** GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba. */

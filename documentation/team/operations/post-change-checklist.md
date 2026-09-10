@@ -63,6 +63,48 @@ Copy the block below for each new change:
 
 ## Active Entries
 
+## 2026-09-10 - GUS multi-record lookup + NIP clearing + GUS status filter (GPO-1..GPO-3)
+
+### Scope
+
+- `GusBirService.lookupByNip` now picks ONE record out of a multi-record registry answer (`search({nip})` returns an
+  array when several REGON units share the NIP) and refuses an answer with no name (`GusBirEmptyRecordError`).
+- `PUT /entity/:id` with an empty `taxNumber` now clears the column (NULL) and the response is a read-after-write.
+- Entity list: new multi-select filter on `Entities.GusStatus` (`gusStatuses` search param).
+
+### Impact
+
+- DB: none (no migration, no data change from this commit).
+- ENV: none.
+- Deploy: backend push to `main` = Heroku release; frontend push to `master` = Pages build. Owner-gated.
+
+### Required Actions
+
+- AFTER the release: re-check the 9 production entities that currently sit at `OK` with an empty snapshot
+  (201, 323, 331, 450, 524, 525, 691, 765, 776) - the code fix does not repair rows already written. Either
+  `POST /entities/:id/gus/check` per row, or clear `GusCheckedAt` on those rows so the monthly sweep picks them up.
+
+### Verification
+
+- Negative controls red before the fix, green after: `GusBirService.multiRecord.test.ts` (7 cases),
+  `EntitiesController.clearNip.test.ts` (2 cases), one case added to `EntitiesController.gusCheck.test.ts`.
+- Gates: backend `tsc` clean, `jest src/entities` 149/149; frontend `tsc` clean, `vitest` 535/535.
+- Real registry through the production code path (firm key, read-only): NIP 5250005662 now returns the active
+  MPWiK S.A. record with REGON 015314758 and KRS 0000146138; NIP 9110015740 returns the business, not the farm;
+  a single-record NIP and a nonexistent NIP behave as before.
+- NIP clearing proven on local `envikons_myEnvi` by DB read after a real `PUT /entity/749` (TaxNumber -> NULL,
+  restored afterwards). Filter proven against DB counts: DIFF+ERROR = 102 in DB, 102 returned by the route and
+  102 shown on screen (96 DIFF + 6 ERROR); a non-dictionary value in the list is dropped by the sieve.
+
+### Rollback
+
+- Code only: revert the commit and redeploy. Nothing to undo in the DB or the environment.
+
+### Links
+
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-10-gpo-poprawki-po-packu-gus-progress.md`
+- `src/entities/gusBir/GusBirService.ts`, `src/entities/EntitiesController.ts`, `src/entities/EntityRepository.ts`
+
 ## 2026-09-10 - GUS entity sync released to production (GUS-5)
 
 ### Scope

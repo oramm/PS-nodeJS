@@ -491,7 +491,8 @@ export interface EntityData extends RepositoryDataItem {
     name?: string;
     shortName?: string;
     address?: string;
-    taxNumber?: string;
+    /** GPO-2 / D-GPO-3: `null` znaczy „wyczyść numer w bazie", patrz Entity.taxNumber. */
+    taxNumber?: string | null;
     /** GUS-1: REGON z rejestru GUS — 9 znaków (siedziba) albo 14 (jednostka lokalna). */
     regon?: string;
     /** GUS-1: numer KRS, 10 cyfr z wiodącymi zerami, dlatego tekst a nie liczba. */

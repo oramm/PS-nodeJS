@@ -7,22 +7,12 @@ import {
     GusAcceptableField,
     GusSnapshot,
     GusStatus,
+    isGusStatus,
 } from './gusBir/GusCompare';
 
 /** Wartość z bazy sprowadzona do słownika stanów; śmieć w kolumnie znaczy „nie sprawdzano". */
 function toGusStatus(value: unknown): GusStatus {
-    const valid: GusStatus[] = [
-        'NOT_CHECKED',
-        'OK',
-        'DIFF',
-        'DIFF_MINOR',
-        'NOT_FOUND',
-        'CLOSED',
-        'ERROR',
-    ];
-    return valid.includes(value as GusStatus)
-        ? (value as GusStatus)
-        : 'NOT_CHECKED';
+    return isGusStatus(value) ? value : 'NOT_CHECKED';
 }
 
 /**
@@ -54,6 +44,12 @@ export interface EntitiesSearchParams {
     name?: string;
     shortName?: string;
     searchText?: string;
+    /**
+     * GPO-3 — filtr po stanie sprawdzenia w rejestrze GUS, wielokrotny wybór.
+     * Przychodzą KODY stanów (`DIFF_MINOR`), nie nazwy z ekranu: napisy widziane przez
+     * człowieka są sprawą frontu i nie mają czego szukać w zapytaniu do bazy.
+     */
+    gusStatuses?: string[];
 }
 
 export default class EntityRepository extends BaseRepository<Entity> {
@@ -209,6 +205,17 @@ export default class EntityRepository extends BaseRepository<Entity> {
         if (searchParams.shortName) {
             conditions.push(
                 mysql.format(`Entities.ShortName = ?`, [searchParams.shortName])
+            );
+        }
+        // GPO-3: przez sito przechodzą wyłącznie kody ze słownika stanów — cokolwiek
+        // innego przyszłoby z żądania, do zapytania nie wejdzie. Pusta lista znaczy
+        // „bez filtrowania", tak samo jak brak pola.
+        const gusStatuses = (searchParams.gusStatuses ?? []).filter(
+            (status): status is GusStatus => isGusStatus(status)
+        );
+        if (gusStatuses.length > 0) {
+            conditions.push(
+                mysql.format(`Entities.GusStatus IN (?)`, [gusStatuses])
             );
         }
 

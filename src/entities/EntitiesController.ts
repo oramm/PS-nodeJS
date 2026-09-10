@@ -64,7 +64,7 @@ type EntityWriteData = {
     name?: string;
     shortName?: string;
     address?: string;
-    taxNumber?: string;
+    taxNumber?: string | null;
     regon?: string;
     krs?: string;
     www?: string;
@@ -96,6 +96,21 @@ function withNormalizedNip<T extends EntityWriteData>(entityData: T): T {
     const digits = normalizeNip(entityData.taxNumber);
     if (digits.length !== 10) return entityData;
     return { ...entityData, taxNumber: digits };
+}
+
+/**
+ * GPO-2 / D-GPO-3 — czy formularz PROSI o wyczyszczenie NIP-u.
+ *
+ * Trzeba odróżnić dwie różne rzeczy, które konstruktor Entity zwijał do jednej: pole
+ * puste („skasuj numer") i pole w ogóle niepodane („nie ruszaj"). Bez tego rozróżnienia
+ * trasa edycji odpowiadała, że numer wyczyściła, a w bazie zostawała stara wartość
+ * (zmierzone na produkcji 2026-09-10, sesja GUS-5).
+ */
+function asksToClearTaxNumber(entityData: EntityWriteData): boolean {
+    return (
+        entityData?.taxNumber !== undefined &&
+        String(entityData.taxNumber ?? '').trim() === ''
+    );
 }
 
 export default class EntitiesController extends BaseController<
@@ -414,6 +429,9 @@ export default class EntitiesController extends BaseController<
         console.group('EntitiesController.editEntity()');
         try {
             const entity = new Entity(withNormalizedNip(entityData));
+            // GPO-2 / D-GPO-3: puste pole NIP kasuje kolumnę wprost. Bramka FIDmana niżej
+            // i tak nie wypuści takiego zapisu dla strony umowy synchronizowanej.
+            if (asksToClearTaxNumber(entityData)) entity.taxNumber = null;
             if (entity.shortName) {
                 const duplicate = await this.repository.find([
                     { shortName: entity.shortName },
@@ -482,7 +500,12 @@ export default class EntitiesController extends BaseController<
                     )
                 );
             }
-            return entity;
+            // GPO-2 / D-GPO-3: odpowiedź jest ODCZYTEM PO ZAPISIE, nie powtórzeniem
+            // formularza. Formularz mówi, o co poproszono; baza mówi, co się stało —
+            // a to nie zawsze jest to samo (defekt z GUS-5 polegał dokładnie na tym).
+            // Gdyby rekord w międzyczasie zniknął, wraca to, co zapisywaliśmy.
+            const saved = (await this.repository.find([{ id: entity.id }]))[0];
+            return saved ?? entity;
         } finally {
             console.groupEnd();
         }

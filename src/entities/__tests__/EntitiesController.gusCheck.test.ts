@@ -25,11 +25,13 @@ jest.mock('../gusBir/GusBirService', () => {
         },
         GusBirNotConfiguredError: actual.GusBirNotConfiguredError,
         GusBirNotFoundError: actual.GusBirNotFoundError,
+        GusBirEmptyRecordError: actual.GusBirEmptyRecordError,
     };
 });
 
 import ToolsDb from '../../tools/ToolsDb';
 import GusBirService, {
+    GusBirEmptyRecordError,
     GusBirNotFoundError,
 } from '../gusBir/GusBirService';
 import EntitiesController from '../EntitiesController';
@@ -174,6 +176,35 @@ describe('EntitiesController.gusCheck — zapisuje werdykt, nie dane podmiotu (G
         expect(sql).not.toMatch(/GusSnapshot/);
         expect(sql).not.toMatch(/\bName\b/);
         expect(sql).not.toMatch(/\bAddress\b/);
+    });
+
+    /**
+     * GPO-1 / D-GPO-2 — sedno defektu z produkcji: rekord 776 (MPWiK Warszawa) dostal
+     * stan „zgodny" z migawka {"name":"","address":""}, bo porownanie nie widzi roznicy
+     * tam, gdzie rejestr nic nie podal. Odpowiedz nie do odczytania ma sie konczyc tak
+     * samo jak awaria sieci: sam stan „blad", migawka nietknieta.
+     */
+    it('KONTROLA NEGATYWNA: odpowiedz rejestru bez nazwy -> ERROR, nie OK, migawka nietknieta', async () => {
+        mockEntityRow({
+            ...ENVI_ROW,
+            GusStatus: 'DIFF',
+            GusSnapshot: '{"name":"POPRZEDNIA NAZWA","address":"ul. Poprzednia 1"}',
+        });
+        (GusBirService.lookupByNip as any).mockRejectedValue(
+            new GusBirEmptyRecordError('7471917575')
+        );
+
+        const result = await EntitiesController.gusCheck(1);
+
+        expect(result).toMatchObject({ ok: true, status: 'ERROR' });
+        // To, co rejestr mowil poprzednio, wraca nietkniete.
+        expect((result as any).snapshot).toEqual({
+            name: 'POPRZEDNIA NAZWA',
+            address: 'ul. Poprzednia 1',
+        });
+        const sql = executedSql()[0];
+        expect(sql).toMatch(/GusStatus/);
+        expect(sql).not.toMatch(/GusSnapshot/);
     });
 
     it('podmiot bez NIP-u: sensowna odmowa, bez pytania GUS-u i bez zapisu', async () => {

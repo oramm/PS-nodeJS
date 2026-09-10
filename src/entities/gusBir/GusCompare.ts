@@ -21,14 +21,22 @@
  * „tę samą treść rejestr zapisuje inaczej”. Podział wziął się z pomiaru: pierwszy pełny
  * przebieg dał różnicę przy 242 z 379 podmiotów i plakietka w tej postaci byłaby szumem.
  */
-export type GusStatus =
-    | 'NOT_CHECKED'
-    | 'OK'
-    | 'DIFF'
-    | 'DIFF_MINOR'
-    | 'NOT_FOUND'
-    | 'CLOSED'
-    | 'ERROR';
+export const GUS_STATUSES = [
+    'NOT_CHECKED',
+    'OK',
+    'DIFF',
+    'DIFF_MINOR',
+    'NOT_FOUND',
+    'CLOSED',
+    'ERROR',
+] as const;
+
+export type GusStatus = (typeof GUS_STATUSES)[number];
+
+/** GPO-3: sito na wartości z żądania — do zapytania wchodzą wyłącznie kody ze słownika. */
+export function isGusStatus(value: unknown): value is GusStatus {
+    return (GUS_STATUSES as readonly string[]).includes(String(value));
+}
 
 /** Pola, które można przepisać z migawki do rekordu przez /gus/accept. */
 export type GusAcceptableField = 'name' | 'address' | 'regon' | 'krs';

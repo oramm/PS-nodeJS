@@ -46,6 +46,24 @@ export class GusBirNotFoundError extends Error {
     }
 }
 
+/**
+ * GPO-1 / D-GPO-2 — rejestr odpowiedział, ale z odpowiedzi nie da się odczytać nazwy.
+ *
+ * CELOWO NIE JEST TO GusBirNotFoundError. Tamten znaczy „rejestr nie zna tego numeru"
+ * i kasuje zapisaną migawkę, bo stara odpowiedź jest wtedy nieaktualna. Tutaj nie wiemy,
+ * co rejestr chciał powiedzieć — więc nie mamy prawa wyrzucić tego, co mówił poprzednio.
+ * Obaj wołający (sprawdzenie jednego podmiotu i przebieg słownika) łapią to zwykłym
+ * `catch`, który zapisuje sam stan „błąd" i migawki nie dotyka.
+ */
+export class GusBirEmptyRecordError extends Error {
+    constructor(nip: string) {
+        super(
+            `Rejestr GUS odpowiedział na NIP ${nip}, ale w odpowiedzi nie ma nazwy podmiotu`
+        );
+        this.name = 'GusBirEmptyRecordError';
+    }
+}
+
 type AddressFields = {
     ulica?: string;
     nr?: string;
@@ -76,6 +94,36 @@ export function buildAddress(fields: AddressFields): string {
 function textOrUndefined(raw: unknown): string | undefined {
     const text = String(raw ?? '').trim();
     return text ? text : undefined;
+}
+
+/**
+ * GPO-1 / D-GPO-1 — jeden wpis z odpowiedzi rejestru.
+ *
+ * `search({nip})` oddaje TABLICĘ, gdy pod jednym numerem siedzi więcej niż jedna jednostka.
+ * Zmierzone na produkcji 2026-09-10 dla 9 podmiotów, w dwóch kształtach: spółka czynna obok
+ * wykreślonego poprzednika, oraz działalność gospodarcza obok gospodarstwa rolnego tej samej
+ * osoby (ten sam REGON, oba czynne). Wcześniej kod czytał `Nazwa` z tablicy, czyli z niczego.
+ *
+ * Reguła: odpadają wpisy wykreślone z rejestru, chyba że wykreślone są wszystkie — wtedy
+ * zostają, bo to jest prawdziwa wiadomość o tym podmiocie. Z reszty wygrywa najniższy
+ * `SilosID`, czyli numer dziedziny rejestru: 1 to zwykła działalność gospodarcza, 2
+ * gospodarstwo rolne, 6 rejestr sądowy. Przy remisie pierwszy z listy.
+ *
+ * Świadomie NIE dopasowujemy wpisu do nazwy zapisanej w PS: porównanie zaczęłoby wybierać
+ * sobie ten wpis, który najlepiej pasuje, i zawsze wychodziłoby „zgodny".
+ */
+function pickRegistryRecord(found: unknown): any | undefined {
+    const records: any[] = Array.isArray(found) ? found : found ? [found] : [];
+    if (records.length <= 1) return records[0];
+
+    const active = records.filter(
+        (record) => !textOrUndefined(record?.DataZakonczeniaDzialalnosci)
+    );
+    const candidates = active.length > 0 ? active : records;
+
+    return [...candidates].sort(
+        (a, b) => Number(a?.SilosID ?? 99) - Number(b?.SilosID ?? 99)
+    )[0];
 }
 
 /** True gdy KRS znaczy faktycznie KRS (rejestr przedsiębiorców), nie inny rejestr/ewidencja GUS. */
@@ -132,13 +180,22 @@ export default class GusBirService {
         const { BirError } = require('bir1');
         const bir: any = session ?? this.openSession();
 
-        let basic: any;
+        let found: unknown;
         try {
-            basic = await bir.search({ nip });
+            found = await bir.search({ nip });
         } catch (err) {
             if (err instanceof BirError) throw new GusBirNotFoundError(nip);
             throw err;
         }
+
+        // GPO-1 / D-GPO-1: z kilku wpisów pod jednym NIP-em bierzemy jeden, według reguły.
+        const basic: any = pickRegistryRecord(found);
+
+        // GPO-1 / D-GPO-2, kontrola negatywna: bez nazwy nie ma czego porównywać.
+        // Pusta migawka przechodziła dotąd przez porównanie jako „brak różnic", czyli
+        // odpowiedź, której nikt nie umiał odczytać, wyglądała jak potwierdzenie zgodności.
+        const name = String(basic?.Nazwa ?? '').trim();
+        if (!name) throw new GusBirEmptyRecordError(nip);
 
         let addressFields: AddressFields = {
             ulica: basic?.Ulica,
@@ -177,7 +234,7 @@ export default class GusBirService {
         }
 
         return {
-            name: String(basic?.Nazwa ?? '').trim(),
+            name,
             address: buildAddress(addressFields),
             regon: basic?.Regon ? String(basic.Regon).trim() : undefined,
             krs,

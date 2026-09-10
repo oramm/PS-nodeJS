@@ -3,6 +3,7 @@ import EntitiesController from './EntitiesController';
 import { app } from '../index';
 import { isValidNipChecksum, normalizeNip } from '../contracts/aqmSync/AqmSync';
 import GusBirService, {
+    GusBirEmptyRecordError,
     GusBirNotConfiguredError,
     GusBirNotFoundError,
 } from './gusBir/GusBirService';
@@ -55,6 +56,12 @@ app.post('/entities/lookup-nip', async (req: Request, res: Response, next) => {
         }
         if (error instanceof GusBirNotFoundError) {
             return res.status(404).json({ error: error.message });
+        }
+        // GPO-1 / D-GPO-2: rejestr odpowiedział, ale odpowiedzi nie da się odczytać.
+        // To nie jest awaria PS, więc nie 500 — człowiek przy ekranie ma dostać zdanie,
+        // z którego wynika, że dane trzeba wpisać ręcznie, a nie że aplikacja padła.
+        if (error instanceof GusBirEmptyRecordError) {
+            return res.status(502).json({ error: error.message });
         }
         next(error);
     }

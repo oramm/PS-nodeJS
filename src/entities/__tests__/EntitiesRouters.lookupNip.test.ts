@@ -29,6 +29,7 @@ jest.mock('../gusBir/GusBirService', () => {
         },
         GusBirNotConfiguredError: actual.GusBirNotConfiguredError,
         GusBirNotFoundError: actual.GusBirNotFoundError,
+        GusBirEmptyRecordError: actual.GusBirEmptyRecordError,
     };
 });
 
@@ -127,6 +128,27 @@ describe('EntitiesRouters — POST /entities/lookup-nip', () => {
         await handler({ body: { nip: '5261040567' } }, res, next);
 
         expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    /**
+     * GPO-1 / D-GPO-2: rejestr odpowiedział, ale odpowiedzi nie da się odczytać.
+     * Człowiek przy ekranie ma dostać zdanie, z którego wynika, że dane trzeba wpisać
+     * ręcznie — nie awarię aplikacji.
+     */
+    it('lookupByNip rzuca GusBirEmptyRecordError -> 502 ze zrozumiałym komunikatem', async () => {
+        mockIsConfigured.mockReturnValue(true);
+        const actual = jest.requireActual('../gusBir/GusBirService') as any;
+        mockLookupByNip.mockRejectedValue(new actual.GusBirEmptyRecordError('5261040567'));
+        const res = makeRes();
+        const next = jest.fn();
+
+        await handler({ body: { nip: '5261040567' } }, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(502);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ error: expect.stringMatching(/nazwy podmiotu/) }),
+        );
+        expect(next).not.toHaveBeenCalled();
     });
 
     it('lookupByNip rzuca nieoczekiwany błąd -> next(error), brak 500 ręcznie', async () => {
