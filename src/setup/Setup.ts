@@ -20,7 +20,7 @@ export default class Setup {
      * ma opcji limitujacej czas oczekiwania na polaczenie. Dotychczasowe `0` jest
      * falsy, wiec kolejka rosla bez konca i zadanie wisialo, az Heroku ubil je po
      * 30 s. Setka stoi nad realnym pikiem (6 osob x 12 zadan Dashboardu), a blad
-     * "Queue limit reached." nie jest bledem polaczenia, wiec nie wywoluje resetPool.
+     * "Queue limit reached." nie jest bledem polaczenia, wiec nie jest ponawiany.
      */
     static get dbConfig(): mysql.PoolOptions {
         const envInt = (raw: string | undefined, fallback: number): number => {

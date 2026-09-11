@@ -5,8 +5,6 @@ import ToolsDate from './ToolsDate';
 
 export default class ToolsDb {
     private static _pool: mysql.Pool;
-    private static isResetting = false;
-    private static resetPromise: Promise<void> | null = null;
 
     static get pool(): mysql.Pool {
         if (!this._pool) {
@@ -56,142 +54,6 @@ export default class ToolsDb {
         // Inicjalizacja poola (wywołuje getter)
         const pool = this.pool;
         console.log('[DB] Pool initialized with auto-reconnect support');
-    }
-
-    /** Kiedy skończył się ostatni reset - zapora przed lawiną resetów */
-    private static lastResetFinishedAt = 0;
-    /** Nie wymieniamy puli częściej niż raz na tyle ms */
-    private static readonly RESET_COOLDOWN_MS = 10000;
-    /** Ile czekamy na grzeczne domknięcie starej puli, zanim rozerwiemy gniazda */
-    private static readonly POOL_END_TIMEOUT_MS = 5000;
-
-    private static async resetPool(): Promise<void> {
-        // Jeśli reset już trwa, poczekaj na jego zakończenie
-        if (this.resetPromise) {
-            console.log('[DB] Waiting for ongoing pool reset...');
-            return this.resetPromise;
-        }
-
-        // Świeżo wymieniona pula musi dostać szansę. Bez tego seria błędów
-        // wymienia pulę raz za razem i przepala limit połączeń całego konta
-        const sinceLastReset = Date.now() - this.lastResetFinishedAt;
-        if (
-            this.lastResetFinishedAt > 0 &&
-            sinceLastReset < this.RESET_COOLDOWN_MS
-        ) {
-            console.log(
-                `[DB] Pool reset skipped - previous reset finished ${sinceLastReset}ms ago`
-            );
-            return;
-        }
-
-        this.isResetting = true;
-        console.log('[DB] Resetting connection pool...');
-
-        // UWAGA: resetPromise zeruje dopiero handler PO ZEWNĘTRZNEJ obietnicy.
-        // finally wewnątrz IIFE wykonywało się, zanim przypisanie zdążyło ustawić
-        // resetPromise - stąd stary zatrzask "Waiting for ongoing pool reset..."
-        const running = (async () => {
-            const oldPool = this._pool;
-            try {
-                // 1. Stara pula znika ZANIM powstanie nowa. Odwrotna kolejność
-                //    przy każdym błędzie dokłada pulę obok niedomkniętej starej
-                if (oldPool) await this.closePoolHard(oldPool);
-                // 2. Dopiero teraz nowa pula
-                this._pool = this.createPool();
-                console.log('[DB] Pool reset completed');
-            } catch (error) {
-                console.error('[DB] Error during pool reset:', error);
-                // Aplikacja nie może zostać bez czynnej puli
-                if (!this._pool || this._pool === oldPool)
-                    this._pool = this.createPool();
-            }
-        })();
-
-        const clearResetState = () => {
-            this.isResetting = false;
-            this.lastResetFinishedAt = Date.now();
-            this.resetPromise = null;
-        };
-        this.resetPromise = running.then(clearResetState, (error) => {
-            clearResetState();
-            throw error;
-        });
-
-        return this.resetPromise;
-    }
-
-    /**
-     * Domyka pulę z twardym limitem czasu. pool.end() nie ma własnego timeoutu,
-     * a COM_QUIT stoi w kolejce komend za niedokończonym zapytaniem - na
-     * zawieszonym połączeniu nie dojdzie tam nigdy. Bez tego stare połączenia
-     * wiszą na serwerze aż do wait_timeout (8 h) i zjadają max_user_connections.
-     */
-    private static async closePoolHard(pool: mysql.Pool): Promise<void> {
-        let timer: NodeJS.Timeout | undefined;
-        const graceful = pool
-            .end()
-            .then(() => 'ended' as const)
-            .catch((err) => {
-                console.error('[DB] Old pool end() failed:', err);
-                return 'failed' as const;
-            });
-        const deadline = new Promise<'timeout'>((resolve) => {
-            timer = setTimeout(
-                () => resolve('timeout'),
-                this.POOL_END_TIMEOUT_MS
-            );
-        });
-
-        try {
-            const outcome = await Promise.race([graceful, deadline]);
-            if (outcome === 'ended')
-                console.log('[DB] Old pool closed gracefully');
-            else
-                console.warn(
-                    outcome === 'timeout'
-                        ? `[DB] Old pool not closed within ${this.POOL_END_TIMEOUT_MS}ms - destroying sockets`
-                        : '[DB] Old pool end() failed - destroying sockets'
-                );
-        } finally {
-            if (timer) clearTimeout(timer);
-            // Zawsze, także po grzecznym zamknięciu: dobicie tego, co zostało
-            const destroyed = this.destroySocketsOf(pool);
-            if (destroyed)
-                console.warn(
-                    `[DB] Hard-destroyed ${destroyed} old connection(s)`
-                );
-        }
-    }
-
-    /**
-     * Rozrywa gniazda TCP wszystkich połączeń puli. Samo connection.destroy()
-     * w mysql2 to alias na close(), czyli stream.end() - grzeczny FIN, który na
-     * zawieszonym połączeniu nie zwalnia niczego. Dopiero stream.destroy() zabija
-     * gniazdo (tak samo robi sam mysql2 w _handleTimeoutError).
-     */
-    private static destroySocketsOf(pool: mysql.Pool): number {
-        const corePool: any = (pool as any)?.pool ?? pool;
-        const all = corePool?._allConnections;
-        if (!all || typeof all.get !== 'function') return 0;
-
-        // Kopia przed niszczeniem: destroy() potrafi zdejmować elementy z kolejki
-        const connections: any[] = [];
-        for (let i = 0; i < all.length; i++) connections.push(all.get(i));
-
-        let destroyed = 0;
-        for (const connection of connections) {
-            const stream = connection?.stream;
-            if (!stream || stream.destroyed) continue;
-            try {
-                connection.destroy(); // ustawia _closing, więc ECONNRESET zostanie połknięty
-                stream.destroy(); // dopiero to zwalnia gniazdo i wątek na serwerze
-                destroyed++;
-            } catch (err) {
-                console.error('[DB] Error destroying old connection:', err);
-            }
-        }
-        return destroyed;
     }
 
     static async getPoolConnectionWithTimeout() {
@@ -247,10 +109,15 @@ export default class ToolsDb {
                         error.code || error.message
                     );
 
-                    // Reset poola tylko przy pierwszej próbie i tylko gdy nie użyto externalConn
-                    if (attempt === 1 && !externalConn) {
-                        await this.resetPool();
-                    }
+                    // Bez wymiany puli (usunięta po awarii 2026-09-11). Połączenie, które
+                    // dostało błąd, mysql2 samo wyrzuca z puli (base/pool_connection.js,
+                    // zdarzenia 'error' i 'end'), więc ponowienie trafia na inne albo nowe.
+                    // Wymiana rozrywała też połączenia, na których ktoś właśnie czekał na
+                    // wynik - mysql2 uznaje je za zamknięte celowo i nie zgłasza błędu
+                    // (base/connection.js, 'close' przy _closing), więc zapytanie wisiało
+                    // bez końca; tak stawały synchronizacje AQM i FIDmana. Przy zrywanych
+                    // połączeniach Heroku -> kylos każda wymiana otwierała też naraz
+                    // komplet nowych połączeń do bazy z limitem 20 na konto.
 
                     // Retry z exponential backoff
                     if (attempt < maxRetries) {
