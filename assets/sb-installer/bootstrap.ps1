@@ -90,6 +90,10 @@ $N1Tools = @(
   @{ Id = 'GitHub.cli';       Name = 'GitHub CLI';   DetectCmd = 'gh' }
   @{ Id = 'Obsidian.Obsidian'; Name = 'Obsidian';     DetectCmd = $null }
   @{ Id = 'Google.GoogleDrive'; Name = 'Google Drive'; DetectCmd = $null }
+  # M4: launcher Pythona dla serwera poczty (P6/mcp/kylos-email). 'py' i nie 'python' -
+  # decyzja zamknieta w planie: atrapa ze Sklepu Microsoft nie wystawia py.exe wcale,
+  # tylko python.exe/python3.exe, wiec Get-Command py nie zlapie atrapy.
+  @{ Id = 'Python.Python.3.12'; Name = 'Python (py launcher)'; DetectCmd = 'py' }
 )
 
 function Test-WingetPackagePresent($id) {
@@ -220,6 +224,24 @@ function Invoke-StepN1 {
   }
 
   if ($installedAny) { Sync-PathFromRegistry }
+
+  # M4: sprawdzenie PO PROBIE, pelna sciezka - nie ufamy samemu "winget install exit 0".
+  # Dwa miejsca, bo winget bez -Scope umie wybrac instalacje per-user (LOCALAPPDATA) albo
+  # dla wszystkich (C:\Windows), w zaleznosci od maszyny - zmierzone przy pisaniu tego
+  # checkpointu, nie zalozone. Serwer poczty (mcp\kylos-email\start.ps1) i krok P6 szukaja
+  # tych samych dwoch miejsc.
+  $pyLauncher = $null
+  foreach ($kandydatPy in @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Launcher\py.exe'), (Join-Path $env:WINDIR 'py.exe'))) {
+    if (Test-Path -LiteralPath $kandydatPy) { $pyLauncher = $kandydatPy; break }
+  }
+  if ($pyLauncher) {
+    Log "[N1] Python: launcher znaleziony ($pyLauncher)"
+    foreach ($linia in @(& $pyLauncher '-0p' 2>&1)) { Log "[N1]   py -0p: $linia" }
+  } else {
+    # Brak Pythona po probie NIE jest bledem instalacji (decyzja planu poczty M4) - krok
+    # P6 (serwer poczty) sam pomija rejestracje i mowi to samo w swoim logu.
+    Log "[N1] Python nie znaleziony po probie instalacji - serwer poczty zostanie pominiety (P6 zglosi to osobno, to nie jest blad)."
+  }
 
   # Google Drive: winget installs the client, but signing in to the account that owns the
   # skills folder is a manual step (N6 onboarding). Detect reachability only; never hard-fail.
@@ -887,11 +909,13 @@ function Install-RdzenZDysku {
   $rozpakowane = Expand-RdzenPaczka -CoreRoot $coreRoot -Manifest $manifest
   if (-not $rozpakowane) { return $false }
 
-  # DWA pliki, nie jeden: silnik szuka rezydenta ikony obok siebie ($PSScriptRoot),
-  # a do 2026-08-21 nie instalowal go nikt - maszyna dostawala silnik bez ikony,
-  # czyli bez calej warstwy, ktora mowi czlowiekowi, co sie dzieje.
+  # Nie jeden plik: silnik szuka rezydenta ikony obok siebie ($PSScriptRoot), a do
+  # 2026-08-21 nie instalowal go nikt - maszyna dostawala silnik bez ikony, czyli bez
+  # calej warstwy, ktora mowi czlowiekowi, co sie dzieje. M4: dolozone cztery skrypty
+  # skrzynek poczty (menu ikony z M3) - ta sama lista, co $PlikiRdzenia/$RdzenPliki,
+  # zeby swiezy install mial poczte OD RAZU, a nie dopiero po pierwszej samoaktualizacji.
   $enviDir = Split-Path $SyncEnginePath -Parent
-  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1')) {
+  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-usun-skrzynke.ps1')) {
     $zrodlo = Join-Path $rozpakowane $plik
     if (-not (Test-Path -LiteralPath $zrodlo)) {
       Log "[N3b] ERROR: paczka $($manifest.paczka) nie zawiera pliku $plik - rdzen jest niekompletny, zglos to wlascicielowi"
@@ -1502,6 +1526,30 @@ function Invoke-N5SkillsSync {
   }
 }
 
+function Invoke-N5PocztaSync {
+  # M4: menu skrzynek (M3, sb-tray.ps1) juz wola silnik z -TylkoPoczta po kazdej zmianie -
+  # tu wolamy go RAZ po pierwszym przebiegu instalatora, zeby nowa osoba miala serwer
+  # poczty zarejestrowany od startu, a nie dopiero po pierwszej godzinnej synchronizacji.
+  # Implementacja jest jedna (w silniku); instalator tylko nie pomija PIERWSZEGO wywolania.
+  if (-not (Test-Path -LiteralPath $SyncEnginePath)) {
+    Log "[N5] sync engine not installed yet ('$SyncEnginePath') - poczta sync skipped this run"
+    return
+  }
+  $target = 'poczta sync (project-sync.ps1 -TylkoPoczta)'
+  $action = "powershell -File `"$SyncEnginePath`" -TylkoPoczta"
+  if ($PSCmdlet.ShouldProcess($target, $action)) {
+    Log "[N5] running poczta sync ..."
+    $out = & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath -TylkoPoczta 2>&1
+    foreach ($linia in @($out)) { Log "[N5] $linia" }
+    $m = [regex]::Match(($out -join "`n"), 'POCZTA-PODSUMOWANIE skrzynek=(\d+) zarejestrowanych=(\d+)')
+    if ($m.Success) {
+      $script:PocztaSkrzynek = [int]$m.Groups[1].Value
+      $script:PocztaZarejestrowanych = [int]$m.Groups[2].Value
+    }
+    Log "[N5] poczta sync done (szczegoly w project-sync.log)"
+  }
+}
+
 function Invoke-N5ChannelSeparationGuard {
   # non-mutating: read-only git query. Enforces the Distribution-split locked decision:
   # git canon = knowledge only; skill PACKAGES + skill TOOLING must never enter the git
@@ -1529,6 +1577,7 @@ function Invoke-StepN5 {
   Log "[N5] agent runtime + skills sync step starting"
   Invoke-N5AgentInstalls
   Invoke-N5SkillsSync
+  Invoke-N5PocztaSync
   Invoke-N5ChannelSeparationGuard
   Log "[N5] agent runtime + skills sync step done"
 }
@@ -1658,6 +1707,11 @@ if ($sumRole -eq 'team') {
 Log ("Skille:                            {0} / {1} aktualne" -f `
   $(if ($null -ne $script:SkilleZainstalowane) { $script:SkilleZainstalowane } else { '?' }), `
   $(if ($null -ne $script:SkilleNaDysku) { $script:SkilleNaDysku } else { '?' }))
+# M4: ta sama zasada co przy skillach - liczba czytana z wyniku silnika (-TylkoPoczta),
+# nie zalozona. '?' znaczy "silnik jeszcze nie odpowiedzial", nie "zero skrzynek".
+Log ("Skrzynki poczty:                   {0} / {1} zarejestrowane w aplikacji Claude" -f `
+  $(if ($null -ne $script:PocztaZarejestrowanych) { $script:PocztaZarejestrowanych } else { '?' }), `
+  $(if ($null -ne $script:PocztaSkrzynek) { $script:PocztaSkrzynek } else { '?' }))
 # Zasada 'Restricted' nie zostawia sladu w logu silnika, bo skrypt w ogole nie startuje -
 # jedynym sygnalem jest kod ostatniego wyniku w harmonogramie (0 = OK, 267011 = jeszcze nie bylo).
 $todoZadania = @()

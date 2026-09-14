@@ -64,6 +64,10 @@ Dwie rzeczy, które zaskakują przy pierwszym użyciu tego skrótu. Po pierwsze 
 
 Plik jest bezpieczny do uruchomienia wielokrotnie — jeśli coś przerwiesz w połowie albo któryś krok wcześniej pominiesz, po prostu uruchom `bootstrap.cmd` jeszcze raz.
 
+## Skrzynki poczty
+
+Żeby agent widział Twoją skrzynkę pocztową, kliknij ikonę Second Brain przy zegarze, wybierz „Skrzynki poczty”, a potem „Dodaj skrzynkę…” — wybierz skrzynkę wspólną z listy albo wpisz dane swojego konta. Hasło wpisujesz raz, w oknie, które się otworzy — nikt, także agent, go nie widzi. Po hasło do skrzynki wspólnej (np. `faktury@`) zapytaj osobę, która tę skrzynkę prowadzi — agent go nie zna i nie może Ci go podać.
+
 ## Jeśli coś wygląda na zawieszone
 
 Najczęstsza przyczyna to zwykle jedna z dwóch rzeczy:
