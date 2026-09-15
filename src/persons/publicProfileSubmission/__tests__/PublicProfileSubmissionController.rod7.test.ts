@@ -4,6 +4,7 @@ jest.mock('../../../tools/ToolsDb');
 
 import PublicProfileSubmissionController from '../PublicProfileSubmissionController';
 import PublicProfileSubmissionRepository from '../PublicProfileSubmissionRepository';
+import ToolsDb from '../../../tools/ToolsDb';
 import ToolsMail from '../../../tools/ToolsMail';
 import { PUBLIC_PROFILE_PRIVACY_NOTICE } from '../publicProfileSubmissionPrivacyNotice';
 
@@ -116,5 +117,48 @@ describe('PublicProfileSubmissionController - ROD-7: klauzula informacyjna', () 
         expect(params.text).toContain('\n\nKto jest administratorem Twoich danych?:');
         expect(params.text).not.toContain('�');
         expect(params.subject).not.toContain('�');
+    });
+});
+
+describe('PublicProfileSubmissionController - mail z kodem weryfikacyjnym', () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('wysyła polski temat i treść', async () => {
+        (ToolsDb.transaction as jest.Mock).mockImplementation(async (fn: any) =>
+            fn({}),
+        );
+        jest.spyOn(
+            PublicProfileSubmissionRepository,
+            'generateCode',
+        ).mockReturnValue('123456');
+        const sendMail = jest
+            .spyOn(ToolsMail, 'sendMail')
+            .mockResolvedValue(undefined as any);
+        const instance = (PublicProfileSubmissionController as any).getInstance();
+        jest.spyOn(instance, 'resolveLinkAndSubmissionInConn').mockResolvedValue({
+            submission: { id: 11 },
+        });
+        jest.spyOn(instance.repository, 'updateSubmissionEmail').mockResolvedValue(
+            undefined,
+        );
+        jest.spyOn(instance.repository, 'createVerifyChallenge').mockResolvedValue(
+            undefined,
+        );
+
+        await PublicProfileSubmissionController.requestVerifyCode(
+            'token',
+            'osoba@test.local',
+        );
+
+        expect(sendMail).toHaveBeenCalledTimes(1);
+        const params = sendMail.mock.calls[0][0] as any;
+        expect(params.subject).toBe('Kod weryfikacyjny do aktualizacji profilu');
+        expect(params.text).toBe(
+            'Twój kod weryfikacyjny: 123456. Kod jest ważny przez 10 minut.',
+        );
+        expect(params.subject).not.toMatch(/verification|submission/i);
+        expect(params.text).not.toMatch(/verification|valid for/i);
     });
 });

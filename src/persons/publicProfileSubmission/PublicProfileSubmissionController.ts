@@ -373,8 +373,8 @@ class PublicProfileSubmissionController {
             );
             yield ToolsMail_1.default.sendMail({
                 to: email,
-                subject: 'Verification code - Public Profile Submission',
-                text: `Your verification code: ${code}. The code is valid for ${VERIFY_CODE_TTL_MINUTES} minutes.`,
+                subject: 'Kod weryfikacyjny do aktualizacji profilu',
+                text: `Twój kod weryfikacyjny: ${code}. Kod jest ważny przez ${VERIFY_CODE_TTL_MINUTES} minut.`,
                 footer: ToolsMail_1.default.makeENVIFooter(),
             });
             return {
