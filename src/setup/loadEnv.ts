@@ -84,6 +84,17 @@ export function loadEnv(): void {
  * Dev nie moze dzielic magazynu sesji z produkcja. `.env.development` nadpisuje MySQL, ale
  * dopoki nie nadpisze MONGO_URI, wartosc spada do `.env` i wskazuje produkcyjny Atlas.
  * Wtedy SessionRevoker.revokeForPerson kasuje sesje prawdziwych uzytkownikow (2026-08-17).
+ *
+ * DLACZEGO HOST+BAZA, A NIE CALY NAPIS (ROD-0, 2026-09-07). Poprzednia wersja porownywala
+ * `effectiveUri !== rootEnvUri` jako caly string. To przepuszcza wariant, gdy `.env.development`
+ * MA wlasne MONGO_URI, ale rozniace sie od produkcyjnego tylko kosmetycznie (np. koncowy `/`,
+ * inna kolejnosc parametrow zapytania, wielkosc liter w hoscie) — a wskazujace TEN SAM klaster
+ * i te sama baze. Zmierzone na tym laptopie 2026-09-07: `.env` konczy sie `...w=majority/`,
+ * a `.env.development` `...w=majority` (bez ukosnika) — stringi rozne, wiec straznik milczal,
+ * mimo ze oba to ten sam produkcyjny Atlas i ta sama kolekcja `sessions`. Porownujemy wiec
+ * (host, baza) po odrzuceniu poswiadczen, parametrow i koncowego ukosnika:
+ * blokujemy tylko wtedy, gdy dev pisze do tego samego hosta I tej samej bazy co produkcja.
+ * Ten sam host, ale inna baza (np. `.../ps_dev`) = inna przestrzen kolekcji = izolacja, przechodzi.
  */
 export function assertDevSessionStoreIsolated(
     nodeEnv: string,
@@ -91,13 +102,42 @@ export function assertDevSessionStoreIsolated(
     rootEnvUri: string | undefined,
 ): void {
     if (nodeEnv !== 'development') return;
-    if (!rootEnvUri || effectiveUri !== rootEnvUri) return;
+    if (!rootEnvUri || !effectiveUri) return;
+
+    const dev = parseMongoHostAndDb(effectiveUri);
+    const prod = parseMongoHostAndDb(rootEnvUri);
+    if (dev.host !== prod.host) return;
+    if (dev.db !== prod.db) return;
 
     throw new Error(
-        '[ENV] NODE_ENV=development uzywa MONGO_URI z .env, czyli produkcyjnego magazynu sesji. ' +
+        `[ENV] NODE_ENV=development wskazuje ten sam magazyn sesji co produkcja ` +
+            `(host="${prod.host}", baza="${prod.db || '(domyslna)'}"). ` +
             'Sesje deweloperskie trafilyby do produkcyjnej kolekcji sessions, a zmiana roli ' +
-            'wylogowalaby prawdziwych uzytkownikow. Ustaw wlasne MONGO_URI w .env.development.',
+            'wylogowalaby prawdziwych uzytkownikow. Ustaw w .env.development MONGO_URI na osobny ' +
+            'host albo osobna baze (np. mongodb://127.0.0.1:27017/ps_dev).',
     );
+}
+
+/**
+ * Host i baza z URI Mongo, bez poswiadczen, parametrow zapytania i koncowego ukosnika.
+ * Host jest porownywany bez rozroznienia wielkosci liter (DNS), baza z rozroznieniem
+ * (nazwy baz Mongo sa case-sensitive). Brak sciezki bazy => baza pusta (domyslna).
+ */
+export function parseMongoHostAndDb(uri: string): { host: string; db: string } {
+    const withoutScheme = uri.includes('://')
+        ? uri.slice(uri.indexOf('://') + 3)
+        : uri;
+    const withoutCreds = withoutScheme.slice(withoutScheme.indexOf('@') + 1);
+    const hostAndPath = withoutCreds.split('?')[0];
+    const slash = hostAndPath.indexOf('/');
+    const host = (slash === -1 ? hostAndPath : hostAndPath.slice(0, slash))
+        .trim()
+        .toLowerCase();
+    const db =
+        slash === -1
+            ? ''
+            : hostAndPath.slice(slash + 1).replace(/\/+$/, '');
+    return { host, db };
 }
 
 /** Host i baza z URI, bez loginu i hasla. */

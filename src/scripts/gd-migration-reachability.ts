@@ -2,7 +2,7 @@
  * RAPORT OSIĄGALNOŚCI właścicieli plików do migracji (hybryda per-konto).
  *
  * Dla każdego właściciela z audytu (owned_by_other) sprawdza, czy w bazie
- * (Persons / PersonAccounts) jest zapisany GoogleRefreshToken i czy jest WAŻNY.
+ * (PersonAccounts) jest zapisany GoogleRefreshToken i czy jest WAŻNY.
  *   - token ważny  → można zeskryptować MOVE plików tego konta (ID zachowane),
  *   - brak/niż.    → to konto trafia do ścieżki COPY + reindex.
  *
@@ -86,31 +86,17 @@ function ownersFromAudit(csvPath: string): Map<string, number> {
     return out;
 }
 
-/** email(lower) -> refresh token (z Persons i PersonAccounts) */
+/** email(lower) -> refresh token. Tylko PersonAccounts: od ROD-5 zaszłe kolumny Persons nie są czytane. */
 async function tokensFromDb(): Promise<Map<string, string>> {
     const map = new Map<string, string>();
-    const add = (rows: any[]) => {
-        for (const r of rows ?? []) {
-            const email = (r.SystemEmail || '').trim().toLowerCase();
-            const tok = r.GoogleRefreshToken;
-            if (email && tok && !map.has(email)) map.set(email, tok);
-        }
-    };
-    add(
-        (await ToolsDb.getQueryCallbackAsync(
-            `SELECT SystemEmail, GoogleRefreshToken FROM Persons
-             WHERE GoogleRefreshToken IS NOT NULL AND GoogleRefreshToken <> ''`
-        )) as any[]
-    );
-    try {
-        add(
-            (await ToolsDb.getQueryCallbackAsync(
-                `SELECT SystemEmail, GoogleRefreshToken FROM PersonAccounts
-                 WHERE GoogleRefreshToken IS NOT NULL AND GoogleRefreshToken <> ''`
-            )) as any[]
-        );
-    } catch {
-        /* tabela może nie istnieć w starszym schemacie */
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        `SELECT SystemEmail, GoogleRefreshToken FROM PersonAccounts
+         WHERE GoogleRefreshToken IS NOT NULL AND GoogleRefreshToken <> ''`
+    )) as any[];
+    for (const r of rows ?? []) {
+        const email = (r.SystemEmail || '').trim().toLowerCase();
+        const tok = r.GoogleRefreshToken;
+        if (email && tok && !map.has(email)) map.set(email, tok);
     }
     return map;
 }

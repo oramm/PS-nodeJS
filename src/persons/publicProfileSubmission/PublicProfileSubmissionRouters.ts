@@ -1,3 +1,4 @@
+import { PrivacyError } from '../privacy/PrivacyNotice';
 import { Request, Response } from 'express';
 import { app, upload } from '../../index';
 import PublicProfileSubmissionController from './PublicProfileSubmissionController';
@@ -23,8 +24,8 @@ const getBearerToken = (req: Request): string => {
 };
 
 const handleError = (error: unknown, res: Response, next: Function) => {
-    if (error instanceof PublicProfileSubmissionError) {
-        if (error.httpStatus === 429 && error.retryAfterSeconds) {
+    if (error instanceof PublicProfileSubmissionError || error instanceof PrivacyError) {
+        if (error instanceof PublicProfileSubmissionError && error.httpStatus === 429 && error.retryAfterSeconds) {
             res.set('Retry-After', String(error.retryAfterSeconds));
         }
         res.status(error.httpStatus).send({
@@ -183,7 +184,7 @@ app.get(
         try {
             const result =
                 await PublicProfileSubmissionController.getPublicSubmission(
-                    req.params.token,
+                    req.params.token, getBearerToken(req),
                 );
             res.send(result);
         } catch (error) {
@@ -302,3 +303,14 @@ app.post(
         }
     },
 );
+
+for (const method of ['get', 'post'] as const) {
+    app[method]('/v2/public/experience-update/:token/privacy' + (method === 'post' ? '/acknowledgements' : ''), async (req, res, next) => {
+        try {
+            const result = method === 'get'
+                ? await PublicProfileSubmissionController.privacyStatus(req.params.token, getBearerToken(req))
+                : await PublicProfileSubmissionController.acknowledgePrivacy(req.params.token, getBearerToken(req), req.body);
+            res.send(result);
+        } catch (error) { handleError(error, res, next); }
+    });
+}

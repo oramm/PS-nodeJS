@@ -1,4 +1,9 @@
+import PrivacyRepository from '../../persons/privacy/PrivacyRepository';
+import { currentNotice } from '../../persons/privacy/PrivacyNotice';
+import { PersonPrivacyStatus } from '../../types/types';
 import BaseController from '../../controllers/BaseController';
+import ToolsDb from '../../tools/ToolsDb';
+import PersonAccountEventsController from '../../persons/accountEvents/PersonAccountEventsController';
 import { BadRequestError } from '../../persons/projectAssignments/ProjectScopeGuard';
 import StaffMember from './StaffMember';
 import StaffMemberAdminRepository, {
@@ -29,6 +34,14 @@ export default class StaffMembersController extends BaseController<
         return this.instance;
     }
 
+    static async privacyStatus(personId: unknown): Promise<PersonPrivacyStatus> {
+        const id = StaffMemberValidator.requirePersonId(personId);
+        const version = currentNotice('SYSTEM').version;
+        const record = await new PrivacyRepository().findForAdmin(id, 'SYSTEM', version);
+        if (!record) return { status: 'missing', acknowledgedAt: null };
+        return { status: record.version === version ? 'confirmed' : 'outdated', acknowledgedAt: record.acknowledgedAt };
+    }
+
     static async find(
         orConditions: StaffMembersSearchParams[] = [{}]
     ): Promise<StaffMember[]> {
@@ -49,7 +62,13 @@ export default class StaffMembersController extends BaseController<
      * stronie bazy ani danych osoby z JOIN, więc bez tego frontend dostałby
      * niepełny obiekt i pokazał puste imię tuż po zapisie.
      */
-    static async editFromDto(dto: any): Promise<StaffMember> {
+    /**
+     * @param actorPersonId autor zmiany (osoba z sesji) - do zdarzeń konta (ROD-3).
+     */
+    static async editFromDto(
+        dto: any,
+        actorPersonId?: number,
+    ): Promise<StaffMember> {
         const payload = StaffMemberValidator.validateUpdatePayload(dto);
         const instance = this.getInstance();
 
@@ -62,7 +81,23 @@ export default class StaffMembersController extends BaseController<
         if (!person)
             throw new BadRequestError('Osoba o podanym numerze nie istnieje.');
 
-        await instance.repository.upsertInDb(new StaffMember(payload));
+        // ROD-3: zapis flag i ślad „kto, kiedy, co" w JEDNEJ transakcji. Porównujemy z odczytem
+        // sprzed zapisu (osoba bez wiersza flag ma tam wartości domyślne), więc „zapisz bez zmian"
+        // nie zostawia zdarzeń.
+        const changes = StaffMemberValidator.FLAGS.map((flag) => ({
+            field: flag,
+            before: (person as any)[flag],
+            after: (payload as any)[flag],
+        }));
+        await ToolsDb.transaction(async (conn) => {
+            await instance.repository.upsertInDb(new StaffMember(payload), conn);
+            await PersonAccountEventsController.recordChanges(conn, {
+                personId: payload.personId,
+                editorId: actorPersonId ?? null,
+                eventType: 'STAFF_FLAGS',
+                changes,
+            });
+        });
 
         const [updated] = await instance.repository.find([
             { personId: payload.personId, scope: 'all' },

@@ -271,7 +271,7 @@ export type FidmanUserSource = {
     entityId?: number | null;
     name?: string | null;
     surname?: string | null;
-    /** PersonAccounts.SystemEmail (świeższe źródło niż Persons.SystemEmail — GLO-R0 pkt 4). */
+    /** PersonAccounts.SystemEmail - jedyne źródło e-maila logowania (ROD-5; zaszła kolumna Persons.SystemEmail nie jest już czytana). */
     systemEmail?: string | null;
     /** PS Persons.Cellphone. */
     cellphone?: string | null;

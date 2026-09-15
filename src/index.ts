@@ -19,6 +19,7 @@ import agentTokenAuth, {
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
 import requireSession from './setup/Sessions/requireSession';
+import requirePrivacyAcknowledgement from './setup/Sessions/requirePrivacyAcknowledgement';
 import { resolveSessionSecrets } from './setup/Sessions/sessionSecret';
 import projectScopedPolicy from './setup/Sessions/projectScopedPolicy';
 import BugEventCaptureService from './bugEvents/BugEventCaptureService';
@@ -562,6 +563,7 @@ app.use(denyDestructiveForAgent);
 // before the routes below — including the ones registered inline in this file — because the
 // per-route checks it backs up were missing on some of them.
 app.use(requireSession);
+app.use(requirePrivacyAcknowledgement);
 
 // Role zakresowe (CONTRACT_WORKER, CLIENT) docierają tylko do tras z jawnej listy w tej
 // warstwie i dostają tu policzony zakres projektów. Musi stać po requireSession (potrzebuje
@@ -686,7 +688,9 @@ app.get('/admin/bug-events', async (req, res) => {
 });
 
 require('./setup/Sessions/Gauth2Routers');
+require('./persons/privacy/PrivacyRouters');
 require('./persons/PersonsRouters');
+require('./persons/accountEvents/PersonAccountEventsRouters');
 require('./persons/experiences/ExperienceRouters');
 
 require('./persons/projectRoles/RolesRouters');

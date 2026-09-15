@@ -157,11 +157,9 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 LastLetterEvent.RecipientsJSON AS LastEventRecipientsJSON,
 
                 -- Tożsamość autora ZDARZENIA UTWORZENIA (nie ostatniego zdarzenia
-                -- i nie autora wiersza) — z niej liczy się znacznik pisma agenta
-                COALESCE(
-                    CreationEventEditorAccount.SystemEmail,
-                    CreationEventEditor.SystemEmail
-                ) AS CreationEventEditorSystemEmail,
+                -- i nie autora wiersza) — z niej liczy się znacznik pisma agenta.
+                -- Tylko konto (ROD-5): zaszła kolumna Persons.SystemEmail nie jest czytana.
+                CreationEventEditorAccount.SystemEmail AS CreationEventEditorSystemEmail,
     
                 -- Pobieranie powiązanych encji i spraw
                 GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
@@ -236,9 +234,10 @@ export default class LetterRepository extends BaseRepository<Letter> {
      * przestają wskazywać agenta. Znacznik „założył agent” jest faktem historycznym.
      *
      * Podzapytanie z MIN(Id) zamiast prostego złączenia po EventType, żeby pismo z dwoma
-     * zdarzeniami CREATED nie zdublowało wiersza. PersonAccounts dokładane tak samo jak
-     * w PersonRepository.getSystemRole — tożsamość agenta rozstrzyga SystemEmail, nigdy Id
-     * (Id konta agenta jest inne lokalnie i na produkcji).
+     * zdarzeniami CREATED nie zdublowało wiersza. Tożsamość z PersonAccounts, tak samo jak
+     * w PersonRepository.getSystemRole — rozstrzyga SystemEmail konta, nigdy Id
+     * (Id konta agenta jest inne lokalnie i na produkcji). Od ROD-5 bez złączenia z Persons:
+     * zaszła kolumna Persons.SystemEmail nie jest czytana.
      */
     private makeCreationEventJoins(): string {
         return `LEFT JOIN (
@@ -251,10 +250,8 @@ export default class LetterRepository extends BaseRepository<Letter> {
             ) AS CreationLetterEvents ON CreationLetterEvents.LetterId = Letters.Id
             LEFT JOIN LetterEvents AS CreationLetterEvent
                 ON CreationLetterEvent.Id = CreationLetterEvents.CreationEventId
-            LEFT JOIN Persons AS CreationEventEditor
-                ON CreationEventEditor.Id = CreationLetterEvent.EditorId
             LEFT JOIN PersonAccounts AS CreationEventEditorAccount
-                ON CreationEventEditorAccount.PersonId = CreationEventEditor.Id
+                ON CreationEventEditorAccount.PersonId = CreationLetterEvent.EditorId
                 AND CreationEventEditorAccount.IsActive = 1`;
     }
 

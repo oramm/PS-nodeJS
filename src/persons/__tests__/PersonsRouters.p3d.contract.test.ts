@@ -235,7 +235,11 @@ describe('PersonsRouters P3-D transition validation', () => {
 
         await accountPutHandler(req, res, next);
 
-        expect(PersonsController.upsertPersonAccountV2).toHaveBeenCalledWith({
+        // ROD-3: router przekazuje jako drugi argument autora zmiany (osoba z sesji) do zdarzeń konta.
+        expect(PersonsController.upsertPersonAccountV2).toHaveBeenCalledTimes(1);
+        const [accountArg, actorArg] =
+            PersonsController.upsertPersonAccountV2.mock.calls[0];
+        expect(accountArg).toEqual({
             personId: 591,
             systemRoleId: undefined,
             systemEmail: undefined,
@@ -245,6 +249,7 @@ describe('PersonsRouters P3-D transition validation', () => {
             microsoftRefreshToken: undefined,
             isActive: false,
         });
+        expect(actorArg).toBe(req.session?.userData?.enviId);
         expect(res.send).toHaveBeenCalledWith({
             personId: 591,
             isActive: false,

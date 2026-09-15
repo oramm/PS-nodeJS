@@ -14,7 +14,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('generates EXISTS subquery for a single skillId', () => {
             const result = (repository as any).makeAndConditions(
                 { skillIds: [5] },
-                'v2',
             );
 
             expect(result).toContain('EXISTS');
@@ -25,7 +24,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('generates EXISTS subquery for multiple skillIds', () => {
             const result = (repository as any).makeAndConditions(
                 { skillIds: [1, 2, 3] },
-                'v2',
             );
 
             expect(result).toContain('pps.SkillId IN (1,2,3)');
@@ -34,14 +32,13 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('skips skillIds filter when array is empty', () => {
             const result = (repository as any).makeAndConditions(
                 { skillIds: [] },
-                'v2',
             );
 
             expect(result).not.toContain('PersonProfileSkills');
         });
 
         it('skips skillIds filter when not provided', () => {
-            const result = (repository as any).makeAndConditions({}, 'v2');
+            const result = (repository as any).makeAndConditions({});
 
             expect(result).not.toContain('PersonProfileSkills');
         });
@@ -51,7 +48,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('generates EXISTS subquery when hasProfile is true', () => {
             const result = (repository as any).makeAndConditions(
                 { hasProfile: true },
-                'v2',
             );
 
             expect(result).toContain('EXISTS');
@@ -62,7 +58,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('skips hasProfile filter when false', () => {
             const result = (repository as any).makeAndConditions(
                 { hasProfile: false },
-                'v2',
             );
 
             expect(result).not.toContain('PersonProfiles');
@@ -73,7 +68,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('combines skillIds and hasProfile with AND', () => {
             const result = (repository as any).makeAndConditions(
                 { skillIds: [7], hasProfile: true },
-                'v2',
             );
 
             expect(result).toContain('PersonProfileSkills');
@@ -84,7 +78,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('combines skillIds with searchText', () => {
             const result = (repository as any).makeAndConditions(
                 { skillIds: [2], searchText: 'Jan' },
-                'v2',
             );
 
             expect(result).toContain('pps.SkillId IN (2)');
@@ -133,7 +126,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('generates EXISTS subquery for experienceText', () => {
             const result = (repository as any).makeAndConditions(
                 { experienceText: 'Envi' },
-                'v2',
             );
 
             expect(result).toContain('EXISTS');
@@ -143,7 +135,7 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         });
 
         it('skips experienceText filter when not provided', () => {
-            const result = (repository as any).makeAndConditions({}, 'v2');
+            const result = (repository as any).makeAndConditions({});
 
             expect(result).not.toContain('PersonProfileExperiences');
         });
@@ -151,7 +143,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('skips experienceText filter when empty string', () => {
             const result = (repository as any).makeAndConditions(
                 { experienceText: '' },
-                'v2',
             );
 
             expect(result).not.toContain('PersonProfileExperiences');
@@ -160,7 +151,6 @@ describe('PersonRepository – Session 3: skills search & filtering', () => {
         it('combines experienceText with skillIds', () => {
             const result = (repository as any).makeAndConditions(
                 { experienceText: 'Envi', skillIds: [3] },
-                'v2',
             );
 
             expect(result).toContain('PersonProfileExperiences');

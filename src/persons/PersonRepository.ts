@@ -117,13 +117,6 @@ export default class PersonRepository extends BaseRepository<Person> {
         }
     }
 
-    private isV2ReadEnabled(): boolean {
-        return (
-            (process.env.PERSONS_MODEL_V2_LEGACY_READ || '').toLowerCase() !==
-            'true'
-        );
-    }
-
     protected mapRowToModel(row: any): Person {
         return new Person({
             id: row.Id,
@@ -142,21 +135,71 @@ export default class PersonRepository extends BaseRepository<Person> {
         });
     }
 
+    /**
+     * ROD-5 (pack ROD, 2026-09-08): rola, e-mail logowania i konto Google mieszkają WYŁĄCZNIE
+     * w PersonAccounts. Zaszłe kolumny Persons (SystemRoleId, SystemEmail, GoogleId,
+     * GoogleRefreshToken) nie są już czytane ani pisane: zapas COALESCE na nie (od migracji v2
+     * w lutym 2026) był drugą, niekontrolowaną drogą do logowania - e-mail zdjęty z konta albo
+     * konto wyłączone nadal logowały po zaszłej kolumnie. Kolumny znikną migracją w kroku 2,
+     * osobnym wydaniem po tygodniu ciszy. Osoba bez AKTYWNEGO konta ma rolę i e-mail puste:
+     * nie jest użytkownikiem systemu.
+     */
     async find(orConditions: PersonsSearchParams[] = []): Promise<Person[]> {
-        return this.findByReadFacade(orConditions);
+        const conditions =
+            orConditions.length > 0
+                ? this.makeOrGroupsConditions(orConditions, (searchParams) =>
+                      this.makeAndConditions(searchParams),
+                  )
+                : '1';
+
+        const sql = `SELECT Persons.Id,
+                            Persons.EntityId,
+                            Persons.Name,
+                            Persons.Surname,
+                            Persons.Position,
+                            Persons.Email,
+                            Persons.Cellphone,
+                            Persons.Phone,
+                            Persons.Comment,
+                            PersonAccounts.SystemEmail AS SystemEmail,
+                            SystemRoles.Name AS SystemRoleName,
+                            PersonAccounts.SystemRoleId AS SystemRoleId,
+                            Entities.Name AS EntityName,
+                            (SELECT GROUP_CONCAT(DISTINCT sd.Name ORDER BY sd.Name SEPARATOR ', ')
+                             FROM PersonProfileSkills pps
+                             JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
+                             JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
+                             WHERE pp.PersonId = Persons.Id) AS SkillNames
+                    FROM Persons
+                    JOIN Entities ON Persons.EntityId=Entities.Id
+                    LEFT JOIN Roles ON Roles.PersonId = Persons.Id
+                    LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
+                    LEFT JOIN SystemRoles ON PersonAccounts.SystemRoleId = SystemRoles.Id
+                    WHERE ${conditions}
+                    GROUP BY Persons.Id
+                    ORDER BY Persons.Surname, Persons.Name ASC`;
+
+        const rows = await this.executeQuery(sql);
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     async getPersonAccountV2(
         personId: number,
     ): Promise<PersonAccountV2Payload | undefined> {
+        // RODO (pack ROD, ROD-2, D-ROD-6 (a) 2026-09-07): odczyt konta NIE wybiera ani nie
+        // zwraca tokenów odświeżania. To sekret logowania osoby - jedyną trasą, którą dotąd
+        // wychodził do przeglądarki administratora, było GET /v2/persons/:id/account (zmierzone
+        // na żywo w ROD-0). Tokeny per osoba nie są używane do wywołań Google (te idą z
+        // process.env.REFRESH_TOKEN - patrz BaseController/MileageController/sheetsAuth), więc
+        // ich nieoddawanie niczego nie psuje. Kolumny tokenów ZOSTAJĄ (owner 2026-09-08:
+        // planowane logowanie kontem Microsoft obok Google) - leżą w bazie, ale nigdy nie
+        // opuszczają serwera.
         const sql = mysql.format(
             `SELECT PersonId,
                     SystemRoleId,
                     SystemEmail,
                     GoogleId,
-                    GoogleRefreshToken,
                     MicrosoftId,
-                    MicrosoftRefreshToken,
                     IsActive,
                     FidmanEnabled
              FROM PersonAccounts
@@ -172,9 +215,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             systemRoleId: row.SystemRoleId ?? undefined,
             systemEmail: row.SystemEmail ?? undefined,
             googleId: row.GoogleId ?? undefined,
-            googleRefreshToken: row.GoogleRefreshToken ?? undefined,
             microsoftId: row.MicrosoftId ?? undefined,
-            microsoftRefreshToken: row.MicrosoftRefreshToken ?? undefined,
             isActive: Boolean(row.IsActive),
             fidmanEnabled: Boolean(row.FidmanEnabled),
         };
@@ -183,9 +224,8 @@ export default class PersonRepository extends BaseRepository<Person> {
     /**
      * GLO-P1 — dane osoby potrzebne do payloadu `user.upsert`, czytane w transakcji zapisu.
      *
-     * SystemEmail bierzemy z PersonAccounts z zapasem na Persons (ten sam COALESCE, którym
-     * czyta fasada v2): PersonAccounts jest źródłem świeższym, ale nie każda osoba ma tam
-     * wypełniony adres. Telefon i podmiot są tylko w Persons.
+     * SystemEmail wyłącznie z PersonAccounts (ROD-5: zaszła kolumna Persons.SystemEmail nie
+     * jest już czytana). Telefon i podmiot są tylko w Persons.
      */
     async getFidmanUserSourceInConn(
         conn: mysql.PoolConnection,
@@ -204,7 +244,7 @@ export default class PersonRepository extends BaseRepository<Person> {
                     Persons.Name AS Name,
                     Persons.Surname AS Surname,
                     Persons.Cellphone AS Cellphone,
-                    COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail
+                    PersonAccounts.SystemEmail AS SystemEmail
              FROM Persons
              LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
              WHERE Persons.Id = ?
@@ -245,232 +285,67 @@ export default class PersonRepository extends BaseRepository<Person> {
         };
     }
 
-    async findByReadFacade(
-        orConditions: PersonsSearchParams[] = [],
-    ): Promise<Person[]> {
-        if (!this.isV2ReadEnabled()) {
-            return this.findLegacy(orConditions);
-        }
-        return this.findV2(orConditions);
-    }
-
-    async getPersonBySystemEmailByReadFacade(
+    async getPersonBySystemEmail(
         systemEmail: string,
     ): Promise<Person | undefined> {
-        const people = await this.findByReadFacade([
+        const people = await this.find([
             { systemEmail, showPrivateData: true },
         ]);
         return people[0];
     }
 
-    async getPersonBySystemEmail(
-        systemEmail: string,
-    ): Promise<Person | undefined> {
-        return this.getPersonBySystemEmailByReadFacade(systemEmail);
-    }
-
-    private async findLegacy(
-        orConditions: PersonsSearchParams[] = [],
-    ): Promise<Person[]> {
-        const conditions =
-            orConditions.length > 0
-                ? this.makeOrGroupsConditions(orConditions, (searchParams) =>
-                      this.makeAndConditions(searchParams, 'legacy'),
-                  )
-                : '1';
-
-        const sql = `SELECT Persons.Id,
-                            Persons.EntityId,
-                            Persons.Name,
-                            Persons.Surname,
-                            Persons.Position,
-                            Persons.Email,
-                            Persons.Cellphone,
-                            Persons.Phone,
-                            Persons.Comment,
-                            Persons.SystemEmail,
-                            SystemRoles.Name AS SystemRoleName,
-                            SystemRoles.Id AS SystemRoleId,
-                            Entities.Name AS EntityName,
-                            (SELECT GROUP_CONCAT(DISTINCT sd.Name ORDER BY sd.Name SEPARATOR ', ')
-                             FROM PersonProfileSkills pps
-                             JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
-                             JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
-                             WHERE pp.PersonId = Persons.Id) AS SkillNames
-                    FROM Persons
-                    JOIN Entities ON Persons.EntityId=Entities.Id
-                    LEFT JOIN Roles ON Roles.PersonId = Persons.Id
-                    JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id
-                    WHERE ${conditions}
-                    GROUP BY Persons.Id
-                    ORDER BY Persons.Surname, Persons.Name ASC`;
-
-        const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToModel(row));
-    }
-
-    private async findV2(
-        orConditions: PersonsSearchParams[] = [],
-    ): Promise<Person[]> {
-        const conditions =
-            orConditions.length > 0
-                ? this.makeOrGroupsConditions(orConditions, (searchParams) =>
-                      this.makeAndConditions(searchParams, 'v2'),
-                  )
-                : '1';
-
-        const sql = `SELECT Persons.Id,
-                            Persons.EntityId,
-                            Persons.Name,
-                            Persons.Surname,
-                            Persons.Position,
-                            Persons.Email,
-                            Persons.Cellphone,
-                            Persons.Phone,
-                            Persons.Comment,
-                            COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail,
-                            COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName,
-                            COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
-                            Entities.Name AS EntityName,
-                            (SELECT GROUP_CONCAT(DISTINCT sd.Name ORDER BY sd.Name SEPARATOR ', ')
-                             FROM PersonProfileSkills pps
-                             JOIN PersonProfiles pp ON pp.Id = pps.PersonProfileId
-                             JOIN SkillsDictionary sd ON sd.Id = pps.SkillId
-                             WHERE pp.PersonId = Persons.Id) AS SkillNames
-                    FROM Persons
-                    JOIN Entities ON Persons.EntityId=Entities.Id
-                    LEFT JOIN Roles ON Roles.PersonId = Persons.Id
-                    LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
-                    LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id
-                    JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id
-                    WHERE ${conditions}
-                    GROUP BY Persons.Id
-                    ORDER BY Persons.Surname, Persons.Name ASC`;
-
-        const rows = await this.executeQuery(sql);
-        return rows.map((row) => this.mapRowToModel(row));
-    }
-
+    /**
+     * Tożsamość i rola: logowanie Google (ToolsGapi), wejście agenta tokenem (agentTokenAuth)
+     * i sprawdzenia scruma po numerze osoby (ContractOur, TasksController).
+     *
+     * ROD-5: tylko PersonAccounts, złączenia wewnętrzne. Osoba bez AKTYWNEGO konta albo z kontem
+     * bez roli dostaje `undefined` („Nie masz dostępu do systemu”). Nie ma zapasu na zaszłe
+     * kolumny Persons - dlatego zdjęcie e-maila logowania w oknie uprawnień naprawdę odbiera
+     * dostęp, a wyłączone konto nie loguje. Przed ROD-5 każda osoba miała tu wiersz (zaszła
+     * rola NOT NULL DEFAULT 5), więc wołający po `id` muszą liczyć się z `undefined`.
+     */
     async getSystemRole(params: { id?: number; systemEmail?: string }) {
-        return this.getSystemRoleByReadFacade(params);
-    }
-
-    async getSystemRoleByReadFacade(params: {
-        id?: number;
-        systemEmail?: string;
-    }) {
-        if (!this.isV2ReadEnabled()) {
-            return this.getSystemRoleLegacy(params);
-        }
-        return this.getSystemRoleV2(params);
-    }
-
-    private async getSystemRoleLegacy(params: {
-        id?: number;
-        systemEmail?: string;
-    }) {
-        if (!params.id && !params.systemEmail)
-            throw new Error('Person should have an ID or systemEmail');
-        const personIdCondition = params.id
-            ? mysql.format('Persons.Id = ?', [params.id])
-            : '1';
-
-        const systemEmailCondition = params.systemEmail
-            ? mysql.format('Persons.SystemEmail = ?', [params.systemEmail])
-            : '1';
-
-        const sql = `SELECT 
-                Persons.SystemRoleId, 
-                Persons.Id AS PersonId, 
-                Persons.GoogleId AS GoogleId, 
-                Persons.GoogleRefreshToken AS GoogleRefreshToken, 
-                SystemRoles.Name AS SystemRoleName 
-                FROM Persons 
-                JOIN SystemRoles ON Persons.SystemRoleId=SystemRoles.Id 
-                WHERE ${systemEmailCondition} AND ${personIdCondition}`;
-
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            const row = result[0];
-            if (!row) return undefined;
-            return {
-                id: <number>row.SystemRoleId,
-                name: <SystemRoleName>row.SystemRoleName,
-                personId: <number>row.PersonId,
-                googleId: <string | undefined>row.GoogleId,
-                microsofId: <string | undefined>row.MicrosoftId,
-                googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
-            };
-        } catch (err) {
-            throw err;
-        }
-    }
-
-    private async getSystemRoleV2(params: {
-        id?: number;
-        systemEmail?: string;
-    }) {
         if (!params.id && !params.systemEmail)
             throw new Error('Person should have an ID or systemEmail');
 
         const personIdCondition = params.id
             ? mysql.format('Persons.Id = ?', [params.id])
             : '1';
-
         const systemEmailCondition = params.systemEmail
-            ? mysql.format(
-                  'COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) = ?',
-                  [params.systemEmail],
-              )
+            ? mysql.format('PersonAccounts.SystemEmail = ?', [
+                  params.systemEmail,
+              ])
             : '1';
 
-        const sql = `SELECT 
-                        COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
+        const sql = `SELECT
+                        PersonAccounts.SystemRoleId AS SystemRoleId,
                         Persons.Id AS PersonId,
-                        COALESCE(PersonAccounts.GoogleId, Persons.GoogleId) AS GoogleId,
-                        COALESCE(PersonAccounts.GoogleRefreshToken, Persons.GoogleRefreshToken) AS GoogleRefreshToken,
+                        PersonAccounts.GoogleId AS GoogleId,
+                        PersonAccounts.GoogleRefreshToken AS GoogleRefreshToken,
                         PersonAccounts.MicrosoftId AS MicrosoftId,
-                        COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name) AS SystemRoleName
+                        SystemRoles.Name AS SystemRoleName
                     FROM Persons
-                    LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
-                    LEFT JOIN SystemRoles V2SystemRoles ON PersonAccounts.SystemRoleId = V2SystemRoles.Id
-                    LEFT JOIN SystemRoles LegacySystemRoles ON Persons.SystemRoleId = LegacySystemRoles.Id
+                    JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
+                    JOIN SystemRoles ON PersonAccounts.SystemRoleId = SystemRoles.Id
                     WHERE ${systemEmailCondition} AND ${personIdCondition}`;
 
-        try {
-            const result: any[] = <any[]>(
-                await ToolsDb.getQueryCallbackAsync(sql)
-            );
-            const row = result[0];
-            if (!row) return undefined;
-            return {
-                id: <number>row.SystemRoleId,
-                name: <SystemRoleName>row.SystemRoleName,
-                personId: <number>row.PersonId,
-                googleId: <string | undefined>row.GoogleId,
-                microsofId: <string | undefined>(row.MicrosoftId ?? undefined),
-                googleRefreshToken: <string | undefined>row.GoogleRefreshToken,
-            };
-        } catch (err) {
-            throw err;
-        }
+        const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
+        const row = result[0];
+        if (!row) return undefined;
+        return {
+            id: <number>row.SystemRoleId,
+            name: <SystemRoleName>row.SystemRoleName,
+            personId: <number>row.PersonId,
+            googleId: <string | undefined>(row.GoogleId ?? undefined),
+            microsofId: <string | undefined>(row.MicrosoftId ?? undefined),
+            googleRefreshToken: <string | undefined>(
+                row.GoogleRefreshToken ?? undefined
+            ),
+        };
     }
 
-    private makeAndConditions(
-        searchParams: PersonsSearchParams,
-        readPath: 'legacy' | 'v2' = 'legacy',
-    ): string {
+    private makeAndConditions(searchParams: PersonsSearchParams): string {
         const conditions: string[] = [];
-        const systemRoleNameColumn =
-            readPath === 'v2'
-                ? 'COALESCE(V2SystemRoles.Name, LegacySystemRoles.Name)'
-                : 'SystemRoles.Name';
-        const systemEmailColumn =
-            readPath === 'v2'
-                ? 'COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail)'
-                : 'Persons.SystemEmail';
 
         if (searchParams.projectId) {
             conditions.push(
@@ -489,7 +364,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (searchParams.systemRoleName) {
             conditions.push(
-                mysql.format(`${systemRoleNameColumn} REGEXP ?`, [
+                mysql.format(`SystemRoles.Name REGEXP ?`, [
                     searchParams.systemRoleName,
                 ]),
             );
@@ -497,7 +372,7 @@ export default class PersonRepository extends BaseRepository<Person> {
 
         if (searchParams.systemEmail) {
             conditions.push(
-                mysql.format(`${systemEmailColumn}=?`, [
+                mysql.format(`PersonAccounts.SystemEmail=?`, [
                     searchParams.systemEmail,
                 ]),
             );

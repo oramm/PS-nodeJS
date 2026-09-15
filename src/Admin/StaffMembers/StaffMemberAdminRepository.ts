@@ -58,8 +58,9 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
     /**
      * Odczyt idzie OD Persons przez LEFT JOIN - bez tego nie dałoby się nadać
      * flagi osobie, która nie ma jeszcze wiersza (seed migracji objął tylko role 1/2/3).
-     * Rola i e-mail systemowy przez COALESCE (ten sam, którym czyta fasada osób),
-     * bo potrafią być zapisane tylko na koncie V2 albo tylko w zaszłej kolumnie Persons.
+     * Rola i e-mail systemowy WYŁĄCZNIE z konta (PersonAccounts) - ROD-5 zdjął zapas COALESCE
+     * na zaszłe kolumny Persons. Bez filtra IsActive: administrator ma widzieć także konto
+     * wyłączone, żeby móc je włączyć.
      */
     async find(
         orConditions: StaffMembersSearchParams[] = [{}]
@@ -71,8 +72,8 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 Persons.Email,
                 Persons.EntityId,
                 Entities.Name AS EntityName,
-                COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) AS SystemRoleId,
-                COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) AS SystemEmail,
+                PersonAccounts.SystemRoleId AS SystemRoleId,
+                PersonAccounts.SystemEmail AS SystemEmail,
                 COALESCE(PersonAccounts.FidmanEnabled, 0) AS FidmanEnabled,
                 StaffMembers.Id AS StaffMemberId,
                 COALESCE(StaffMembers.IsDriver, 0) AS IsDriver,
@@ -123,16 +124,16 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 mysql.format('Persons.Id = ?', [searchParams.personId])
             );
 
-        // Zakres (D-PER-7). Warunek „użytkownik" powtarza COALESCE z SELECT, bo w WHERE nie da
-        // się odwołać do aliasu kolumny wyliczanej. Pusty string liczy się jak brak e-maila:
-        // zaszła kolumna Persons.SystemEmail bywa wypełniona pustym łańcuchem.
+        // Zakres (D-PER-7). Warunek „użytkownik" powtarza kolumnę z SELECT, bo w WHERE nie da
+        // się odwołać do aliasu. Pusty string liczy się jak brak e-maila: zapis konta potrafi
+        // zostawić pusty łańcuch zamiast NULL.
         const scope = resolveStaffMembersScope(searchParams.scope);
         if (scope === 'permissions')
             conditions.push('StaffMembers.Id IS NOT NULL');
         else if (scope === 'users')
             conditions.push(
-                `((COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) IS NOT NULL
-                    AND COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) <> '')
+                `((PersonAccounts.SystemEmail IS NOT NULL
+                    AND PersonAccounts.SystemEmail <> '')
                   OR StaffMembers.Id IS NOT NULL)`,
             );
 
@@ -147,15 +148,11 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
         if (entityCondition !== '1') conditions.push(entityCondition);
 
         // Pusty wybór w filtrze dociera tu jako '' albo 0 - to znaczy "bez zawężania",
-        // a nie "rola o numerze zero". Powtarzamy całe COALESCE, bo w WHERE nie da się
-        // odwołać do aliasu kolumny wyliczanej w SELECT.
+        // a nie "rola o numerze zero".
         const systemRoleId = Number(searchParams.systemRoleId);
         if (Number.isInteger(systemRoleId) && systemRoleId > 0)
             conditions.push(
-                mysql.format(
-                    'COALESCE(PersonAccounts.SystemRoleId, Persons.SystemRoleId) = ?',
-                    [systemRoleId]
-                )
+                mysql.format('PersonAccounts.SystemRoleId = ?', [systemRoleId])
             );
 
         // E-mail systemowy w szukanej frazie, bo to on jest pokazany w wierszu listy
@@ -167,7 +164,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
             words.forEach((word) =>
                 conditions.push(
                     mysql.format(
-                        '(Persons.Name LIKE ? OR Persons.Surname LIKE ? OR Persons.Email LIKE ? OR COALESCE(PersonAccounts.SystemEmail, Persons.SystemEmail) LIKE ?)',
+                        '(Persons.Name LIKE ? OR Persons.Surname LIKE ? OR Persons.Email LIKE ? OR PersonAccounts.SystemEmail LIKE ?)',
                         [`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`]
                     )
                 )

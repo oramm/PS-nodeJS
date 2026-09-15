@@ -36,6 +36,8 @@
         "gd:audit-ownership": "cross-env NODE_ENV=development ts-node src/scripts/gd-audit-ownership.ts",
         "gd:folder-size": "cross-env NODE_ENV=development ts-node src/scripts/gd-folder-size.ts",
         "gd:reachability": "cross-env NODE_ENV=development ts-node src/scripts/gd-migration-reachability.ts",
+        "persons:legacy-report": "cross-env NODE_ENV=development ts-node src/scripts/persons-legacy-account-report.ts",
+        "persons:unlinked-report": "cross-env NODE_ENV=development ts-node src/scripts/persons-unlinked-report.ts",
         "gd:move-test": "cross-env NODE_ENV=development ts-node src/scripts/gd-move-test.ts",
         "gd:reindex": "cross-env NODE_ENV=development ts-node src/scripts/gd-reindex.ts",
         "gd:scan-perms": "cross-env NODE_ENV=development ts-node src/scripts/gd-scan-permissions.ts",

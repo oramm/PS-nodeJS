@@ -220,7 +220,10 @@ export default async function agentTokenAuth(
         if (!providedToken) return next();
 
         // A live human session is never overwritten — see LIS-2 task 1.
-        if (req.session.userData) return next();
+        if (req.session.userData) {
+            if (sessionHoldsAgentIdentity && hasValidToken) res.locals.authenticatedMachine = true;
+            return next();
+        }
 
         if (!hasValidToken) {
             // The caller still gets the plain "not logged in" path (no information leak),
@@ -237,6 +240,7 @@ export default async function agentTokenAuth(
         // Shallow copy: the cached identity is shared between requests and must not be
         // mutated through a session object.
         req.session.userData = { ...agentUserData };
+        res.locals.authenticatedMachine = true;
         req.session.cookie.maxAge = AGENT_SESSION_MAX_AGE_MS;
         console.log(
             `[AgentAuth] Agent token accepted:: ID: ${req.sessionID} path: ${req.path} userName: ${agentUserData.userName} / ${agentUserData.systemRoleName} / enviId: ${agentUserData.enviId}`,

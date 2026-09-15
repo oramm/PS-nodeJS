@@ -88,7 +88,7 @@ describe('agentTokenAuth', () => {
         });
 
         const { req, next } = makeRequest({ token: VALID_TOKEN });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toBeUndefined();
         expect(getSystemRole).not.toHaveBeenCalled();
@@ -104,7 +104,7 @@ describe('agentTokenAuth', () => {
         });
 
         const { req, next } = makeRequest({ token: VALID_TOKEN });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         // The account was looked up, and the elevated role was the reason for the refusal.
         expect(getSystemRole).toHaveBeenCalledWith({
@@ -124,7 +124,7 @@ describe('agentTokenAuth', () => {
 
         // Cookie minted earlier, while the previous token was still valid.
         const { req, next } = makeRequest({ userData: { ...AGENT_SESSION } });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toBeUndefined();
         expect(next).toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe('agentTokenAuth', () => {
         });
 
         const { req, next } = makeRequest({ token: 'undefined' });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toBeUndefined();
         expect(getSystemRole).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('agentTokenAuth', () => {
         });
 
         const { req, next } = makeRequest({ token: VALID_TOKEN });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toMatchObject({
             enviId: 613,
@@ -179,7 +179,7 @@ describe('agentTokenAuth', () => {
 
         const human = { ...HUMAN_SESSION };
         const { req, next } = makeRequest({ userData: human });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toEqual(HUMAN_SESSION);
         expect(next).toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('agentTokenAuth', () => {
             token: 'c'.repeat(64),
             userData: human,
         });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toEqual(HUMAN_SESSION);
         expect(next).toHaveBeenCalled();
@@ -213,7 +213,7 @@ describe('agentTokenAuth', () => {
         });
 
         const { req, next } = makeRequest({ userData: { ...AGENT_SESSION } });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toBeUndefined();
         expect(next).toHaveBeenCalled();
@@ -236,7 +236,7 @@ describe('agentTokenAuth', () => {
             systemRoleId: 2,
         };
         const { req, next } = makeRequest({ token: VALID_TOKEN, userData: human });
-        await layer(req, {}, next);
+        await layer(req, { locals: {} }, next);
 
         expect(req.session.userData).toEqual(human);
         expect(next).toHaveBeenCalled();

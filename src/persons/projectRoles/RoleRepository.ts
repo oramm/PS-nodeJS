@@ -89,7 +89,9 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
             FROM Roles 
             JOIN Persons ON Persons.Id = Roles.PersonId 
             JOIN Entities ON Entities.Id = Persons.EntityId 
-            JOIN SystemRoles ON SystemRoles.Id = Persons.SystemRoleId 
+            -- ROD-5: rola systemowa osoby tylko z aktywnego konta, bez zaszlej kolumny w tabeli osob
+            LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id AND PersonAccounts.IsActive = 1
+            LEFT JOIN SystemRoles ON SystemRoles.Id = PersonAccounts.SystemRoleId
             LEFT JOIN Contracts ON Contracts.Id = Roles.ContractId
             LEFT JOIN OurContractsData ON Contracts.Id = OurContractsData.Id
             LEFT JOIN ContractTypes ON Contracts.TypeId = ContractTypes.Id

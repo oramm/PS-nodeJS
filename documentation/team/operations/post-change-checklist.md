@@ -6,6 +6,17 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-09-14 - Privacy acknowledgement (ACK-1)
+
+- DB/deploy: migration `src/persons/migrations/010_create_privacy_acknowledgements.sql` is additive; apply and verify BEFORE backend, then deploy matching frontend. No new environment variables.
+- Release gate: SYSTEM notice is a reviewable draft; obtain owner review of the actual text in `src/persons/privacy/PrivacyNotice.ts` before production. PUBLIC_PROFILE retains approved wording.
+- Metadata cleanup (2026-09-15): removed requiresReleaseReview from API/snapshots; both scopes use revision 2 with material version 2026-09-14 unchanged. Retain revision 1 snapshots and acknowledgements; no data migration or repeat acknowledgement needed. Release review remains in this checklist.
+- Admin status (2026-09-15): GET /admin/staffMember/:personId/privacy returns SYSTEM confirmation status and timestamp for the personnel edit panel, under existing ADMIN/ENVI_MANAGER access. Deploy backend before corresponding frontend; uses existing migration010 tables, no additional migration or env change.
+- Local verification: dispatcher applied migration to existing local copy only; production refresh source unavailable. No production migration or release performed.
+- Before release: run normal migration ledger verify and coordinated backend/frontend checks (fresh account, returning account, material revision, scoped role, verified public form, headless integration). Do not deploy backend alone: old frontend cannot clear the gate.
+- Verification: initial privacy/auth/public suites 19 passed; final privacy route regression suites 9 passed; frontend focused tests 9 passed; both typechecks passed. Independent bounded review APPROVE. Final real local API 9 checks and browser 9 checks passed (synthetic data; email delivery stub only); desktop/mobile inspected; both diff checks passed. PR checklist: DB/deploy action documented; env N/A; frontend counterpart required; Heroku does not auto-apply migration.
+- Rollback: revert matching application release, retain acknowledgement/snapshot evidence tables; do not delete evidence as part of rollback.
+
 ## How to use
 
 1. Update the canonical document that owns the change:
@@ -194,7 +205,9 @@ Copy the block below for each new change:
 
 ### Links
 
+- Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md`
 - Vault pack: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-progress.md`
+- `src/entities/migrations/002_add_regon_krs_gus_status.sql`
 - `src/entities/gusBir/GusSweep.ts`, `src/entities/EntitiesRouters.ts`
 
 ## 2026-09-09 - GUS_BIR_KEY set on production (GUS-0)
@@ -225,6 +238,131 @@ Copy the block below for each new change:
 
 - Plan: SB `20_projects/Aplikacje/PS.APP.01/plans/2026-09-09-gus-synchronizacja-podmiotow-plan.md`
 - `src/entities/gusBir/GusBirService.ts`, `src/entities/EntitiesRouters.ts`
+
+## 2026-09-10 - RODO pack ROD (ROD-6): person delete blocked when references exist (D-ROD-2 = c) (no schema change, no commits)
+
+### Scope
+
+- `DELETE /person/:id` now refuses with `409 { errorMessage, blockers[] }` when the person has any reference in the DB (module `personReferences` from ROD-8); hard delete only for a person with no trace. Missing/invalid `id` -> `400` (was `500`). New `PersonDeleteBlockedError`, `describeBlockers` (human labels in the message); frontend unchanged (existing ConfirmModal shows `errorMessage` in a danger alert). Owner decision `D-ROD-2` = (c): no anonymization, no new route, no migration.
+
+### Impact
+
+- DB: none (no schema change, no migration).
+- ENV: none.
+- Deploy: part of the ROD batch. Behaviour change: persons with references stop deleting from the UI (today they cascade, or hit a RESTRICT); they get a 409 that lists what blocks.
+
+### Required Actions
+
+- Owner gate `G-ROD-2`: review the refusal on a copy (non-destructive - it blocks, it does not delete).
+- After backend release, smoke: try deleting a person with references from the "Osoby" screen -> red message lists them, person stays; delete a synthetic person with no references -> gone.
+
+### Verification
+
+- Full jest 156/157 suites, 1564 tests, 0 failed; `tsc` clean. Live probe: 409 with blockers (linked person), 200 (unlinked), 400 (no id); inventory before = after (448/436/16/0).
+
+### Rollback
+
+- Before release: `git checkout -- .` (nothing committed). No data or schema change to undo.
+
+### Links
+
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-07-rod-dane-osobowe-progress.md` (session 10).
+
+## 2026-09-10 - RODO pack ROD (ROD-9): release package - staged rollout order and smoke checks (no code change, no commits)
+
+### Scope
+
+- Final evidence checkpoint. No schema/env/code change in this session; migrations 008 (account events, ROD-3) and 009 (account backfill, ROD-5 step 1) already in the repo, applied locally. Commit, push and smoke test are the owner's (gate G-ROD-3).
+
+### Impact
+
+- DB: none new. 008/009 applied locally; on production behind gate G-ROD-1.
+- ENV: none.
+- Deploy: corrects the plan's "each checkpoint releases on its own" - false. Six closed checkpoints are interleaved in the same files (PersonRepository.ts, PersonsRouters.ts, types.d.ts) and the full suites only ran on the whole tree. Release in three stages: DB -> one backend push -> one frontend push.
+
+### Required Actions
+
+- Stage 1 (DB, production): `cross-env NODE_ENV=production ts-node src/scripts/persons-legacy-account-report.ts` (sections A-taken/B-taken/H and the agent line need a human decision) -> DB backup -> `yarn migrate:apply` (008 and 009) -> `yarn migrate:verify`.
+- Stage 2 (backend push `main`): release gate = migrate verify only.
+- Stage 3 (frontend push `master`, Pages Actions); Ctrl+F5 after (service worker envi-pwa-v3).
+
+### Verification
+
+- Full backend jest 147/148 suites, 1452 tests, 0 failed; full frontend vitest 57 files, 514 tests, 0 failed; `tsc` clean in both repos. Local visual review of the two touched windows; synthetic person 631 created and deleted, inventory before = after; no e-mail sent.
+
+### Rollback
+
+- Before release: `git checkout -- .` in both repos plus removing new files. Migration 009 is data (may stay); 008 is a new unused table (may stay or `DROP TABLE PersonAccountEvents`).
+
+### Links
+
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-07-rod-dane-osobowe-progress.md` (session 9).
+
+## 2026-09-08 - RODO pack ROD (ROD-5 step 1): PersonAccounts is the only source of role, login e-mail and Google identity; data migration 009
+
+### Scope
+
+- Reads of the legacy account columns in `Persons` (`SystemRoleId`, `SystemEmail`, `GoogleId`, `GoogleRefreshToken`) removed from code: `PersonRepository` (persons list; `getSystemRole` used by Google login, the agent token layer and scrum checks; FIDman user source), `StaffMemberAdminRepository` (permissions window), `LetterRepository` (agent-created flag), `RoleRepository`, `PublicProfileSubmissionRepository`, `gd-migration-reachability.ts`. The legacy read paths and the `PERSONS_MODEL_V2_LEGACY_READ` flag are gone. Identity now requires an **active** `PersonAccounts` row with a role; a person without one gets `undefined` from `getSystemRole` (before: every person had a row through the `NOT NULL DEFAULT 5` legacy role).
+- New read-only report `yarn persons:legacy-report` (ids only, never names or addresses): who migration 009 will touch and who needs a manual decision.
+- Legacy columns stay until step 2 (a separate release after a week of silence). Do not add a DROP migration before step 1 is released.
+
+### Impact
+
+- DB: `src/persons/migrations/009_backfill_person_accounts_from_legacy.sql` - **data only, additive, idempotent**: creates an account for a person without one whose legacy columns carry a real value (e-mail, Google id, or a role other than the column default 5); fills an empty account e-mail from the legacy column when the address is free; fills an empty account role. Applied locally on `envi_16_06` on 2026-09-08 (0 rows on the base data; logic proven on 8 synthetic persons, created and deleted in the session). Legacy columns untouched.
+- ENV: `PERSONS_MODEL_V2_LEGACY_READ` removed from `.env.example` (no reader left in code).
+- Deploy: **the Heroku `release` gate only verifies and fails the release while a migration is pending - it applies nothing.** Order: report on production -> DB backup -> `yarn migrate:apply` (NODE_ENV=production) for 008 and 009 -> `yarn migrate:verify` -> push backend -> push frontend (ROD-3 UI). The ROD-0..ROD-3 entry below is corrected accordingly.
+
+### Required Actions
+
+- Before `apply` on production run `cross-env NODE_ENV=production ts-node src/scripts/persons-legacy-account-report.ts`; sections `A-taken`, `B-taken`, `H` and the agent line need a human decision (e-mail taken by another account; disabled account that today logs in through the legacy column; agent e-mail present only in the legacy column).
+- Owner review of 008 + 009 (pack gate `G-ROD-1`). Role mismatches (report section `F`) are settled by owner decision `D-ROD-8`: the account is the truth, no data change.
+- Behaviour changes to accept consciously: a disabled account (`PersonAccounts.IsActive = 0`) no longer logs in through the legacy e-mail; a person without an account shows an empty role in lists instead of "EXTERNAL_USER"; with scrum sheet sync enabled (`SCRUM_SHEET_SYNC_ENABLED` not `false`) a task owner without an account raises "Użytkownik nie zarejestrowany w systemie" instead of being silently skipped.
+
+### Verification
+
+- `tsc --noEmit` clean; full jest suite 142/142 suites, 1432 tests green; grep of the legacy columns in `src` (outside `migrations/` and tests) = 0 code hits; migration dry-run in a rolled-back transaction 0/0/0 rows; synthetic-data run plus a `getSystemRole` probe through the real code before/after; live `POST /persons` on the dev server (448 persons, role distribution equal to the accounts table).
+
+### Rollback
+
+- Code: revert the commit. Data written by 009 may stay (accounts and filled fields are real); the previous COALESCE code works with them unchanged.
+
+### Links
+
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-07-rod-dane-osobowe-progress.md` (session 5).
+
+## 2026-09-08 - RODO pack ROD (ROD-0..ROD-3): dev session-store guard, persons list scoping, account read without tokens, account change events
+
+### Scope
+
+- ROD-0: `assertDevSessionStoreIsolated` (`src/setup/loadEnv.ts`) compares the Mongo **host and database** instead of the whole URI string. The string compare was defeated by a trailing slash: `.env.development` pointed at the production Atlas and dev sessions (and `SessionRevoker`) hit the production `sessions` collection. Dev now needs its own MONGO_URI (this laptop: Docker `ps-mongo-dev`, `mongodb://127.0.0.1:27017/ps_dev?serverSelectionTimeoutMS=120000`); the server refuses to start otherwise (intended).
+- ROD-1: `POST /persons` returns the full person shape only to `STAFF_ROLES`; every other role (EXTERNAL_USER, ENVI_COOPERATOR, CONTRACT_WORKER, CLIENT) gets `{id, name, surname, email, _nameSurnameEmail}` (`src/persons/personsListVisibility.ts`). Measured before the change: EXTERNAL_USER received phones, entity, position, comment, systemEmail and role of all 448 persons.
+- ROD-2: `GET /v2/persons/:id/account` no longer selects or returns `googleRefreshToken` / `microsoftRefreshToken` (`PersonRepository.getPersonAccountV2`). Token columns **stay** (owner 2026-09-08: Microsoft login planned next to Google) - no migration.
+- ROD-3: new table `PersonAccountEvents` (migration 008) and module `src/persons/accountEvents/`. `PUT /v2/persons/:id/account`, `PUT /v2/persons/:id/project-assignments` (now through the new `ProjectAssignmentsController`, one transaction) and `PUT /admin/staffMember/:id` write one event per changed value **in the same transaction** as the change, author = session person (`req.session.userData.enviId`). `GET /v2/persons/:id/account-events` (USER_MANAGEMENT_ROLES) reads them. Tokens are never written to events (closed field list). Frontend (separate repo): section "Ostatnie zmiany konta" in the permissions modal.
+
+### Impact
+
+- DB: `src/persons/migrations/008_create_person_account_events.sql` - **additive** (new table; FKs to Persons: `PersonId` ON DELETE CASCADE, `EditorId` ON DELETE SET NULL). No change to existing tables or data. Applied locally on `envi_16_06` on 2026-09-08. Safe to auto-run on release together with the code.
+- ENV: no new keys. `.env.development` must carry its own MONGO_URI (different host or database than `.env`).
+- Deploy: backend first (release gate runs migration 008), then frontend. No data migration, no backfill.
+
+### Required Actions
+
+- Owner review of migration 008 before release (pack gate `G-ROD-1`).
+- Owner confirmation that ENVI_COOPERATOR gets the trimmed persons list (`D-ROD-1` (a)); otherwise variant (b) - only persons from their contracts.
+- After release, smoke: open a person in "Personel i uprawnienia", change one flag, reopen - "Ostatnie zmiany konta" shows the row with author and date.
+
+### Verification
+
+- Backend: `tsc --noEmit` clean; jest: `loadEnv.test` (10), `personsListVisibility.test` (7) + `PersonsRouters.p3d.contract`, `getPersonAccountV2.rod2.test`, `PersonAccountEventsController.test` (4); live probes on the local server (7 roles on `POST /persons`, `GET account` shape, events written for a synthetic person and read back with author).
+- Frontend: vitest `AccountEventsList.test`, `StaffMemberModalBody.test`; `tsc --noEmit`.
+
+### Rollback
+
+- Code: revert the commits (backend, then frontend). The empty/unused table may stay; otherwise `DROP TABLE PersonAccountEvents` - nothing else references it.
+
+### Links
+
+- Vault: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-07-rod-dane-osobowe-progress.md` (sessions 1-3).
 
 ## 2026-09-04 - Persons and accounts: one account write path, role gates on account and person routes (pack PER)
 

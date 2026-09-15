@@ -159,10 +159,11 @@ export default class PublicProfileSubmissionRepository {
         personId: number,
     ): Promise<string | undefined> {
         const rows: any[] = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT NULLIF(TRIM(Email), '') AS Email,
-                    NULLIF(TRIM(SystemEmail), '') AS SystemEmail
+            `SELECT NULLIF(TRIM(Persons.Email), '') AS Email,
+                    NULLIF(TRIM(PersonAccounts.SystemEmail), '') AS SystemEmail
              FROM Persons
-             WHERE Id = ?
+             LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
+             WHERE Persons.Id = ?
              LIMIT 1`,
             undefined,
             [personId],

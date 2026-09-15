@@ -202,6 +202,11 @@ describe('flaga _isCreatedByAgent w rejestrze pism', () => {
 
         expect(capturedSql).toContain('SystemEmail');
         expect(capturedSql).not.toMatch(/EditorId\s*=\s*\d+/);
+        // ROD-5: tożsamość wyłącznie z konta; zaszła kolumna Persons.SystemEmail nie jest czytana.
+        expect(capturedSql).toContain(
+            'CreationEventEditorAccount.SystemEmail AS CreationEventEditorSystemEmail',
+        );
+        expect(capturedSql).not.toContain('CreationEventEditor.SystemEmail');
     });
 
     it('zapytanie sięga po zdarzenie utworzenia osobnym złączeniem', async () => {

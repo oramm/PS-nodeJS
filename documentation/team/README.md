@@ -20,7 +20,7 @@ decisions, procedures and rollout facts that are not visible in code.
 - `architecture/testing-per-layer.md` — what to mock per layer
 - `architecture/system-context.md` — C4 context diagram
 - `onboarding/` — local setup, environment, access and secrets
-- `runbooks/` — testing, dev-login, local dev orchestration, DB migration execution, bug backlog, public profile link recovery
+- `runbooks/` — testing, dev-login, local dev orchestration, DB migration execution, bug backlog, public profile link recovery, RODO review of unlinked persons (`rodo-przeglad-osob.md`)
 - `operations/` — db-changes, deployment-heroku, post-change-checklist (+ archive), db-migration-memory
 
 ## Initiative docs

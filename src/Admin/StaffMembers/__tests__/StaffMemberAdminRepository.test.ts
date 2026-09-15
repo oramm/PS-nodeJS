@@ -1,5 +1,6 @@
 /// <reference types="jest" />
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
+import ToolsDb from '../../../tools/ToolsDb';
 import StaffMemberAdminRepository from '../StaffMemberAdminRepository';
 
 /**
@@ -159,5 +160,36 @@ describe('StaffMemberAdminRepository - filtr podmiotu i zawężenie do osoby', (
 
         expect(result).toContain('Persons.Id = 613');
         expect(result).not.toContain(USERS_ONLY);
+    });
+});
+
+describe('StaffMemberAdminRepository - ROD-5: rola i e-mail logowania tylko z konta', () => {
+    // Zaszłe kolumny Persons (SystemRoleId, SystemEmail) były drugą, niekontrolowaną drogą
+    // do roli i e-maila: COALESCE pokazywał w oknie uprawnień wartość, której nikt nie widział
+    // w koncie. Od ROD-5 okno czyta wyłącznie PersonAccounts (bez filtra aktywności - administrator
+    // ma widzieć także konto wyłączone).
+    it('warunki listy nie sięgają do zaszłych kolumn Persons', () => {
+        const result = conditionsFor({ scope: 'users', systemRoleId: 3, searchText: 'kowal' });
+
+        expect(result).not.toContain('Persons.SystemEmail');
+        expect(result).not.toContain('Persons.SystemRoleId');
+        expect(result).not.toContain('COALESCE');
+        expect(result).toContain('PersonAccounts.SystemRoleId = 3');
+        expect(result).toContain('PersonAccounts.SystemEmail LIKE');
+    });
+
+    it('odczyt listy bierze rolę i e-mail z PersonAccounts', async () => {
+        const querySpy = jest
+            .spyOn(ToolsDb, 'getQueryCallbackAsync')
+            .mockResolvedValue([] as any);
+
+        await repository.find([{}]);
+
+        const sql = String(querySpy.mock.calls[0][0]);
+        expect(sql).toContain('PersonAccounts.SystemRoleId AS SystemRoleId');
+        expect(sql).toContain('PersonAccounts.SystemEmail AS SystemEmail');
+        expect(sql).not.toContain('Persons.SystemRoleId');
+        expect(sql).not.toContain('Persons.SystemEmail');
+        expect(sql).not.toContain('COALESCE(PersonAccounts.System');
     });
 });

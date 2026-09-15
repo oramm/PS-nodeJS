@@ -1,10 +1,11 @@
 import PersonsController from './PersonsController';
 import { app } from '../index';
 import { Request, Response } from 'express';
-import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 import requireUserManagementRole, {
     requireStaffRole,
 } from '../setup/Sessions/requireUserManagementRole';
+import { projectPersonsForRole } from './personsListVisibility';
+import PersonDeleteBlockedError from './personReferences/PersonDeleteBlockedError';
 
 const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'systemRoleId',
@@ -40,23 +41,11 @@ app.post('/persons', async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await PersonsController.find(orConditions);
-        // Role zakresowe (pracownik kontraktowy, klient) dostają tylko tyle, ile
-        // potrzebują listy wyboru osób (np. właściciel zadania). Reszta profilu - dane
-        // kontaktowe, podmiot, rola systemowa - nie jest im do niczego potrzebna i nie ma
-        // po co wychodzić z serwera.
+        // RODO (ROD-1): pełne dane osób dostaje tylko personel ENVI (STAFF_ROLES); każda inna
+        // rola - zewnętrzna, współpracownik, zakresowa - dostaje kształt listy wyboru
+        // (id, imię, nazwisko, e-mail). Jedna reguła i uzasadnienie: personsListVisibility.ts.
         const role = req.session.userData?.systemRoleName;
-        if (role && PROJECT_SCOPED_ROLES.includes(role)) {
-            res.send(
-                result.map((person) => ({
-                    id: person.id,
-                    name: person.name,
-                    surname: person.surname,
-                    email: person.email,
-                })),
-            );
-            return;
-        }
-        res.send(result);
+        res.send(projectPersonsForRole(result, role));
     } catch (error) {
         next(error);
     }
@@ -136,9 +125,14 @@ app.put(
 
 /**
  * Usuwa osobę z bazy danych.
- * Params: id
+ * UWAGA: id czytane z TRESCI zadania (req.body.id), nie z :id w adresie.
+ * Params: id (ignorowany)
  * Body: { id }
- * Returns: { id }
+ * Returns: { id } albo 409 { errorMessage, blockers[] }, gdy osoba ma powiazania.
+ *
+ * RODO (ROD-6, D-ROD-2 = (c)): osoby z powiazaniami nie wolno skasowac. Kontroler rzuca
+ * PersonDeleteBlockedError z lista powiazan; tu nadajemy cialu 409 ksztalt { errorMessage,
+ * blockers[] }, bo globalny handler oddalby samo errorMessage.
  */
 app.delete(
     '/person/:id',
@@ -148,6 +142,12 @@ app.delete(
             const result = await PersonsController.deleteFromDto(req.body);
             res.send(result);
         } catch (error) {
+            if (error instanceof PersonDeleteBlockedError) {
+                return res.status(409).send({
+                    errorMessage: error.message,
+                    blockers: error.blockers,
+                });
+            }
             next(error);
         }
     },
@@ -275,7 +275,7 @@ app.put(
                 microsoftRefreshToken: payload?.microsoftRefreshToken,
                 isActive: payload?.isActive,
                 fidmanEnabled: payload?.fidmanEnabled,
-            });
+            }, req.session?.userData?.enviId);
             if (ownRoleChange) {
                 await destroyOwnSession(req);
                 res.send({ ...account, _selfSessionRevoked: true });

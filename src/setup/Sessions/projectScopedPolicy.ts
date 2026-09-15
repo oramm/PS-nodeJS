@@ -32,6 +32,8 @@ type RoutePattern = { method: string; path: string };
  * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
 const BASE_ROUTES: RoutePattern[] = [
+    { method: 'GET', path: '/v2/privacy/system' },
+    { method: 'POST', path: '/v2/privacy/system/acknowledgements' },
     // --- Start aplikacji: repozytoria ładowane przez frontend dla każdego zalogowanego.
     // Bez nich aplikacja kliencka nie wstaje (MainControllerReact.setRepostories).
     { method: 'POST', path: '/persons' }, // odpowiedź okrojona do danych podstawowych

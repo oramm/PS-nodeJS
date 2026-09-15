@@ -539,6 +539,33 @@ export interface PersonAccountV2Payload {
     _selfSessionRevoked?: boolean;
 }
 
+/**
+ * ROD-3 (pack ROD, D-ROD-5 wariant (a)): jedno zdarzenie konta osoby = jedna zmieniona wartość
+ * (rola, e-mail logowania, aktywność konta, FIDman, zakres projektów, flaga panelu).
+ * Pisze wyłącznie kontroler, w tej samej transakcji co zmiana; autor = osoba z sesji.
+ */
+export type PersonAccountEventType =
+    | 'ACCOUNT'
+    | 'PROJECT_ASSIGNMENTS'
+    | 'STAFF_FLAGS';
+
+export interface PersonAccountEventData {
+    id?: number;
+    personId: number;
+    /** Autor zmiany (osoba z sesji); null, gdy autora już nie ma w bazie. */
+    editorId?: number | null;
+    eventType: PersonAccountEventType;
+    /** Nazwa zmienionego pola: systemRoleId, systemEmail, isActive, fidmanEnabled, projectOurIds, isDriver, ... */
+    field: string;
+    /** Wartość przed / po zmianie jako JSON (string); null = brak wartości. */
+    valueBefore?: string | null;
+    valueAfter?: string | null;
+    /** Z bazy (DEFAULT CURRENT_TIMESTAMP); pole z `_`, więc nie jedzie w INSERT. */
+    _createdAt?: string;
+    _editorName?: string | null;
+    _editorSurname?: string | null;
+}
+
 export interface PersonProfileV2Payload {
     personId: number;
     headline?: string;
@@ -666,6 +693,27 @@ export interface PublicSubmissionViewDto {
     createdAt?: string;
     updatedAt?: string;
     items: PublicSubmissionItemDto[];
+}
+
+/**
+ * Klauzula informacyjna publicznego formularza (ROD-7). Jedno źródło tekstu:
+ * src/persons/publicProfileSubmission/publicProfileSubmissionPrivacyNotice.ts.
+ * `isPlaceholder: true` = tekst zastępczy do zastąpienia przez administratora danych (front pokazuje plakietkę).
+ */
+export interface PublicProfilePrivacyNoticeSectionDto {
+    heading: string;
+    text: string;
+}
+
+export interface PublicProfilePrivacyNoticeDto {
+    isPlaceholder: boolean;
+    title: string;
+    sections: PublicProfilePrivacyNoticeSectionDto[];
+}
+
+/** Odpowiedź GET /v2/public/experience-update/:token - widok zgłoszenia plus klauzula (tylko trasa publiczna). */
+export interface PublicSubmissionPublicInfoDto extends PublicSubmissionViewDto {
+    privacyNotice: PublicProfilePrivacyNoticeDto;
 }
 
 export interface PublicReviewDecisionPayload {
@@ -958,3 +1006,7 @@ export interface ProjectRoleData extends ContractRoleData {
     projectOurId?: string | null;
     _project?: ProjectData;
 }
+
+export type PersonPrivacyStatus =
+    | { status: 'missing'; acknowledgedAt: null }
+    | { status: 'confirmed' | 'outdated'; acknowledgedAt: string };

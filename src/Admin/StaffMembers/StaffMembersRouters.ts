@@ -27,13 +27,24 @@ app.put(
     '/admin/staffMember/:personId',
     async (req: any, res: any, next: any) => {
         try {
-            const result = await StaffMembersController.editFromDto({
-                ...req.parsedBody,
-                personId: req.params.personId,
-            });
+            const result = await StaffMembersController.editFromDto(
+                {
+                    ...req.parsedBody,
+                    personId: req.params.personId,
+                },
+                req.session?.userData?.enviId,
+            );
             res.send(result);
         } catch (error) {
             next(error);
         }
     }
 );
+
+// Inherits the /admin guard registered before all staff routes.
+app.get('/admin/staffMember/:personId/privacy', async (req, res, next) => {
+    try {
+        res.set('Cache-Control', 'no-store');
+        res.send(await StaffMembersController.privacyStatus(req.params.personId));
+    } catch (error) { next(error); }
+});

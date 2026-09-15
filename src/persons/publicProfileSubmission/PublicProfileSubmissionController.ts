@@ -46,6 +46,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 const ToolsDb_1 = __importDefault(require('../../tools/ToolsDb'));
 const ToolsMail_1 = __importDefault(require('../../tools/ToolsMail'));
 const ToolsAI_1 = __importDefault(require('../../tools/ToolsAI'));
+const publicProfileSubmissionPrivacyNotice_1 = require('./publicProfileSubmissionPrivacyNotice');
 const ExperienceController_1 = __importDefault(
     require('../experiences/ExperienceController'),
 );
@@ -59,6 +60,7 @@ const PublicProfileSubmissionErrors_1 = require('./PublicProfileSubmissionErrors
 const PublicProfileSubmissionRepository_1 = __importDefault(
     require('./PublicProfileSubmissionRepository'),
 );
+const PrivacyController = require('../privacy/PrivacyController').default;
 const LINK_TTL_DAYS = Number(
     (_a = process.env.PUBLIC_PROFILE_SUBMISSION_LINK_TTL_DAYS) !== null &&
         _a !== void 0
@@ -288,15 +290,42 @@ class PublicProfileSubmissionController {
             };
         });
     }
-    static getPublicSubmission(token) {
+    static getPublicSubmission(token, bearerToken = "") {
         return __awaiter(this, void 0, void 0, function* () {
             const instance = this.getInstance();
             const { link, submission } =
                 yield instance.resolveLinkAndSubmission(token);
+            if (!bearerToken) return {
+                id: submission.id, status: submission.status, items: [],
+                privacyNotice: publicProfileSubmissionPrivacyNotice_1.PUBLIC_PROFILE_PRIVACY_NOTICE,
+            };
+            yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            yield PrivacyController.requireAcknowledgement(submission.personId, 'PUBLIC_PROFILE');
             const items = yield instance.repository.getSubmissionItems(
                 submission.id,
             );
-            return instance.buildSubmissionView(link.id, submission, items);
+            const view = instance.buildSubmissionView(link.id, submission, items);
+            // ROD-7: klauzula informacyjna tylko na trasie publicznej (jedno źródło tekstu - moduł obok).
+            return Object.assign({}, view, {
+                privacyNotice:
+                    publicProfileSubmissionPrivacyNotice_1.PUBLIC_PROFILE_PRIVACY_NOTICE,
+            });
+        });
+    }
+    static privacyStatus(token, bearerToken) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const instance = this.getInstance();
+            const { submission } = yield instance.resolveLinkAndSubmission(token);
+            yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            return yield PrivacyController.status(submission.personId, 'PUBLIC_PROFILE');
+        });
+    }
+    static acknowledgePrivacy(token, bearerToken, dto) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const instance = this.getInstance();
+            const { submission } = yield instance.resolveLinkAndSubmission(token);
+            yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            return yield PrivacyController.acknowledge(submission.personId, 'PUBLIC_PROFILE', dto);
         });
     }
     static requestVerifyCode(token, emailRaw) {
@@ -481,6 +510,7 @@ class PublicProfileSubmissionController {
             const { submission } =
                 yield instance.resolveLinkAndSubmission(token);
             yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            yield PrivacyController.requireAcknowledgement(submission.personId, 'PUBLIC_PROFILE');
             const items = yield instance.repository.getSubmissionItems(
                 submission.id,
             );
@@ -493,6 +523,7 @@ class PublicProfileSubmissionController {
             const { submission } =
                 yield instance.resolveLinkAndSubmission(token);
             yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            yield PrivacyController.requireAcknowledgement(submission.personId, 'PUBLIC_PROFILE');
             if (submission.status === 'CLOSED') {
                 throw new PublicProfileSubmissionErrors_1.PublicProfileSubmissionError(
                     'Submission already closed',
@@ -543,6 +574,7 @@ class PublicProfileSubmissionController {
             const { submission } =
                 yield instance.resolveLinkAndSubmission(token);
             yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            yield PrivacyController.requireAcknowledgement(submission.personId, 'PUBLIC_PROFILE');
             yield ToolsDb_1.default.transaction((conn) =>
                 __awaiter(this, void 0, void 0, function* () {
                     yield instance.repository.markSubmissionSubmitted(
@@ -566,6 +598,7 @@ class PublicProfileSubmissionController {
             const { submission } =
                 yield instance.resolveLinkAndSubmission(token);
             yield instance.ensureVerifiedSession(submission.id, bearerToken);
+            yield PrivacyController.requireAcknowledgement(submission.personId, 'PUBLIC_PROFILE');
             const result = yield ToolsAI_1.default.analyzePersonProfile(
                 file,
                 hint,
@@ -1084,10 +1117,16 @@ class PublicProfileSubmissionController {
     sendSubmissionLinkMail(email, url, expiresAt) {
         return __awaiter(this, void 0, void 0, function* () {
             const expiresLabel = expiresAt.toISOString().slice(0, 10);
+            // ROD-7: pod linkiem klauzula informacyjna - to samo źródło tekstu, co strona formularza.
+            const privacyNoticeText =
+                publicProfileSubmissionPrivacyNotice_1.renderPrivacyNoticeText(
+                    publicProfileSubmissionPrivacyNotice_1.PUBLIC_PROFILE_PRIVACY_NOTICE,
+                );
             yield ToolsMail_1.default.sendMail({
                 to: email,
-                subject: 'Link do uzupe�nienia profilu',
-                text: `Otrzymujesz link do uzupe�nienia profilu: ${url}\n\nLink wygasa: ${expiresLabel}.`,
+                subject: 'Link do uzupełnienia profilu',
+                html: publicProfileSubmissionPrivacyNotice_1.renderProfileSubmissionLinkMailHtml(url, expiresLabel),
+                text: `Otrzymujesz link do uzupełnienia profilu: ${url}\n\nLink wygasa: ${expiresLabel}.\n\n${privacyNoticeText}`,
                 footer: ToolsMail_1.default.makeENVIFooter(),
             });
         });

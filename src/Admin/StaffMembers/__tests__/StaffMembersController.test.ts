@@ -6,13 +6,19 @@
  * panelu nigdy nie wrócił do własnego zapisu roli.
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import ToolsDb from '../../../tools/ToolsDb';
 import StaffMemberAdminRepository from '../StaffMemberAdminRepository';
 
 jest.mock('../StaffMemberAdminRepository');
+// ROD-3: zapis flag idzie w transakcji razem ze zdarzeniami konta - obie rzeczy udajemy,
+// żeby test nie dotykał bazy (zawieszał się na prawdziwym połączeniu).
+jest.mock('../../../tools/ToolsDb');
+jest.mock('../../../persons/accountEvents/PersonAccountEventRepository');
 
 import StaffMembersController from '../StaffMembersController';
 
 const PERSON_ID = 613;
+const mockConn = { threadId: 613 } as any;
 
 const flags = {
     isDriver: false,
@@ -28,6 +34,12 @@ describe('StaffMembersController.editFromDto()', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        (ToolsDb.transaction as jest.Mock).mockImplementation(
+            async (...args: any[]) => {
+                const callback = args[0] as (conn: any) => Promise<any>;
+                return await callback(mockConn);
+            }
+        );
         const storedRow = {
             id: PERSON_ID,
             personId: PERSON_ID,

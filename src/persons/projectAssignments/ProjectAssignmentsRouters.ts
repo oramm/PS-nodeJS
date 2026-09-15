@@ -1,6 +1,7 @@
 import { app } from '../../index';
 import { Request, Response, NextFunction } from 'express';
 import ProjectAssignmentRepository from './ProjectAssignmentRepository';
+import ProjectAssignmentsController from './ProjectAssignmentsController';
 import { BadRequestError } from './ProjectScopeGuard';
 /**
  * Przypisania nadaje ten, kto zarządza użytkownikami - ta sama lista ról co trasy konta.
@@ -58,21 +59,14 @@ app.put(
                 ),
             ] as string[];
 
-            // Nieistniejący projekt to błąd, a nie cicho pominięty wpis - inaczej
-            // literówka w OurId zawęziłaby dostęp bez śladu.
-            const existing =
-                await ProjectAssignmentRepository.filterExistingProjectOurIds(
-                    requested
-                );
-            const unknown = requested.filter((ourId) => !existing.includes(ourId));
-            if (unknown.length > 0)
-                throw new BadRequestError(
-                    `Nieznane projekty: ${unknown.join(', ')}`
-                );
-
-            await ProjectAssignmentRepository.setAssignments(personId, requested);
+            // ROD-3: walidacja istnienia projektów, podmiana przypisań i zdarzenie konta
+            // (zakres przed/po, autor z sesji) idą przez kontroler, w jednej transakcji.
             const assignments =
-                await ProjectAssignmentRepository.getAssignedProjects(personId);
+                await ProjectAssignmentsController.replaceAssignments(
+                    personId,
+                    requested,
+                    req.session?.userData?.enviId
+                );
             res.send({ assignments });
         } catch (error) {
             next(error);

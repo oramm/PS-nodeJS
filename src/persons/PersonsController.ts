@@ -1,8 +1,12 @@
 import Person from './Person';
 import { UserData } from '../types/sessionTypes';
 import SessionRevoker from '../setup/Sessions/SessionRevoker';
+import PersonAccountEventsController from './accountEvents/PersonAccountEventsController';
 import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
+import PersonReferencesRepository from './personReferences/PersonReferencesRepository';
+import PersonDeleteBlockedError from './personReferences/PersonDeleteBlockedError';
+import { BadRequestError } from './projectAssignments/ProjectScopeGuard';
 import { PersonAccountV2Payload, PersonProfileV2Payload } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
@@ -232,6 +236,27 @@ export default class PersonsController extends BaseController<
     static async deleteFromDto(
         personData: any,
     ): Promise<{ id: number | undefined }> {
+        // Trasa czyta id z TRESCI zadania (nie z adresu). Bez prawidlowego id oddajemy 400,
+        // a nie 500 „Id = undefined" (sprostowanie z ROD-7, Sesja 8).
+        const id = Number(personData?.id);
+        if (!Number.isInteger(id) || id <= 0)
+            throw new BadRequestError(
+                'Brak prawidlowego identyfikatora osoby do usuniecia.',
+            );
+
+        // RODO (ROD-6, decyzja ownera D-ROD-2 = (c), 2026-09-10): osoby z JAKIMKOLWIEK powiazaniem
+        // NIE wolno skasowac - twarde kasowanie zostaje tylko dla osoby bez sladu w bazie. Inwentarz
+        // odwolan to ten sam modul, co raport ROD-8 (personReferences): liczy powiazania w calej bazie
+        // z kluczy obcych do Persons plus 5 kolumn edytora bez klucza. Niepusty = odmowa 409 z lista,
+        // co blokuje; front pokazuje czlowiekowi, co trzyma osobe. „Prawo do bycia zapomnianym" osoby
+        // z historia realizuje sie recznie w bazie (swiadomy wybor ownera).
+        const references = await new PersonReferencesRepository().countReferences(
+            [id],
+        );
+        const blockers = references.get(id) ?? [];
+        if (blockers.length > 0)
+            throw new PersonDeleteBlockedError(id, blockers);
+
         const person = new Person(personData);
         await this.delete(person);
         return { id: person.id };
@@ -366,8 +391,25 @@ export default class PersonsController extends BaseController<
         return instance.repository.getPersonAccountV2(personId);
     }
 
+    /**
+     * Pola konta, których zmiana zostawia zdarzenie (ROD-3). ZAMKNIĘTA LISTA - celowo bez
+     * tokenów odświeżania (sekret nie ma prawa trafić do tabeli zdarzeń) i bez identyfikatorów
+     * Google/Microsoft (techniczne, ustawiane przy logowaniu, nie przez administratora).
+     */
+    private static readonly ACCOUNT_EVENT_FIELDS = [
+        'systemRoleId',
+        'systemEmail',
+        'isActive',
+        'fidmanEnabled',
+    ] as const;
+
+    /**
+     * @param actorPersonId autor zmiany (osoba z sesji) - trafia do zdarzenia konta (ROD-3);
+     *   brak = zdarzenie bez autora (np. wywołanie ze skryptu), nigdy nie blokuje zapisu.
+     */
     static async upsertPersonAccountV2(
         accountData: PersonAccountV2Payload,
+        actorPersonId?: number,
     ): Promise<PersonAccountV2Payload> {
         const instance = this.getInstance();
         if (!accountData.personId) {
@@ -434,6 +476,20 @@ export default class PersonsController extends BaseController<
                 conn,
                 fieldsToSync,
             );
+            // ROD-3: ślad „kto, kiedy, co" w tej samej transakcji co zmiana konta. Tylko pola
+            // faktycznie zapisywane w tym żądaniu i tylko te, które się zmieniły.
+            await PersonAccountEventsController.recordChanges(conn, {
+                personId: accountData.personId,
+                editorId: actorPersonId ?? null,
+                eventType: 'ACCOUNT',
+                changes: this.ACCOUNT_EVENT_FIELDS.filter((field) =>
+                    fieldsToSync.includes(field),
+                ).map((field) => ({
+                    field,
+                    before: previousAccount?.[field],
+                    after: accountData[field],
+                })),
+            });
             await this.ensureStaffMemberForRole(
                 accountData.personId,
                 accountData.systemRoleId,
