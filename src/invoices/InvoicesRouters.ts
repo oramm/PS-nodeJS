@@ -49,6 +49,24 @@ app.post('/invoice', async (req: Request, res: Response, next) => {
     }
 });
 
+app.post('/invoiceSeries/preview', async (req: Request, res: Response, next) => {
+    try {
+        if (!req.session.userData) return res.status(401).json({ error: 'Użytkownik niezalogowany' });
+        res.json(await InvoicesController.previewSeries(req.body));
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post('/invoiceSeries', async (req: Request, res: Response, next) => {
+    try {
+        if (!req.session.userData) return res.status(401).json({ error: 'Użytkownik niezalogowany' });
+        res.json(await InvoicesController.createSeries(req.body, req.session.userData));
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.post('/copyInvoice', async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');

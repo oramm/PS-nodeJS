@@ -397,6 +397,36 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return result;
     }
 
+    async requireTransactionalSeriesTables(conn: mysql.PoolConnection): Promise<void> {
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+            "SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('Invoices', 'InvoiceItems', 'InvoiceThirdParties', 'InvoiceSeriesRequests')",
+        );
+        if (rows.length !== 4 || rows.some(row => row.ENGINE?.toUpperCase() !== 'INNODB'))
+            throw new Error('Tworzenie serii wymaga migracji bazy i tabel InnoDB. Skontaktuj się z administratorem.');
+    }
+
+    async claimSeriesRequest(requestId: string, userId: number, payload: string, conn: mysql.PoolConnection) {
+        // The unique key waits for a concurrent transaction to commit or roll back.
+        await conn.execute(
+            'INSERT INTO InvoiceSeriesRequests (RequestId, UserId, RequestPayload) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE RequestId = RequestId',
+            [requestId, userId, payload],
+        );
+        const [rows] = await conn.execute<mysql.RowDataPacket[]>(
+            'SELECT UserId, RequestPayload, InvoiceIds FROM InvoiceSeriesRequests WHERE RequestId = ? FOR UPDATE',
+            [requestId],
+        );
+        return rows[0];
+    }
+
+    async finishSeriesRequest(requestId: string, invoiceIds: number[], conn: mysql.PoolConnection) {
+        await conn.execute('UPDATE InvoiceSeriesRequests SET InvoiceIds = ? WHERE RequestId = ?',
+            [JSON.stringify(invoiceIds), requestId]);
+    }
+
+    async lockSeriesContract(contractId: number, conn: mysql.PoolConnection) {
+        await conn.execute('SELECT Id FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]);
+    }
+
     async replaceThirdPartiesInDb(
         invoiceId: number,
         thirdParties: InvoiceThirdPartyData[],

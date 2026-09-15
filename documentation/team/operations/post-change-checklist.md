@@ -17,6 +17,17 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 - Verification: initial privacy/auth/public suites 19 passed; final privacy route regression suites 9 passed; frontend focused tests 9 passed; both typechecks passed. Independent bounded review APPROVE. Final real local API 9 checks and browser 9 checks passed (synthetic data; email delivery stub only); desktop/mobile inspected; both diff checks passed. PR checklist: DB/deploy action documented; env N/A; frontend counterpart required; Heroku does not auto-apply migration.
 - Rollback: revert matching application release, retain acknowledgement/snapshot evidence tables; do not delete evidence as part of rollback.
 
+## 2026-09-15 - Invoice series
+
+- DB/deploy: apply additive migration src/invoices/migrations/011_create_invoice_series_requests.sql before backend, then deploy matching frontend. Verify Invoices, InvoiceItems, InvoiceThirdParties and InvoiceSeriesRequests all use InnoDB before enabling the feature; atomic rollback requires transactional tables.
+- ENV: no changes. No production deployment or migration performed as part of implementation.
+- Local DB: migration 011 applied and verified on 2026-09-15, development, 127.0.0.1/envi_16_06; existing invoice tables verified as InnoDB. Scope was 011 only, not a global migration run.
+- Verification: 36 backend unit tests, 2 opt-in real InnoDB tests (49 copies, concurrent replay, reconnect, injected insert failure), 10 frontend tests; both repository typechecks passed. Database integration uses a disposable schema cloned from local tables and stubs external services and financial validators.
+- UI: running local app with existing local test invoice; 50-row preview, manual anchor and month-end return checked. 1280/1920/390 px DOM checks showed no modal overflow; mobile table scrolls horizontally. No invoice was created through the browser. This used the existing local snapshot, not a fresh production refresh.
+- Review: bounded fallback diff review (native /review unavailable), APPROVE after fixes; no remaining blocking findings. PR checklist: DB/deploy documented; env N/A; apply migration before backend, frontend build/deploy belongs to ENVI.ProjectSite.
+- Retain InvoiceSeriesRequests on rollback: deleting receipts would allow retries to create duplicates.
+- Release checks: repeat a request ID, inject an item insert failure, verify no partial invoices or third parties remain, and check the 31 January schedule and a manually chosen first date.
+
 ## How to use
 
 1. Update the canonical document that owns the change:

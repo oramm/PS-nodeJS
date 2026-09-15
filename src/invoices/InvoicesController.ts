@@ -1,4 +1,5 @@
 import Invoice from './Invoice';
+import InvoiceSeriesValidator, { InvoiceSeriesPreview, InvoiceSeriesValidationError } from './InvoiceSeriesValidator';
 import InvoiceRepository, { InvoicesSearchParams } from './InvoiceRepository';
 import BaseController from '../controllers/BaseController';
 import { InvoiceData, InvoiceThirdPartyData } from '../types/types';
@@ -123,17 +124,7 @@ export default class InvoicesController extends BaseController<
             );
             await validator.checkValueWithContract(true);
 
-            await ToolsDb.transaction(async (conn) => {
-                await this.repository.addInDb(invoice, conn, true);
-                if (!invoice.id) {
-                    throw new Error('Invoice id missing after insert');
-                }
-                await this.repository.replaceThirdPartiesInDb(
-                    invoice.id,
-                    invoice._thirdParties || [],
-                    conn,
-                );
-            });
+            await this.insertInvoice(invoice);
             // LastUpdated wypełnia baza, ale wartość nie wraca do obiektu w pamięci.
             // Bez tego szczegóły faktury pokazują "Invalid date" tuż po dodaniu.
             invoice._lastUpdated = new Date().toISOString();
@@ -144,6 +135,20 @@ export default class InvoicesController extends BaseController<
         } finally {
             console.groupEnd();
         }
+    }
+
+    private async insertInvoice(invoice: Invoice, externalConn?: mysql.PoolConnection): Promise<void> {
+        this.normalizeThirdPartyState(invoice);
+        this.validateThirdPartyRules(invoice);
+        await ToolsDb.transaction(async (conn) => {
+            await this.repository.addInDb(invoice, conn, true);
+            if (!invoice.id) throw new Error('Invoice id missing after insert');
+            await this.repository.replaceThirdPartiesInDb(
+                invoice.id,
+                invoice._thirdParties || [],
+                conn,
+            );
+        }, externalConn);
     }
 
     // ==================== CORRECTION INVOICE ====================
@@ -929,104 +934,108 @@ export default class InvoicesController extends BaseController<
     }
 
     // ==================== COPY ====================
-    /**
-     * API PUBLICZNE
-     * Kopiuje fakturę wraz z pozycjami
-     *
-     * @param invoiceToCopyData - Dane faktury do skopiowania
-     * @param userData - Dane użytkownika z sesji
-     * @returns Promise<Invoice> - Skopiowana faktura
-     */
-    static async copy(
-        invoiceToCopyData: InvoiceData,
-        userData: UserData
-    ): Promise<Invoice> {
+    static async copy(invoiceToCopyData: InvoiceData, userData: UserData): Promise<Invoice> {
         const instance = this.getInstance();
-        return await instance.copyInvoice(invoiceToCopyData, userData);
+        return ToolsDb.transaction(async conn => {
+            const [copy] = await instance.copyBatch(invoiceToCopyData, [invoiceToCopyData.issueDate], userData, conn, true);
+            return copy;
+        });
     }
 
-    /**
-     * LOGIKA BIZNESOWA (prywatna)
-     * Kopiuje fakturę i jej pozycje w transakcji DB
-     *
-     * @param invoiceToCopyData - Dane faktury do skopiowania
-     * @param userData - Dane użytkownika z sesji
-     * @returns Promise<Invoice> - Skopiowana faktura
-     */
-    private async copyInvoice(
-        invoiceToCopyData: InvoiceData,
-        userData: UserData
-    ): Promise<Invoice> {
-        console.group('InvoicesController.copyInvoice()');
+    private async copyBatch(
+        source: InvoiceData,
+        saleDates: string[],
+        userData: UserData,
+        conn: mysql.PoolConnection,
+        markAsCopy: boolean,
+    ): Promise<Invoice[]> {
+        const items = await InvoiceItemsController.find([{ invoiceId: source.id }]);
+        const totalNet = items.reduce((sum, item) => sum + item._netValue, 0);
+        // Validate all new copies together; the uncommitted writes are invisible to settlement queries.
+        const batch = new Invoice({ ...source, _owner: source._owner ? { ...source._owner } : undefined, _totalNetValue: Math.round(totalNet * saleDates.length * 100) / 100 });
         try {
-            const item = new Invoice(invoiceToCopyData);
-            const validator = new InvoiceValidator(
-                new ContractOur(item._contract),
-                item
-            );
-            await validator.checkValueWithContract(true);
-
-            return await ToolsDb.transaction(
-                async (conn: mysql.PoolConnection) => {
-                    console.log(
-                        'copyController for invoice',
-                        invoiceToCopyData.id
-                    );
-
-                    const invoiceCopyData: InvoiceData = {
-                        ...invoiceToCopyData,
-                        id: undefined,
-                        description: invoiceToCopyData.description
-                            ? invoiceToCopyData.description.endsWith(' KOPIA')
-                                ? invoiceToCopyData.description
-                                : invoiceToCopyData.description + ' KOPIA'
-                            : 'KOPIA',
-                        status: Setup.InvoiceStatus.FOR_LATER,
-                        gdId: null,
-                        _documentOpenUrl: undefined,
-                        number: null,
-                        sentDate: null,
-                        paymentDeadline: null,
-                        // Nie kopiuj danych KSeF - nowa faktura nie była wysłana
-                        ksefNumber: null,
-                        ksefStatus: null,
-                        ksefSessionId: null,
-                        ksefUpo: null,
-                        // Nie kopiuj powiązań z korektą
-                        correctedInvoiceId: null,
-                        correctionReason: null,
-                        _corrections: undefined,
-                    };
-
-                    const invoiceCopy = await InvoicesController.add(
-                        invoiceCopyData
-                    );
-
-                    const originalItems = await InvoiceItemsController.find([
-                        { invoiceId: invoiceToCopyData.id },
-                    ]);
-
-                    for (const itemData of originalItems) {
-                        const newItemData = {
-                            ...itemData,
-                            id: undefined,
-                            _parent: invoiceCopy,
-                            _editor:
-                                await PersonsController.getPersonFromSessionUserData(
-                                    userData
-                                ),
-                        };
-                        await InvoiceItemsController.addNewInvoiceItem(
-                            newItemData,
-                            userData
-                        );
-                    }
-                    return invoiceCopy;
-                }
-            );
-        } finally {
-            console.groupEnd();
+            await new InvoiceValidator(new ContractOur(source._contract), batch).checkValueWithContract(true);
+            await InvoiceItemsController.validateCopyItems(items);
+        } catch (error) {
+            // Existing financial validators use plain Error for business rejections.
+            if (error instanceof Error && /^(Nie można|Wartość kontraktu)/.test(error.message))
+                throw new InvoiceSeriesValidationError(error.message);
+            throw error;
         }
+        const editor = await PersonsController.getPersonFromSessionUserData(userData);
+        const copies: Invoice[] = [];
+        for (const saleDate of saleDates) {
+            const copy = new Invoice({
+                ...source,
+                id: undefined,
+                issueDate: saleDate,
+                description: markAsCopy
+                    ? source.description
+                        ? source.description.endsWith(' KOPIA') ? source.description : source.description + ' KOPIA'
+                        : 'KOPIA'
+                    : source.description,
+                status: Setup.InvoiceStatus.FOR_LATER,
+                _editor: editor,
+                _lastUpdated: undefined,
+                _owner: source._owner ? { ...source._owner } : undefined,
+                gdId: null,
+                _documentOpenUrl: undefined,
+                number: null,
+                sentDate: null,
+                paymentDeadline: null,
+                paymentStatus: 'UNPAID',
+                paidAmount: 0,
+                paymentDate: null,
+                ksefNumber: null,
+                ksefStatus: null,
+                ksefSessionId: null,
+                ksefUpo: null,
+                ksefCorrectionType: null,
+                correctedInvoiceId: null,
+                correctionReason: null,
+                _corrections: undefined,
+                _totalNetValue: totalNet,
+            });
+            await this.insertInvoice(copy, conn);
+            await InvoiceItemsController.copyItems(items, copy, editor, conn);
+            copy._lastUpdated = new Date().toISOString();
+            copies.push(copy);
+        }
+        return copies;
+    }
+
+    static async previewSeries(value: unknown): Promise<InvoiceSeriesPreview> {
+        const input = InvoiceSeriesValidator.input(value);
+        const [source] = await this.getInstance().repository.find([{ id: input.sourceInvoiceId }]);
+        if (!source) throw new InvoiceSeriesValidationError('Faktura źródłowa nie istnieje.');
+        return {
+            saleDates: InvoiceSeriesValidator.dates(source.issueDate, input),
+            netAmount: Number(source._totalNetValue ?? 0),
+            grossAmount: Number(source._totalGrossValue ?? 0),
+        };
+    }
+
+    static async createSeries(value: any, userData: UserData): Promise<{ invoiceIds: number[] }> {
+        const input = InvoiceSeriesValidator.input(value);
+        const requestId = InvoiceSeriesValidator.requestId(value.requestId);
+        const instance = this.getInstance();
+        const payload = JSON.stringify(input);
+        return ToolsDb.transaction(async (conn) => {
+            await instance.repository.requireTransactionalSeriesTables(conn);
+            const receipt = await instance.repository.claimSeriesRequest(requestId, userData.enviId, payload, conn);
+            if (Number(receipt.UserId) !== userData.enviId || receipt.RequestPayload !== payload)
+                throw new InvoiceSeriesValidationError('Identyfikator żądania został już użyty dla innych danych.');
+            if (receipt.InvoiceIds !== null) return { invoiceIds: JSON.parse(receipt.InvoiceIds) };
+
+            const [source] = await instance.repository.find([{ id: input.sourceInvoiceId }]);
+            if (!source) throw new InvoiceSeriesValidationError('Faktura źródłowa nie istnieje.');
+            await instance.repository.lockSeriesContract(source._contract.id!, conn);
+            const dates = InvoiceSeriesValidator.dates(source.issueDate, input);
+            const copies = await instance.copyBatch(source, dates.slice(1), userData, conn, false);
+            const invoiceIds = copies.map(copy => copy.id!);
+            await instance.repository.finishSeriesRequest(requestId, invoiceIds, conn);
+            return { invoiceIds };
+        });
     }
 
     // ==================== DEPRECATED (dla kompatybilności wstecznej) ====================

@@ -1,3 +1,6 @@
+import mysql from 'mysql2/promise';
+import Invoice from './Invoice';
+import { PersonData } from '../types/types';
 import BaseController from '../controllers/BaseController';
 import InvoiceItem from './InvoiceItem';
 import InvoiceItemRepository, {
@@ -54,9 +57,25 @@ export default class InvoiceItemsController extends BaseController<
         );
         await validator.checkValueAgainstContract(true);
 
-        await instance.create(item);
+        await instance.repository.addInDb(item);
         console.log(`InvoiceItem "${item.description}" added`);
         return item;
+    }
+
+    static async validateCopyItems(items: InvoiceItem[]): Promise<void> {
+        for (const item of items) {
+            await new InvoiceItemValidator(
+                new ContractOur(item._parent._contract), item, this.getInstance().repository,
+            ).checkValueAgainstContract(true);
+        }
+    }
+
+    /** Caller validates the complete batch and owns its transaction. */
+    static async copyItems(items: InvoiceItem[], parent: Invoice, editor: PersonData, conn: mysql.PoolConnection): Promise<void> {
+        for (const source of items) {
+            const copy = new InvoiceItem({ ...source, id: undefined, _parent: parent, _editor: editor, _lastUpdated: undefined });
+            await this.getInstance().repository.addInDb(copy, conn, true);
+        }
     }
 
     static async updateInvoiceItem(
