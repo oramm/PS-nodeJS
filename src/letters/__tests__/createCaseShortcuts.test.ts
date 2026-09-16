@@ -33,6 +33,19 @@ describe('createCaseShortcuts', () => {
         });
     });
 
+    it('dla pisma wychodzącego kieruje skrót na folder z załącznikami', async () => {
+        await createCaseShortcuts(
+            auth,
+            makeLetter({ _project: { id: 1 }, gdFolderId: 'letter-folder-1' })
+        );
+
+        expect(ToolsGd.createShortcut).toHaveBeenCalledWith(auth, {
+            targetId: 'letter-folder-1',
+            parentId: 'case-folder-1',
+            name: '123 Opis pisma',
+        });
+    });
+
     it('nie tworzy skrótów dla pisma do oferty — oryginał leży już w folderze sprawy', async () => {
         await createCaseShortcuts(auth, makeLetter({ _offer: { id: 7 } }));
 
@@ -73,6 +86,20 @@ describe('syncCaseShortcutNames', () => {
             id: 'shortcut-stary',
             name: '123 Opis pisma',
         });
+    });
+
+    it('szuka skrótu pisma wychodzącego po folderze z załącznikami', async () => {
+        (ToolsGd.findShortcutsByTarget as jest.Mock).mockResolvedValue([]);
+
+        await syncCaseShortcutNames(
+            auth,
+            makeLetter({ _project: { id: 1 }, gdFolderId: 'letter-folder-1' })
+        );
+
+        expect(ToolsGd.findShortcutsByTarget).toHaveBeenCalledWith(
+            auth,
+            'letter-folder-1'
+        );
     });
 
     it('nie rusza skrótów spoza folderów spraw pisma', async () => {

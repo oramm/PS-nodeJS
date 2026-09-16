@@ -28,7 +28,9 @@ export async function createCaseShortcuts(
     auth: OAuth2Client,
     letter: LetterData
 ): Promise<void> {
-    const targetId = letter.gdDocumentId || letter.gdFolderId;
+    // Folder jest pełnym pismem (dokument + załączniki). Dokument pozostaje
+    // celem tylko dla pism przychodzących zapisanych jako pojedynczy plik.
+    const targetId = letter.gdFolderId || letter.gdDocumentId;
     if (!targetId || isOfferLetter(letter)) return;
 
     await Promise.all(
@@ -92,7 +94,9 @@ export async function reconcileCaseShortcuts(
     // i wiersze zostały nietknięte. Skoro baza się nie zmieniła, Dysk też nie może.
     if (!casesNow.length) return;
 
-    const targetIds = [identity.gdDocumentId, identity.gdFolderId].filter(
+    // Pierwszy identyfikator jest celem nowego skrótu; oba służą do
+    // rozpoznawania i sprzątania także starszych skrótów na sam dokument.
+    const targetIds = [identity.gdFolderId, identity.gdDocumentId].filter(
         (id): id is string => !!id
     );
     if (!targetIds.length) return;
@@ -360,7 +364,7 @@ export async function syncCaseShortcutNames(
     auth: OAuth2Client,
     letter: LetterData
 ): Promise<void> {
-    const targetId = letter.gdDocumentId || letter.gdFolderId;
+    const targetId = letter.gdFolderId || letter.gdDocumentId;
     if (!targetId) return;
 
     const ownFolderIds = await collectShortcutFolderIds(auth, letter);

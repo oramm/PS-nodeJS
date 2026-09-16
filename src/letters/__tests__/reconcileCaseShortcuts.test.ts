@@ -94,7 +94,7 @@ describe('reconcileCaseShortcuts — ścieżka szczęśliwa', () => {
 
         expect(ToolsGd.createShortcut).toHaveBeenCalledTimes(1);
         expect(ToolsGd.createShortcut).toHaveBeenCalledWith(auth, {
-            targetId: 'doc-1',
+            targetId: 'letter-folder-1',
             parentId: 'case-folder-20',
             name: '6119 Opis pisma',
         });
