@@ -83,6 +83,7 @@ const BASE_ROUTES: RoutePattern[] = [
 
     // --- Pisma przypisanych kontraktów.
     { method: 'POST', path: '/contractsLetters' },
+    { method: 'POST', path: '/letters/incoming-number-check' },
     { method: 'POST', path: '/letterReact' },
     { method: 'PUT', path: '/letter/:id' },
     { method: 'DELETE', path: '/letter/:id' },

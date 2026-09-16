@@ -23,7 +23,11 @@ import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 import ToolsAI from '../tools/ToolsAI';
-import { CaseData, EntityData } from '../types/types';
+import {
+    CaseData,
+    EntityData,
+    IncomingLetterNumberCheckData,
+} from '../types/types';
 import {
     createCaseShortcuts,
     reconcileCaseShortcuts,
@@ -35,11 +39,17 @@ import LetterCaseAssociationsController from './associations/LetterCaseAssociati
 import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
 import ApprovedDocsController from '../contracts/milestones/approvedDocs/ApprovedDocsController';
 import { ProjectScope } from '../types/sessionTypes';
+import {
+    generatedNumberPrefix,
+    nextDuplicateNumber,
+    nextGeneratedNumber,
+} from './incomingLetterNumber';
 
 export default class LettersController extends BaseController<
     Letter,
     LetterRepository
 > {
+    private static readonly LETTER_NUMBER_MAX_LENGTH = 64;
     private static instance: LettersController;
 
     constructor() {
@@ -75,6 +85,114 @@ export default class LettersController extends BaseController<
             userData,
             scope,
         });
+    }
+
+    static async checkIncomingNumber(
+        number: unknown,
+        scope?: ProjectScope
+    ): Promise<IncomingLetterNumberCheckData> {
+        const baseNumber = String(number ?? '').trim();
+        if (!baseNumber) {
+            return { hasConflicts: false, suggestedNumber: '', conflicts: [] };
+        }
+        if (baseNumber.length > this.LETTER_NUMBER_MAX_LENGTH) {
+            throw new Error(
+                `Numer może mieć maksymalnie ${this.LETTER_NUMBER_MAX_LENGTH} znaki.`
+            );
+        }
+
+        const instance = this.getInstance();
+        const [existingNumbers, conflicts] = await Promise.all([
+            instance.repository.findNumberSeries(baseNumber),
+            instance.repository.findIncomingNumberConflicts(baseNumber, scope),
+        ]);
+        const hasConflicts = existingNumbers.length > 0;
+        return {
+            hasConflicts,
+            suggestedNumber: hasConflicts
+                ? nextDuplicateNumber(baseNumber, existingNumbers)
+                : baseNumber,
+            conflicts: conflicts.map(({ gdDocumentId, ...conflict }) => ({
+                ...conflict,
+                documentUrl: gdDocumentId
+                    ? ToolsGd.createDocumentOpenUrl(gdDocumentId)
+                    : undefined,
+            })),
+        };
+    }
+
+    static async previewIncomingNumber(contractIdValue: unknown): Promise<string> {
+        const contractId = Number(contractIdValue);
+        if (!Number.isInteger(contractId) || contractId <= 0) {
+            throw new Error('Wybierz kontrakt, aby wygenerować numer pisma.');
+        }
+
+        const instance = this.getInstance();
+        const contractNumber =
+            await instance.repository.findContractNumber(contractId);
+        if (!contractNumber) {
+            throw new Error('Wybrany kontrakt nie ma numeru.');
+        }
+
+        const prefix = generatedNumberPrefix(contractNumber);
+        const existingNumbers = await instance.repository.findNumberSeries(prefix);
+        const number = nextGeneratedNumber(prefix, existingNumbers);
+        if (number.length > this.LETTER_NUMBER_MAX_LENGTH) {
+            throw new Error(
+                `Numer „${number}” przekracza limit ${this.LETTER_NUMBER_MAX_LENGTH} znaków.`
+            );
+        }
+        return number;
+    }
+
+    static async prepareIncomingNumber(initParam: any): Promise<void> {
+        const instance = this.getInstance();
+        const hasNoNumber =
+            initParam.hasNoNumber === true ||
+            initParam.hasNoNumber === 1 ||
+            initParam.hasNoNumber === '1';
+
+        if (hasNoNumber) {
+            initParam.number = await this.previewIncomingNumber(
+                initParam?._contract?.id
+            );
+        } else {
+            const baseNumber = String(initParam.number ?? '').trim();
+            if (!baseNumber) throw new Error('Numer pisma jest wymagany.');
+
+            const existingNumbers =
+                await instance.repository.findNumberSeries(baseNumber);
+            if (existingNumbers.length) {
+                const confirmedFor = String(
+                    initParam.duplicateNumberConfirmedFor ?? ''
+                ).trim();
+                if (confirmedFor !== baseNumber) {
+                    const suggested = nextDuplicateNumber(
+                        baseNumber,
+                        existingNumbers
+                    );
+                    throw new Error(
+                        `W systemie istnieje już pismo o numerze „${baseNumber}”. ` +
+                            `Sprawdź je i potwierdź rejestrację jako „${suggested}”.`
+                    );
+                }
+                initParam.number = nextDuplicateNumber(
+                    baseNumber,
+                    existingNumbers
+                );
+            } else {
+                initParam.number = baseNumber;
+            }
+        }
+
+        if (
+            String(initParam.number).length >
+            this.LETTER_NUMBER_MAX_LENGTH
+        ) {
+            throw new Error(
+                `Numer „${initParam.number}” przekracza limit ${this.LETTER_NUMBER_MAX_LENGTH} znaków.`
+            );
+        }
     }
 
     /**

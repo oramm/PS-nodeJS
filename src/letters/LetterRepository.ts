@@ -22,6 +22,7 @@ import LetterEntity from './associations/LetterEntity';
 import { LetterDbEditContext } from './letterEditScope';
 import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import Setup from '../setup/Setup';
+import { numberSeriesMember } from './incomingLetterNumber';
 
 export type LetterSearchParams = {
     projectId?: string;
@@ -49,9 +50,101 @@ export type LetterFindParams = {
     scope?: ProjectScope;
 };
 
+export type IncomingLetterNumberConflict = {
+    id: number;
+    number: string;
+    isOur: boolean;
+    description: string;
+    creationDate: string;
+    registrationDate: string;
+    senderNames: string;
+    contractNumber: string;
+    gdDocumentId?: string;
+};
+
 export default class LetterRepository extends BaseRepository<Letter> {
     constructor() {
         super('Letters');
+    }
+
+    async findNumberSeries(baseNumber: string): Promise<string[]> {
+        const prefix = `${baseNumber}|`;
+        const sql = mysql.format(
+            `SELECT Number
+             FROM Letters
+             WHERE IsOur = 0
+               AND (Number = ? OR LEFT(Number, ?) = ?)`,
+            [baseNumber, prefix.length, prefix]
+        );
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as Array<{
+            Number: string;
+        }>;
+        return rows
+            .map((row) => String(row.Number))
+            .filter((number) => numberSeriesMember(baseNumber, number));
+    }
+
+    async findContractNumber(contractId: number): Promise<string | undefined> {
+        const sql = mysql.format(
+            'SELECT Number FROM Contracts WHERE Id = ? LIMIT 1',
+            [contractId]
+        );
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as Array<{
+            Number: string;
+        }>;
+        return rows[0]?.Number ? String(rows[0].Number).trim() : undefined;
+    }
+
+    async findIncomingNumberConflicts(
+        baseNumber: string,
+        scope?: ProjectScope
+    ): Promise<IncomingLetterNumberConflict[]> {
+        const prefix = `${baseNumber}|`;
+        const sql = mysql.format(
+            `SELECT
+                Letters.Id,
+                Letters.Number,
+                Letters.IsOur,
+                Letters.Description,
+                Letters.CreationDate,
+                Letters.RegistrationDate,
+                Letters.GdDocumentId,
+                GROUP_CONCAT(DISTINCT Contracts.Number ORDER BY Contracts.Number SEPARATOR ', ') AS ContractNumber,
+                GROUP_CONCAT(DISTINCT Entities.Name ORDER BY Entities.Name SEPARATOR ', ') AS SenderNames
+             FROM Letters
+             JOIN Letters_Cases ON Letters_Cases.LetterId = Letters.Id
+             JOIN Cases ON Cases.Id = Letters_Cases.CaseId
+             JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+             JOIN Contracts ON Contracts.Id = Milestones.ContractId
+             LEFT JOIN Letters_Entities
+                ON Letters_Entities.LetterId = Letters.Id
+                AND Letters_Entities.LetterRole = 'MAIN'
+             LEFT JOIN Entities ON Entities.Id = Letters_Entities.EntityId
+             WHERE Letters.IsOur = 0
+               AND (Letters.Number = ? OR LEFT(Letters.Number, ?) = ?)
+               AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
+             GROUP BY Letters.Id, Letters.Number, Letters.IsOur, Letters.Description,
+                Letters.CreationDate, Letters.RegistrationDate,
+                Letters.GdDocumentId
+             ORDER BY Letters.Id`,
+            [baseNumber, prefix.length, prefix]
+        );
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+        return rows
+            .filter((row) =>
+                numberSeriesMember(baseNumber, String(row.Number))
+            )
+            .map((row) => ({
+                id: row.Id,
+                number: String(row.Number),
+                isOur: !!row.IsOur,
+                description: ToolsDb.sqlToString(row.Description),
+                creationDate: row.CreationDate,
+                registrationDate: row.RegistrationDate,
+                senderNames: ToolsDb.sqlToString(row.SenderNames),
+                contractNumber: String(row.ContractNumber),
+                gdDocumentId: row.GdDocumentId || undefined,
+            }));
     }
 
     /**

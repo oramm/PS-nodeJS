@@ -73,6 +73,40 @@ app.post('/offersLetters', async (req: Request, res: Response, next) => {
 });
 
 app.post(
+    '/letters/incoming-number-check',
+    async (req: Request, res: Response, next) => {
+        try {
+            if (!req.session.userData)
+                throw new Error('Użytkownik niezalogowany');
+            const number = req.parsedBody?.number ?? req.body?.number;
+            const contractId =
+                req.parsedBody?.contractId ?? req.body?.contractId;
+            if (!number && contractId) {
+                await assertNewLetterInScope(
+                    { _contract: { id: contractId } },
+                    req.projectScope
+                );
+                res.send({
+                    hasConflicts: false,
+                    suggestedNumber:
+                        await LettersController.previewIncomingNumber(contractId),
+                    conflicts: [],
+                });
+                return;
+            }
+            res.send(
+                await LettersController.checkIncomingNumber(
+                    number,
+                    req.projectScope
+                )
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+app.post(
     '/testLetter/:mode',
     async (req: express.Request, res: express.Response) => {
         let response;
@@ -162,6 +196,12 @@ app.post(
                 initParamsFromClient,
                 req.projectScope,
             );
+
+            if (initParamsFromClient.isOur === false) {
+                await LettersController.prepareIncomingNumber(
+                    initParamsFromClient
+                );
+            }
 
             const item = LettersController.createProperLetter(initParamsFromClient);
 

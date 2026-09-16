@@ -142,6 +142,7 @@ describe('projectScopedPolicy', () => {
             ['PUT', '/task/12'],
             ['DELETE', '/task/12'],
             ['POST', '/letterReact'],
+            ['POST', '/letters/incoming-number-check'],
             ['PUT', '/letter/12'],
             ['DELETE', '/letter/12'],
             ['POST', '/contractsLetters'],

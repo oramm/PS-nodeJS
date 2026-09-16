@@ -454,6 +454,24 @@ export interface IncomingLetterData extends LetterData {
     isOur: false;
 }
 
+export interface IncomingLetterNumberConflictData {
+    id: number;
+    number: string;
+    isOur: boolean;
+    description: string;
+    creationDate: string;
+    registrationDate: string;
+    senderNames: string;
+    contractNumber: string;
+    documentUrl?: string;
+}
+
+export interface IncomingLetterNumberCheckData {
+    hasConflicts: boolean;
+    suggestedNumber: string;
+    conflicts: IncomingLetterNumberConflictData[];
+}
+
 export interface OurLetterContractData extends OurLetterData {
     _project: ProjectData;
     projectId?: number;

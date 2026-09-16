@@ -2,7 +2,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:BackendRepo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:FrontendRepo = 'C:\Apache24\htdocs\ENVI.ProjectSite'
+$pathsConfig = Join-Path $env:USERPROFILE '.envi\paths.yaml'
+$frontendPathMatch = Select-String -LiteralPath $pathsConfig -Pattern '^\s*PS_FRONT:\s*(.+?)\s*$' | Select-Object -First 1
+if (-not $frontendPathMatch) {
+    throw "PS_FRONT not found in ENVI paths config: $pathsConfig"
+}
+$script:FrontendRepo = $frontendPathMatch.Matches[0].Groups[1].Value.Trim()
 $script:RuntimeDir = Join-Path $script:BackendRepo 'tmp/dev-runtime'
 $script:BackendPort = 3000
 $script:FrontendPort = 9000
