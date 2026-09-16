@@ -1270,3 +1270,102 @@ Copy the block below for each new change:
 ## Archive Index
 
 - `2026-Q1`: `documentation/team/operations/post-change-checklist-archive/2026-Q1.md`
+
+## 2026-09-15 - LIC-0 local encryption preparation
+
+- ENV: new SOFTWARE_LICENSE_ENCRYPTION_KEY contract; separate generated 32-byte secrets for local/production. Production backup decision D-LIC-4 remains required before rollout.
+- DB/deploy: none. No production configuration changed; standalone module is not yet connected to routes.
+- Verification: 18 focused tests passed; full TypeScript check passed (yarn tsc --noEmit). Local development secret configured without displaying its value. Bounded fallback review: no blocking findings.
+
+## 2026-09-15 - LIC-1 local license table
+
+### Scope
+
+- Local checkpoint only; migration `src/Admin/SoftwareLicenses/migrations/001_create_software_licenses.sql` applied on development `127.0.0.1/envi_16_06`. No production, commit or push.
+
+### Impact
+
+- DB: new empty table, verified via information_schema. ENV: unchanged. Deploy: none.
+- Owner decisions: license pack D-LIC-6/7/8 in ENVI-Kanon; production secret backup D-LIC-4 remains a LIC-5 gate only.
+
+### Required Actions
+
+- Before LIC-2, re-read live constraints and preserve existing changes. Validate integer counts, text lengths, decimal precision and dates in the API: this local DB uses non-strict SQL mode and can coerce inputs.
+- Global migration gate is NOT green: 63 pre-existing pending receipts and checksum drift in invoice migration 011. Do not bulk apply or baseline them as part of licensing.
+- Standard list fails in local mysql2 prepared execute (undefined.length). LIC-1 used canonical migration functions scoped to the single migration, with query parameter binding; no runner source changes.
+- PR checklist: DB action and rollback documented; env/Heroku/frontend/build changes N/A for LIC-1. Production apply belongs to LIC-5.
+
+### Verification
+
+- Real local up/down/up and 13 evidence checks PASS; independent fresh read: 19 columns, 5 CHECK constraints plus PK, InnoDB, 0 rows, scoped migration verify PASS. Other table columns and migration receipts unchanged.
+- 18 cipher tests PASS; full `yarn tsc --noEmit` PASS after model addition; diff check PASS. Bounded fallback review APPROVE, one pass, no blocking findings; native review unavailable. No UI change.
+- Evidence: `tmp/lic1/evidence.json`, reproducible local harness `tmp/lic1/run.cjs` (refuses existing table). Vault copy: `20_projects/Aplikacje/PS.APP.01/plans/2026-09-15-lic1-db-evidence.json`.
+- Test harness reads dates as strings: an older invoice receipt has an invalid date, so JS Date deep equality gave a false failure. Existing receipt retained unchanged.
+
+### Rollback
+
+- `001_create_software_licenses_down.sql` destroys license records; back up first once populated. After successful DROP remove only the receipt for the corresponding forward migration, then up may be reapplied. Tested here exclusively on the new empty local table.
+
+## 2026-09-15 - LIC-2 local CRUD verification
+
+### Scope
+
+- Local-only checkpoint; no production configuration, migration, commit or push. Frontend/UI belongs to LIC-4.
+
+### Impact
+
+- DB: synthetic local CRUD tests on development `127.0.0.1/envi_16_06`; final table empty, AUTO_INCREMENT advanced. No schema or migration receipt changes. ENV: unchanged.
+- Deploy: not authorized here. Migration 001 and production encryption configuration must precede application rollout; D-LIC-4 remains the LIC-5 gate. Global migration gate remains red (63 earlier pending, invoice 011 checksum drift); no bulk apply/baseline.
+
+### Required Actions
+
+- Continue LIC-3 only from the current licensing plan. Preserve uncommitted LIC-0/1/2 work. Future release must retain coverage for secret-free diagnostics and responses.
+- PR checklist: DB/local actions documented; env change, new migration, Heroku release and frontend build N/A in this checkpoint. No PR created.
+
+### Verification
+
+- 124 tests / 4 suites PASS; full `yarn tsc --noEmit` PASS; `git diff --check` PASS. 13 local HTTP/DB check groups PASS, including both roles, optional-value edits, concurrent updates and rollback after injected failure.
+- Fresh separate-process read-only verification PASS: 19 columns, 6 constraints, no rows, LIC-1 checksum matches; earlier cipher/migration/env files unchanged. Evidence in `tmp/lic2/evidence.json`, `tests.json`, `verify.json`; dated copies and full handoff in the ENVI-Kanon licensing pack.
+- Bounded fallback review APPROVE, 2 passes; fixed malformed update body acceptance and added regression. Native review unavailable. `yarn check:cycles` still reports 8 earlier unrelated cycles. Local prettier command absent; no dependency installed.
+- Scope limit: real local DB and module HTTP routes, with synthetic session and OAuth initialization stub; no live Google/Mongo/mail or UI verification claimed.
+
+### Rollback
+
+- Code-only scoped revert of LIC-2 if needed; preserve LIC-0/1 work and migration data. Do not use repository-wide reset or the LIC-1 destructive harness on a populated table.
+
+## 2026-09-15 - LIC-3 local audited key access
+
+### Scope
+
+- Local checkpoint only, D-LIC-5 default (durable audit table) selected from the licensing plan. No production, frontend, commit or push.
+
+### Impact
+
+- DB: migration `src/Admin/SoftwareLicenses/migrations/002_create_software_license_key_events.sql` verified on development `127.0.0.1/envi_16_06`. Existing schema and migration receipts preserved; synthetic tests cleaned up. License and audit tables empty after tests; AUTO_INCREMENT advanced.
+- ENV: unchanged. Deploy: apply 001/002 and configure production encryption before enabling the backend. D-LIC-4 blocks LIC-5 only; global migration gate still has 63 prior pending and invoice 011 drift, not repaired here.
+
+### Required Actions
+
+- Continue LIC-4 from the licensing handoff. Manager menu access remains required; secret backup location remains an owner decision before production.
+- PR checklist: local DB action and rollout order documented; env/frontend/release changes N/A here. No PR created.
+
+### Verification
+
+- 147 tests / 5 suites PASS, full typecheck PASS after correcting optional session access. 12 real local LIC-3 HTTP/DB groups and all 13 LIC-2 regression groups PASS. No Google/Mongo login or UI verification claimed.
+- Bounded fallback review APPROVE (native review unavailable), one pass, no blocking findings. Fresh verification and hashes: `tmp/lic3/verify.json`; DB/audit evidence: `tmp/lic3/migration.json`, `tmp/lic3/evidence.json`. Scoped 001/002 checks and prior file preservation included.
+- Audit records confirm server authorization to disclose; network delivery cannot be proven atomically with DB commit. Failure after commit can leave an event without client receipt.
+
+### Rollback
+
+- Roll back application code while retaining audit history. `002_create_software_license_key_events_down.sql` deletes evidence: archive/back up before any populated-table rollback. Not executed on this local final table; no need to discard audit data on application rollback.
+
+## 2026-09-15 - LIC-4 local UI acceptance
+
+- Scope: licensing checkpoint LIC-4 only; no production, commit or push. Frontend build is local, not a deployment.
+- DB/ENV: no changes; owner explicitly selected existing development `127.0.0.1/envi_16_06` instead of refresh (D-LIC-9). The runbook source `.env` points locally and no refresh dump was available. No restore/global apply/baseline; applied 001/002 unchanged.
+- Verification: backend 147 tests/5 suites and full typecheck PASS; frontend full suite 590 PASS before the final StrictMode correction, final focused 28 PASS, final full build PASS. Real HTTP/DB regressions LIC-2 13 groups and LIC-3 12 groups PASS.
+- UI: 11 real browser checks PASS with existing dev login and local Mongo sessions for ADMIN/ENVI_MANAGER; desktop 1280/1920 and mobile 390 px, no overflow, parent row actions aligned. Local screenshots/DOM retained in frontend `tmp/lic4/`. Google OAuth not tested.
+- Review: bounded fallback diff review APPROVE, 2 passes; fixed duplicate audit caused by effect replay in React StrictMode. Native review not exposed. Automatic approval review initially rejected possible secret caching; response allowlisting resolved that concern before file creation.
+- Fresh SELECT-only verification: schema/ledger unchanged, 001/002 checksums match; 0 licenses/0 events after synthetic cleanup, 19 previous backend files unchanged. Counters increased. Evidence: `tmp/lic4/independent-verify.json` and dated vault copy.
+- Remaining gates: production requires D-LIC-4 / G-LIC-1; global ledger still has 63 old pending and invoice 011 drift. Earlier 8 dependency cycles were not changed or rechecked in this frontend-only checkpoint.
+- Rollout/rollback: coordinate backend LIC-0–3 prerequisites before frontend release; retain audit on application rollback. Revert only reviewed frontend changes if needed, preserve earlier work. No new migration or environment key; PR checklist DB/ENV/deploy requirements recorded, publication out of scope.

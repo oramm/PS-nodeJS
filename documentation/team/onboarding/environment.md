@@ -75,3 +75,7 @@ This allows one-command local switch to production KSeF without pasting token ea
 2. Update local/prod secret stores.
 3. Document impact in `documentation/team/operations/post-change-checklist.md`.
 4. Mention required actions in the PR template.
+
+## Software license encryption
+
+SOFTWARE_LICENSE_ENCRYPTION_KEY requires 32 cryptographically random bytes encoded as 64 hexadecimal characters. Generate with Node crypto.randomBytes(32), and store directly in the environment secret store; never paste the value into chat or documentation. Use separate local and production values. Back up the production value through the owner-approved channel before rollout. Losing or replacing it without re-encrypting stored licenses makes existing keys unreadable. Load the environment before importing the license module. LIC-0 adds the standalone module only; application routes will be connected in later checkpoints.
