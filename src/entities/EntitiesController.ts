@@ -98,6 +98,15 @@ function withNormalizedNip<T extends EntityWriteData>(entityData: T): T {
     return { ...entityData, taxNumber: digits };
 }
 
+function duplicateEntityMessage(err: any, entity: Entity): string {
+    const message = `${err?.sqlMessage ?? err?.message ?? ''}`.toLowerCase();
+    if (message.includes('taxnumber'))
+        return `Numer NIP "${entity.taxNumber}" jest już przypisany do innego podmiotu`;
+    if (message.includes('uq_entities_short_name') || message.includes('shortname'))
+        return `Skrócona nazwa "${entity.shortName}" jest już zajęta`;
+    return 'Podmiot z taką unikalną wartością już istnieje';
+}
+
 /** REG-1 / D-REG-1: numery podmiotu, ktore da sie z formularza skasowac. */
 const CLEARABLE_NUMBERS = ['taxNumber', 'regon', 'krs'] as const;
 
@@ -399,9 +408,7 @@ export default class EntitiesController extends BaseController<
                 await this.create(entity);
             } catch (err: any) {
                 if (err.code === 'ER_DUP_ENTRY')
-                    throw new Error(
-                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
-                    );
+                    throw new Error(duplicateEntityMessage(err, entity));
                 throw err;
             }
             console.log(`Entity ${entity.name} added in db`);
@@ -495,9 +502,7 @@ export default class EntitiesController extends BaseController<
                 );
             } catch (err: any) {
                 if (err.code === 'ER_DUP_ENTRY')
-                    throw new Error(
-                        `Skrócona nazwa "${entity.shortName}" jest już zajęta`
-                    );
+                    throw new Error(duplicateEntityMessage(err, entity));
                 throw err;
             }
             console.log(`Entity ${entity.name} updated in db`);
