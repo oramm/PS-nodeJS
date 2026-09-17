@@ -27,6 +27,7 @@ export default class SoftwareLicenseValidator {
             licenseType: this.text(dto.licenseType, 'Typ licencji', 20),
             registrationAccount: this.text(dto.registrationAccount, 'Konto rejestracji', 320),
             vendorPanelUrl: this.text(dto.vendorPanelUrl, 'Panel producenta', 65535, false, true),
+            googleDriveUrl: this.googleDriveUrl(dto.googleDriveUrl),
             seatsPurchased: this.integer(dto.seatsPurchased, 'Stanowiska kupione'),
             seatsUsed: this.integer(dto.seatsUsed, 'Stanowiska zajęte'),
             assignment: this.text(dto.assignment, 'Przypisanie', 65535, false, true),
@@ -96,6 +97,19 @@ export default class SoftwareLicenseValidator {
         if ((typeof value !== 'string' && typeof value !== 'number') || !/^\d{1,10}(\.\d{1,2})?$/.test(String(value)))
             throw new BadRequestError('Koszt brutto musi być nieujemną kwotą w PLN, do 9999999999,99 zł i najwyżej dwóch miejsc po przecinku.');
         return Number(value).toFixed(2);
+    }
+
+    private static googleDriveUrl(value: any): string | null {
+        const text = this.text(value, 'Link Google Drive', 2048);
+        if (text === null) return null;
+        try {
+            const url = new URL(text);
+            if (url.protocol !== 'https:' || url.username || url.password ||
+                !['drive.google.com', 'docs.google.com'].includes(url.hostname.toLowerCase())) throw new Error();
+            return url.toString();
+        } catch {
+            throw new BadRequestError('Pole „Link Google Drive” musi zawierać prawidłowy link do Dysku Google.');
+        }
     }
 
     private static date(value: any, label: string): string | null {

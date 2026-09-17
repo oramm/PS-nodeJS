@@ -7,6 +7,7 @@ export interface SoftwareLicenseData {
     licenseType: string | null;
     registrationAccount: string | null;
     vendorPanelUrl: string | null;
+    googleDriveUrl: string | null;
     seatsPurchased: number;
     seatsUsed: number;
     assignment: string | null;

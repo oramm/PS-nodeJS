@@ -27,6 +27,14 @@ describe('license input against the migration contract', () => {
     it.each(['assignment', 'comment', 'vendorPanelUrl'])('checks TEXT byte size for %s', (field) => {
         expect(() => Validator.validatePayload({ ...valid, [field]: 'ą'.repeat(32768) })).toThrow(BadRequestError);
     });
+    it.each(['https://drive.google.com/drive/folders/abc', 'https://docs.google.com/document/d/abc/edit'])(
+        'accepts Google Drive URL %s', (googleDriveUrl) => {
+            expect(Validator.validatePayload({ ...valid, googleDriveUrl }).googleDriveUrl).toBe(googleDriveUrl);
+        });
+    it.each(['http://drive.google.com/drive/folders/abc', 'https://example.com/file', 'javascript:alert(1)', 'not-a-url'])(
+        'rejects unsafe Google Drive URL %s', (googleDriveUrl) => {
+            expect(() => Validator.validatePayload({ ...valid, googleDriveUrl })).toThrow(BadRequestError);
+        });
     it('counts unicode codepoints and refuses broken UTF-16', () => {
         expect(Validator.validatePayload({ ...valid, manufacturer: '😀'.repeat(255) }).manufacturer).toHaveLength(510);
         expect(() => Validator.validatePayload({ ...valid, manufacturer: '\ud800' })).toThrow(BadRequestError);

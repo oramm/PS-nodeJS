@@ -6,7 +6,7 @@ import { SoftwareLicensesSearchParams } from './SoftwareLicenseValidator';
 
 const fields: (keyof SoftwareLicenseData)[] = [
     'manufacturer', 'product', 'version', 'licenseType', 'registrationAccount',
-    'vendorPanelUrl', 'seatsPurchased', 'seatsUsed', 'assignment', 'purchaseDate',
+    'vendorPanelUrl', 'googleDriveUrl', 'seatsPurchased', 'seatsUsed', 'assignment', 'purchaseDate',
     'expirationDate', 'cost', 'billingCycle', 'status', 'comment',
 ];
 const column = (field: string) => field[0].toUpperCase() + field.slice(1);

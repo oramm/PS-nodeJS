@@ -1369,3 +1369,11 @@ Copy the block below for each new change:
 - Fresh SELECT-only verification: schema/ledger unchanged, 001/002 checksums match; 0 licenses/0 events after synthetic cleanup, 19 previous backend files unchanged. Counters increased. Evidence: `tmp/lic4/independent-verify.json` and dated vault copy.
 - Remaining gates: production requires D-LIC-4 / G-LIC-1; global ledger still has 63 old pending and invoice 011 drift. Earlier 8 dependency cycles were not changed or rechecked in this frontend-only checkpoint.
 - Rollout/rollback: coordinate backend LIC-0–3 prerequisites before frontend release; retain audit on application rollback. Revert only reviewed frontend changes if needed, preserve earlier work. No new migration or environment key; PR checklist DB/ENV/deploy requirements recorded, publication out of scope.
+
+## 2026-09-16 - LIC-4A local Google Drive link
+
+- Scope: local pre-release extension requested by owner; no production, commit or push in this checkpoint.
+- DB: additive migration `003_add_software_license_google_drive_url.sql` applied and verified on development `127.0.0.1/envi_16_06`; 001/002/003 receipts match. Existing local data preserved and synthetic row removed. ENV unchanged.
+- Verification: backend 144 focused tests and typecheck PASS; frontend 32 focused tests, TypeScript/webpack and artifact copy PASS; real UI/DB add, conditional action, clear and roundtrip PASS. Bounded fallback review APPROVE.
+- Release: production order is now 001 -> 002 -> 003 before backend and frontend. Global verify still hits the known mysql2 `execute` failure locally; no global apply/baseline was run.
+- Rollback: application rollback may retain the nullable column. The 003 down migration removes saved links and requires backup once populated.
