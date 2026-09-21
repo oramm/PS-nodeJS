@@ -19,4 +19,4 @@
 - If the task touches the frontend, include `C:\Apache24\htdocs\ENVI.ProjectSite` in scope explicitly.
 - If your `search` tool is workspace-limited, read files by absolute path instead of claiming a full-text scan.
 - If external path access is blocked, say so and ask for the frontend diff; do not present the review as complete.
-- For UI verification load `.github/instructions/client-guidelines.instructions.md` and `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\ui-browser-loop.md` (canonical for the browser loop).
+- For UI verification load `.github/instructions/client-guidelines.instructions.md` and `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\DEVELOPMENT.md`.

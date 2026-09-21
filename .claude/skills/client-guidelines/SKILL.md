@@ -20,7 +20,7 @@ Repozytorium klienta: `C:\Apache24\htdocs\ENVI.ProjectSite`
 - Selektory → `instructions/selectors-architecture.md` + `instructions/business-object-selectors.md`
 - FilterableTable → `instructions/filterable-table-data-flow.md`
 - CRUD moduł → `instructions/crud-module-guide.md`
-- Weryfikacja wizualna UI → `instructions/ui-browser-loop.md`
+- Weryfikacja wizualna UI → `instructions/DEVELOPMENT.md`
 
 Ścieżki względem `C:\Apache24\htdocs\ENVI.ProjectSite\`.
 

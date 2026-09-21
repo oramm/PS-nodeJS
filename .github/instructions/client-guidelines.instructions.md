@@ -34,7 +34,7 @@ Optional files (load by task scope):
 - Business selectors: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\business-object-selectors.md`
 - FilterableTable: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\filterable-table-data-flow.md`
 - CRUD module: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\crud-module-guide.md`
-- Browser loop & visual verification: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\ui-browser-loop.md`
+- Visual verification: `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\DEVELOPMENT.md`
 
 Manual invocation fallback:
 

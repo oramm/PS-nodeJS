@@ -30,4 +30,4 @@
 3. If requested files are missing in current `cwd`, check the sibling repository by absolute path before reporting blocker.
 4. Do not conclude "files do not exist" until both repositories are checked.
 5. For frontend changes, switch working directory to `C:\Apache24\htdocs\ENVI.ProjectSite` and report touched files from that repo.
-6. For frontend UI verification tasks, refer to `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\ui-browser-loop.md`.
+6. For frontend UI verification tasks, refer to `C:\Apache24\htdocs\ENVI.ProjectSite\instructions\DEVELOPMENT.md`.
