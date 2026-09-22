@@ -6,6 +6,15 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-09-22 - SB installer 0.14.5
+
+- Scope: refresh only the SB installer assets from the reviewed ENVI.SB.Rdzen candidate; no backend or frontend behavior change beyond the downloaded installer. Core delivery remains the existing shared Drive channel.
+- DB/env/migrations: none. No config vars, dependency install, frontend pointer or database action required.
+- Verification: Yarn build PASS with portable Node 22.17.0 (system Node 24.19.0 is outside this repo's declared range); installer package Jest suite 3/3 PASS; SB gates and independent review recorded in the existing SB installer progress/activity-log.
+- Delivery gate: publish only after complete SB regression and fresh upstream/hash verification. Verify the real distributed copies and package after publication; a staging result is not a production smoke result.
+- Rollback: revert only this delivery commit and restore the backed-up installer assets, without resetting shared history. Backup: C:/Users/oram/.envi/release-backups/sb-rdzen-0.14.5-20260922-go-01/rollback-map.json. Do not downgrade newer installations silently.
+- PR operational checklist: deployment documented; env, SQL, migration gate and frontend/Pages items N/A. Existing Node requirement respected without bypass.
+
 ## 2026-09-14 - Privacy acknowledgement (ACK-1)
 
 - DB/deploy: migration `src/persons/migrations/010_create_privacy_acknowledgements.sql` is additive; apply and verify BEFORE backend, then deploy matching frontend. No new environment variables.

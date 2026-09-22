@@ -1275,6 +1275,18 @@ function Invoke-StepN4 {
     Log "[N4] .claude\skills already exists inside the vault - skip"
   }
 
+  $vaultLogs = Join-Path $VaultPath 'logs'
+  if (Test-Path -LiteralPath $vaultLogs -PathType Container) {
+    Log "[N4] logs already exists inside the vault - skip"
+  } elseif (Test-Path -LiteralPath $vaultLogs) {
+    throw "[N4] ERROR: '$vaultLogs' istnieje, ale nie jest katalogiem. Plik pozostawilem bez zmian; zmien jego nazwe albo przenies go recznie, potem uruchom bootstrap.cmd ponownie."
+  } else {
+    if ($PSCmdlet.ShouldProcess($vaultLogs, 'create local logs folder inside the vault')) {
+      New-Item -ItemType Directory -Path $vaultLogs -Force | Out-Null
+      Log "[N4] logs created inside the vault: $vaultLogs"
+    }
+  }
+
   Log "[N4] REMINDER: your own working notes can live directly in the vault ($VaultPath), outside 40_wiki and 20_projects - 40_wiki is the read-only canon repo (anything else at this level is outside its tracked tree), 20_projects is its own separate writable repo, so notes placed directly here never leave your machine"
   Log "[N4] obsidian shortcut + vault registration step done"
 }
