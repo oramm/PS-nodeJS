@@ -72,6 +72,36 @@ describe('normalizeForCompare — skróty form prawnych', () => {
             isSameAfterNormalization('Alfa Sp. z o.o.', 'Beta Sp. z o.o.')
         ).toBe(false);
     });
+
+    // Zapisy wzięte z Entities na produkcji (2026-09-23), które przed poprawką dawały DIFF.
+    it.each([
+        ['Pniewskie Przedsiębiorstwo Komunalne sp. o.o.', 'PNIEWSKIE PRZEDSIĘBIORSTWO KOMUNALNE SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ'],
+        ['Biprogeo Sp. zo.o.', 'BIPROGEO SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ'],
+        ['Alfa Sp z oo', 'ALFA SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ'],
+        ['Zakład Gospodarki Komunalnej w Ścinawie Sp. z o.o.', 'ZAKŁAD GOSPODARKI KOMUNALNEJ W ŚCINAWIE SPÓŁKA ZOGRANICZONĄ ODPOWIEDZIALNOŚCIĄ'],
+        ['NBM Technologie Mroczka i Wspólnicy S.J.', 'NBM TECHNOLOGIE MROCZKA I WSPÓLNICY SPÓŁKA JAWNA'],
+        ['Gamma Sp. Kom.', 'GAMMA SPÓŁKA KOMANDYTOWA'],
+        ['Delta P.S.A.', 'DELTA PROSTA SPÓŁKA AKCYJNA'],
+        ['Epsilon s.c', 'EPSILON SPÓŁKA CYWILNA'],
+        ['Epsilon SC', 'EPSILON S.C.'],
+    ])('„%s" i „%s" to ten sam tekst', (inPs, inGus) => {
+        expect(isSameAfterNormalization(inPs, inGus)).toBe(true);
+    });
+
+    it('prosta spółka akcyjna i spółka akcyjna zostają różne', () => {
+        expect(
+            isSameAfterNormalization('Delta P.S.A.', 'DELTA SPÓŁKA AKCYJNA')
+        ).toBe(false);
+    });
+
+    it('sama wielkość liter nigdy nie jest różnicą (Duszniki, przypadek produkcyjny)', () => {
+        expect(
+            compareWithGus(
+                { name: 'Komunalny Zakład Budżetowy', address: 'ul. Szamotulska 16, 64-550 Duszniki' },
+                { name: 'KOMUNALNY ZAKŁAD BUDŻETOWY', address: 'UL. SZAMOTULSKA 16, 64-550 DUSZNIKI' }
+            ).status
+        ).toBe('OK');
+    });
 });
 
 describe('normalizeForCompare — adresy', () => {

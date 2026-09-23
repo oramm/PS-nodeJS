@@ -114,14 +114,21 @@ const PHRASES: [RegExp, string][] = [
     // wzorzec do dopasowania zamiast dwóch („SPÓŁKA JAWNA" i „sp. j." to ta sama forma)
     [/\bspolka\b/g, 'sp'],
     // formy prawne
-    [/\bsp z ograniczona odpowiedzialnoscia\b/g, 'spzoo'],
-    [/\bsp z o o\b/g, 'spzoo'],
+    // „z" bywa sklejone z następnym wyrazem albo pominięte — tak w PS („Sp. zo.o.",
+    // „sp. o.o.", „Sp z oo"), jak i w samym rejestrze („SPÓŁKA ZOGRANICZONĄ")
+    [/\bsp (z ?)?ograniczona odpowiedzialnoscia\b/g, 'spzoo'],
+    [/\bsp (z ?)?o ?o\b/g, 'spzoo'],
     [/\bsp komandytowo akcyjna\b/g, 'ska'],
     [/\bs k a\b/g, 'ska'],
     [/\bsp komandytowa\b/g, 'spk'],
-    [/\bsp k\b/g, 'spk'],
+    [/\bsp (k|kom)\b/g, 'spk'],
     [/\bsp jawna\b/g, 'spj'],
-    [/\bsp j\b/g, 'spj'],
+    // ponytail: „s j" złapie też dwa inicjały obok siebie („S. J. Nowak"); obie strony
+    // przechodzą tę samą regułę, więc zgodności to nie psuje — najwyżej mylnie ją nazywa
+    [/\b(sp|s) j\b/g, 'spj'],
+    // prosta spółka akcyjna przed zwykłą, żeby „akcyjna" nie zjadło „prostej"
+    [/\bprosta sp akcyjna\b/g, 'psa'],
+    [/\bp s a\b/g, 'psa'],
     [/\bsp partnerska\b/g, 'spp'],
     [/\bsp p\b/g, 'spp'],
     [/\bsp cywilna\b/g, 'sc'],
@@ -165,7 +172,7 @@ export function isSameAfterNormalization(a: unknown, b: unknown): boolean {
 const NOISE_TOKENS = new Set([
     'w', 'we', 'i', 'z', 'ze', 'na', 'do', 'przy', 'oraz', 'nr', 'lok', 'im', 'm',
     'ul', 'al', 'os', 'pl',
-    'sp', 'spzoo', 'sa', 'spk', 'spj', 'spp', 'sc', 'ska',
+    'sp', 'spzoo', 'sa', 'psa', 'spk', 'spj', 'spp', 'sc', 'ska',
 ]);
 
 /** Skróty, po których zaczyna się ulica — koniec nazwy miejscowości. */
