@@ -27,6 +27,18 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param()
+# 0.14.6: instalator chodzi WYLACZNIE pod Windows PowerShell 5.1. bootstrap.cmd woli pwsh, a pod
+# pwsh 7 (a) katalog siodemki nie ma starego interpretera (FATAL N5 u Michala 22.09), (b) Start-Process
+# 'powershell.exe' dziedziczy PSModulePath siodemki - rezydent ikony startuje bez
+# ConvertTo-SecureString i okna poczty padaja do wylogowania, (c) Tee-Object pisze log w innym
+# kodowaniu. Zamiast lapac kazda roznice osobno: jedno przelaczenie na 5.1 przez `&` (ten
+# operator czysci PSModulePath dla dziecka, Start-Process nie). Dziala tez przy recznym `pwsh -File`.
+if ($PSVersionTable.PSEdition -eq 'Core') {
+  $ps51 = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+  $przekaz = @(); if ($WhatIfPreference) { $przekaz += '-WhatIf' }
+  & $ps51 -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @przekaz
+  exit $LASTEXITCODE
+}
 # 'Continue', not 'Stop': every native command below already guards itself with a
 # $LASTEXITCODE check. Under 'Stop', Windows PowerShell 5.1 turns any native-command
 # *stderr* line (`gh auth status` when logged out, `git clone` progress, winget noise)
@@ -1523,7 +1535,7 @@ function Invoke-N5SkillsSync {
   $action = "powershell -File `"$SyncEnginePath`" -TylkoSkille -SkillDriveRoot `"$SkillDriveRoot`""
   if ($PSCmdlet.ShouldProcess($target, $action)) {
     Log "[N5] running skills sync ..."
-    $out = & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath `
+    $out = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath `
              -TylkoSkille -SkillDriveRoot $SkillDriveRoot 2>&1
     foreach ($linia in @($out)) { Log "[N5] $linia" }
     $m = [regex]::Match(($out -join "`n"), 'SKILLE-PODSUMOWANIE zainstalowane=(\d+) na_dysku=(\d+)')
@@ -1551,7 +1563,7 @@ function Invoke-N5PocztaSync {
   $action = "powershell -File `"$SyncEnginePath`" -TylkoPoczta"
   if ($PSCmdlet.ShouldProcess($target, $action)) {
     Log "[N5] running poczta sync ..."
-    $out = & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath -TylkoPoczta 2>&1
+    $out = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $SyncEnginePath -TylkoPoczta 2>&1
     foreach ($linia in @($out)) { Log "[N5] $linia" }
     $m = [regex]::Match(($out -join "`n"), 'POCZTA-PODSUMOWANIE skrzynek=(\d+) zarejestrowanych=(\d+)')
     if ($m.Success) {
