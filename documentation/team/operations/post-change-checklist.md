@@ -6,6 +6,16 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-09-30 - Rejestr dostępu do Second Brain (warstwa danych)
+
+- Scope: migracje, repozytoria stanu i historii, kontroler transakcji oraz testy Jest. Bez tras HTTP, integracji GitHub/Dysk i zmian panelu personelu.
+- DB: `src/staff/migrations/002_add_can_manage_sb_access.sql`, `src/sbAccess/migrations/001_create_sb_access.sql`, `src/sbAccess/migrations/002_seed_initial_sb_access.sql`. Status: **local (`localhost/envikons_local`) applied 2026-09-30, `migrate verify` passed**; produkcja: NIEWYKONANE (w B3, przed wypchnieciem na Heroku, bo release robi `migrate verify`). Lokalna kopia ma zamaskowane adresy, wiec wpis startowy nikogo tam nie wstawia; proba w wycofanej transakcji z podstawionymi adresami: 2 wpisy ACTIVE + 2 zdarzenia SEED, ponowne uruchomienie bez duplikatow.
+- Kolejność: istniejące migracje Persons/PersonAccounts i StaffMembers oraz `src/siteVisits/migrations/001_create_site_visits.sql` (kolumna CanLogSiteVisits), potem staff/002 -> sbAccess/001 -> sbAccess/002, przed użyciem nowego modułu. Runner wykonuje pliki z multipleStatements; identyfikatorem jest pełna ścieżka migracji. Orkiestrator wykona zwykłe apply/verify i sprawdzi pominięte konta lub konflikty loginów; tutaj migration gate nie był uruchamiany.
+- ENV/deploy: brak nowych zmiennych, `.env.example` bez zmian; nic nie wdrożono. Nowa flaga domyślnie 0, bez nadawania jej komukolwiek. Upsert panelu administratora aktualizuje tylko wymienione kolumny i zachowuje CanManageSbAccess.
+- Verification: Node 22.17.0; `yarn tsc --noEmit` PASS; `yarn jest src/sbAccess src/staff` 34 testy / 5 zestawów PASS; `yarn jest src/Admin/StaffMembers src/persons/accountEvents` 46 testów / 5 zestawów PASS. `yarn check:cycles` FAIL: 8 wcześniej opisanych cykli w ScrumSheet/persons/contracts, żaden w nowym module. SQL sprawdzony statycznie; rollback testowany prawdziwym ToolsDb.transaction z atrapą połączenia. Nie deklaruje się wykonania SQL na MariaDB.
+- Rollback: wycofać kod, pozostawić stan i historię; nie usuwać tabel z zapisanymi zdarzeniami. Flaga bez UI będzie używana dopiero w osobnym checkpointcie.
+- PR operational checklist: aktualizacja checklisty DB i instrukcja migracji wykonane; env, Heroku, frontend/Pages i zmiana migration gate N/A. PR nie tworzono; szablon PR pozostaje bez zmian. Bez operacji git.
+
 ## 2026-09-22 - SB installer 0.14.5
 
 - Scope: refresh only the SB installer assets from the reviewed ENVI.SB.Rdzen candidate; no backend or frontend behavior change beyond the downloaded installer. Core delivery remains the existing shared Drive channel.

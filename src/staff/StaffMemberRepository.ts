@@ -6,7 +6,8 @@ type StaffFlag =
     | 'IsDriver'
     | 'HasCostInvoiceAccess'
     | 'HasBankAccess'
-    | 'CanLogSiteVisits';
+    | 'CanLogSiteVisits'
+    | 'CanManageSbAccess';
 
 export default class StaffMemberRepository {
     /**
@@ -79,6 +80,11 @@ export default class StaffMemberRepository {
     /** Czy dana osoba ma dostęp do rejestru wizyt na budowie (i jest aktywna). */
     static hasSiteVisitAccess(personId: number): Promise<boolean> {
         return this.hasFlag(personId, 'CanLogSiteVisits');
+    }
+
+    /** Czy dana osoba może zarządzać dostępem do SB (i jest aktywna). */
+    static hasSbAccessManagement(personId: number): Promise<boolean> {
+        return this.hasFlag(personId, 'CanManageSbAccess');
     }
 
     /** Czy dana osoba ma dostęp do kilometrówki (i jest aktywna). */
