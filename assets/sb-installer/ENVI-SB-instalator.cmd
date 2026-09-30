@@ -1,3 +1,26 @@
+@echo off
+REM ENVI Second Brain - instalator, wersja 0.14.12. Dwuklik: wypakowuje instalator do
+REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
+setlocal
+set "SB_INSTALATOR=%~f0"
+set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
+set "SB_INSTALATOR_WERSJA=0.14.12"
+set "PSModulePath="
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$f=$env:SB_INSTALATOR;$d=$env:SB_INSTALATOR_DIR;$null=New-Item -ItemType Directory -Force -Path $d;$b=[IO.File]::ReadAllBytes($f);$t=[Text.Encoding]::ASCII.GetString($b);$o=$t.IndexOf(':SB-LADUNEK'+[char]13);if($o -lt 0){throw 'brak ladunku w pliku'};$o+=13;$r=[regex]'\G#SB-PLIK ([\w.-]+) (\d+)\r\n';$m=$r.Match($t,$o);$ile=0;while($m.Success){$n=[int]$m.Groups[2].Value;$s=[IO.File]::Create((Join-Path $d $m.Groups[1].Value));$s.Write($b,$m.Index+$m.Length,$n);$s.Close();$ile++;$o=$m.Index+$m.Length+$n+2;$m=$r.Match($t,$o)};if($ile -ne 2){throw ('ladunek niepelny: '+$ile+' plikow')}"
+if errorlevel 1 goto :blad
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%SB_INSTALATOR_DIR%\bootstrap.ps1" %*
+set "KOD=%ERRORLEVEL%"
+echo(
+echo Zapis przebiegu: %SB_INSTALATOR_DIR%\bootstrap.log
+pause
+exit /b %KOD%
+:blad
+echo(
+echo Nie udalo sie wypakowac instalatora. Pobierz plik jeszcze raz.
+pause
+exit /b 1
+:SB-LADUNEK
+#SB-PLIK bootstrap.ps1 103692
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -22,12 +45,13 @@
   team project repo) clones into a nested $VaultPath\20_projects. The old,
   now-orphaned second vault is detected and retired by Invoke-LegacyOwnVaultCleanup
   - see the hard safety gate on that function before touching it.
-  Run:  bootstrap.cmd            (execute)
-        bootstrap.cmd -WhatIf    (dry-run: print the plan, change nothing)
+  Run:  ENVI-SB-instalator.cmd          (execute; built by build-instalator.ps1, J1)
+        ENVI-SB-instalator.cmd -WhatIf  (dry-run: print the plan, change nothing)
+        powershell -File bootstrap.ps1  (developer path, log beside this file)
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param()
-# 0.14.6: instalator chodzi WYLACZNIE pod Windows PowerShell 5.1. bootstrap.cmd woli pwsh, a pod
+# 0.14.6: instalator chodzi WYLACZNIE pod Windows PowerShell 5.1. dawny bootstrap.cmd wolal pwsh, a pod
 # pwsh 7 (a) katalog siodemki nie ma starego interpretera (FATAL N5 u Michala 22.09), (b) Start-Process
 # 'powershell.exe' dziedziczy PSModulePath siodemki - rezydent ikony startuje bez
 # ConvertTo-SecureString i okna poczty padaja do wylogowania, (c) Tee-Object pisze log w innym
@@ -169,7 +193,7 @@ function Start-GoogleDriveApp {
   }
   $launcher = Join-Path $env:ProgramFiles 'Google\Drive File Stream\launch.bat'
   if (-not (Test-Path -LiteralPath $launcher)) {
-    Log "[N1] Google Drive for Desktop not found at '$launcher'. If winget could not install it, get it from https://www.google.com/drive/download/ and re-run bootstrap.cmd."
+    Log "[N1] Google Drive for Desktop not found at '$launcher'. If winget could not install it, get it from https://www.google.com/drive/download/ and re-run ENVI-SB-instalator.cmd."
     return
   }
   Start-Process -FilePath $launcher -WindowStyle Hidden
@@ -204,14 +228,14 @@ function Resolve-SkillDriveRoot {
     $script:SkillDriveRoot = $found
     Log "[N1] Google Drive skills path detected: $found"
   } else {
-    Log "[N1] Google Drive skills path still not found - skills sync will be skipped this run (not a hard fail). Re-run bootstrap.cmd after signing in, or pin the path in bootstrap.config.ps1: `$SkillDriveRoot = 'X:\...\SB\.skills'"
+    Log "[N1] Google Drive skills path still not found - skills sync will be skipped this run (not a hard fail). Re-run ENVI-SB-instalator.cmd after signing in, or pin the path in bootstrap.config.ps1: `$SkillDriveRoot = 'X:\...\SB\.skills'"
   }
 }
 
 function Invoke-StepN1 {
   Log "[N1] prerequisites check starting"
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Log "[N1] ERROR: winget not found on this machine. Install 'App Installer' from the Microsoft Store (https://aka.ms/getwinget), then re-run bootstrap.cmd."
+    Log "[N1] ERROR: winget not found on this machine. Install 'App Installer' from the Microsoft Store (https://aka.ms/getwinget), then re-run ENVI-SB-instalator.cmd."
     return
   }
 
@@ -709,7 +733,7 @@ function Expand-RdzenPaczka {
   $sha = Get-Sha256Pliku -Path $pkg
   $oczekiwana = ([string]$Manifest.sha256).ToLower()
   if ($sha -ne $oczekiwana) {
-    Log "[N3b] PACZKA ODRZUCONA: suma kontrolna sie nie zgadza (na dysku $sha, w manifescie $oczekiwana). Plik jest niekompletny albo podmieniony - rdzen NIE zostal zainstalowany, zostaje wersja obecna. Powtorz bootstrap.cmd, gdy Dysk skonczy synchronizacje."
+    Log "[N3b] PACZKA ODRZUCONA: suma kontrolna sie nie zgadza (na dysku $sha, w manifescie $oczekiwana). Plik jest niekompletny albo podmieniony - rdzen NIE zostal zainstalowany, zostaje wersja obecna. Powtorz ENVI-SB-instalator.cmd, gdy Dysk skonczy synchronizacje."
     return $null
   }
   $stage = Join-Path $env:TEMP ('sb-rdzen-' + [string]$Manifest.wersja)
@@ -905,7 +929,7 @@ function Install-RdzenZDysku {
   $coreRoot = $script:CoreDriveRoot
   if (-not $coreRoot) {
     if (-not $script:SkillDriveRoot -or -not (Test-Path -LiteralPath $script:SkillDriveRoot)) {
-      Log "[N3b] Dysk Google nie jest osiagalny, a rdzen przyjezdza wlasnie stamtad - pomijam podmiane rdzenia, obecna wersja zostaje nietknieta. Zaloguj sie do Dysku i uruchom bootstrap.cmd jeszcze raz."
+      Log "[N3b] Dysk Google nie jest osiagalny, a rdzen przyjezdza wlasnie stamtad - pomijam podmiane rdzenia, obecna wersja zostaje nietknieta. Zaloguj sie do Dysku i uruchom ENVI-SB-instalator.cmd jeszcze raz."
       return $false
     }
     $coreRoot = Join-Path (Split-Path $script:SkillDriveRoot -Parent) '.rdzen'
@@ -949,7 +973,7 @@ function Install-RdzenZDysku {
   # nazw katalogow ("Dyski wspoldzielone" / "Shared drives") mieszka tutaj,
   # w Find-SkillDriveRoot, i ma zostac jednym domem tej wiedzy. Zamiast
   # przepisywac ja do silnika, instalator zapisuje WYNIK swojego szukania.
-  # Skutek nazwany wprost: maszyna, ktora nie uruchomila bootstrap.cmd po tej
+  # Skutek nazwany wprost: maszyna, ktora nie uruchomila instalatora po tej
   # zmianie, ma manifest bez 'zrodlo' i samoaktualizacji NIE dostaje - silnik
   # mowi to w logu wprost, zamiast zgadywac sciezke.
   $manifestLokalny = Join-Path $enviDir 'rdzen.json'
@@ -1291,7 +1315,7 @@ function Invoke-StepN4 {
   if (Test-Path -LiteralPath $vaultLogs -PathType Container) {
     Log "[N4] logs already exists inside the vault - skip"
   } elseif (Test-Path -LiteralPath $vaultLogs) {
-    throw "[N4] ERROR: '$vaultLogs' istnieje, ale nie jest katalogiem. Plik pozostawilem bez zmian; zmien jego nazwe albo przenies go recznie, potem uruchom bootstrap.cmd ponownie."
+    throw "[N4] ERROR: '$vaultLogs' istnieje, ale nie jest katalogiem. Plik pozostawilem bez zmian; zmien jego nazwe albo przenies go recznie, potem uruchom ENVI-SB-instalator.cmd ponownie."
   } else {
     if ($PSCmdlet.ShouldProcess($vaultLogs, 'create local logs folder inside the vault')) {
       New-Item -ItemType Directory -Path $vaultLogs -Force | Out-Null
@@ -1517,7 +1541,7 @@ function Set-EnviSyncConfigJesliTrzeba {
 
 function Invoke-N5SkillsSync {
   if (-not (Test-Path -LiteralPath $SkillDriveRoot)) {
-    Log "[N5] Google Drive skills path not reachable: '$SkillDriveRoot'. Sign in to Google Drive with the ENVI account that holds the skills folder, then re-run bootstrap.cmd. (Full sign-in checklist = N6.) Skills sync skipped this run - idempotent, not a hard fail."
+    Log "[N5] Google Drive skills path not reachable: '$SkillDriveRoot'. Sign in to Google Drive with the ENVI account that holds the skills folder, then re-run ENVI-SB-instalator.cmd. (Full sign-in checklist = N6.) Skills sync skipped this run - idempotent, not a hard fail."
     return
   }
   Log "[N5] skills source reachable: $SkillDriveRoot"
@@ -1611,7 +1635,10 @@ $stubs = [ordered]@{
   'N6' = "checklist: README-onboarding (GitHub acct, org invite to envi-konsulting with Read/Write on ENVI.SB, Drive login, Copilot opt-out) + clean-machine test"
 }
 
-Log "=== ENVI.SB bootstrap (WhatIf=$($PSBoundParameters.ContainsKey('WhatIf') -or $WhatIfPreference)) ==="
+# J1: numer wydania wbity w ENVI-SB-instalator.cmd - pierwszy wpis przebiegu mowi, ktora wersje uruchomiono.
+$wersjaInstalatora = if ($env:SB_INSTALATOR_WERSJA) { "wersja $env:SB_INSTALATOR_WERSJA" } else { 'bez numeru wydania (uruchomiony wprost)' }
+Log "=== ENVI.SB bootstrap, $wersjaInstalatora (WhatIf=$($PSBoundParameters.ContainsKey('WhatIf') -or $WhatIfPreference)) ==="
+Log "Zapis przebiegu: $InstallLogFile"
 try {
 # Runs once, before N1: retires the pre-T3 second vault if - and only if - it is safe to do so.
 # Independent of the N1-N6 sequence below (different, now-obsolete path), so it never blocks it.
@@ -1745,24 +1772,24 @@ foreach ($zad in @($TaskName, $SyncTaskName)) {
   try { $wynik = (Get-ScheduledTaskInfo -TaskName $zad -ErrorAction Stop).LastTaskResult } catch { }
   Log ("Zadanie '{0}': ostatni wynik {1}" -f $zad, $(if ($null -ne $wynik) { $wynik } else { 'nieznany (zadania nie ma?)' }))
   if ($null -ne $wynik -and $wynik -ne 0 -and $wynik -ne 267011) {
-    $todoZadania += ("Zadanie w tle '{0}' skonczylo sie bledem (kod {1}). Uruchom bootstrap.cmd jeszcze raz; jesli kod wroci, wyslij bootstrap.log wlascicielowi." -f $zad, $wynik)
+    $todoZadania += ("Zadanie w tle '{0}' skonczylo sie bledem (kod {1}). Uruchom ENVI-SB-instalator.cmd jeszcze raz; jesli kod wroci, wyslij plik $InstallLogFile wlascicielowi." -f $zad, $wynik)
   }
 }
 Log ""
 $todo = @()
-if (-not $sumCanon) { $todo += "Kanon sie nie sciagnal. Uruchom bootstrap.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli GitHub odmawia dostepu - popros wlasciciela o zaproszenie do zespolu (organizacji) i przyjmij je mailem." }
+if (-not $sumCanon) { $todo += "Kanon sie nie sciagnal. Uruchom ENVI-SB-instalator.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli GitHub odmawia dostepu - popros wlasciciela o zaproszenie do zespolu (organizacji) i przyjmij je mailem." }
 # Only a team member is supposed to have a project area - for a consumer, "brak" here is
 # correct behaviour, not a defect, and must not generate a fix-it instruction (T6).
-if ($sumRole -eq 'team' -and -not $sumProjects) { $todo += "Obszar projektowy (20_projects) sie nie sciagnal. Uruchom bootstrap.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli druga proba tez nie pomoze, NIE probuj trzeci raz - wyslij plik bootstrap.log wlascicielowi, bo przyczyna moze byc za dluga sciezka do Twojego folderu domowego i wtedy powtarzanie nic nie da." }
-if ($sumRole -eq 'team' -and $sumProjects -and -not $sumSyncTask) { $todo += "Synchronizacja obszaru projektowego w tle sie nie skonfigurowala. Uruchom bootstrap.cmd jeszcze raz." }
-if (-not $sumSkills) { $todo += "Skille sa niewidoczne. Zaloguj sie w aplikacji Dysk Google na konto firmowe, poczekaj az pojawi sie dysk w Eksploratorze, potem uruchom bootstrap.cmd jeszcze raz." }
-if ($sumSkills -and $vaultSkillCount -eq 0) { $todo += "Skille sie nie skopiowaly. Uruchom bootstrap.cmd jeszcze raz; jesli to nie pomoze, wyslij ten plik bootstrap.log wlascicielowi." }
-if (-not $sumObsidian) { $todo += "Obsidian nie ma zarejestrowanego vaultu. Zamknij Obsidiana calkowicie i uruchom bootstrap.cmd jeszcze raz." }
+if ($sumRole -eq 'team' -and -not $sumProjects) { $todo += "Obszar projektowy (20_projects) sie nie sciagnal. Uruchom ENVI-SB-instalator.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli druga proba tez nie pomoze, NIE probuj trzeci raz - wyslij plik $InstallLogFile wlascicielowi, bo przyczyna moze byc za dluga sciezka do Twojego folderu domowego i wtedy powtarzanie nic nie da." }
+if ($sumRole -eq 'team' -and $sumProjects -and -not $sumSyncTask) { $todo += "Synchronizacja obszaru projektowego w tle sie nie skonfigurowala. Uruchom ENVI-SB-instalator.cmd jeszcze raz." }
+if (-not $sumSkills) { $todo += "Skille sa niewidoczne. Zaloguj sie w aplikacji Dysk Google na konto firmowe, poczekaj az pojawi sie dysk w Eksploratorze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz." }
+if ($sumSkills -and $vaultSkillCount -eq 0) { $todo += "Skille sie nie skopiowaly. Uruchom ENVI-SB-instalator.cmd jeszcze raz; jesli to nie pomoze, wyslij plik $InstallLogFile wlascicielowi." }
+if (-not $sumObsidian) { $todo += "Obsidian nie ma zarejestrowanego vaultu. Zamknij Obsidiana calkowicie i uruchom ENVI-SB-instalator.cmd jeszcze raz." }
 # P2: kazde "nie" z trzech linii wyzej ma tu swoja pozycje - inaczej podsumowanie mowiloby
 # o usterce i zostawialo czlowieka bez jednego ruchu, ktorym da sie ja odkrecic.
-if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy zegarze nie dziala. Wyloguj sie i zaloguj ponownie (skrot w Autostarcie podniesie ja sam) albo uruchom bootstrap.cmd jeszcze raz." }
-if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom bootstrap.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij bootstrap.log wlascicielowi." }
-if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij bootstrap.log wlascicielowi." }
+if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy zegarze nie dziala. Wyloguj sie i zaloguj ponownie (skrot w Autostarcie podniesie ja sam) albo uruchom ENVI-SB-instalator.cmd jeszcze raz." }
+if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom ENVI-SB-instalator.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij plik $InstallLogFile wlascicielowi." }
+if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij plik $InstallLogFile wlascicielowi." }
 $todo += $todoZadania
 if ($todo.Count -eq 0) {
   Log ("Nic nie zostalo do zrobienia recznie. Otworz Obsidiana - Twoj vault ({0}) powinien byc od razu widoczny." -f $(if ($sumRole -eq 'team') { 'kanon + obszar projektowy' } else { 'kanon' }))
@@ -1770,4 +1797,88 @@ if ($todo.Count -eq 0) {
   Log "DO ZROBIENIA:"
   for ($i = 0; $i -lt $todo.Count; $i++) { Log ("  {0}. {1}" -f ($i + 1), $todo[$i]) }
 }
+Log "Pelny zapis przebiegu (ten plik wyslij, gdy cos nie dziala): $InstallLogFile"
 Log "=== bootstrap run done ==="
+
+#SB-PLIK README-onboarding.md 7674
+# Second Brain ENVI — pierwsze uruchomienie na Twoim komputerze
+
+Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Zanim uruchomisz instalator, wykonaj cztery krótkie kroki poniżej — każdy robisz raz, na początku. Piąty krok (logowanie do agenta) robisz przy pierwszym użyciu narzędzia.
+
+Jeśli utkniesz na którymś kroku — nic straconego, patrz sekcja "Jeśli coś wygląda na zawieszone" na końcu.
+
+## Krok 1 — Konto GitHub
+
+Potrzebujesz konta na GitHub (to serwis, przez który Twój komputer pobiera aktualną wiedzę firmową).
+
+- Jeśli masz już konto GitHub — świetnie, przejdź do kroku 2.
+- Jeśli nie masz — załóż je na [github.com/signup](https://github.com/signup). Wystarczy zwykłe, prywatne konto (nie musi być firmowe) — koszt ewentualnego planu pokrywa firma, w ramach pilotażu.
+
+## Krok 2 — Dostęp do odczytu wiedzy firmowej
+
+Tego kroku **nie robisz sam** — potrzebna jest jedna czynność po stronie biura ENVI.
+
+1. Wyślij swoją nazwę użytkownika GitHub do <właściciel repozytorium / biuro@envi.com.pl>.
+2. Poczekaj na e-mail z zaproszeniem od GitHuba do zespołu (organizacji) **envi-konsulting**.
+3. Otwórz ten e-mail i kliknij, żeby przyjąć zaproszenie.
+
+Po przyjęciu zaproszenia masz dostęp do wiedzy firmowej w ramach zespołu **envi-konsulting** — zwykle **tylko do odczytu**, więc nie możesz nic w niej przypadkowo zepsuć ani nadpisać. (Jeśli Twoja rola to wyjątkowo współautorska, biuro poinformuje Cię o tym osobno.)
+
+## Krok 3 — Logowanie do Dysku Google
+
+Zainstaluj (lub zaloguj się, jeśli już masz zainstalowany) Dysk Google na komputerze, używając firmowego konta ENVI, które ma dostęp do folderu z narzędziami (skillami).
+
+Po zalogowaniu na Twoim komputerze pojawi się dysk `G:` — to z niego instalator pobiera narzędzia dla agenta.
+
+**To normalne:** jeśli uruchomisz instalator zanim zdążysz się zalogować do Dysku Google, instalator grzecznie Cię o tym poinformuje i zatrzyma tylko ten jeden etap — nie jest to błąd. Po zalogowaniu wystarczy uruchomić plik jeszcze raz.
+
+## Krok 4 — Wyłączenie trenowania AI na Twoim koncie GitHub Copilot
+
+W ustawieniach swojego konta GitHub wyłącz wykorzystywanie Twoich danych do trenowania modeli/produktów:
+
+- Ustawienia konta → **Copilot** → **Features** (nazwa i lokalizacja tej opcji może się nieznacznie zmieniać w interfejsie GitHuba).
+- Wyłącz opcję dotyczącą używania Twojej aktywności/kodu do trenowania modeli.
+
+Robimy to, bo treści firmowe nie powinny trafiać do trenowania modeli zewnętrznych dostawców — to prosta zasada firmowa, nie dotyczy samej pracy z Second Brain, ale konta GitHub jako takiego.
+
+## Krok 5 — Logowanie do agenta (Claude Code / Codex)
+
+Na komputerze zainstalowany jest agent (Claude Code i/lub Codex — używasz tego, który pasuje do zadania, nie ma znaczenia który akurat wybierzesz). Przy pierwszym uruchomieniu narzędzie poprosi Cię o zalogowanie się — na start używasz swojego prywatnego konta, koszt pokrywa firma w ramach pilotażu.
+
+To logowanie robisz raz na narzędzie — potem działa samo.
+
+## Co robi instalator (jeden plik)
+
+Całą resztę załatwia jeden plik: **`ENVI-SB-instalator.cmd`**. Pobierasz go ze strony instalatora w PS ENVI jako ZIP — nie musisz go rozpakowywać: otwórz pobrany ZIP (Eksplorator pokaże go jak folder) i kliknij dwukrotnie plik w środku.
+
+1. Uruchamiasz `ENVI-SB-instalator.cmd` (dwuklik).
+2. W pewnym momencie w przeglądarce pojawi się prośba o zalogowanie do GitHuba — to jednorazowa, bezpieczna autoryzacja (tzw. logowanie kodem urządzenia). Potwierdzasz i to wszystko — nie wpisujesz żadnych haseł do samego instalatora.
+3. Dalej wszystko dzieje się automatycznie:
+   - na komputerze pojawia się **jeden** folder — Twój Second Brain — a w Menu Start skrót **„ENVI Second Brain”**, który otwiera go w Obsidianie od razu na notatce startowej,
+   - w tym folderze jest wiedza firmowa (**tylko do odczytu**) oraz — jeśli pracujesz zespołowo nad projektami — osobny obszar projektowy, w którym możesz zapisywać zmiany,
+   - wiedza firmowa sama, cicho, odświeża się w tle co kilka godzin (i przy każdym logowaniu) — nie musisz nic klikać, nie zobaczysz żadnego czarnego okienka konsoli,
+   - do niczego z tego nie są potrzebne uprawnienia administratora ani znajomość komend git — ich w ogóle nie zobaczysz.
+
+**Ważne — koniecznie przeczytaj:** Otwierasz cały folder ENVI-Kanon — w Obsidianie i dla agenta. Piszesz w `20_projects`, czytasz `40_wiki`. `40_wiki` na Twoim komputerze jest tylko do odczytu i nadpisuje się samo — ręczna zmiana tam zniknie. Linki między folderami działają, bo to jeden vault. Zielona ikona przy zegarze (pod strzałką) pokazuje stan synchronizacji; „Synchronizuj teraz” wysyła Twoje zmiany od razu.
+
+**Jeśli pracujesz zespołowo:** instalator sam rozpoznaje, że masz dostęp do wspólnego obszaru projektowego, i nie musisz nic w tej sprawie wybierać ani ustawiać. Dostajesz wtedy dodatkowo skrót **"Synchronizuj teraz (Second Brain)"** w dwóch miejscach: **na pulpicie** i w Menu Start. Poznasz go po **zielonym znaku ENVI** (turbina) — tym samym, który program pokazuje przy zegarze, więc oba miejsca wyglądają tak samo i nie trzeba szukać skrótu wśród innych ikon. Kliknij go, kiedy chcesz od razu wysłać swoje zmiany i pobrać zmiany innych osób, zamiast czekać na automatyczne odświeżenie w tle. Po kliknięciu zobaczysz krótkie powiadomienie z wynikiem: wysłano, nie było nic nowego do wysłania, albo trzeba czyjejś pomocy. Nic więcej nie musisz robić.
+
+Dwie rzeczy, które zaskakują przy pierwszym użyciu tego skrótu. Po pierwsze **nie otwiera żadnego okna** - jest uruchamiany celowo bez konsoli, więc jedynym znakiem, że zadziałał, jest to powiadomienie. Po drugie **wyszukiwarka w Menu Start może go przez jakiś czas nie znajdować**, bo Windows indeksuje nowe skróty z opóźnieniem; dlatego ta sama ikona leży od razu na pulpicie. Jeśli wolisz mieć ją na pasku zadań, kliknij ikonę na pulpicie prawym przyciskiem, wybierz "Pokaż więcej opcji", potem "Przypnij do paska zadań" - tego jednego kroku instalator nie zrobi za Ciebie, bo Windows blokuje przypinanie do paska z poziomu programu.
+
+Plik jest bezpieczny do uruchomienia wielokrotnie — jeśli coś przerwiesz w połowie albo któryś krok wcześniej pominiesz, po prostu uruchom `ENVI-SB-instalator.cmd` jeszcze raz.
+
+## Skrzynki poczty
+
+Żeby agent widział Twoją skrzynkę pocztową, kliknij ikonę Second Brain przy zegarze, wybierz „Skrzynki poczty”, a potem „Dodaj skrzynkę…” — wybierz skrzynkę wspólną z listy albo wpisz dane swojego konta. Hasło wpisujesz raz, w oknie, które się otworzy — nikt, także agent, go nie widzi. Po hasło do skrzynki wspólnej (np. `faktury@`) zapytaj osobę, która tę skrzynkę prowadzi — agent go nie zna i nie może Ci go podać.
+
+## Jeśli coś wygląda na zawieszone
+
+Najczęstsza przyczyna to zwykle jedna z dwóch rzeczy:
+
+- nie jesteś jeszcze zalogowany(a) do Dysku Google (krok 3), albo
+- nie przyjęłaś/przyjąłeś jeszcze zaproszenia do zespołu (organizacji) envi-konsulting na GitHubie (krok 2).
+
+W obu przypadkach: dokończ brakujący krok i uruchom `ENVI-SB-instalator.cmd` ponownie — to bezpieczne i nic nie nadpisze.
+
+Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
+

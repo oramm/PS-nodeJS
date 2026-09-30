@@ -11,10 +11,10 @@ describe('paczka instalatora Second Brain', () => {
     const zip = new AdmZip(buildInstallerZip());
     const names = zip.getEntries().map((e) => e.entryName);
 
-    it('zawiera launcher razem ze skryptem, ktory ten launcher uruchamia', () => {
-        // To jest cale uzasadnienie paczki: bootstrap.cmd wola %~dp0bootstrap.ps1, wiec sam
-        // bootstrap.cmd bylby plikiem bez tresci do uruchomienia.
-        expect(names).toEqual(expect.arrayContaining(INSTALLER_ENTRIES));
+    it('zawiera jeden plik do dwukliku i nic poza nim', () => {
+        // Instalator sam sie wypakowuje (skrypt jedzie w srodku .cmd), wiec drugi plik w ZIP-ie
+        // bylby albo zbedny, albo starsza kopia obok wlasciwej.
+        expect(names).toEqual(INSTALLER_ENTRIES);
     });
 
     it('oddaje bajt w bajt to, co lezy w assets - nie starsza kopie z build/', () => {
@@ -26,7 +26,9 @@ describe('paczka instalatora Second Brain', () => {
         }
     });
 
-    it('launcher szuka skryptu obok siebie - kontrola pozytywna dla testu wyzej', () => {
-        expect(zip.readAsText('bootstrap.cmd')).toContain('%~dp0bootstrap.ps1');
+    it('plik niesie skrypt w srodku - kontrola pozytywna dla testow wyzej', () => {
+        const cmd = zip.readAsText(INSTALLER_ENTRIES[0]);
+        expect(cmd).toContain(':SB-LADUNEK');
+        expect(cmd).toContain('#SB-PLIK bootstrap.ps1 ');
     });
 });
