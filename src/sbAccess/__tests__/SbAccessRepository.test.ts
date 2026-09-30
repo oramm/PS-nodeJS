@@ -106,4 +106,21 @@ describe('SbAccessRepository', () => {
         expect(await repository.getByPersonId(17)).toBeNull();
         expect(await repository.getByGithubLogin('oramm')).toBeNull();
     });
+    it('konto osoby i kandydaci: parametry zamiast sklejania, role jako placeholdery', async () => {
+        const query = jest
+            .spyOn(ToolsDb, 'getQueryCallbackAsync')
+            .mockResolvedValue([{ personId: 5, isActive: 1, systemRoleName: 'ENVI_EMPLOYEE' }] as any);
+        expect(await repository.getPersonAccount(5)).toMatchObject({ personId: 5, isActive: true });
+        expect(query.mock.calls[0][2]).toEqual([5]);
+        await repository.listInviteCandidates(["ENVI_EMPLOYEE", "X' OR 1=1"]);
+        const [sql, , params] = query.mock.calls[1];
+        expect(sql).toContain('sr.Name IN (?, ?)');
+        expect(sql).toContain("s.StatusCode = 'REVOKED'");
+        expect(sql).not.toContain('OR 1=1');
+        expect(params).toEqual(["ENVI_EMPLOYEE", "X' OR 1=1"]);
+        expect(await repository.listInviteCandidates([])).toEqual([]);
+        expect(query).toHaveBeenCalledTimes(2);
+        query.mockResolvedValue([] as any);
+        expect(await repository.getPersonAccount(5)).toBeNull();
+    });
 });

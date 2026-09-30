@@ -6,6 +6,17 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-09-30 - Dostęp do Second Brain: trasy /sbAccess (GitHub + Dysk SB.ENVI)
+
+- Scope: trasy `/sbAccess/*` (lista, kandydaci, historia, zaproś, zablokuj, odblokuj, odbierz, przypisanie konta GitHub przez kierownika i "moje konto", członkowie organizacji bez przypisania), bramka ADMIN/ENVI_MANAGER + znacznik `CanManageSbAccess`. Bez UI (B4/B5). Zapisy zewnętrzne: zaproszenia i członkostwa w organizacji GitHub `envi-konsulting`, uprawnienie "reader" na dysku współdzielonym SB.ENVI (`0AH3vXVwNH5M-Uk9PVA`) kontem serwerowego `REFRESH_TOKEN`.
+- ENV: nowa `SB_GITHUB_INVITE_TOKEN` (`.env.example`). Token fine-grained: tylko organizacja `envi-konsulting`, "Members: read and write". Pusta = 503 "funkcja nieskonfigurowana" przed jakimkolwiek wywołaniem zewnętrznym i bez zapisu. Heroku `erp-envi`: wpisuje właściciel.
+- DB: bez nowych migracji; wymaga migracji z wpisu niżej (staff/002, sbAccess/001-002) na produkcji PRZED wypchnięciem kodu (release robi `migrate verify`).
+- Kolejność wdrożenia: migracje B2 na produkcji -> token w Heroku -> push. Bez tokenu moduł działa tylko do odczytu rejestru.
+- Po wdrożeniu (bez skutków ubocznych): `GET /sbAccess/entries` zwraca właściciela i Michała; `GET /sbAccess/githubMembers/unlinked` działa tokenem produkcyjnym (odczyt); znacznik `CanManageSbAccess` komuś nadać (dziś nikt go nie ma - bez niego nawet ADMIN dostaje 403).
+- Verification: `tsc --noEmit` 0; jest `src/sbAccess` 7 zestawów PASS (GitHub = atrapa `fetch`, Dysk = atrapa `googleapis`, baza w pamięci); smoke lokalny na `envikons_local` bez tokenu (403 bez znacznika, 200 ze znacznikiem, zaproszenie 503, zero wierszy w rejestrze).
+- Rollback: wycofać kod; stan i historia zostają. Nadane zaproszenia/uprawnienia zdjąć ręcznie wg historii (`SbAccessEvents`).
+- PR operational checklist: env + checklist wykonane; SQL N/A; frontend w B4/B5; bez wdrożenia.
+
 ## 2026-09-30 - Rejestr dostępu do Second Brain (warstwa danych)
 
 - Scope: migracje, repozytoria stanu i historii, kontroler transakcji oraz testy Jest. Bez tras HTTP, integracji GitHub/Dysk i zmian panelu personelu.

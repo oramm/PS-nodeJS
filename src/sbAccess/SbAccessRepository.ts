@@ -1,6 +1,10 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
-import { SbAccessRecord, SbAccessStateInput } from './sbAccessTypes';
+import {
+    SbAccessRecord,
+    SbAccessStateInput,
+    SbPersonAccount,
+} from './sbAccessTypes';
 
 const STATE_COLUMNS = `s.Id AS id, s.PersonId AS personId, s.StatusCode AS statusCode,
     s.GithubLogin AS githubLogin, s.GithubInvitationId AS githubInvitationId,
@@ -46,6 +50,48 @@ export default class SbAccessRepository {
              ORDER BY p.Surname, p.Name, s.PersonId`,
         )) as SbAccessRecord[];
         return rows.map(mapState);
+    }
+
+    /**
+     * Konto osoby, której dotyczy operacja: adres logowania, rola, czy aktywne.
+     * Adres zaproszenia bierze się wyłącznie stąd, nigdy z żądania HTTP.
+     */
+    async getPersonAccount(personId: number): Promise<SbPersonAccount | null> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT p.Id AS personId, p.Name AS name, p.Surname AS surname,
+                pa.SystemEmail AS systemEmail, pa.IsActive AS isActive,
+                sr.Name AS systemRoleName
+             FROM Persons p
+             LEFT JOIN PersonAccounts pa ON pa.PersonId = p.Id
+             LEFT JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
+             WHERE p.Id = ?
+             LIMIT 1`,
+            undefined,
+            [personId],
+        )) as SbPersonAccount[];
+        if (!rows.length) return null;
+        return { ...rows[0], isActive: !!rows[0].isActive };
+    }
+
+    /** Osoby z aktywnym kontem w podanych rolach, bez wpisu albo z dostępem odebranym. */
+    async listInviteCandidates(roles: string[]): Promise<SbPersonAccount[]> {
+        if (!roles.length) return [];
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT p.Id AS personId, p.Name AS name, p.Surname AS surname,
+                pa.SystemEmail AS systemEmail, pa.IsActive AS isActive,
+                sr.Name AS systemRoleName, s.StatusCode AS statusCode
+             FROM Persons p
+             JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
+             JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
+             LEFT JOIN SbAccess s ON s.PersonId = p.Id
+             WHERE sr.Name IN (${roles.map(() => '?').join(', ')})
+               AND pa.SystemEmail IS NOT NULL AND pa.SystemEmail <> ''
+               AND (s.Id IS NULL OR s.StatusCode = 'REVOKED')
+             ORDER BY p.Surname, p.Name, p.Id`,
+            undefined,
+            roles,
+        )) as SbPersonAccount[];
+        return rows.map((row) => ({ ...row, isActive: !!row.isActive }));
     }
 
     /**

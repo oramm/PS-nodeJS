@@ -64,3 +64,22 @@ export interface SbAccessEventRecord extends SbAccessEventInput {
 export interface SbAccessTransitionInput extends SbAccessEventInput {
     state?: SbAccessStateInput;
 }
+
+/** Konto osoby w PS widziane przez moduł SB (adres logowania, rola systemowa). */
+export interface SbPersonAccount {
+    personId: number;
+    name: string;
+    surname: string;
+    systemEmail: string | null;
+    isActive: boolean;
+    systemRoleName: string | null;
+    /** Tylko na liście kandydatów: obecny stan w rejestrze (null albo REVOKED). */
+    statusCode?: SbAccessStatus | null;
+}
+
+/** Wynik operacji zapisany w historii i oddany klientowi. */
+export interface SbAccessOperationOutcome {
+    result: SbAccessResult;
+    note: string;
+    state: SbAccessRecord | null;
+}

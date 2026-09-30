@@ -755,6 +755,8 @@ require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
 // Instalator firmowego Second Brain do pobrania zza bramki sesji (D-7 packa SB).
 require('./sbInstaller/SbInstallerRouters');
+// Zarządzanie dostępem do SB (GitHub + Dysk SB.ENVI); montuje własną bramkę na /sbAccess.
+require('./sbAccess/SbAccessRouters');
 
 // Panel administracyjny. AdminPanelRouters MUSI być pierwszy - montuje bramkę
 // app.use('/admin', ...), która działa tylko na trasy zarejestrowane PO niej.
