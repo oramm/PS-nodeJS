@@ -13,7 +13,7 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 - DB: bez nowych migracji; wymaga migracji z wpisu niżej (staff/002, sbAccess/001-002) na produkcji PRZED wypchnięciem kodu (release robi `migrate verify`).
 - Kolejność wdrożenia: migracje B2 na produkcji -> token w Heroku -> push. Bez tokenu moduł działa tylko do odczytu rejestru.
 - Po wdrożeniu (bez skutków ubocznych): `GET /sbAccess/entries` zwraca właściciela i Michała; `GET /sbAccess/githubMembers/unlinked` działa tokenem produkcyjnym (odczyt); znacznik `CanManageSbAccess` komuś nadać (dziś nikt go nie ma - bez niego nawet ADMIN dostaje 403).
-- Verification: `tsc --noEmit` 0; jest `src/sbAccess` 7 zestawów PASS (GitHub = atrapa `fetch`, Dysk = atrapa `googleapis`, baza w pamięci); smoke lokalny na `envikons_local` bez tokenu (403 bez znacznika, 200 ze znacznikiem, zaproszenie 503, zero wierszy w rejestrze).
+- Verification: `tsc --noEmit` 0; jest `src/sbAccess` 6 zestawów / 104 testy PASS; pełna suita 178 zestawów / 1913 testów PASS (GitHub = atrapa `fetch`, Dysk = atrapa `googleapis`, baza w pamięci); smoke lokalny na `envikons_local` bez tokenu (403 bez znacznika, 200 ze znacznikiem, zaproszenie 503, zero wierszy w rejestrze).
 - Rollback: wycofać kod; stan i historia zostają. Nadane zaproszenia/uprawnienia zdjąć ręcznie wg historii (`SbAccessEvents`).
 - PR operational checklist: env + checklist wykonane; SQL N/A; frontend w B4/B5; bez wdrożenia.
 
