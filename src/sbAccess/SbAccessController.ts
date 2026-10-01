@@ -32,6 +32,7 @@ import {
     SbAccessStatus,
     SbAccessTransitionInput,
     SbPersonAccount,
+    SbOwnAccessView,
 } from './sbAccessTypes';
 
 interface GithubPart extends PartOutcome {
@@ -143,6 +144,41 @@ export default class SbAccessController {
         if (!account?.isActive) return false;
         if (!SB_MANAGER_ROLES.includes(account.systemRoleName as any)) return false;
         return StaffMemberRepository.hasSbAccessManagement(userData.enviId);
+    }
+
+    /** Dostęp do SB wynika z aktywnego konta i bieżącego wpisu w bazie, niezależnie od roli. */
+    static async canSeeSb(userData?: UserData | null): Promise<boolean> {
+        return (await this.getOwnSbView(userData)) !== null;
+    }
+
+    static async getOwnAccess(userData?: UserData | null): Promise<{
+        canManage: boolean;
+        canSeeSb: boolean;
+        sb: SbOwnAccessView | null;
+    }> {
+        const canManage = await this.canManage(userData);
+        const sb = await this.getOwnSbView(userData);
+        return { canManage, canSeeSb: sb !== null, sb };
+    }
+
+    private static async getOwnSbView(
+        userData?: UserData | null,
+    ): Promise<SbOwnAccessView | null> {
+        if (!userData?.enviId) return null;
+        const account = await this.repository.getPersonAccount(userData.enviId);
+        if (!account?.isActive) return null;
+        const record = await this.repository.getByPersonId(userData.enviId);
+        if (!record || (record.statusCode !== 'INVITED' && record.statusCode !== 'ACTIVE'))
+            return null;
+        return {
+            status: record.statusCode,
+            githubState: record.statusCode === 'INVITED'
+                ? 'PENDING'
+                : record.githubLogin ? 'LINKED' : 'UNLINKED',
+            githubLogin: record.githubLogin,
+            driveState: record.drivePermissionId || record.isGrantedManually ? 'READY' : 'MISSING',
+            isGrantedManually: record.isGrantedManually,
+        };
     }
 
     /** Kogo można dziś zaprosić: role wg D2, bez wpisu albo z dostępem odebranym. */

@@ -58,6 +58,7 @@ describe('SbAccessRouters - bramka i trasy', () => {
 
     beforeEach(() => {
         mockHasFlag.mockReset();
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(null);
         // Rola z bazy (canManage nie ufa sesji) - tu zgodna z sesją testowych osób.
         const roles: Record<number, string> = { 125: 'ENVI_MANAGER', 1: 'ADMIN', 131: 'ENVI_EMPLOYEE' };
         jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockImplementation(
@@ -131,11 +132,30 @@ describe('SbAccessRouters - bramka i trasy', () => {
         expect(next).not.toHaveBeenCalled();
     });
 
-    it('GET /sbAccess/access odpowiada canManage dla każdego zalogowanego', async () => {
+    it('GET /sbAccess/access odpowiada pełnym widokiem dla każdego zalogowanego', async () => {
         mockHasFlag.mockResolvedValue(true);
         const res = makeRes();
         await route('get', '/sbAccess/access').handler(req(EMPLOYEE), res, jest.fn());
-        expect(res.send).toHaveBeenCalledWith({ canManage: false });
+        expect(res.send).toHaveBeenCalledWith({ canManage: false, canSeeSb: false, sb: null });
+    });
+
+    it('GET /sbAccess/access przekazuje sesję i zwraca własny widok SB', async () => {
+        const view = {
+            canManage: true,
+            canSeeSb: true,
+            sb: {
+                status: 'ACTIVE' as const,
+                githubState: 'LINKED' as const,
+                githubLogin: 'Kierownik-GH',
+                driveState: 'READY' as const,
+                isGrantedManually: true,
+            },
+        };
+        const ownAccess = jest.spyOn(SbAccessController, 'getOwnAccess').mockResolvedValue(view);
+        const res = makeRes();
+        await route('get', '/sbAccess/access').handler(req(MANAGER), res, jest.fn());
+        expect(ownAccess.mock.calls).toEqual([[MANAGER]]);
+        expect(res.send).toHaveBeenCalledWith(view);
     });
 
     it('zaproszenie: osoba z adresu trasy, zlecający z sesji; adres e-mail z żądania ignorowany', async () => {

@@ -43,12 +43,10 @@ function requesterId(req: Request): number {
 
 // ------------------------------------------------ dla każdego zalogowanego
 
-/** Czy zalogowany zarządza dostępem do SB (warunkowe menu po stronie klienta). */
+/** Uprawnienia zalogowanego i jego widok SB; niedostępny wpis pozostaje ukryty. */
 app.get('/sbAccess/access', async (req, res, next) => {
     try {
-        res.send({
-            canManage: await SbAccessController.canManage(req.session?.userData),
-        });
+        res.send(await SbAccessController.getOwnAccess(req.session?.userData));
     } catch (error) {
         next(error);
     }

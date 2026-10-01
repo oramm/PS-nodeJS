@@ -6,6 +6,14 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-01 - Strona i instalator SB tylko dla zaproszonych (B4)
+
+- Scope: bramka na wszystkie `/sbInstaller/*` (w tym `paczka`): wpis rejestru SB w stanie INVITED albo ACTIVE (czytany z bazy przy każdym żądaniu) i aktywne konto; nikt inny, także ADMIN bez wpisu, zablokowany i odebrany. `GET /sbAccess/access` zwraca teraz `{ canManage, canSeeSb, sb }` (stan własnego dostępu, bez identyfikatorów zaproszenia i uprawnienia Dysku).
+- ENV/DB: bez zmian, bez migracji. Wdrożenie razem z B3 (kolejność bez zmian); klient (`ENVI.ProjectSite`) po serwerze.
+- UWAGA: od wdrożenia pobieranie `paczka` wymaga wpisu w rejestrze - bez wpisu rejestru nikt nie pobierze instalatora (także właściciel i Michał, jeśli migracja startowa B2 ich nie wstawi). Sprawdzić odczytem `GET /sbAccess/entries` PRZED pushem klienta.
+- Verification: `tsc --noEmit` 0; pełna suita 179 zestawów / 1958 testów PASS, 5 pominiętych; smoke lokalny na `envikons_local`: bez wpisu, zablokowany, odebrany -> 403 na `paczka`; zaproszony i aktywny -> 200; bez sesji 401.
+- Rollback: wycofać kod; rejestr bez zmian.
+
 ## 2026-09-30 - Dostęp do Second Brain: trasy /sbAccess (GitHub + Dysk SB.ENVI)
 
 - Scope: trasy `/sbAccess/*` (lista, kandydaci, historia, zaproś, zablokuj, odblokuj, odbierz, przypisanie konta GitHub przez kierownika i "moje konto", członkowie organizacji bez przypisania), bramka ADMIN/ENVI_MANAGER + znacznik `CanManageSbAccess`. Bez UI (B4/B5). Zapisy zewnętrzne: zaproszenia i członkostwa w organizacji GitHub `envi-konsulting`, uprawnienie "reader" na dysku współdzielonym SB.ENVI (`0AH3vXVwNH5M-Uk9PVA`) kontem serwerowego `REFRESH_TOKEN`.

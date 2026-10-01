@@ -1,17 +1,33 @@
 import { Request, Response } from 'express';
 import { app } from '../index';
+import SbAccessController from '../sbAccess/SbAccessController';
 import {
     INSTALLER_FILE_NAME,
     buildInstallerZip,
 } from './SbInstallerPackage';
 
 /**
- * Hand-out point for the company Second Brain installer (decision D-7 of the SB release pack).
- *
- * NO AUTHORISATION CODE HERE ON PURPOSE. requireSession already refuses every route that is not
- * on its explicit public list, and this route is deliberately not on it; a second, private check
- * would be a second thing to keep in step with the first.
+ * Pobieranie firmowego instalatora Second Brain.
+ * Bramka przed trasami sprawdza rejestr dostępu przy każdym żądaniu: sama sesja nie wystarcza.
  */
+app.use('/sbInstaller', async (req, res, next) => {
+    try {
+        if (!req.session?.userData) {
+            res.status(401).send({ errorMessage: 'Użytkownik niezalogowany' });
+            return;
+        }
+        if (!(await SbAccessController.canSeeSb(req.session.userData))) {
+            res.status(403).send({
+                errorMessage: 'Brak dostępu do Second Brain - poproś przełożonego o zaproszenie do SB w PS',
+            });
+            return;
+        }
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get('/sbInstaller/paczka', (req: Request, res: Response, next) => {
     try {
         const user = req.session.userData;

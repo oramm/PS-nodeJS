@@ -634,6 +634,91 @@ describe('SbAccessController - przypisanie konta GitHub', () => {
 });
 
 describe('SbAccessController - bramka i sekrety', () => {
+    const ownUser = { enviId: PERSON, systemRoleName: 'ENVI_EMPLOYEE' } as any;
+
+    it.each([
+        ['INVITED', true],
+        ['ACTIVE', true],
+        ['BLOCKED', false],
+        ['REVOKED', false],
+        [null, false],
+    ] as const)('widoczność SB dla stanu %s -> %s', async (status, visible) => {
+        seed(status);
+        expect(await SbAccessController.canSeeSb(ownUser)).toBe(visible);
+        expect(SbAccessRepository.prototype.getByPersonId).toHaveBeenCalledTimes(1);
+        expect(SbAccessRepository.prototype.getByPersonId).toHaveBeenCalledWith(PERSON);
+    });
+
+    it.each([undefined, null, {}])('bez danych osoby odmawia dostępu: %s', async (user) => {
+        expect(await SbAccessController.canSeeSb(user as any)).toBe(false);
+        expect(await SbAccessController.getOwnAccess(user as any)).toEqual({
+            canManage: false, canSeeSb: false, sb: null,
+        });
+        expect(SbAccessRepository.prototype.getPersonAccount).not.toHaveBeenCalled();
+        expect(SbAccessRepository.prototype.getByPersonId).not.toHaveBeenCalled();
+    });
+
+    it.each([false, null])('nieaktywne albo brakujące konto odmawia dostępu: %s', async (active) => {
+        seed('INVITED');
+        if (active === null) db.accounts.delete(PERSON);
+        else db.accounts.get(PERSON).isActive = active;
+        expect(await SbAccessController.canSeeSb(ownUser)).toBe(false);
+        expect(await SbAccessController.getOwnAccess(ownUser)).toEqual({
+            canManage: false, canSeeSb: false, sb: null,
+        });
+        expect(SbAccessRepository.prototype.getByPersonId).not.toHaveBeenCalled();
+    });
+
+    it('kierownik i ADMIN bez wpisu nie widzą SB mimo prawa zarządzania', async () => {
+        for (const role of ['ENVI_MANAGER', 'ADMIN']) {
+            db.accounts.get(MANAGER).systemRoleName = role;
+            const user = { enviId: MANAGER, systemRoleName: role } as any;
+            expect(await SbAccessController.canSeeSb(user)).toBe(false);
+            expect(await SbAccessController.getOwnAccess(user)).toEqual({
+                canManage: true, canSeeSb: false, sb: null,
+            });
+        }
+    });
+
+    it.each(['BLOCKED', 'REVOKED', null] as const)('własny widok ukrywa stan %s', async (status) => {
+        seed(status, { githubInvitationId: 77, drivePermissionId: 'tajne', githubLogin: 'Osoba-GH' });
+        expect(await SbAccessController.getOwnAccess(ownUser)).toEqual({
+            canManage: false, canSeeSb: false, sb: null,
+        });
+        expect(SbAccessRepository.prototype.getByPersonId).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['INVITED', null, null, false, 'PENDING', 'MISSING'],
+        ['INVITED', 'Osoba-GH', 'perm', false, 'PENDING', 'READY'],
+        ['ACTIVE', 'Osoba-GH', 'perm', false, 'LINKED', 'READY'],
+        ['ACTIVE', null, null, true, 'UNLINKED', 'READY'],
+        ['ACTIVE', null, null, false, 'UNLINKED', 'MISSING'],
+    ] as const)('własny widok: %s, login %s, Dysk %s, ręczne %s', async (
+        status, githubLogin, drivePermissionId, isGrantedManually, githubState, driveState,
+    ) => {
+        seed(status, { githubLogin, githubInvitationId: 77, drivePermissionId, isGrantedManually });
+        expect(await SbAccessController.getOwnAccess(ownUser)).toEqual({
+            canManage: false,
+            canSeeSb: true,
+            sb: { status, githubState, githubLogin, driveState, isGrantedManually },
+        });
+        expect(SbAccessRepository.prototype.getByPersonId).toHaveBeenCalledTimes(1);
+    });
+
+    it('kolejne żądania czytają zmiany wpisu i aktywności konta z bazy', async () => {
+        seed('INVITED');
+        expect(await SbAccessController.canSeeSb(ownUser)).toBe(true);
+        seed('BLOCKED');
+        expect(await SbAccessController.canSeeSb(ownUser)).toBe(false);
+        seed('ACTIVE');
+        expect((await SbAccessController.getOwnAccess(ownUser)).canSeeSb).toBe(true);
+        db.accounts.get(PERSON).isActive = false;
+        expect(await SbAccessController.getOwnAccess(ownUser)).toEqual({
+            canManage: false, canSeeSb: false, sb: null,
+        });
+    });
+
     it('zarządza tylko ADMIN/ENVI_MANAGER ze znacznikiem; rola z bazy, nie z sesji', async () => {
         const user = (role: string, enviId: number) => ({ systemRoleName: role, enviId }) as any;
         expect(await SbAccessController.canManage(user('ENVI_MANAGER', MANAGER))).toBe(true);

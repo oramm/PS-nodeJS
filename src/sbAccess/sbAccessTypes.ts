@@ -19,6 +19,14 @@ export type SbAccessStatus = (typeof SB_ACCESS_STATUSES)[number];
 export type SbAccessAction = (typeof SB_ACCESS_ACTIONS)[number];
 export type SbAccessResult = (typeof SB_ACCESS_RESULTS)[number];
 
+export interface SbOwnAccessView {
+    status: 'INVITED' | 'ACTIVE';
+    githubState: 'PENDING' | 'LINKED' | 'UNLINKED';
+    githubLogin: string | null;
+    driveState: 'READY' | 'MISSING';
+    isGrantedManually: boolean;
+}
+
 export interface SbAccessStateInput {
     statusCode: SbAccessStatus;
     githubLogin?: string | null;
