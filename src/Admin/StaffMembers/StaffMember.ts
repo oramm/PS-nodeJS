@@ -21,6 +21,7 @@ export default class StaffMember
     hasCostInvoiceAccess: boolean;
     hasBankAccess: boolean;
     canLogSiteVisits: boolean;
+    canManageSbAccess: boolean;
     isActive: boolean;
     _personName?: string;
     _personSurname?: string;
@@ -41,6 +42,7 @@ export default class StaffMember
         this.hasCostInvoiceAccess = initParamObject.hasCostInvoiceAccess;
         this.hasBankAccess = initParamObject.hasBankAccess;
         this.canLogSiteVisits = initParamObject.canLogSiteVisits;
+        this.canManageSbAccess = initParamObject.canManageSbAccess;
         this.isActive = initParamObject.isActive;
         this._personName = initParamObject._personName;
         this._personSurname = initParamObject._personSurname;

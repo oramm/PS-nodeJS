@@ -81,16 +81,28 @@ export default class StaffMembersController extends BaseController<
         if (!person)
             throw new BadRequestError('Osoba o podanym numerze nie istnieje.');
 
+        const canManageSbAccess =
+            payload.canManageSbAccess ?? person.canManageSbAccess;
+
         // ROD-3: zapis flag i ślad „kto, kiedy, co" w JEDNEJ transakcji. Porównujemy z odczytem
         // sprzed zapisu (osoba bez wiersza flag ma tam wartości domyślne), więc „zapisz bez zmian"
         // nie zostawia zdarzeń.
-        const changes = StaffMemberValidator.FLAGS.map((flag) => ({
-            field: flag,
-            before: (person as any)[flag],
-            after: (payload as any)[flag],
-        }));
+        const changes = [
+            ...StaffMemberValidator.FLAGS.map((flag) => ({
+                field: flag,
+                before: (person as any)[flag],
+                after: (payload as any)[flag],
+            })),
+            {
+                field: 'canManageSbAccess',
+                before: person.canManageSbAccess,
+                after: canManageSbAccess,
+            },
+        ];
         await ToolsDb.transaction(async (conn) => {
-            await instance.repository.upsertInDb(new StaffMember(payload), conn);
+            await instance.repository.upsertInDb(
+                new StaffMember({ ...payload, canManageSbAccess }), conn,
+            );
             await PersonAccountEventsController.recordChanges(conn, {
                 personId: payload.personId,
                 editorId: actorPersonId ?? null,

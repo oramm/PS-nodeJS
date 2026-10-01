@@ -6,6 +6,13 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-01 - Znacznik "zarządza dostępem do SB" w panelu personelu (B5, serwer)
+
+- Scope: `CanManageSbAccess` w odczycie i zapisie panelu `/admin/staffMembers` (`PUT /admin/staffMember/:personId`) i w historii zmian flag (`STAFF_FLAGS`). Pole w zapisie jest opcjonalne: brak pola (stary klient) zachowuje zapisaną wartość i nie tworzy zdarzenia; wartość nielogiczna daje 400.
+- ENV/DB: bez zmian, bez migracji (kolumna z `src/staff/migrations/002_add_can_manage_sb_access.sql`, wymaga migracji B2 na produkcji przed wypchnięciem). Znacznik na produkcji: właściciel i Michał (decyzja właściciela 2026-10-01) - nadać przez panel albo SQL po wdrożeniu.
+- Verification: `tsc --noEmit` 0; `src/Admin/StaffMembers src/staff src/sbAccess` 11 zestawów / 193 testy PASS; pełna suita 179 zestawów / 1971 testów PASS, 5 pominiętych; obieg lokalny na `envikons_local`: PUT true -> odczyt true, PUT bez pola -> true zostaje, PUT "tak" -> 400, PUT false -> false.
+- Rollback: wycofać kod; kolumna i wartości zostają.
+
 ## 2026-10-01 - Strona i instalator SB tylko dla zaproszonych (B4)
 
 - Scope: bramka na wszystkie `/sbInstaller/*` (w tym `paczka`): wpis rejestru SB w stanie INVITED albo ACTIVE (czytany z bazy przy każdym żądaniu) i aktywne konto; nikt inny, także ADMIN bez wpisu, zablokowany i odebrany. `GET /sbAccess/access` zwraca teraz `{ canManage, canSeeSb, sb }` (stan własnego dostępu, bez identyfikatorów zaproszenia i uprawnienia Dysku).

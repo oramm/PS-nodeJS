@@ -21,6 +21,27 @@ describe('StaffMemberValidator', () => {
         expect(result.personId).toBe(42);
         expect(result.isDriver).toBe(true);
         expect(result.hasBankAccess).toBe(false);
+        expect(result.canManageSbAccess).toBeUndefined();
+        expect(result).not.toHaveProperty('canManageSbAccess');
+    });
+
+    it.each([true, false])('przepuszcza opcjonalną flagę SB: %p', (value) => {
+        const result = StaffMemberValidator.validateUpdatePayload({
+            personId: 42,
+            ...allFlags,
+            canManageSbAccess: value,
+        });
+        expect(result.canManageSbAccess).toBe(value);
+    });
+
+    it.each(['true', 1, '1', null])('odrzuca niepoprawną flagę SB: %p', (value) => {
+        const validate = () => StaffMemberValidator.validateUpdatePayload({
+            personId: 42,
+            ...allFlags,
+            canManageSbAccess: value,
+        });
+        expect(validate).toThrow(BadRequestError);
+        expect(validate).toThrow('Flaga „canManageSbAccess” musi być wartością logiczną (true/false).');
     });
 
     // Te flagi sterują dostępem do faktur kosztowych i banku - niejawna konwersja

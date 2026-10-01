@@ -2,6 +2,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../../tools/ToolsDb';
 import StaffMemberAdminRepository from '../StaffMemberAdminRepository';
+import StaffMember from '../StaffMember';
 
 /**
  * Warunki WHERE listy okna „Personel i uprawnienia" (pack PER, checkpoint PER-3).
@@ -191,5 +192,42 @@ describe('StaffMemberAdminRepository - ROD-5: rola i e-mail logowania tylko z ko
         expect(sql).not.toContain('Persons.SystemRoleId');
         expect(sql).not.toContain('Persons.SystemEmail');
         expect(sql).not.toContain('COALESCE(PersonAccounts.System');
+        expect(sql).toContain('COALESCE(StaffMembers.CanManageSbAccess, 0) AS CanManageSbAccess');
+        querySpy.mockRestore();
+    });
+});
+
+describe('StaffMemberAdminRepository - uprawnienie do zarządzania dostępem SB', () => {
+    it.each([0, 1, null])('mapuje wartość %p na boolean', (value) => {
+        const model = (repository as any).mapRowToModel({ PersonId: 7, CanManageSbAccess: value });
+        expect(model.canManageSbAccess).toBe(!!value);
+    });
+
+    it.each([true, false])('upsert zapisuje flagę SB: %p na właściwej pozycji', async (value) => {
+        const executeSpy = jest.spyOn(ToolsDb, 'executeSQL').mockResolvedValue(undefined as any);
+        const conn = { threadId: 7 } as any;
+        try {
+            await repository.upsertInDb(new StaffMember({
+                personId: 7,
+                isDriver: true,
+                isInScrum: false,
+                hasCostInvoiceAccess: true,
+                hasBankAccess: false,
+                canLogSiteVisits: true,
+                canManageSbAccess: value,
+                isActive: true,
+            }), conn);
+
+            expect(executeSpy).toHaveBeenCalledWith(
+                expect.stringContaining('HasBankAccess, CanLogSiteVisits, CanManageSbAccess, IsActive'),
+                [7, 1, 0, 1, 0, 1, value ? 1 : 0, 1],
+                conn,
+            );
+            const sql = String(executeSpy.mock.calls[0][0]);
+            expect(sql).toContain('VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            expect(sql).toContain('CanManageSbAccess = VALUES(CanManageSbAccess)');
+        } finally {
+            executeSpy.mockRestore();
+        }
     });
 });

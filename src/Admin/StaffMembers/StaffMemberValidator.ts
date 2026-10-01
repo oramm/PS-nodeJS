@@ -19,13 +19,18 @@ export default class StaffMemberValidator {
         'isActive',
     ] as const;
 
+    // Stary klient nie wysyła tej flagi; brak pola musi zachować zapisane uprawnienie.
+    static readonly OPTIONAL_FLAGS = ['canManageSbAccess'] as const;
+
     /**
      * Pola konta (systemRoleId, systemEmail, fidmanEnabled) w treści są IGNOROWANE,
      * nie odrzucane: klient wysyła cały wiersz scalony z formularzem, a konto zapisuje
      * osobnym żądaniem trasą PUT /v2/persons/:personId/account - jedyną, która
      * unieważnia sesje po zmianie roli i kolejkuje push do FIDmana (pack PER).
      */
-    static validateUpdatePayload(dto: any): StaffMemberData {
+    static validateUpdatePayload(dto: any): Omit<StaffMemberData, 'canManageSbAccess'> & {
+        canManageSbAccess?: boolean;
+    } {
         if (!dto || typeof dto !== 'object')
             throw new BadRequestError('Brak danych uprawnień.');
 
@@ -44,7 +49,18 @@ export default class StaffMemberValidator {
             payload[flag] = value;
         }
 
-        return payload as StaffMemberData;
+        for (const flag of this.OPTIONAL_FLAGS) {
+            const value = dto[flag];
+            if (value === undefined) continue;
+            if (typeof value !== 'boolean') {
+                throw new BadRequestError(
+                    `Flaga „${flag}” musi być wartością logiczną (true/false).`
+                );
+            }
+            payload[flag] = value;
+        }
+
+        return payload;
     }
 
     static requirePersonId(value: any): number {

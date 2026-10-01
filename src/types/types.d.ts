@@ -56,6 +56,7 @@ export interface StaffMemberData extends RepositoryDataItem {
     hasCostInvoiceAccess: boolean;
     hasBankAccess: boolean;
     canLogSiteVisits: boolean;
+    canManageSbAccess: boolean;
     isActive: boolean;
     /** Dane osoby z JOIN - tylko do odczytu, nie zapisywane. */
     _personName?: string;
