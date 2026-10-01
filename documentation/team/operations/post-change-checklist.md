@@ -6,6 +6,14 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-01 - SB installer 0.14.13
+
+- Scope: refresh only the SB installer asset `assets/sb-installer/ENVI-SB-instalator.cmd` (and `ZRODLO.md`) from `envi-konsulting/ENVI.SB.Rdzen` commit `37796d8`; no backend or frontend behavior change beyond the downloaded installer. Installer behavior (B6): Polish guidance when GitHub or Drive access is missing, opens the right page and waits (Enter = recheck, S = skip, max 3 tries), GitHub login with the code on the clipboard, opens the SB page in PS once with `githubLogin`. `README-onboarding.md` in the payload rewritten for the new path (one Google account, access granted by the manager in PS). The sync engine package is unchanged (same sha256 as 0.14.12); the core delivery channel (shared Drive) is published separately by the release script.
+- DB/env/migrations: none. No config vars, dependency install, frontend pointer or database action required.
+- Verification: installer package Jest suite (`src/sbInstaller`) PASS; rdzen suite `bootstrap/test-bootstrap-units.ps1` 21/21 on Windows PowerShell 5.1 and pwsh 7 without `SB_PS_REPO` (check 5 = this copy equals the source, green); check 8 (copy on the shared Drive) is green only after the Drive publication by `release/build-core-package.ps1`. Real run of the installer on a clean profile is B7 (live test), not part of this commit.
+- Delivery gate: push only after the Drive release (VERSION.md bump + `build-core-package.ps1`) so that the Drive copy and this copy carry the same version; verify the real distributed ZIP from `/sbInstaller/paczka` after deploy (first line of the .cmd: version 0.14.13).
+- Rollback: revert only this delivery commit (restores the 0.14.12 installer asset), without resetting shared history. Do not downgrade newer installations silently.
+
 ## 2026-10-01 - Znacznik "zarządza dostępem do SB" w panelu personelu (B5, serwer)
 
 - Scope: `CanManageSbAccess` w odczycie i zapisie panelu `/admin/staffMembers` (`PUT /admin/staffMember/:personId`) i w historii zmian flag (`STAFF_FLAGS`). Pole w zapisie jest opcjonalne: brak pola (stary klient) zachowuje zapisaną wartość i nie tworzy zdarzenia; wartość nielogiczna daje 400.

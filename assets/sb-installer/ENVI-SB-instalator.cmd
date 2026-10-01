@@ -1,10 +1,10 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.14.12. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.14.13. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
-set "SB_INSTALATOR_WERSJA=0.14.12"
+set "SB_INSTALATOR_WERSJA=0.14.13"
 set "PSModulePath="
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$f=$env:SB_INSTALATOR;$d=$env:SB_INSTALATOR_DIR;$null=New-Item -ItemType Directory -Force -Path $d;$b=[IO.File]::ReadAllBytes($f);$t=[Text.Encoding]::ASCII.GetString($b);$o=$t.IndexOf(':SB-LADUNEK'+[char]13);if($o -lt 0){throw 'brak ladunku w pliku'};$o+=13;$r=[regex]'\G#SB-PLIK ([\w.-]+) (\d+)\r\n';$m=$r.Match($t,$o);$ile=0;while($m.Success){$n=[int]$m.Groups[2].Value;$s=[IO.File]::Create((Join-Path $d $m.Groups[1].Value));$s.Write($b,$m.Index+$m.Length,$n);$s.Close();$ile++;$o=$m.Index+$m.Length+$n+2;$m=$r.Match($t,$o)};if($ile -ne 2){throw ('ladunek niepelny: '+$ile+' plikow')}"
 if errorlevel 1 goto :blad
@@ -20,7 +20,7 @@ echo Nie udalo sie wypakowac instalatora. Pobierz plik jeszcze raz.
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 103692
+#SB-PLIK bootstrap.ps1 115253
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -73,6 +73,8 @@ $ErrorActionPreference = 'Continue'
 
 # -- Config -- override any of these in bootstrap.config.ps1 beside this file
 $RepoUrl          = 'https://github.com/envi-konsulting/ENVI.SB.git'
+$PsUrl            = 'https://ps.envi.com.pl' # strona PS ENVI (GitHub Pages, CNAME), hash-route #/sbInstaller
+$StanInstalatora  = "$env:USERPROFILE\.envi\instalator-stan.json"
 # $VaultPath is the ONE Obsidian vault root (T3). Canon repo A clones directly here (its
 # tracked tree already places 40_wiki/, _index.md and CLAUDE.md at the clone root, so no
 # extra nesting is needed - see the header comment). Kept at the SAME literal path the
@@ -170,9 +172,10 @@ $DriveFsRootNames = @(
 
 function Find-SkillDriveRoot {
   # non-mutating: read-only filesystem search, safe under -WhatIf
-  foreach ($drive in (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)) {
+  param([string[]]$KorzenieDyskow = (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue).Root)
+  foreach ($drive in $KorzenieDyskow) {
     foreach ($name in $DriveFsRootNames) {
-      $root = Join-Path $drive.Root $name
+      $root = Join-Path $drive $name
       if (-not (Test-Path -LiteralPath $root)) { continue }
       $hit = Get-ChildItem -LiteralPath $root -Directory -Recurse -Depth 4 -Filter '.skills' -Force -ErrorAction SilentlyContinue |
              Select-Object -First 1
@@ -188,47 +191,47 @@ function Start-GoogleDriveApp {
   # every update, while "...\Drive File Stream\launch.bat" is the stable entry point Google
   # itself keeps in place. Ceiling: 64-bit Program Files only (Drive ships no 32-bit build).
   if (Get-Process 'GoogleDriveFS' -ErrorAction SilentlyContinue) {
-    Log "[N1] Google Drive for Desktop is already running"
+    Log "[N1] Dysk Google juz dziala"
     return
   }
   $launcher = Join-Path $env:ProgramFiles 'Google\Drive File Stream\launch.bat'
   if (-not (Test-Path -LiteralPath $launcher)) {
-    Log "[N1] Google Drive for Desktop not found at '$launcher'. If winget could not install it, get it from https://www.google.com/drive/download/ and re-run ENVI-SB-instalator.cmd."
+    Log "[N1] Nie znaleziono aplikacji Dysk Google w '$launcher'. Pobierz ja z https://www.google.com/drive/download/, zaloguj sie kontem, ktorym logujesz sie do PS, i uruchom ENVI-SB-instalator.cmd jeszcze raz."
     return
   }
   Start-Process -FilePath $launcher -WindowStyle Hidden
-  Log "[N1] started Google Drive for Desktop - its sign-in window should appear"
+  Log "[N1] Uruchomiono Dysk Google - zaloguj sie kontem, ktorym logujesz sie do PS"
 }
 
 function Resolve-SkillDriveRoot {
-  # The employee's Drive letter, UI language and shortcut placement all differ from the
-  # owner's, so the configured path is a guess: use it only if it actually exists.
+  # Litera dysku i jezyk Windows roznia sie u ludzi; konfiguracja jest tylko podpowiedzia.
   if (Test-Path -LiteralPath $script:SkillDriveRoot) {
-    Log "[N1] Google Drive skills path reachable: $script:SkillDriveRoot"
+    Log "[N1] Skille na Dysku Google sa dostepne: $script:SkillDriveRoot"
     return
   }
-  Log "[N1] configured skills path not reachable ('$script:SkillDriveRoot') - searching mounted Google Drive roots ..."
-  $found = Find-SkillDriveRoot
-  $attempt = 0
-  while (-not $found -and -not $WhatIfPreference -and $attempt -lt 3) {
-    $attempt++
-    # winget installs Google Drive but never launches it, and no drive letter is mounted
-    # until a human signs in - so start the app for them, then wait and re-probe.
-    Start-GoogleDriveApp
-    Log "[N1] no .skills folder found on any mounted Drive yet. Do this in the Google Drive window that just opened (attempt $attempt/3):"
-    Log "[N1]   1. Sign in with your ENVI Google account."
-    Log "[N1]   2. In Drive on the web, find the shared skills folder under 'Shared with me', right-click -> Organise -> Add shortcut to Drive -> My Drive."
-    Log "[N1]   3. Wait until a new drive (usually G:) shows up in Explorer."
-    Read-Host "[N1] Press Enter to check again, or type S + Enter to skip skills for now" | ForEach-Object {
-      if ($_ -match '^\s*[sS]') { $attempt = 99 }
+  Log "[N1] Nie widac skonfigurowanej sciezki '$script:SkillDriveRoot' - szukam Dysku Google."
+  $script:znalezionyDysk = Find-SkillDriveRoot
+  if (-not $script:znalezionyDysk) {
+    $sprawdz = {
+      $f = Find-SkillDriveRoot
+      if ($f) { $script:znalezionyDysk = $f; $null }
+      else { Get-PoradaDysk (Test-GoogleDriveInstalled) (Test-DriveMounted) }
     }
-    if ($attempt -ne 99) { $found = Find-SkillDriveRoot }
+    if ($WhatIfPreference) {
+      $porada = & $sprawdz
+      if ($porada) { foreach ($linia in @($porada.Lines)) { Log $linia } }
+    } else {
+      $null = Invoke-PetlaNaprawy -Sprawdz $sprawdz -PrzedPorada {
+        param($p)
+        if ($p.Kind -eq 'dysk-niezalogowany') { Start-GoogleDriveApp }
+      }
+    }
   }
-  if ($found) {
-    $script:SkillDriveRoot = $found
-    Log "[N1] Google Drive skills path detected: $found"
+  if ($script:znalezionyDysk) {
+    $script:SkillDriveRoot = $script:znalezionyDysk
+    Log "[N1] Znaleziono skille na Dysku Google: $script:SkillDriveRoot"
   } else {
-    Log "[N1] Google Drive skills path still not found - skills sync will be skipped this run (not a hard fail). Re-run ENVI-SB-instalator.cmd after signing in, or pin the path in bootstrap.config.ps1: `$SkillDriveRoot = 'X:\...\SB\.skills'"
+    Log ('[N1] Skille zostana pominiete w tym przebiegu. Po zalogowaniu kontem, ktorym logujesz sie do PS, uruchom ENVI-SB-instalator.cmd jeszcze raz albo ustaw w bootstrap.config.ps1: $SkillDriveRoot = ''X:\...\SB.ENVI\.skills''')
   }
 }
 
@@ -285,9 +288,264 @@ function Invoke-StepN1 {
   Log "[N1] prerequisites step done"
 }
 
+# -- B6: dostep, ktorego brakuje - instalator mowi co robic, otwiera strone i czeka --
+function Test-GitHubLogin {
+  param([string]$Login)
+  return ($Login -match '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$')
+}
+
+function New-SbPowiazanieUrl {
+  param([string]$PsUrl, [string]$Login)
+  if (-not (Test-GitHubLogin $Login)) { return $null }
+  return ($PsUrl.TrimEnd('/') + '/#/sbInstaller?githubLogin=' + $Login)
+}
+
+function Test-OtworzPowiazanie {
+  param($Stan, [string]$Login)
+  return ((Test-GitHubLogin $Login) -and ($null -eq $Stan -or $Stan.sbPowiazanieLogin -ne $Login))
+}
+
+function Resolve-MembershipState {
+  param([int]$ExitCode, [string]$Text)
+  if ($ExitCode -eq 0) {
+    $state = $Text.Trim()
+    if ($state -eq 'active' -or $state -eq 'pending') { return $state.ToLowerInvariant() }
+    return 'unknown'
+  }
+  if ($Text -match 'HTTP 404|"status":"404"') { return 'none' }
+  return 'unknown'
+}
+
+function Get-PoradaGitHub {
+  param([string]$Stan, [string]$Login, [string]$Org, [string]$LogInstalatora)
+  if (-not $Login) { $Login = '(nieznany)' }
+  $url = $null
+  switch ($Stan) {
+    'pending' {
+      $kind = 'zaproszenie-czeka'
+      $url = "https://github.com/orgs/$Org/invitation"
+      $lines = @(
+        "GitHub: na koncie $Login czeka zaproszenie do organizacji $Org - bez jego przyjecia instalator nie pobierze wiedzy firmowej."
+        "  Otwieram strone zaproszenia: $url"
+        "  Kliknij tam zielony przycisk 'Join $Org', potem wroc do tego okna."
+      )
+    }
+    'none' {
+      $kind = 'brak-zaproszenia'
+      $lines = @(
+        "GitHub: konto $Login nie ma dostepu do wiedzy firmowej, a GitHub nie widzi dla niego zaproszenia."
+        "  Popros przelozonego o zaproszenie do SB w PS. Zaproszenie przyjdzie mailem od GitHuba na adres, ktorym logujesz sie do PS."
+        "  Jesli taki mail juz masz: otworz go, kliknij 'Join' i zaloguj sie na GitHubie kontem Google, ktorym logujesz sie do PS."
+        "  Jesli to nie jest wlasciwe konto GitHub, wyloguj je poleceniem: gh auth logout --hostname github.com  (potem uruchom instalator jeszcze raz)."
+      )
+    }
+    'active' {
+      $kind = 'czlonek-bez-repozytorium'
+      $lines = @(
+        "GitHub: konto $Login jest w organizacji $Org, ale repozytorium z wiedza firmowa jest nadal niedostepne."
+        "  To wyglada na usterke po naszej stronie - wyslij plik $LogInstalatora wlascicielowi."
+      )
+    }
+    default {
+      $kind = 'blad-sprawdzenia'
+      $lines = @(
+        "GitHub: nie udalo sie sprawdzic dostepu (brak internetu albo GitHub chwilowo nie odpowiada)."
+        "  Sprawdz polaczenie z internetem i nacisnij Enter, zeby sprobowac jeszcze raz."
+      )
+    }
+  }
+  return [pscustomobject]@{ Kind = $kind; Url = $url; Lines = [string[]]$lines }
+}
+
+function Get-PoradaDysk {
+  param([bool]$AplikacjaZainstalowana, [bool]$DyskPodlaczony)
+  $url = $null
+  if (-not $AplikacjaZainstalowana) {
+    $kind = 'dysk-brak-aplikacji'
+    $url = 'https://www.google.com/drive/download/'
+    $lines = @(
+      "Dysk Google: aplikacja Dysk Google nie jest zainstalowana na tym komputerze."
+      "  Pobierz ja i zainstaluj: https://www.google.com/drive/download/"
+      "  Potem zaloguj sie kontem, ktorym logujesz sie do PS, i wroc do tego okna."
+    )
+  } elseif (-not $DyskPodlaczony) {
+    $kind = 'dysk-niezalogowany'
+    $lines = @(
+      "Dysk Google: aplikacja nie jest jeszcze zalogowana (albo dysk sie nie podlaczyl)."
+      "  1. W oknie Dysku Google zaloguj sie kontem, ktorym logujesz sie do PS (tym samym, co na GitHubie)."
+      "  2. Poczekaj, az w Eksploratorze pojawi sie nowy dysk (zwykle G:)."
+    )
+  } else {
+    $kind = 'dysk-bez-sb'
+    $lines = @(
+      "Dysk Google: jestes zalogowany, ale to konto nie widzi dysku wspolnego SB.ENVI, z ktorego instalator bierze narzedzia."
+      "  To konto nie ma dostepu - uzyj konta, ktorym logujesz sie do PS: w aplikacji Dysk Google kliknij swoje zdjecie i wybierz 'Dodaj inne konto'."
+      "  Jesli dostep dostales przed chwila, poczekaj minute i nacisnij Enter."
+      "  Nadal nic? Popros przelozonego o zaproszenie do SB w PS - ono nadaje tez dostep do Dysku."
+    )
+  }
+  return [pscustomobject]@{ Kind = $kind; Url = $url; Lines = [string[]]$lines }
+}
+
+function Get-GhLoginArgs {
+  param([bool]$Schowek)
+  $argsLogin = @('auth','login','--hostname','github.com','--git-protocol','https','--web')
+  if ($Schowek) { $argsLogin += '--clipboard' }
+  return $argsLogin
+}
+
+function Get-GhLoginIntro {
+  param([bool]$Schowek)
+  "GitHub: logowanie. Za chwile gh otworzy strone logowania w przegladarce."
+  "  1. W tym oknie nacisnij Enter - gh pokaze kod jednorazowy i otworzy przegladarke."
+  if ($Schowek) { "     Kod zostal skopiowany do schowka - wklej go na stronie GitHuba (Ctrl+V)." }
+  else { "     Przepisz kod ze strony ponizej na strone GitHuba." }
+  "  2. Na stronie logowania wybierz 'Continue with Google' i zaloguj sie tym samym kontem Google, ktorym logujesz sie do PS. Nie potrzebujesz osobnego hasla do GitHuba; jesli nie masz jeszcze konta GitHub, ta opcja je zalozy - GitHub zapyta tylko o nazwe uzytkownika."
+  "  3. Kliknij 'Authorize' i wroc do tego okna."
+}
+
+function Invoke-PetlaNaprawy {
+  param(
+    [Parameter(Mandatory)][scriptblock]$Sprawdz,
+    [scriptblock]$Czytaj = { param($pytanie) try { Read-Host $pytanie } catch { 'S' } },
+    [scriptblock]$Pokaz = { param($tekst) Log $tekst },
+    [scriptblock]$Otworz = { param($url) Open-Url $url },
+    [scriptblock]$PrzedPorada = $null,
+    [int]$Max = 3
+  )
+  $porada = & $Sprawdz
+  if ($null -eq $porada) { return [pscustomobject]@{ Wynik = 'ok'; Proby = 0; Porada = $null } }
+  $otwarte = @()
+  for ($i = 1; $i -le $Max; $i++) {
+    if ($PrzedPorada) { $null = & $PrzedPorada $porada }
+    foreach ($linia in @($porada.Lines)) { $null = & $Pokaz $linia }
+    if ($porada.Url -and $otwarte -notcontains $porada.Url) {
+      $null = & $Otworz $porada.Url
+      $otwarte += $porada.Url
+    }
+    $odpowiedz = & $Czytaj "Enter = sprawdz ponownie, S + Enter = pomin ten krok. Proba $i z $Max"
+    if ("$odpowiedz".Trim() -match '^[sS]') {
+      return [pscustomobject]@{ Wynik = 'pominiete'; Proby = ($i - 1); Porada = $porada }
+    }
+    $porada = & $Sprawdz
+    if ($null -eq $porada) { return [pscustomobject]@{ Wynik = 'ok'; Proby = $i; Porada = $null } }
+  }
+  return [pscustomobject]@{ Wynik = 'wyczerpane'; Proby = $Max; Porada = $porada }
+}
+
+function Open-Url {
+  param([string]$Url)
+  try { Start-Process $Url -ErrorAction Stop; return $true }
+  catch { Log "Nie udalo sie otworzyc przegladarki - otworz recznie: $Url"; return $false }
+}
+
+function Test-GhClipboardSupport {
+  try { return ((gh auth login --help 2>&1 | Out-String) -match '--clipboard') }
+  catch { return $false }
+}
+
+function Test-RepoReachable {
+  param([string]$Slug)
+  if (-not $Slug -or -not (Get-Command gh -ErrorAction SilentlyContinue)) { return $false }
+  try {
+    $null = gh api "repos/$Slug" --jq .id 2>$null
+    return ($LASTEXITCODE -eq 0)
+  } catch { return $false }
+}
+
+function Get-GitHubMembershipState {
+  param([string]$Org)
+  try {
+    $txt = (gh api "user/memberships/orgs/$Org" --jq .state 2>&1 | Out-String)
+    return Resolve-MembershipState $LASTEXITCODE $txt
+  } catch { return 'unknown' }
+}
+
+function Get-GitHubLogin {
+  try {
+    $txt = gh api user --jq .login 2>$null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $login = "$txt".Trim()
+    if (Test-GitHubLogin $login) { return $login }
+  } catch {}
+  return $null
+}
+
+function Read-StanInstalatora {
+  param([string]$Path)
+  try {
+    $stan = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    if ($stan -is [pscustomobject]) { return $stan }
+  } catch {}
+  return [pscustomobject]@{}
+}
+
+function Save-StanInstalatora {
+  param([string]$Path, $Stan)
+  $parent = Split-Path -Parent $Path
+  if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+  # JSON z \uXXXX zachowuje rowniez obce pola Unicode w czystym ASCII.
+  $json = $Stan | ConvertTo-Json -Depth 20
+  $json = [regex]::Replace($json, '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+  Set-JsonFileNoBom -LiteralPath $Path -Content $json
+}
+
+function Test-DriveMounted {
+  param([string[]]$KorzenieDyskow = (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue).Root)
+  foreach ($drive in $KorzenieDyskow) {
+    foreach ($name in $DriveFsRootNames) {
+      if (Test-Path -LiteralPath (Join-Path $drive $name)) { return $true }
+    }
+  }
+  return $false
+}
+
+function Test-GoogleDriveInstalled {
+  return ([bool](Get-Process 'GoogleDriveFS' -ErrorAction SilentlyContinue) -or
+    (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'Google\Drive File Stream\launch.bat')))
+}
+
+function Invoke-DostepGitHub {
+  param([string]$Slug, [string]$Login, [string]$Org, [switch]$PominPetle)
+  $sprawdz = {
+    if (Test-RepoReachable $Slug) { $null }
+    else { Get-PoradaGitHub (Get-GitHubMembershipState $Org) $Login $Org $InstallLogFile }
+  }
+  if ($PominPetle) {
+    $porada = & $sprawdz
+    if ($null -eq $porada) { return 'ok' }
+    foreach ($linia in @($porada.Lines)) { Log $linia }
+    return 'sprawdzone-bez-petli'
+  }
+  $wynik = Invoke-PetlaNaprawy -Sprawdz $sprawdz
+  if ($wynik.Wynik -eq 'wyczerpane') {
+    Log "GitHub: nadal brak dostepu po 3 probach. Gdy dostaniesz zaproszenie, uruchom ENVI-SB-instalator.cmd jeszcze raz."
+  } elseif ($wynik.Wynik -eq 'pominiete') {
+    Log "GitHub: pominieto na Twoja prosbe. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy dostep bedzie gotowy."
+  }
+  return $wynik.Wynik
+}
+
+function Invoke-SbPowiazanie {
+  param([string]$Login, [string]$PsUrl, [string]$StanPath, [switch]$DryRun)
+  $stan = Read-StanInstalatora $StanPath
+  if (-not (Test-OtworzPowiazanie $stan $Login)) {
+    Log "[GitHub] strona Second Brain w PS z powiazaniem konta byla juz otwarta dla $Login - pomijam"
+    return
+  }
+  $url = New-SbPowiazanieUrl $PsUrl $Login
+  if ($DryRun) { Log "(-WhatIf) otworzylbym $url"; return }
+  Log "GitHub: zalogowano jako $Login. Otwieram strone Second Brain w PS - zaloguj sie tam kontem Google, kliknij 'To moje konto' (PS dowie sie, ktore konto GitHub jest Twoje) i przeczytaj tam krotka instrukcje wylaczenia trenowania AI na koncie GitHub."
+  Log "  Gdyby strona sie nie otworzyla, wejdz recznie: $url"
+  if (Open-Url $url) {
+    $stan | Add-Member -NotePropertyName sbPowiazanieLogin -NotePropertyValue $Login -Force
+    $stan | Add-Member -NotePropertyName sbPowiazanieCzas -NotePropertyValue (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Force
+    Save-StanInstalatora $StanPath $stan
+  }
+}
+
 # -- N2: auth + read-only canon (repo A) clone, idempotent --
-# ponytail: one flat gh auth login + setup-git call, no retry/backoff. If flaky networks
-# turn out to be a real problem on employee machines, add retry logic then, not now.
+# Brak uprawnien wymaga dzialania czlowieka; kolejny clone nie naprawi zaproszenia.
 # $VaultPath is cloned into DIRECTLY (not into a "40_wiki" subfolder of it) - repo A's own
 # tracked tree already contains 40_wiki/, _index.md, CLAUDE.md and .gitignore at its root,
 # so cloning it here IS what produces $VaultPath\40_wiki. N2b (below) adds repo B as a
@@ -360,16 +618,39 @@ function Invoke-StepN2 {
     Log "[N2] gh already authenticated - skip login"
   } else {
     $target = 'gh auth (device-flow, https)'
-    $action = 'gh auth login --hostname github.com --git-protocol https --web; gh auth setup-git'
+    $czySchowek = Test-GhClipboardSupport
+    $action = 'gh ' + ((Get-GhLoginArgs $czySchowek) -join ' ') + '; gh auth setup-git'
     if ($PSCmdlet.ShouldProcess($target, $action)) {
-      Log "[N2] gh not authenticated - running gh auth login (device-flow) ..."
-      gh auth login --hostname github.com --git-protocol https --web
+      foreach ($linia in @(Get-GhLoginIntro $czySchowek)) { Log $linia }
+      & gh @(Get-GhLoginArgs $czySchowek)
       if ($LASTEXITCODE -ne 0) {
-        Log "[N2] ERROR: gh auth login failed (exit $LASTEXITCODE) - aborting N2"
+        Log "GitHub: logowanie sie nie udalo (kod $LASTEXITCODE). Uruchom ENVI-SB-instalator.cmd jeszcze raz."
         return
       }
       gh auth setup-git
       Log "[N2] gh auth login done, git credential helper configured"
+    }
+  }
+
+  if (Test-GhAuthenticated) {
+    $canonSlug = Get-RepoSlugFromUrl -Url $RepoUrl
+    $org = $canonSlug -split '/' | Select-Object -First 1
+    $login = Get-GitHubLogin
+    if (-not (Test-Path -LiteralPath (Join-Path $VaultPath '.git'))) {
+      $dostep = Invoke-DostepGitHub -Slug $canonSlug -Login $login -Org $org -PominPetle:$WhatIfPreference
+      if ($dostep -ne 'ok' -and -not $WhatIfPreference) {
+        Log "[N2] kanon niepobrany - brak dostepu do GitHuba (patrz wyzej). Reszta instalacji idzie dalej; po zalogowaniu/zaproszeniu uruchom ENVI-SB-instalator.cmd jeszcze raz."
+        return
+      }
+      $osiagalne = $dostep -eq 'ok'
+    } else {
+      $osiagalne = Test-RepoReachable $canonSlug
+      if (-not $osiagalne) {
+        Log "[N2] GitHub: nie potwierdzono dostepu do kanonu. Sprawdz internet; jesli GitHub odmawia dostepu, popros przelozonego o zaproszenie do SB w PS i przyjmij je tym samym kontem."
+      }
+    }
+    if ($osiagalne -and (Test-GitHubLogin $login)) {
+      Invoke-SbPowiazanie -Login $login -PsUrl $PsUrl -StanPath $StanInstalatora -DryRun:$WhatIfPreference
     }
   }
 
@@ -399,7 +680,7 @@ function Invoke-StepN2 {
       # Windows username or a redirected profile, not a fix for a live failure.
       git clone --config core.longpaths=true $RepoUrl $VaultPath
       if ($LASTEXITCODE -ne 0) {
-        Log "[N2] ERROR: git clone failed (exit $LASTEXITCODE) - aborting N2"
+        Log "[N2] Nie udalo sie pobrac kanonu (kod $LASTEXITCODE). Szczegoly w pliku $InstallLogFile - uruchom ENVI-SB-instalator.cmd jeszcze raz po sprawdzeniu dostepu."
         return
       }
     }
@@ -1541,7 +1822,7 @@ function Set-EnviSyncConfigJesliTrzeba {
 
 function Invoke-N5SkillsSync {
   if (-not (Test-Path -LiteralPath $SkillDriveRoot)) {
-    Log "[N5] Google Drive skills path not reachable: '$SkillDriveRoot'. Sign in to Google Drive with the ENVI account that holds the skills folder, then re-run ENVI-SB-instalator.cmd. (Full sign-in checklist = N6.) Skills sync skipped this run - idempotent, not a hard fail."
+    Log "[N5] Nie widac skilli na Dysku Google: '$SkillDriveRoot'. Zaloguj sie w aplikacji Dysk Google kontem, ktorym logujesz sie do PS, poczekaj na podlaczenie dysku i uruchom ENVI-SB-instalator.cmd jeszcze raz. Skille zostana pominiete w tym przebiegu."
     return
   }
   Log "[N5] skills source reachable: $SkillDriveRoot"
@@ -1777,12 +2058,12 @@ foreach ($zad in @($TaskName, $SyncTaskName)) {
 }
 Log ""
 $todo = @()
-if (-not $sumCanon) { $todo += "Kanon sie nie sciagnal. Uruchom ENVI-SB-instalator.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli GitHub odmawia dostepu - popros wlasciciela o zaproszenie do zespolu (organizacji) i przyjmij je mailem." }
+if (-not $sumCanon) { $todo += "Kanon sie nie sciagnal. Uruchom ENVI-SB-instalator.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli GitHub odmawia dostepu - popros przelozonego o zaproszenie do SB w PS i przyjmij je na stronie https://github.com/orgs/envi-konsulting/invitation (albo w mailu od GitHuba)." }
 # Only a team member is supposed to have a project area - for a consumer, "brak" here is
 # correct behaviour, not a defect, and must not generate a fix-it instruction (T6).
 if ($sumRole -eq 'team' -and -not $sumProjects) { $todo += "Obszar projektowy (20_projects) sie nie sciagnal. Uruchom ENVI-SB-instalator.cmd jeszcze raz i przy pytaniu o GitHub zaloguj sie w przegladarce. Jesli druga proba tez nie pomoze, NIE probuj trzeci raz - wyslij plik $InstallLogFile wlascicielowi, bo przyczyna moze byc za dluga sciezka do Twojego folderu domowego i wtedy powtarzanie nic nie da." }
 if ($sumRole -eq 'team' -and $sumProjects -and -not $sumSyncTask) { $todo += "Synchronizacja obszaru projektowego w tle sie nie skonfigurowala. Uruchom ENVI-SB-instalator.cmd jeszcze raz." }
-if (-not $sumSkills) { $todo += "Skille sa niewidoczne. Zaloguj sie w aplikacji Dysk Google na konto firmowe, poczekaj az pojawi sie dysk w Eksploratorze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz." }
+if (-not $sumSkills) { $todo += "Skille sa niewidoczne. Zaloguj sie w aplikacji Dysk Google kontem, ktorym logujesz sie do PS, poczekaj az pojawi sie dysk w Eksploratorze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz." }
 if ($sumSkills -and $vaultSkillCount -eq 0) { $todo += "Skille sie nie skopiowaly. Uruchom ENVI-SB-instalator.cmd jeszcze raz; jesli to nie pomoze, wyslij plik $InstallLogFile wlascicielowi." }
 if (-not $sumObsidian) { $todo += "Obsidian nie ma zarejestrowanego vaultu. Zamknij Obsidiana calkowicie i uruchom ENVI-SB-instalator.cmd jeszcze raz." }
 # P2: kazde "nie" z trzech linii wyzej ma tu swoja pozycje - inaczej podsumowanie mowiloby
@@ -1800,85 +2081,82 @@ if ($todo.Count -eq 0) {
 Log "Pelny zapis przebiegu (ten plik wyslij, gdy cos nie dziala): $InstallLogFile"
 Log "=== bootstrap run done ==="
 
-#SB-PLIK README-onboarding.md 7674
-# Second Brain ENVI — pierwsze uruchomienie na Twoim komputerze
+#SB-PLIK README-onboarding.md 8894
+# Second Brain ENVI: pierwsze uruchomienie na Twoim komputerze
 
-Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Zanim uruchomisz instalator, wykonaj cztery krótkie kroki poniżej — każdy robisz raz, na początku. Piąty krok (logowanie do agenta) robisz przy pierwszym użyciu narzędzia.
+Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Nie zakładasz żadnych kont i niczego nikomu nie wysyłasz: do wszystkiego używasz **jednego konta Google, którym logujesz się do PS ENVI**. Tym samym kontem logujesz się do Dysku Google i do GitHuba.
 
-Jeśli utkniesz na którymś kroku — nic straconego, patrz sekcja "Jeśli coś wygląda na zawieszone" na końcu.
+Jeśli utkniesz na którymś kroku, nic straconego. Instalator sam powie po polsku, czego brakuje, i da się go uruchomić ponownie, patrz sekcja "Jeśli coś wygląda na zawieszone" na końcu.
 
-## Krok 1 — Konto GitHub
+## Zanim uruchomisz instalator
 
-Potrzebujesz konta na GitHub (to serwis, przez który Twój komputer pobiera aktualną wiedzę firmową).
+Trzy rzeczy, każdą robisz raz.
 
-- Jeśli masz już konto GitHub — świetnie, przejdź do kroku 2.
-- Jeśli nie masz — załóż je na [github.com/signup](https://github.com/signup). Wystarczy zwykłe, prywatne konto (nie musi być firmowe) — koszt ewentualnego planu pokrywa firma, w ramach pilotażu.
+### 1. Dostęp do Second Brain
 
-## Krok 2 — Dostęp do odczytu wiedzy firmowej
+Dostęp nadaje Twój przełożony w PS ENVI: zaprasza Cię do Second Brain jednym kliknięciem. Bez takiego zaproszenia PS nie wyda instalatora, więc skoro go pobrałeś(aś), dostęp już masz.
 
-Tego kroku **nie robisz sam** — potrzebna jest jedna czynność po stronie biura ENVI.
+Zaproszenie na GitHubie przychodzi **mailem od GitHuba na adres, którym logujesz się do PS**. Nie zakładasz konta GitHub osobno i nie wysyłasz nikomu swojej nazwy użytkownika.
 
-1. Wyślij swoją nazwę użytkownika GitHub do <właściciel repozytorium / biuro@envi.com.pl>.
-2. Poczekaj na e-mail z zaproszeniem od GitHuba do zespołu (organizacji) **envi-konsulting**.
-3. Otwórz ten e-mail i kliknij, żeby przyjąć zaproszenie.
+1. Otwórz mail od GitHuba (zajrzyj też do folderu ze spamem) i kliknij **Join**.
+2. Na stronie logowania wybierz **Continue with Google** i zaloguj się tym samym kontem Google, którym logujesz się do PS. Jeśli nie masz jeszcze konta GitHub, ta opcja założy je za Ciebie, a GitHub zapyta tylko o nazwę użytkownika.
 
-Po przyjęciu zaproszenia masz dostęp do wiedzy firmowej w ramach zespołu **envi-konsulting** — zwykle **tylko do odczytu**, więc nie możesz nic w niej przypadkowo zepsuć ani nadpisać. (Jeśli Twoja rola to wyjątkowo współautorska, biuro poinformuje Cię o tym osobno.)
+Jeśli maila nie widzisz, zaproszenie możesz przyjąć też na stronie [github.com/orgs/envi-konsulting/invitation](https://github.com/orgs/envi-konsulting/invitation). Jeśli i tam go nie ma, poproś przełożonego o zaproszenie do Second Brain w PS.
 
-## Krok 3 — Logowanie do Dysku Google
+Po przyjęciu zaproszenia masz dostęp do wiedzy firmowej, **tylko do odczytu**, więc nie możesz w niej niczego przypadkowo zepsuć ani nadpisać.
 
-Zainstaluj (lub zaloguj się, jeśli już masz zainstalowany) Dysk Google na komputerze, używając firmowego konta ENVI, które ma dostęp do folderu z narzędziami (skillami).
+### 2. Dysk Google
 
-Po zalogowaniu na Twoim komputerze pojawi się dysk `G:` — to z niego instalator pobiera narzędzia dla agenta.
+Zainstaluj Dysk Google na komputerze (albo zaloguj się, jeśli już go masz) **tym samym kontem, którym logujesz się do PS**. Zwykle już jesteś tak zalogowany(a). Sprawdzisz to, klikając swoje zdjęcie w prawym górnym rogu aplikacji Dysk Google: powinien tam być ten adres.
 
-**To normalne:** jeśli uruchomisz instalator zanim zdążysz się zalogować do Dysku Google, instalator grzecznie Cię o tym poinformuje i zatrzyma tylko ten jeden etap — nie jest to błąd. Po zalogowaniu wystarczy uruchomić plik jeszcze raz.
+Po zalogowaniu na Twoim komputerze pojawi się dysk `G:`. Z niego instalator pobiera narzędzia dla agenta.
 
-## Krok 4 — Wyłączenie trenowania AI na Twoim koncie GitHub Copilot
+**To normalne:** jeśli uruchomisz instalator, zanim zdążysz się zalogować do Dysku Google, instalator grzecznie Cię o tym poinformuje i zatrzyma tylko ten jeden etap. To nie jest błąd. Po zalogowaniu wystarczy uruchomić plik jeszcze raz.
 
-W ustawieniach swojego konta GitHub wyłącz wykorzystywanie Twoich danych do trenowania modeli/produktów:
+### 3. Wyłączenie trenowania AI na koncie GitHub
 
-- Ustawienia konta → **Copilot** → **Features** (nazwa i lokalizacja tej opcji może się nieznacznie zmieniać w interfejsie GitHuba).
-- Wyłącz opcję dotyczącą używania Twojej aktywności/kodu do trenowania modeli.
+Po przyjęciu zaproszenia wyłącz wykorzystywanie Twoich danych do trenowania modeli. Otwórz [ustawienia Copilot](https://github.com/settings/copilot/features), na samym dole w sekcji **Privacy** przy opcji **Allow GitHub to use my data for AI model training** wybierz **Disabled** (zapisuje się samo). Nazwa i lokalizacja tej opcji mogą się nieznacznie zmieniać w interfejsie GitHuba.
 
-Robimy to, bo treści firmowe nie powinny trafiać do trenowania modeli zewnętrznych dostawców — to prosta zasada firmowa, nie dotyczy samej pracy z Second Brain, ale konta GitHub jako takiego.
-
-## Krok 5 — Logowanie do agenta (Claude Code / Codex)
-
-Na komputerze zainstalowany jest agent (Claude Code i/lub Codex — używasz tego, który pasuje do zadania, nie ma znaczenia który akurat wybierzesz). Przy pierwszym uruchomieniu narzędzie poprosi Cię o zalogowanie się — na start używasz swojego prywatnego konta, koszt pokrywa firma w ramach pilotażu.
-
-To logowanie robisz raz na narzędzie — potem działa samo.
+Robimy to, bo treści firmowe nie powinny trafiać do trenowania modeli zewnętrznych dostawców. To prosta zasada firmowa dotycząca konta GitHub jako takiego.
 
 ## Co robi instalator (jeden plik)
 
-Całą resztę załatwia jeden plik: **`ENVI-SB-instalator.cmd`**. Pobierasz go ze strony instalatora w PS ENVI jako ZIP — nie musisz go rozpakowywać: otwórz pobrany ZIP (Eksplorator pokaże go jak folder) i kliknij dwukrotnie plik w środku.
+Całą resztę załatwia jeden plik: **`ENVI-SB-instalator.cmd`**. Pobierasz go ze strony instalatora w PS ENVI jako ZIP. Nie musisz go rozpakowywać: otwórz pobrany ZIP (Eksplorator pokaże go jak folder) i kliknij dwukrotnie plik w środku.
 
 1. Uruchamiasz `ENVI-SB-instalator.cmd` (dwuklik).
-2. W pewnym momencie w przeglądarce pojawi się prośba o zalogowanie do GitHuba — to jednorazowa, bezpieczna autoryzacja (tzw. logowanie kodem urządzenia). Potwierdzasz i to wszystko — nie wpisujesz żadnych haseł do samego instalatora.
-3. Dalej wszystko dzieje się automatycznie:
-   - na komputerze pojawia się **jeden** folder — Twój Second Brain — a w Menu Start skrót **„ENVI Second Brain”**, który otwiera go w Obsidianie od razu na notatce startowej,
-   - w tym folderze jest wiedza firmowa (**tylko do odczytu**) oraz — jeśli pracujesz zespołowo nad projektami — osobny obszar projektowy, w którym możesz zapisywać zmiany,
-   - wiedza firmowa sama, cicho, odświeża się w tle co kilka godzin (i przy każdym logowaniu) — nie musisz nic klikać, nie zobaczysz żadnego czarnego okienka konsoli,
-   - do niczego z tego nie są potrzebne uprawnienia administratora ani znajomość komend git — ich w ogóle nie zobaczysz.
+2. W pewnym momencie instalator poprosi o zalogowanie do GitHuba. Naciśnij Enter: kod jednorazowy trafi do schowka, a w przeglądarce otworzy się strona GitHuba. Wklej kod (Ctrl+V), wybierz **Continue with Google** i zaloguj się tym samym kontem Google co do PS. Nie wpisujesz żadnych haseł do samego instalatora.
+3. Gdy instalator czegoś nie może zrobić, bo brakuje dostępu do GitHuba albo do Dysku, nie kończy się błędem. Mówi po polsku, czego brakuje, otwiera stronę, na której to naprawisz, i czeka. Po naprawie naciśnij **Enter**, a instalator sprawdzi ponownie. Klawisz **S** pomija dany krok. Po trzech próbach bez skutku instalator przerywa ten krok i prosi, żeby uruchomić go jeszcze raz, gdy dostęp będzie gotowy.
+4. Raz, gdy instalator potwierdzi, że masz dostęp do wiedzy firmowej, otworzy w przeglądarce stronę Second Brain w PS z pytaniem o Twoje konto GitHub. Zaloguj się tam do PS, jeśli trzeba, i kliknij **To moje konto**. Dzięki temu PS wie, które konto GitHub jest Twoje.
+5. Dalej wszystko dzieje się automatycznie:
+   - na komputerze pojawia się **jeden** folder, Twój Second Brain, a w Menu Start skrót **"ENVI Second Brain"**, który otwiera go w Obsidianie od razu na notatce startowej,
+   - w tym folderze jest wiedza firmowa (**tylko do odczytu**) oraz, jeśli pracujesz zespołowo nad projektami, osobny obszar projektowy, w którym możesz zapisywać zmiany,
+   - wiedza firmowa sama, cicho, odświeża się w tle co kilka godzin (i przy każdym logowaniu): nie musisz nic klikać, nie zobaczysz żadnego czarnego okienka konsoli,
+   - do niczego z tego nie są potrzebne uprawnienia administratora ani znajomość komend git. Ich w ogóle nie zobaczysz.
 
-**Ważne — koniecznie przeczytaj:** Otwierasz cały folder ENVI-Kanon — w Obsidianie i dla agenta. Piszesz w `20_projects`, czytasz `40_wiki`. `40_wiki` na Twoim komputerze jest tylko do odczytu i nadpisuje się samo — ręczna zmiana tam zniknie. Linki między folderami działają, bo to jeden vault. Zielona ikona przy zegarze (pod strzałką) pokazuje stan synchronizacji; „Synchronizuj teraz” wysyła Twoje zmiany od razu.
+**Ważne, koniecznie przeczytaj:** Otwierasz cały folder ENVI-Kanon, w Obsidianie i dla agenta. Piszesz w `20_projects`, czytasz `40_wiki`. `40_wiki` na Twoim komputerze jest tylko do odczytu i nadpisuje się samo, więc ręczna zmiana tam zniknie. Linki między folderami działają, bo to jeden vault. Zielona ikona przy zegarze (pod strzałką) pokazuje stan synchronizacji; "Synchronizuj teraz" wysyła Twoje zmiany od razu.
 
-**Jeśli pracujesz zespołowo:** instalator sam rozpoznaje, że masz dostęp do wspólnego obszaru projektowego, i nie musisz nic w tej sprawie wybierać ani ustawiać. Dostajesz wtedy dodatkowo skrót **"Synchronizuj teraz (Second Brain)"** w dwóch miejscach: **na pulpicie** i w Menu Start. Poznasz go po **zielonym znaku ENVI** (turbina) — tym samym, który program pokazuje przy zegarze, więc oba miejsca wyglądają tak samo i nie trzeba szukać skrótu wśród innych ikon. Kliknij go, kiedy chcesz od razu wysłać swoje zmiany i pobrać zmiany innych osób, zamiast czekać na automatyczne odświeżenie w tle. Po kliknięciu zobaczysz krótkie powiadomienie z wynikiem: wysłano, nie było nic nowego do wysłania, albo trzeba czyjejś pomocy. Nic więcej nie musisz robić.
+**Jeśli pracujesz zespołowo:** instalator sam rozpoznaje, że masz dostęp do wspólnego obszaru projektowego, i nie musisz nic w tej sprawie wybierać ani ustawiać. Dostajesz wtedy dodatkowo skrót **"Synchronizuj teraz (Second Brain)"** w dwóch miejscach: **na pulpicie** i w Menu Start. Poznasz go po **zielonym znaku ENVI** (turbina), tym samym, który program pokazuje przy zegarze, więc oba miejsca wyglądają tak samo i nie trzeba szukać skrótu wśród innych ikon. Kliknij go, kiedy chcesz od razu wysłać swoje zmiany i pobrać zmiany innych osób, zamiast czekać na automatyczne odświeżenie w tle. Po kliknięciu zobaczysz krótkie powiadomienie z wynikiem: wysłano, nie było nic nowego do wysłania, albo trzeba czyjejś pomocy. Nic więcej nie musisz robić.
 
-Dwie rzeczy, które zaskakują przy pierwszym użyciu tego skrótu. Po pierwsze **nie otwiera żadnego okna** - jest uruchamiany celowo bez konsoli, więc jedynym znakiem, że zadziałał, jest to powiadomienie. Po drugie **wyszukiwarka w Menu Start może go przez jakiś czas nie znajdować**, bo Windows indeksuje nowe skróty z opóźnieniem; dlatego ta sama ikona leży od razu na pulpicie. Jeśli wolisz mieć ją na pasku zadań, kliknij ikonę na pulpicie prawym przyciskiem, wybierz "Pokaż więcej opcji", potem "Przypnij do paska zadań" - tego jednego kroku instalator nie zrobi za Ciebie, bo Windows blokuje przypinanie do paska z poziomu programu.
+Dwie rzeczy, które zaskakują przy pierwszym użyciu tego skrótu. Po pierwsze **nie otwiera żadnego okna**: jest uruchamiany celowo bez konsoli, więc jedynym znakiem, że zadziałał, jest to powiadomienie. Po drugie **wyszukiwarka w Menu Start może go przez jakiś czas nie znajdować**, bo Windows indeksuje nowe skróty z opóźnieniem; dlatego ta sama ikona leży od razu na pulpicie. Jeśli wolisz mieć ją na pasku zadań, kliknij ikonę na pulpicie prawym przyciskiem, wybierz "Pokaż więcej opcji", potem "Przypnij do paska zadań". Tego jednego kroku instalator nie zrobi za Ciebie, bo Windows blokuje przypinanie do paska z poziomu programu.
 
-Plik jest bezpieczny do uruchomienia wielokrotnie — jeśli coś przerwiesz w połowie albo któryś krok wcześniej pominiesz, po prostu uruchom `ENVI-SB-instalator.cmd` jeszcze raz.
+Plik jest bezpieczny do uruchomienia wielokrotnie. Jeśli coś przerwiesz w połowie albo któryś krok wcześniej pominiesz, po prostu uruchom `ENVI-SB-instalator.cmd` jeszcze raz.
+
+## Logowanie do agenta (Claude Code / Codex)
+
+Na komputerze zainstalowany jest agent (Claude Code i/lub Codex; używasz tego, który pasuje do zadania, nie ma znaczenia który akurat wybierzesz). Przy pierwszym uruchomieniu narzędzie poprosi Cię o zalogowanie się. Na start używasz swojego prywatnego konta, koszt pokrywa firma w ramach pilotażu. To logowanie robisz raz na narzędzie, potem działa samo.
 
 ## Skrzynki poczty
 
-Żeby agent widział Twoją skrzynkę pocztową, kliknij ikonę Second Brain przy zegarze, wybierz „Skrzynki poczty”, a potem „Dodaj skrzynkę…” — wybierz skrzynkę wspólną z listy albo wpisz dane swojego konta. Hasło wpisujesz raz, w oknie, które się otworzy — nikt, także agent, go nie widzi. Po hasło do skrzynki wspólnej (np. `faktury@`) zapytaj osobę, która tę skrzynkę prowadzi — agent go nie zna i nie może Ci go podać.
+Żeby agent widział Twoją skrzynkę pocztową, kliknij ikonę Second Brain przy zegarze, wybierz "Skrzynki poczty", a potem "Dodaj skrzynkę…". Wybierz skrzynkę wspólną z listy albo wpisz dane swojego konta. Hasło wpisujesz raz, w oknie, które się otworzy: nikt, także agent, go nie widzi. Po hasło do skrzynki wspólnej (np. `faktury@`) zapytaj osobę, która tę skrzynkę prowadzi. Agent go nie zna i nie może Ci go podać.
 
 ## Jeśli coś wygląda na zawieszone
 
 Najczęstsza przyczyna to zwykle jedna z dwóch rzeczy:
 
-- nie jesteś jeszcze zalogowany(a) do Dysku Google (krok 3), albo
-- nie przyjęłaś/przyjąłeś jeszcze zaproszenia do zespołu (organizacji) envi-konsulting na GitHubie (krok 2).
+- nie przyjęłaś/przyjąłeś jeszcze zaproszenia do organizacji envi-konsulting na GitHubie (mail od GitHuba na adres logowania do PS), albo
+- jesteś zalogowany(a) do Dysku Google innym kontem niż to, którym logujesz się do PS.
 
-W obu przypadkach: dokończ brakujący krok i uruchom `ENVI-SB-instalator.cmd` ponownie — to bezpieczne i nic nie nadpisze.
+W obu przypadkach instalator wyświetli, co dokładnie zrobić. Dokończ brakujący krok i naciśnij Enter albo uruchom `ENVI-SB-instalator.cmd` ponownie: to bezpieczne i nic nie nadpisze. Jeśli zaproszenia w ogóle nie dostałaś/dostałeś, poproś przełożonego o zaproszenie do Second Brain w PS.
 
 Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
 
