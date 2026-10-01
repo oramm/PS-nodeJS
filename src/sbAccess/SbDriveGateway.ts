@@ -29,18 +29,45 @@ async function getServerAuth(): Promise<OAuth2Client> {
     return oAuthClient;
 }
 
+/** Limit pojedynczego wywołania Dysku (gaxios `timeout`). */
+const REQUEST_TIMEOUT_MS = 20000;
+
 function httpStatusOf(error: unknown): number | undefined {
     const e = error as any;
-    const status = e?.code ?? e?.status ?? e?.response?.status;
+    const status = e?.status ?? e?.response?.status ?? e?.code;
     return typeof status === 'number' ? status : Number(status) || undefined;
 }
 
+/**
+ * 404 znaczy "tego uprawnienia już nie ma" TYLKO, gdy Google mówi wprost o uprawnieniu
+ * ("Permission not found: <id>"). 404 całego dysku ("File not found" / "Shared drive not
+ * found") przychodzi też przy złym tokenie albo po utracie roli organizatora - wtedy to jest
+ * błąd, a zapamiętany numer uprawnienia musi zostać do powtórki.
+ */
+function isPermissionNotFound(error: unknown): boolean {
+    if (httpStatusOf(error) !== 404) return false;
+    const e = error as any;
+    const messages: string[] = [
+        e?.message,
+        ...(Array.isArray(e?.errors) ? e.errors.map((x: any) => x?.message) : []),
+        e?.response?.data?.error?.message,
+        ...(Array.isArray(e?.response?.data?.error?.errors)
+            ? e.response.data.error.errors.map((x: any) => x?.message)
+            : []),
+    ].filter((m): m is string => typeof m === 'string');
+    return messages.some((m) => /^Permission not found:?/i.test(m.trim()));
+}
+
 async function drive() {
-    return google.drive({ version: 'v3', auth: await getServerAuth() });
+    return google.drive({
+        version: 'v3',
+        auth: await getServerAuth(),
+        timeout: REQUEST_TIMEOUT_MS,
+    });
 }
 
 export default class SbDriveGateway {
-    /** Jedno uprawnienie; null = nie istnieje (404). */
+    /** Jedno uprawnienie; null = nie istnieje ("Permission not found"). */
     static async getPermission(
         permissionId: string,
     ): Promise<SbDrivePermission | null> {
@@ -57,7 +84,7 @@ export default class SbDriveGateway {
                 role: String(data.role),
             };
         } catch (error) {
-            if (httpStatusOf(error) === 404) return null;
+            if (isPermissionNotFound(error)) return null;
             throw error;
         }
     }
@@ -104,7 +131,7 @@ export default class SbDriveGateway {
         return String(data.id);
     }
 
-    /** Usuwa uprawnienie. false = już go nie było (404). */
+    /** Usuwa uprawnienie. false = już go nie było ("Permission not found"). */
     static async deletePermission(permissionId: string): Promise<boolean> {
         try {
             await (await drive()).permissions.delete({
@@ -114,7 +141,7 @@ export default class SbDriveGateway {
             });
             return true;
         } catch (error) {
-            if (httpStatusOf(error) === 404) return false;
+            if (isPermissionNotFound(error)) return false;
             throw error;
         }
     }

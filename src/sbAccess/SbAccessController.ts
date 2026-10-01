@@ -4,7 +4,11 @@ import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import { UserData } from '../types/sessionTypes';
 import SbAccessRepository from './SbAccessRepository';
 import SbAccessEventRepository from './SbAccessEventRepository';
-import SbGithubGateway from './SbGithubGateway';
+import SbGithubGateway, {
+    GithubApiError,
+    GithubInvitation,
+    GithubMembership,
+} from './SbGithubGateway';
 import SbDriveGateway from './SbDriveGateway';
 import {
     NOT_CONFIGURED_MESSAGE,
@@ -39,6 +43,24 @@ interface GithubPart extends PartOutcome {
 interface DrivePart extends PartOutcome {
     /** undefined = nie ruszaj zapamiętanego; null = wyczyść. */
     permissionId?: string | null;
+}
+
+/** Jedna odmowa dla osoby przypisującej sobie konto: nie zdradza, czy login jest członkiem. */
+const SELF_LINK_REFUSAL =
+    'Nie można przypisać tego konta GitHub. Upewnij się, że to konto, którym przyjęto zaproszenie do organizacji ENVI; w razie wątpliwości poproś przełożonego.';
+
+/**
+ * GitHub odpowiada 422, gdy zapraszany adres należy do konta, które już jest członkiem.
+ * Dokumentacja podaje tylko "Validation failed"; spotykane brzmienie pola errors[].message:
+ * "Invitee is already a part of this organization". Dopasowanie celowo wąskie - każde inne
+ * 422 zostaje zwykłym błędem z oryginalną treścią.
+ */
+function isAlreadyMemberError(error: unknown): boolean {
+    return (
+        error instanceof GithubApiError &&
+        error.httpStatus === 422 &&
+        /already (a part|a member) of (this|the) organi[sz]ation/i.test(error.message)
+    );
 }
 
 function errorText(error: unknown): string {
@@ -110,10 +132,16 @@ export default class SbAccessController {
         return this.events.listByPersonId(personId, limit);
     }
 
-    /** Czy zalogowany zarządza dostępem do SB: rola z listy I znacznik przy osobie. */
+    /**
+     * Czy zalogowany zarządza dostępem do SB: rola z listy I znacznik przy osobie.
+     * Rola i aktywność konta z BAZY, nie z sesji: sesja żyje do 30 dni, więc odebranie roli
+     * kierownika nie może czekać na jej wygaśnięcie.
+     */
     static async canManage(userData?: UserData | null): Promise<boolean> {
         if (!userData?.enviId) return false;
-        if (!SB_MANAGER_ROLES.includes(userData.systemRoleName)) return false;
+        const account = await this.repository.getPersonAccount(userData.enviId);
+        if (!account?.isActive) return false;
+        if (!SB_MANAGER_ROLES.includes(account.systemRoleName as any)) return false;
         return StaffMemberRepository.hasSbAccessManagement(userData.enviId);
     }
 
@@ -197,8 +225,13 @@ export default class SbAccessController {
      * raz" (np. po odblokowaniu i przyjęciu nowego zaproszenia).
      *
      * `mode: 'self'` - osoba dla siebie (strona SB, B4): tylko własny wpis w stanie zaproszony
-     * albo aktywny i bez podmiany już przypisanego innego konta. `mode: 'manager'` - kierownik
-     * z uprawnieniem, także dla wpisu zablokowanego/odebranego (żeby dokończyć zdjęcie dostępu).
+     * albo aktywny, bez podmiany już przypisanego innego konta i dopiero wtedy, gdy jej własne
+     * zaproszenie zniknęło z oczekujących (czyli ktoś je przyjął). Odmowa "nie członek" i
+     * "przypisane komuś" ma JEDNO brzmienie, żeby trasa nie służyła do sprawdzania cudzych kont.
+     * ZNANE OGRANICZENIE: API organizacji nie dowodzi, że konto należy do tej osoby (zaproszenie
+     * po e-mailu nie mówi, kto je przyjął) - pełny dowód dałoby dopiero logowanie OAuth GitHub (B4).
+     * `mode: 'manager'` - kierownik z uprawnieniem, także dla wpisu zablokowanego/odebranego
+     * (żeby dokończyć zdjęcie dostępu).
      */
     static async linkGithub(
         personId: number,
@@ -233,10 +266,7 @@ export default class SbAccessController {
                 );
         }
 
-        let membership;
-        try {
-            membership = await github.getMembership(requestedLogin);
-        } catch (error) {
+        const failLink = async (error: unknown): Promise<never> => {
             const note = sanitizeNote(
                 `Nie udało się sprawdzić konta GitHub ${requestedLogin}: ${errorText(error)}`,
             );
@@ -248,15 +278,50 @@ export default class SbAccessController {
                 note,
             });
             throw new SbAccessError(502, note);
+        };
+
+        // Czy własne zaproszenie osoby (zapamiętany numer albo zaproszenie na jej adres) czeka.
+        const account = await this.repository.getPersonAccount(personId);
+        let pending: GithubInvitation[] = [];
+        try {
+            pending = await github.listPendingInvitations();
+        } catch (error) {
+            await failLink(error);
         }
-        if (!membership || membership.state !== 'active')
+        const ownInvitationWaiting = pending.some(
+            (invitation) =>
+                (record.githubInvitationId != null &&
+                    invitation.id === record.githubInvitationId) ||
+                sameText(invitation.email, account?.systemEmail),
+        );
+        if (mode === 'self') {
+            if (ownInvitationWaiting)
+                throw new SbAccessError(
+                    409,
+                    'Twoje zaproszenie do organizacji ENVI na GitHubie jeszcze czeka - przyjmij je (Join) i spróbuj ponownie.',
+                );
+        }
+
+        let membership: GithubMembership | null = null;
+        try {
+            membership = await github.getMembership(requestedLogin);
+        } catch (error) {
+            await failLink(error);
+        }
+        const isMember = !!membership && membership.state === 'active';
+        const login = membership?.login ?? requestedLogin;
+        const owner = isMember
+            ? await this.repository.getByGithubLogin(login)
+            : null;
+        const takenByOther = !!owner && owner.personId !== personId;
+        if (mode === 'self' && (!isMember || takenByOther))
+            throw new SbAccessError(422, SELF_LINK_REFUSAL);
+        if (!isMember)
             throw new SbAccessError(
                 422,
                 `Konto GitHub ${requestedLogin} nie jest członkiem organizacji ENVI - najpierw trzeba przyjąć zaproszenie.`,
             );
-        const login = membership.login;
-        const owner = await this.repository.getByGithubLogin(login);
-        if (owner && owner.personId !== personId)
+        if (takenByOther)
             throw new SbAccessError(
                 409,
                 `Konto GitHub ${login} jest przypisane innej osobie.`,
@@ -279,10 +344,12 @@ export default class SbAccessController {
             } catch (error) {
                 // Wyścig dwóch przypisań tego samego konta: UNIQUE na GithubLogin.
                 if ((error as any)?.code === 'ER_DUP_ENTRY')
-                    throw new SbAccessError(
-                        409,
-                        `Konto GitHub ${login} jest przypisane innej osobie.`,
-                    );
+                    throw mode === 'self'
+                        ? new SbAccessError(422, SELF_LINK_REFUSAL)
+                        : new SbAccessError(
+                              409,
+                              `Konto GitHub ${login} jest przypisane innej osobie.`,
+                          );
                 throw error;
             }
             notes.push(note);
@@ -295,7 +362,12 @@ export default class SbAccessController {
                 resultCode: 'OK',
                 requestedByPersonId,
                 note,
-                state: { statusCode: 'ACTIVE' },
+                // Zaproszenie, które już nie czeka, zostało "zużyte" przez to konto - numer nie
+                // jest już potrzebny, a zostawiony kazałby blokadzie podejrzewać inne konto.
+                state: {
+                    statusCode: 'ACTIVE',
+                    githubInvitationId: ownInvitationWaiting ? undefined : null,
+                },
             });
             notes.push(note);
         }
@@ -461,6 +533,11 @@ export default class SbAccessController {
                 note: `GitHub: wysłano zaproszenie na ${email}`,
             };
         } catch (error) {
+            if (isAlreadyMemberError(error))
+                return {
+                    ok: false,
+                    note: `GitHub: adres ${email} należy do konta, które już jest członkiem organizacji - przypisz to konto (lista członków bez przypisania), nowe zaproszenie nie jest potrzebne`,
+                };
             return { ok: false, note: `GitHub: błąd - ${errorText(error)}` };
         }
     }
@@ -514,16 +591,30 @@ export default class SbAccessController {
                         invitation.id === record.githubInvitationId) ||
                     sameText(invitation.email, email),
             );
+            const cancelledIds: number[] = [];
             for (const invitation of toCancel) {
-                await github.cancelInvitation(invitation.id);
-                notes.push('anulowano oczekujące zaproszenie');
+                if (await github.cancelInvitation(invitation.id)) {
+                    cancelledIds.push(invitation.id);
+                    notes.push('anulowano oczekujące zaproszenie');
+                } else notes.push('zaproszenie zniknęło przed anulowaniem');
             }
+            // Zapamiętane zaproszenie, którego NIE anulował ten przebieg: przyjęte albo wygasłe.
             const storedInvitationGone =
                 record.githubInvitationId != null &&
-                !toCancel.some((i) => i.id === record.githubInvitationId);
+                !cancelledIds.includes(record.githubInvitationId);
 
             if (record.githubLogin) {
                 const membership = await github.getMembership(record.githubLogin);
+                if (!membership && storedInvitationGone)
+                    // Np. odblokowanie wysłało zaproszenie e-mailem, a osoba przyjęła je INNYM
+                    // kontem: przypisany login nie jest członkiem, ale ktoś mógł wejść.
+                    return {
+                        ok: false,
+                        note: `GitHub: ${[
+                            ...notes,
+                            `zaproszenie nie czeka już na przyjęcie, a przypisane konto ${record.githubLogin} nie jest członkiem organizacji - zaproszenie mogło zostać przyjęte innym kontem. Przypisz aktualne konto GitHub i powtórz.`,
+                        ].join(', ')}`,
+                    };
                 if (!membership)
                     notes.push(`konto ${record.githubLogin} nie jest członkiem organizacji`);
                 else if (membership.role === 'admin')
@@ -543,7 +634,10 @@ export default class SbAccessController {
                 // konto usunąć - nie udajemy sukcesu. Identyfikator zostaje do powtórki.
                 return {
                     ok: false,
-                    note: 'GitHub: zaproszenie nie czeka już na przyjęcie, a konto GitHub nie jest przypisane - nie wiadomo, kogo usunąć z organizacji. Przypisz konto GitHub i powtórz.',
+                    note: `GitHub: ${[
+                        ...notes,
+                        'zaproszenie nie czeka już na przyjęcie, a konto GitHub nie jest przypisane - nie wiadomo, kogo usunąć z organizacji. Przypisz konto GitHub i powtórz.',
+                    ].join(', ')}`,
                 };
             }
             return {

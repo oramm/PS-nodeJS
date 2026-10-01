@@ -31,6 +31,8 @@ export interface GithubMembership {
 }
 
 const API = 'https://api.github.com';
+/** Limit całego żądania (z odczytem treści), żeby zawieszony GitHub nie trzymał operacji. */
+const REQUEST_TIMEOUT_MS = 15000;
 const PAGE_SIZE = 100;
 /** Bezpiecznik pętli stronicowania; organizacja ma kilkanaście osób. */
 const MAX_PAGES = 20;
@@ -53,6 +55,7 @@ export default class SbGithubGateway {
                 ...(body ? { 'Content-Type': 'application/json' } : {}),
             },
             body: body ? JSON.stringify(body) : undefined,
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         const text = await response.text();
         let data: any = null;

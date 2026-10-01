@@ -19,6 +19,7 @@ jest.mock('../../staff/StaffMemberRepository', () => ({
 }));
 
 import SbAccessController from '../SbAccessController';
+import SbAccessRepository from '../SbAccessRepository';
 import { SbAccessError } from '../sbAccessPolicy';
 
 function makeRes() {
@@ -57,6 +58,12 @@ describe('SbAccessRouters - bramka i trasy', () => {
 
     beforeEach(() => {
         mockHasFlag.mockReset();
+        // Rola z bazy (canManage nie ufa sesji) - tu zgodna z sesją testowych osób.
+        const roles: Record<number, string> = { 125: 'ENVI_MANAGER', 1: 'ADMIN', 131: 'ENVI_EMPLOYEE' };
+        jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockImplementation(
+            async (personId: number) =>
+                ({ personId, isActive: true, systemRoleName: roles[personId] ?? null }) as any,
+        );
     });
 
     const route = (method: string, path: string) => {

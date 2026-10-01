@@ -8,49 +8,78 @@ import { afterAll, beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 // ------------------------------------------------------------------ atrapa Dysku
 type Perm = { id: string; emailAddress: string; role: string };
+const SB_DRIVE = '0AH3vXVwNH5M-Uk9PVA';
 const drive = {
     perms: new Map<string, Perm>(),
     next: 1,
-    fail: null as null | { op: string; code: number },
+    fail: null as null | { op: string; code: number; message?: string },
     calls: [] as string[],
+    params: [] as { op: string; params: any }[],
+    options: [] as any[],
+    /** Dysk niewidoczny dla konta serwera (zły token / utrata roli organizatora). */
+    driveGone: false,
 };
-function driveFail(op: string) {
+function googleError(code: number, message: string) {
+    return Object.assign(new Error(message), {
+        code,
+        status: code,
+        errors: [{ reason: 'notFound', message }],
+    });
+}
+/** Każde wywołanie: zapis parametrów, kontrola dysku i supportsAllDrives jak w Google. */
+function driveCall(op: string, params: any) {
     drive.calls.push(op);
+    drive.params.push({ op, params });
     if (drive.fail?.op === op || drive.fail?.op === '*')
-        throw Object.assign(new Error(`Drive ${op} padl`), { code: drive.fail.code });
+        throw googleError(drive.fail.code, drive.fail.message ?? `Drive ${op} padl`);
+    // Bez supportsAllDrives Google nie widzi dysku współdzielonego.
+    if (params.fileId !== SB_DRIVE || params.supportsAllDrives !== true || drive.driveGone)
+        throw googleError(404, `Shared drive not found: ${params.fileId}`);
 }
 jest.mock('googleapis', () => ({
     google: {
-        drive: () => ({
-            permissions: {
-                get: async ({ permissionId }: any) => {
-                    driveFail('get');
-                    const p = drive.perms.get(permissionId);
-                    if (!p) throw Object.assign(new Error('not found'), { code: 404 });
-                    return { data: p };
+        drive: (options: any) => {
+            drive.options.push(options);
+            return {
+                permissions: {
+                    get: async (params: any) => {
+                        driveCall('get', params);
+                        const p = drive.perms.get(params.permissionId);
+                        if (!p) throw googleError(404, `Permission not found: ${params.permissionId}.`);
+                        return { data: p };
+                    },
+                    list: async (params: any) => {
+                        driveCall('list', params);
+                        const all = [...drive.perms.values()];
+                        const from = Number(params.pageToken ?? 0);
+                        const page = all.slice(from, from + params.pageSize);
+                        const next = from + params.pageSize;
+                        return {
+                            data: {
+                                permissions: page,
+                                nextPageToken: next < all.length ? String(next) : undefined,
+                            },
+                        };
+                    },
+                    create: async (params: any) => {
+                        driveCall('create', params);
+                        const id = `perm${drive.next++}`;
+                        drive.perms.set(id, {
+                            id,
+                            emailAddress: params.requestBody.emailAddress,
+                            role: params.requestBody.role,
+                        });
+                        return { data: { id } };
+                    },
+                    delete: async (params: any) => {
+                        driveCall('delete', params);
+                        if (!drive.perms.delete(params.permissionId))
+                            throw googleError(404, `Permission not found: ${params.permissionId}.`);
+                        return { data: {} };
+                    },
                 },
-                list: async () => {
-                    driveFail('list');
-                    return { data: { permissions: [...drive.perms.values()] } };
-                },
-                create: async ({ requestBody }: any) => {
-                    driveFail('create');
-                    const id = `perm${drive.next++}`;
-                    drive.perms.set(id, {
-                        id,
-                        emailAddress: requestBody.emailAddress,
-                        role: requestBody.role,
-                    });
-                    return { data: { id } };
-                },
-                delete: async ({ permissionId }: any) => {
-                    driveFail('delete');
-                    if (!drive.perms.delete(permissionId))
-                        throw Object.assign(new Error('not found'), { code: 404 });
-                    return { data: {} };
-                },
-            },
-        }),
+            };
+        },
     },
 }));
 jest.mock('../../setup/Sessions/ToolsGapi', () => ({
@@ -74,9 +103,13 @@ const gh = {
     members: new Map<string, { role: string }>(),
     invitations: [] as { id: number; email: string | null; login: string | null }[],
     next: 500,
-    fail: null as null | { method: string; pattern: RegExp; status: number },
+    fail: null as null | { method: string; pattern: RegExp; status: number; body?: any },
     calls: [] as string[],
     authHeaders: [] as string[],
+    bodies: [] as any[],
+    signals: [] as unknown[],
+    /** Zaproszenie znika między listą a anulowaniem (wyścig z przyjęciem). */
+    cancelRace: false,
 };
 function json(status: number, body?: unknown) {
     return {
@@ -85,23 +118,36 @@ function json(status: number, body?: unknown) {
         text: async () => (body === undefined ? '' : JSON.stringify(body)),
     };
 }
+/** Stronicowanie jak w GitHubie: per_page + page (od 1). */
+function paged<T>(items: T[], query: URLSearchParams) {
+    const perPage = Number(query.get('per_page') ?? 30);
+    const page = Number(query.get('page') ?? 1);
+    return items.slice((page - 1) * perPage, page * perPage);
+}
 const fakeFetch = async (url: string, init: any) => {
     const method = init.method;
-    const path = url.replace('https://api.github.com', '').split('?')[0];
+    const [rawPath, rawQuery] = url.replace('https://api.github.com', '').split('?');
+    const path = rawPath;
+    const query = new URLSearchParams(rawQuery ?? '');
     gh.calls.push(`${method} ${path}`);
     gh.authHeaders.push(init.headers.Authorization);
+    gh.signals.push(init.signal);
+    if (init.body) gh.bodies.push(JSON.parse(init.body));
     if (gh.fail && gh.fail.method === method && gh.fail.pattern.test(path))
-        return json(gh.fail.status, { message: 'Awaria atrapy' });
+        return json(gh.fail.status, gh.fail.body ?? { message: 'Awaria atrapy' });
     let m: RegExpMatchArray | null;
     if (path === '/orgs/envi-konsulting/invitations' && method === 'GET')
-        return json(200, gh.invitations);
+        return json(200, paged(gh.invitations, query));
     if (path === '/orgs/envi-konsulting/invitations' && method === 'POST') {
         const body = JSON.parse(init.body);
+        if (body.role !== 'direct_member' || typeof body.email !== 'string')
+            return json(422, { message: 'Validation Failed' });
         const invitation = { id: gh.next++, email: body.email, login: null };
         gh.invitations.push(invitation);
         return json(201, invitation);
     }
     if ((m = path.match(/^\/orgs\/envi-konsulting\/invitations\/(\d+)$/)) && method === 'DELETE') {
+        if (gh.cancelRace) gh.invitations = gh.invitations.filter((i) => i.id !== Number(m![1]));
         const before = gh.invitations.length;
         gh.invitations = gh.invitations.filter((i) => i.id !== Number(m![1]));
         return before === gh.invitations.length ? json(404, { message: 'Not Found' }) : json(204);
@@ -118,7 +164,7 @@ const fakeFetch = async (url: string, init: any) => {
         }
     }
     if (path === '/orgs/envi-konsulting/members' && method === 'GET')
-        return json(200, [...gh.members.keys()].map((login) => ({ login })));
+        return json(200, paged([...gh.members.keys()].map((login) => ({ login })), query));
     return json(500, { message: `nieobsluzone ${method} ${path}` });
 };
 const originalFetch = global.fetch;
@@ -162,7 +208,7 @@ function seedExternal(status: SbAccessStatus | null) {
     } else if (status === 'ACTIVE') {
         gh.members.set('Osoba-GH', { role: 'member' });
         drive.perms.set('perm-old', { id: 'perm-old', emailAddress: EMAIL, role: 'reader' });
-        seed('ACTIVE', { githubLogin: 'Osoba-GH', githubInvitationId: 77, drivePermissionId: 'perm-old' });
+        seed('ACTIVE', { githubLogin: 'Osoba-GH', githubInvitationId: null, drivePermissionId: 'perm-old' });
     } else if (status) {
         seed(status, { githubLogin: 'Osoba-GH' });
     }
@@ -173,16 +219,23 @@ beforeEach(() => {
     drive.next = 1;
     drive.fail = null;
     drive.calls = [];
+    drive.params = [];
+    drive.options = [];
+    drive.driveGone = false;
     gh.members = new Map([['oramm', { role: 'admin' }]]);
     gh.invitations = [];
     gh.next = 500;
     gh.fail = null;
     gh.calls = [];
     gh.authHeaders = [];
+    gh.bodies = [];
+    gh.signals = [];
+    gh.cancelRace = false;
     db.states.clear();
     db.events = [];
     db.accounts = new Map([
         [PERSON, { personId: PERSON, name: 'Jan', surname: 'Test', systemEmail: EMAIL, isActive: true, systemRoleName: 'ENVI_EMPLOYEE' }],
+        [MANAGER, { personId: MANAGER, name: 'Kier', surname: 'Ownik', systemEmail: 'k@example.test', isActive: true, systemRoleName: 'ENVI_MANAGER' }],
         [200, { personId: 200, name: 'Wspol', surname: 'Pracownik', systemEmail: 'w@example.test', isActive: true, systemRoleName: 'ENVI_COOPERATOR' }],
     ]);
     process.env.SB_GITHUB_INVITE_TOKEN = TOKEN;
@@ -259,7 +312,10 @@ describe('SbAccessController - każdy stan x każda operacja', () => {
                 // Dla BLOCKED/REVOKED konto jest wciąż członkiem tylko tam, gdzie test tego wymaga.
                 if (op.startsWith('link') || (op === 'unblock' && status === 'BLOCKED') || (op === 'invite' && status === 'REVOKED'))
                     gh.members.set('Osoba-GH', { role: 'member' });
-                if (op.startsWith('link') && status === 'INVITED') seed('INVITED', { githubInvitationId: 77 });
+                if (op.startsWith('link') && status === 'INVITED') {
+                    seed('INVITED', { githubInvitationId: 77 });
+                    gh.invitations = []; // przyjęte
+                }
                 const eventsBefore = db.events.length;
                 if (expected === 'refuse') {
                     await expect(run(op)).rejects.toMatchObject({ status: 409 });
@@ -496,8 +552,11 @@ describe('SbAccessController - blokada, odblokowanie, odebranie', () => {
         expect(gh.invitations).toEqual([expect.objectContaining({ email: EMAIL })]);
         expect(drive.perms.size).toBe(1);
         expect(db.states.get(PERSON)).toMatchObject({ statusCode: 'INVITED', githubLogin: 'Osoba-GH' });
-        // Po przyjęciu zaproszenia to samo konto ponownie = aktywacja.
+        // Przed przyjęciem zaproszenia osoba nie przypisze sobie konta.
         gh.members.set('Osoba-GH', { role: 'member' });
+        await expect(SbAccessController.linkGithub(PERSON, 'Osoba-GH', PERSON, 'self')).rejects.toMatchObject({ status: 409 });
+        // Po przyjęciu zaproszenia to samo konto ponownie = aktywacja.
+        gh.invitations = [];
         const relink = await SbAccessController.linkGithub(PERSON, 'Osoba-GH', PERSON, 'self');
         expect(relink.state?.statusCode).toBe('ACTIVE');
         expect(db.events.map((e) => e.actionCode)).toEqual(['BLOCK', 'UNBLOCK', 'ACTIVATE']);
@@ -533,6 +592,19 @@ describe('SbAccessController - przypisanie konta GitHub', () => {
         await expect(SbAccessController.linkGithub(PERSON, 'Nowe', PERSON, 'self')).rejects.toMatchObject({ status: 409 });
     });
 
+    it('aktywacja czyści numer zaproszenia tylko, gdy już nie czeka (kierownik przy czekającym go zostawia)', async () => {
+        seed('INVITED', { githubInvitationId: 77 });
+        gh.invitations = [{ id: 77, email: EMAIL, login: null }];
+        gh.members.set('Osoba-GH', { role: 'member' });
+        await SbAccessController.linkGithub(PERSON, 'osoba-gh', MANAGER, 'manager');
+        expect(db.states.get(PERSON)).toMatchObject({ statusCode: 'ACTIVE', githubInvitationId: 77 });
+        seed('INVITED', { githubInvitationId: 78 });
+        db.states.get(PERSON)!.githubLogin = null;
+        gh.invitations = [];
+        await SbAccessController.linkGithub(PERSON, 'osoba-gh', PERSON, 'self');
+        expect(db.states.get(PERSON)).toMatchObject({ statusCode: 'ACTIVE', githubInvitationId: null });
+    });
+
     it('zapisuje login w pisowni z GitHuba i aktywuje zaproszonego (dwa zdarzenia)', async () => {
         seed('INVITED');
         gh.members.set('Osoba-GH', { role: 'member' });
@@ -562,13 +634,21 @@ describe('SbAccessController - przypisanie konta GitHub', () => {
 });
 
 describe('SbAccessController - bramka i sekrety', () => {
-    it('zarządza tylko ADMIN/ENVI_MANAGER ze znacznikiem', async () => {
+    it('zarządza tylko ADMIN/ENVI_MANAGER ze znacznikiem; rola z bazy, nie z sesji', async () => {
         const user = (role: string, enviId: number) => ({ systemRoleName: role, enviId }) as any;
         expect(await SbAccessController.canManage(user('ENVI_MANAGER', MANAGER))).toBe(true);
-        expect(await SbAccessController.canManage(user('ADMIN', MANAGER))).toBe(true);
-        expect(await SbAccessController.canManage(user('ENVI_MANAGER', 126))).toBe(false);
-        expect(await SbAccessController.canManage(user('ADMIN', 126))).toBe(false);
-        expect(await SbAccessController.canManage(user('ENVI_EMPLOYEE', MANAGER))).toBe(false);
+        // Sesja mówi "pracownik", baza "kierownik" - rozstrzyga baza.
+        expect(await SbAccessController.canManage(user('ENVI_EMPLOYEE', MANAGER))).toBe(true);
+        db.accounts.set(MANAGER, { ...db.accounts.get(MANAGER), systemRoleName: 'ADMIN' });
+        expect(await SbAccessController.canManage(user('ENVI_EMPLOYEE', MANAGER))).toBe(true);
+        // Rola odebrana w bazie, sesja wciąż "kierownik" (do 30 dni) -> odmowa.
+        db.accounts.set(MANAGER, { ...db.accounts.get(MANAGER), systemRoleName: 'ENVI_EMPLOYEE' });
+        expect(await SbAccessController.canManage(user('ENVI_MANAGER', MANAGER))).toBe(false);
+        db.accounts.set(MANAGER, { ...db.accounts.get(MANAGER), systemRoleName: 'ENVI_MANAGER', isActive: false });
+        expect(await SbAccessController.canManage(user('ENVI_MANAGER', MANAGER))).toBe(false);
+        // Bez znacznika (osoba 131 z rolą kierownika w bazie) -> odmowa.
+        db.accounts.set(PERSON, { ...db.accounts.get(PERSON), systemRoleName: 'ENVI_MANAGER' });
+        expect(await SbAccessController.canManage(user('ENVI_MANAGER', PERSON))).toBe(false);
         expect(await SbAccessController.canManage(undefined)).toBe(false);
     });
 
@@ -576,5 +656,142 @@ describe('SbAccessController - bramka i sekrety', () => {
         gh.fail = { method: 'POST', pattern: /invitations$/, status: 401 };
         await SbAccessController.invite(PERSON, MANAGER);
         expect(JSON.stringify(db.events)).not.toContain(TOKEN);
+    });
+});
+
+describe('SbAccessController - poprawki po przeglądzie', () => {
+    it('parametry wywołań: zaproszenie jako member, Dysk: supportsAllDrives, user/reader, SB.ENVI; limity czasu', async () => {
+        await SbAccessController.invite(PERSON, MANAGER);
+        expect(gh.bodies).toEqual([{ email: EMAIL, role: 'direct_member' }]);
+        expect(gh.signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
+        const create = drive.params.find((c) => c.op === 'create')!.params;
+        expect(create).toMatchObject({
+            fileId: SB_DRIVE,
+            supportsAllDrives: true,
+            requestBody: { type: 'user', role: 'reader', emailAddress: EMAIL },
+        });
+        expect(drive.params.every((c) => c.params.supportsAllDrives === true && c.params.fileId === SB_DRIVE)).toBe(true);
+        expect(drive.options.every((o) => o.version === 'v3' && o.timeout > 0)).toBe(true);
+    });
+
+    it('stronicowanie: zaproszenie na 150. pozycji listy GitHub i uprawnienie na 2. stronie Dysku są znajdowane', async () => {
+        for (let i = 0; i < 149; i++) gh.invitations.push({ id: 10000 + i, email: `inny${i}@example.test`, login: null });
+        gh.invitations.push({ id: 9, email: EMAIL, login: null });
+        for (let i = 0; i < 120; i++) drive.perms.set(`x${i}`, { id: `x${i}`, emailAddress: `inny${i}@example.test`, role: 'reader' });
+        drive.perms.set('mine', { id: 'mine', emailAddress: EMAIL, role: 'organizer' });
+        const outcome = await SbAccessController.invite(PERSON, MANAGER);
+        expect(db.states.get(PERSON)?.githubInvitationId).toBe(9);
+        expect(gh.calls.filter((c) => c === 'POST /orgs/envi-konsulting/invitations')).toHaveLength(0);
+        expect(outcome.note).toContain('poza modułem');
+        expect(drive.calls.filter((c) => c === 'list').length).toBeGreaterThan(1);
+        expect(drive.calls).not.toContain('create');
+    });
+
+    it('stronicowanie członków GitHub: lista bez przypisania obejmuje drugą stronę', async () => {
+        for (let i = 0; i < 130; i++) gh.members.set(`czlonek${i}`, { role: 'member' });
+        const unlinked = await SbAccessController.listUnlinkedGithubMembers();
+        expect(unlinked).toHaveLength(131); // + oramm
+    });
+
+    it('(1) odblokowanie, przyjęcie zaproszenia INNYM kontem, blokada -> PARTIAL, zaproszenie zostaje zapamiętane', async () => {
+        seedExternal('ACTIVE');
+        await SbAccessController.block(PERSON, MANAGER);
+        await SbAccessController.unblock(PERSON, MANAGER);
+        const invitationId = db.states.get(PERSON)!.githubInvitationId;
+        expect(invitationId).toBe(500);
+        // Osoba przyjmuje zaproszenie kontem B.
+        gh.invitations = [];
+        gh.members.set('Konto-B', { role: 'member' });
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.result).toBe('PARTIAL');
+        expect(outcome.note).toContain('Przypisz aktualne konto');
+        expect(db.states.get(PERSON)?.githubInvitationId).toBe(invitationId);
+        expect(gh.members.has('Konto-B')).toBe(true);
+        // Kierownik przypisuje konto B, powtórka blokady usuwa je i czyści zaproszenie.
+        await SbAccessController.linkGithub(PERSON, 'konto-b', MANAGER, 'manager');
+        const retry = await SbAccessController.block(PERSON, MANAGER);
+        expect(retry.result).toBe('OK');
+        expect(gh.members.has('Konto-B')).toBe(false);
+        expect(db.states.get(PERSON)?.githubInvitationId).toBeNull();
+    });
+
+    it('(5c) zaproszenie znika między listą a anulowaniem -> notatka nie mówi "anulowano", a brak konta = PARTIAL', async () => {
+        seedExternal('INVITED');
+        gh.cancelRace = true;
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.note).not.toContain('anulowano');
+        expect(outcome.note).toContain('zniknęło przed anulowaniem');
+        expect(outcome.result).toBe('PARTIAL');
+        expect(db.states.get(PERSON)?.githubInvitationId).toBe(77);
+    });
+
+    it('(2) 404 całego dysku przy blokadzie = błąd, numer uprawnienia zostaje; brak samego uprawnienia = OK', async () => {
+        seedExternal('ACTIVE');
+        drive.driveGone = true;
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.result).toBe('PARTIAL');
+        expect(outcome.note).toContain('Shared drive not found');
+        expect(db.states.get(PERSON)?.drivePermissionId).toBe('perm-old');
+        drive.driveGone = false;
+        drive.perms.delete('perm-old');
+        const retry = await SbAccessController.block(PERSON, MANAGER);
+        expect(retry.result).toBe('OK');
+        expect(retry.note).toContain('uprawnienia już nie było');
+        expect(db.states.get(PERSON)?.drivePermissionId).toBeNull();
+    });
+
+    it('(2) 404 dysku przy usuwaniu (uprawnienie widoczne, delete trafia w niewidoczny dysk) = błąd', async () => {
+        seedExternal('ACTIVE');
+        drive.fail = { op: 'delete', code: 404, message: 'File not found: 0AH3vXVwNH5M-Uk9PVA.' };
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.result).toBe('PARTIAL');
+        expect(db.states.get(PERSON)?.drivePermissionId).toBe('perm-old');
+    });
+
+    it('(3) osoba dla siebie: dopóki jej zaproszenie czeka, przypisania nie ma (bez sprawdzania loginu)', async () => {
+        seedExternal('INVITED');
+        gh.members.set('Osoba-GH', { role: 'member' });
+        await expect(SbAccessController.linkGithub(PERSON, 'osoba-gh', PERSON, 'self')).rejects.toMatchObject({ status: 409 });
+        expect(gh.calls.some((c) => c.includes('/memberships/'))).toBe(false);
+        // Zaproszenie na jej adres (bez zapamiętanego numeru) też blokuje.
+        seed('INVITED');
+        gh.invitations = [{ id: 1, email: EMAIL.toUpperCase(), login: null }];
+        await expect(SbAccessController.linkGithub(PERSON, 'osoba-gh', PERSON, 'self')).rejects.toMatchObject({ status: 409 });
+        expect(db.events).toHaveLength(0);
+    });
+
+    it('(3) osoba dla siebie: "nie członek" i "przypisane komuś" dają tę samą odpowiedź', async () => {
+        seed('INVITED');
+        db.states.set(999, { ...db.states.get(PERSON)!, personId: 999, githubLogin: 'Zajete', statusCode: 'ACTIVE' });
+        gh.members.set('Zajete', { role: 'member' });
+        const notMember = await SbAccessController.linkGithub(PERSON, 'obcy', PERSON, 'self').catch((e) => e);
+        const taken = await SbAccessController.linkGithub(PERSON, 'zajete', PERSON, 'self').catch((e) => e);
+        expect(notMember).toBeInstanceOf(SbAccessError);
+        expect({ status: notMember.status, message: notMember.message }).toEqual({ status: taken.status, message: taken.message });
+        expect(notMember.message).not.toMatch(/obcy|zajete/i);
+        // Kierownik dostaje rozróżnienie.
+        await expect(SbAccessController.linkGithub(PERSON, 'zajete', MANAGER, 'manager')).rejects.toMatchObject({ status: 409 });
+        await expect(SbAccessController.linkGithub(PERSON, 'obcy', MANAGER, 'manager')).rejects.toMatchObject({ status: 422 });
+    });
+
+    it('(4) 422 "already a part of this organization" -> czytelna uwaga "przypisz to konto"', async () => {
+        gh.fail = {
+            method: 'POST',
+            pattern: /invitations$/,
+            status: 422,
+            body: {
+                message: 'Validation Failed',
+                errors: [{ resource: 'OrganizationInvitation', code: 'unprocessable', field: 'data', message: 'Invitee is already a part of this organization' }],
+            },
+        };
+        const outcome = await SbAccessController.invite(PERSON, MANAGER);
+        expect(outcome.result).toBe('PARTIAL');
+        expect(outcome.note).toContain('już jest członkiem organizacji - przypisz to konto');
+        // Inne 422 zostaje zwykłym błędem z oryginalną treścią.
+        db.states.clear();
+        drive.perms.clear();
+        gh.fail = { method: 'POST', pattern: /invitations$/, status: 422, body: { message: 'Over invitation rate limit' } };
+        const other = await SbAccessController.invite(PERSON, MANAGER);
+        expect(other.note).toContain('GitHub: błąd - GitHub 422: Over invitation rate limit');
     });
 });
