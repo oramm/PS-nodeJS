@@ -716,6 +716,7 @@ require('./contracts/ContractsRouters');
 require('./contracts/caseListSheet/CaseListSheetRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
 require('./contracts/fidmanSync/FidmanSyncRouters');
+require('./contracts/chatSpaces/ChatSpacesRouters');
 require('./contracts/contractDocuments/ContractDocumentsRouters');
 require('./meetings/MeetingsRouters');
 require('./meetings/meetingArrangements/MeetingArrangementsRouters');

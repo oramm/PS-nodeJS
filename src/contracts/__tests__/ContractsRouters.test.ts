@@ -4,6 +4,7 @@ import { app } from '../../index';
 import ContractsController from '../ContractsController';
 import TaskStore from '../../setup/Sessions/IntersessionsTasksStore';
 import ToolsMail from '../../tools/ToolsMail';
+import ChatSpacesController from '../chatSpaces/ChatSpacesController';
 
 jest.mock('../../index', () => ({
     app: {
@@ -21,6 +22,14 @@ jest.mock('../ContractsController', () => ({
         addWithAuth: jest.fn(),
         editWithAuth: jest.fn(),
         deleteWithAuth: jest.fn(),
+    },
+}));
+
+jest.mock('../chatSpaces/ChatSpacesController', () => ({
+    __esModule: true,
+    default: {
+        parseSelection: jest.fn(() => ({ mode: 'none' })),
+        provisionAfterContractCreation: jest.fn(),
     },
 }));
 
@@ -226,6 +235,89 @@ describe('ContractsRouters', () => {
                 { milestoneTypeId: 5, caseTypeIds: [1, 2] },
             ]);
             expect(options.foldersSelection).toEqual(['MEETING_PROTOCOLS']);
+        });
+    });
+
+    describe('pokój Google Chat przy tworzeniu kontraktu (_chatSpaceSelection)', () => {
+        async function runCreate(parsedBody: any) {
+            const request = {
+                parsedBody,
+                session: { userData: { userName: 'tester', enviId: 42 } },
+            } as any;
+            const response = {
+                status: jest.fn().mockReturnThis(),
+                send: jest.fn(),
+            } as any;
+            let backgroundPromise: Promise<unknown> | undefined;
+            const spy = jest
+                .spyOn(global, 'setImmediate')
+                .mockImplementation(((callback: (...args: any[]) => any) => {
+                    backgroundPromise = Promise.resolve().then(() => callback());
+                    return 0 as any;
+                }) as any);
+            try {
+                await createHandler(request, response, jest.fn());
+                await backgroundPromise;
+            } finally {
+                spy.mockRestore();
+            }
+            return { request, response };
+        }
+
+        it('Chat rzuca błąd: kontrakt zostaje, zadanie kończy się sukcesem, jest log i zgłoszenie', async () => {
+            const chatError = new Error('Google Chat nie założył pokoju');
+            const errorSpy = jest
+                .spyOn(console, 'error')
+                .mockImplementation(() => undefined);
+            const selection = { mode: 'new', scope: 'contract' } as any;
+            (ChatSpacesController.parseSelection as any).mockReturnValue(
+                selection,
+            );
+            (
+                ChatSpacesController.provisionAfterContractCreation as any
+            ).mockResolvedValue({ error: chatError });
+            (ContractsController.createContractFromDto as any).mockResolvedValue(
+                { id: 77 },
+            );
+            (ContractsController.addWithAuth as any).mockResolvedValue({
+                id: 77,
+            });
+
+            const { request } = await runCreate({
+                _chatSpaceSelection: selection,
+            });
+
+            expect(
+                ChatSpacesController.provisionAfterContractCreation,
+            ).toHaveBeenCalledWith(77, selection, 42);
+            expect(TaskStore.complete).toHaveBeenCalledWith(
+                expect.any(String),
+                { id: 77 },
+                'Kontrakt pomyślnie zarejestrowany',
+            );
+            expect(TaskStore.fail).not.toHaveBeenCalled();
+            expect(ToolsMail.sendServerErrorReport).toHaveBeenCalledWith(
+                chatError,
+                request,
+            );
+            errorSpy.mockRestore();
+            (ChatSpacesController.parseSelection as any).mockReturnValue({
+                mode: 'none',
+            });
+        });
+
+        it('brak pola (none): Chat w ogóle nie jest wołany', async () => {
+            (ContractsController.createContractFromDto as any).mockResolvedValue(
+                { id: 78 },
+            );
+            (ContractsController.addWithAuth as any).mockResolvedValue({
+                id: 78,
+            });
+            await runCreate({});
+            expect(
+                ChatSpacesController.provisionAfterContractCreation,
+            ).not.toHaveBeenCalled();
+            expect(TaskStore.complete).toHaveBeenCalled();
         });
     });
 });

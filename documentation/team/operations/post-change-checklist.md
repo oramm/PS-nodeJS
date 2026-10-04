@@ -6,6 +6,15 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-04 - Pokoje Google Chat dla kontraktów ENVI (CHT)
+
+- Scope: tabela `ChatSpaces` i `Contracts.ChatSpaceId`; trasy `GET /chatSpaces?projectOurId=`, `GET /contract/:id/chatSpaces`, `POST|PUT|DELETE /contract/:id/chatSpace`; pole `_chatSpaceSelection` w `POST /contractReact` (obsługa po zapisie umowy, błąd Chatu nie psuje umowy). Zwykły zapis umowy nie pisze `ChatSpaceId` (tylko trasy pokojów). Skrypty: `src/scripts/chatSmoke.ts` (próba), `src/scripts/chatLinkExistingSpaces.ts` (jednorazowe podpięcie istniejących pokojów, `--dry-run`/`--apply`/`--undo`, zapis poza localhost tylko z `--prod`).
+- ENV: nowe `CHAT_CLIENT_ID`, `CHAT_CLIENT_SECRET`, `CHAT_REFRESH_TOKEN` (OAuth konta system@envi.com.pl, klient "PS ENVI serwer - Chat" w projekcie Google Cloud `envi-agent`; osobne od `GOOGLE_*`). Heroku `erp-envi`: do wpisania przed pushem. Brak zmiennych = trasy pokojów zwracają błąd, reszta PS działa.
+- DB: migracja `src/contracts/migrations/013_create_chat_spaces.sql` (+ `_down`). Produkcja: dry-run -> backup -> apply -> odczyt PRZED pushem kodu (kod czyta `ChatSpaceId`). Lokalnie 013 zastosowana ręcznie na `envikons_myEnvi` i `envikons_local` (runner: dryf sumy `entities/002`, Node 24.19 poza engines), więc w lokalnym `SchemaMigrations` brak wpisu 013.
+- Po migracji i deployu: `chatLinkExistingSpaces.ts --dry-run`, potem `--apply --prod` (backup przed) - oczekiwane 15 pokojów / 20 umów.
+- Verification: `tsc --noEmit` 0; jest chatSpaces + ContractsRouters + ContractRepository* 8 zestawów / 73 testy PASS; próby na żywym Google (założenie i skasowanie pokoju testowego) i lokalnej bazie.
+- Rollback: wycofać kod; `chatLinkExistingSpaces.ts --undo --prod`; migracja `_down` kasuje podpięcia (kopia przed).
+
 ## 2026-10-01 - SB installer 0.14.13
 
 - Scope: refresh only the SB installer asset `assets/sb-installer/ENVI-SB-instalator.cmd` (and `ZRODLO.md`) from `envi-konsulting/ENVI.SB.Rdzen` commit `37796d8`; no backend or frontend behavior change beyond the downloaded installer. Installer behavior (B6): Polish guidance when GitHub or Drive access is missing, opens the right page and waits (Enter = recheck, S = skip, max 3 tries), GitHub login with the code on the clipboard, opens the SB page in PS once with `githubLogin`. `README-onboarding.md` in the payload rewritten for the new path (one Google account, access granted by the manager in PS). The sync engine package is unchanged (same sha256 as 0.14.12); the core delivery channel (shared Drive) is published separately by the release script.

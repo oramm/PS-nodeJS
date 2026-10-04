@@ -77,6 +77,11 @@ export default abstract class Contract
      *  poprawne: wykluczenie umowy nie wypisuje jej z FIDmana.
      *  Opcjonalne świadomie — zob. parseOptionalBoolean(). */
     fidmanSyncEnabled?: boolean;
+    /** Pokój Google Chat tej umowy (CHT-2, migracja 013, `Contracts.ChatSpaceId` -> `ChatSpaces.Id`).
+     *  Wiele umów może wskazywać ten sam pokój. Trzy stany: `undefined` = pola nie było
+     *  w żądaniu (ToolsDb je pomija, zapis nie kasuje wartości w bazie); `null` = jawnie
+     *  brak pokoju; liczba = Id pokoju. */
+    chatSpaceId?: number | null;
     settlementMethod?: SettlementMethod | null;
 
     /** Walidacja na wejściu, a nie w bazie: produkcja (MariaDB) ma PUSTY `sql_mode`, więc
@@ -128,6 +133,17 @@ export default abstract class Contract
     private static parseOptionalBoolean(value: unknown): boolean | undefined {
         if (value === undefined) return undefined;
         return !!value;
+    }
+
+    /** Trójstanowe Id opcjonalnej relacji: `undefined` (brak w żądaniu) i `null`/pusty string
+     *  (jawnie brak) zachowują się różnie, liczba przechodzi jako liczba. */
+    private static parseOptionalNullableId(
+        value: unknown
+    ): number | null | undefined {
+        if (value === undefined) return undefined;
+        if (value === null || value === '') return null;
+        const id = Number(value);
+        return Number.isInteger(id) && id > 0 ? id : null;
     }
 
     /** Lider konsorcjum na początek listy wykonawców.
@@ -305,6 +321,9 @@ export default abstract class Contract
         this.approvedDocumentation = !!initParamObject.approvedDocumentation;
         this.fidmanSyncEnabled = Contract.parseOptionalBoolean(
             initParamObject.fidmanSyncEnabled
+        );
+        this.chatSpaceId = Contract.parseOptionalNullableId(
+            initParamObject.chatSpaceId
         );
         this.settlementMethod = Contract.parseSettlementMethod(
             initParamObject.settlementMethod

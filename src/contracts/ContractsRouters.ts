@@ -15,6 +15,7 @@ import crypto from 'crypto'; // u góry pliku
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 import ToolsMail from '../tools/ToolsMail';
+import ChatSpacesController from './chatSpaces/ChatSpacesController';
 
 function getAsyncTaskErrorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -93,6 +94,12 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             ),
         };
 
+        // Pokój Google Chat (CHT-3): jednorazowa instrukcja jak drzewo struktury, obsługiwana
+        // PO commicie kontraktu. Brak pola = none.
+        const chatSpaceSelection = ChatSpacesController.parseSelection(
+            req.parsedBody._chatSpaceSelection,
+        );
+
         // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
         TaskStore.create(taskId);
@@ -114,6 +121,34 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                     taskId,
                     creationOptions,
                 );
+                // Chat nigdy nie wywraca tworzenia kontraktu: błąd = log + zgłoszenie,
+                // kontrakt zostaje (provision... nie rzuca).
+                if (chatSpaceSelection.mode !== 'none' && contract.id) {
+                    const chat =
+                        await ChatSpacesController.provisionAfterContractCreation(
+                            contract.id,
+                            chatSpaceSelection,
+                            req.session?.userData?.enviId,
+                        );
+                    if (chat.chatSpaceId) contract.chatSpaceId = chat.chatSpaceId;
+                    if (chat.error) {
+                        console.error(
+                            'Błąd pokoju Google Chat przy tworzeniu kontraktu (kontrakt zostaje):',
+                            chat.error,
+                        );
+                        try {
+                            await ToolsMail.sendServerErrorReport(
+                                chat.error,
+                                req,
+                            );
+                        } catch (mailError) {
+                            console.error(
+                                'Nie udało się wysłać zgłoszenia o błędzie Chatu:',
+                                mailError,
+                            );
+                        }
+                    }
+                }
                 TaskStore.complete(
                     taskId,
                     contract,

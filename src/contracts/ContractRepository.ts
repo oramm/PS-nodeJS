@@ -35,7 +35,57 @@ export default class ContractRepository extends BaseRepository<
         super('Contracts');
     }
 
+    /**
+     * `chatSpaceId` jest w modelu tylko do odczytu: kolumne `Contracts.ChatSpaceId` pisza
+     * wylacznie trasy pokojow i `_chatSpaceSelection` (ChatSpaceRepository). Zwykly zapis umowy
+     * (PUT /contract/:id, POST /contractReact) wycina pole z zapisu; wartosc wraca do obiektu.
+     */
+    private async withoutChatSpaceId<T>(
+        item: ContractOur | ContractOther,
+        action: () => Promise<T>,
+    ): Promise<T> {
+        const had = 'chatSpaceId' in item;
+        const value = item.chatSpaceId;
+        delete (item as any).chatSpaceId;
+        try {
+            return await action();
+        } finally {
+            if (had) item.chatSpaceId = value;
+        }
+    }
+
     async addInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+    ): Promise<void> {
+        return this.withoutChatSpaceId(item, () =>
+            this.addInDbWithChatSpace(item, externalConn, isPartOfTransaction),
+        );
+    }
+
+    async editInDb(
+        item: ContractOur | ContractOther,
+        externalConn?: mysql.PoolConnection,
+        isPartOfTransaction?: boolean,
+        fieldsToUpdate?: string[],
+    ): Promise<void> {
+        let fields = fieldsToUpdate;
+        if (fields) {
+            fields = fields.filter((f) => f !== 'chatSpaceId');
+            if (fields.length === 0) return; // wyslano tylko pole tylko-do-odczytu
+        }
+        return this.withoutChatSpaceId(item, () =>
+            this.editInDbWithChatSpace(
+                item,
+                externalConn,
+                isPartOfTransaction,
+                fields,
+            ),
+        );
+    }
+
+    private async addInDbWithChatSpace(
         item: ContractOur | ContractOther,
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
@@ -102,7 +152,7 @@ export default class ContractRepository extends BaseRepository<
         }
     }
 
-    async editInDb(
+    private async editInDbWithChatSpace(
         item: ContractOur | ContractOther,
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
@@ -276,6 +326,7 @@ export default class ContractRepository extends BaseRepository<
                     mainContracts.DefectsNotificationEndDate,
                     mainContracts.FidmanContractId,
                     mainContracts.FidmanSyncEnabled,
+                    mainContracts.ChatSpaceId,
                     mainContracts.ContractDocumentPresent,
                     mainContracts.ContractDocumentCheckedAt,
                     ${this.makeContractDocumentFolderColumn()},
@@ -883,6 +934,8 @@ export default class ContractRepository extends BaseRepository<
                 row.FidmanSyncEnabled === undefined
                     ? undefined
                     : !!row.FidmanSyncEnabled,
+            // CHT-2: trójstanowo jak FidmanSyncEnabled (undefined = kolumny nie wybrano).
+            chatSpaceId: row.ChatSpaceId,
             // `|| null`, a nie `?? null`: przy pustym sql_mode (produkcja) niedozwolona wartość
             // ENUM wchodzi do bazy jako pusty string, którego `IS NULL` nie złapie. Zmierzone.
             settlementMethod: row.SettlementMethod || null,
@@ -1104,6 +1157,8 @@ type ContractRow = {
     /** WYK-1: opcjonalne z tego samego powodu co FidmanContractId wyżej — wiersz z zapytania,
      *  które tej kolumny nie wybiera, ma je jako `undefined`, a nie jako 0. */
     FidmanSyncEnabled?: number | null;
+    /** CHT-2: opcjonalne z tego samego powodu co FidmanSyncEnabled. */
+    ChatSpaceId?: number | null;
     ContractDocumentPresent?: number | null;
     ContractDocumentCheckedAt?: Date | string | null;
     ContractDocumentFolderId?: string | null;
