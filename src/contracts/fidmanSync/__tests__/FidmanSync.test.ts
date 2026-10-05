@@ -217,13 +217,14 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
 describe('enqueueFidmanContractPush (same tx conn)', () => {
     it('inserts a PENDING row via the provided connection and returns insertId', async () => {
         const conn: any = {
+            query: jest.fn<any>().mockResolvedValue([[], undefined]),
             execute: jest
                 .fn<any>()
                 .mockResolvedValue([{ insertId: 999 }, undefined]),
         };
         const id = await enqueueFidmanContractPush(baseContract() as any, conn);
         expect(id).toBe(999);
-        expect(conn.execute).toHaveBeenCalledTimes(1);
+        expect(conn.execute).toHaveBeenCalledTimes(2);
         const [sql, params] = conn.execute.mock.calls[0];
         expect(sql).toContain('INSERT INTO FidmanSyncOutbox');
         expect(sql).toContain("'PENDING'");

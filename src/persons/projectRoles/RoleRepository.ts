@@ -38,6 +38,30 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
         super('Roles');
     }
 
+    async projectContractIds(projectOurId: string, conn: mysql.PoolConnection): Promise<number[]> {
+        const [rows] = await conn.query('SELECT Id FROM Contracts WHERE ProjectOurId = ? ORDER BY Id', [projectOurId]);
+        return (rows as any[]).map((row) => row.Id);
+    }
+
+    async rolesForMutation(id: number, conn: mysql.PoolConnection): Promise<any[]> {
+        const [rows] = await conn.query('SELECT Id, ContractId, ProjectOurId, PersonId FROM Roles WHERE Id = ? FOR UPDATE', [id]);
+        const old = (rows as any[])[0];
+        if (!old) throw new Error('Nie znaleziono roli do zmiany');
+        // PS edytuje i usuwa kopie roli projektowej razem. Samodzielna rola z NULL pozostaje pojedyncza.
+        if (!old.ProjectOurId || old.ContractId == null) return [old];
+        const [copies] = await conn.query(
+            'SELECT Id, ContractId, ProjectOurId, PersonId FROM Roles WHERE ProjectOurId = ? AND PersonId = ? FOR UPDATE',
+            [old.ProjectOurId, old.PersonId]
+        );
+        return copies as any[];
+    }
+
+    async readScopes(ids: number[], conn: mysql.PoolConnection): Promise<any[]> {
+        if (!ids.length) return [];
+        const [rows] = await conn.query('SELECT ContractId, ProjectOurId FROM Roles WHERE Id IN (?)', [ids]);
+        return rows as any[];
+    }
+
     protected mapRowToModel(row: any): ContractRole {
         return new ContractRole({
             id: row.Id,

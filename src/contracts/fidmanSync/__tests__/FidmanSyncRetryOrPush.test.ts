@@ -84,7 +84,7 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
                     refId: params[1],
                     payload: JSON.parse(params[2]),
                 });
-                latest = {
+                if (params[0] === 'contract.upsert') latest = {
                     Id: NEW_OUTBOX_ID,
                     Kind: params[0],
                     RefId: params[1],
@@ -101,7 +101,7 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
 
         (ToolsDb.transaction as any).mockReset();
         (ToolsDb.transaction as any).mockImplementation(async (cb: any) =>
-            cb({ execute: connExecute })
+            cb({ execute: connExecute, query: jest.fn<any>().mockResolvedValue([[], undefined]) })
         );
 
         (ToolsDb.getQueryCallbackAsync as any).mockReset();
@@ -157,7 +157,8 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
     it('umowa objęta synchronizacją, bez ani jednego wpisu w kolejce: wstawia nowy wiersz contract.upsert z ładunkiem złożonym z żywej umowy (ze stronami) i wysyła go', async () => {
         const result = await retryOrPushFidmanContract(makeContract());
 
-        expect(inserted).toHaveLength(1);
+        expect(inserted).toHaveLength(2);
+        expect(inserted.map((r) => r.kind)).toEqual(['contract.upsert', 'contract.personnel']);
         expect(inserted[0].kind).toBe('contract.upsert');
         expect(inserted[0].refId).toBe(CONTRACT_ID);
         // Ładunek pochodzi z ŻYWEJ umowy, nie z migawki — stąd numer, daty i strony.
@@ -193,7 +194,8 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
 
         const result = await retryOrPushFidmanContract(makeContract());
 
-        expect(inserted).toHaveLength(1);
+        expect(inserted).toHaveLength(2);
+        expect(inserted.map((r) => r.kind)).toEqual(['contract.upsert', 'contract.personnel']);
         expect(inserted[0].refId).toBe(CONTRACT_ID);
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(result.ok).toBe(true);
@@ -213,8 +215,8 @@ describe('retryOrPushFidmanContract — „dopchnij synchronizację" (WYK-2 zada
 
         const result = await retryOrPushFidmanContract(makeContract());
 
-        expect(inserted).toHaveLength(0);
-        expect(ToolsDb.transaction as any).not.toHaveBeenCalled();
+        expect(inserted.map((r) => r.kind)).toEqual(['contract.personnel']);
+        expect(ToolsDb.transaction as any).toHaveBeenCalledTimes(1);
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(result.ok).toBe(true);
         if (result.ok) expect(result.status.status).toBe('SENT');

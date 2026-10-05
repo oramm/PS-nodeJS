@@ -52,6 +52,7 @@ describe('ContractsController.add() -> FidmanSyncOutbox status read (SYNC-P2 red
         outbox = { Status: 'PENDING', SkipReason: null, LastError: null, Attempts: 0 };
 
         mockConn = {
+            query: jest.fn<any>().mockResolvedValue([[], undefined]),
             beginTransaction: jest.fn(),
             commit: jest.fn(),
             rollback: jest.fn(),

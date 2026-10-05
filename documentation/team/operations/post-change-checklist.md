@@ -6,6 +6,19 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+
+## 2026-10-05 — WNM-2, personel kontraktu PS → FIDman (przygotowane, bez wdrożenia)
+
+- Runda poprawek: konwersja kopii roli projektu pozostawia jeden edytowany wiersz na umowie, usuwa pozostałe i odświeża stare oraz nową umowę. Personel zawiera opcjonalny `loginEmail` z `PersonAccounts.SystemEmail` dla `IsActive = 1`; kontaktowy `email` bez zmian. Przed wdrożeniem uzgodnić obsługę `loginEmail` po stronie FIDmana.
+- Backfill wypisuje cel DB; poza `localhost`/`127.0.0.1` wymaga jawnego `--prod` zarówno dla dry-run, jak i apply. W tej rundzie skryptu nie uruchamiano.
+
+- Bramka G-WNM-2 pozostaje otwarta: migracja i wdrożenie produkcyjne wymagają zgody właściciela. W sesji nie wykonywano operacji DB, backfillu ani wdrożenia; bez zmian env i zależności.
+- Przed wdrożeniem: backup wskazanej bazy; `yarn migrate:list`; sprawdzić oczekiwany zestaw pending; `yarn migrate:apply`; `yarn migrate:verify`. Nowy plik: `src/contracts/migrations/014_add_contract_personnel_kind_to_fidman_sync_outbox.sql`. Migracja musi poprzedzić kod; nieznany ENUM przy pustym sql_mode może zapisać pusty rodzaj pusha. Wynik verify na bazie: NIE URUCHAMIANO.
+- Po migracji, w jawnie wybranym środowisku: `yarn ts-node src/scripts/fidmanPersonnelBackfill.ts --dry-run`, ocena liczb, następnie `--apply`. Skrypt tylko kolejkuje; dostawa przez istniejący drain. Pusta lista personelu czyści listę w FIDmanie, dlatego przed apply sprawdzić również umowy bez poprawnych adresów e-mail.
+- Rollback: wycofać kod; pozostawić rozszerzony ENUM i kolejkę do oceny. Bez migracji down (wzorcowa 010 dla user.upsert również jej nie ma); zawężenie ENUM z zapisanymi wierszami personelu byłoby utratą danych.
+- Dowody build/test, przegląd, checklist PR i handoff: `tmp/dev-runtime/wnm2-ps-report.md`. Frontend bez zmian; istniejące config vars synchronizacji bez zmian.
+
+
 ## 2026-10-04 - Pokoje Google Chat dla kontraktów ENVI (CHT)
 
 - Scope: tabela `ChatSpaces` i `Contracts.ChatSpaceId`; trasy `GET /chatSpaces?projectOurId=`, `GET /contract/:id/chatSpaces`, `POST|PUT|DELETE /contract/:id/chatSpace`; pole `_chatSpaceSelection` w `POST /contractReact` (obsługa po zapisie umowy, błąd Chatu nie psuje umowy). Zwykły zapis umowy nie pisze `ChatSpaceId` (tylko trasy pokojów). Skrypty: `src/scripts/chatSmoke.ts` (próba), `src/scripts/chatLinkExistingSpaces.ts` (jednorazowe podpięcie istniejących pokojów, `--dry-run`/`--apply`/`--undo`, zapis poza localhost tylko z `--prod`).

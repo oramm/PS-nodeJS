@@ -37,7 +37,8 @@ export type FidmanKind =
     | 'contract.upsert'
     | 'entity.upsert'
     | 'project.upsert'
-    | 'user.upsert';
+    | 'user.upsert'
+    | 'contract.personnel';
 
 export type FidmanRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
@@ -98,7 +99,126 @@ export type FidmanEnvelope =
     | { kind: 'contract.upsert'; payload: FidmanContractPayload }
     | { kind: 'entity.upsert'; payload: FidmanEntityPayload }
     | { kind: 'project.upsert'; payload: FidmanProjectPayload }
-    | { kind: 'user.upsert'; payload: FidmanUserPayload };
+    | { kind: 'user.upsert'; payload: FidmanUserPayload }
+    | { kind: 'contract.personnel'; payload: FidmanPersonnelPayload };
+
+export type FidmanPersonnelPayload = {
+    legacyContractId: number;
+    personnel: {
+        psPersonId: number;
+        firstName: string;
+        lastName: string;
+        email: string;
+        loginEmail?: string;
+        roleName: string;
+        group: 'Zamawiający' | 'Inżynier' | 'Wykonawca/Podwykonawcy' | 'Pozostali';
+    }[];
+};
+
+export type FidmanRoleScope = {
+    ContractId: number | null;
+    ProjectOurId: string | null;
+};
+
+/** ContractId ma pierwszeństwo; kod ROZNE. wyklucza wyłącznie rozwijanie projektu. */
+export async function findFidmanPersonnelContracts(
+    scopes: FidmanRoleScope[] | undefined,
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const conditions: string[] = [];
+    const params: (number | string)[] = [];
+    if (scopes) {
+        for (const scope of scopes) {
+            if (scope.ContractId != null) {
+                conditions.push('c.Id = ?');
+                params.push(scope.ContractId);
+            } else if (scope.ProjectOurId && !scope.ProjectOurId.startsWith('ROZNE.')) {
+                conditions.push('c.ProjectOurId = ?');
+                params.push(scope.ProjectOurId);
+            }
+        }
+        if (!conditions.length) return [];
+    }
+    const [rows] = await conn.query(
+        `SELECT c.Id, c.TypeId, c.FidmanSyncEnabled FROM Contracts c
+         WHERE ${scopes ? `(${conditions.join(' OR ')})` : '1'}
+         ORDER BY c.Id`, params
+    );
+    return [...new Set((rows as any[])
+        .filter((row) => isFidmanSyncEligible({
+            typeId: row.TypeId, fidmanSyncEnabled: !!row.FidmanSyncEnabled,
+        }))
+        .map((row) => row.Id as number))];
+}
+
+/** Pełna migawka po zmianie roli; odczyty korzystają z połączenia transakcji. */
+export async function buildContractPersonnelPayload(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<{ kind: 'contract.personnel'; payload: FidmanPersonnelPayload }> {
+    const [rows] = await conn.query(
+        `SELECT r.PersonId, p.Name AS FirstName, p.Surname AS LastName,
+                p.Email, pa.SystemEmail AS LoginEmail, r.Name AS RoleName, r.GroupName
+         FROM Contracts c
+         JOIN Roles r ON (r.ContractId = c.Id AND
+             (r.ProjectOurId IS NULL OR LEFT(r.ProjectOurId, 6) <> 'ROZNE.')) OR
+             (r.ContractId IS NULL AND r.ProjectOurId = c.ProjectOurId
+              AND LEFT(c.ProjectOurId, 6) <> 'ROZNE.')
+         JOIN Persons p ON p.Id = r.PersonId
+         LEFT JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
+         WHERE c.Id = ?
+         ORDER BY (r.ContractId IS NULL), r.Id`, [contractId]
+    );
+    const personnel: FidmanPersonnelPayload['personnel'] = [];
+    const seen = new Set<string>();
+    for (const row of rows as any[]) {
+        const loginEmail = trimmedOrEmpty(row.LoginEmail);
+        const entry = {
+            psPersonId: row.PersonId,
+            firstName: trimmedOrEmpty(row.FirstName),
+            lastName: trimmedOrEmpty(row.LastName),
+            email: trimmedOrEmpty(row.Email),
+            ...(loginEmail.length >= 6 && loginEmail.length <= 96 &&
+                FIDMAN_EMAIL_PATTERN.test(loginEmail) ? { loginEmail } : {}),
+            roleName: trimmedOrEmpty(row.RoleName),
+            group: row.GroupName,
+        };
+        // Limity i wzorzec z contractPersonnelPayloadSchema w FIDmanie.
+        if (!Number.isInteger(entry.psPersonId) ||
+            !entry.firstName || entry.firstName.length > 63 ||
+            !entry.lastName || entry.lastName.length > 32 ||
+            entry.email.length < 6 || entry.email.length > 96 ||
+            !FIDMAN_EMAIL_PATTERN.test(entry.email) ||
+            !entry.roleName || entry.roleName.length > 100 ||
+            !['Zamawiający', 'Inżynier', 'Wykonawca/Podwykonawcy', 'Pozostali'].includes(entry.group)) {
+            console.warn(`[FidmanSync] Pominięto niepoprawny personel: umowa ${contractId}, osoba ${row.PersonId}.`);
+            continue;
+        }
+        const key = JSON.stringify([entry.psPersonId, entry.roleName]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        personnel.push(entry);
+    }
+    return { kind: 'contract.personnel', payload: { legacyContractId: contractId, personnel } };
+}
+
+export async function enqueueFidmanPersonnelPush(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<number> {
+    return enqueueRow(await buildContractPersonnelPayload(contractId, conn), contractId, conn);
+}
+
+export async function enqueueFidmanPersonnelForRoles(
+    scopes: FidmanRoleScope[],
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const ids: number[] = [];
+    for (const contractId of await findFidmanPersonnelContracts(scopes, conn)) {
+        ids.push(await enqueueFidmanPersonnelPush(contractId, conn));
+    }
+    return ids;
+}
 
 export type FidmanIngestResponse = {
     created?: number;
@@ -243,7 +363,9 @@ export async function enqueueFidmanContractPush(
     contract: AnyContract,
     conn: mysql.PoolConnection
 ): Promise<number> {
-    return enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
+    const id = await enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
+    await enqueueFidmanPersonnelPush((contract as any).id, conn);
+    return id;
 }
 
 export async function enqueueFidmanEntityPush(
@@ -760,7 +882,11 @@ export async function retryOrPushFidmanContract(
     const contractId = (contract as any).id as number;
 
     const retried = await retryFidmanContractSync(contractId);
-    if (retried.ok) return retried;
+    if (retried.ok) {
+        // Umowa została ponowiona; personel liczymy z bieżących ról, nie z dawnej migawki.
+        await ToolsDb.transaction(async (conn) => enqueueFidmanPersonnelPush(contractId, conn));
+        return retried;
+    }
 
     const outboxId = await ToolsDb.transaction<number>(async (conn) =>
         enqueueFidmanContractPush(contract, conn)
