@@ -1,36 +1,8 @@
 jest.mock('../../../tools/ToolsDb');
 import RoleRepository from '../RoleRepository';
 
-describe('WNM-2 zakres zapisanej roli', () => {
+describe('WNM-2 zakres umow projektu', () => {
     const repo = new RoleRepository();
-
-    it('rola umowy odczytywana i blokowana po Id', async () => {
-        const row = { Id: 7, ContractId: 42, ProjectOurId: null, PersonId: 5 };
-        const conn: any = { query: jest.fn().mockResolvedValue([[row]]) };
-        expect(await repo.rolesForMutation(7, conn)).toEqual([row]);
-        expect(conn.query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'), [7]);
-        expect(conn.query).toHaveBeenCalledTimes(1);
-    });
-
-    it('samodzielna rola projektu z NULL obejmuje ten wiersz', async () => {
-        const row = { Id: 7, ContractId: null, ProjectOurId: 'PRJ.1', PersonId: 5 };
-        const conn: any = { query: jest.fn().mockResolvedValue([[row]]) };
-        expect(await repo.rolesForMutation(7, conn)).toEqual([row]);
-        expect(conn.query).toHaveBeenCalledTimes(1);
-    });
-
-    it('kopie projektu wyszukuje według starego projektu i osoby, niezależnie od nowych danych żądania', async () => {
-        const first = { Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1', PersonId: 5 };
-        const copies = [first, { ...first, Id: 8, ContractId: 43 }];
-        const conn: any = { query: jest.fn().mockResolvedValueOnce([[first]]).mockResolvedValueOnce([copies]) };
-        expect(await repo.rolesForMutation(7, conn)).toEqual(copies);
-        expect(conn.query.mock.calls[1]).toEqual([expect.stringContaining('FOR UPDATE'), ['PRJ.1', 5]]);
-    });
-
-    it('brak roli przerywa operację', async () => {
-        const conn: any = { query: jest.fn().mockResolvedValue([[]]) };
-        await expect(repo.rolesForMutation(7, conn)).rejects.toThrow('Nie znaleziono roli');
-    });
 
     it('umowy projektu odczytuje tym samym połączeniem, pusty zakres nie buduje IN ()', async () => {
         const conn: any = { query: jest.fn().mockResolvedValue([[{ Id: 42 }, { Id: 43 }]]) };
@@ -42,7 +14,7 @@ describe('WNM-2 zakres zapisanej roli', () => {
     });
 });
 
-describe('usuniecie roli: zakres kopii tej samej roli', () => {
+describe('edycja i usuniecie roli: zakres kopii tej samej roli (copiesOfRole)', () => {
     const repo = new RoleRepository();
     const row = (over: any = {}) => ({
         Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1', PersonId: 5,
@@ -63,27 +35,27 @@ describe('usuniecie roli: zakres kopii tej samej roli', () => {
         const caseVariant = row({ Id: 12, ContractId: 44, Name: 'Kierownik zespołu' });
         const otherDescription = row({ Id: 13, ContractId: 45, Description: 'inny opis' });
         const conn = connWith([target], [target, copy, legacyProjectRole, otherRole, otherGroup, caseVariant, otherDescription]);
-        const result = await repo.rolesForDeletion(7, conn);
+        const result = await repo.copiesOfRole(7, conn);
         expect(result.map((r) => r.Id)).toEqual([7, 8, 9]);
         expect(conn.query.mock.calls[1]).toEqual([expect.stringContaining('FOR UPDATE'), ['PRJ.1', 5]]);
     });
 
-    it('usuniecie roli starego typu (bez umowy) obejmuje ten sam zestaw', async () => {
+    it('rola starego typu (bez umowy) obejmuje ten sam zestaw', async () => {
         const target = row({ ContractId: null });
         const copy = row({ Id: 8, ContractId: 43 });
         const other = row({ Id: 10, Name: 'Koordynator' });
-        const result = await repo.rolesForDeletion(7, connWith([target], [target, copy, other]));
+        const result = await repo.copiesOfRole(7, connWith([target], [target, copy, other]));
         expect(result.map((r) => r.Id)).toEqual([7, 8]);
     });
 
     it('rola samej umowy to jeden wiersz i jedno zapytanie', async () => {
         const target = row({ ProjectOurId: null });
         const conn = connWith([target]);
-        expect(await repo.rolesForDeletion(7, conn)).toEqual([target]);
+        expect(await repo.copiesOfRole(7, conn)).toEqual([target]);
         expect(conn.query).toHaveBeenCalledTimes(1);
     });
 
     it('brak roli przerywa operacje', async () => {
-        await expect(repo.rolesForDeletion(7, connWith([]))).rejects.toThrow('Nie znaleziono roli');
+        await expect(repo.copiesOfRole(7, connWith([]))).rejects.toThrow('Nie znaleziono roli');
     });
 });

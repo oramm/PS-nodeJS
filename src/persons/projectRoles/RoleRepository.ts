@@ -43,32 +43,19 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
         return (rows as any[]).map((row) => row.Id);
     }
 
-    async rolesForMutation(id: number, conn: mysql.PoolConnection): Promise<any[]> {
-        const [rows] = await conn.query('SELECT Id, ContractId, ProjectOurId, PersonId FROM Roles WHERE Id = ? FOR UPDATE', [id]);
-        const old = (rows as any[])[0];
-        if (!old) throw new Error('Nie znaleziono roli do zmiany');
-        // PS edytuje i usuwa kopie roli projektowej razem. Samodzielna rola z NULL pozostaje pojedyncza.
-        if (!old.ProjectOurId || old.ContractId == null) return [old];
-        const [copies] = await conn.query(
-            'SELECT Id, ContractId, ProjectOurId, PersonId FROM Roles WHERE ProjectOurId = ? AND PersonId = ? FOR UPDATE',
-            [old.ProjectOurId, old.PersonId]
-        );
-        return copies as any[];
-    }
-
     /**
-     * Wiersze do usuniecia razem z podanym: kopie tej samej roli osoby w projekcie, czyli wiersze
+     * Wiersze dotkniete zmiana albo usunieciem roli: kopie tej samej roli osoby w projekcie, czyli wiersze
      * o tym samym projekcie, osobie, nazwie, opisie i grupie (addNewRole kopiuje te pola bez zmian,
      * roznia sie tylko ContractId i Id; starsza rola samego projektu ma ContractId NULL).
      * Inna rola tej samej osoby w projekcie zostaje. Rola samej umowy (bez projektu) to zawsze
      * pojedynczy wiersz. Porownanie scisle w kodzie, bo kolacja bazy ignoruje wielkosc liter
      * i koncowe spacje.
      */
-    async rolesForDeletion(id: number, conn: mysql.PoolConnection): Promise<any[]> {
+    async copiesOfRole(id: number, conn: mysql.PoolConnection): Promise<any[]> {
         const columns = 'Id, ContractId, ProjectOurId, PersonId, Name, Description, GroupName';
         const [rows] = await conn.query(`SELECT ${columns} FROM Roles WHERE Id = ? FOR UPDATE`, [id]);
         const old = (rows as any[])[0];
-        if (!old) throw new Error('Nie znaleziono roli do usuniecia');
+        if (!old) throw new Error('Nie znaleziono roli');
         if (!old.ProjectOurId) return [old];
         const [sameProjectPerson] = await conn.query(
             `SELECT ${columns} FROM Roles WHERE ProjectOurId = ? AND PersonId = ? FOR UPDATE`,

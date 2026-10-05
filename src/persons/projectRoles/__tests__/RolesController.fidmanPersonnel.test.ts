@@ -32,8 +32,7 @@ describe('WNM-2 transakcje ról', () => {
                 events.push(name);
             });
         }
-        proto.rolesForMutation.mockResolvedValue([old()]);
-        proto.rolesForDeletion.mockResolvedValue([old()]);
+        proto.copiesOfRole.mockResolvedValue([old()]);
         proto.projectContractIds.mockResolvedValue([42, 43]);
         proto.readScopes.mockResolvedValue([{ ContractId: 42, ProjectOurId: null }]);
         (enqueueFidmanPersonnelForRoles as any).mockImplementation(async (_scopes: any, connection: any) => {
@@ -74,7 +73,7 @@ describe('WNM-2 transakcje ról', () => {
     });
 
     it('rola bez ContractId zmienia projekt: odświeża stare i nowe umowy projektu', async () => {
-        proto.rolesForMutation.mockResolvedValue([old({ ContractId: null, ProjectOurId: 'PRJ.1' })]);
+        proto.copiesOfRole.mockResolvedValue([old({ ContractId: null, ProjectOurId: 'PRJ.1' })]);
         proto.readScopes.mockResolvedValue([{ ContractId: null, ProjectOurId: 'PRJ.2' }]);
         await RolesController.updateRole(role({ _contract: undefined, _project: { ourId: 'PRJ.2' } }));
         expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith(expect.arrayContaining([
@@ -84,7 +83,7 @@ describe('WNM-2 transakcje ról', () => {
     });
 
     it('przeniesienie kopii projektowych usuwa stare i dodaje kopie w nowym projekcie', async () => {
-        proto.rolesForMutation.mockResolvedValue([old({ ProjectOurId: 'PRJ.1' })]);
+        proto.copiesOfRole.mockResolvedValue([old({ ProjectOurId: 'PRJ.1' })]);
         proto.projectContractIds.mockResolvedValue([99]);
         proto.readScopes.mockResolvedValue([]);
         await RolesController.updateRole(role({ _project: { ourId: 'PRJ.2' } }));
@@ -102,7 +101,7 @@ describe('WNM-2 transakcje ról', () => {
             old({ ProjectOurId: 'PRJ.1' }),
             old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
         ];
-        proto.rolesForMutation.mockResolvedValue(rows.slice());
+        proto.copiesOfRole.mockResolvedValue(rows.slice());
         proto.deleteFromDb.mockImplementation(async (item: any, connection: any, tx: any) => {
             expect(connection).toBe(conn);
             expect(tx).toBe(true);
@@ -134,7 +133,7 @@ describe('WNM-2 transakcje ról', () => {
     });
 
     it('edycja samej nazwy nie usuwa kopii projektu dla żądania roli umowy', async () => {
-        proto.rolesForMutation.mockResolvedValue([
+        proto.copiesOfRole.mockResolvedValue([
             old({ ProjectOurId: 'PRJ.1' }), old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
         ]);
         await RolesController.updateRole(role(), ['name']);
@@ -144,7 +143,7 @@ describe('WNM-2 transakcje ról', () => {
     });
 
     it('fieldsToUpdate bez projektu nie przenosi kopii do innego projektu', async () => {
-        proto.rolesForMutation.mockResolvedValue([old({ ProjectOurId: 'PRJ.1' })]);
+        proto.copiesOfRole.mockResolvedValue([old({ ProjectOurId: 'PRJ.1' })]);
         proto.readScopes.mockResolvedValue([{ ContractId: 42, ProjectOurId: 'PRJ.1' }]);
         await RolesController.updateRole(role({ _project: { ourId: 'PRJ.2' } }), ['name']);
         expect(proto.deleteFromDb).not.toHaveBeenCalled();
@@ -153,8 +152,7 @@ describe('WNM-2 transakcje ról', () => {
     });
 
     it.each(['updateRole', 'deleteRole'] as const)('%s roli projektu zbiorczego nie kolejkuje kopii', async (method) => {
-        proto.rolesForMutation.mockResolvedValue([old({ ProjectOurId: 'ROZNE.1' })]);
-        proto.rolesForDeletion.mockResolvedValue([old({ ProjectOurId: 'ROZNE.1' })]);
+        proto.copiesOfRole.mockResolvedValue([old({ ProjectOurId: 'ROZNE.1' })]);
         proto.readScopes.mockResolvedValue([{ ContractId: 42, ProjectOurId: 'ROZNE.1' }]);
         await RolesController[method](role({ _project: { ourId: 'ROZNE.1' } }));
         expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith([], conn);
@@ -166,12 +164,11 @@ describe('WNM-2 transakcje ról', () => {
             old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
             old({ Id: 9, ContractId: null, ProjectOurId: 'PRJ.1' }),
         ];
-        proto.rolesForDeletion.mockResolvedValue(copies);
+        proto.copiesOfRole.mockResolvedValue(copies);
         const deleted: number[] = [];
         proto.deleteFromDb.mockImplementation(async (item: any) => { deleted.push(item.id); events.push('deleteFromDb'); });
         await RolesController.deleteRole(role({ _contract: undefined, _project: { ourId: 'PRJ.1' } }));
-        expect(proto.rolesForDeletion).toHaveBeenCalledWith(7, conn);
-        expect(proto.rolesForMutation).not.toHaveBeenCalled();
+        expect(proto.copiesOfRole).toHaveBeenCalledWith(7, conn);
         expect(deleted).toEqual([7, 8, 9]);
         expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith([
             expect.objectContaining({ ContractId: 42, ProjectOurId: 'PRJ.1' }),
@@ -185,6 +182,82 @@ describe('WNM-2 transakcje ról', () => {
         await RolesController.deleteRole(role());
         expect(proto.deleteFromDb).toHaveBeenCalledTimes(1);
         expect(proto.deleteFromDb).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), conn, true);
+    });
+
+    it('edycja kopii zmienia wszystkie kopie tej samej roli i kolejkuje ich umowy', async () => {
+        const copies = [
+            old({ Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 9, ContractId: null, ProjectOurId: 'PRJ.1' }),
+        ];
+        proto.copiesOfRole.mockResolvedValue(copies);
+        proto.readScopes.mockResolvedValue(copies);
+        const edited: any[] = [];
+        proto.editInDb.mockImplementation(async (item: any, _c: any, _t: any, fields: any) => {
+            edited.push([item.id, item.name, item.groupName, item.contractId, fields]); events.push('editInDb');
+        });
+        await RolesController.updateRole(role({ _contract: undefined, _project: { ourId: 'PRJ.1' }, name: 'Nowa', groupName: 'Pozostali' }), ['name', 'groupName']);
+        expect(proto.copiesOfRole).toHaveBeenCalledWith(7, conn);
+        expect(edited).toEqual([
+            [7, 'Nowa', 'Pozostali', 42, ['name', 'groupName']],
+            [8, 'Nowa', 'Pozostali', 43, ['name', 'groupName']],
+            [9, 'Nowa', 'Pozostali', null, ['name', 'groupName']],
+        ]);
+        expect(proto.deleteFromDb).not.toHaveBeenCalled();
+        expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith(expect.arrayContaining([
+            expect.objectContaining({ ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            expect.objectContaining({ ContractId: 43, ProjectOurId: 'PRJ.1' }),
+            expect.objectContaining({ ContractId: null, ProjectOurId: 'PRJ.1' }),
+        ]), conn);
+        expect(events).toEqual(['begin', 'editInDb', 'editInDb', 'editInDb', 'enqueue', 'commit', 'deliver']);
+    });
+
+    it('edycja roli samej umowy zmienia jeden wiersz', async () => {
+        await RolesController.updateRole(role({ name: 'Inna' }), ['name']);
+        expect(proto.editInDb).toHaveBeenCalledTimes(1);
+        expect(proto.editInDb).toHaveBeenCalledWith(expect.objectContaining({ id: 7, name: 'Inna' }), conn, true, ['name']);
+    });
+
+    it('zmiana grupy z Inzynier kolejkuje umowy sprzed i po zmianie', async () => {
+        const copies = [
+            old({ Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1', GroupName: 'Inżynier' }),
+            old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1', GroupName: 'Inżynier' }),
+        ];
+        proto.copiesOfRole.mockResolvedValue(copies);
+        proto.readScopes.mockResolvedValue(copies.map((c) => ({ ContractId: c.ContractId, ProjectOurId: c.ProjectOurId })));
+        await RolesController.updateRole(role({ _contract: undefined, _project: { ourId: 'PRJ.1' }, groupName: 'Pozostali' }), ['groupName']);
+        expect(proto.editInDb).toHaveBeenCalledTimes(2);
+        const queued = (enqueueFidmanPersonnelForRoles as any).mock.calls[0][0];
+        expect(queued).toEqual(expect.arrayContaining([
+            expect.objectContaining({ ContractId: 42 }), expect.objectContaining({ ContractId: 43 }),
+        ]));
+    });
+
+    it('przeniesienie projektu usuwa tylko kopie tej samej roli, inne role osoby zostaja', async () => {
+        const copies = [
+            old({ Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
+        ];
+        proto.copiesOfRole.mockResolvedValue(copies);
+        proto.projectContractIds.mockResolvedValue([99]);
+        proto.readScopes.mockResolvedValue([]);
+        const deleted: number[] = [];
+        proto.deleteFromDb.mockImplementation(async (item: any) => { deleted.push(item.id); });
+        await RolesController.updateRole(role({ _contract: undefined, _project: { ourId: 'PRJ.2' } }));
+        expect(deleted).toEqual([7, 8]);
+        expect(proto.addInDb).toHaveBeenCalledTimes(1);
+    });
+
+    it('zmiana osoby przenosi wszystkie kopie tej samej roli na nowa osobe', async () => {
+        const copies = [
+            old({ Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
+        ];
+        proto.copiesOfRole.mockResolvedValue(copies);
+        const persons: number[] = [];
+        proto.editInDb.mockImplementation(async (item: any) => { persons.push(item.personId); });
+        await RolesController.updateRole(role({ _contract: undefined, _project: { ourId: 'PRJ.1' }, personId: 6 }), ['personId']);
+        expect(persons).toEqual([6, 6]);
     });
 
     it('po błędzie kolejki zapis roli nie commitował i nie ma dostawy', async () => {
