@@ -33,6 +33,7 @@ describe('WNM-2 transakcje ról', () => {
             });
         }
         proto.rolesForMutation.mockResolvedValue([old()]);
+        proto.rolesForDeletion.mockResolvedValue([old()]);
         proto.projectContractIds.mockResolvedValue([42, 43]);
         proto.readScopes.mockResolvedValue([{ ContractId: 42, ProjectOurId: null }]);
         (enqueueFidmanPersonnelForRoles as any).mockImplementation(async (_scopes: any, connection: any) => {
@@ -153,9 +154,37 @@ describe('WNM-2 transakcje ról', () => {
 
     it.each(['updateRole', 'deleteRole'] as const)('%s roli projektu zbiorczego nie kolejkuje kopii', async (method) => {
         proto.rolesForMutation.mockResolvedValue([old({ ProjectOurId: 'ROZNE.1' })]);
+        proto.rolesForDeletion.mockResolvedValue([old({ ProjectOurId: 'ROZNE.1' })]);
         proto.readScopes.mockResolvedValue([{ ContractId: 42, ProjectOurId: 'ROZNE.1' }]);
         await RolesController[method](role({ _project: { ourId: 'ROZNE.1' } }));
         expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith([], conn);
+    });
+
+    it('usuniecie roli projektu kasuje wylacznie kopie wskazane przez repozytorium i kolejkuje wszystkie ich umowy', async () => {
+        const copies = [
+            old({ Id: 7, ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 8, ContractId: 43, ProjectOurId: 'PRJ.1' }),
+            old({ Id: 9, ContractId: null, ProjectOurId: 'PRJ.1' }),
+        ];
+        proto.rolesForDeletion.mockResolvedValue(copies);
+        const deleted: number[] = [];
+        proto.deleteFromDb.mockImplementation(async (item: any) => { deleted.push(item.id); events.push('deleteFromDb'); });
+        await RolesController.deleteRole(role({ _contract: undefined, _project: { ourId: 'PRJ.1' } }));
+        expect(proto.rolesForDeletion).toHaveBeenCalledWith(7, conn);
+        expect(proto.rolesForMutation).not.toHaveBeenCalled();
+        expect(deleted).toEqual([7, 8, 9]);
+        expect(enqueueFidmanPersonnelForRoles).toHaveBeenCalledWith([
+            expect.objectContaining({ ContractId: 42, ProjectOurId: 'PRJ.1' }),
+            expect.objectContaining({ ContractId: 43, ProjectOurId: 'PRJ.1' }),
+            expect.objectContaining({ ContractId: null, ProjectOurId: 'PRJ.1' }),
+        ], conn);
+        expect(events).toEqual(['begin', 'deleteFromDb', 'deleteFromDb', 'deleteFromDb', 'enqueue', 'commit', 'deliver']);
+    });
+
+    it('usuniecie roli samej umowy kasuje jeden wiersz', async () => {
+        await RolesController.deleteRole(role());
+        expect(proto.deleteFromDb).toHaveBeenCalledTimes(1);
+        expect(proto.deleteFromDb).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), conn, true);
     });
 
     it('po błędzie kolejki zapis roli nie commitował i nie ma dostawy', async () => {

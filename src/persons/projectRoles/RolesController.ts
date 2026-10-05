@@ -124,7 +124,8 @@ export default class RolesController extends BaseController<
         const item = this.createProperRole(roleData);
         const instance = this.getInstance();
         const outboxIds = await ToolsDb.transaction<number[]>(async (conn) => {
-            const rows = await instance.repository.rolesForMutation(item.id, conn);
+            // Tylko kopie tej samej roli osoby w projekcie; inne role osoby zostają.
+            const rows = await instance.repository.rolesForDeletion(item.id, conn);
             for (const row of rows) {
                 await instance.repository.deleteFromDb(new ContractRole({ ...item, id: row.Id }), conn, true);
             }

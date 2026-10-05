@@ -56,6 +56,32 @@ export default class RoleRepository extends BaseRepository<ContractRole> {
         return copies as any[];
     }
 
+    /**
+     * Wiersze do usuniecia razem z podanym: kopie tej samej roli osoby w projekcie, czyli wiersze
+     * o tym samym projekcie, osobie, nazwie, opisie i grupie (addNewRole kopiuje te pola bez zmian,
+     * roznia sie tylko ContractId i Id; starsza rola samego projektu ma ContractId NULL).
+     * Inna rola tej samej osoby w projekcie zostaje. Rola samej umowy (bez projektu) to zawsze
+     * pojedynczy wiersz. Porownanie scisle w kodzie, bo kolacja bazy ignoruje wielkosc liter
+     * i koncowe spacje.
+     */
+    async rolesForDeletion(id: number, conn: mysql.PoolConnection): Promise<any[]> {
+        const columns = 'Id, ContractId, ProjectOurId, PersonId, Name, Description, GroupName';
+        const [rows] = await conn.query(`SELECT ${columns} FROM Roles WHERE Id = ? FOR UPDATE`, [id]);
+        const old = (rows as any[])[0];
+        if (!old) throw new Error('Nie znaleziono roli do usuniecia');
+        if (!old.ProjectOurId) return [old];
+        const [sameProjectPerson] = await conn.query(
+            `SELECT ${columns} FROM Roles WHERE ProjectOurId = ? AND PersonId = ? FOR UPDATE`,
+            [old.ProjectOurId, old.PersonId]
+        );
+        return (sameProjectPerson as any[]).filter((row) =>
+            row.Id === old.Id ||
+            (row.Name === old.Name &&
+                (row.Description ?? '') === (old.Description ?? '') &&
+                row.GroupName === old.GroupName)
+        );
+    }
+
     async readScopes(ids: number[], conn: mysql.PoolConnection): Promise<any[]> {
         if (!ids.length) return [];
         const [rows] = await conn.query('SELECT ContractId, ProjectOurId FROM Roles WHERE Id IN (?)', [ids]);
