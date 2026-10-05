@@ -244,3 +244,82 @@ describe('ContractsController.edit() — WYK-1: znacznik „Objęta synchronizac
         expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();
     });
 });
+
+/**
+ * Właściciel 2026-10-05 (uchyla Q-WYK-1 dla NOWYCH umów): żądanie założenia umowy, które o znaczniku
+ * milczy, zakłada umowę objętego typu jako włączoną; poza allowlistą typów znacznik zawsze 0.
+ * Bramka i podział na typy są PRAWDZIWE. Red-without-fix: bez bloku w add() pierwszy test
+ * nie widzi wpisu w kolejce, a czwarty zapisuje 1 dla typu spoza allowlisty.
+ */
+describe('ContractsController.add() — nowa umowa objętego typu domyślnie objęta synchronizacją', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        const real = jest.requireActual('../fidmanSync/FidmanSync') as typeof FidmanSync;
+        (FidmanSync.isFidmanSyncEligible as any).mockImplementation(real.isFidmanSyncEligible);
+        (FidmanSync.isFidmanContractType as any).mockImplementation(real.isFidmanContractType);
+        (ToolsDb.getQueryCallbackAsync as any).mockResolvedValue([]);
+        (ToolsDb.transaction as jest.Mock).mockImplementation(async (cb: any) =>
+            cb({ beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn() })
+        );
+        (ToolsDb.addInDb as any).mockImplementation(async (_t: any, d: any) => {
+            d.id = 123;
+            return d;
+        });
+        (Tools.cloneOfObject as any).mockImplementation((o: any) => JSON.parse(JSON.stringify(o)));
+        (CurrentSprintValidator.checkColumns as any).mockResolvedValue(undefined);
+        (TaskStore.update as any).mockReturnValue(undefined);
+        (FidmanSync.enqueueFidmanContractPush as any).mockResolvedValue(555);
+        (FidmanSync.tryDeliverAfterCommit as any).mockResolvedValue(undefined);
+    });
+
+    const makeNew = (typeId: number, fidmanSyncEnabled?: boolean): any => ({
+        alias: 'FID-NEW',
+        typeId,
+        _type: { id: typeId, name: 'IK', isOur: true },
+        number: '002',
+        name: 'Nowa umowa',
+        startDate: '2026-10-05',
+        endDate: '2027-10-05',
+        status: 'W trakcie',
+        _project: { id: 1, ourId: 'PRJ-001', gdFolderId: 'gd-1' },
+        projectOurId: 'PRJ-001',
+        gdFolderId: 'FOLDER_ABC',
+        _employers: [{ id: 7, name: 'PWiK', taxNumber: '7471917575' }],
+        _contractors: [],
+        _engineers: [],
+        _contractRangesPerContract: [],
+        id: undefined,
+        isUniquePerProject: jest.fn(() => Promise.resolve(false)),
+        ...(fidmanSyncEnabled === undefined ? {} : { fidmanSyncEnabled }),
+    });
+
+    const add = async (c: any) => {
+        const ContractsController = (await import('../ContractsController')).default;
+        await ContractsController.add(c);
+        return c;
+    };
+
+    it('żądanie milczy, typ z allowlisty → znacznik włączony i wpis w kolejce', async () => {
+        const c = await add(makeNew(3));
+        expect(c.fidmanSyncEnabled).toBe(true);
+        expect(FidmanSync.enqueueFidmanContractPush).toHaveBeenCalledTimes(1);
+    });
+
+    it('jawne false wygrywa z domyślnym → brak wpisu w kolejce', async () => {
+        const c = await add(makeNew(4, false));
+        expect(c.fidmanSyncEnabled).toBe(false);
+        expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();
+    });
+
+    it('typ spoza allowlisty, żądanie milczy → znacznik 0, brak wpisu', async () => {
+        const c = await add(makeNew(5));
+        expect(c.fidmanSyncEnabled).toBe(false);
+        expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();
+    });
+
+    it('typ spoza allowlisty z jawnym true (formularz allowlisty nie zna) → znacznik 0', async () => {
+        const c = await add(makeNew(5, true));
+        expect(c.fidmanSyncEnabled).toBe(false);
+        expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();
+    });
+});

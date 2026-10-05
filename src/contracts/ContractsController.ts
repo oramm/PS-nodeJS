@@ -41,6 +41,7 @@ import {
 } from './aqmSync/AqmSync';
 import {
     enqueueFidmanContractPush,
+    isFidmanContractType,
     isFidmanSyncEligible,
     readContractFidmanSyncEnabled,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
@@ -222,6 +223,15 @@ export default class ContractsController extends BaseController<
             }
 
             // Operacje bazodanowe - TRANSAKCJA
+            // Właściciel 2026-10-05 (uchyla Q-WYK-1 dla NOWYCH umów): żądanie, które o znaczniku
+            // milczy, zakłada umowę objętego typu jako włączoną — każda droga zakładania, nie tylko
+            // formularz. Jawne `false` wygrywa. Edycja tej reguły nie ma i mieć nie może: włączyłaby
+            // z powrotem wydmuszki wykluczone w sierpniu (WYK-3). Poza allowlistą typów zawsze 0
+            // (formularz allowlisty nie zna i przysyła true), żeby jej rozszerzenie nie wciągnęło
+            // po cichu umów innych typów.
+            contract.fidmanSyncEnabled =
+                isFidmanContractType(contract.typeId) &&
+                contract.fidmanSyncEnabled !== false;
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             let aqmOutboxId: number | undefined;
             let fidmanOutboxId: number | undefined;
@@ -248,8 +258,7 @@ export default class ContractsController extends BaseController<
 
                 // 5. SYNC-P1 + WYK-1: wpis outbox w TEJ SAMEJ transakcji (L8), ale
                 // tylko gdy umowa ma JEDNOCZEŚNIE typ z allowlisty i włączony znacznik
-                // „Objęta synchronizacją". Nowa umowa rodzi się wykluczona, więc bez
-                // jawnego włączenia nie wychodzi tu nic — to jest cała zmiana WYK-1.
+                // „Objęta synchronizacją". Znacznik nowej umowy ustala blok przed transakcją.
                 if (isFidmanSyncEligible(contract)) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
