@@ -1,26 +1,62 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.14.13. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.14.14. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
-set "SB_INSTALATOR_WERSJA=0.14.13"
+set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
+set "SB_INSTALATOR_WERSJA=0.14.14"
 set "PSModulePath="
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$f=$env:SB_INSTALATOR;$d=$env:SB_INSTALATOR_DIR;$null=New-Item -ItemType Directory -Force -Path $d;$b=[IO.File]::ReadAllBytes($f);$t=[Text.Encoding]::ASCII.GetString($b);$o=$t.IndexOf(':SB-LADUNEK'+[char]13);if($o -lt 0){throw 'brak ladunku w pliku'};$o+=13;$r=[regex]'\G#SB-PLIK ([\w.-]+) (\d+)\r\n';$m=$r.Match($t,$o);$ile=0;while($m.Success){$n=[int]$m.Groups[2].Value;$s=[IO.File]::Create((Join-Path $d $m.Groups[1].Value));$s.Write($b,$m.Index+$m.Length,$n);$s.Close();$ile++;$o=$m.Index+$m.Length+$n+2;$m=$r.Match($t,$o)};if($ile -ne 2){throw ('ladunek niepelny: '+$ile+' plikow')}"
+set "SB_TU=%~dp0"
+set "SB_Z_ZIPA="
+if defined TEMP call :czy_temp "%TEMP%"
+if defined LOCALAPPDATA call :czy_temp "%LOCALAPPDATA%\Temp"
+if defined SB_Z_ZIPA goto :zip
+if exist "%SB_INSTALATOR_KONIEC%" del /f /q "%SB_INSTALATOR_KONIEC%"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$f=$env:SB_INSTALATOR;$d=$env:SB_INSTALATOR_DIR;$null=New-Item -ItemType Directory -Force -Path $d;$b=[IO.File]::ReadAllBytes($f);$t=[Text.Encoding]::ASCII.GetString($b);$o=$t.IndexOf(':SB-LADUNEK'+[char]13);if($o -lt 0){throw 'brak ladunku w pliku'};$o+=13;$r=[regex]'\G#SB-PLIK ([\w.-]+) (\d+)\r\n';$m=$r.Match($t,$o);$ile=0;while($m.Success){$n=[int]$m.Groups[2].Value;$s=[IO.File]::Create((Join-Path $d $m.Groups[1].Value));$s.Write($b,$m.Index+$m.Length,$n);$s.Close();$ile++;$o=$m.Index+$m.Length+$n+2;$m=$r.Match($t,$o)};if($ile -ne 3){throw ('ladunek niepelny: '+$ile+' plikow')}"
 if errorlevel 1 goto :blad
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%SB_INSTALATOR_DIR%\bootstrap.ps1" %*
 set "KOD=%ERRORLEVEL%"
 echo(
+if exist "%SB_INSTALATOR_KONIEC%" goto :koniec
+echo PRZEBIEG SIE URWAL (kod wyjscia %KOD%) - instalator nie doszedl do podsumowania.
+echo Najczestsza przyczyna: antywirus (np. Avast) zabral plik instalatora do Kwarantanny w trakcie pracy.
+echo  1. Otworz antywirusa i sprawdz Kwarantanne - jesli jest tam bootstrap.ps1 albo ENVI-SB-instalator.cmd, to wlasnie to.
+echo  2. Wyslij wlascicielowi plik %SB_INSTALATOR_DIR%\bootstrap.log
+echo Zapis przebiegu: %SB_INSTALATOR_DIR%\bootstrap.log
+pause
+if "%KOD%"=="0" set "KOD=1"
+exit /b %KOD%
+:koniec
 echo Zapis przebiegu: %SB_INSTALATOR_DIR%\bootstrap.log
 pause
 exit /b %KOD%
+:czy_temp
+set "SB_T=%~1\"
+call set "SB_R=%%SB_TU:%SB_T%=%%"
+if /i not "%SB_R%"=="%SB_TU%" set "SB_Z_ZIPA=1"
+exit /b 0
+:zip
+echo(
+echo Ten plik uruchomiono z wnetrza archiwum ZIP. Windows trzyma go wtedy w folderze tymczasowym:
+echo   %SB_TU%
+echo a antywirus zabiera pliki z tego miejsca, wiec instalacja by sie nie udala.
+echo  1. Zamknij to okno.
+echo  2. W folderze Pobrane kliknij prawym przyciskiem myszy plik ENVI-SB-instalator.zip i wybierz Wyodrebnij wszystkie.
+echo  3. W wypakowanym folderze kliknij dwukrotnie ENVI-SB-instalator.cmd.
+pause
+exit /b 2
 :blad
 echo(
-echo Nie udalo sie wypakowac instalatora. Pobierz plik jeszcze raz.
+echo Nie udalo sie wypakowac instalatora do %SB_INSTALATOR_DIR% - zapis pliku zostal zablokowany.
+echo Najczestsza przyczyna: antywirus (np. Avast) zabral wczesniej plik do Kwarantanny i do restartu blokuje to miejsce (komunikat: Odmowa dostepu).
+echo  1. Uruchom komputer ponownie.
+echo  2. Pobierz instalator jeszcze raz ze strony SB w PS, wypakuj ZIP (Wyodrebnij wszystkie) i uruchom ENVI-SB-instalator.cmd z wypakowanego folderu.
+echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascicielowi zrzut tego okna.
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 115253
+#SB-PLIK bootstrap.ps1 138942
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -111,7 +147,7 @@ $SkillDriveRoot = "G:\Dyski wsp$([char]0x00F3)$([char]0x0142)dzielone\SB.ENVI\.s
 # zmienna istnieje tylko po to, zeby dalo sie go przypiac w bootstrap.config.ps1.
 $CoreDriveRoot  = $null
 $LogFile        = "$VaultPath\.envi\pull.log"             # append-only auto-pull log (N3), distinct from the installer's own log below
-$PullLauncher   = "$env:USERPROFILE\.envi\kanon-pull.ps1"  # N3 auto-pull launcher (stable, space-free per-user path; NOT inside the clone)
+$PullLauncher   = "$env:USERPROFILE\.envi\kanon-pull.ps1"  # N3 auto-pull launcher (stable per-user path - may contain a space, see Register-ZadanieCogodzinne; NOT inside the clone)
 $override = Join-Path $PSScriptRoot 'bootstrap.config.ps1'
 if (Test-Path $override) { . $override }
 
@@ -185,6 +221,16 @@ function Find-SkillDriveRoot {
   return $null
 }
 
+function Find-SkillDriveRootNajpierwZnana {
+  # R2 (poz. 13, Agnieszka 07.10 "enter nic nie robi"): po zalogowaniu Dysku petla wolala od razu
+  # Find-SkillDriveRoot - rekurencja po calym G: z dyskami wspoldzielonymi, na dysku w chmurze
+  # minuty ciszy. Skonfigurowana sciezka to jeden Test-Path, wiec idzie pierwsza (TEST 30).
+  param([string]$Znana)
+  if ($Znana -and (Test-Path -LiteralPath $Znana)) { return $Znana }
+  Log "[N1] Szukam folderu skilli na Dysku Google - to moze potrwac kilka minut, nie zamykaj tego okna."
+  return Find-SkillDriveRoot
+}
+
 function Start-GoogleDriveApp {
   # ponytail: launch.bat, not the exe. Verified on a live install: GoogleDriveFS.exe sits in a
   # VERSIONED subfolder ("...\Drive File Stream\128.0.0.0\GoogleDriveFS.exe") that changes on
@@ -210,10 +256,10 @@ function Resolve-SkillDriveRoot {
     return
   }
   Log "[N1] Nie widac skonfigurowanej sciezki '$script:SkillDriveRoot' - szukam Dysku Google."
-  $script:znalezionyDysk = Find-SkillDriveRoot
+  $script:znalezionyDysk = Find-SkillDriveRootNajpierwZnana -Znana $script:SkillDriveRoot
   if (-not $script:znalezionyDysk) {
     $sprawdz = {
-      $f = Find-SkillDriveRoot
+      $f = Find-SkillDriveRootNajpierwZnana -Znana $script:SkillDriveRoot
       if ($f) { $script:znalezionyDysk = $f; $null }
       else { Get-PoradaDysk (Test-GoogleDriveInstalled) (Test-DriveMounted) }
     }
@@ -235,6 +281,39 @@ function Resolve-SkillDriveRoot {
   }
 }
 
+function Get-OstrzezenieWersji {
+  # R2 (poz. 7, Agnieszka 02.10 uruchomila stary 0.14.12 z Pobranych). Porownanie liczbowe
+  # ([version]), nie tekstowe - tekstowo "0.14.9" wychodzi nowsze niz "0.14.13" (TEST 29).
+  # Numer nieczytelny po ktorejkolwiek stronie (np. budowa testowa "0.0.0-test") = brak ostrzezenia.
+  param([string]$Biezaca, [string]$NaDysku, [string]$StronaSb)
+  $b = $null; $d = $null
+  if (-not [version]::TryParse("$Biezaca", [ref]$b) -or -not [version]::TryParse("$NaDysku", [ref]$d)) { return $null }
+  if ($b -ge $d) { return $null }
+  return "UWAGA: uruchamiasz stary instalator (wersja $Biezaca), a aktualna wersja to $NaDysku. Pobierz nowy ze strony SB w PS ($StronaSb), wypakuj go i uruchom; stary plik z folderu Pobrane usun. Ta instalacja idzie dalej."
+}
+
+function Test-WersjaInstalatora {
+  # non-mutating: sam odczyt, bezpieczne pod -WhatIf. Numer aktualnego wydania czytamy z manifestu
+  # rdzenia na dysku SB.ENVI (.rdzen\rdzen-manifest.json): wydanie sklada instalator i paczke rdzenia
+  # z TYM SAMYM numerem (release/build-core-package.ps1), a z tego dysku instalator i tak bierze
+  # skille i rdzen. Kopia .cmd lezy na innym dysku (ENVI-MG), ktorego pracownik nie musi widziec.
+  if (-not $env:SB_INSTALATOR_WERSJA) { return }
+  $coreRoot = $script:CoreDriveRoot
+  if (-not $coreRoot) {
+    if (-not $script:SkillDriveRoot -or -not (Test-Path -LiteralPath $script:SkillDriveRoot)) { return }
+    $coreRoot = Join-Path (Split-Path $script:SkillDriveRoot -Parent) '.rdzen'
+  }
+  $mf = Get-RdzenManifest -CoreRoot $coreRoot
+  if (-not $mf) { return }
+  $ostrzezenie = Get-OstrzezenieWersji -Biezaca $env:SB_INSTALATOR_WERSJA -NaDysku ([string]$mf.wersja) -StronaSb ($PsUrl.TrimEnd('/') + '/#/sbInstaller')
+  if ($ostrzezenie) {
+    Log "[N1] $ostrzezenie"
+    $script:InstalatorStary = $ostrzezenie
+  } else {
+    Log "[N1] wersja instalatora $env:SB_INSTALATOR_WERSJA - najnowsze wydanie na Dysku: $($mf.wersja)"
+  }
+}
+
 function Invoke-StepN1 {
   Log "[N1] prerequisites check starting"
   if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -252,6 +331,8 @@ function Invoke-StepN1 {
     $action = 'winget install --id {0} --exact --silent --accept-package-agreements --accept-source-agreements' -f $tool.Id
     if ($PSCmdlet.ShouldProcess($target, $action)) {
       Log "[N1] installing $target ..."
+      # R2 (poz. 11): okna zgody nie da sie sfotografowac (Windows je zaciemnia), wiec mowimy z gory.
+      Log "[N1]   Windows moze teraz zapytac 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - to instalacja $($tool.Name), kliknij Tak."
       winget install --id $tool.Id --exact --silent --accept-package-agreements --accept-source-agreements
       if ($LASTEXITCODE -ne 0) {
         Log "[N1] WARNING: winget install for $target exited $LASTEXITCODE - check manually"
@@ -269,13 +350,13 @@ function Invoke-StepN1 {
   # dla wszystkich (C:\Windows), w zaleznosci od maszyny - zmierzone przy pisaniu tego
   # checkpointu, nie zalozone. Serwer poczty (mcp\kylos-email\start.ps1) i krok P6 szukaja
   # tych samych dwoch miejsc.
-  $pyLauncher = $null
+  $script:PyLauncher = $null
   foreach ($kandydatPy in @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Launcher\py.exe'), (Join-Path $env:WINDIR 'py.exe'))) {
-    if (Test-Path -LiteralPath $kandydatPy) { $pyLauncher = $kandydatPy; break }
+    if (Test-Path -LiteralPath $kandydatPy) { $script:PyLauncher = $kandydatPy; break }
   }
-  if ($pyLauncher) {
-    Log "[N1] Python: launcher znaleziony ($pyLauncher)"
-    foreach ($linia in @(& $pyLauncher '-0p' 2>&1)) { Log "[N1]   py -0p: $linia" }
+  if ($script:PyLauncher) {
+    Log "[N1] Python: launcher znaleziony ($script:PyLauncher)"
+    foreach ($linia in @(& $script:PyLauncher '-0p' 2>&1)) { Log "[N1]   py -0p: $linia" }
   } else {
     # Brak Pythona po probie NIE jest bledem instalacji (decyzja planu poczty M4) - krok
     # P6 (serwer poczty) sam pomija rejestracje i mowi to samo w swoim logu.
@@ -285,6 +366,7 @@ function Invoke-StepN1 {
   # Google Drive: winget installs the client, but signing in to the account that owns the
   # skills folder is a manual step (N6 onboarding). Detect reachability only; never hard-fail.
   Resolve-SkillDriveRoot
+  Test-WersjaInstalatora
   Log "[N1] prerequisites step done"
 }
 
@@ -366,7 +448,8 @@ function Get-PoradaDysk {
     $lines = @(
       "Dysk Google: aplikacja Dysk Google nie jest zainstalowana na tym komputerze."
       "  Pobierz ja i zainstaluj: https://www.google.com/drive/download/"
-      "  Potem zaloguj sie kontem, ktorym logujesz sie do PS, i wroc do tego okna."
+      "  Przy instalacji Windows zapyta 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - kliknij Tak."
+      "  Potem zaloguj sie kontem, ktorym logujesz sie do PS, i wroc do tego okna. Ekran Google o 'Google Play' to zwykle ostrzezenie - kliknij 'Zaloguj sie'."
     )
   } elseif (-not $DyskPodlaczony) {
     $kind = 'dysk-niezalogowany'
@@ -374,6 +457,7 @@ function Get-PoradaDysk {
       "Dysk Google: aplikacja nie jest jeszcze zalogowana (albo dysk sie nie podlaczyl)."
       "  1. W oknie Dysku Google zaloguj sie kontem, ktorym logujesz sie do PS (tym samym, co na GitHubie)."
       "  2. Poczekaj, az w Eksploratorze pojawi sie nowy dysk (zwykle G:)."
+      "  Google moze pokazac ekran 'Upewnij sie, ze ta aplikacja zostala pobrana z Google Play' - to zwykle ostrzezenie przy logowaniu, kliknij 'Zaloguj sie'."
     )
   } else {
     $kind = 'dysk-bez-sb'
@@ -397,11 +481,45 @@ function Get-GhLoginArgs {
 function Get-GhLoginIntro {
   param([bool]$Schowek)
   "GitHub: logowanie. Za chwile gh otworzy strone logowania w przegladarce."
+  # R2 (poz. 14, 15, 17): kod wygasa po 15 minutach, schowek gubi go po zrzucie ekranu, a konto
+  # zalozone przez Google potwierdza dostep kodem z maila - wszystko to zatrzymalo Agnieszke 07.10.
+  "  Kod jest wazny 15 minut - przejdz ponizsze kroki od razu, bez przerwy."
   "  1. W tym oknie nacisnij Enter - gh pokaze kod jednorazowy i otworzy przegladarke."
-  if ($Schowek) { "     Kod zostal skopiowany do schowka - wklej go na stronie GitHuba (Ctrl+V)." }
+  if ($Schowek) {
+    "     Kod zostal skopiowany do schowka - wklej go na stronie GitHuba (Ctrl+V)."
+    "     Jesli schowek go zgubil (np. po zrobieniu zrzutu ekranu), przepisz kod z tego okna - gh wypisuje go ponizej."
+  }
   else { "     Przepisz kod ze strony ponizej na strone GitHuba." }
   "  2. Na stronie logowania wybierz 'Continue with Google' i zaloguj sie tym samym kontem Google, ktorym logujesz sie do PS. Nie potrzebujesz osobnego hasla do GitHuba; jesli nie masz jeszcze konta GitHub, ta opcja je zalozy - GitHub zapyta tylko o nazwe uzytkownika."
+  "     GitHub moze poprosic o potwierdzenie mailem ('Confirm access' / 'Verify via email'): otworz poczte, przepisz kod z maila od GitHuba na te strone i idz dalej."
   "  3. Kliknij 'Authorize' i wroc do tego okna."
+}
+
+function Invoke-GhLogowanie {
+  # R2/D6 (poz. 15, Agnieszka 07.10 13:37: expired_token, "logowanie sie nie udalo (kod 1)", a potem
+  # N2b/N3 jak gdyby nigdy nic). Porazka = pytanie o ponowienie, nie ciche przejscie dalej.
+  # Kontrakt -Zaloguj: uruchamia logowanie i zostawia kod wyjscia w $LASTEXITCODE. Wynik idzie do
+  # $script:GhZalogowany, NIE na wyjscie funkcji: przechwycenie wyjscia (if (Invoke-...)) zabraloby
+  # gh konsole, a gh auth login pyta tylko w konsoli. Do 0.14.13 gh szlo wprost do konsoli i to
+  # dzialalo u ludzi - zostawiamy ten uklad (wariant z przechwyceniem nie mierzony).
+  # Sprawdzian: TEST 31 (atrapy zamiast gh i Read-Host).
+  param(
+    [Parameter(Mandatory)][scriptblock]$Zaloguj,
+    [scriptblock]$Czytaj = { param($pytanie) try { Read-Host $pytanie } catch { 'N' } },
+    [int]$Max = 3
+  )
+  $script:GhZalogowany = $false
+  for ($i = 1; $i -le $Max; $i++) {
+    $global:LASTEXITCODE = 0
+    & $Zaloguj
+    $kod = $LASTEXITCODE
+    if ($kod -eq 0) { $script:GhZalogowany = $true; return }
+    Log "GitHub: logowanie sie nie udalo (kod $kod). Najczestsza przyczyna: kod wygasl - jest wazny 15 minut."
+    if ($i -ge $Max) { break }
+    $odpowiedz = & $Czytaj "Sprobowac jeszcze raz z nowym kodem? Enter = tak, N + Enter = pomin logowanie. Proba $i z $Max"
+    if ("$odpowiedz".Trim() -match '^[nN]') { break }
+  }
+  Log "GitHub: logowanie pominiete - wiedza firmowa (kanon) nie zostanie pobrana w tym przebiegu. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy bedziesz miec 15 minut na logowanie."
 }
 
 function Invoke-PetlaNaprawy {
@@ -611,6 +729,52 @@ function Resolve-InstallRole {
   return [pscustomobject]@{ Role = 'consumer'; Reason = 'brak potwierdzonego prawa zapisu do obszaru projektowego (repo niedostepne, gh niedostepny albo offline)' }
 }
 
+function Move-FolderBezGit {
+  # R1/D4 (proba u Agnieszki 2026-10-07): folder kanonu zostal po przerwanym przebiegu bez .git,
+  # a git nie klonuje do niepustego katalogu (kod 128). Przenosimy go pod nowa nazwe - NIGDY
+  # nie kasujemy (moga tam lezec notatki czlowieka). Zwraca $true, gdy sciezka jest wolna.
+  param([string]$Sciezka)
+  $cel = '{0}-stary-{1}' -f $Sciezka.TrimEnd('\'), (Get-Date -Format 'yyyy-MM-dd-HHmm')
+  if (Test-Path -LiteralPath $cel) {
+    Log "[N2] folder '$Sciezka' nie ma klonu (.git), a miejsce '$cel' jest zajete - nic nie przenosze; uruchom ENVI-SB-instalator.cmd jeszcze raz za minute."
+    return $false
+  }
+  try {
+    Move-Item -LiteralPath $Sciezka -Destination $cel -ErrorAction Stop
+  } catch {
+    Log "[N2] folder '$Sciezka' nie ma klonu (.git) i nie dal sie przeniesc ($($_.Exception.Message)). Zamknij Obsidiana i okna Eksploratora w tym folderze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+    return $false
+  }
+  Log "[N2] folder '$Sciezka' nie mial klonu (.git) - przeniesiony na '$cel' (nic nie skasowane), klonuje od nowa"
+  return $true
+}
+
+function Invoke-KlonKanonu {
+  # Klon kanonu do $VaultPath; folder bez .git najpierw przenosi (Move-FolderBezGit). Pusty
+  # katalog zostaje - git klonuje do pustego bez bledu. Zwraca $true tylko przy udanym klonie.
+  $target = $VaultPath
+  $action = "git clone --config core.longpaths=true $RepoUrl $VaultPath"
+  if (-not $PSCmdlet.ShouldProcess($target, $action)) { return $false }
+  if ((Test-Path -LiteralPath $VaultPath) -and @(Get-ChildItem -LiteralPath $VaultPath -Force -ErrorAction SilentlyContinue).Count -gt 0) {
+    if (-not (Move-FolderBezGit -Sciezka $VaultPath)) { return $false }
+  }
+  Log "[N2] no clone at $VaultPath - git clone $RepoUrl"
+  # --config (not -c): it is written into the NEW repo's config before checkout, so it
+  # covers both the initial checkout AND every later git call in that clone. Measured
+  # 2026-08-08 on a 131-char destination path: without it `git clone` dies with
+  # "cannot create directory ... Filename too long" (exit 128) and leaves a half-checked-out
+  # tree; with it the clone completes and `git status` reports zero long-path warnings.
+  # Not hypothetical - the owner's own repo-B tree already loses 7 directories this way.
+  # The default $VaultPath is short enough today, so this is insurance against a long
+  # Windows username or a redirected profile, not a fix for a live failure.
+  git clone --config core.longpaths=true $RepoUrl $VaultPath
+  if ($LASTEXITCODE -ne 0) {
+    Log "[N2] Nie udalo sie pobrac kanonu (kod $LASTEXITCODE). Szczegoly w pliku $InstallLogFile - uruchom ENVI-SB-instalator.cmd jeszcze raz po sprawdzeniu dostepu."
+    return $false
+  }
+  return $true
+}
+
 function Invoke-StepN2 {
   Log "[N2] auth+clone step starting"
 
@@ -621,12 +785,11 @@ function Invoke-StepN2 {
     $czySchowek = Test-GhClipboardSupport
     $action = 'gh ' + ((Get-GhLoginArgs $czySchowek) -join ' ') + '; gh auth setup-git'
     if ($PSCmdlet.ShouldProcess($target, $action)) {
-      foreach ($linia in @(Get-GhLoginIntro $czySchowek)) { Log $linia }
-      & gh @(Get-GhLoginArgs $czySchowek)
-      if ($LASTEXITCODE -ne 0) {
-        Log "GitHub: logowanie sie nie udalo (kod $LASTEXITCODE). Uruchom ENVI-SB-instalator.cmd jeszcze raz."
-        return
+      Invoke-GhLogowanie -Zaloguj {
+        foreach ($linia in @(Get-GhLoginIntro $czySchowek)) { Log $linia }
+        & gh @(Get-GhLoginArgs $czySchowek)
       }
+      if (-not $script:GhZalogowany) { return }
       gh auth setup-git
       Log "[N2] gh auth login done, git credential helper configured"
     }
@@ -666,24 +829,8 @@ function Invoke-StepN2 {
       }
     }
   } else {
-    $target = $VaultPath
-    $action = "git clone --config core.longpaths=true $RepoUrl $VaultPath"
-    if ($PSCmdlet.ShouldProcess($target, $action)) {
-      Log "[N2] no clone at $VaultPath - git clone $RepoUrl"
-      # --config (not -c): it is written into the NEW repo's config before checkout, so it
-      # covers both the initial checkout AND every later git call in that clone. Measured
-      # 2026-08-08 on a 131-char destination path: without it `git clone` dies with
-      # "cannot create directory ... Filename too long" (exit 128) and leaves a half-checked-out
-      # tree; with it the clone completes and `git status` reports zero long-path warnings.
-      # Not hypothetical - the owner's own repo-B tree already loses 7 directories this way.
-      # The default $VaultPath is short enough today, so this is insurance against a long
-      # Windows username or a redirected profile, not a fix for a live failure.
-      git clone --config core.longpaths=true $RepoUrl $VaultPath
-      if ($LASTEXITCODE -ne 0) {
-        Log "[N2] Nie udalo sie pobrac kanonu (kod $LASTEXITCODE). Szczegoly w pliku $InstallLogFile - uruchom ENVI-SB-instalator.cmd jeszcze raz po sprawdzeniu dostepu."
-        return
-      }
-    }
+    # -WhatIf: Invoke-KlonKanonu tylko opisuje klon i zwraca $false - przebieg na sucho idzie dalej.
+    if (-not (Invoke-KlonKanonu) -and -not $WhatIfPreference) { return }
   }
 
   if (Test-Path -LiteralPath $gitDir) {
@@ -812,6 +959,34 @@ function Set-ZadanieChodziNaBaterii {
   }
 }
 
+function Get-ZapowiedzAntywirusa {
+  # R2 (poz. 16, Agnieszka 07.10): RAV Endpoint Protection zatrzymal schtasks.exe /create oknem
+  # "Wykryto podejrzany proces" (Zablokuj / Wznow). Spotkane dotad: Avast (kwarantanna plikow),
+  # RAV Endpoint Protection (zakladanie zadania).
+  param([string]$Krok)
+  return "[$Krok]   Antywirus moze teraz pokazac okno w rodzaju 'Wykryto podejrzany proces' przy schtasks.exe - to ten instalator zaklada zadanie w harmonogramie Windows. Wybierz 'Wznow' albo 'Zezwol'."
+}
+
+function Register-ZadanieCogodzinne {
+  # R1/D3 (proba u Agnieszki Brodziak 2026-10-07): przy spacji w profilu ("C:\Users\Agnieszka
+  # Brodziak") schtasks odrzucal /tr - "Invalid argument/option - 'Brodziak\.envi\kanon-pull.ps1'".
+  # PowerShell 5.1 obejmuje argument ze spacja cudzyslowem, ale cudzyslowow W SRODKU nie
+  # zabezpiecza, wiec schtasks widzial koniec /tr przed sciezka. schtasks wymaga \" wewnatrz /tr.
+  # Wiersz polecen skladamy tu sami (Process, nie `& schtasks`), zeby wynik nie zalezal od tego,
+  # jak dana wersja PowerShella przekazuje argumenty (7.3+ robi to inaczej niz 5.1).
+  # Sprawdzian: TEST 22 (prawdziwe zadanie przy sciezce ze spacja).
+  param([string]$Nazwa, [string]$Polecenie, [int]$CoGodzin)
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = Join-Path ([Environment]::SystemDirectory) 'schtasks.exe'
+  $psi.Arguments = '/create /tn "{0}" /tr "{1}" /sc HOURLY /mo {2} /f' -f $Nazwa, $Polecenie.Replace('"', '\"'), $CoGodzin
+  $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $wy = $p.StandardOutput.ReadToEnd() + $p.StandardError.ReadToEnd()
+  $p.WaitForExit()
+  return [pscustomobject]@{ Kod = $p.ExitCode; Wyjscie = $wy.Trim() }
+}
+
 function Write-N3PullLauncher {
   # ponytail: point schtasks /tr and the Startup shortcut at a one-line -File launcher rather
   # than an inline -Command. The old inline `-Command "New-Item -ItemType Directory ..."`
@@ -820,8 +995,8 @@ function Write-N3PullLauncher {
   # -2147467259. With -File the only quoted token is a single file path, which round-trips
   # cleanly (verified under PS 5.1). The .envi mkdir moved INTO the launcher and guarded on
   # the clone existing, so a pre-clone run never pre-creates $VaultPath and blocks N2's clone.
-  # Ceiling: a space in the Windows username would break the unquoted 5.1 path form; .envi
-  # lives under $env:USERPROFILE, which is space-free for essentially every real account.
+  # A space in the Windows username DOES happen (Agnieszka Brodziak, 2026-10-07) - the inner
+  # quotes of /tr are escaped in Register-ZadanieCogodzinne.
   param([string]$Path)
   $body = @(
     # B3: jedna linia, ktora zdejmuje cala klase awarii "zadanie w tle wisi w nieskonczonosc":
@@ -858,9 +1033,10 @@ function Invoke-StepN3 {
   $action = "schtasks /create /tn $TaskName /tr <hidden -File pull launcher> /sc HOURLY /mo $PullEveryHours /f"
   if ($PSCmdlet.ShouldProcess($TaskName, $action)) {
     Log "[N3] registering periodic task '$TaskName' (every ${PullEveryHours}h, hidden, user context, no stored password)"
-    schtasks /create /tn $TaskName /tr $trCmd /sc HOURLY /mo $PullEveryHours /f | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Log "[N3] ERROR: schtasks /create for '$TaskName' failed (exit $LASTEXITCODE)"
+    Log (Get-ZapowiedzAntywirusa -Krok 'N3')
+    $zad = Register-ZadanieCogodzinne -Nazwa $TaskName -Polecenie $trCmd -CoGodzin $PullEveryHours
+    if ($zad.Kod -ne 0) {
+      Log "[N3] ERROR: schtasks /create for '$TaskName' failed (exit $($zad.Kod)): $($zad.Wyjscie)"
     } else {
       Log "[N3] periodic task '$TaskName' registered/updated (idempotent via /f)"
       Set-ZadanieChodziNaBaterii -Nazwa $TaskName
@@ -884,7 +1060,11 @@ function Invoke-StepN3 {
   # P2: rola 'konsument' nie ma obszaru projektowego, wiec JEDYNYM jej pierwszym przebiegiem
   # jest pobranie kanonu. Team dostaje swoj pierwszy przebieg w N3b (silnik).
   $roleN3 = if ($script:InstallRoleResult) { $script:InstallRoleResult.Role } else { 'consumer' }
-  if ($roleN3 -ne 'team' -and $PSCmdlet.ShouldProcess($PullLauncher, 'uruchom pobranie kanonu raz, synchronicznie')) {
+  # R1/D4: bez klonu launcher konczy sie po cichu kodem 0 i log mowil "zakonczone (kod 0)",
+  # choc kanonu nie bylo (Agnieszka 2026-10-07). Bez .git pobrania nie uruchamiamy i mowimy prawde.
+  if ($roleN3 -ne 'team' -and -not (Test-Path -LiteralPath (Join-Path $VaultPath '.git'))) {
+    Log "[N3] kanon niepobrany - w '$VaultPath' nie ma klonu (patrz krok N2 wyzej), wiec pierwszego pobrania nie uruchamiam. Uruchom ENVI-SB-instalator.cmd jeszcze raz."
+  } elseif ($roleN3 -ne 'team' -and $PSCmdlet.ShouldProcess($PullLauncher, 'uruchom pobranie kanonu raz, synchronicznie')) {
     Log "[N3] pierwsze pobranie kanonu - startuje i czekam"
     $wynikPull = Wait-ProcesBezPytaniaOHaslo -Argumenty @('-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PullLauncher))
     Log ("[N3] pierwsze pobranie kanonu zakonczone ({0})" -f $wynikPull)
@@ -1319,9 +1499,10 @@ function Invoke-StepN3b {
   $syncAction = "schtasks /create /tn $SyncTaskName /tr <hidden -File sync launcher> /sc HOURLY /mo $SyncEveryHours /f"
   if ($PSCmdlet.ShouldProcess($SyncTaskName, $syncAction)) {
     Log "[N3b] rejestruje zadanie cykliczne '$SyncTaskName' (co ${SyncEveryHours}h, bez okna, kontekst uzytkownika, bez -Manual)"
-    schtasks /create /tn $SyncTaskName /tr $syncTrCmd /sc HOURLY /mo $SyncEveryHours /f | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Log "[N3b] ERROR: schtasks /create dla '$SyncTaskName' nie powiodlo sie (exit $LASTEXITCODE)"
+    Log (Get-ZapowiedzAntywirusa -Krok 'N3b')
+    $zad = Register-ZadanieCogodzinne -Nazwa $SyncTaskName -Polecenie $syncTrCmd -CoGodzin $SyncEveryHours
+    if ($zad.Kod -ne 0) {
+      Log "[N3b] ERROR: schtasks /create dla '$SyncTaskName' nie powiodlo sie (exit $($zad.Kod)): $($zad.Wyjscie)"
     } else {
       Log "[N3b] zadanie '$SyncTaskName' zarejestrowane/zaktualizowane (idempotentnie, /f)"
       Set-ZadanieChodziNaBaterii -Nazwa $SyncTaskName
@@ -1698,19 +1879,18 @@ function Invoke-LegacyOwnVaultCleanup {
 }
 
 # -- N5: agent runtime(s) (agent-agnostic) + skills sync from Drive G:, idempotent --
-# ponytail: runtime list is config-driven (OD-1: never a hardcoded single vendor). Install
-# commands below were determined by INSPECTING this machine's real install mechanism, not
-# guessed: `codex` is a shim generated by `npm install -g @openai/codex` (confirmed:
-# `npm ls -g` -> @openai/codex@0.144.2; codex.ps1's own body calls
-# node_modules\@openai\codex\bin\codex.js - the standard npm-global wrapper shape).
+# ponytail: runtime list is config-driven (OD-1: never a hardcoded single vendor).
 # `claude` is a single ~250MB standalone exe at $env:USERPROFILE\.local\bin\claude.exe with
 # NO matching npm package and NO winget entry under that name (winget's "Claude" /
 # Anthropic.Claude is the separate desktop app, confirmed via `winget list`) - that
 # signature matches Anthropic's documented native/self-updating installer script, so the
 # command below is the real mechanism, not a placeholder.
+# Codex CLI: winget OpenAI.Codex (plan 2026-10-07, D8: wydawca OpenAI, ta sama wersja co npm,
+# bez Node.js). Do 0.14.13 szlo przez npm - brak npm u Agnieszki konczyl przebieg FATAL-em.
+# Istniejaca instalacja z npm (wlasciciel, Michal) aktualizowana jest nadal przez npm.
 $N5Agents = @(
-  @{ Id = 'claude'; Name = 'Claude Code'; DetectCmd = 'claude'; InstallCmd = 'irm https://claude.ai/install.ps1 | iex' }
-  @{ Id = 'codex';  Name = 'Codex CLI';   DetectCmd = 'codex';  InstallCmd = 'npm install -g @openai/codex' }
+  @{ Id = 'claude'; Name = 'Claude Code'; DetectCmd = 'claude'; InstallCmd = 'irm https://claude.ai/install.ps1 -ErrorAction Stop | iex -ErrorAction Stop' }
+  @{ Id = 'codex';  Name = 'Codex CLI';   DetectCmd = 'codex';  InstallCmd = 'winget install --id OpenAI.Codex --exact --silent --accept-package-agreements --accept-source-agreements' }
 )
 
 function Test-N5AgentPresent($agent) {
@@ -1718,30 +1898,230 @@ function Test-N5AgentPresent($agent) {
   return [bool](Get-Command $agent.DetectCmd -ErrorAction SilentlyContinue)
 }
 
+$script:N5Todo = @()
+$script:N5Versions = @{}
+
+function Add-N5Todo([string]$Name, [string]$Powod) {
+  $Powod = $Powod -replace ' - pomijam$', ''
+  Log "[N5] ${Name}: $Powod - pomijam, reszta instalacji idzie dalej"
+  $powodTodo = $Powod -replace ' \(kod -?\d+\)', ''
+  $script:N5Todo += "${Name}: $powodTodo. Uruchom ENVI-SB-instalator.cmd jeszcze raz; jesli problem wroci, wyslij plik $InstallLogFile wlascicielowi."
+}
+
+function Get-N5Version([string]$Command) {
+  try {
+    if (Get-Command $Command -ErrorAction SilentlyContinue) {
+      $v = & $Command --version 2>&1 | Out-String
+      if ($LASTEXITCODE -eq 0 -and $v.Trim()) { return $v.Trim() }
+    }
+  } catch { }
+  return 'nieznana (brak polecenia lub blad odczytu)'
+}
+
+function Test-N5CodexNpm {
+  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { return $false }
+  $lista = npm list -g --depth=0 --json 2>$null | Out-String
+  try {
+    if (($lista | ConvertFrom-Json -ErrorAction Stop).dependencies.'@openai/codex') { return $true }
+  } catch { }
+  $prefix = (npm prefix -g 2>$null | Out-String).Trim()
+  $cmd = Get-Command codex -ErrorAction SilentlyContinue
+  return ($LASTEXITCODE -eq 0 -and $prefix -and $cmd.Source -and
+    $cmd.Source.StartsWith($prefix.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase))
+}
+
+function Invoke-N5Runtime {
+  # Jeden dom obslugi bledow i wersji dla Node.js i obu CLI; kazde wywolanie izolowane.
+  param([string]$Name, [string]$Command, [string]$InstallCmd, [string]$UpdateCmd)
+  try {
+    $present = [bool](Get-Command $Command -ErrorAction SilentlyContinue)
+    $before = Get-N5Version $Command
+    Log "[N5] ${Name}: wersja przed: $before"
+    $action = if ($present) { $UpdateCmd } else { $InstallCmd }
+    if (-not $PSCmdlet.ShouldProcess($Name, $action)) { return }
+    $tool = ($action -split '\s+')[0]
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "brak polecenia '$tool' na tym komputerze" }
+    Log "[N5] ${Name}: $action"
+    Log "[N5]   Windows moze zapytac 'Czy zezwolic na wprowadzanie zmian?' - to instalacja lub aktualizacja $Name, kliknij Tak."
+    # Instalator Claude w osobnym zakresie: jego $Target nie nadpisuje lokalnych zmiennych.
+    $global:LASTEXITCODE = 0
+    & ([scriptblock]::Create($action))
+    $code = $LASTEXITCODE
+    # winget: APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (0x8A15002B).
+    if ($code -ne 0 -and -not ($action -like 'winget upgrade *' -and $code -eq -1978335189)) {
+      throw $(if ($tool -eq 'winget') { "winget zglosil blad (kod $code)" } else { "polecenie zakonczylo sie bledem (kod $code)" })
+    }
+    Sync-PathFromRegistry
+    $bin = Join-Path $env:USERPROFILE '.local\bin'
+    if ((Test-Path -LiteralPath $bin) -and @($env:Path -split ';') -notcontains $bin) { $env:Path += ';' + $bin }
+  } catch {
+    Add-N5Todo $Name $_.Exception.Message
+  } finally {
+    $after = Get-N5Version $Command
+    $script:N5Versions[$Name] = $after
+    Log "[N5] ${Name}: wersja po: $after"
+  }
+}
+
+function Install-N5NodeJs {
+  Invoke-N5Runtime -Name 'Node.js' -Command 'node' `
+    -InstallCmd 'winget install --id OpenJS.NodeJS.LTS --exact --silent --accept-package-agreements --accept-source-agreements' `
+    -UpdateCmd 'winget upgrade --id OpenJS.NodeJS.LTS --exact --silent --accept-package-agreements --accept-source-agreements'
+}
+
 function Invoke-N5AgentInstalls {
   foreach ($agent in $N5Agents) {
-    if (Test-N5AgentPresent $agent) {
-      Log "[N5] $($agent.Name) ($($agent.Id)) already present - skip"
-      continue
-    }
-    $label = "$($agent.Name) ($($agent.Id))"
-    if ($PSCmdlet.ShouldProcess($label, $agent.InstallCmd)) {
-      Log "[N5] installing $label via: $($agent.InstallCmd)"
-      # ponytail: run the vendor installer in an isolated child scope, NOT Invoke-Expression
-      # in this function's scope. install.ps1 from claude.ai assigns to $Target; iex-ing it
-      # here collided with a local named $target (PS vars are case-insensitive) -> "Cannot
-      # overwrite variable Target because the variable has been optimized", which killed the
-      # Claude Code install. The local is renamed ($label) AND the script runs in a fresh
-      # scriptblock scope, so no caller local can be shadowed by the vendor script.
-      & ([scriptblock]::Create($agent.InstallCmd))
-      if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        Log "[N5] WARNING: install for $label exited $LASTEXITCODE - check manually"
-      } else {
-        Log "[N5] $label installed"
+    try {
+      $update = 'claude update'
+      if ($agent.Id -eq 'codex') {
+        $update = if ((Test-N5AgentPresent $agent) -and (Test-N5CodexNpm)) {
+          'npm install -g @openai/codex@latest'
+        } else { 'winget upgrade --id OpenAI.Codex --exact --silent --accept-package-agreements --accept-source-agreements' }
       }
-    }
+      Invoke-N5Runtime -Name $agent.Name -Command $agent.DetectCmd -InstallCmd $agent.InstallCmd -UpdateCmd $update
+    } catch { Add-N5Todo $agent.Name $_.Exception.Message }
   }
-  # Per-user agent account sign-in is explicitly NOT here - manual N6 checklist step.
+}
+
+function Invoke-N5DesktopInstalls {
+  foreach ($app in @(
+    @{ Name = 'Claude Desktop'; Id = 'Anthropic.Claude'; Cmd = 'winget install --id Anthropic.Claude --exact --silent --accept-package-agreements --accept-source-agreements' }
+    @{ Name = 'aplikacja Codex (ChatGPT)'; Id = 'OpenAI.Codex'; Cmd = 'winget install --id 9PLM9XGG6VKS -s msstore --accept-package-agreements --accept-source-agreements' }
+  )) {
+    try {
+      if ($app.Id -eq 'Anthropic.Claude') {
+        # ponytail: winget list exit 0 = pakiet obecny, niezaleznie od jezyka tabeli.
+        # Przy bledzie zapytania zatrzymujemy ten krok; nie zgadujemy, ze trzeba instalowac.
+        $null = winget list --id Anthropic.Claude --exact --accept-source-agreements 2>&1
+        $code = $LASTEXITCODE
+        if ($code -eq 0) { Log "[N5] $($app.Name) juz jest"; continue }
+        # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND (0x8A150014).
+        if ($code -ne -1978335212) { throw "winget zglosil blad przy sprawdzaniu aplikacji (kod $code)" }
+      } elseif (Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction Stop) {
+        Log "[N5] $($app.Name) juz jest"; continue
+      }
+      if (-not $PSCmdlet.ShouldProcess($app.Name, $app.Cmd)) { continue }
+      Log "[N5]   Windows lub Sklep Microsoft moze otworzyc okno zgody - to instalacja $($app.Name), zaakceptuj ja."
+      $global:LASTEXITCODE = 0
+      & ([scriptblock]::Create($app.Cmd))
+      if ($LASTEXITCODE -ne 0) { throw "winget zglosil blad (kod $LASTEXITCODE)" }
+      Log "[N5] $($app.Name) zainstalowana"
+    } catch { Add-N5Todo $app.Name $_.Exception.Message }
+  }
+}
+
+function Set-N5GoogleInstructions {
+  $block = @'
+<!-- SB-GOOGLE:START -->
+## Dysk i Dokumenty Google
+Uzywaj skryptu pracownika: py -3 "%USERPROFILE%\.envi\google\sb-google.py".
+W PowerShell zamiast %USERPROFILE% uzyj $env:USERPROFILE (sciezke ujmij w cudzyslowy).
+Przyklady (cmd.exe; w PowerShell rozwin sciezke jak wyzej):
+- Konto: py -3 "%USERPROFILE%\.envi\google\sb-google.py" status
+- Wgraj plik: py -3 "%USERPROFILE%\.envi\google\sb-google.py" upload "C:\pliki\raport.pdf" --folder <folder-id>
+- Utworz Dokument Google: py -3 "%USERPROFILE%\.envi\google\sb-google.py" upload "C:\pliki\raport.docx" --folder <folder-id> --jako-dokument
+- Odczytaj dokument: py -3 "%USERPROFILE%\.envi\google\sb-google.py" api docs/documents/<id>
+- Zmien dokument: py -3 "%USERPROFILE%\.envi\google\sb-google.py" api docs/documents/<id>:batchUpdate POST @plik.json
+Usuwaj tylko do kosza: api drive/v3/files/<id> PATCH @kosz.json, gdzie kosz.json zawiera {"trashed":true}. Nigdy nie usuwaj trwale (DELETE).
+Dyski wspoldzielone wymagaja supportsAllDrives; skrypt dodaje ten parametr.
+Po kazdej zmianie potwierdz wynik ponownym odczytem (api); po wgraniu odczytaj drive/v3/files/<id>.
+<!-- SB-GOOGLE:END -->
+'@
+  foreach ($relative in @('.claude\CLAUDE.md', '.codex\AGENTS.md')) {
+    $file = Join-Path $env:USERPROFILE $relative
+    try {
+      if (-not $PSCmdlet.ShouldProcess($file, 'odswiez instrukcje Google miedzy znacznikami SB-GOOGLE')) { continue }
+      $text = if (Test-Path -LiteralPath $file) { [IO.File]::ReadAllText($file) } else { '' }
+      $pattern = '(?s)<!-- SB-GOOGLE:START -->.*?<!-- SB-GOOGLE:END -->'
+      if ($text -match $pattern) {
+        # MatchEvaluator zachowuje doslowne $env:USERPROFILE i tresci poza blokiem.
+        $text = [regex]::Replace($text, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $block })
+      } else { $text += $(if ($text -and -not $text.EndsWith("`n")) { "`n" }) + "`n" + $block + "`n" }
+      $null = New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) -ErrorAction Stop
+      [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($false)))
+    } catch { Add-N5Todo "Instrukcje Google ($relative)" $_.Exception.Message }
+  }
+}
+
+function Invoke-N5Google {
+  param([scriptblock]$Czytaj = { param($pytanie) try { Read-Host $pytanie } catch { 'N' } })
+  try {
+    $dir = Join-Path $env:USERPROFILE '.envi\google'
+    $google = Join-Path $dir 'sb-google.py'
+    $client = Join-Path (Split-Path $SkillDriveRoot -Parent) '.google\sb-pracownicy-oauth-client.json'
+    $clientJest = Test-Path -LiteralPath $client
+    Log ("[N5] plik klienta Google na Dysku: {0}" -f $(if ($clientJest) { 'jest' } else { 'brak' }))
+    if (-not $PSCmdlet.ShouldProcess($google, 'skopiuj skrypt Google pracownika')) { return }
+    $null = New-Item -ItemType Directory -Force -Path $dir -ErrorAction Stop
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sb-google.py') -Destination $google -Force -ErrorAction Stop
+    if (-not $clientJest) {
+      Add-N5Todo 'Google' 'brak pliku klienta Google na Dysku - pomijam'
+      return
+    }
+    if (-not $PSCmdlet.ShouldProcess($dir, 'skopiuj klienta OAuth i sprawdz konto Google; login gdy token nie dziala')) { return }
+    Copy-Item -LiteralPath $client -Destination $dir -Force -ErrorAction Stop
+    if (-not $script:PyLauncher) { throw 'brak launchera Python (py) po kroku N1' }
+    $global:LASTEXITCODE = 0
+    $account = & $script:PyLauncher -3 $google status 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0) { Log "[N5] Google: konto $($account.Trim()) - token dziala"; return }
+    Log '[N5] Google: otworzy sie przegladarka. Wybierz konto Google, ktorym logujesz sie do PS.'
+    Log '[N5]   Google moze pokazac "Google nie zweryfikowal tej aplikacji" -> "Zaawansowane" -> "Przejdz do ENVI Second Brain". Kliknij Zezwol.'
+    $answer = & $Czytaj 'Enter = zaloguj teraz, N = pomin'
+    if ("$answer".Trim() -match '^[nN]') { throw 'logowanie pominiete' }
+    $global:LASTEXITCODE = 0
+    & $script:PyLauncher -3 $google login
+    if ($LASTEXITCODE -ne 0) { throw "logowanie nieudane (kod $LASTEXITCODE)" }
+    $account = & $script:PyLauncher -3 $google status 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw 'nie udalo sie potwierdzic konta po logowaniu' }
+    Log "[N5] Google: konto $($account.Trim()) - token dziala"
+  } catch { Add-N5Todo 'Google' $_.Exception.Message }
+}
+
+function Set-N5LocalBinPath {
+  # R1/D5: instalator natywny Claude Code kladzie claude.exe w %USERPROFILE%\.local\bin i tylko
+  # PROSI o dopisanie go do PATH (komunikat u Agnieszki 07.10). Dopisujemy sami: PATH uzytkownika,
+  # bez administratora; do PATH tego procesu tez, zeby podsumowanie widzialo claude od razu.
+  $kat = Join-Path $env:USERPROFILE '.local\bin'
+  if (-not (Test-Path -LiteralPath $kat)) { return }
+  if ($PSCmdlet.ShouldProcess('PATH uzytkownika', "dopisz $kat, gdy go brakuje")) {
+    try {
+      if (Add-KatalogDoPathUzytkownika -Katalog $kat) { Log "[N5] dopisano $kat do PATH uzytkownika (polecenie 'claude' zadziala w nowych oknach)" }
+    } catch {
+      Log "[N5] nie udalo sie dopisac $kat do PATH uzytkownika ($($_.Exception.Message)) - polecenie 'claude' moze nie dzialac w nowych oknach"
+    }
+    if (@($env:Path -split ';') -notcontains $kat) { $env:Path = $env:Path.TrimEnd(';') + ';' + $kat }
+  }
+}
+
+function Add-KatalogDoPathUzytkownika {
+  # Czyta i pisze PATH uzytkownika wprost w rejestrze (HKCU\<Klucz>), zachowujac rodzaj wartosci
+  # i %ZMIENNE% nierozwiniete. [Environment]::SetEnvironmentVariable zapisalby REG_SZ z rozwinietymi
+  # sciezkami. Wpis porownywany po rozwinieciu i bez koncowego '\', bez wielkosci liter. Zwraca
+  # $true, gdy dopisal. Klucz inny niz 'Environment' sluzy sprawdzianowi (TEST 25).
+  param([string]$Katalog, [string]$Klucz = 'Environment')
+  $szukany = $Katalog.TrimEnd('\')
+  $k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($Klucz)
+  try {
+    $jest = @($k.GetValueNames()) -contains 'Path'
+    $obecna = if ($jest) { [string]$k.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } else { '' }
+    $rodzaj = if ($jest) { $k.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+    $wpisy = @($obecna -split ';' | Where-Object { $_ })
+    foreach ($w in $wpisy) {
+      if ([Environment]::ExpandEnvironmentVariables($w).TrimEnd('\') -eq $szukany) { return $false }
+    }
+    $k.SetValue('Path', (@($wpisy) + $szukany) -join ';', $rodzaj)
+  } finally { $k.Close() }
+  if ($Klucz -eq 'Environment') {
+    # Explorer (a za nim kazde nowe okno) czyta PATH na nowo dopiero po tym komunikacie.
+    try {
+      if (-not ('SBBoot.Srodowisko' -as [type])) {
+        Add-Type -Namespace SBBoot -Name Srodowisko -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, int Msg, System.IntPtr wParam, string lParam, int fuFlags, int uTimeout, out System.IntPtr lpdwResult);'
+      }
+      $r = [IntPtr]::Zero
+      [void][SBBoot.Srodowisko]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [IntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+    } catch { }
+  }
+  return $true
 }
 
 function New-EnviSyncConfig {
@@ -1904,9 +2284,16 @@ function Invoke-N5ChannelSeparationGuard {
 
 function Invoke-StepN5 {
   Log "[N5] agent runtime + skills sync step starting"
-  Invoke-N5AgentInstalls
+  # R1/D1: najpierw skille (silnik kopiuje pliki z Dysku, nie potrzebuje agentow), potem Node.js
+  # i agenci. Do 0.14.13 bylo odwrotnie i wyjatek przy agencie zabieral skille (Agnieszka 07.10).
   Invoke-N5SkillsSync
   Invoke-N5PocztaSync
+  Install-N5NodeJs
+  Invoke-N5AgentInstalls
+  Set-N5LocalBinPath
+  Invoke-N5DesktopInstalls
+  Set-N5GoogleInstructions
+  Invoke-N5Google
   Invoke-N5ChannelSeparationGuard
   Log "[N5] agent runtime + skills sync step done"
 }
@@ -2044,6 +2431,14 @@ Log ("Skille:                            {0} / {1} aktualne" -f `
 Log ("Skrzynki poczty:                   {0} / {1} zarejestrowane w aplikacji Claude" -f `
   $(if ($null -ne $script:PocztaZarejestrowanych) { $script:PocztaZarejestrowanych } else { '?' }), `
   $(if ($null -ne $script:PocztaSkrzynek) { $script:PocztaSkrzynek } else { '?' }))
+# R1: agenci w podsumowaniu - stan odczytany (Get-Command), nie zamiar z N5. Brakujacy agent
+# albo Node.js to pozycja DO ZROBIENIA, nie FATAL i nie cisza.
+$todoAgenci = @()
+foreach ($ag in @(@{ Name = 'Node.js'; DetectCmd = 'node' }) + @($N5Agents)) {
+  $agJest = [bool](Get-Command $ag.DetectCmd -ErrorAction SilentlyContinue)
+  Log ("{0,-35}{1}" -f ($ag.Name + ':'), $(if ($agJest) { 'OK - ' + $script:N5Versions[$ag.Name] } else { 'BRAK' }))
+  if (-not $agJest -and -not @($script:N5Todo | Where-Object { $_.StartsWith($ag.Name + ':') }).Count) { $todoAgenci += ("{0} sie nie zainstalowal. Uruchom ENVI-SB-instalator.cmd jeszcze raz (na okno 'Czy zezwolic na wprowadzanie zmian?' odpowiedz Tak); jesli wroci, wyslij plik $InstallLogFile wlascicielowi." -f $ag.Name) }
+}
 # Zasada 'Restricted' nie zostawia sladu w logu silnika, bo skrypt w ogole nie startuje -
 # jedynym sygnalem jest kod ostatniego wyniku w harmonogramie (0 = OK, 267011 = jeszcze nie bylo).
 $todoZadania = @()
@@ -2072,16 +2467,37 @@ if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy 
 if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom ENVI-SB-instalator.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij plik $InstallLogFile wlascicielowi." }
 if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij plik $InstallLogFile wlascicielowi." }
 $todo += $todoZadania
+$todo += $todoAgenci
+$todo += $script:N5Todo
+# Stary instalator na PIERWSZYM miejscu: kolejne pozycje kaza uruchomic instalator jeszcze raz,
+# a bez tego czlowiek uruchomilby ponownie ten sam stary plik (weryfikacja R2).
+if ($script:InstalatorStary) { $todo = @($script:InstalatorStary -replace ' Ta instalacja idzie dalej\.$', '') + $todo }
 if ($todo.Count -eq 0) {
   Log ("Nic nie zostalo do zrobienia recznie. Otworz Obsidiana - Twoj vault ({0}) powinien byc od razu widoczny." -f $(if ($sumRole -eq 'team') { 'kanon + obszar projektowy' } else { 'kanon' }))
 } else {
   Log "DO ZROBIENIA:"
   for ($i = 0; $i -lt $todo.Count; $i++) { Log ("  {0}. {1}" -f ($i + 1), $todo[$i]) }
 }
+# R3/R2: strona SB w PS, sekcja "Po instalacji - co dalej" (router hashowy, sekcja z ?sekcja=).
+$urlPoInstalacji = $PsUrl.TrimEnd('/') + '/#/sbInstaller?sekcja=po-instalacji'
+if ($WhatIfPreference) {
+  Log "(-WhatIf) otworzylbym strone SB w PS, sekcja 'Po instalacji - co dalej': $urlPoInstalacji"
+} else {
+  Log "Otwieram strone SB w PS, sekcja 'Po instalacji - co dalej': jak uruchomic Claude i Codex i co zrobic, gdy cos nie wyszlo. Gdyby sie nie otworzyla, wejdz recznie: $urlPoInstalacji"
+  $null = Open-Url $urlPoInstalacji
+}
 Log "Pelny zapis przebiegu (ten plik wyslij, gdy cos nie dziala): $InstallLogFile"
 Log "=== bootstrap run done ==="
+# R2: znacznik konca (poz. 3). ENVI-SB-instalator.cmd kasuje ten plik przed startem i po przebiegu
+# sprawdza, czy jest - brak znaczy, ze przebieg sie urwal przed podsumowaniem (Avast zabijal skrypt
+# w trakcie, a czlowiek widzial tylko "nacisnij dowolny klawisz"). Zapis .NET-em, nie Set-Content:
+# ma powstac takze pod -WhatIf. Bez zmiennej (uruchomienie wprost, nie z .cmd) - nic nie piszemy.
+if ($env:SB_INSTALATOR_KONIEC) {
+  try { [System.IO.File]::WriteAllText($env:SB_INSTALATOR_KONIEC, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) }
+  catch { Log "Nie udalo sie zapisac znacznika konca '$env:SB_INSTALATOR_KONIEC' ($($_.Exception.Message)) - okno instalatora powie, ze przebieg sie urwal, choc doszedl do konca." }
+}
 
-#SB-PLIK README-onboarding.md 8894
+#SB-PLIK README-onboarding.md 9143
 # Second Brain ENVI: pierwsze uruchomienie na Twoim komputerze
 
 Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Nie zakładasz żadnych kont i niczego nikomu nie wysyłasz: do wszystkiego używasz **jednego konta Google, którym logujesz się do PS ENVI**. Tym samym kontem logujesz się do Dysku Google i do GitHuba.
@@ -2121,7 +2537,7 @@ Robimy to, bo treści firmowe nie powinny trafiać do trenowania modeli zewnętr
 
 ## Co robi instalator (jeden plik)
 
-Całą resztę załatwia jeden plik: **`ENVI-SB-instalator.cmd`**. Pobierasz go ze strony instalatora w PS ENVI jako ZIP. Nie musisz go rozpakowywać: otwórz pobrany ZIP (Eksplorator pokaże go jak folder) i kliknij dwukrotnie plik w środku.
+Całą resztę załatwia jeden plik: **`ENVI-SB-instalator.cmd`**. Pobierasz go ze strony instalatora w PS ENVI jako ZIP. Najpierw go wypakuj: kliknij pobrany ZIP prawym przyciskiem myszy i wybierz **Wyodrębnij wszystkie**, potem kliknij dwukrotnie `ENVI-SB-instalator.cmd` w wypakowanym folderze. Nie uruchamiaj go z wnętrza ZIP-a: Windows trzyma wtedy plik w folderze tymczasowym, skąd antywirus potrafi go zabrać, więc instalator w takim miejscu zatrzyma się i poprosi o wypakowanie.
 
 1. Uruchamiasz `ENVI-SB-instalator.cmd` (dwuklik).
 2. W pewnym momencie instalator poprosi o zalogowanie do GitHuba. Naciśnij Enter: kod jednorazowy trafi do schowka, a w przeglądarce otworzy się strona GitHuba. Wklej kod (Ctrl+V), wybierz **Continue with Google** i zaloguj się tym samym kontem Google co do PS. Nie wpisujesz żadnych haseł do samego instalatora.
@@ -2159,4 +2575,273 @@ Najczęstsza przyczyna to zwykle jedna z dwóch rzeczy:
 W obu przypadkach instalator wyświetli, co dokładnie zrobić. Dokończ brakujący krok i naciśnij Enter albo uruchom `ENVI-SB-instalator.cmd` ponownie: to bezpieczne i nic nie nadpisze. Jeśli zaproszenia w ogóle nie dostałaś/dostałeś, poproś przełożonego o zaproszenie do Second Brain w PS.
 
 Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
+
+#SB-PLIK sb-google.py 12794
+"""Google Drive, Docs i Sheets dla agenta pracownika (token szyfrowany DPAPI).
+
+login [--force] - zgoda Google w przegladarce; dzialajacy token pomija login
+status - email konta; kod 0 gdy token dziala, 1 gdy brak lub blad
+api <sciezka-lub-URL> [METODA] [JSON | @plik.json] - domyslnie GET
+upload <plik> [--folder ID] [--name NAZWA] [--jako-dokument]
+selftest - sprawdza DPAPI
+
+Sciezki: drive/v3/files, docs/documents, sheets/spreadsheets.
+Usuwanie = przeniesienie do kosza, nigdy trwale usuniecie:
+  api drive/v3/files/<id> PATCH '{"trashed":true}'
+"""
+import argparse, base64, ctypes, ctypes.wintypes as wt, hashlib, http.server
+import json, mimetypes, os, secrets, sys, time, urllib.error, urllib.parse, urllib.request, webbrowser
+from pathlib import Path
+
+DIR = Path(os.environ.get("SB_GOOGLE_DIR", os.path.dirname(os.path.abspath(__file__))))
+CLIENT_FILE = DIR / "sb-pracownicy-oauth-client.json"
+TOKEN_FILE = DIR / "sb-google.token.dpapi"
+API_BASE = os.environ.get("SB_GOOGLE_API_BASE", "https://www.googleapis.com/").rstrip("/") + "/"
+DOCS_BASE = os.environ.get("SB_GOOGLE_DOCS_BASE", "https://docs.googleapis.com/v1/")
+SHEETS_BASE = os.environ.get("SB_GOOGLE_SHEETS_BASE", "https://sheets.googleapis.com/v4/")
+SCOPES = ["https://www.googleapis.com/auth/" + s for s in ("drive", "documents", "spreadsheets")]
+ACCESS_TOKEN = None
+PRIVATE = []
+
+
+class _Blob(ctypes.Structure):
+    _fields_ = [("cbData", wt.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+
+def _dpapi(data, protect):
+    buf = ctypes.create_string_buffer(data, len(data))
+    src = _Blob(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    dst = _Blob()
+    fn = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    if not fn(ctypes.byref(src), None, None, None, None, 1, ctypes.byref(dst)):
+        raise ctypes.WinError()
+    try:
+        return ctypes.string_at(dst.pbData, dst.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(dst.pbData)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    # Nie przekazuj Bearer ani danych OAuth pod adres z przekierowania.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _request(req):
+    with urllib.request.build_opener(_NoRedirect).open(req, timeout=60) as r:
+        raw = r.read()
+        return json.loads(raw) if raw.strip() else {}
+
+
+def _post(url, fields):
+    return _request(urllib.request.Request(url, urllib.parse.urlencode(fields).encode()))
+
+
+def _token_uri(client):
+    return os.environ.get("SB_GOOGLE_TOKEN_URI", client.get("token_uri", "https://oauth2.googleapis.com/token"))
+
+
+def access_token():
+    global ACCESS_TOKEN
+    if ACCESS_TOKEN is None:
+        p = json.loads(_dpapi(TOKEN_FILE.read_bytes(), False))
+        if not isinstance(p, dict) or any(not isinstance(p.get(k), str) or not p[k]
+                for k in ("client_id", "client_secret", "refresh_token")):
+            raise ValueError("Nieprawidlowy plik tokenu Google. Uruchom login.")
+        PRIVATE.extend(p[k] for k in ("client_id", "client_secret", "refresh_token"))
+        ACCESS_TOKEN = _post(_token_uri(p), {
+            "client_id": p["client_id"], "client_secret": p["client_secret"],
+            "refresh_token": p["refresh_token"], "grant_type": "refresh_token",
+        })["access_token"]
+        PRIVATE.append(ACCESS_TOKEN)
+    return ACCESS_TOKEN
+
+
+def api_url(path, method="GET"):
+    parsed = urllib.parse.urlsplit(path)
+    if parsed.scheme or parsed.netloc:
+        host = parsed.hostname or ""
+        if (parsed.scheme != "https" or not host.endswith(".googleapis.com")
+                or parsed.username is not None or parsed.password is not None
+                or parsed.port not in (None, 443)):
+            raise ValueError("Dozwolone sa tylko adresy HTTPS w domenie *.googleapis.com.")
+        url = path
+    else:
+        path = path.lstrip("/")
+        base = API_BASE
+        for prefix, target in (("docs/", DOCS_BASE), ("sheets/", SHEETS_BASE)):
+            if path.startswith(prefix):
+                base, path = target, path[len(prefix):]
+                break
+        url = base.rstrip("/") + "/" + path
+    parts = urllib.parse.urlsplit(url)
+    if parts.path.startswith("/drive/v3/"):
+        query = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        keys = {k for k, v in query}
+        if "supportsAllDrives" not in keys:
+            query.append(("supportsAllDrives", "true"))
+        if parts.path.rstrip("/") == "/drive/v3/files" and method.upper() == "GET" and "includeItemsFromAllDrives" not in keys:
+            query.append(("includeItemsFromAllDrives", "true"))
+        url = urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+    return url
+
+
+def api(path, method="GET", body=None):
+    url = api_url(path, method)
+    if body is not None:
+        if body.startswith("@"):
+            body = Path(body[1:]).read_text(encoding="utf-8-sig")
+        body = json.dumps(json.loads(body)).encode()
+    return _request(urllib.request.Request(url, method=method.upper(), data=body,
+                    headers={"Authorization": "Bearer " + access_token(), "Content-Type": "application/json"}))
+
+
+def status():
+    return api("drive/v3/about?fields=user")["user"]["emailAddress"]
+
+
+def login(force=False):
+    global ACCESS_TOKEN
+    if TOKEN_FILE.exists() and not force:
+        try:
+            print("Token dziala. Konto: " + status())
+            return
+        except (OSError, ValueError, KeyError, TypeError):
+            ACCESS_TOKEN = None
+    client = json.loads(CLIENT_FILE.read_text(encoding="utf-8-sig"))["installed"]
+    PRIVATE.extend(client[k] for k in ("client_id", "client_secret"))
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    state, result = secrets.token_urlsafe(16), {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.path).query))
+            valid = q.get("state") == state and ("code" in q or "error" in q)
+            if valid:
+                result.update(q)
+            self.send_response(200 if valid else 400)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Gotowe, mozesz zamknac karte." if valid else b"Nieprawidlowe wywolanie.")
+
+        def log_message(self, *args):
+            pass
+
+    with http.server.HTTPServer(("127.0.0.1", 0), Handler) as srv:
+        redirect = f"http://127.0.0.1:{srv.server_port}/"
+        url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+            "client_id": client["client_id"], "redirect_uri": redirect, "response_type": "code",
+            "scope": " ".join(SCOPES), "access_type": "offline", "prompt": "consent",
+            "state": state, "code_challenge": challenge, "code_challenge_method": "S256",
+        })
+        print("Zaloguj sie kontem Google, ktorym logujesz sie do PS i kliknij Zezwol.")
+        print('Google moze pokazac "Google nie zweryfikowal tej aplikacji":')
+        print('wybierz "Zaawansowane", potem "Przejdz do ENVI Second Brain".')
+        print("Jesli przegladarka sie nie otworzyla, skopiuj ten adres do przegladarki:")
+        print(url, flush=True)
+        deadline = time.monotonic() + float(os.environ.get("SB_GOOGLE_LOGIN_TIMEOUT", "300"))
+        webbrowser.open(url)
+        while not result:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError("Nie bylo zgody w ciagu 5 minut - uruchom login jeszcze raz.")
+            srv.timeout = min(1, remaining)
+            srv.handle_request()
+    if "error" in result:
+        raise ValueError("Zgoda Google nieudana.")
+    tok = _post(_token_uri(client), {
+        "code": result["code"], "client_id": client["client_id"], "client_secret": client["client_secret"],
+        "redirect_uri": redirect, "grant_type": "authorization_code", "code_verifier": verifier,
+    })
+    if not tok.get("refresh_token"):
+        raise ValueError("Google nie oddal refresh tokenu - powtorz login --force.")
+    payload = {"client_id": client["client_id"], "client_secret": client["client_secret"],
+               "refresh_token": tok["refresh_token"], "scopes": SCOPES, "token_uri": _token_uri(client)}
+    DIR.mkdir(parents=True, exist_ok=True)
+    # Zapis atomowy: nie tracimy poprzedniego tokenu przy przerwaniu zapisu.
+    temporary = TOKEN_FILE.with_suffix(".tmp")
+    temporary.write_bytes(_dpapi(json.dumps(payload).encode(), True))
+    temporary.replace(TOKEN_FILE)
+    print("Zapisano zaszyfrowany token Google.")
+
+
+def upload(local_file, folder=None, name=None, jako_dokument=False):
+    path = Path(local_file)
+    metadata = {"name": name or path.name}
+    if folder:
+        metadata["parents"] = [folder]
+    if jako_dokument:
+        kind = {".docx": "document", ".odt": "document", ".txt": "document", ".md": "document",
+                ".xlsx": "spreadsheet", ".csv": "spreadsheet", ".pptx": "presentation"}.get(path.suffix.lower())
+        if not kind:
+            raise ValueError("Nieobslugiwany typ pliku do konwersji na dokument Google.")
+        metadata["mimeType"] = "application/vnd.google-apps." + kind
+    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    boundary = "sb_google_" + secrets.token_hex(24)
+    body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode()
+            + json.dumps(metadata).encode() + f"\r\n--{boundary}\r\nContent-Type: {mime}\r\n\r\n".encode()
+            + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode())
+    url = API_BASE + "upload/drive/v3/files?" + urllib.parse.urlencode({
+        "uploadType": "multipart", "supportsAllDrives": "true", "fields": "id,name,mimeType,parents,webViewLink"})
+    return _request(urllib.request.Request(url, data=body, headers={
+        "Authorization": "Bearer " + access_token(), "Content-Type": "multipart/related; boundary=" + boundary}))
+
+
+def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("login", help="Zgoda Google").add_argument("--force", action="store_true")
+    commands.add_parser("status", help="Sprawdz konto bez logowania")
+    p = commands.add_parser("api", help="Wywolaj Google API")
+    p.add_argument("path")
+    p.add_argument("method", nargs="?", default="GET")
+    p.add_argument("body", nargs="?")
+    p = commands.add_parser("upload", help="Wyslij plik na Drive")
+    p.add_argument("local_file")
+    p.add_argument("--folder")
+    p.add_argument("--name")
+    p.add_argument("--jako-dokument", action="store_true")
+    commands.add_parser("selftest", help="Sprawdz DPAPI")
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "login":
+            login(args.force)
+        elif args.command == "status":
+            print(status())
+        elif args.command == "selftest":
+            assert _dpapi(_dpapi(b"proba", True), False) == b"proba"
+            print("DPAPI OK")
+        else:
+            result = api(args.path, args.method, args.body) if args.command == "api" else upload(
+                args.local_file, args.folder, args.name, args.jako_dokument)
+            print(json.dumps(result, ensure_ascii=False, indent=1))
+        return 0
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        if args.command == "status":
+            print("Brak dzialajacego tokenu Google. Uruchom login.", file=sys.stderr)
+            return 1
+        message = "Blad pliku, polaczenia lub danych; sprawdz konfiguracje i token (login)."
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                error = json.loads(e.read()).get("error", {})
+                detail = error.get("message", "Blad Google API") if isinstance(error, dict) else "Blad OAuth Google"
+            except (ValueError, AttributeError):
+                detail = "Blad Google API"
+            message = f"HTTP {e.code}: {detail}"
+        elif isinstance(e, ValueError) and not isinstance(e, json.JSONDecodeError):
+            message = str(e)
+        for private in PRIVATE:
+            if private:
+                message = message.replace(private, "[ukryte]")
+        print(message, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 
