@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.14.16. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.14.17. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.14.16"
+set "SB_INSTALATOR_WERSJA=0.14.17"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -61,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 150683
+#SB-PLIK bootstrap.ps1 153537
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -1175,6 +1175,44 @@ function Install-SbUpdateShortcut {
     $sc.Save()
     Log '[Aktualizacja] skrot Aktualizuj Second Brain zapisany w menu Start.'
   } catch { Log "[Aktualizacja] nie udalo sie przygotowac aktualizacji: $($_.Exception.Message)" }
+}
+
+# Pulpit: Windows 11 nie pozwala instalatorom przypinac do paska zadan (Microsoft Learn: pin-to-taskbar); decyzja wlasciciela 2026-10-08.
+function Install-SbDesktopShortcuts {
+  [CmdletBinding(SupportsShouldProcess)]
+  param(
+    [string]$Desktop = [Environment]::GetFolderPath('Desktop'),
+    [string]$Programs = [Environment]::GetFolderPath('Programs')
+  )
+  foreach ($app in @(
+    @{ Name = 'Claude'; Package = 'Claude' },
+    @{ Name = 'Codex (ChatGPT)'; Package = 'OpenAI.Codex' },
+    @{ Name = 'Aktualizuj Second Brain'; Package = $null }
+  )) {
+    try {
+      $path = Join-Path $Desktop ($app.Name + '.lnk')
+      if (Test-Path -LiteralPath $path) { continue }
+      if ($app.Package) {
+        $package = Get-AppxPackage -Name $app.Package -ErrorAction Stop | Select-Object -First 1
+        if (-not $package) { if (-not $WhatIfPreference) { Log "[Ikony] aplikacji $($app.Name) nie ma - ikony na pulpicie nie zakladam" }; continue }
+        $manifest = Get-AppxPackageManifest -Package $package -ErrorAction Stop
+        $id = @($manifest.Package.Applications.Application)[0].Id
+        if (-not $id) { throw 'Manifest nie zawiera Id pierwszej aplikacji.' }
+        $appId = $package.PackageFamilyName + '!' + $id
+        if ($PSCmdlet.ShouldProcess($path, 'zaloz ikone aplikacji na pulpicie')) {
+          $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+          $sc.TargetPath = 'shell:AppsFolder\' + $appId
+          $sc.Save()
+        }
+      } else {
+        $source = Join-Path $Programs ($app.Name + '.lnk')
+        if (-not (Test-Path -LiteralPath $source)) { if (-not $WhatIfPreference) { Log '[Ikony] skrotu Aktualizuj Second Brain w menu Start nie ma - ikony na pulpicie nie zakladam' }; continue }
+        if ($PSCmdlet.ShouldProcess($path, 'skopiuj ikone aktualizacji z menu Start na pulpit')) {
+          Copy-Item -LiteralPath $source -Destination $path -ErrorAction Stop
+        }
+      }
+    } catch { Log "[Ikony] nie udalo sie zalozyc ikony $($app.Name): $($_.Exception.Message)" }
+  }
 }
 
 function Invoke-StepN3 {
@@ -2536,6 +2574,7 @@ foreach ($id in @('N1', 'N2', 'N2b', 'N3', 'N3b', 'N4', 'N5', 'N6')) {
 }
 # Wersje zapisujemy dopiero po wszystkich krokach, zeby przerwany przebieg nie ukryl dymka.
 Install-SbUpdateShortcut
+Install-SbDesktopShortcuts
 } catch {
   # Last-resort net: any unexpected terminating error still lands in bootstrap.log instead of
   # only flashing in a console window that closes on exit.
@@ -2581,7 +2620,7 @@ if ($sumRole -eq 'team') {
   $sumSyncLnk = Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Synchronizuj teraz (Second Brain).lnk')
   Log ("  - skrot 'Synchronizuj teraz':    [{0}] pulpit i menu Start" -f $(if ($sumSyncLnk) { 'OK' } else { 'BRAK' }))
   if ($sumSyncLnk) {
-    Log "    (chcesz go miec na pasku zadan? prawy przycisk na ikonie -> Pokaz wiecej opcji -> Przypnij do paska zadan)"
+    Log "    (chcesz go miec na pasku zadan? prawy przycisk na ikonie -> Przypnij do paska zadan; jesli jej nie widac, najpierw Pokaz wiecej opcji)"
   }
 } else {
   Log "  - obszar projektowy 20_projects: nie dotyczy tej roli (konsument)"
@@ -2628,6 +2667,16 @@ foreach ($ag in @(@{ Name = 'Node.js'; DetectCmd = 'node' }) + @($N5Agents)) {
   $agJest = [bool](Get-Command $ag.DetectCmd -ErrorAction SilentlyContinue)
   Log ("{0,-35}{1}" -f ($ag.Name + ':'), $(if ($agJest) { 'OK - ' + $script:N5Versions[$ag.Name] } else { 'BRAK' }))
   if (-not $agJest -and -not @($script:N5Todo | Where-Object { $_.StartsWith($ag.Name + ':') }).Count) { $todoAgenci += ("{0} sie nie zainstalowal. Uruchom ENVI-SB-instalator.cmd jeszcze raz (na okno 'Czy zezwolic na wprowadzanie zmian?' odpowiedz Tak); jesli wroci, wyslij plik $InstallLogFile wlascicielowi." -f $ag.Name) }
+}
+$sumDesktop = [Environment]::GetFolderPath('Desktop')
+$sumDesktopIcons = @('Claude', 'Codex (ChatGPT)', 'Aktualizuj Second Brain') | ForEach-Object {
+  # Pusty pulpit (konto bez profilu) nie moze urwac podsumowania - Join-Path z '' rzuca.
+  $present = [bool]$sumDesktop -and (Test-Path -LiteralPath (Join-Path $sumDesktop ($_ + '.lnk')))
+  [pscustomobject]@{ Name = $_; Present = $present }
+}
+Log ("Ikony na pulpicie:                 {0}" -f (($sumDesktopIcons | ForEach-Object { '{0} [{1}]' -f $_.Name, $(if ($_.Present) { 'OK' } else { 'BRAK' }) }) -join ', '))
+if ($sumDesktopIcons.Present -contains $true) {
+  Log "    (chcesz je miec na pasku zadan? prawy przycisk na ikonie -> Przypnij do paska zadan; jesli jej nie widac, najpierw Pokaz wiecej opcji)"
 }
 # Zasada 'Restricted' nie zostawia sladu w logu silnika, bo skrypt w ogole nie startuje -
 # jedynym sygnalem jest kod ostatniego wyniku w harmonogramie (0 = OK, 267011 = jeszcze nie bylo).

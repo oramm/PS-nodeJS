@@ -7,8 +7,8 @@ trasy: zamkniecie zakletego kregu "zeby zainstalowac SB, musisz juz miec dostep 
 SB konfiguruje").
 
 - Zrodlo: `envi-konsulting/ENVI.SB.Rdzen`, `bootstrap/`
-- Commit, z ktorego pochodzi ta kopia: `3a1ec9fdb62b767b428abcb5d0940cb823ec8cc4`
-- Zlozono: 2026-10-08, wersja w naglowku pliku 0.14.16
+- Commit, z ktorego pochodzi ta kopia: `e5da1399438934aad67160f1e8e02672ae5681d0`
+- Zlozono: 2026-10-08, wersja w naglowku pliku 0.14.17
 
 **`ENVI-SB-instalator.cmd` nie jest plikiem z repo - jest skladany.** Funkcja `New-InstalatorCmd`
 z `bootstrap/build-instalator.ps1` skleja naglowek wsadowy z `bootstrap.ps1` i README bajt w bajt.
