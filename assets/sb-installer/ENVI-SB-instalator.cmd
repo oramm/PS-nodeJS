@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.14.14. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.14.15. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.14.14"
+set "SB_INSTALATOR_WERSJA=0.14.15"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -29,7 +29,12 @@ if "%KOD%"=="0" set "KOD=1"
 exit /b %KOD%
 :koniec
 echo Zapis przebiegu: %SB_INSTALATOR_DIR%\bootstrap.log
+echo Przeczytaj podsumowanie powyzej. Nacisnij dowolny klawisz - otworze strone z dalszymi krokami.
 pause
+set "SB_URL="
+set /p "SB_URL=" < "%SB_INSTALATOR_KONIEC%"
+setlocal EnableDelayedExpansion
+if /i "!SB_URL:~0,23!"=="https://ps.envi.com.pl/" start "" "!SB_URL!"
 exit /b %KOD%
 :czy_temp
 set "SB_T=%~1\"
@@ -56,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 138942
+#SB-PLIK bootstrap.ps1 150361
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -155,19 +160,22 @@ if (Test-Path $override) { . $override }
 $InstallLogFile = Join-Path $PSScriptRoot 'bootstrap.log'
 function Log($m) { ('{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m) | Tee-Object -FilePath $InstallLogFile -Append | Out-Host }
 
+$script:PoradaOknoZgody = 'Jesli nic sie nie dzieje, spojrz na pasek zadan na dole - okno zgody potrafi sie schowac i tylko miga tam ikonka; kliknij ja.'
+
 # -- N1: prerequisites (winget), idempotent --
 # ponytail: detection = Get-Command for CLI tools (fast, no winget call needed), winget list
-# for GUI-only apps that never land on PATH. Ceiling: no version pinning, no upgrade path
-# beyond "present = skip"; if we ever need min-version checks, revisit here.
+# for GUI-only apps that never land on PATH. Ceiling: no version pinning;
+# if we ever need min-version checks, revisit here.
 $N1Tools = @(
-  @{ Id = 'Git.Git';          Name = 'Git';          DetectCmd = 'git' }
-  @{ Id = 'GitHub.cli';       Name = 'GitHub CLI';   DetectCmd = 'gh' }
+  @{ Id = 'Git.Git';          Name = 'Git';          DetectCmd = 'git'; Upgrade = $true }
+  @{ Id = 'GitHub.cli';       Name = 'GitHub CLI';   DetectCmd = 'gh'; Upgrade = $true }
+  # ponytail: Obsidian i Google Drive aktualizuja sie same - obecne pomijamy.
   @{ Id = 'Obsidian.Obsidian'; Name = 'Obsidian';     DetectCmd = $null }
   @{ Id = 'Google.GoogleDrive'; Name = 'Google Drive'; DetectCmd = $null }
   # M4: launcher Pythona dla serwera poczty (P6/mcp/kylos-email). 'py' i nie 'python' -
   # decyzja zamknieta w planie: atrapa ze Sklepu Microsoft nie wystawia py.exe wcale,
   # tylko python.exe/python3.exe, wiec Get-Command py nie zlapie atrapy.
-  @{ Id = 'Python.Python.3.12'; Name = 'Python (py launcher)'; DetectCmd = 'py' }
+  @{ Id = 'Python.Python.3.12'; Name = 'Python (py launcher)'; DetectCmd = 'py'; Upgrade = $true }
 )
 
 function Test-WingetPackagePresent($id) {
@@ -296,7 +304,7 @@ function Test-WersjaInstalatora {
   # non-mutating: sam odczyt, bezpieczne pod -WhatIf. Numer aktualnego wydania czytamy z manifestu
   # rdzenia na dysku SB.ENVI (.rdzen\rdzen-manifest.json): wydanie sklada instalator i paczke rdzenia
   # z TYM SAMYM numerem (release/build-core-package.ps1), a z tego dysku instalator i tak bierze
-  # skille i rdzen. Kopia .cmd lezy na innym dysku (ENVI-MG), ktorego pracownik nie musi widziec.
+  # skille i rdzen. Kopia .cmd do aktualizacji lezy teraz takze obok tego manifestu.
   if (-not $env:SB_INSTALATOR_WERSJA) { return }
   $coreRoot = $script:CoreDriveRoot
   if (-not $coreRoot) {
@@ -324,6 +332,25 @@ function Invoke-StepN1 {
   $installedAny = $false
   foreach ($tool in $N1Tools) {
     if (Test-N1ToolPresent $tool) {
+      if ($tool.Upgrade) {
+        $target = "$($tool.Name) ($($tool.Id))"
+        $action = 'winget upgrade --id {0} --exact --silent --accept-package-agreements --accept-source-agreements' -f $tool.Id
+        if ($PSCmdlet.ShouldProcess($target, $action)) {
+          Log "[N1]   Windows moze teraz zapytac 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - to aktualizacja $($tool.Name), kliknij Tak. $script:PoradaOknoZgody"
+          try {
+            winget upgrade --id $tool.Id --exact --silent --accept-package-agreements --accept-source-agreements
+            switch ($LASTEXITCODE) {
+              0 { Log "[N1] $($tool.Name) zaktualizowany"; $installedAny = $true }
+              -1978335189 { Log "[N1] $($tool.Name) - aktualna wersja" } # 0x8A15002B
+              -1978335212 { Log "[N1] $($tool.Name) zainstalowany spoza winget - aktualizacje pomijam" } # 0x8A150014
+              default { Log "[N1] WARNING: winget upgrade for $target exited $LASTEXITCODE - check manually" }
+            }
+          } catch {
+            Log "[N1] WARNING: winget upgrade for $target failed: $($_.Exception.Message) - check manually"
+          }
+        }
+        continue
+      }
       Log "[N1] $($tool.Name) ($($tool.Id)) already present - skip"
       continue
     }
@@ -332,7 +359,7 @@ function Invoke-StepN1 {
     if ($PSCmdlet.ShouldProcess($target, $action)) {
       Log "[N1] installing $target ..."
       # R2 (poz. 11): okna zgody nie da sie sfotografowac (Windows je zaciemnia), wiec mowimy z gory.
-      Log "[N1]   Windows moze teraz zapytac 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - to instalacja $($tool.Name), kliknij Tak."
+      Log "[N1]   Windows moze teraz zapytac 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - to instalacja $($tool.Name), kliknij Tak. $script:PoradaOknoZgody"
       winget install --id $tool.Id --exact --silent --accept-package-agreements --accept-source-agreements
       if ($LASTEXITCODE -ne 0) {
         Log "[N1] WARNING: winget install for $target exited $LASTEXITCODE - check manually"
@@ -448,7 +475,7 @@ function Get-PoradaDysk {
     $lines = @(
       "Dysk Google: aplikacja Dysk Google nie jest zainstalowana na tym komputerze."
       "  Pobierz ja i zainstaluj: https://www.google.com/drive/download/"
-      "  Przy instalacji Windows zapyta 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - kliknij Tak."
+      "  Windows moze teraz zapytac przy instalacji 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - kliknij Tak. $script:PoradaOknoZgody"
       "  Potem zaloguj sie kontem, ktorym logujesz sie do PS, i wroc do tego okna. Ekran Google o 'Google Play' to zwykle ostrzezenie - kliknij 'Zaloguj sie'."
     )
   } elseif (-not $DyskPodlaczony) {
@@ -998,7 +1025,9 @@ function Write-N3PullLauncher {
   # A space in the Windows username DOES happen (Agnieszka Brodziak, 2026-10-07) - the inner
   # quotes of /tr are escaped in Register-ZadanieCogodzinne.
   param([string]$Path)
+  $paths = [regex]::Replace((@{ vault = $VaultPath; log = $LogFile } | ConvertTo-Json -Compress), '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value }).Replace("'", "''")
   $body = @(
+    "`$paths = '$paths' | ConvertFrom-Json"
     # B3: jedna linia, ktora zdejmuje cala klase awarii "zadanie w tle wisi w nieskonczonosc":
     # bez niej git przy wygaslych poswiadczeniach czeka na wpisanie hasla, ktorego w ukrytym
     # oknie nikt nie wpisze. Z nia git konczy sie bledem, ktory ladnie w logu.
@@ -1006,13 +1035,146 @@ function Write-N3PullLauncher {
     # Menedzer poswiadczen Gita (GCM) wystawia WLASNE okno logowania i o GIT_TERMINAL_PROMPT
     # nie wie - w ukrytym zadaniu nikt go nie zobaczy, wiec proces wisi (zmierzone w Z8).
     "`$env:GCM_INTERACTIVE = 'never'"
-    "if (-not (Test-Path -LiteralPath '$VaultPath\.git')) { return }"
-    "New-Item -ItemType Directory -Force -Path '$VaultPath\.envi' | Out-Null"
-    "git -C '$VaultPath' pull --ff-only *>> '$LogFile'"
-  ) -join "`r`n"
+    "if (-not (Test-Path -LiteralPath (Join-Path `$paths.vault '.git'))) { return }"
+    "New-Item -ItemType Directory -Force -Path (Join-Path `$paths.vault '.envi') | Out-Null"
+    "git -C `$paths.vault pull --ff-only *>> `$paths.log"
+  ) -join "`n"
   $dir = Split-Path $Path -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-  Set-JsonFileNoBom -LiteralPath $Path -Content ($body + "`r`n")   # reused BOM-less text writer
+  Set-JsonFileNoBom -LiteralPath $Path -Content ($body + "`n" + (Get-SbUpdateNoticeBody) + "`nInvoke-SbUpdateNotice`n")
+}
+
+# -- Aktualizacja instalatora: lokalny skrot dla kazdej roli, bez rezydenta. --
+function Get-SbUpdateNoticeBody {
+  return @'
+function Show-SbUpdateBalloon {
+  Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+  Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+  $icon = New-Object System.Windows.Forms.NotifyIcon
+  try {
+    $icon.Icon = [System.Drawing.SystemIcons]::Information
+    $enviIcon = Join-Path $env:USERPROFILE '.envi\envi-znak.ico'
+    if (Test-Path -LiteralPath $enviIcon) { $icon.Icon = New-Object System.Drawing.Icon($enviIcon) }
+    $icon.add_BalloonTipClicked({
+      try {
+        $launcher = Join-Path $env:USERPROFILE '.envi\sb-aktualizuj.ps1'
+        $ps51 = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+        Start-Process -FilePath $ps51 -ArgumentList ('-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $launcher) -WindowStyle Hidden -ErrorAction Stop
+      } catch { try { Add-Content -LiteralPath (Join-Path $env:USERPROFILE '.envi\sb-aktualizacja.log') -Value "Klikniecie powiadomienia: $($_.Exception.Message)" -ErrorAction Stop } catch { } }
+    })
+    $icon.Visible = $true
+    $icon.ShowBalloonTip(20000, 'Second Brain: jest nowa wersja', 'Kliknij tutaj albo w menu Start: Aktualizuj Second Brain.', [System.Windows.Forms.ToolTipIcon]::Info)
+    $koniec = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $koniec) { [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
+  } finally { $icon.Visible = $false; $icon.Dispose() }
+}
+
+function Invoke-SbUpdateNotice {
+  $log = Join-Path $env:USERPROFILE '.envi\sb-aktualizacja.log'
+  $mutex = $null; $locked = $false
+  try {
+    # Autostart i harmonogram moga pobrac kanon w tej samej chwili.
+    $mutex = New-Object Threading.Mutex($false, 'Local\ENVI-SB-UpdateNotice')
+    $locked = $mutex.WaitOne(0)
+    if (-not $locked) { return }
+    $stanPath = Join-Path $env:USERPROFILE '.envi\sb-aktualizacja-stan.json'
+    $stan = Get-Content -LiteralPath $stanPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    $mf = Get-Content -LiteralPath (Join-Path $stan.rdzen 'rdzen-manifest.json') -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    $lokalna = $null; $zdalna = $null
+    if (-not [version]::TryParse([string]$stan.wersja, [ref]$lokalna) -or -not [version]::TryParse([string]$mf.wersja, [ref]$zdalna)) { throw 'Nieczytelny numer wersji - pomijam powiadomienie.' }
+    $dzis = Get-Date -Format 'yyyy-MM-dd'
+    if ($zdalna -le $lokalna -or $stan.ostatniDymek -eq $dzis) { return }
+    Show-SbUpdateBalloon
+    $stan | Add-Member -NotePropertyName ostatniDymek -NotePropertyValue $dzis -Force
+    $json = [regex]::Replace(($stan | ConvertTo-Json), '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+    [IO.File]::WriteAllText($stanPath, $json, (New-Object Text.UTF8Encoding($false)))
+  } catch {
+    try { Add-Content -LiteralPath $log -Value ("{0} Powiadomienie pominiete: {1}" -f (Get-Date), $_.Exception.Message) -ErrorAction Stop } catch { }
+  } finally {
+    if ($locked) { $mutex.ReleaseMutex() }
+    if ($mutex) { $mutex.Dispose() }
+  }
+}
+'@
+}
+
+function Write-SbUpdateLauncher {
+  param([string]$Path)
+  $body = @'
+$ErrorActionPreference = 'Stop'
+function Show-SbUpdateError([string]$Tekst) {
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.MessageBox]::Show($Tekst, 'Aktualizuj Second Brain', 'OK', 'Warning') | Out-Null
+}
+function Start-SbInstaller([string]$Path) {
+  Start-Process -FilePath (Join-Path ([Environment]::SystemDirectory) 'cmd.exe') -ArgumentList ('/d /c ""{0}""' -f $Path) -WorkingDirectory (Split-Path $Path -Parent) -WindowStyle Normal -ErrorAction Stop
+}
+function Invoke-SbUpdate {
+  $blad = "Nie uda$([char]0x0142)o si$([char]0x0119) uruchomi$([char]0x0107) aktualizacji."
+  $pomoc = 'Pobierz instalator ze strony SB w PS: https://ps.envi.com.pl/#/sbInstaller'
+  $ponow = "Spr$([char]0x00F3)buj ponownie za kilka minut. Je$([char]0x015B)li dalej nie dzia$([char]0x0142)a, pobierz instalator ze strony SB w PS: https://ps.envi.com.pl/#/sbInstaller"
+  try {
+    $dir = Join-Path $env:USERPROFILE '.envi'
+    $stan = Get-Content -LiteralPath (Join-Path $dir 'sb-aktualizacja-stan.json') -Raw | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath $stan.rdzen -PathType Container)) {
+      $pomoc = "Otw$([char]0x00F3)rz Dysk Google i zaloguj si$([char]0x0119).`n" + $pomoc
+      throw 'Dysk SB.ENVI jest niedostepny.'
+    }
+    $mf = Get-Content -LiteralPath (Join-Path $stan.rdzen 'rdzen-manifest.json') -Raw | ConvertFrom-Json
+    if ($mf.instalator.plik -ne 'ENVI-SB-instalator.cmd' -or $mf.instalator.sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Brak danych instalatora w opisie wydania.' }
+    $source = Join-Path $stan.rdzen 'ENVI-SB-instalator.cmd'
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { $pomoc = $ponow; throw 'Brak instalatora na Dysku.' }
+    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $mf.instalator.sha256) { $pomoc = $ponow; throw 'Instalator na Dysku jest niepelny.' }
+    $pobrany = Join-Path $dir 'instalator\pobrany'
+    New-Item -ItemType Directory -Path $pobrany -Force | Out-Null
+    $cel = Join-Path $pobrany 'ENVI-SB-instalator.cmd'
+    Copy-Item -LiteralPath $source -Destination $cel -Force
+    if ((Get-FileHash -LiteralPath $cel -Algorithm SHA256).Hash -ne $mf.instalator.sha256) { $pomoc = $ponow; throw 'Kopia instalatora jest niepelna.' }
+    Start-SbInstaller -Path $cel
+  } catch {
+    try { Add-Content -LiteralPath (Join-Path $env:USERPROFILE '.envi\sb-aktualizacja.log') -Value ("{0} Aktualizacja: {1}" -f (Get-Date), $_.Exception.Message) } catch { }
+    try { Show-SbUpdateError -Tekst ($blad + "`n" + $pomoc) } catch { }
+  }
+}
+Invoke-SbUpdate
+'@
+  Set-JsonFileNoBom -LiteralPath $Path -Content ($body + "`n")
+}
+
+function Install-SbUpdateShortcut {
+  [CmdletBinding(SupportsShouldProcess)]
+  param([string]$Programs = [Environment]::GetFolderPath('Programs'))
+  try {
+    $dir = Join-Path $env:USERPROFILE '.envi'
+    $root = $script:CoreDriveRoot
+    if (-not $root -and $script:SkillDriveRoot) { $root = Join-Path (Split-Path $script:SkillDriveRoot -Parent) '.rdzen' }
+    if (-not $root) { throw 'Nie ustalono sciezki dysku SB.ENVI.' }
+    if (-not $PSCmdlet.ShouldProcess($dir, 'zapisz wersje instalatora i skrot Aktualizuj Second Brain w menu Start')) { return }
+    New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+    $stanPath = Join-Path $dir 'sb-aktualizacja-stan.json'
+    $ostatni = $null
+    if (Test-Path -LiteralPath $stanPath) {
+      try { $ostatni = (Get-Content -LiteralPath $stanPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop).ostatniDymek } catch { Log "[Aktualizacja] poprzedni stan nieczytelny: $($_.Exception.Message)" }
+    }
+    $stan = [ordered]@{ wersja = [string]$env:SB_INSTALATOR_WERSJA; rdzen = $root; ostatniDymek = $ostatni }
+    $json = [regex]::Replace(($stan | ConvertTo-Json), '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value })
+    Set-JsonFileNoBom -LiteralPath $stanPath -Content $json
+    $launcher = Join-Path $dir 'sb-aktualizuj.ps1'
+    Write-SbUpdateLauncher -Path $launcher
+    $ico = Join-Path $dir 'envi-znak.ico'
+    Write-ZnakEnviIco -Path $ico | Out-Null
+    $icon = '%SystemRoot%\System32\shell32.dll,46'
+    if (Test-Path -LiteralPath $ico) { $icon = "$ico,0" }
+    $wsh = New-Object -ComObject WScript.Shell
+    $sc = $wsh.CreateShortcut((Join-Path $Programs 'Aktualizuj Second Brain.lnk'))
+    $sc.TargetPath = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+    $sc.Arguments = '-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $launcher
+    $sc.WindowStyle = 7
+    $sc.IconLocation = $icon
+    $sc.Description = 'Second Brain: pobierz i uruchom najnowszy instalator'
+    $sc.Save()
+    Log '[Aktualizacja] skrot Aktualizuj Second Brain zapisany w menu Start.'
+  } catch { Log "[Aktualizacja] nie udalo sie przygotowac aktualizacji: $($_.Exception.Message)" }
 }
 
 function Invoke-StepN3 {
@@ -1930,6 +2092,25 @@ function Test-N5CodexNpm {
     $cmd.Source.StartsWith($prefix.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase))
 }
 
+function Set-N5CodexShim {
+  # ponytail: shim zamiast dowiazania - bez trybu dewelopera/admina winget nie robi aliasow.
+  $bin = Join-Path $env:USERPROFILE '.local\bin'
+  $shim = Join-Path $bin 'codex.cmd'
+  $owned = $false
+  if (Test-Path -LiteralPath $shim) {
+    $owned = [IO.File]::ReadAllText($shim).Split([char]10)[0].TrimEnd([char]13) -ceq '@rem ENVI SB'
+    if (-not $owned) { Log '[N5] Codex: obcy codex.cmd - pozostawiam bez zmian'; return }
+  }
+  $cmd = Get-Command codex -ErrorAction SilentlyContinue
+  if ($cmd -and (-not $owned -or $cmd.Source -ne $shim)) { return }
+  $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+  $files = @(Get-ChildItem -Path (Join-Path $packages 'OpenAI.Codex_*\codex-*-pc-windows-msvc.exe') -File -ErrorAction SilentlyContinue)
+  if ($files.Count -ne 1) { Log "[N5] Codex: znaleziono $($files.Count) plikow CLI w WinGet - nie zapisuje shim bez jednoznacznej sciezki"; return }
+  $null = New-Item -ItemType Directory -Path $bin -Force -ErrorAction Stop
+  [IO.File]::WriteAllText($shim, ('@rem ENVI SB' + "`n" + '@"' + $files[0].FullName + '" %*' + "`n"), [Text.Encoding]::ASCII)
+  Log "[N5] Codex: odswiezono $shim"
+}
+
 function Invoke-N5Runtime {
   # Jeden dom obslugi bledow i wersji dla Node.js i obu CLI; kazde wywolanie izolowane.
   param([string]$Name, [string]$Command, [string]$InstallCmd, [string]$UpdateCmd)
@@ -1942,7 +2123,7 @@ function Invoke-N5Runtime {
     $tool = ($action -split '\s+')[0]
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "brak polecenia '$tool' na tym komputerze" }
     Log "[N5] ${Name}: $action"
-    Log "[N5]   Windows moze zapytac 'Czy zezwolic na wprowadzanie zmian?' - to instalacja lub aktualizacja $Name, kliknij Tak."
+    Log "[N5]   Windows moze teraz zapytac 'Czy zezwolic na wprowadzanie zmian?' - to instalacja lub aktualizacja $Name, kliknij Tak. $script:PoradaOknoZgody"
     # Instalator Claude w osobnym zakresie: jego $Target nie nadpisuje lokalnych zmiennych.
     $global:LASTEXITCODE = 0
     & ([scriptblock]::Create($action))
@@ -1953,7 +2134,8 @@ function Invoke-N5Runtime {
     }
     Sync-PathFromRegistry
     $bin = Join-Path $env:USERPROFILE '.local\bin'
-    if ((Test-Path -LiteralPath $bin) -and @($env:Path -split ';') -notcontains $bin) { $env:Path += ';' + $bin }
+    if (@($env:Path -split ';') -notcontains $bin) { $env:Path += ';' + $bin }
+    if ($Command -eq 'codex' -and $tool -eq 'winget') { Set-N5CodexShim }
   } catch {
     Add-N5Todo $Name $_.Exception.Message
   } finally {
@@ -2001,7 +2183,7 @@ function Invoke-N5DesktopInstalls {
         Log "[N5] $($app.Name) juz jest"; continue
       }
       if (-not $PSCmdlet.ShouldProcess($app.Name, $app.Cmd)) { continue }
-      Log "[N5]   Windows lub Sklep Microsoft moze otworzyc okno zgody - to instalacja $($app.Name), zaakceptuj ja."
+      Log "[N5]   Windows moze teraz zapytac o zgode (takze w Sklepie Microsoft) - to instalacja $($app.Name), zaakceptuj ja. $script:PoradaOknoZgody"
       $global:LASTEXITCODE = 0
       & ([scriptblock]::Create($app.Cmd))
       if ($LASTEXITCODE -ne 0) { throw "winget zglosil blad (kod $LASTEXITCODE)" }
@@ -2064,9 +2246,10 @@ function Invoke-N5Google {
     $global:LASTEXITCODE = 0
     $account = & $script:PyLauncher -3 $google status 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) { Log "[N5] Google: konto $($account.Trim()) - token dziala"; return }
-    Log '[N5] Google: otworzy sie przegladarka. Wybierz konto Google, ktorym logujesz sie do PS.'
+    Log '[N5] Nacisnij Enter - wtedy otworzy sie przegladarka z logowaniem Google (N = pomin).'
+    Log '[N5] Wybierz konto Google, ktorym logujesz sie do PS.'
     Log '[N5]   Google moze pokazac "Google nie zweryfikowal tej aplikacji" -> "Zaawansowane" -> "Przejdz do ENVI Second Brain". Kliknij Zezwol.'
-    $answer = & $Czytaj 'Enter = zaloguj teraz, N = pomin'
+    $answer = & $Czytaj 'Nacisnij Enter - wtedy otworzy sie przegladarka z logowaniem Google (N = pomin). Wybierz konto Google, ktorym logujesz sie do PS.'
     if ("$answer".Trim() -match '^[nN]') { throw 'logowanie pominiete' }
     $global:LASTEXITCODE = 0
     & $script:PyLauncher -3 $google login
@@ -2346,6 +2529,8 @@ foreach ($id in @('N1', 'N2', 'N2b', 'N3', 'N3b', 'N4', 'N5', 'N6')) {
     Log "[$id] (stub) $desc"
   }
 }
+# Wersje zapisujemy dopiero po wszystkich krokach, zeby przerwany przebieg nie ukryl dymka.
+Install-SbUpdateShortcut
 } catch {
   # Last-resort net: any unexpected terminating error still lands in bootstrap.log instead of
   # only flashing in a console window that closes on exit.
@@ -2446,7 +2631,11 @@ foreach ($zad in @($TaskName, $SyncTaskName)) {
   if ($zad -eq $SyncTaskName -and $sumRole -ne 'team') { continue }
   $wynik = $null
   try { $wynik = (Get-ScheduledTaskInfo -TaskName $zad -ErrorAction Stop).LastTaskResult } catch { }
-  Log ("Zadanie '{0}': ostatni wynik {1}" -f $zad, $(if ($null -ne $wynik) { $wynik } else { 'nieznany (zadania nie ma?)' }))
+  $opisWyniku = if ($null -eq $wynik) { 'nieznany (zadania nie ma?)' }
+    elseif ($wynik -eq 267011) { 'zalozone, pierwsze uruchomienie w ciagu kilku godzin' }
+    elseif ($wynik -eq 0) { 'dziala (ostatnie pobranie OK)' }
+    else { "ostatnie uruchomienie zakonczone kodem $wynik - jesli sie powtarza, wyslij bootstrap.log" }
+  Log ("Zadanie '{0}': {1}" -f $zad, $opisWyniku)
   if ($null -ne $wynik -and $wynik -ne 0 -and $wynik -ne 267011) {
     $todoZadania += ("Zadanie w tle '{0}' skonczylo sie bledem (kod {1}). Uruchom ENVI-SB-instalator.cmd jeszcze raz; jesli kod wroci, wyslij plik $InstallLogFile wlascicielowi." -f $zad, $wynik)
   }
@@ -2480,12 +2669,7 @@ if ($todo.Count -eq 0) {
 }
 # R3/R2: strona SB w PS, sekcja "Po instalacji - co dalej" (router hashowy, sekcja z ?sekcja=).
 $urlPoInstalacji = $PsUrl.TrimEnd('/') + '/#/sbInstaller?sekcja=po-instalacji'
-if ($WhatIfPreference) {
-  Log "(-WhatIf) otworzylbym strone SB w PS, sekcja 'Po instalacji - co dalej': $urlPoInstalacji"
-} else {
-  Log "Otwieram strone SB w PS, sekcja 'Po instalacji - co dalej': jak uruchomic Claude i Codex i co zrobic, gdy cos nie wyszlo. Gdyby sie nie otworzyla, wejdz recznie: $urlPoInstalacji"
-  $null = Open-Url $urlPoInstalacji
-}
+Log "Dalsze kroki (Claude, Codex i pomoc po instalacji): $urlPoInstalacji"
 Log "Pelny zapis przebiegu (ten plik wyslij, gdy cos nie dziala): $InstallLogFile"
 Log "=== bootstrap run done ==="
 # R2: znacznik konca (poz. 3). ENVI-SB-instalator.cmd kasuje ten plik przed startem i po przebiegu
@@ -2493,7 +2677,7 @@ Log "=== bootstrap run done ==="
 # w trakcie, a czlowiek widzial tylko "nacisnij dowolny klawisz"). Zapis .NET-em, nie Set-Content:
 # ma powstac takze pod -WhatIf. Bez zmiennej (uruchomienie wprost, nie z .cmd) - nic nie piszemy.
 if ($env:SB_INSTALATOR_KONIEC) {
-  try { [System.IO.File]::WriteAllText($env:SB_INSTALATOR_KONIEC, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) }
+  try { [System.IO.File]::WriteAllText($env:SB_INSTALATOR_KONIEC, $(if ($WhatIfPreference) { '' } else { $urlPoInstalacji })) }
   catch { Log "Nie udalo sie zapisac znacznika konca '$env:SB_INSTALATOR_KONIEC' ($($_.Exception.Message)) - okno instalatora powie, ze przebieg sie urwal, choc doszedl do konca." }
 }
 
