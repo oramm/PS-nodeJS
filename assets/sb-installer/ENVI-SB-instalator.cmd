@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.14.15. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.14.16. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.14.15"
+set "SB_INSTALATOR_WERSJA=0.14.16"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -61,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 150361
+#SB-PLIK bootstrap.ps1 150683
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -2115,6 +2115,9 @@ function Invoke-N5Runtime {
   # Jeden dom obslugi bledow i wersji dla Node.js i obu CLI; kazde wywolanie izolowane.
   param([string]$Name, [string]$Command, [string]$InstallCmd, [string]$UpdateCmd)
   try {
+    $bin = Join-Path $env:USERPROFILE '.local\bin'
+    if (@($env:Path -split ';') -notcontains $bin) { $env:Path += ';' + $bin }
+    if ($Command -eq 'codex' -and -not $WhatIfPreference) { Set-N5CodexShim }
     $present = [bool](Get-Command $Command -ErrorAction SilentlyContinue)
     $before = Get-N5Version $Command
     Log "[N5] ${Name}: wersja przed: $before"
@@ -2128,8 +2131,10 @@ function Invoke-N5Runtime {
     $global:LASTEXITCODE = 0
     & ([scriptblock]::Create($action))
     $code = $LASTEXITCODE
-    # winget: APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (0x8A15002B).
-    if ($code -ne 0 -and -not ($action -like 'winget upgrade *' -and $code -eq -1978335189)) {
+    # winget: UPDATE_NOT_APPLICABLE (0x8A15002B), PACKAGE_ALREADY_INSTALLED (0x8A150061).
+    if ($code -ne 0 -and -not (
+      ($action -like 'winget upgrade *' -and $code -eq -1978335189) -or
+      ($action -like 'winget install *' -and $code -in @(-1978335135, -1978335189)))) {
       throw $(if ($tool -eq 'winget') { "winget zglosil blad (kod $code)" } else { "polecenie zakonczylo sie bledem (kod $code)" })
     }
     Sync-PathFromRegistry
