@@ -1,4 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import fs from 'fs';
+import path from 'path';
 import { app } from '../../index';
 
 jest.mock('../../index', () => ({
@@ -22,6 +24,8 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
     let guard: any;
     let guardOrder: number;
     let packageOrder: number;
+    let infoOrder: number;
+    let info: (req: any, res: any, next: any) => void;
     let account: SbPersonAccount | null;
     let record: SbAccessRecord | null;
 
@@ -34,6 +38,9 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
         const get = app.get as unknown as jest.Mock;
         const getIndex = get.mock.calls.findIndex((call: any) => call[0] === '/sbInstaller/paczka');
         packageOrder = get.mock.invocationCallOrder[getIndex];
+        const infoIndex = get.mock.calls.findIndex((call: any) => call[0] === '/sbInstaller/info');
+        infoOrder = get.mock.invocationCallOrder[infoIndex];
+        info = get.mock.calls[infoIndex][1] as any;
     });
 
     beforeEach(() => {
@@ -101,5 +108,24 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
         await guard({ session: { userData: USER } }, res, next);
         expect(next).toHaveBeenCalledWith(error);
         expect(res.send).not.toHaveBeenCalled();
+    });
+
+    it('trasa info stoi za ta sama bramka prefiksu /sbInstaller co paczka', () => {
+        expect(guardOrder).toBeLessThan(infoOrder);
+    });
+
+    it('info zwraca wersje z naglowka skryptu instalatora, bez cache`owania', () => {
+        const res: any = { setHeader: jest.fn(), send: jest.fn() };
+
+        info({ session: { userData: USER } }, res, jest.fn());
+
+        const { version } = res.send.mock.calls[0][0];
+        const cmd = fs.readFileSync(
+            path.resolve(process.cwd(), 'assets', 'sb-installer', 'ENVI-SB-instalator.cmd'),
+            'utf8'
+        );
+        expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+        expect(cmd).toContain(`set "SB_INSTALATOR_WERSJA=${version}"`);
+        expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
     });
 });

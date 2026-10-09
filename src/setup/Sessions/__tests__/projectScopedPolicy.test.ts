@@ -115,6 +115,7 @@ describe('projectScopedPolicy', () => {
             ['GET', '/letter/5/signatures'],
             ['POST', '/letters/signatureSummary'],
             ['GET', '/signing/program/download'],
+            ['GET', '/signing/program/info'],
         ];
 
         describe.each(SCOPED_ROLES)('%s', (_label, userData) => {

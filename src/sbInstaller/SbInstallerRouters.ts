@@ -1,10 +1,23 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { app } from '../index';
 import SbAccessController from '../sbAccess/SbAccessController';
 import {
     INSTALLER_FILE_NAME,
     buildInstallerZip,
+    installerAssetsDir,
 } from './SbInstallerPackage';
+
+const INSTALLER_SCRIPT_NAME = 'ENVI-SB-instalator.cmd';
+
+/** Wersja z linii `set "SB_INSTALATOR_WERSJA=..."` skryptu; brak pliku albo linii = null. */
+function readSbInstallerVersion(): string | null {
+    const script = path.join(installerAssetsDir(), INSTALLER_SCRIPT_NAME);
+    if (!fs.existsSync(script)) return null;
+    const match = /set "SB_INSTALATOR_WERSJA=([^"]+)"/.exec(fs.readFileSync(script, 'utf8'));
+    return match ? match[1] : null;
+}
 
 /**
  * Pobieranie firmowego instalatora Second Brain.
@@ -40,6 +53,15 @@ app.get('/sbInstaller/paczka', (req: Request, res: Response, next) => {
         );
         res.attachment(INSTALLER_FILE_NAME);
         res.send(buildInstallerZip());
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get('/sbInstaller/info', (req: Request, res: Response, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.send({ version: readSbInstallerVersion() });
     } catch (error) {
         next(error);
     }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { registerSigningRoutes } from '../SigningRoutes';
+import { readProgramFileVersion, registerSigningRoutes } from '../SigningRoutes';
 import { SigningJobError } from '../SigningJobError';
 
 type Handler = (req: any, res: any, next: any) => Promise<void> | void;
@@ -35,6 +35,17 @@ async function call(handlers: Handler[], req: any, res: any) {
 
 const PERSON = { enviId: 125, userName: 'Marek' };
 
+/** Minimalny bufor z VS_FIXEDFILEINFO o wersji a.b.c.d (MS = a.b, LS = c.d). */
+function versionedExe(a: number, b: number, c: number, d: number): Buffer {
+    const buf = Buffer.alloc(64, 0x20);
+    const at = 20;
+    buf.writeUInt32LE(0xfeef04bd, at);
+    buf.writeUInt32LE(0x00010000, at + 4);
+    buf.writeUInt32LE(((a << 16) | b) >>> 0, at + 8);
+    buf.writeUInt32LE(((c << 16) | d) >>> 0, at + 12);
+    return buf;
+}
+
 describe('SigningRoutes', () => {
     let controller: any;
     let routes: Record<string, Handler[]>;
@@ -67,6 +78,7 @@ describe('SigningRoutes', () => {
         'GET /letter/:id/signatures',
         'POST /letters/signatureSummary',
         'GET /signing/program/download',
+        'GET /signing/program/info',
     ];
     const PROGRAM_ROUTES = [
         'GET /signing/jobs/:token',
@@ -150,6 +162,42 @@ describe('SigningRoutes', () => {
 
         it('produkcyjna sciezka domyslna wskazuje plik, ktory naprawde lezy w repozytorium', () => {
             expect(fs.existsSync(path.resolve(process.cwd(), 'assets', 'signing', 'EnviPodpis.exe'))).toBe(true);
+        });
+
+        it('info: brak pliku -> available false, version null, bez cache`owania', async () => {
+            const missing = collect(controller, { programExePath: path.join(dir, 'nie-ma.exe') });
+            const res = makeRes();
+
+            await call(missing['GET /signing/program/info'], { params: {}, session: { userData: PERSON } }, res);
+
+            expect(res.body).toEqual({ available: false, version: null });
+            expect(res.headers['Cache-Control']).toBe('no-cache');
+        });
+
+        it('info: plik z sygnatura -> available true i wersja z zasobu pliku', async () => {
+            const exe = path.join(dir, 'versioned.exe');
+            fs.writeFileSync(exe, versionedExe(1, 0, 0, 0));
+            const withFile = collect(controller, { programExePath: exe });
+            const res = makeRes();
+
+            await call(withFile['GET /signing/program/info'], { params: {}, session: { userData: PERSON } }, res);
+
+            expect(res.body).toEqual({ available: true, version: '1.0.0' });
+        });
+    });
+
+    describe('readProgramFileVersion', () => {
+        it('prawdziwy EnviPodpis.exe z repozytorium ma wersje 1.0.0', () => {
+            const exe = fs.readFileSync(path.resolve(process.cwd(), 'assets', 'signing', 'EnviPodpis.exe'));
+            expect(readProgramFileVersion(exe)).toBe('1.0.0');
+        });
+
+        it('bez sygnatury VS_FIXEDFILEINFO wersja jest nieznana (null)', () => {
+            expect(readProgramFileVersion(Buffer.from('MZ-bez-zasobu-wersji'))).toBeNull();
+        });
+
+        it('czyta dwie pierwsze czesci z MS i dwie z LS, czwarta pomija', () => {
+            expect(readProgramFileVersion(versionedExe(1, 2, 3, 4))).toBe('1.2.3');
         });
     });
 

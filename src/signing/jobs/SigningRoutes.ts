@@ -22,6 +22,7 @@ import { MAX_UPLOAD_BYTES } from './SigningJobsConfig';
  *      GET  /letter/:id/signatures            podpisane pliki pisma (okno podpisu, plakietka)
  *      POST /letters/signatureSummary         { letterIds } - plakietki calej listy pism jednym zapytaniem
  *      GET  /signing/program/download         instalator ENVI Podpis (assets/signing/EnviPodpis.exe)
+ *      GET  /signing/program/info             { available, version } - wersja tego instalatora
  *
  * B. Trasy PROGRAMU ENVI Podpis - BEZ sesji (wyjatek w requireSession). Jedynym poswiadczeniem
  *    jest token w adresie; kontrakt z programem: desktop/envi-podpis/src/ApiClient.cs.
@@ -64,6 +65,21 @@ function wrap(handler: Handler): Handler {
 
 /** Nazwa pliku instalatora w assets/signing oraz nazwa, pod jaka go pobiera uzytkownik. */
 export const PROGRAM_EXE_NAME = 'EnviPodpis.exe';
+
+/** Sygnatura VS_FIXEDFILEINFO (0xFEEF04BD) zapisana little-endian. */
+const VS_FIXEDFILEINFO_SIGNATURE = Buffer.from([0xbd, 0x04, 0xef, 0xfe]);
+
+/**
+ * Wersja pliku PE z zasobu VS_FIXEDFILEINFO: dwFileVersionMS spod sygnatury +8, LS +12.
+ * Zwraca trzy czesci ("1.0.0"), czwarta jest pomijana. Brak sygnatury lub obciety bufor = null.
+ */
+export function readProgramFileVersion(exe: Buffer): string | null {
+    const at = exe.indexOf(VS_FIXEDFILEINFO_SIGNATURE);
+    if (at < 0 || at + 16 > exe.length) return null;
+    const ms = exe.readUInt32LE(at + 8);
+    const ls = exe.readUInt32LE(at + 12);
+    return `${ms >>> 16}.${ms & 0xffff}.${ls >>> 16}`;
+}
 
 export interface SigningRoutesOptions {
     /** Tylko testy: inny plik instalatora niz assets/signing/EnviPodpis.exe. */
@@ -214,6 +230,22 @@ export function registerSigningRoutes(
             );
             res.setHeader('Cache-Control', 'no-cache');
             res.send(bytes);
+        })
+    );
+
+    app.get(
+        '/signing/program/info',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.setHeader('Cache-Control', 'no-cache');
+            if (!fs.existsSync(programExePath)) {
+                res.send({ available: false, version: null });
+                return;
+            }
+            res.send({
+                available: true,
+                version: readProgramFileVersion(fs.readFileSync(programExePath)),
+            });
         })
     );
 
