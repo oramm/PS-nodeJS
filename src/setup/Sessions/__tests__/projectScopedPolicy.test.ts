@@ -106,6 +106,15 @@ describe('projectScopedPolicy', () => {
             ['PUT', '/milestoneDate/5'],
             ['POST', '/security'],
             ['POST', '/city'],
+            // Podpis kwalifikowany (SIG-2): karta jest osoby z ENVI; role zakresowe nie podpisuja.
+            ['GET', '/letter/5/signableFiles'],
+            ['POST', '/signingJob'],
+            ['GET', '/signingJob/5'],
+            ['POST', '/signingJob/5/cancel'],
+            ['POST', '/letter/5/signedPdf'],
+            ['GET', '/letter/5/signatures'],
+            ['POST', '/letters/signatureSummary'],
+            ['GET', '/signing/program/download'],
         ];
 
         describe.each(SCOPED_ROLES)('%s', (_label, userData) => {

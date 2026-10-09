@@ -7,6 +7,15 @@ This file is the active operational index, not a full rollout log.
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
 
+## 2026-10-09 - Podpis kwalifikowany pism z PS: zlecenia podpisu (SIG-2, przygotowane, bez wdrozenia)
+
+- Scope: tabele `SigningJobs`, `PersonSigningCertificates`, `SigningJobFiles`, `DocumentSignatures`; trasy sesyjne (`GET /letter/:id/signableFiles`, `POST /signingJob`, `GET /signingJob/:id`, `GET /signingJob/:id/file/:index/preview`, `POST /signingJob/:id/cancel`, `POST /letter/:id/signedPdf`) i **cztery trasy programu "ENVI Podpis" bez sesji** (`GET /signing/jobs/:token`, `POST .../certificate|signatures|cancel`) - wyjatek w `requireSession`, jedynym poswiadczeniem jest jednorazowy token (w bazie tylko SHA-256). Role zakresowe (CONTRACT_WORKER, CLIENT) nie maja tych tras (default deny w `projectScopedPolicy`).
+- ENV: brak nowych zmiennych. Dysk Google: wspolny `REFRESH_TOKEN` serwera (jak eksport pisma do PDF). Lista zaufanych CA to stala w kodzie (`src/signing/jobs/QualifiedCaAllowlist.ts`).
+- DB: migracje `src/signing/migrations/001_create_signing_jobs.sql`, `002_create_signing_job_files.sql`, `003_create_document_signatures.sql` (+ `_down`). Kolejnosc wazna (FK). Zastosowane **tylko lokalnie** (`localhost/envikons_myEnvi`, recznie, z wpisem w lokalnym `SchemaMigrations`; pozostale zalegle migracje lokalne nietkniete). Produkcja: bramka G-SIG-1 (zgoda wlasciciela), backup -> `migrate:list` -> apply -> odczyt PRZED pushem kodu.
+- Ograniczenia v1: odwolania certyfikatow (CRL/OCSP) nie sa sprawdzane; limit 10 MB na plik (PDF jest trzymany w bazie miedzy krokami); tylko certyfikaty RSA.
+- Verification: `tsc --noEmit` 0; jest `src/signing/jobs` + `requireSession` + `projectScopedPolicy`; proba na prawdziwej lokalnej bazie (zlecenie od zalozenia do podpisanych plikow z atrapa Dysku, potem posprzatane).
+- Rollback: wycofac kod; `_down` w kolejnosci 003, 002, 001 (kasuje slad audytowy - najpierw kopia). Trasy programu bez kodu zwroca 404/401, nic poza podpisywaniem sie nie psuje.
+
 ## 2026-10-05 — WNM-2, personel kontraktu PS → FIDman (przygotowane, bez wdrożenia)
 
 - Runda poprawek: konwersja kopii roli projektu pozostawia jeden edytowany wiersz na umowie, usuwa pozostałe i odświeża stare oraz nową umowę. Personel zawiera opcjonalny `loginEmail` z `PersonAccounts.SystemEmail` dla `IsActive = 1`; kontaktowy `email` bez zmian. Przed wdrożeniem uzgodnić obsługę `loginEmail` po stronie FIDmana.

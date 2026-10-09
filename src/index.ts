@@ -744,6 +744,7 @@ require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
 require('./letters/incomingMails/IncomingMailsRouters');
+require('./signing/jobs/SigningJobsRouters');
 require('./ai/AiRouters');
 
 // ScrumSheet maintenance routes

@@ -55,6 +55,21 @@ const PUBLIC_ROUTES: { method: string; path: string }[] = [
  */
 const PUBLIC_PREFIXES = ['/v2/public/'];
 
+/**
+ * Trasy lokalnego programu "ENVI Podpis" (SIG-2): program nie ma sesji przegladarki, a jedynym
+ * poswiadczeniem jest jednorazowy, krotko wazny token w adresie (256 bitow losowosci, w bazie
+ * tylko jego skrot SHA-256). Kazda trasa sprawdza token i stan zlecenia sama
+ * (src/signing/jobs/SigningJobsController.ts). Dopasowanie jest scisle: dokladnie te cztery
+ * trasy i token o formacie [A-Za-z0-9_-]{20,128} (sciezka jest tu juz zapisana malymi literami).
+ */
+const SIGNING_PROGRAM_ROUTES: { method: string; pattern: RegExp }[] = [
+    { method: 'GET', pattern: /^\/signing\/jobs\/[a-z0-9_-]{20,128}$/ },
+    {
+        method: 'POST',
+        pattern: /^\/signing\/jobs\/[a-z0-9_-]{20,128}\/(certificate|signatures|cancel)$/,
+    },
+];
+
 /** Mirrors Express's default routing: case-insensitive, trailing slash ignored. */
 function normalizePath(path: string): string {
     const lower = path.toLowerCase();
@@ -64,6 +79,13 @@ function normalizePath(path: string): string {
 function isPublic(method: string, path: string): boolean {
     const normalized = normalizePath(path);
     if (PUBLIC_PREFIXES.some((prefix) => normalized.startsWith(prefix)))
+        return true;
+    if (
+        SIGNING_PROGRAM_ROUTES.some(
+            (route) =>
+                route.method === method.toUpperCase() && route.pattern.test(normalized),
+        )
+    )
         return true;
     return PUBLIC_ROUTES.some(
         (route) =>
