@@ -19,6 +19,10 @@ import MilestoneRepository, {
 } from './MilestoneRepository';
 import ApprovedDocsController from './approvedDocs/ApprovedDocsController';
 import Setup from '../../setup/Setup';
+import {
+    enqueueFidmanFoldersForContracts,
+    deliverFidmanFoldersAfterCommit,
+} from '../fidmanSync/FidmanSync';
 import type { ResolvedCaseType } from '../contractTemplatesTree/ContractTemplatesTreeController';
 
 /**
@@ -85,10 +89,12 @@ export default class MilestonesController extends BaseController<
         externalConn?: mysql.PoolConnection
     ): Promise<Milestone[]> {
         const instance = this.getInstance();
-        return await instance.repository.addMilestonesWithDates(
-            milestones,
-            externalConn
-        );
+        const ids = await ToolsDb.transaction<number[]>(async (conn) => {
+            await instance.repository.addMilestonesWithDates(milestones, conn);
+            return enqueueFidmanFoldersForContracts(milestones.map((m) => m.contractId), conn);
+        }, externalConn);
+        if (!externalConn) await deliverFidmanFoldersAfterCommit(ids);
+        return milestones;
     }
 
     /**
@@ -114,10 +120,8 @@ export default class MilestonesController extends BaseController<
             caseTypesByMilestone?: Map<Milestone, ResolvedCaseType[]>;
         }
     ): Promise<Milestone[]> {
-        const instance = this.getInstance();
-
         // 1. Zapisz wszystkie Milestones z Dates do DB
-        await instance.repository.addMilestonesWithDates(milestones);
+        await this.addBulkWithDates(milestones);
         console.log('Milestones saved in DB');
 
         // 2. Dla każdego Milestone utwórz Cases z Tasks
@@ -190,7 +194,7 @@ export default class MilestonesController extends BaseController<
 
                     try {
                         // 2. Transakcja DB - Milestone + Dates (pojedynczy insert)
-                        await instance.repository.addMilestonesWithDates([
+                        await MilestonesController.addBulkWithDates([
                             milestone,
                         ]);
 
@@ -292,12 +296,13 @@ export default class MilestonesController extends BaseController<
                         );
 
                     // 1. Transakcja DB - Milestone + Dates
-                    await instance.repository.editMilestoneWithDates(
-                        milestone,
-                        undefined,
-                        false,
-                        fieldsToUpdate
-                    );
+                    const ids = await ToolsDb.transaction<number[]>(async (conn) => {
+                        await instance.repository.editMilestoneWithDates(
+                            milestone, conn, true, fieldsToUpdate
+                        );
+                        return enqueueFidmanFoldersForContracts([milestone.contractId], conn);
+                    });
+                    await deliverFidmanFoldersAfterCommit(ids);
 
                     console.log('Milestone edited in DB');
 
@@ -350,10 +355,8 @@ export default class MilestonesController extends BaseController<
                 instance: MilestonesController,
                 authClient: OAuth2Client
             ) => {
-                return await instance.editMilestoneFolder(
-                    authClient,
-                    milestone
-                );
+                await instance.editMilestoneFolder(authClient, milestone);
+                await enqueueFidmanFoldersForContracts([milestone.contractId]);
             },
             auth
         );
@@ -418,6 +421,7 @@ export default class MilestonesController extends BaseController<
                 try {
                     // 1. Usuń z bazy (CASCADE usunie też MilestoneDates i powiązane Cases)
                     await instance.repository.deleteFromDb(milestone);
+                    await enqueueFidmanFoldersForContracts([milestone.contractId]);
                     console.log('Milestone deleted from DB');
 
                     // 2. Równolegle: GD + Scrum (błędy nie wpływają na DB)

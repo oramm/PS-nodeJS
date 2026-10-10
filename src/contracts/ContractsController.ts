@@ -41,6 +41,7 @@ import {
 } from './aqmSync/AqmSync';
 import {
     enqueueFidmanContractPush,
+    deliverFidmanFoldersAfterCommit,
     isFidmanContractType,
     isFidmanSyncEligible,
     readContractFidmanSyncEnabled,
@@ -235,6 +236,7 @@ export default class ContractsController extends BaseController<
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             let aqmOutboxId: number | undefined;
             let fidmanOutboxId: number | undefined;
+            const fidmanFolderIds: number[] = [];
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
                 await instance.repository.addInDb(contract, conn, true);
@@ -262,7 +264,8 @@ export default class ContractsController extends BaseController<
                 if (isFidmanSyncEligible(contract)) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
-                        conn
+                        conn,
+                        fidmanFolderIds
                     );
                 }
             });
@@ -284,6 +287,8 @@ export default class ContractsController extends BaseController<
                     )
                 );
             }
+
+            await deliverFidmanFoldersAfterCommit(fidmanFolderIds);
 
             // Operacje Scrum (jeśli auth dostępne)
             if (auth) {
@@ -507,6 +512,7 @@ export default class ContractsController extends BaseController<
             // Operacje bazodanowe - TRANSAKCJA
             let aqmOutboxId: number | undefined;
             let fidmanOutboxId: number | undefined;
+            const fidmanFolderIds: number[] = [];
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
                 await instance.repository.editInDb(
@@ -589,7 +595,8 @@ export default class ContractsController extends BaseController<
                 ) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
-                        conn
+                        conn,
+                        fidmanFolderIds
                     );
                 }
             });
@@ -615,6 +622,7 @@ export default class ContractsController extends BaseController<
                     )
                 );
             }
+            await deliverFidmanFoldersAfterCommit(fidmanFolderIds);
 
             console.groupEnd();
 

@@ -187,6 +187,59 @@ export async function enqueueFidmanFoldersPush(
     return id;
 }
 
+/** Rozwiązuje również starą umowę sprawy przed jej przeniesieniem/usunięciem. */
+export async function findFidmanFoldersContractIds(
+    milestoneIds: number[],
+    conn: mysql.PoolConnection,
+    caseId?: number
+): Promise<number[]> {
+    const ids = [...new Set(milestoneIds)].filter((id) => id != null);
+    if (!ids.length && !caseId) return [];
+    const [rows] = await conn.query(
+        `SELECT DISTINCT m.ContractId FROM Milestones m
+         WHERE ${ids.length ? `m.Id IN (${ids.map(() => '?').join(',')})` : '0'}
+         ${caseId ? 'OR m.Id = (SELECT MilestoneId FROM Cases WHERE Id = ?)' : ''}`,
+        [...ids, ...(caseId ? [caseId] : [])]
+    );
+    return (rows as any[]).map((row) => row.ContractId).filter((id) => id != null);
+}
+
+export async function deliverFidmanFoldersAfterCommit(ids: number[]): Promise<void> {
+    for (const id of ids) {
+        await tryDeliverAfterCommit(id).catch((err) =>
+            console.error('[FidmanSync] folder delivery error:', err)
+        );
+    }
+}
+
+/** Bez conn zapis użytkownika jest już zatwierdzony: błąd synchronizacji tylko logujemy. */
+export async function enqueueFidmanFoldersForContracts(
+    contractIds: (number | undefined)[],
+    conn?: mysql.PoolConnection
+): Promise<number[]> {
+    const contracts = [...new Set(contractIds)]
+        .filter((id): id is number => id != null).sort((a, b) => a - b);
+    if (!contracts.length) return [];
+    if (!conn) {
+        try {
+            const ids = await ToolsDb.transaction<number[]>(async (connection) =>
+                enqueueFidmanFoldersForContracts(contracts, connection)
+            );
+            await deliverFidmanFoldersAfterCommit(ids);
+            return ids;
+        } catch (err) {
+            console.error('[FidmanSync] folder enqueue after save error:', err);
+            return [];
+        }
+    }
+    const ids: number[] = [];
+    for (const contractId of contracts) {
+        const id = await enqueueFidmanFoldersPush(contractId, conn);
+        if (id !== null) ids.push(id);
+    }
+    return ids;
+}
+
 export type FidmanPersonnelPayload = {
     legacyContractId: number;
     personnel: {
@@ -446,10 +499,12 @@ async function enqueueRow(
 
 export async function enqueueFidmanContractPush(
     contract: AnyContract,
-    conn: mysql.PoolConnection
+    conn: mysql.PoolConnection,
+    foldersOutboxIds: number[] = []
 ): Promise<number> {
     const id = await enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
     await enqueueFidmanPersonnelPush((contract as any).id, conn);
+    foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn));
     return id;
 }
 
@@ -971,14 +1026,20 @@ export async function retryOrPushFidmanContract(
     const retried = await retryFidmanContractSync(contractId);
     if (retried.ok) {
         // Umowa została ponowiona; personel liczymy z bieżących ról, nie z dawnej migawki.
-        await ToolsDb.transaction(async (conn) => enqueueFidmanPersonnelPush(contractId, conn));
+        const folderIds = await ToolsDb.transaction<number[]>(async (conn) => {
+            await enqueueFidmanPersonnelPush(contractId, conn);
+            return enqueueFidmanFoldersForContracts([contractId], conn);
+        });
+        await deliverFidmanFoldersAfterCommit(folderIds);
         return retried;
     }
 
+    const folderIds: number[] = [];
     const outboxId = await ToolsDb.transaction<number>(async (conn) =>
-        enqueueFidmanContractPush(contract, conn)
+        enqueueFidmanContractPush(contract, conn, folderIds)
     );
     await tryDeliverAfterCommit(outboxId);
+    await deliverFidmanFoldersAfterCommit(folderIds);
     return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
 }
 

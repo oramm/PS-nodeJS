@@ -19,6 +19,11 @@ import ToolsMail from '../../../tools/ToolsMail';
 import Milestone from '../Milestone';
 import MilestoneRepository from '../MilestoneRepository';
 import CaseTypeFolderRepository from './caseTypes/CaseTypeFolderRepository';
+import {
+    findFidmanFoldersContractIds,
+    enqueueFidmanFoldersForContracts,
+    deliverFidmanFoldersAfterCommit,
+} from '../../fidmanSync/FidmanSync';
 
 export default class CasesController extends BaseController<
     Case,
@@ -285,9 +290,11 @@ export default class CasesController extends BaseController<
 
             let processInstances: ProcessInstance[] = [];
             let defaultTasks: Task[] = [];
+            let folderIds: number[] = [];
 
             // 2. Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                const contractIds = await findFidmanFoldersContractIds([caseItem.milestoneId!], conn);
                 // 2a. Numer podsprawy - wewnątrz transakcji z FOR UPDATE aby uniknąć race condition
                 if (caseItem.parentCaseId) {
                     caseItem.subCaseNumber =
@@ -317,8 +324,10 @@ export default class CasesController extends BaseController<
                     defaultTasks,
                     conn
                 );
+                folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
+            await deliverFidmanFoldersAfterCommit(folderIds);
             console.log('added in db');
 
             // 3. Ustaw display number (logika domenowa - Model)
@@ -563,9 +572,13 @@ export default class CasesController extends BaseController<
                 caseItem._processesInstances.length > 0;
 
             let newProcessInstances: ProcessInstance[] = [];
+            let folderIds: number[] = [];
 
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                const contractIds = await findFidmanFoldersContractIds(
+                    [caseItem.milestoneId!], conn, caseItem.id
+                );
                 // Przygotuj nowe ProcessInstances (jeśli reset)
                 if (shouldResetProcessInstances) {
                     newProcessInstances =
@@ -583,8 +596,10 @@ export default class CasesController extends BaseController<
                     conn,
                     fieldsToUpdate
                 );
+                folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
+            await deliverFidmanFoldersAfterCommit(folderIds);
             console.log('edited in db');
 
             // Operacje post-DB: GD i Scrum (równolegle) - zbędne przy edycji tylko pól DB
@@ -711,7 +726,12 @@ export default class CasesController extends BaseController<
                 });
             }
 
+            const contractIds = await findFidmanFoldersContractIds(
+                caseItems.map((c) => c.milestoneId!), conn
+            );
+            const folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             await conn.commit();
+            await deliverFidmanFoldersAfterCommit(folderIds);
             console.log('Cases with Tasks saved in DB');
 
             // 3. Dodaj do Scrum (błąd nie może cofnąć już zatwierdzonej transakcji DB)
@@ -842,11 +862,14 @@ export default class CasesController extends BaseController<
                 : [];
 
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
-            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            const folderIds = await ToolsDb.transaction<number[]>(async (conn: mysql.PoolConnection) => {
+                const contractIds = await findFidmanFoldersContractIds([], conn, caseItem.id);
                 // Usuń Case (CASCADE usunie ProcessInstances, podsprawy i ich zadania)
                 await this.repository.deleteFromDb(caseItem, conn, true);
+                return enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
+            await deliverFidmanFoldersAfterCommit(folderIds);
             console.log('deleted from db');
 
             const subCases = subCaseIds.map(

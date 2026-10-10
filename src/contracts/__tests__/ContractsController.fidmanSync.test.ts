@@ -90,7 +90,8 @@ describe('ContractsController.add() — SYNC-P1 FIDman outbox', () => {
     it('umowa przechodząca bramkę → enqueues outbox row using the tx conn, then delivers post-commit', async () => {
         (FidmanSync.isFidmanSyncEligible as jest.Mock).mockReturnValue(true);
         (FidmanSync.enqueueFidmanContractPush as any).mockImplementation(
-            async (_c: any, conn: any) => {
+            async (_c: any, conn: any, folderIds: number[]) => {
+                folderIds.push(556);
                 enqueueCalledWithConn = conn;
                 return 555;
             }
@@ -105,6 +106,7 @@ describe('ContractsController.add() — SYNC-P1 FIDman outbox', () => {
         // SAME connection as the contract transaction (enqueue-in-tx / L8)
         expect(enqueueCalledWithConn).toBe(mockConn);
         expect(FidmanSync.tryDeliverAfterCommit).toHaveBeenCalledWith(555);
+        expect(FidmanSync.deliverFidmanFoldersAfterCommit).toHaveBeenCalledWith([556]);
     });
 
     it('umowa niespełniająca bramki → no outbox row, no delivery', async () => {
@@ -116,6 +118,7 @@ describe('ContractsController.add() — SYNC-P1 FIDman outbox', () => {
 
         expect(FidmanSync.enqueueFidmanContractPush).not.toHaveBeenCalled();
         expect(FidmanSync.tryDeliverAfterCommit).not.toHaveBeenCalled();
+        expect(FidmanSync.deliverFidmanFoldersAfterCommit).toHaveBeenCalledWith([]);
     });
 
     it('L8: a post-commit push throw does NOT propagate out of add() nor roll back the contract', async () => {

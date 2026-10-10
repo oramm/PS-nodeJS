@@ -18,6 +18,10 @@ describe('WNM-2 personel', () => {
         return {
             query: jest.fn(async (sql: string, params: any[]) => {
                 expect(params).toEqual([42]);
+                if (!sql.includes('r.ContractId IS NULL')) {
+                    if (sql.includes('FROM Contracts')) return [[{ TypeId: 3, FidmanSyncEnabled: 1 }]];
+                    return [[]];
+                }
                 expect(sql).toContain('r.ContractId IS NULL');
                 expect(sql).toContain('LEFT(c.ProjectOurId, 6)');
                 expect(sql).toContain('p.Email');
@@ -133,7 +137,7 @@ describe('WNM-2 personel', () => {
         let id = 80;
         conn.execute.mockImplementation(async () => [{ insertId: ++id }]);
         expect(await enqueueFidmanContractPush({ id: 42 } as any, conn)).toBe(81);
-        expect(conn.execute.mock.calls.map((call: any) => call[1][0])).toEqual(['contract.upsert', 'contract.personnel']);
+        expect(conn.execute.mock.calls.filter((call: any) => call[0].startsWith('INSERT')).map((call: any) => call[1][0])).toEqual(['contract.upsert', 'contract.personnel', 'contract.folders']);
         expect(JSON.parse(conn.execute.mock.calls[1][1][2])).toEqual({ legacyContractId: 42, personnel: [] });
     });
 
