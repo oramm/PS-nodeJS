@@ -11,13 +11,13 @@ export interface RequestedFile {
     kind: SourceKind;
     gdFileId?: string;
     withGraphic: boolean;
-    /** Miejsce grafiki wskazane na stronie PS; uzywane tylko przez zrodla, ktore tego wymagaja (oferta). */
+    /** Miejsce grafiki wskazane na stronie PS; uzywane tylko przez zrodla, ktore tego wymagaja (oferta, umowa). */
     placement?: GraphicPlacement;
 }
 
 export interface CreateJobDto {
-    /** Zrodlo plikow: pismo albo oferta (w zadaniu dokladnie jedno z letterId / offerId). */
-    source: { type: 'LETTER' | 'OFFER'; id: number };
+    /** Zrodlo plikow: pismo, oferta albo kontrakt (dokladnie jedno z letterId / offerId / contractId). */
+    source: { type: 'LETTER' | 'OFFER' | 'CONTRACT'; id: number };
     files: RequestedFile[];
 }
 
@@ -95,15 +95,14 @@ export default class SigningJobValidator {
     static parseCreateJob(body: any): CreateJobDto {
         const hasLetter = body?.letterId !== undefined && body?.letterId !== null;
         const hasOffer = body?.offerId !== undefined && body?.offerId !== null;
-        if (hasLetter === hasOffer)
-            return bad(
-                hasLetter
-                    ? 'Zlecenie może dotyczyć pisma albo oferty, nie obu naraz.'
-                    : 'Brak identyfikatora pisma.'
-            );
-        const sourceId = Number(hasLetter ? body.letterId : body.offerId);
+        const hasContract = body?.contractId !== undefined && body?.contractId !== null;
+        if (Number(hasLetter) + Number(hasOffer) + Number(hasContract) > 1)
+            return bad('Zlecenie może dotyczyć jednego źródła: pisma, oferty albo kontraktu.');
+        if (!hasLetter && !hasOffer && !hasContract)
+            return bad(body?.contractId === null ? 'Brak identyfikatora kontraktu.' : 'Brak identyfikatora pisma.');
+        const sourceId = Number(hasLetter ? body.letterId : hasOffer ? body.offerId : body.contractId);
         if (!Number.isInteger(sourceId) || sourceId <= 0)
-            return bad(hasLetter ? 'Brak identyfikatora pisma.' : 'Brak identyfikatora oferty.');
+            return bad(hasLetter ? 'Brak identyfikatora pisma.' : hasOffer ? 'Brak identyfikatora oferty.' : 'Brak identyfikatora kontraktu.');
         const files = body?.files;
         if (!Array.isArray(files) || files.length === 0)
             return bad('Wybierz co najmniej jeden plik do podpisania.');
@@ -136,7 +135,7 @@ export default class SigningJobValidator {
             return { kind, gdFileId, withGraphic, placement };
         });
         if (letterDocs > 1) return bad('Pismo można wybrać tylko raz.');
-        return { source: { type: hasLetter ? 'LETTER' : 'OFFER', id: sourceId }, files: parsed };
+        return { source: { type: hasLetter ? 'LETTER' : hasOffer ? 'OFFER' : 'CONTRACT', id: sourceId }, files: parsed };
     }
 
     static parseCertificateChain(body: any): Buffer[] {

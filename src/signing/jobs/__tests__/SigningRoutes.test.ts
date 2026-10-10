@@ -69,6 +69,11 @@ describe('SigningRoutes', () => {
             renderOfferFilePage: jest.fn().mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
             uploadSignedToOffer: jest.fn().mockResolvedValue({ signedName: 'y' }),
             listOfferSignatures: jest.fn().mockResolvedValue({ offerId: 55, signatures: [] }),
+            listContractSignableFiles: jest.fn().mockResolvedValue({ contractId: 55, files: [] }),
+            locateContractGraphicPlace: jest.fn().mockResolvedValue({ pages: [], candidates: [] }),
+            renderContractFilePage: jest.fn().mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+            uploadSignedToContract: jest.fn().mockResolvedValue({ signedName: 'y' }),
+            listContractSignatures: jest.fn().mockResolvedValue({ contractId: 55, signatures: [] }),
         };
         routes = collect(controller);
     });
@@ -87,6 +92,11 @@ describe('SigningRoutes', () => {
         'GET /offer/:id/signableFile/:gdFileId/page/:page',
         'POST /offer/:id/signedPdf',
         'GET /offer/:id/signatures',
+        'GET /contract/:id/signableFiles',
+        'GET /contract/:id/signableFile/:gdFileId/graphicPlace',
+        'GET /contract/:id/signableFile/:gdFileId/page/:page',
+        'POST /contract/:id/signedPdf',
+        'GET /contract/:id/signatures',
         'GET /signing/program/download',
         'GET /signing/program/info',
     ];
@@ -97,7 +107,7 @@ describe('SigningRoutes', () => {
         'POST /signing/jobs/:token/cancel',
     ];
 
-    it('rejestruje dokladnie komplet tras sesyjnych (w tym 5 tras oferty) i cztery trasy programu', () => {
+    it('rejestruje dokladnie komplet tras sesyjnych (w tym po 5 tras oferty i umowy) i cztery trasy programu', () => {
         expect(Object.keys(routes).sort()).toEqual([...SESSION_ROUTES, ...PROGRAM_ROUTES].sort());
     });
 
@@ -185,6 +195,47 @@ describe('SigningRoutes', () => {
         );
 
         expect(controller.uploadSignedToOffer).toHaveBeenCalledWith(125, 55, file, scope);
+    });
+
+    it('trasy umowy dostaja osobe, zakres, id, numer strony i gdFileId z adresu', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const gdFileId = 'CONTRACT_DOC_ID_001';
+
+        await call(routes['GET /contract/:id/signableFiles'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /contract/:id/signableFile/:gdFileId/graphicPlace'], { params: { id: '55', gdFileId }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /contract/:id/signatures'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+
+        expect(controller.listContractSignableFiles).toHaveBeenCalledWith(55, scope);
+        expect(controller.locateContractGraphicPlace).toHaveBeenCalledWith(55, gdFileId, scope);
+        expect(controller.listContractSignatures).toHaveBeenCalledWith(55, scope);
+    });
+
+    it('obraz strony umowy to PNG (Content-Type image/png) bez cache, z numerem strony z adresu', async () => {
+        const res = makeRes();
+
+        await call(
+            routes['GET /contract/:id/signableFile/:gdFileId/page/:page'],
+            { params: { id: '55', gdFileId: 'CONTRACT_DOC_ID_001', page: '2' }, session: { userData: PERSON } },
+            res
+        );
+
+        expect(controller.renderContractFilePage).toHaveBeenCalledWith(55, 'CONTRACT_DOC_ID_001', 2, undefined);
+        expect(res.headers['Content-Type']).toBe('image/png');
+        expect(res.headers['Cache-Control']).toBe('no-store');
+        expect(res.body.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
+    it('"Wgraj podpisany" dla umowy przekazuje req.file do uploadSignedToContract razem z osoba i zakresem', async () => {
+        const file = { buffer: Buffer.from('%PDF-1.4'), originalname: 'Formularz-sig.pdf', size: 8 };
+        const scope = { projectOurIds: ['A'] };
+
+        await call(
+            routes['POST /contract/:id/signedPdf'],
+            { params: { id: '55' }, session: { userData: PERSON }, file, projectScope: scope },
+            makeRes()
+        );
+
+        expect(controller.uploadSignedToContract).toHaveBeenCalledWith(125, 55, file, scope);
     });
 
     it('lista podpisow pisma i zbiorcze plakietki dostaja osobe, zakres i dane z zadania', async () => {

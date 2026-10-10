@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
+import Setup from '../../setup/Setup';
 
 export type JobStatus =
     | 'created'
@@ -35,9 +36,10 @@ export interface GraphicPlacement {
 export interface JobRecord {
     id: number;
     tokenHash: string;
-    /** Zrodlo plikow: dokladnie jedno z letterId / offerId jest ustawione (pilnuje tego baza). */
+    /** Zrodlo plikow: dokladnie jedno z letterId / offerId / contractId jest ustawione (pilnuje tego baza). */
     letterId: number | null;
     offerId: number | null;
+    contractId: number | null;
     createdByPersonId: number;
     status: JobStatus;
     minProgramVersion: string;
@@ -77,6 +79,7 @@ export interface NewJob {
     tokenHash: string;
     letterId: number | null;
     offerId: number | null;
+    contractId: number | null;
     createdByPersonId: number;
     minProgramVersion: string;
     createdAt: Date;
@@ -110,9 +113,10 @@ export interface NewSignature {
     sourceGdFileId: string | null;
     signedGdFileId: string;
     signedName: string;
-    /** Najwyzej jedno z letterId / offerId (to samo zrodlo co zlecenie). */
+    /** Najwyzej jedno z letterId / offerId / contractId (to samo zrodlo co zlecenie). */
     letterId: number | null;
     offerId: number | null;
+    contractId: number | null;
     method: SignatureMethod;
     certSubjectCn: string;
     certSerial: string;
@@ -146,12 +150,20 @@ export interface SignatureRecord {
     id: number;
     letterId: number | null;
     offerId: number | null;
+    contractId: number | null;
     sourceType: SignatureSourceType;
     signedGdFileId: string;
     signedName: string;
     method: SignatureMethod;
     certSubjectCn: string;
     signedAt: Date;
+}
+
+export interface ContractContext {
+    id: number;
+    label: string;
+    isOur: boolean;
+    documentFolderIds: string[];
 }
 
 export interface PersonCertificateRecord {
@@ -192,6 +204,7 @@ export default class SigningJobRepository {
             tokenHash: row.TokenHash,
             letterId: row.LetterId ?? null,
             offerId: row.OfferId ?? null,
+            contractId: row.ContractId ?? null,
             createdByPersonId: row.CreatedByPersonId,
             status: row.Status,
             minProgramVersion: row.MinProgramVersion,
@@ -287,15 +300,42 @@ export default class SigningJobRepository {
         };
     }
 
+    async getContractContext(
+        contractId: number,
+        conn?: mysql.PoolConnection
+    ): Promise<ContractContext | undefined> {
+        const { caseTypeIds } = Setup.ContractDocuments;
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT Contracts.Id, Contracts.Number, OurContractsData.OurId, Cases.GdFolderId AS CaseGdFolderId
+             FROM Contracts
+             LEFT JOIN OurContractsData ON OurContractsData.Id = Contracts.Id
+             LEFT JOIN Milestones ON Milestones.ContractId = Contracts.Id
+             LEFT JOIN Cases ON Cases.MilestoneId = Milestones.Id AND ${caseTypeIds.length > 0 ? 'Cases.TypeId IN (?)' : '1 = 0'}
+             WHERE Contracts.Id = ?`,
+            conn,
+            caseTypeIds.length > 0 ? [caseTypeIds, contractId] : [contractId]
+        )) as any[];
+        if (rows.length === 0) return undefined;
+        return {
+            id: rows[0].Id,
+            label: rows[0].OurId ?? rows[0].Number ?? '',
+            isOur: rows[0].OurId != null,
+            documentFolderIds: [...new Set<string>(rows
+                .map((row) => (row.CaseGdFolderId || '').trim())
+                .filter((id) => id.length > 0))],
+        };
+    }
+
     async insertJob(job: NewJob, conn: mysql.PoolConnection): Promise<number> {
         const result = await ToolsDb.executeSQL(
             `INSERT INTO SigningJobs
-                (TokenHash, LetterId, OfferId, CreatedByPersonId, Status, MinProgramVersion, CreatedAt, ExpiresAt)
-             VALUES (?, ?, ?, ?, 'created', ?, ?, ?)`,
+                (TokenHash, LetterId, OfferId, ContractId, CreatedByPersonId, Status, MinProgramVersion, CreatedAt, ExpiresAt)
+             VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?)`,
             [
                 job.tokenHash,
                 job.letterId,
                 job.offerId,
+                job.contractId,
                 job.createdByPersonId,
                 job.minProgramVersion,
                 job.createdAt,
@@ -505,9 +545,9 @@ export default class SigningJobRepository {
     ): Promise<number> {
         const result = await ToolsDb.executeSQL(
             `INSERT INTO DocumentSignatures
-                (SourceType, SourceGdFileId, SignedGdFileId, SignedName, LetterId, OfferId, Method,
+                (SourceType, SourceGdFileId, SignedGdFileId, SignedName, LetterId, OfferId, ContractId, Method,
                  CertSubjectCn, CertSerial, CertIssuer, SignerPersonId, JobId, SignedAt)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 signature.sourceType,
                 signature.sourceGdFileId,
@@ -515,6 +555,7 @@ export default class SigningJobRepository {
                 signature.signedName,
                 signature.letterId,
                 signature.offerId,
+                signature.contractId,
                 signature.method,
                 signature.certSubjectCn,
                 signature.certSerial,
@@ -547,14 +588,21 @@ export default class SigningJobRepository {
         return this.listSignaturesBy('OfferId', [offerId], conn);
     }
 
+    async listSignaturesByContractId(
+        contractId: number,
+        conn?: mysql.PoolConnection
+    ): Promise<SignatureRecord[]> {
+        return this.listSignaturesBy('ContractId', [contractId], conn);
+    }
+
     private async listSignaturesBy(
-        column: 'LetterId' | 'OfferId',
+        column: 'LetterId' | 'OfferId' | 'ContractId',
         ids: number[],
         conn?: mysql.PoolConnection
     ): Promise<SignatureRecord[]> {
         if (ids.length === 0) return [];
         const rows = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT Id, LetterId, OfferId, SourceType, SignedGdFileId, SignedName, Method, CertSubjectCn, SignedAt
+            `SELECT Id, LetterId, OfferId, ContractId, SourceType, SignedGdFileId, SignedName, Method, CertSubjectCn, SignedAt
              FROM DocumentSignatures
              WHERE ${column} IN (?)
              ORDER BY SignedAt DESC, Id DESC`,
@@ -565,6 +613,7 @@ export default class SigningJobRepository {
             id: row.Id,
             letterId: row.LetterId ?? null,
             offerId: row.OfferId ?? null,
+            contractId: row.ContractId ?? null,
             sourceType: row.SourceType,
             signedGdFileId: row.SignedGdFileId,
             signedName: row.SignedName,

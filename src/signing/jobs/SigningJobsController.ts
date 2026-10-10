@@ -8,6 +8,7 @@ import {
     SignaturePlaceSearch,
 } from '../ContractorSignaturePlace';
 import { renderPdfPage } from '../PdfPageRenderer';
+import { readByteRanges } from '../PdfSignatureLayout';
 import { finalize, prepare, validate } from '../PdfSigning';
 import { SigningError } from '../SigningError';
 import { SignaturePlacement } from '../SigningTypes';
@@ -53,8 +54,8 @@ export interface SigningJobsDeps {
     allowlist?: readonly TrustedCa[];
 }
 
-/** Wskazanie zrodla plikow do podpisu: pismo albo oferta zewnetrzna; dokumenty kontraktu dojda jako kolejny typ. */
-export type SigningSourceRef = { type: 'LETTER' | 'OFFER'; id: number };
+/** Wskazanie zrodla plikow do podpisu: pismo, oferta albo dokumenty umowy ENVI. */
+export type SigningSourceRef = { type: 'LETTER' | 'OFFER' | 'CONTRACT'; id: number };
 
 /** Nazwa podfolderu z plikami oferty w folderze sprawy "Przygotowanie oferty" (tworzy go PS przy zakladaniu oferty). */
 const OFFER_FILES_FOLDER_NAME = 'Oferta';
@@ -90,6 +91,11 @@ interface SigningSource {
      * podmieniony miedzy przygotowaniem a podpisem.
      */
     folderFoundByName: boolean;
+    /**
+     * Folder ma id w bazie, ale moze sie tam zmienic w trakcie zlecenia (sprawa kontraktu): przed zapisem
+     * sprawdzamy to samo co przy folderze szukanym po nazwie - ze pliki zrodlowe nadal w nim leza.
+     */
+    recheckSourcesBeforeUpload?: boolean;
 }
 
 export interface SignableFile {
@@ -143,9 +149,10 @@ export interface CreateJobResult {
 
 export interface JobStatusResult {
     jobId: number;
-    /** Zrodlo zlecenia: jedno z dwoch jest ustawione. */
+    /** Zrodlo zlecenia: jedno z trzech jest ustawione. */
     letterId: number | null;
     offerId: number | null;
+    contractId: number | null;
     status: JobStatus;
     expiresAt: string;
     failureMessage: string | null;
@@ -203,6 +210,18 @@ export interface LetterSignatureView {
 
 export interface LetterSignaturesResult {
     letterId: number;
+    signatures: LetterSignatureView[];
+}
+
+export interface ContractSignableFilesResult {
+    contractId: number;
+    contractLabel: string;
+    files: SignableFile[];
+    notSignable: NotSignableFile[];
+}
+
+export interface ContractSignaturesResult {
+    contractId: number;
     signatures: LetterSignatureView[];
 }
 
@@ -289,11 +308,11 @@ export function signedFileName(
 
 /** Podpisane kopie w folderze pisma: nasze (_pdp), "_sig", wczesniejsze nazewnictwo (_podpisany). Regula z SIG-2, bez zmian. */
 const isSignedLetterCopy = (name: string): boolean =>
-    /_(pdp|sig|podpisany)\b/i.test(name) && /\.pdf$/i.test(name);
+    /_(pdp|sig|podpisany)(?:_\d{8}-\d{6}(?:_\d+)?)?\b/i.test(name) && /\.pdf$/i.test(name);
 
-/** Podpisane kopie w folderze "Oferta": jak wyzej oraz "-sig" - tak nazywa je Szafir (setki takich plikow na Dysku). */
-const isSignedOfferCopy = (name: string): boolean =>
-    /[-_](pdp|sig|podpisany)\b/i.test(name) && /\.pdf$/i.test(name);
+/** Podpisane kopie w folderze oferty lub umowy: jak wyzej oraz "-sig" - tak nazywa je Szafir (setki takich plikow na Dysku). */
+const isSignedFileCopy = (name: string): boolean =>
+    /[-_](pdp|sig|podpisany)(?:_\d{8}-\d{6}(?:_\d+)?)?\b/i.test(name) && /\.pdf$/i.test(name);
 
 /** Nazwa pliku z przegladarki: multer oddaje ja jako latin1, a sciezka i znaki sterujace sa zbedne. */
 function uploadedFileName(original: unknown): string | null {
@@ -395,8 +414,37 @@ export default class SigningJobsController {
             genitive: 'oferty',
             signatureTypes: { mainDoc: 'OFFER_DOCUMENT', file: 'OFFER_DOCUMENT' },
             fileGraphic: 'explicit',
-            isSignedCopy: isSignedOfferCopy,
+            isSignedCopy: isSignedFileCopy,
             folderFoundByName: true,
+        };
+    }
+
+    private async contractSource(contractId: number): Promise<SigningSource> {
+        if (!SigningJobValidator.isPositiveId(contractId))
+            return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator kontraktu.', 400);
+        const contract = await this.deps.repository.getContractContext(contractId);
+        if (!contract) return fail('NOT_FOUND', 'Nie znaleziono kontraktu.', 404);
+        if (!contract.isOur)
+            return fail('BAD_REQUEST', 'Podpisujemy tylko dokumenty umów ENVI. Ten kontrakt nie jest umową ENVI.', 400);
+        if (contract.documentFolderIds.length !== 1)
+            return fail(
+                'BAD_REQUEST',
+                contract.documentFolderIds.length === 0
+                    ? 'Ten kontrakt nie ma na Dysku Google folderu sprawy „Umowa i zmiany”, w którym PS trzyma dokumenty umowy.'
+                    : 'Ten kontrakt ma więcej niż jedną sprawę „Umowa i zmiany” z osobnymi folderami - nie wiem, w której szukać dokumentów umowy.',
+                409
+            );
+        return {
+            ref: { type: 'CONTRACT', id: contract.id },
+            number: contract.label || null,
+            gdFolderId: contract.documentFolderIds[0],
+            mainDoc: null,
+            genitive: 'umowy',
+            signatureTypes: { mainDoc: 'CONTRACT_DOCUMENT', file: 'CONTRACT_DOCUMENT' },
+            fileGraphic: 'explicit',
+            isSignedCopy: isSignedFileCopy,
+            folderFoundByName: false,
+            recheckSourcesBeforeUpload: true,
         };
     }
 
@@ -405,7 +453,10 @@ export default class SigningJobsController {
         ref: SigningSourceRef,
         scope: ProjectScope | undefined
     ): Promise<SigningSource> {
-        // Kolejne typy zrodel (dokumenty kontraktu) dochodza tutaj i w resolveSourceForJob.
+        if (ref.type === 'CONTRACT') {
+            if (scope) return fail('FORBIDDEN', 'Brak uprawnień do podpisywania dokumentów umów.', 403);
+            return this.contractSource(ref.id);
+        }
         if (ref.type === 'OFFER') {
             // Oferty nie maja modelu zakresu projektu: rola zakresowa nie podpisuje ich wcale.
             // Polityka tras odmawia jej juz wczesniej; to drugi zamek na wypadek zmiany allowlisty.
@@ -417,6 +468,7 @@ export default class SigningJobsController {
 
     /** Zrodlo dla trwajacego zlecenia (trasy programu): bez sesji, wiec bez sprawdzania zakresu. */
     private async resolveSourceForJob(job: JobRecord): Promise<SigningSource> {
+        if (job.contractId !== null) return this.contractSource(job.contractId);
         if (job.offerId !== null) return this.offerSource(job.offerId);
         return this.letterSource(await this.requireLetterForJob(job));
     }
@@ -518,17 +570,17 @@ export default class SigningJobsController {
         };
     }
 
-    /** Tresc jednego pliku z folderu "Oferta" jako PDF - do szukania miejsca grafiki i obrazu strony. Tylko odczyt. */
-    private async readOfferFilePdf(
-        offerId: number,
+    /** Tresc jednego pliku z folderu zrodla jako PDF - do szukania miejsca grafiki i obrazu strony. Tylko odczyt. */
+    private async readSourceFilePdf(
+        ref: SigningSourceRef,
         gdFileId: unknown,
         scope: ProjectScope | undefined
     ): Promise<{ bytes: Buffer; name: string }> {
-        const source = await this.resolveSource({ type: 'OFFER', id: offerId }, scope);
+        const source = await this.resolveSource(ref, scope);
         if (!SigningJobValidator.isDriveId(gdFileId))
             return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator pliku z Dysku Google.', 400);
         const meta = await this.deps.drive.getFile(gdFileId);
-        // Nazwy pliku spoza folderu oferty nie powtarzamy w komunikacie.
+        // Nazwy pliku spoza folderu zrodla nie powtarzamy w komunikacie.
         const name =
             meta && (meta.parents ?? []).includes(source.gdFolderId) ? meta.name : 'wybrany plik';
         const bytes = await this.fetchSourcePdf(
@@ -544,9 +596,22 @@ export default class SigningJobsController {
         gdFileId: unknown,
         scope?: ProjectScope
     ): Promise<GraphicPlaceResult> {
-        const { bytes, name } = await this.readOfferFilePdf(offerId, gdFileId, scope);
+        return this.locateGraphicPlace({ type: 'OFFER', id: offerId }, gdFileId, scope);
+    }
+
+    private async locateGraphicPlace(
+        ref: SigningSourceRef,
+        gdFileId: unknown,
+        scope?: ProjectScope
+    ): Promise<GraphicPlaceResult> {
+        const { bytes, name } = await this.readSourceFilePdf(ref, gdFileId, scope);
+        // Plik juz podpisany i tak odpadnie przy przygotowaniu; tu mowimy to od razu, zanim uzytkownik ustawi grafike na cudzym podpisie.
+        if (readByteRanges(bytes).length > 0)
+            return fail('PREPARE_FAILED', `Plik „${name}” ${SIGNING_ERROR_TEXT.ALREADY_SIGNED}.`, 422);
         try {
-            return await findContractorSignaturePlaces(bytes);
+            return ref.type === 'CONTRACT'
+                ? await findContractorSignaturePlaces(bytes, { partyHeadings: true })
+                : await findContractorSignaturePlaces(bytes);
         } catch (error) {
             return fail('PREPARE_FAILED', `Plik „${name}” ${describeSigningError(error)}.`, 422);
         }
@@ -559,9 +624,18 @@ export default class SigningJobsController {
         page: number,
         scope?: ProjectScope
     ): Promise<Buffer> {
+        return this.renderSourceFilePage({ type: 'OFFER', id: offerId }, gdFileId, page, scope);
+    }
+
+    private async renderSourceFilePage(
+        ref: SigningSourceRef,
+        gdFileId: unknown,
+        page: number,
+        scope?: ProjectScope
+    ): Promise<Buffer> {
         if (!SigningJobValidator.isPositiveId(page))
             return fail('BAD_REQUEST', 'Nieprawidłowy numer strony.', 400);
-        const { bytes, name } = await this.readOfferFilePdf(offerId, gdFileId, scope);
+        const { bytes, name } = await this.readSourceFilePdf(ref, gdFileId, scope);
         try {
             return (await renderPdfPage(bytes, page)).png;
         } catch (error) {
@@ -586,6 +660,45 @@ export default class SigningJobsController {
         if (scope) return fail('FORBIDDEN', 'Brak uprawnień do podpisywania plików ofert.', 403);
         const records = await this.deps.repository.listSignaturesByOfferId(offerId);
         return { offerId, signatures: records.map((r) => this.toSignatureView(r)) };
+    }
+
+    // ------------------------------------------------------------------ dokumenty umowy ENVI
+
+    async listContractSignableFiles(
+        contractId: number,
+        scope?: ProjectScope
+    ): Promise<ContractSignableFilesResult> {
+        const source = await this.resolveSource({ type: 'CONTRACT', id: contractId }, scope);
+        const { files, notSignable } = await this.buildSignable(source);
+        return { contractId, contractLabel: source.number ?? '', files, notSignable };
+    }
+
+    async locateContractGraphicPlace(
+        contractId: number,
+        gdFileId: unknown,
+        scope?: ProjectScope
+    ): Promise<GraphicPlaceResult> {
+        return this.locateGraphicPlace({ type: 'CONTRACT', id: contractId }, gdFileId, scope);
+    }
+
+    async renderContractFilePage(
+        contractId: number,
+        gdFileId: unknown,
+        page: number,
+        scope?: ProjectScope
+    ): Promise<Buffer> {
+        return this.renderSourceFilePage({ type: 'CONTRACT', id: contractId }, gdFileId, page, scope);
+    }
+
+    async listContractSignatures(
+        contractId: number,
+        scope?: ProjectScope
+    ): Promise<ContractSignaturesResult> {
+        if (!SigningJobValidator.isPositiveId(contractId))
+            return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator kontraktu.', 400);
+        if (scope) return fail('FORBIDDEN', 'Brak uprawnień do podpisywania dokumentów umów.', 403);
+        const records = await this.deps.repository.listSignaturesByContractId(contractId);
+        return { contractId, signatures: records.map((r) => this.toSignatureView(r)) };
     }
 
     // ------------------------------------------------------------------ podpisane pliki pisma
@@ -702,6 +815,7 @@ export default class SigningJobsController {
                     tokenHash: sha256Hex(token),
                     letterId: source.ref.type === 'LETTER' ? source.ref.id : null,
                     offerId: source.ref.type === 'OFFER' ? source.ref.id : null,
+                    contractId: source.ref.type === 'CONTRACT' ? source.ref.id : null,
                     createdByPersonId: personId,
                     minProgramVersion: MIN_PROGRAM_VERSION,
                     createdAt: now,
@@ -756,6 +870,7 @@ export default class SigningJobsController {
             jobId: job.id,
             letterId: job.letterId,
             offerId: job.offerId,
+            contractId: job.contractId,
             status: job.status,
             expiresAt: new Date(job.expiresAt).toISOString(),
             failureMessage: job.failureMessage,
@@ -1155,7 +1270,7 @@ export default class SigningJobsController {
         try {
             const source = await this.resolveSourceForJob(job);
             const folderId = source.gdFolderId;
-            if (source.folderFoundByName) {
+            if (source.folderFoundByName || source.recheckSourcesBeforeUpload) {
                 for (const file of files) {
                     const origin = await this.deps.drive.getFile(file.sourceGdFileId);
                     if (!origin || origin.trashed || !(origin.parents ?? []).includes(folderId))
@@ -1204,6 +1319,7 @@ export default class SigningJobsController {
                             signedName: item.name,
                             letterId: job.letterId,
                             offerId: job.offerId,
+                            contractId: job.contractId,
                             method: 'LOCAL_APP',
                             certSubjectCn: job.certSubjectCn as string,
                             certSerial: job.certSerial as string,
@@ -1284,6 +1400,15 @@ export default class SigningJobsController {
         return this.uploadSignedTo({ type: 'OFFER', id: offerId }, personId, file, scope);
     }
 
+    async uploadSignedToContract(
+        personId: number,
+        contractId: number,
+        file: { buffer?: Buffer; size?: number; originalname?: string } | undefined,
+        scope?: ProjectScope
+    ): Promise<ManualUploadResult> {
+        return this.uploadSignedTo({ type: 'CONTRACT', id: contractId }, personId, file, scope);
+    }
+
     private async uploadSignedTo(
         ref: SigningSourceRef,
         personId: number,
@@ -1361,6 +1486,7 @@ export default class SigningJobsController {
                         signedName: name,
                         letterId: source.ref.type === 'LETTER' ? source.ref.id : null,
                         offerId: source.ref.type === 'OFFER' ? source.ref.id : null,
+                        contractId: source.ref.type === 'CONTRACT' ? source.ref.id : null,
                         method: 'MANUAL_UPLOAD',
                         certSubjectCn: verified.subjectCn,
                         certSerial: verified.serial,

@@ -18,6 +18,7 @@ import { softwareCardSign } from '../../__tests__/testPki';
 import { TrustedCa } from '../QualifiedCaAllowlist';
 import { DriveFileInfo, SigningDrive } from '../SigningDrive';
 import SigningJobRepository, {
+    ContractContext,
     JobFileRecord,
     JobRecord,
     JobStatus,
@@ -330,6 +331,7 @@ export class FakeRepository {
     personCerts = new Map<number, PersonCertificateRecord>();
     letters = new Map<number, LetterContext>();
     offers = new Map<number, OfferContext>();
+    contracts = new Map<number, ContractContext>();
     failSignatureInsert = false;
     private nextJob = 1;
     private nextFile = 1;
@@ -343,6 +345,11 @@ export class FakeRepository {
         return offer ? { ...offer, makeOfferCaseFolderIds: [...offer.makeOfferCaseFolderIds] } : undefined;
     }
 
+    async getContractContext(contractId: number) {
+        const contract = this.contracts.get(contractId);
+        return contract ? { ...contract, documentFolderIds: [...contract.documentFolderIds] } : undefined;
+    }
+
     async insertJob(job: NewJob) {
         const id = this.nextJob++;
         this.jobs.push({
@@ -350,6 +357,7 @@ export class FakeRepository {
             tokenHash: job.tokenHash,
             letterId: job.letterId,
             offerId: job.offerId,
+            contractId: job.contractId,
             createdByPersonId: job.createdByPersonId,
             status: 'created',
             minProgramVersion: job.minProgramVersion,
@@ -478,6 +486,10 @@ export class FakeRepository {
         return this.listSignaturesWhere((s) => s.offerId !== null && s.offerId === offerId);
     }
 
+    async listSignaturesByContractId(contractId: number): Promise<SignatureRecord[]> {
+        return this.listSignaturesWhere((s) => s.contractId !== null && s.contractId === contractId);
+    }
+
     private listSignaturesWhere(match: (s: NewSignature) => boolean): SignatureRecord[] {
         // Jak w bazie: od najnowszego podpisu; Id = kolejnosc zapisu.
         return this.signatures
@@ -487,6 +499,7 @@ export class FakeRepository {
                 id,
                 letterId: s.letterId,
                 offerId: s.offerId,
+                contractId: s.contractId,
                 sourceType: s.sourceType,
                 signedGdFileId: s.signedGdFileId,
                 signedName: s.signedName,

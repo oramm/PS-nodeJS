@@ -12,10 +12,10 @@ import { SystemRoleName } from '../../types/sessionTypes';
 /**
  * Trasy zlecen podpisu (SIG-2). Dwa rodzaje, ktorych nie wolno mylic:
  *
- * A. Trasy SESYJNE (strona PS) - za bramka sesji i allowlista rol zakresowych; kazda sprawdza
- *    zakres projektu pisma i to, ze zlecenie nalezy do zalogowanej osoby:
+ * A. Trasy SESYJNE (strona PS) - za bramka sesji i roli pracownika ENVI;
+ *    zlecenie musi nalezec do zalogowanej osoby:
  *      GET  /letter/:id/signableFiles
- *      POST /signingJob                       { letterId | offerId, files:[{kind, gdFileId?, withGraphic, placement?}] }
+ *      POST /signingJob                       { letterId | offerId | contractId, files:[{kind, gdFileId?, withGraphic, placement?}] }
  *      GET  /signingJob/:id                   (odpytywanie stanu)
  *      GET  /signingJob/:id/file/:index/preview
  *      POST /signingJob/:id/cancel            { reason? }
@@ -27,7 +27,12 @@ import { SystemRoleName } from '../../types/sessionTypes';
  *      GET  /offer/:id/signableFile/:gdFileId/page/:page     obraz strony (PNG) do wskazania miejsca grafiki
  *      POST /offer/:id/signedPdf              (multipart, pole "file") - "Wgraj podpisany" dla oferty
  *      GET  /offer/:id/signatures             podpisane pliki oferty
- *    Trasy oferty nie sa na allowliscie rol zakresowych (projectScopedPolicy): te role dostaja 403.
+ *      GET  /contract/:id/signableFiles       dokumenty umowy ENVI
+ *      GET  /contract/:id/signableFile/:gdFileId/graphicPlace   miejsca na podpis w dokumencie umowy
+ *      GET  /contract/:id/signableFile/:gdFileId/page/:page     obraz strony (PNG)
+ *      POST /contract/:id/signedPdf           (multipart, pole "file") - "Wgraj podpisany" dla umowy
+ *      GET  /contract/:id/signatures          podpisane dokumenty umowy
+ *    Zadna trasa podpisu nie jest na allowliscie rol zakresowych (projectScopedPolicy): te role dostaja 403.
  *      GET  /signing/program/download         instalator ENVI Podpis (assets/signing/EnviPodpis.exe)
  *      GET  /signing/program/info             { available, version } - wersja tego instalatora
  *
@@ -291,6 +296,75 @@ export function registerSigningRoutes(
             requirePerson(req, res);
             res.send(
                 await controller.listOfferSignatures(Number(req.params.id), req.projectScope)
+            );
+        })
+    );
+
+    // ---------------------------------------------------------------- A. sesja: umowa ENVI
+
+    app.get(
+        '/contract/:id/signableFiles',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.send(
+                await controller.listContractSignableFiles(Number(req.params.id), req.projectScope)
+            );
+        })
+    );
+
+    app.get(
+        '/contract/:id/signableFile/:gdFileId/graphicPlace',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.setHeader('Cache-Control', 'no-store');
+            res.send(
+                await controller.locateContractGraphicPlace(
+                    Number(req.params.id),
+                    req.params.gdFileId,
+                    req.projectScope
+                )
+            );
+        })
+    );
+
+    app.get(
+        '/contract/:id/signableFile/:gdFileId/page/:page',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            const png = await controller.renderContractFilePage(
+                Number(req.params.id),
+                req.params.gdFileId,
+                Number(req.params.page),
+                req.projectScope
+            );
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'no-store');
+            res.send(png);
+        })
+    );
+
+    app.post(
+        '/contract/:id/signedPdf',
+        receiveUpload,
+        wrap(async (req, res) => {
+            const personId = requirePerson(req, res);
+            res.send(
+                await controller.uploadSignedToContract(
+                    personId,
+                    Number(req.params.id),
+                    req.file,
+                    req.projectScope
+                )
+            );
+        })
+    );
+
+    app.get(
+        '/contract/:id/signatures',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.send(
+                await controller.listContractSignatures(Number(req.params.id), req.projectScope)
             );
         })
     );

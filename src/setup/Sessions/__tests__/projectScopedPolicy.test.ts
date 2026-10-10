@@ -122,6 +122,11 @@ describe('projectScopedPolicy', () => {
             ['GET', '/offer/55/signableFile/OFFER_FORM_ID_0001/page/1'],
             ['POST', '/offer/55/signedPdf'],
             ['GET', '/offer/55/signatures'],
+            ['GET', '/contract/55/signableFiles'],
+            ['GET', '/contract/55/signableFile/CONTRACT_DOC_ID_001/graphicPlace'],
+            ['GET', '/contract/55/signableFile/CONTRACT_DOC_ID_001/page/1'],
+            ['POST', '/contract/55/signedPdf'],
+            ['GET', '/contract/55/signatures'],
         ];
 
         describe.each(SCOPED_ROLES)('%s', (_label, userData) => {
