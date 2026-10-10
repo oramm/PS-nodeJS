@@ -988,6 +988,9 @@ export function fidmanSkipReasonLabel(reason: string | null): string | null {
             return 'To ostatnie włączone konto administratora FIDmana — nie zostanie wyłączone.';
         case 'GOOGLE_EMAIL_TAKEN':
             return 'Ten adres Google należy już do innego konta w FIDmanie.';
+        // LMF wariant B: FIDman ma już nowszy komplet folderów umowy — starszy nie jest stosowany.
+        case 'STALE_FOLDER_SET':
+            return 'FIDman ma już nowszy komplet folderów tej umowy — starszy nie został zastosowany.';
         default:
             return reason ? `Nieznany powód pominięcia: ${reason}` : null;
     }
