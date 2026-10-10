@@ -332,6 +332,21 @@ it.each([true, false])('LMF-3 dopchnięcie (ponowiono upsert: %s) odkłada bież
     expect(folderWrites()).toHaveLength(1);
 });
 
+it.each([true, false])('LMF-3 dopchnięcie (retry: %s) wymusza komplet mimo identycznego SENT, zwykły zapis nie', async (retry) => {
+    jest.spyOn(Setup, 'FidmanSync', 'get').mockReturnValue({ ...Setup.FidmanSync, baseUrl: '', token: '' });
+    (ToolsDb.getQueryCallbackAsync as any).mockImplementation(async (sql: string) =>
+        sql.includes("Status IN ('FAILED', 'SKIPPED')") && retry
+            ? [{ Id: 99, Status: 'FAILED', Kind: 'contract.upsert', Attempts: 0, Payload: {} }] : []);
+    const base = conn.query.getMockImplementation();
+    const snapshot = { legacyContractId: 42, contractFolderId: 'folder_contract_42',
+        cases: [{ psCaseId: 7, psCaseTypeId: 75, folderId: 'folder_case_7' }] };
+    conn.query.mockImplementation(async (sql: string, params: any[]) =>
+        sql.includes("Kind = 'contract.folders'") ? [[{ Payload: snapshot, Status: 'SENT' }]] : base(sql, params));
+    await ToolsDb.transaction(async (tx) => enqueueFidmanFoldersForContracts([42], tx));
+    expect(folderWrites()).toHaveLength(0);
+    await retryOrPushFidmanContract({ id: 42, typeId: 3, fidmanSyncEnabled: true } as any);
+    expect(folderWrites()).toHaveLength(1);
+});
 
 it('LMF-3 addBulkWithDatesAndCases odkłada sprawy dodane przez atrapę createDefaultCases', async () => {
     cases.clear();

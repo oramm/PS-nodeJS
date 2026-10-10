@@ -126,6 +126,15 @@ describe('LMF-2 foldery kontraktu', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('umowa 42, sprawa 7'));
     });
 
+    it('sprawa bez rodzaju pominięta z ostrzeżeniem', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const { conn } = connection({ cases: [{ ...caseRow, TypeId: null }, { ...caseRow, Id: 8 }] });
+        expect((await buildContractFoldersPayload(42, conn)).payload.cases)
+            .toEqual([{ psCaseId: 8, psCaseTypeId: 75, folderId: 'folder_case_7' }]);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('umowa 42, sprawa 7'));
+    });
+
     it('folder umowy pusty daje null', async () => {
         const { conn } = connection({ contract: { GdFolderId: '' } });
         expect((await buildContractFoldersPayload(42, conn)).payload).toEqual({

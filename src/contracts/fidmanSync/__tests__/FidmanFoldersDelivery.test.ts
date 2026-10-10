@@ -23,11 +23,19 @@ beforeEach(() => {
             if (sql.includes('RELEASE_LOCK')) return [[{ Released: 1 }]];
             expect(sql).toContain("Status IN ('PENDING', 'FAILED')");
             expect(sql).toContain('NOT EXISTS');
-            return [rows.filter((r) => r.Id === params[0] && ['PENDING', 'FAILED'].includes(r.Status) &&
+            expect(sql).toContain("sent.Kind = 'contract.upsert' AND sent.RefId = ? AND sent.Status = 'SENT'");
+            expect(sql).toContain("pending.Status IN ('PENDING', 'FAILED') AND pending.Attempts < ?");
+            expect(params[4]).toBe(params[3]);
+            // Komplet czeka, gdy umowa nie ma SENT, a ma wpis jeszcze możliwy do dostarczenia.
+            const upserts = rows.filter((r) => r.Kind === 'contract.upsert' && r.RefId === params[3]);
+            const contractAllows = upserts.some((r) => r.Status === 'SENT') ||
+                !upserts.some((r) => ['PENDING', 'FAILED'].includes(r.Status) && r.Attempts < params[5]);
+            return [rows.filter((r) => r.Id === params[0] && ['PENDING', 'FAILED'].includes(r.Status) && contractAllows &&
                 !rows.some((newer) => newer.Kind === 'contract.folders' && newer.RefId === params[1] && newer.Id > params[2]))
                 .map((r) => ({ ...r }))];
         }),
         release: jest.fn(),
+        destroy: jest.fn(),
     };
     (ToolsDb.getPoolConnectionWithTimeout as jest.Mock).mockResolvedValue(conn);
     (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (_sql, _conn, params) =>
@@ -199,4 +207,76 @@ it.each(['fetch', 'body'])('F6 timeout podczas %s zapisuje FAILED i zwalnia blok
     await delivery;
     expect(rows[0]).toMatchObject({ Status: 'FAILED', Attempts: 1, LastError: 'FIDman timeout' });
     expect(conn.release).toHaveBeenCalledTimes(1);
+});
+
+const folders = (Id: number) => makeRow(Id);
+const upsert = (Id: number, Status: string, Attempts = 0): any => ({ ...makeRow(Id, 'contract.upsert'), Status, Attempts });
+
+it.each([['PENDING', 0], ['FAILED', 3], ['FAILED', 9]])('umowa oczekująca (%s, próby %i) bez SENT wstrzymuje komplet', async (Status, Attempts) => {
+    rows = [upsert(1, Status, Attempts), folders(2)];
+    await tryDeliverAfterCommit(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ToolsDb.executeSQL).not.toHaveBeenCalled();
+    expect(rows[1]).toMatchObject({ Status: 'PENDING', Attempts: 0, SkipReason: null });
+    expect(conn.release).toHaveBeenCalledTimes(1);
+});
+
+it('umowa z wcześniejszym SENT nie wstrzymuje kompletu mimo nowszego FAILED', async () => {
+    rows = [upsert(1, 'SENT'), upsert(2, 'FAILED', 1), folders(3)];
+    await tryDeliverAfterCommit(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).kind).toBe('contract.folders');
+    expect(rows[2].Status).toBe('SENT');
+});
+
+it.each([['FAILED', 10], ['SKIPPED', 0]])('umowa martwa albo pominięta (%s, próby %i) nie wstrzymuje kompletu', async (Status, Attempts) => {
+    rows = [upsert(1, Status, Attempts), folders(2)];
+    await tryDeliverAfterCommit(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(rows[1].Status).toBe('SENT');
+});
+
+it('wpis umowy innej umowy nie wstrzymuje kompletu', async () => {
+    rows = [{ ...upsert(1, 'FAILED', 1), RefId: 99 }, folders(2)];
+    await tryDeliverAfterCommit(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('drainer dostarcza umowę przed kompletem, gdy oba czekają', async () => {
+    rows = [upsert(1, 'PENDING'), folders(2)];
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async () => rows.map((r) => ({ ...r })));
+    expect(await drainFidmanOutbox()).toEqual({ processed: 2, sent: 2, failed: 0, skipped: 0 });
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).kind)).toEqual(['contract.upsert', 'contract.folders']);
+});
+
+it('drainer zostawia komplet, gdy umowa znów się nie udała', async () => {
+    rows = [upsert(1, 'PENDING'), folders(2)];
+    fetchMock.mockResolvedValue(response(500));
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async () => rows.map((r) => ({ ...r })));
+    expect(await drainFidmanOutbox()).toEqual({ processed: 1, sent: 0, failed: 1, skipped: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(rows.map((r) => [r.Status, r.Attempts])).toEqual([['FAILED', 1], ['PENDING', 0]]);
+});
+
+it('wyczerpana pula połączeń daje null i nie przerywa drainera', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    (ToolsDb.getPoolConnectionWithTimeout as jest.Mock).mockRejectedValue(new Error('pool timeout'));
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async () => rows.map((r) => ({ ...r })));
+    await expect(deliverOutboxRow(rows[0])).resolves.toBeNull();
+    expect(await drainFidmanOutbox({ batchSize: 1 })).toEqual({ processed: 0, sent: 0, failed: 0, skipped: 0 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
+});
+
+it('błąd RELEASE_LOCK niszczy połączenie zamiast zwolnić je do puli', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const original = conn.query.getMockImplementation();
+    conn.query.mockImplementation(async (sql: string, params: any[]) => {
+        if (sql.includes('RELEASE_LOCK')) throw new Error('connection lost');
+        return original(sql, params);
+    });
+    await expect(deliverOutboxRow(rows[0])).resolves.toBe('SENT');
+    expect(conn.destroy).toHaveBeenCalledTimes(1);
+    expect(conn.release).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
 });

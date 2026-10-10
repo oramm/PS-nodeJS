@@ -34,6 +34,8 @@ const PUSH_PATH = '/api/ps-sync';
 const FOLDERS_DELIVERY_LOCK_SECONDS = 5;
 // Ogranicza także oczekiwanie na treść odpowiedzi FIDmana.
 const DELIVERY_TIMEOUT_MS = 15_000;
+// Limit prób drainera; ten sam próg rozstrzyga, czy umowa jest jeszcze „do dostarczenia".
+const FIDMAN_OUTBOX_MAX_ATTEMPTS = 10;
 
 type AnyContract = ContractOur | ContractOther;
 
@@ -133,6 +135,11 @@ export async function buildContractFoldersPayload(
     );
     const cases: FidmanFoldersPayload['cases'] = [];
     for (const row of rows as any[]) {
+        // Kolumna dopuszcza NULL, a FIDman odrzuciłby cały komplet z jednym psCaseTypeId bez wartości.
+        if (row.TypeId == null) {
+            console.warn(`[FidmanSync] Pominięto sprawę bez rodzaju: umowa ${contractId}, sprawa ${row.Id}.`);
+            continue;
+        }
         // Wzorzec driveFolderId z contractFoldersPayloadSchema po stronie FIDmana.
         if (!row.GdFolderId || !/^[A-Za-z0-9_-]{10,128}$/.test(row.GdFolderId)) {
             console.warn(`[FidmanSync] Pominięto sprawę bez poprawnego folderu: umowa ${contractId}, sprawa ${row.Id}.`);
@@ -262,7 +269,8 @@ export async function deliverFidmanFoldersAfterCommit(ids: number[]): Promise<vo
 /** Bez conn zapis użytkownika jest już zatwierdzony: błąd synchronizacji tylko logujemy. */
 export async function enqueueFidmanFoldersForContracts(
     contractIds: (number | undefined)[],
-    conn?: mysql.PoolConnection
+    conn?: mysql.PoolConnection,
+    force = false
 ): Promise<number[]> {
     const contracts = [...new Set(contractIds)]
         .filter((id): id is number => id != null).sort((a, b) => a - b);
@@ -270,7 +278,7 @@ export async function enqueueFidmanFoldersForContracts(
     if (!conn) {
         try {
             const ids = await ToolsDb.transaction<number[]>(async (connection) =>
-                enqueueFidmanFoldersForContracts(contracts, connection)
+                enqueueFidmanFoldersForContracts(contracts, connection, force)
             );
             void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
                 console.error('[FidmanSync] folder delivery error:', err)
@@ -284,7 +292,7 @@ export async function enqueueFidmanFoldersForContracts(
     await lockFidmanFoldersContracts(contracts, conn);
     const ids: number[] = [];
     for (const contractId of contracts) {
-        const id = await enqueueFidmanFoldersPush(contractId, conn);
+        const id = await enqueueFidmanFoldersPush(contractId, conn, force);
         if (id !== null) ids.push(id);
     }
     return ids;
@@ -550,12 +558,13 @@ async function enqueueRow(
 export async function enqueueFidmanContractPush(
     contract: AnyContract,
     conn: mysql.PoolConnection,
-    foldersOutboxIds: number[] = []
+    foldersOutboxIds: number[] = [],
+    forceFolders = false
 ): Promise<number> {
     await lockFidmanFoldersContracts([(contract as any).id], conn);
     const id = await enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
     await enqueueFidmanPersonnelPush((contract as any).id, conn);
-    foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn));
+    foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn, forceFolders));
     return id;
 }
 
@@ -827,20 +836,29 @@ export async function deliverOutboxRow(
     row: OutboxRow
 ): Promise<'SENT' | 'FAILED' | 'SKIPPED' | null> {
     if (row.Kind !== 'contract.folders') return deliverUnlockedOutboxRow(row);
-    const conn = await ToolsDb.getPoolConnectionWithTimeout();
     const lockName = `fidman:contract.folders:${row.RefId}`;
+    let conn: mysql.PoolConnection | undefined;
     let acquired = false;
+    let destroyConn = false;
     try {
+        conn = await ToolsDb.getPoolConnectionWithTimeout();
         const [locks] = await conn.query('SELECT GET_LOCK(?, ?) AS Acquired',
             [lockName, FOLDERS_DELIVERY_LOCK_SECONDS]);
         acquired = (locks as any[])[0]?.Acquired === 1;
         if (!acquired) return null;
+        // Komplet nie wyprzedza umowy: bez SENT i z wpisem umowy jeszcze możliwym do dostarczenia
+        // czeka na drainer. Umowa martwa (próby wyczerpane) albo pominięta nie wstrzymuje kompletu.
         const [rows] = await conn.query(
             `SELECT Id, Kind, RefId, Payload, Status, Attempts, SkipReason FROM ${OUTBOX_TABLE}
              WHERE Id = ? AND Status IN ('PENDING', 'FAILED')
                AND NOT EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} newer
-                   WHERE newer.Kind = 'contract.folders' AND newer.RefId = ? AND newer.Id > ?)`,
-            [row.Id, row.RefId, row.Id]
+                   WHERE newer.Kind = 'contract.folders' AND newer.RefId = ? AND newer.Id > ?)
+               AND (EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} sent
+                       WHERE sent.Kind = 'contract.upsert' AND sent.RefId = ? AND sent.Status = 'SENT')
+                    OR NOT EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} pending
+                       WHERE pending.Kind = 'contract.upsert' AND pending.RefId = ?
+                         AND pending.Status IN ('PENDING', 'FAILED') AND pending.Attempts < ?))`,
+            [row.Id, row.RefId, row.Id, row.RefId, row.RefId, FIDMAN_OUTBOX_MAX_ATTEMPTS]
         );
         const current = (rows as OutboxRow[])[0];
         return current ? await deliverUnlockedOutboxRow(current, conn) : null;
@@ -848,10 +866,15 @@ export async function deliverOutboxRow(
         console.error('[FidmanSync] folder delivery lock error:', err);
         return null;
     } finally {
-        try {
-            if (acquired) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
-        } finally {
-            conn.release();
+        if (conn) {
+            try {
+                if (acquired) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+            } catch (err) {
+                // Połączenie może nadal trzymać blokadę nazwaną; do puli nie wraca.
+                console.error('[FidmanSync] folder delivery RELEASE_LOCK error:', err);
+                destroyConn = true;
+            }
+            if (destroyConn) conn.destroy(); else conn.release();
         }
     }
 }
@@ -1127,7 +1150,8 @@ export async function retryOrPushFidmanContract(
         const folderIds = await ToolsDb.transaction<number[]>(async (conn) => {
             await lockFidmanFoldersContracts([contractId], conn);
             await enqueueFidmanPersonnelPush(contractId, conn);
-            return enqueueFidmanFoldersForContracts([contractId], conn);
+            // Ręczne dopchnięcie wymusza komplet, także gdy ostatni wpis jest SENT i identyczny.
+            return enqueueFidmanFoldersForContracts([contractId], conn, true);
         });
         await deliverFidmanFoldersAfterCommit(folderIds);
         return retried;
@@ -1135,7 +1159,7 @@ export async function retryOrPushFidmanContract(
 
     const folderIds: number[] = [];
     const outboxId = await ToolsDb.transaction<number>(async (conn) =>
-        enqueueFidmanContractPush(contract, conn, folderIds)
+        enqueueFidmanContractPush(contract, conn, folderIds, true)
     );
     await tryDeliverAfterCommit(outboxId);
     await deliverFidmanFoldersAfterCommit(folderIds);
@@ -1157,7 +1181,7 @@ export async function drainFidmanOutbox(options?: {
     processed: number;
 }> {
     const batchSize = options?.batchSize ?? 50;
-    const maxAttempts = options?.maxAttempts ?? 10;
+    const maxAttempts = options?.maxAttempts ?? FIDMAN_OUTBOX_MAX_ATTEMPTS;
 
     const summary = { sent: 0, failed: 0, skipped: 0, processed: 0 };
 
