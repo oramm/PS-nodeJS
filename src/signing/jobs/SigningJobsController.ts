@@ -48,6 +48,26 @@ export interface SigningJobsDeps {
     allowlist?: readonly TrustedCa[];
 }
 
+/** Wskazanie zrodla plikow do podpisu. Dzis tylko pismo; oferta i dokumenty kontraktu dojda jako kolejne typy. */
+export type SigningSourceRef = { type: 'LETTER'; id: number };
+
+/**
+ * To, czym zrodla roznia sie miedzy soba. Reszta przebiegu (zlecenie, certyfikat, przygotowanie,
+ * podpis, zapis, "Wgraj podpisany") jest wspolna i nie pyta, co jest podpisywane.
+ */
+interface SigningSource {
+    ref: SigningSourceRef;
+    /** Numer do odpowiedzi dla strony i do awaryjnej nazwy pliku. */
+    number: string | null;
+    /** Folder na Dysku: stad lista plikow i tu trafiaja podpisane kopie. */
+    gdFolderId: string;
+    /** Dokument glowny: zawsze z grafika, w miejscu `placement`. null = same pliki z folderu. */
+    mainDoc: { gdFileId: string; placement: SignaturePlacement } | null;
+    /** Dopelniacz do komunikatow, np. "w folderze pisma". */
+    genitive: string;
+    signatureTypes: { mainDoc: SignatureSourceType; file: SignatureSourceType };
+}
+
 export interface SignableFile {
     kind: SourceKind;
     /** Dla LETTER_DOC: id Dokumentu pisma. */
@@ -253,33 +273,61 @@ export default class SigningJobsController {
         return letter as LetterContext & { gdDocumentId: string; gdFolderId: string };
     }
 
-    private async buildSignable(
+    private letterSource(
         letter: LetterContext & { gdDocumentId: string; gdFolderId: string }
-    ): Promise<{ files: SignableFile[]; notSignable: NotSignableFile[]; docName: string }> {
-        const doc = await this.deps.drive.getFile(letter.gdDocumentId);
-        if (!doc || doc.trashed)
-            return fail(
-                'BAD_REQUEST',
-                'Dokument pisma nie istnieje już na Dysku Google.',
-                409
-            );
-        const children = await this.deps.drive.listFolder(letter.gdFolderId);
+    ): SigningSource {
+        return {
+            ref: { type: 'LETTER', id: letter.id },
+            number: letter.number,
+            gdFolderId: letter.gdFolderId,
+            mainDoc: { gdFileId: letter.gdDocumentId, placement: 'letterClosing' },
+            genitive: 'pisma',
+            signatureTypes: { mainDoc: 'LETTER', file: 'LETTER_ATTACHMENT' },
+        };
+    }
 
-        const files: SignableFile[] = [
-            {
+    /** Zrodlo dla zalogowanego uzytkownika: sprawdza zakres i komplet danych na Dysku. */
+    private async resolveSource(
+        ref: SigningSourceRef,
+        scope: ProjectScope | undefined
+    ): Promise<SigningSource> {
+        // Kolejne typy zrodel (oferta, dokumenty kontraktu) dochodza tutaj i w resolveSourceForJob.
+        return this.letterSource(await this.requireLetter(ref.id, scope));
+    }
+
+    /** Zrodlo dla trwajacego zlecenia (trasy programu): bez sesji, wiec bez sprawdzania zakresu. */
+    private async resolveSourceForJob(job: JobRecord): Promise<SigningSource> {
+        return this.letterSource(await this.requireLetterForJob(job));
+    }
+
+    private async buildSignable(
+        source: SigningSource
+    ): Promise<{ files: SignableFile[]; notSignable: NotSignableFile[] }> {
+        const files: SignableFile[] = [];
+        let doc: DriveFileInfo | undefined;
+        if (source.mainDoc) {
+            doc = await this.deps.drive.getFile(source.mainDoc.gdFileId);
+            if (!doc || doc.trashed)
+                return fail(
+                    'BAD_REQUEST',
+                    `Dokument ${source.genitive} nie istnieje już na Dysku Google.`,
+                    409
+                );
+            files.push({
                 kind: 'LETTER_DOC',
                 gdFileId: doc.id,
                 name: doc.name,
                 mimeType: doc.mimeType,
                 withGraphic: true,
                 graphicLocked: true,
-            },
-        ];
+            });
+        }
+        const children = await this.deps.drive.listFolder(source.gdFolderId);
         const notSignable: NotSignableFile[] = [];
-        const exportName = `${doc.name}.pdf`.toLowerCase();
+        const exportName = doc ? `${doc.name}.pdf`.toLowerCase() : undefined;
 
         for (const child of children) {
-            if (child.id === doc.id) continue;
+            if (child.id === doc?.id) continue;
             if (child.mimeType === MIME_GOOGLE_FOLDER) continue;
             const lower = child.name.toLowerCase();
             // Eksport PDF samego pisma i wczesniejsze podpisane pliki nie sa zalacznikami.
@@ -309,7 +357,7 @@ export default class SigningJobsController {
                 });
             }
         }
-        return { files, notSignable, docName: doc.name };
+        return { files, notSignable };
     }
 
     private asAttachment(child: DriveFileInfo): SignableFile {
@@ -327,9 +375,9 @@ export default class SigningJobsController {
         letterId: number,
         scope?: ProjectScope
     ): Promise<SignableFilesResult> {
-        const letter = await this.requireLetter(letterId, scope);
-        const { files, notSignable } = await this.buildSignable(letter);
-        return { letterId, letterNumber: letter.number, files, notSignable };
+        const source = await this.resolveSource({ type: 'LETTER', id: letterId }, scope);
+        const { files, notSignable } = await this.buildSignable(source);
+        return { letterId, letterNumber: source.number, files, notSignable };
     }
 
     // ------------------------------------------------------------------ podpisane pliki pisma
@@ -396,8 +444,8 @@ export default class SigningJobsController {
         scope?: ProjectScope
     ): Promise<CreateJobResult> {
         const dto: CreateJobDto = SigningJobValidator.parseCreateJob(body);
-        const letter = await this.requireLetter(dto.letterId, scope);
-        const { files: signable } = await this.buildSignable(letter);
+        const source = await this.resolveSource({ type: 'LETTER', id: dto.letterId }, scope);
+        const { files: signable } = await this.buildSignable(source);
 
         const chosen: NewJobFile[] = dto.files.map((requested, fileIndex) => {
             const match =
@@ -409,7 +457,7 @@ export default class SigningJobsController {
             if (!match)
                 return fail(
                     'BAD_REQUEST',
-                    'Wybrany plik nie jest już dostępny do podpisu w folderze tego pisma. Odśwież listę.',
+                    `Wybrany plik nie jest już dostępny do podpisu w folderze ${source.genitive}. Odśwież listę.`,
                     409
                 );
             return {
@@ -418,7 +466,7 @@ export default class SigningJobsController {
                 sourceGdFileId: match.gdFileId,
                 displayName: match.name,
                 // Pismo zawsze z grafika (decyzja ownera); zalaczniki wg wyboru.
-                withGraphic: match.kind === 'LETTER_DOC' ? true : requested.withGraphic,
+                withGraphic: match.graphicLocked ? true : requested.withGraphic,
             };
         });
 
@@ -431,7 +479,7 @@ export default class SigningJobsController {
             const id = await this.deps.repository.insertJob(
                 {
                     tokenHash: sha256Hex(token),
-                    letterId: letter.id,
+                    letterId: source.ref.id,
                     createdByPersonId: personId,
                     minProgramVersion: MIN_PROGRAM_VERSION,
                     createdAt: now,
@@ -689,12 +737,12 @@ export default class SigningJobsController {
         const files = await this.deps.repository.listFiles(job.id, false);
         const prepared: ProgramPreparedFile[] = [];
         try {
-            const letter = await this.requireLetterForJob(job);
+            const source = await this.resolveSourceForJob(job);
             for (const file of files) {
-                const bytes = await this.fetchSourcePdf(file, letter);
+                const bytes = await this.fetchSourcePdf(file, source);
                 let result;
                 try {
-                    result = await prepare(bytes, chain, this.placementFor(file), { now });
+                    result = await prepare(bytes, chain, this.placementFor(file, source), { now });
                 } catch (error) {
                     throw new SigningJobError(
                         'PREPARE_FAILED',
@@ -737,8 +785,8 @@ export default class SigningJobsController {
         return { files: prepared };
     }
 
-    private placementFor(file: JobFileRecord): SignaturePlacement {
-        if (file.sourceKind === 'LETTER_DOC') return 'letterClosing';
+    private placementFor(file: JobFileRecord, source: SigningSource): SignaturePlacement {
+        if (file.sourceKind === 'LETTER_DOC' && source.mainDoc) return source.mainDoc.placement;
         return file.withGraphic ? 'lastPageCorner' : 'none';
     }
 
@@ -754,7 +802,7 @@ export default class SigningJobsController {
     /** Zamraza tresc pliku zrodlowego jako PDF. Tylko odczyt z Dysku. */
     private async fetchSourcePdf(
         file: JobFileRecord,
-        letter: { gdDocumentId: string; gdFolderId: string }
+        source: SigningSource
     ): Promise<Buffer> {
         const tooBig = () =>
             new SigningJobError(
@@ -763,10 +811,10 @@ export default class SigningJobsController {
                 422
             );
         if (file.sourceKind === 'LETTER_DOC') {
-            if (file.sourceGdFileId !== letter.gdDocumentId)
+            if (file.sourceGdFileId !== source.mainDoc?.gdFileId)
                 throw new SigningJobError(
                     'PREPARE_FAILED',
-                    'Dokument pisma został zmieniony po założeniu zlecenia. Zacznij od nowa.',
+                    `Dokument ${source.genitive} został zmieniony po założeniu zlecenia. Zacznij od nowa.`,
                     409
                 );
             const bytes = await this.deps.drive.exportToPdf(file.sourceGdFileId);
@@ -774,10 +822,10 @@ export default class SigningJobsController {
             return bytes;
         }
         const meta = await this.deps.drive.getFile(file.sourceGdFileId);
-        if (!meta || meta.trashed || !(meta.parents ?? []).includes(letter.gdFolderId))
+        if (!meta || meta.trashed || !(meta.parents ?? []).includes(source.gdFolderId))
             throw new SigningJobError(
                 'PREPARE_FAILED',
-                `Pliku „${file.displayName}” nie ma już w folderze pisma.`,
+                `Pliku „${file.displayName}” nie ma już w folderze ${source.genitive}.`,
                 409
             );
         let bytes: Buffer;
@@ -868,11 +916,10 @@ export default class SigningJobsController {
         }
 
         // --- Faza 2: zapis na Dysk (jedyne miejsce zapisow w zleceniu). ---
-        const letter = await this.deps.repository.getLetterContext(job.letterId);
-        const folderId = letter?.gdFolderId ?? null;
         const uploaded: Array<{ file: JobFileRecord; id: string; name: string }> = [];
         try {
-            if (!folderId) throw new Error('Pismo nie ma już folderu na Dysku.');
+            const source = await this.resolveSourceForJob(job);
+            const folderId = source.gdFolderId;
             const taken = new Set(
                 (await this.deps.drive.listFolder(folderId)).map((f) => f.name)
             );
@@ -889,7 +936,7 @@ export default class SigningJobsController {
                 const back = await this.deps.drive.getFile(created.id);
                 if (!back || back.trashed || !(back.parents ?? []).includes(folderId))
                     throw new Error(
-                        `Plik „${name}” nie pojawił się w folderze pisma po zapisie.`
+                        `Plik „${name}” nie pojawił się w folderze ${source.genitive} po zapisie.`
                     );
             }
             await this.deps.runInTransaction(async (conn) => {
@@ -904,8 +951,8 @@ export default class SigningJobsController {
                         {
                             sourceType:
                                 item.file.sourceKind === 'LETTER_DOC'
-                                    ? 'LETTER'
-                                    : 'LETTER_ATTACHMENT',
+                                    ? source.signatureTypes.mainDoc
+                                    : source.signatureTypes.file,
                             sourceGdFileId: item.file.sourceGdFileId,
                             signedGdFileId: item.id,
                             signedName: item.name,
@@ -970,7 +1017,7 @@ export default class SigningJobsController {
         file: { buffer?: Buffer; size?: number } | undefined,
         scope?: ProjectScope
     ): Promise<ManualUploadResult> {
-        const letter = await this.requireLetter(letterId, scope);
+        const source = await this.resolveSource({ type: 'LETTER', id: letterId }, scope);
         const bytes = SigningJobValidator.assertPdfUpload(file);
 
         let check;
@@ -1004,30 +1051,31 @@ export default class SigningJobsController {
                 known.certIssuerSha256 !== verified.issuerSha256);
 
         // --- Dopiero tu zapis na Dysk. ---
-        const doc = await this.deps.drive.getFile(letter.gdDocumentId);
+        const mainDocId = source.mainDoc?.gdFileId ?? null;
+        const doc = mainDocId ? await this.deps.drive.getFile(mainDocId) : undefined;
         const taken = new Set(
-            (await this.deps.drive.listFolder(letter.gdFolderId)).map((f) => f.name)
+            (await this.deps.drive.listFolder(source.gdFolderId)).map((f) => f.name)
         );
-        const name = signedFileName(doc?.name || letter.number || 'pismo', taken, now);
+        const name = signedFileName(doc?.name || source.number || 'pismo', taken, now);
         let createdId: string | undefined;
         try {
             const created = await this.deps.drive.uploadPdf({
                 name,
-                parentFolderId: letter.gdFolderId,
+                parentFolderId: source.gdFolderId,
                 bytes,
             });
             createdId = created.id;
             const back = await this.deps.drive.getFile(created.id);
-            if (!back || back.trashed || !(back.parents ?? []).includes(letter.gdFolderId))
-                throw new Error('Plik nie pojawił się w folderze pisma po zapisie.');
+            if (!back || back.trashed || !(back.parents ?? []).includes(source.gdFolderId))
+                throw new Error(`Plik nie pojawił się w folderze ${source.genitive} po zapisie.`);
             await this.deps.runInTransaction(async (conn) => {
                 await this.deps.repository.insertSignature(
                     {
-                        sourceType: 'LETTER',
-                        sourceGdFileId: letter.gdDocumentId,
+                        sourceType: source.signatureTypes.mainDoc,
+                        sourceGdFileId: mainDocId,
                         signedGdFileId: created.id,
                         signedName: name,
-                        letterId: letter.id,
+                        letterId: source.ref.id,
                         method: 'MANUAL_UPLOAD',
                         certSubjectCn: verified.subjectCn,
                         certSerial: verified.serial,
