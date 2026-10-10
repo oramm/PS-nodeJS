@@ -6,6 +6,15 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-10 - LMF-1/2: pliki migracji i migawka folderów FIDmana
+
+- Zakres: migracja `src/contracts/migrations/015_add_contract_folders_kind_to_fidman_sync_outbox.sql` + `_down` oraz builder/kolejkowanie; bez wyzwalaczy LMF-3, dostawy i wdrożenia. Git wyłącznie odczytywany; bez zapisów do baz.
+- Odczyt `SHOW COLUMNS FROM FidmanSyncOutbox LIKE 'Kind'` na `localhost/envikons_myEnvi`: `contract.upsert`, `entity.upsert`, `project.upsert`, `user.upsert`. Lokalna baza nie ma jeszcze wartości z 014; 015 zachowuje również `contract.personnel`, dodawaną przez 014.
+- Kolejność dla dyspozytora: zastosować 014, potem 015 przed uruchomieniem kodu tworzącego `contract.folders`. Migracji ani próbnego INSERT/rollback nie wykonano w tej sesji. Globalny migration gate nie był uruchamiany.
+- Rollback: najpierw wycofać kod tworzący nowy rodzaj, zarchiwizować i usunąć wpisy `contract.folders`, dopiero potem uruchomić `_down`; nie zawężać ENUM przy istniejących wpisach tego rodzaju. Te kroki nie były wykonywane.
+- Checklist PR z `.github/PULL_REQUEST_TEMPLATE.md`: dokumentacja DB i lokalne akcje opisane; pliki migracji i kolejność wskazane. ENV/`.env.example`, Heroku, zmiana migration gate, frontend pointer i Pages/build klienta: nie dotyczy. PR nie utworzono (Git tylko do odczytu).
+- Weryfikacja: `yarn --ignore-engines tsc --noEmit` PASS; `yarn --ignore-engines test --runInBand`: 190 zestawów PASS + 2 pominięte, 2241 testów PASS + 5 pominiętych (17 nowych testów). Node 24.19.0 przekracza deklarowany limit repo; użyto --ignore-engines. Próbka ładunku ręcznie sprawdzona przeciw schematowi FIDmana, warunki utrwalone w teście. Ograniczony przegląd diffu APPROVE (fallback, 1 przebieg, brak uwag); `git diff --check` PASS.
+
 
 ## 2026-10-09 - Podpis kwalifikowany pism z PS: zlecenia podpisu (SIG-2, przygotowane, bez wdrozenia)
 

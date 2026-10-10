@@ -38,7 +38,8 @@ export type FidmanKind =
     | 'entity.upsert'
     | 'project.upsert'
     | 'user.upsert'
-    | 'contract.personnel';
+    | 'contract.personnel'
+    | 'contract.folders';
 
 export type FidmanRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
@@ -100,7 +101,91 @@ export type FidmanEnvelope =
     | { kind: 'entity.upsert'; payload: FidmanEntityPayload }
     | { kind: 'project.upsert'; payload: FidmanProjectPayload }
     | { kind: 'user.upsert'; payload: FidmanUserPayload }
-    | { kind: 'contract.personnel'; payload: FidmanPersonnelPayload };
+    | { kind: 'contract.personnel'; payload: FidmanPersonnelPayload }
+    | { kind: 'contract.folders'; payload: FidmanFoldersPayload };
+
+export type FidmanFoldersPayload = {
+    legacyContractId: number;
+    contractFolderId: string | null;
+    cases: { psCaseId: number; psCaseTypeId: number; folderId: string }[];
+};
+
+/** Pełna lista kamieni 50, włącznie z podsprawami i sprawami zamkniętymi. */
+export async function buildContractFoldersPayload(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<{ kind: 'contract.folders'; payload: FidmanFoldersPayload }> {
+    const [contracts] = await conn.query(
+        'SELECT GdFolderId FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]
+    );
+    const contract = (contracts as any[])[0];
+    if (!contract) throw new Error(`Nie znaleziono umowy ${contractId}.`);
+    const [rows] = await conn.query(
+        `SELECT c.Id, c.TypeId, c.GdFolderId
+         FROM Cases c JOIN Milestones m ON m.Id = c.MilestoneId
+         WHERE m.ContractId = ? AND m.TypeId = 50
+         ORDER BY c.Id FOR UPDATE`, [contractId]
+    );
+    const cases: FidmanFoldersPayload['cases'] = [];
+    for (const row of rows as any[]) {
+        // Wzorzec driveFolderId z contractFoldersPayloadSchema po stronie FIDmana.
+        if (!row.GdFolderId || !/^[A-Za-z0-9_-]{10,128}$/.test(row.GdFolderId)) {
+            console.warn(`[FidmanSync] Pominięto sprawę bez poprawnego folderu: umowa ${contractId}, sprawa ${row.Id}.`);
+            continue;
+        }
+        cases.push({ psCaseId: row.Id, psCaseTypeId: row.TypeId, folderId: row.GdFolderId });
+    }
+    return {
+        kind: 'contract.folders',
+        payload: { legacyContractId: contractId, contractFolderId: contract.GdFolderId || null, cases },
+    };
+}
+
+/** Wywoływać w transakcji zapisu; force jest dla jednorazowego dopchnięcia. */
+export async function enqueueFidmanFoldersPush(
+    contractId: number,
+    conn: mysql.PoolConnection,
+    force = false
+): Promise<number | null> {
+    // Blokada umowy szereguje równoległe porównania i wpisy, także gdy kolejka jest pusta.
+    const [contracts] = await conn.query(
+        'SELECT TypeId, FidmanSyncEnabled FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]
+    );
+    const contract = (contracts as any[])[0];
+    if (!contract || !isFidmanSyncEligible({
+        typeId: contract.TypeId, fidmanSyncEnabled: !!contract.FidmanSyncEnabled,
+    })) return null;
+    const envelope = await buildContractFoldersPayload(contractId, conn);
+    if (!force) {
+        const [rows] = await conn.query(
+            `SELECT Payload, Status FROM ${OUTBOX_TABLE}
+             WHERE Kind = 'contract.folders' AND RefId = ?
+             ORDER BY Id DESC LIMIT 1 FOR UPDATE`, [contractId]
+        );
+        const latest = (rows as any[])[0];
+        if (latest && ['PENDING', 'SENT'].includes(latest.Status)) {
+            const previous = typeof latest.Payload === 'string'
+                ? JSON.parse(latest.Payload) : latest.Payload;
+            // MariaDB może zmienić kolejność kluczy JSON; porównujemy jawne pola migawki.
+            if (previous.legacyContractId === envelope.payload.legacyContractId &&
+                previous.contractFolderId === envelope.payload.contractFolderId &&
+                Array.isArray(previous.cases) && previous.cases.length === envelope.payload.cases.length &&
+                previous.cases.every((entry: any, i: number) => {
+                    const current = envelope.payload.cases[i];
+                    return entry.psCaseId === current.psCaseId &&
+                        entry.psCaseTypeId === current.psCaseTypeId && entry.folderId === current.folderId;
+                })) return null;
+        }
+    }
+    const id = await enqueueRow(envelope, contractId, conn);
+    await conn.execute(
+        `UPDATE ${OUTBOX_TABLE}
+         SET Status = 'SKIPPED', SkipReason = 'SUPERSEDED', LastError = NULL
+         WHERE Kind = 'contract.folders' AND RefId = ? AND Id < ?
+           AND Status IN ('PENDING', 'FAILED')`, [contractId, id]
+    );
+    return id;
+}
 
 export type FidmanPersonnelPayload = {
     legacyContractId: number;
@@ -737,6 +822,8 @@ export type FidmanSyncStatus = {
 /** Human-readable meaning of a FIDman SkipReason, for the "awizo braków" UI. */
 export function fidmanSkipReasonLabel(reason: string | null): string | null {
     switch (reason) {
+        case 'SUPERSEDED':
+            return 'Wpis zastąpiony nowszą migawką folderów kontraktu.';
         case 'NEEDS_DATA':
             return 'FIDman potrzebuje uzupełnienia danych kontrahenta, aby zaktualizować rekord.';
         case 'NO_NIP':
