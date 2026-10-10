@@ -33,7 +33,7 @@ async function call(handlers: Handler[], req: any, res: any) {
     return next;
 }
 
-const PERSON = { enviId: 125, userName: 'Marek' };
+const PERSON = { enviId: 125, userName: 'Marek', systemRoleName: 'ENVI_EMPLOYEE' };
 
 /** Minimalny bufor z VS_FIXEDFILEINFO o wersji a.b.c.d (MS = a.b, LS = c.d). */
 function versionedExe(a: number, b: number, c: number, d: number): Buffer {
@@ -116,6 +116,24 @@ describe('SigningRoutes', () => {
         expect(machine.mock.calls[0][0].status).toBe(403);
         for (const fn of Object.values(controller) as jest.Mock[]) expect(fn).not.toHaveBeenCalled();
     });
+
+    it.each(['ENVI_COOPERATOR', 'EXTERNAL_USER', 'CONTRACT_WORKER', 'CLIENT', undefined])(
+        'rola %s nie dochodzi do zadnej trasy sesyjnej (podpisuja tylko pracownicy ENVI)',
+        async (systemRoleName) => {
+            for (const key of SESSION_ROUTES) {
+                const handlers = routes[key];
+                const next = jest.fn();
+                // Trasy z plikiem maja straznika przed multerem: wolamy pierwszy handler.
+                await handlers[0](
+                    { params: { id: '7', index: '0', gdFileId: 'abcdefghijklmnopqrstuvwxyz', page: '1' }, body: {}, session: { userData: { ...PERSON, systemRoleName } } },
+                    makeRes(),
+                    next
+                );
+                expect(next.mock.calls[0]?.[0]).toMatchObject({ status: 403 });
+            }
+            for (const fn of Object.values(controller)) expect(fn).not.toHaveBeenCalled();
+        }
+    );
 
     it('trasa sesyjna przekazuje osobe z sesji, zakres projektow i id z adresu', async () => {
         const scope = { projectOurIds: ['A'] };

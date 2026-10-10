@@ -7,6 +7,7 @@ import SigningJobsController from './SigningJobsController';
 import SigningJobValidator from './SigningJobValidator';
 import { SigningJobError } from './SigningJobError';
 import { MAX_UPLOAD_BYTES } from './SigningJobsConfig';
+import { SystemRoleName } from '../../types/sessionTypes';
 
 /**
  * Trasy zlecen podpisu (SIG-2). Dwa rodzaje, ktorych nie wolno mylic:
@@ -49,6 +50,12 @@ type Handler = (req: Request, res: Response, next: NextFunction) => Promise<void
 const forbidden = () =>
     new SigningJobError('FORBIDDEN', 'Brak uprawnień do podpisywania.', 403);
 
+const SIGNING_ROLES: ReadonlySet<SystemRoleName> = new Set([
+    SystemRoleName.ADMIN,
+    SystemRoleName.ENVI_MANAGER,
+    SystemRoleName.ENVI_EMPLOYEE,
+]);
+
 /** Zwraca osobe z sesji. Tozsamosc maszynowa (token agenta) nie podpisuje: karta jest czlowieka. */
 function requirePerson(req: Request, res: Response): number {
     const userData = req.session?.userData;
@@ -56,6 +63,9 @@ function requirePerson(req: Request, res: Response): number {
         throw new SigningJobError('FORBIDDEN', 'Użytkownik niezalogowany', 401);
     }
     if (res.locals?.authenticatedMachine === true) throw forbidden();
+    // Podpisuja tylko pracownicy ENVI. Role zakresowe odcina juz projectScopedPolicy, ale
+    // wspolpracownik i uzytkownik zewnetrzny przechodza przez nia bez ograniczen - stad lista tutaj.
+    if (!SIGNING_ROLES.has(userData.systemRoleName)) throw forbidden();
     return userData.enviId;
 }
 
