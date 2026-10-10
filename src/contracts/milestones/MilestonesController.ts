@@ -21,6 +21,7 @@ import ApprovedDocsController from './approvedDocs/ApprovedDocsController';
 import Setup from '../../setup/Setup';
 import {
     lockFidmanFoldersContracts,
+    findAndLockFidmanFoldersContractIds,
     enqueueFidmanFoldersForContracts,
     deliverFidmanFoldersAfterCommit,
 } from '../fidmanSync/FidmanSync';
@@ -95,7 +96,11 @@ export default class MilestonesController extends BaseController<
             await instance.repository.addMilestonesWithDates(milestones, conn);
             return enqueueFidmanFoldersForContracts(milestones.map((m) => m.contractId), conn);
         }, externalConn);
-        if (!externalConn) await deliverFidmanFoldersAfterCommit(ids);
+        if (!externalConn) {
+            void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
+        }
         return milestones;
     }
 
@@ -228,11 +233,13 @@ export default class MilestonesController extends BaseController<
                             .catch((error: unknown) => {
                                 console.error('Error deleting folder:', error);
                             });
-                        await instance.repository
-                            .deleteFromDb(milestone)
-                            .catch((error: unknown) => {
-                                console.error('Error deleting from DB:', error);
-                            });
+                        try {
+                            const stored = await instance.repository.findById(milestone.id!);
+                            await instance.repository.deleteFromDb(milestone);
+                            await enqueueFidmanFoldersForContracts([stored?.contractId]);
+                        } catch (error) {
+                            console.error('Error deleting from DB:', error);
+                        }
                         throw dbError;
                     }
                 } finally {
@@ -299,13 +306,17 @@ export default class MilestonesController extends BaseController<
 
                     // 1. Transakcja DB - Milestone + Dates
                     const ids = await ToolsDb.transaction<number[]>(async (conn) => {
-                        await lockFidmanFoldersContracts([milestone.contractId], conn);
+                        const contractIds = await findAndLockFidmanFoldersContractIds(
+                            [milestone.id!], conn, undefined, [milestone.contractId]
+                        );
                         await instance.repository.editMilestoneWithDates(
                             milestone, conn, true, fieldsToUpdate
                         );
-                        return enqueueFidmanFoldersForContracts([milestone.contractId], conn);
+                        return enqueueFidmanFoldersForContracts(contractIds, conn);
                     });
-                    await deliverFidmanFoldersAfterCommit(ids);
+                    void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
+                        console.error('[FidmanSync] folder delivery error:', err)
+                    );
 
                     console.log('Milestone edited in DB');
 
@@ -423,8 +434,9 @@ export default class MilestonesController extends BaseController<
 
                 try {
                     // 1. Usuń z bazy (CASCADE usunie też MilestoneDates i powiązane Cases)
+                    const stored = await instance.repository.findById(milestone.id!);
                     await instance.repository.deleteFromDb(milestone);
-                    await enqueueFidmanFoldersForContracts([milestone.contractId]);
+                    await enqueueFidmanFoldersForContracts([stored?.contractId]);
                     console.log('Milestone deleted from DB');
 
                     // 2. Równolegle: GD + Scrum (błędy nie wpływają na DB)

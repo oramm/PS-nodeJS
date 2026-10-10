@@ -133,6 +133,18 @@ describe('LMF-2 foldery kontraktu', () => {
         });
     });
 
+    it('punkt 7 błędny folder umowy daje ostrzeżenie i PENDING z null oraz sprawami', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        const { conn, outbox } = connection({ contract: {
+            TypeId: 3, FidmanSyncEnabled: 1, GdFolderId: 'bad/id',
+        }, cases: [caseRow] });
+        await enqueueFidmanFoldersPush(42, conn);
+        expect(outbox[0].Status).toBe('PENDING');
+        expect(JSON.parse(outbox[0].Payload)).toEqual({ legacyContractId: 42, contractFolderId: null,
+            cases: [{ psCaseId: 7, psCaseTypeId: 75, folderId: 'folder_case_7' }] });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('folder umowy 42'));
+    });
+
     it('identyczna migawka nie tworzy wpisu', async () => {
         for (const Status of ['PENDING', 'SENT']) {
             const payload = { cases: [], contractFolderId: folder, legacyContractId: 42 };

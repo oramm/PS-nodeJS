@@ -9,6 +9,10 @@ import MilestonesController from '../../milestones/MilestonesController';
 import MilestoneRepository from '../../milestones/MilestoneRepository';
 import CasesController from '../../milestones/cases/CasesController';
 import CaseRepository from '../../milestones/cases/CaseRepository';
+import CaseTypesController from '../../milestones/cases/caseTypes/CaseTypesController';
+import CaseTypeRepository from '../../milestones/cases/caseTypes/CaseTypeRepository';
+import MilestoneTypesController from '../../milestones/milestoneTypes/MilestoneTypesController';
+import MilestoneTypeRepository from '../../milestones/milestoneTypes/MilestoneTypeRepository';
 import {
     enqueueFidmanContractPush, enqueueFidmanFoldersForContracts,
     deliverFidmanFoldersAfterCommit, retryOrPushFidmanContract,
@@ -131,6 +135,107 @@ beforeEach(() => {
 });
 
 const folderWrites = () => writes.filter((w) => w.kind === 'contract.folders');
+
+it('F3 przeniesienie sprawy podczas oczekiwania odświeża ponownie odczytanego właściciela', async () => {
+    contracts.set(44, { ...contracts.get(42) });
+    milestones.set(12, milestone(12, 44));
+    const query = conn.query.getMockImplementation();
+    let moved = false;
+    conn.query.mockImplementation(async (sql: string, params: any[]) => {
+        if (!moved && sql === 'SELECT Id FROM Contracts WHERE Id = ? FOR UPDATE' && params[0] === 42) {
+            cases.set(7, caseItem(7, 12));
+            moved = true;
+        }
+        return query(sql, params);
+    });
+    await CasesController.edit(caseItem(7, 11), auth, ['milestoneId']);
+    expectLocksBeforeSave([42, 43, 44], 'save:case');
+    expect(conn.query.mock.calls.some(([sql]: [string]) =>
+        sql.includes('SELECT MilestoneId FROM Cases WHERE Id = ? FOR UPDATE)') &&
+        sql.trimEnd().endsWith('FOR UPDATE'))).toBe(true);
+    expect(folderWrites().map((w) => [w.refId, w.payload.cases.map((c: any) => c.psCaseId)]))
+        .toEqual([[42, []], [43, [7]], [44, []]]);
+});
+
+it('F4 przeniesienie kamienia odświeża starą i docelową umowę', async () => {
+    await MilestonesController.edit(milestone(10, 43), auth, undefined, ['contractId']);
+    expectLocksBeforeSave([42, 43], 'save:milestone');
+    expect(folderWrites().map((w) => [w.refId, w.payload.cases.map((c: any) => c.psCaseId)]))
+        .toEqual([[42, []], [43, [7]]]);
+});
+
+it('F4 usunięcie kamienia bierze właściciela z bazy zamiast nieaktualnego DTO', async () => {
+    await MilestonesController.delete(milestone(10, 43), auth);
+    expect(folderWrites().map((w) => [w.refId, w.payload.cases])).toEqual([[42, []]]);
+});
+
+it('F5 kompensacja po błędzie folderu odkłada komplet bez wcześniej dodanych spraw', async () => {
+    cases.clear();
+    (MilestonesController.createDefaultCases as jest.Mock).mockImplementation(async () => {
+        await CasesController.addBulkWithDefaultTasks([caseItem()], auth);
+    });
+    const item = milestones.get(10);
+    item.updateFolderName.mockRejectedValue(new Error('folder failed'));
+    await expect(MilestonesController.add(item, auth)).rejects.toThrow('folder failed');
+    expect(milestones.has(10)).toBe(false);
+    expect(folderWrites().map((w) => w.payload.cases.map((c: any) => c.psCaseId)))
+        .toEqual([[], [7], []]);
+});
+
+it.each(['case', 'milestone'] as const)('F2 kaskadowe usunięcie rodzaju %s odświeża dotknięte umowy', async (kind) => {
+    cases.set(8, caseItem(8, 11));
+    const typeId = kind === 'case' ? 75 : 50;
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string, _tx, params) => {
+        if (!sql.includes('SELECT DISTINCT m.ContractId')) return [];
+        expect(params).toEqual([typeId]);
+        expect(sql).toContain('m.TypeId = 50');
+        expect(sql).toContain(kind === 'case' ? 'c.TypeId = ?' : 'm.TypeId = ?');
+        return [...new Set([...cases.values()].filter((c) => {
+            const m = milestones.get(c.milestoneId);
+            return m?.typeId === 50 && (kind === 'case' ? c.typeId === typeId : m.typeId === typeId);
+        }).map((c) => milestones.get(c.milestoneId).contractId))].map((ContractId) => ({ ContractId }));
+    });
+    const repo = kind === 'case' ? CaseTypeRepository.prototype : MilestoneTypeRepository.prototype;
+    jest.spyOn(repo, 'deleteFromDb').mockImplementation(async () => {
+        expect(folderWrites()).toEqual([]);
+        for (const c of cases.values()) if (kind === 'case' ? c.typeId === typeId :
+            milestones.get(c.milestoneId)?.typeId === typeId) cases.delete(c.id);
+        if (kind === 'milestone') for (const m of milestones.values()) if (m.typeId === typeId) milestones.delete(m.id);
+    });
+    if (kind === 'case') await CaseTypesController.delete({ id: typeId } as any);
+    else await MilestoneTypesController.delete({ id: typeId } as any);
+    expect(folderWrites().map((w) => [w.refId, w.payload.cases])).toEqual([[42, []], [43, []]]);
+});
+
+it('F6 trasa sprawy kończy zapis PENDING zanim wisząca dostawa HTTP się zakończy', async () => {
+    jest.spyOn(Setup, 'FidmanSync', 'get').mockReturnValue({ ...Setup.FidmanSync,
+        baseUrl: 'http://fidman.test', token: 'test' });
+    const row = { Id: 1, Kind: 'contract.folders', RefId: 42, Payload: {}, Status: 'PENDING', Attempts: 0 };
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValue([row]);
+    const query = conn.query.getMockImplementation();
+    conn.query.mockImplementation(async (sql: string, params: any[]) => {
+        if (sql.includes('GET_LOCK')) return [[{ Acquired: 1 }]];
+        if (sql.includes('NOT EXISTS')) return [[row]];
+        return query(sql, params);
+    });
+    let finish!: (response: any) => void;
+    let started!: () => void;
+    const pending = new Promise<void>((resolve) => { started = resolve; });
+    jest.spyOn(global, 'fetch').mockImplementation(() => {
+        started(); return new Promise((resolve) => { finish = resolve; });
+    });
+    const route = CasesController.edit(caseItem(), auth, ['status']);
+    await pending;
+    const result = await Promise.race([route.then(() => 'saved'),
+        new Promise<string>((resolve) => setTimeout(() => resolve('waiting'), 50))]);
+    expect(committed).toBe(true);
+    expect(folderWrites()).toHaveLength(1);
+    expect(row.Status).toBe('PENDING');
+    finish({ status: 200, json: async () => ({}) });
+    await route;
+    expect(result).toBe('saved');
+});
+
 const scopes = [
     ['w zakresie', 3, 1, 1], ['wyłączona', 3, 0, 0], ['typ poza zakresem', 99, 1, 0],
 ] as const;
@@ -148,7 +253,7 @@ describe.each(scopes)('LMF-3 umowa %s', (_label, TypeId, FidmanSyncEnabled, coun
 
 const milestoneRoutes = ['add', 'addBulkWithDates', 'addBulkWithDatesAndCases', 'edit', 'editFolder', 'delete'] as const;
 describe.each(scopes)('LMF-3 kamień umowy %s', (_label, TypeId, FidmanSyncEnabled, count) => {
-    it.each(milestoneRoutes)('%s odkłada pełną migawkę bez filtrowania wyzwalacza', async (route) => {
+    it.each(milestoneRoutes)('%s odkłada wpis folderów; usunięcie daje pustą listę spraw', async (route) => {
         contracts.set(42, { ...contracts.get(42), TypeId, FidmanSyncEnabled });
         const item = milestones.get(10);
         if (route === 'addBulkWithDates') await MilestonesController.addBulkWithDates([item]);
@@ -195,7 +300,7 @@ it.each(['enqueue', 'delivery'])('LMF-3 błąd %s po zapisie nie wywraca usunię
     expect(console.error).toHaveBeenCalled();
 });
 
-it('LMF-3 błąd odkładania w transakcji sprawy przerywa zapis', async () => {
+it('LMF-3 błąd odkładania sprawy propaguje wyjątek i nie wywołuje commit', async () => {
     conn.execute.mockRejectedValue(new Error('enqueue failed'));
     await expect(CasesController.edit(caseItem(), auth, ['status'])).rejects.toThrow('enqueue failed');
     expect(conn.commit).not.toHaveBeenCalled();
@@ -209,7 +314,7 @@ it('LMF-3 zewnętrzna transakcja kamieni nie dostarcza przed commitem właścici
     expect(ToolsDb.getQueryCallbackAsync).not.toHaveBeenCalled();
 });
 
-it('LMF-3 wiele zmian tej samej umowy odkłada jeden komplet', async () => {
+it('LMF-3 powtórzone identyfikatory umów są deduplikowane i sortowane', async () => {
     await ToolsDb.transaction(async (tx) => enqueueFidmanFoldersForContracts([43, 42, 42, undefined], tx));
     expect(folderWrites().map((w) => w.refId)).toEqual([42, 43]);
 });
@@ -228,7 +333,7 @@ it.each([true, false])('LMF-3 dopchnięcie (ponowiono upsert: %s) odkłada bież
 });
 
 
-it('LMF-3 po kamieniach domyślnych powstaje migawka z nowymi sprawami', async () => {
+it('LMF-3 addBulkWithDatesAndCases odkłada sprawy dodane przez atrapę createDefaultCases', async () => {
     cases.clear();
     (MilestonesController.createDefaultCases as any).mockImplementation(async () => {
         await CasesController.addBulkWithDefaultTasks([caseItem()], auth);

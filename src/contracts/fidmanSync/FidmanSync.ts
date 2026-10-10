@@ -30,6 +30,10 @@ import { isValidNipChecksum } from '../aqmSync/AqmSync';
 
 const OUTBOX_TABLE = 'FidmanSyncOutbox';
 const PUSH_PATH = '/api/ps-sync';
+// Krótka próba blokady; zajętą dostawę ponowi drainer.
+const FOLDERS_DELIVERY_LOCK_SECONDS = 5;
+// Ogranicza także oczekiwanie na treść odpowiedzi FIDmana.
+const DELIVERY_TIMEOUT_MS = 15_000;
 
 type AnyContract = ContractOur | ContractOther;
 
@@ -135,9 +139,14 @@ export async function buildContractFoldersPayload(
         }
         cases.push({ psCaseId: row.Id, psCaseTypeId: row.TypeId, folderId: row.GdFolderId });
     }
+    let contractFolderId = contract.GdFolderId || null;
+    if (contractFolderId && !/^[A-Za-z0-9_-]{10,128}$/.test(contractFolderId)) {
+        console.warn(`[FidmanSync] Pominięto niepoprawny folder umowy ${contractId}.`);
+        contractFolderId = null;
+    }
     return {
         kind: 'contract.folders',
-        payload: { legacyContractId: contractId, contractFolderId: contract.GdFolderId || null, cases },
+        payload: { legacyContractId: contractId, contractFolderId, cases },
     };
 }
 
@@ -204,17 +213,41 @@ export async function lockFidmanFoldersContracts(
 export async function findAndLockFidmanFoldersContractIds(
     milestoneIds: number[],
     conn: mysql.PoolConnection,
-    caseId?: number
+    caseId?: number,
+    additionalContractIds: (number | undefined)[] = []
 ): Promise<number[]> {
     const ids = [...new Set(milestoneIds)].filter((id) => id != null);
-    if (!ids.length && !caseId) return [];
-    const [rows] = await conn.query(
-        `SELECT DISTINCT m.ContractId FROM Milestones m
+    if (!ids.length && !caseId) return lockFidmanFoldersContracts(additionalContractIds, conn);
+    const sql = (locking = false) => `SELECT DISTINCT m.ContractId FROM Milestones m
          WHERE ${ids.length ? `m.Id IN (${ids.map(() => '?').join(',')})` : '0'}
-         ${caseId ? 'OR m.Id = (SELECT MilestoneId FROM Cases WHERE Id = ?)' : ''}`,
-        [...ids, ...(caseId ? [caseId] : [])]
-    );
-    return lockFidmanFoldersContracts((rows as any[]).map((row) => row.ContractId), conn);
+         ${caseId ? `OR m.Id = (SELECT MilestoneId FROM Cases WHERE Id = ?${locking ? ' FOR UPDATE' : ''})` : ''}
+         ${locking ? 'FOR UPDATE' : ''}`;
+    const params = [...ids, ...(caseId ? [caseId] : [])];
+    const [rows] = await conn.query(sql(), params);
+    const locked = await lockFidmanFoldersContracts([
+        ...additionalContractIds, ...(rows as any[]).map((row) => row.ContractId),
+    ], conn);
+    // Blokujący odczyt także wewnątrz podzapytania widzi bieżącego właściciela przy REPEATABLE READ.
+    const [current] = await conn.query(sql(true), params);
+    const missing = (current as any[]).map((row) => row.ContractId)
+        .filter((id) => id != null && !locked.includes(id));
+    // Dobranie blokady poza kolejnością jest świadome: podwójny wyścig przeniesień jest skrajnie rzadki.
+    return [...locked, ...await lockFidmanFoldersContracts(missing, conn)].sort((a, b) => a - b);
+}
+
+/** Umowy, których komplet zmieni kaskadowe usunięcie rodzaju. */
+export async function findFidmanFoldersContractsForType(
+    kind: 'case' | 'milestone', typeId: number
+): Promise<number[]> {
+    const rows = await ToolsDb.getQueryCallbackAsync(
+        kind === 'case'
+            ? `SELECT DISTINCT m.ContractId FROM Milestones m JOIN Cases c ON c.MilestoneId = m.Id
+               WHERE m.TypeId = 50 AND c.TypeId = ? AND m.ContractId IS NOT NULL`
+            : `SELECT DISTINCT m.ContractId FROM Milestones m
+               WHERE m.TypeId = 50 AND m.TypeId = ? AND m.ContractId IS NOT NULL`,
+        undefined, [typeId]
+    ) as { ContractId: number }[];
+    return rows.map((row) => row.ContractId);
 }
 
 export async function deliverFidmanFoldersAfterCommit(ids: number[]): Promise<void> {
@@ -238,7 +271,9 @@ export async function enqueueFidmanFoldersForContracts(
             const ids = await ToolsDb.transaction<number[]>(async (connection) =>
                 enqueueFidmanFoldersForContracts(contracts, connection)
             );
-            await deliverFidmanFoldersAfterCommit(ids);
+            void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
             return ids;
         } catch (err) {
             console.error('[FidmanSync] folder enqueue after save error:', err);
@@ -771,12 +806,12 @@ function parsePayload(raw: any): any {
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
 
-async function markFailed(row: OutboxRow, error: string): Promise<void> {
+async function markFailed(row: OutboxRow, error: string, conn?: mysql.PoolConnection): Promise<void> {
     await ToolsDb.executeSQL(
         `UPDATE ${OUTBOX_TABLE}
          SET Status = 'FAILED', Attempts = Attempts + 1, LastError = ?
-         WHERE Id = ?`,
-        [error?.slice(0, 60000) ?? null, row.Id]
+         WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+        [error?.slice(0, 60000) ?? null, row.Id], ...(conn ? [conn] : [])
     );
 }
 
@@ -789,13 +824,46 @@ async function markFailed(row: OutboxRow, error: string): Promise<void> {
  */
 export async function deliverOutboxRow(
     row: OutboxRow
-): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
+): Promise<'SENT' | 'FAILED' | 'SKIPPED' | null> {
+    if (row.Kind !== 'contract.folders') return deliverUnlockedOutboxRow(row);
+    const conn = await ToolsDb.getPoolConnectionWithTimeout();
+    const lockName = `fidman:contract.folders:${row.RefId}`;
+    let acquired = false;
+    try {
+        const [locks] = await conn.query('SELECT GET_LOCK(?, ?) AS Acquired',
+            [lockName, FOLDERS_DELIVERY_LOCK_SECONDS]);
+        acquired = (locks as any[])[0]?.Acquired === 1;
+        if (!acquired) return null;
+        const [rows] = await conn.query(
+            `SELECT Id, Kind, RefId, Payload, Status, Attempts, SkipReason FROM ${OUTBOX_TABLE}
+             WHERE Id = ? AND Status IN ('PENDING', 'FAILED')
+               AND NOT EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} newer
+                   WHERE newer.Kind = 'contract.folders' AND newer.RefId = ? AND newer.Id > ?)`,
+            [row.Id, row.RefId, row.Id]
+        );
+        const current = (rows as OutboxRow[])[0];
+        return current ? await deliverUnlockedOutboxRow(current, conn) : null;
+    } catch (err) {
+        console.error('[FidmanSync] folder delivery lock error:', err);
+        return null;
+    } finally {
+        try {
+            if (acquired) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+        } finally {
+            conn.release();
+        }
+    }
+}
+
+async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnection): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
     const { baseUrl, token } = Setup.FidmanSync;
     try {
         if (!baseUrl) throw new Error('FIDMAN_SYNC_BASE_URL nie ustawione');
 
+        const signal = AbortSignal.timeout(DELIVERY_TIMEOUT_MS);
         const response = await fetch(`${baseUrl}${PUSH_PATH}`, {
             method: 'POST',
+            signal,
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token ?? ''}`,
@@ -809,22 +877,25 @@ export async function deliverOutboxRow(
         if (response.status === 200) {
             const body = (await response
                 .json()
-                .catch(() => null)) as FidmanIngestResponse | null;
+                .catch((err) => {
+                    if (signal.aborted) throw err;
+                    return null;
+                })) as FidmanIngestResponse | null;
             const skip = body?.skipped?.[0];
             if (skip) {
                 await ToolsDb.executeSQL(
                     `UPDATE ${OUTBOX_TABLE}
                      SET Status = 'SKIPPED', SkipReason = ?, LastError = NULL
-                     WHERE Id = ?`,
-                    [skip.reason ?? null, row.Id]
+                     WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+                    [skip.reason ?? null, row.Id], ...(conn ? [conn] : [])
                 );
                 return 'SKIPPED';
             }
             await ToolsDb.executeSQL(
                 `UPDATE ${OUTBOX_TABLE}
                  SET Status = 'SENT', SkipReason = NULL, LastError = NULL
-                 WHERE Id = ?`,
-                [row.Id]
+                 WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+                [row.Id], ...(conn ? [conn] : [])
             );
             // DM-L1 reverse link: persist FIDman's own contract id (PK↔PK) onto PS Contracts.
             // RefId of a contract.upsert row = PS Contracts.Id (see enqueueRow). No-clobber:
@@ -842,11 +913,11 @@ export async function deliverOutboxRow(
         const bodyText = await response.text().catch(() => '');
         await markFailed(
             row,
-            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim()
+            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
         );
         return 'FAILED';
     } catch (err: any) {
-        await markFailed(row, err?.message ?? String(err)).catch((dbErr) =>
+        await markFailed(row, err?.message ?? String(err), conn).catch((dbErr) =>
             console.error('[FidmanSync] nie udało się zapisać FAILED:', dbErr)
         );
         return 'FAILED';
@@ -855,7 +926,7 @@ export async function deliverOutboxRow(
 
 /**
  * Post-commit best-effort delivery of a freshly enqueued row.
- * MUST be awaited OUTSIDE the business transaction. Wrapped so a push failure
+ * Call OUTSIDE the business transaction. Wrapped so a push failure
  * can never bubble into the business path (L8).
  *
  * Gotcha (go-live playbook): on an Eco/idling dyno the drainer interval may not
@@ -1091,6 +1162,7 @@ export async function drainFidmanOutbox(options?: {
 
         for (const row of rows ?? []) {
             const result = await deliverOutboxRow(row);
+            if (result === null) continue;
             summary.processed += 1;
             if (result === 'SENT') summary.sent += 1;
             else if (result === 'SKIPPED') summary.skipped += 1;

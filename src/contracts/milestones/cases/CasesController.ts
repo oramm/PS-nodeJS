@@ -327,7 +327,9 @@ export default class CasesController extends BaseController<
                 folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
-            await deliverFidmanFoldersAfterCommit(folderIds);
+            void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
             console.log('added in db');
 
             // 3. Ustaw display number (logika domenowa - Model)
@@ -599,7 +601,9 @@ export default class CasesController extends BaseController<
                 folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
-            await deliverFidmanFoldersAfterCommit(folderIds);
+            void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
             console.log('edited in db');
 
             // Operacje post-DB: GD i Scrum (równolegle) - zbędne przy edycji tylko pól DB
@@ -731,7 +735,9 @@ export default class CasesController extends BaseController<
 
             const folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             await conn.commit();
-            await deliverFidmanFoldersAfterCommit(folderIds);
+            void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
             console.log('Cases with Tasks saved in DB');
 
             // 3. Dodaj do Scrum (błąd nie może cofnąć już zatwierdzonej transakcji DB)
@@ -869,7 +875,9 @@ export default class CasesController extends BaseController<
                 return enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
-            await deliverFidmanFoldersAfterCommit(folderIds);
+            void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
             console.log('deleted from db');
 
             const subCases = subCaseIds.map(
