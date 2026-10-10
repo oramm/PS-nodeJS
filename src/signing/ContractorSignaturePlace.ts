@@ -73,7 +73,9 @@ function pageCandidates(content: PageContent, width: number, height: number): Ar
                 if (index > 0 && chunk.box.left - members[index - 1].box.right > 1) label += ' ';
                 label += chunk.text.slice(index === 0 ? start.offset : 0, chunk === last ? labelEnd : undefined);
             });
-            label = label.replace(/\s+/gu, ' ').trim().slice(0, 60);
+            label = label.replace(/\s+/gu, ' ').trim();
+            // The label is quoted to the user: a cut one ends with an ellipsis, not mid-sentence.
+            if (label.length > 60) label = label.slice(0, 59).trimEnd() + '…';
             // shortcut: Partial chunk edges use proportional width; use glyph positions if exact character edges are needed.
             const box: Box = {
                 left: members[0].box.left + (members[0].box.right - members[0].box.left) * start.offset / members[0].text.length,
