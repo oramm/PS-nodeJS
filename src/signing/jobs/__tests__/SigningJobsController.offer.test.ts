@@ -119,20 +119,20 @@ describe('lista plikow oferty', () => {
 });
 
 describe('zrodlo oferty: odmowy przed czymkolwiek innym', () => {
-    it('oferta wlasna ENVI: 400 z komunikatem o ofercie wlasnej', async () => {
+    it('oferta wlasna bez folderu sprawy: 409 (oferty wlasne sa podpisywane od decyzji z 2026-10-10, ale folder musi byc)', async () => {
         const error = await rejected(kit.controller.listOfferSignableFiles(OUR_OFFER_ID));
 
-        expect(error.status).toBe(400);
-        expect(error.message).toContain('oferta własna');
+        expect(error.status).toBe(409);
+        expect(error.message).toContain('Przygotowanie oferty');
         noWrites();
     });
 
-    it('oferta wlasna ENVI nie zaklada zlecenia', async () => {
+    it('oferta wlasna bez folderu sprawy nie zaklada zlecenia', async () => {
         const error = await rejected(
             kit.controller.createJob(PERSON_ID, { offerId: OUR_OFFER_ID, files: plain(FORM) })
         );
 
-        expect(error.status).toBe(400);
+        expect(error.status).toBe(409);
         expect(kit.repo.jobs).toHaveLength(0);
         noWrites();
     });
@@ -144,14 +144,14 @@ describe('zrodlo oferty: odmowy przed czymkolwiek innym', () => {
         noWrites();
     });
 
-    it('brak podfolderu Oferta (oznaczony jako usuniety): 409 z komunikatem o braku podfolderu', async () => {
+    it('brak podfolderu Oferta: lista bierze pliki z folderu sprawy, a plik z dawnego podfolderu nie jest wybieralny', async () => {
         kit.drive.files.get(OFFER_FILES_FOLDER_ID_001)!.trashed = true;
 
-        const error = await rejected(kit.controller.listOfferSignableFiles(OFFER_ID));
+        const list = await kit.controller.listOfferSignableFiles(OFFER_ID);
         const job = await rejected(kit.controller.createJob(PERSON_ID, { offerId: OFFER_ID, files: plain(FORM) }));
 
-        expect(error.status).toBe(409);
-        expect(error.message).toContain('nie ma podfolderu „Oferta”');
+        expect(list.folder).toBe('CASE');
+        expect(list.files).toEqual([]);
         expect(job.status).toBe(409);
         expect(kit.repo.jobs).toHaveLength(0);
         noWrites();
@@ -471,7 +471,7 @@ describe('zmiany na Dysku miedzy krokami zlecenia', () => {
 
         const error = await rejected(kit.controller.submitCertificate(job.token, certBody()));
 
-        expect(error.message).toContain('nie ma podfolderu „Oferta”');
+        expect(error.message).toContain('nie ma już w folderze oferty');
         expect(kit.repo.jobs[0].status).toBe('failed');
         expect(kit.repo.jobs[0].failureMessage).toBe(error.message);
         noWrites();

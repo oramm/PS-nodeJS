@@ -82,6 +82,8 @@ interface SigningSource {
     fileGraphic: 'lastPageCorner' | 'explicit';
     /** Czy plik o tej nazwie to wczesniej podpisana kopia (nie proponujemy jej do podpisu). */
     isSignedCopy: (name: string) => boolean;
+    /** Tylko oferta: czy pliki leza w podfolderze "Oferta", czy wprost w folderze sprawy (gdy podfolderu nie ma). */
+    offerFolder?: OfferFolderKind;
     /**
      * true = folder nie ma id w bazie i jest szukany po nazwie przy kazdym kroku (oferta). Wtedy przed
      * zapisem sprawdzamy, ze pliki zrodlowe nadal w nim leza: folder o tej samej nazwie mogl zostac
@@ -114,9 +116,14 @@ export interface SignableFilesResult {
     notSignable: NotSignableFile[];
 }
 
+/** Gdzie leza pliki oferty: w podfolderze "Oferta" albo wprost w folderze sprawy "Przygotowanie oferty". */
+export type OfferFolderKind = 'OFERTA' | 'CASE';
+
 export interface OfferSignableFilesResult {
     offerId: number;
     offerAlias: string;
+    /** Strona PS mowi uzytkownikowi, do ktorego folderu trafia podpisane kopie. */
+    folder: OfferFolderKind;
     files: SignableFile[];
     notSignable: NotSignableFile[];
 }
@@ -349,27 +356,22 @@ export default class SigningJobsController {
     }
 
     /**
-     * Oferta zewnetrzna -> folder sprawy "Przygotowanie oferty" -> podfolder "Oferta". Id podfolderu
-     * nie ma w bazie, wiec szukamy go po nazwie (tylko odczyt Dysku). Kazdy brak to czytelna odmowa:
-     * ludzie przenosza foldery recznie, a oferty wlasne podfolderu nie maja.
+     * Oferta -> folder sprawy "Przygotowanie oferty" -> podfolder "Oferta", a gdy go nie ma - sam
+     * folder sprawy (decyzja wlasciciela 2026-10-10). PS tworzy podfolder tylko ofertom zewnetrznym;
+     * w ofercie wlasnej dokument oferty lezy wprost w folderze sprawy, a ludzie bywa, ze przenosza
+     * foldery recznie. Id podfolderu nie ma w bazie, wiec szukamy go po nazwie (tylko odczyt Dysku).
      */
     private async offerSource(offerId: number): Promise<SigningSource> {
         if (!SigningJobValidator.isPositiveId(offerId))
             return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator oferty.', 400);
         const offer = await this.deps.repository.getOfferContext(offerId);
         if (!offer) return fail('NOT_FOUND', 'Nie znaleziono oferty.', 404);
-        if (offer.isOur)
-            return fail(
-                'BAD_REQUEST',
-                'W PS podpisujemy pliki ofert zewnętrznych (z folderu „Oferta”). To jest oferta własna ENVI.',
-                400
-            );
         if (offer.makeOfferCaseFolderIds.length !== 1)
             return fail(
                 'BAD_REQUEST',
                 offer.makeOfferCaseFolderIds.length === 0
-                    ? 'Ta oferta nie ma na Dysku Google folderu sprawy „Przygotowanie oferty”, w którym PS trzyma folder „Oferta”.'
-                    : 'Ta oferta ma więcej niż jedną sprawę „Przygotowanie oferty” - nie wiem, w której szukać folderu „Oferta”.',
+                    ? 'Ta oferta nie ma na Dysku Google folderu sprawy „Przygotowanie oferty”, w którym PS trzyma pliki oferty.'
+                    : 'Ta oferta ma więcej niż jedną sprawę „Przygotowanie oferty” - nie wiem, w której szukać plików oferty.',
                 409
             );
         const caseFolderId = offer.makeOfferCaseFolderIds[0];
@@ -378,18 +380,17 @@ export default class SigningJobsController {
                 child.mimeType === MIME_GOOGLE_FOLDER &&
                 child.name.trim().toLowerCase() === OFFER_FILES_FOLDER_NAME.toLowerCase()
         );
-        if (folders.length !== 1)
+        if (folders.length > 1)
             return fail(
                 'BAD_REQUEST',
-                folders.length === 0
-                    ? 'W folderze sprawy „Przygotowanie oferty” nie ma podfolderu „Oferta”. Utwórz go tam na Dysku Google i włóż do niego pliki oferty, potem spróbuj ponownie.'
-                    : 'W folderze sprawy „Przygotowanie oferty” jest więcej niż jeden podfolder „Oferta”. Zostaw jeden i spróbuj ponownie.',
+                'W folderze sprawy „Przygotowanie oferty” jest więcej niż jeden podfolder „Oferta”. Zostaw jeden i spróbuj ponownie.',
                 409
             );
         return {
             ref: { type: 'OFFER', id: offer.id },
             number: offer.alias || null,
-            gdFolderId: folders[0].id,
+            gdFolderId: folders[0]?.id ?? caseFolderId,
+            offerFolder: folders[0] ? 'OFERTA' : 'CASE',
             mainDoc: null,
             genitive: 'oferty',
             signatureTypes: { mainDoc: 'OFFER_DOCUMENT', file: 'OFFER_DOCUMENT' },
@@ -508,7 +509,13 @@ export default class SigningJobsController {
     ): Promise<OfferSignableFilesResult> {
         const source = await this.resolveSource({ type: 'OFFER', id: offerId }, scope);
         const { files, notSignable } = await this.buildSignable(source);
-        return { offerId, offerAlias: source.number ?? '', files, notSignable };
+        return {
+            offerId,
+            offerAlias: source.number ?? '',
+            folder: source.offerFolder ?? 'OFERTA',
+            files,
+            notSignable,
+        };
     }
 
     /** Tresc jednego pliku z folderu "Oferta" jako PDF - do szukania miejsca grafiki i obrazu strony. Tylko odczyt. */
