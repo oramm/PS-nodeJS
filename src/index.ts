@@ -348,7 +348,6 @@ const corsOptions = {
         'http://localhost:9010', // front dev na porcie zapasowym, gdy 9000 jest zajęty
                                  // przez równoległą sesję (przegląd wizualny UI lokalnie)
         'https://erp-envi.herokuapp.com',
-        'https://erp.envi.com.pl',
         'https://ps.envi.com.pl',
     ],
     optionsSuccessStatus: 200, // For legacy browser support
