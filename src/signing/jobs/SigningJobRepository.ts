@@ -23,12 +23,21 @@ export type SignatureMethod = 'LOCAL_APP' | 'MANUAL_UPLOAD';
 export type SignatureSourceType =
     | 'LETTER'
     | 'LETTER_ATTACHMENT'
-    | 'CONTRACT_DOCUMENT';
+    | 'CONTRACT_DOCUMENT'
+    | 'OFFER_DOCUMENT';
+
+/** Jawne miejsce grafiki podpisu: strona od 1, prostokat w punktach PDF (poczatek: lewy dolny rog). */
+export interface GraphicPlacement {
+    page: number;
+    rect: { x: number; y: number; width: number; height: number };
+}
 
 export interface JobRecord {
     id: number;
     tokenHash: string;
-    letterId: number;
+    /** Zrodlo plikow: dokladnie jedno z letterId / offerId jest ustawione (pilnuje tego baza). */
+    letterId: number | null;
+    offerId: number | null;
     createdByPersonId: number;
     status: JobStatus;
     minProgramVersion: string;
@@ -54,6 +63,8 @@ export interface JobFileRecord {
     sourceGdFileId: string;
     displayName: string;
     withGraphic: boolean;
+    /** Miejsce grafiki wskazane przy zakladaniu zlecenia; null = wyznacza je serwer. */
+    graphicPlacement: GraphicPlacement | null;
     preparedPdf: Buffer | null;
     signedAttrsDer: Buffer | null;
     checkCode: string | null;
@@ -64,7 +75,8 @@ export interface JobFileRecord {
 
 export interface NewJob {
     tokenHash: string;
-    letterId: number;
+    letterId: number | null;
+    offerId: number | null;
     createdByPersonId: number;
     minProgramVersion: string;
     createdAt: Date;
@@ -77,6 +89,7 @@ export interface NewJobFile {
     sourceGdFileId: string;
     displayName: string;
     withGraphic: boolean;
+    graphicPlacement: GraphicPlacement | null;
 }
 
 /** Pola zlecenia, ktore wolno ustawic razem z przejsciem stanu. */
@@ -97,7 +110,9 @@ export interface NewSignature {
     sourceGdFileId: string | null;
     signedGdFileId: string;
     signedName: string;
+    /** Najwyzej jedno z letterId / offerId (to samo zrodlo co zlecenie). */
     letterId: number | null;
+    offerId: number | null;
     method: SignatureMethod;
     certSubjectCn: string;
     certSerial: string;
@@ -115,10 +130,22 @@ export interface LetterContext {
     gdFolderId: string | null;
 }
 
-/** Wiersz rejestru podpisow do plakietki „podpisane” i listy podpisanych plikow pisma. */
+/** Oferta jako zrodlo plikow do podpisu: foldery spraw typu "Przygotowanie oferty" (powinien byc jeden). */
+export interface OfferContext {
+    id: number;
+    alias: string;
+    isOur: boolean;
+    makeOfferCaseFolderIds: string[];
+}
+
+/** Typ sprawy "Przygotowanie oferty" (CaseTypes.Id); w jej folderze PS tworzy podfolder "Oferta". */
+export const MAKE_OFFER_CASE_TYPE_ID = 100;
+
+/** Wiersz rejestru podpisow do plakietki „podpisane” i listy podpisanych plikow pisma albo oferty. */
 export interface SignatureRecord {
     id: number;
-    letterId: number;
+    letterId: number | null;
+    offerId: number | null;
     sourceType: SignatureSourceType;
     signedGdFileId: string;
     signedName: string;
@@ -163,7 +190,8 @@ export default class SigningJobRepository {
         return {
             id: row.Id,
             tokenHash: row.TokenHash,
-            letterId: row.LetterId,
+            letterId: row.LetterId ?? null,
+            offerId: row.OfferId ?? null,
             createdByPersonId: row.CreatedByPersonId,
             status: row.Status,
             minProgramVersion: row.MinProgramVersion,
@@ -190,6 +218,18 @@ export default class SigningJobRepository {
             sourceGdFileId: row.SourceGdFileId,
             displayName: row.DisplayName,
             withGraphic: !!row.WithGraphic,
+            graphicPlacement:
+                row.GraphicPage == null
+                    ? null
+                    : {
+                          page: row.GraphicPage,
+                          rect: {
+                              x: Number(row.GraphicX),
+                              y: Number(row.GraphicY),
+                              width: Number(row.GraphicWidth),
+                              height: Number(row.GraphicHeight),
+                          },
+                      },
             preparedPdf: row.PreparedPdf ?? null,
             signedAttrsDer: row.SignedAttrsDer ?? null,
             checkCode: row.CheckCode ?? null,
@@ -219,14 +259,43 @@ export default class SigningJobRepository {
         };
     }
 
+    /**
+     * Oferta i foldery jej spraw "Przygotowanie oferty": Offers <- Milestones.OfferId <- Cases.
+     * Zwraca wszystkie niepuste foldery; ocena "brak" / "wiecej niz jeden" nalezy do kontrolera.
+     */
+    async getOfferContext(
+        offerId: number,
+        conn?: mysql.PoolConnection
+    ): Promise<OfferContext | undefined> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT Offers.Id, Offers.Alias, Offers.IsOur, Cases.GdFolderId AS CaseGdFolderId
+             FROM Offers
+             LEFT JOIN Milestones ON Milestones.OfferId = Offers.Id
+             LEFT JOIN Cases ON Cases.MilestoneId = Milestones.Id AND Cases.TypeId = ?
+             WHERE Offers.Id = ?`,
+            conn,
+            [MAKE_OFFER_CASE_TYPE_ID, offerId]
+        )) as any[];
+        if (rows.length === 0) return undefined;
+        return {
+            id: rows[0].Id,
+            alias: rows[0].Alias ?? '',
+            isOur: !!rows[0].IsOur,
+            makeOfferCaseFolderIds: rows
+                .map((row) => (row.CaseGdFolderId || '').trim())
+                .filter((id) => id.length > 0),
+        };
+    }
+
     async insertJob(job: NewJob, conn: mysql.PoolConnection): Promise<number> {
         const result = await ToolsDb.executeSQL(
             `INSERT INTO SigningJobs
-                (TokenHash, LetterId, CreatedByPersonId, Status, MinProgramVersion, CreatedAt, ExpiresAt)
-             VALUES (?, ?, ?, 'created', ?, ?, ?)`,
+                (TokenHash, LetterId, OfferId, CreatedByPersonId, Status, MinProgramVersion, CreatedAt, ExpiresAt)
+             VALUES (?, ?, ?, ?, 'created', ?, ?, ?)`,
             [
                 job.tokenHash,
                 job.letterId,
+                job.offerId,
                 job.createdByPersonId,
                 job.minProgramVersion,
                 job.createdAt,
@@ -244,8 +313,9 @@ export default class SigningJobRepository {
     ): Promise<void> {
         await ToolsDb.executeSQL(
             `INSERT INTO SigningJobFiles
-                (JobId, FileIndex, SourceKind, SourceGdFileId, DisplayName, WithGraphic)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+                (JobId, FileIndex, SourceKind, SourceGdFileId, DisplayName, WithGraphic,
+                 GraphicPage, GraphicX, GraphicY, GraphicWidth, GraphicHeight)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 jobId,
                 file.fileIndex,
@@ -253,6 +323,11 @@ export default class SigningJobRepository {
                 file.sourceGdFileId,
                 file.displayName,
                 file.withGraphic ? 1 : 0,
+                file.graphicPlacement?.page ?? null,
+                file.graphicPlacement?.rect.x ?? null,
+                file.graphicPlacement?.rect.y ?? null,
+                file.graphicPlacement?.rect.width ?? null,
+                file.graphicPlacement?.rect.height ?? null,
             ],
             conn
         );
@@ -290,6 +365,7 @@ export default class SigningJobRepository {
         const columns = withBlobs
             ? '*'
             : `Id, JobId, FileIndex, SourceKind, SourceGdFileId, DisplayName, WithGraphic,
+               GraphicPage, GraphicX, GraphicY, GraphicWidth, GraphicHeight,
                CheckCode, Pages, SignedGdFileId, SignedName`;
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT ${columns} FROM SigningJobFiles WHERE JobId = ? ORDER BY FileIndex`,
@@ -429,15 +505,16 @@ export default class SigningJobRepository {
     ): Promise<number> {
         const result = await ToolsDb.executeSQL(
             `INSERT INTO DocumentSignatures
-                (SourceType, SourceGdFileId, SignedGdFileId, SignedName, LetterId, Method,
+                (SourceType, SourceGdFileId, SignedGdFileId, SignedName, LetterId, OfferId, Method,
                  CertSubjectCn, CertSerial, CertIssuer, SignerPersonId, JobId, SignedAt)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 signature.sourceType,
                 signature.sourceGdFileId,
                 signature.signedGdFileId,
                 signature.signedName,
                 signature.letterId,
+                signature.offerId,
                 signature.method,
                 signature.certSubjectCn,
                 signature.certSerial,
@@ -459,18 +536,35 @@ export default class SigningJobRepository {
         letterIds: number[],
         conn?: mysql.PoolConnection
     ): Promise<SignatureRecord[]> {
-        if (letterIds.length === 0) return [];
+        return this.listSignaturesBy('LetterId', letterIds, conn);
+    }
+
+    /** Podpisy plikow jednej oferty, od najnowszego. */
+    async listSignaturesByOfferId(
+        offerId: number,
+        conn?: mysql.PoolConnection
+    ): Promise<SignatureRecord[]> {
+        return this.listSignaturesBy('OfferId', [offerId], conn);
+    }
+
+    private async listSignaturesBy(
+        column: 'LetterId' | 'OfferId',
+        ids: number[],
+        conn?: mysql.PoolConnection
+    ): Promise<SignatureRecord[]> {
+        if (ids.length === 0) return [];
         const rows = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT Id, LetterId, SourceType, SignedGdFileId, SignedName, Method, CertSubjectCn, SignedAt
+            `SELECT Id, LetterId, OfferId, SourceType, SignedGdFileId, SignedName, Method, CertSubjectCn, SignedAt
              FROM DocumentSignatures
-             WHERE LetterId IN (?)
+             WHERE ${column} IN (?)
              ORDER BY SignedAt DESC, Id DESC`,
             conn,
-            [letterIds]
+            [ids]
         )) as any[];
         return rows.map((row) => ({
             id: row.Id,
-            letterId: row.LetterId,
+            letterId: row.LetterId ?? null,
+            offerId: row.OfferId ?? null,
             sourceType: row.SourceType,
             signedGdFileId: row.SignedGdFileId,
             signedName: row.SignedName,

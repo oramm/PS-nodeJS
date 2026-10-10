@@ -707,6 +707,7 @@ describe('podpisane pliki pisma (plakietka na liscie i okno podpisu)', () => {
         signedGdFileId: 'SIGNED_FILE_ID_001',
         signedName: 'Pismo testowe_pdp.pdf',
         letterId: LETTER_ID,
+        offerId: null,
         method: 'LOCAL_APP' as const,
         certSubjectCn: 'Żaneta Gęślarz-Łoś',
         certSerial: 'AA',

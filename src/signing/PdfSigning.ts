@@ -17,6 +17,7 @@ import {
     verifyRsaSha256,
 } from './CmsSigning';
 import { extractPageContent } from './PdfPageAnalyzer';
+import { isPlaceablePage } from './ContractorSignaturePlace';
 import {
     BYTERANGE_PLACEHOLDER_VALUE,
     patchByteRange,
@@ -92,16 +93,7 @@ async function resolvePlacement(
     const pageNumber = pageCount;
     const page = pdfDoc.getPage(pageNumber - 1);
     const media = page.getMediaBox();
-    const crop = page.getCropBox();
-    if (
-        page.getRotation().angle % 360 !== 0 ||
-        media.x !== 0 ||
-        media.y !== 0 ||
-        crop.x !== media.x ||
-        crop.y !== media.y ||
-        crop.width !== media.width ||
-        crop.height !== media.height
-    ) {
+    if (!isPlaceablePage(page)) {
         throw new SigningError(
             'PLACEMENT_BLOCKED',
             'Rotated or offset page requires a manual rectangle.',

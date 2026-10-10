@@ -64,6 +64,11 @@ describe('SigningRoutes', () => {
             submitCertificate: jest.fn().mockResolvedValue({ files: [] }),
             submitSignatures: jest.fn().mockResolvedValue({ status: 'done' }),
             cancelByProgram: jest.fn().mockResolvedValue({ status: 'cancelled' }),
+            listOfferSignableFiles: jest.fn().mockResolvedValue({ offerId: 55, files: [] }),
+            locateOfferGraphicPlace: jest.fn().mockResolvedValue({ pages: [], candidates: [] }),
+            renderOfferFilePage: jest.fn().mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+            uploadSignedToOffer: jest.fn().mockResolvedValue({ signedName: 'y' }),
+            listOfferSignatures: jest.fn().mockResolvedValue({ offerId: 55, signatures: [] }),
         };
         routes = collect(controller);
     });
@@ -77,6 +82,11 @@ describe('SigningRoutes', () => {
         'POST /letter/:id/signedPdf',
         'GET /letter/:id/signatures',
         'POST /letters/signatureSummary',
+        'GET /offer/:id/signableFiles',
+        'GET /offer/:id/signableFile/:gdFileId/graphicPlace',
+        'GET /offer/:id/signableFile/:gdFileId/page/:page',
+        'POST /offer/:id/signedPdf',
+        'GET /offer/:id/signatures',
         'GET /signing/program/download',
         'GET /signing/program/info',
     ];
@@ -87,7 +97,7 @@ describe('SigningRoutes', () => {
         'POST /signing/jobs/:token/cancel',
     ];
 
-    it('rejestruje dokladnie komplet tras sesyjnych i cztery trasy programu', () => {
+    it('rejestruje dokladnie komplet tras sesyjnych (w tym 5 tras oferty) i cztery trasy programu', () => {
         expect(Object.keys(routes).sort()).toEqual([...SESSION_ROUTES, ...PROGRAM_ROUTES].sort());
     });
 
@@ -116,6 +126,47 @@ describe('SigningRoutes', () => {
 
         expect(controller.createJob).toHaveBeenCalledWith(125, { letterId: 7 }, scope);
         expect(controller.listSignableFiles).toHaveBeenCalledWith(7, scope);
+    });
+
+    it('trasy oferty dostaja osobe, zakres, id, numer strony i gdFileId z adresu', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const gdFileId = 'OFFER_FORM_ID_0001';
+
+        await call(routes['GET /offer/:id/signableFiles'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /offer/:id/signableFile/:gdFileId/graphicPlace'], { params: { id: '55', gdFileId }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /offer/:id/signatures'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+
+        expect(controller.listOfferSignableFiles).toHaveBeenCalledWith(55, scope);
+        expect(controller.locateOfferGraphicPlace).toHaveBeenCalledWith(55, gdFileId, scope);
+        expect(controller.listOfferSignatures).toHaveBeenCalledWith(55, scope);
+    });
+
+    it('obraz strony oferty to PNG (Content-Type image/png) bez cache, z numerem strony z adresu', async () => {
+        const res = makeRes();
+
+        await call(
+            routes['GET /offer/:id/signableFile/:gdFileId/page/:page'],
+            { params: { id: '55', gdFileId: 'OFFER_FORM_ID_0001', page: '2' }, session: { userData: PERSON } },
+            res
+        );
+
+        expect(controller.renderOfferFilePage).toHaveBeenCalledWith(55, 'OFFER_FORM_ID_0001', 2, undefined);
+        expect(res.headers['Content-Type']).toBe('image/png');
+        expect(res.headers['Cache-Control']).toBe('no-store');
+        expect(res.body.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
+    it('"Wgraj podpisany" dla oferty przekazuje req.file do uploadSignedToOffer razem z osoba i zakresem', async () => {
+        const file = { buffer: Buffer.from('%PDF-1.4'), originalname: 'Formularz-sig.pdf', size: 8 };
+        const scope = { projectOurIds: ['A'] };
+
+        await call(
+            routes['POST /offer/:id/signedPdf'],
+            { params: { id: '55' }, session: { userData: PERSON }, file, projectScope: scope },
+            makeRes()
+        );
+
+        expect(controller.uploadSignedToOffer).toHaveBeenCalledWith(125, 55, file, scope);
     });
 
     it('lista podpisow pisma i zbiorcze plakietki dostaja osobe, zakres i dane z zadania', async () => {

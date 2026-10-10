@@ -26,6 +26,7 @@ import SigningJobRepository, {
     NewJob,
     NewJobFile,
     NewSignature,
+    OfferContext,
     PersonCertificateRecord,
     SignatureRecord,
 } from '../SigningJobRepository';
@@ -328,6 +329,7 @@ export class FakeRepository {
     signatures: NewSignature[] = [];
     personCerts = new Map<number, PersonCertificateRecord>();
     letters = new Map<number, LetterContext>();
+    offers = new Map<number, OfferContext>();
     failSignatureInsert = false;
     private nextJob = 1;
     private nextFile = 1;
@@ -336,12 +338,18 @@ export class FakeRepository {
         return this.letters.get(letterId);
     }
 
+    async getOfferContext(offerId: number) {
+        const offer = this.offers.get(offerId);
+        return offer ? { ...offer, makeOfferCaseFolderIds: [...offer.makeOfferCaseFolderIds] } : undefined;
+    }
+
     async insertJob(job: NewJob) {
         const id = this.nextJob++;
         this.jobs.push({
             id,
             tokenHash: job.tokenHash,
             letterId: job.letterId,
+            offerId: job.offerId,
             createdByPersonId: job.createdByPersonId,
             status: 'created',
             minProgramVersion: job.minProgramVersion,
@@ -370,6 +378,7 @@ export class FakeRepository {
             sourceGdFileId: file.sourceGdFileId,
             displayName: file.displayName,
             withGraphic: file.withGraphic,
+            graphicPlacement: file.graphicPlacement,
             preparedPdf: null,
             signedAttrsDer: null,
             checkCode: null,
@@ -462,13 +471,22 @@ export class FakeRepository {
     }
 
     async listSignaturesByLetterIds(letterIds: number[]): Promise<SignatureRecord[]> {
+        return this.listSignaturesWhere((s) => s.letterId !== null && letterIds.includes(s.letterId));
+    }
+
+    async listSignaturesByOfferId(offerId: number): Promise<SignatureRecord[]> {
+        return this.listSignaturesWhere((s) => s.offerId !== null && s.offerId === offerId);
+    }
+
+    private listSignaturesWhere(match: (s: NewSignature) => boolean): SignatureRecord[] {
         // Jak w bazie: od najnowszego podpisu; Id = kolejnosc zapisu.
         return this.signatures
             .map((s, i) => ({ s, id: i + 1 }))
-            .filter(({ s }) => s.letterId !== null && letterIds.includes(s.letterId))
+            .filter(({ s }) => match(s))
             .map(({ s, id }) => ({
                 id,
-                letterId: s.letterId as number,
+                letterId: s.letterId,
+                offerId: s.offerId,
                 sourceType: s.sourceType,
                 signedGdFileId: s.signedGdFileId,
                 signedName: s.signedName,
@@ -503,6 +521,33 @@ export const LETTER_ID = 7;
 export const LETTER_DOC_ID = 'LETTER_DOC_ID_0001';
 export const LETTER_FOLDER_ID = 'LETTER_FOLDER_ID_0001';
 export const PERSON_ID = 125;
+
+/** Oferta zewnetrzna (zrodlo plikow "Oferta") i oferta wlasna (zawsze odmowa). */
+export const OFFER_ID = 55;
+export const OFFER_ALIAS = 'OS test';
+export const OUR_OFFER_ID = 56;
+/** Folder sprawy typu "Przygotowanie oferty" tej oferty. */
+export const OFFER_CASE_FOLDER_ID_0001 = 'OFFER_CASE_FOLDER_ID_0001';
+/** Podfolder "Oferta" w folderze sprawy (tu leza pliki do podpisu). */
+export const OFFER_FILES_FOLDER_ID_001 = 'OFFER_FILES_FOLDER_ID_001';
+export const SWZ_FOLDER_ID_0001 = 'SWZ_FOLDER_ID_0001';
+/** Pliki i foldery atrapy Dysku dla oferty. */
+export const OFFER_FILE_IDS = {
+    /** "Formularz oferty.pdf" - zwykly PDF do podpisu. */
+    formularz: 'OFFER_FORM_ID_0001',
+    /** "Zalacznik 2.pdf" - zwykly PDF do podpisu. */
+    zalacznik2: 'OFFER_ATT2_ID_0001',
+    /** "Wykaz.docx" - format niepodpisywalny. */
+    wykaz: 'OFFER_DOCX_ID_0001',
+    /** "Formularz oferty-sig.pdf" - podpisana kopia (ukryta). */
+    formularzSig: 'OFFER_SIG_ID_0001',
+    /** "Stary_pdp.pdf" - podpisana kopia (ukryta). */
+    stary: 'OFFER_OLD_PDP_0001',
+    /** Podfolder "MG" w "Oferta" (pomijany). */
+    mgFolder: 'OFFER_MG_FOLDER_001',
+    /** "SWZ.pdf" w folderze SWZ - NIE jest w folderze "Oferta". */
+    swzPdf: 'SWZ_PDF_ID_000001',
+} as const;
 
 export interface Kit {
     drive: FakeDrive;
@@ -553,6 +598,61 @@ export async function makeKit(allowlist: TrustedCa[]): Promise<Kit> {
         { id: 'ATTACHMENT_DOCX_01', name: 'Umowa.docx', mimeType: MIME.docx, size: 5000, parents: [LETTER_FOLDER_ID] }
     );
     drive.add({ id: 'SUBFOLDER_ID_00001', name: 'Podfolder', mimeType: MIME.folder, parents: [LETTER_FOLDER_ID] });
+
+    // Oferta zewnetrzna: folder sprawy "Przygotowanie oferty" z podfolderami "SWZ" i "Oferta".
+    repo.offers.set(OFFER_ID, {
+        id: OFFER_ID,
+        alias: OFFER_ALIAS,
+        isOur: false,
+        makeOfferCaseFolderIds: [OFFER_CASE_FOLDER_ID_0001],
+    });
+    repo.offers.set(OUR_OFFER_ID, {
+        id: OUR_OFFER_ID,
+        alias: 'OWN test',
+        isOur: true,
+        makeOfferCaseFolderIds: [],
+    });
+    drive.add({ id: OFFER_CASE_FOLDER_ID_0001, name: 'Przygotowanie oferty', mimeType: MIME.folder });
+    drive.add({
+        id: SWZ_FOLDER_ID_0001,
+        name: 'SWZ',
+        mimeType: MIME.folder,
+        parents: [OFFER_CASE_FOLDER_ID_0001],
+    });
+    drive.add({
+        id: OFFER_FILES_FOLDER_ID_001,
+        name: 'Oferta',
+        mimeType: MIME.folder,
+        parents: [OFFER_CASE_FOLDER_ID_0001],
+    });
+    drive.add(
+        { id: OFFER_FILE_IDS.swzPdf, name: 'SWZ.pdf', mimeType: MIME.pdf, size: 1000, parents: [SWZ_FOLDER_ID_0001] },
+        await makePlainPdf('SWZ')
+    );
+    drive.add(
+        { id: OFFER_FILE_IDS.formularz, name: 'Formularz oferty.pdf', mimeType: MIME.pdf, size: 1000, parents: [OFFER_FILES_FOLDER_ID_001] },
+        await makePlainPdf('Formularz oferty')
+    );
+    drive.add(
+        { id: OFFER_FILE_IDS.zalacznik2, name: 'Zalacznik 2.pdf', mimeType: MIME.pdf, size: 1000, parents: [OFFER_FILES_FOLDER_ID_001] },
+        await makePlainPdf('Zalacznik 2')
+    );
+    drive.add({
+        id: OFFER_FILE_IDS.wykaz,
+        name: 'Wykaz.docx',
+        mimeType: MIME.docx,
+        size: 5000,
+        parents: [OFFER_FILES_FOLDER_ID_001],
+    });
+    drive.add(
+        { id: OFFER_FILE_IDS.formularzSig, name: 'Formularz oferty-sig.pdf', mimeType: MIME.pdf, size: 1000, parents: [OFFER_FILES_FOLDER_ID_001] },
+        await makePlainPdf('Formularz oferty podpisany')
+    );
+    drive.add(
+        { id: OFFER_FILE_IDS.stary, name: 'Stary_pdp.pdf', mimeType: MIME.pdf, size: 1000, parents: [OFFER_FILES_FOLDER_ID_001] },
+        await makePlainPdf('Stary podpisany')
+    );
+    drive.add({ id: OFFER_FILE_IDS.mgFolder, name: 'MG', mimeType: MIME.folder, parents: [OFFER_FILES_FOLDER_ID_001] });
 
     const controller = new SigningJobsController({
         repository: repo as unknown as SigningJobRepository,

@@ -14,13 +14,19 @@ import { MAX_UPLOAD_BYTES } from './SigningJobsConfig';
  * A. Trasy SESYJNE (strona PS) - za bramka sesji i allowlista rol zakresowych; kazda sprawdza
  *    zakres projektu pisma i to, ze zlecenie nalezy do zalogowanej osoby:
  *      GET  /letter/:id/signableFiles
- *      POST /signingJob                       { letterId, files:[{kind, gdFileId?, withGraphic}] }
+ *      POST /signingJob                       { letterId | offerId, files:[{kind, gdFileId?, withGraphic, placement?}] }
  *      GET  /signingJob/:id                   (odpytywanie stanu)
  *      GET  /signingJob/:id/file/:index/preview
  *      POST /signingJob/:id/cancel            { reason? }
  *      POST /letter/:id/signedPdf             (multipart, pole "file") - "Wgraj podpisany"
  *      GET  /letter/:id/signatures            podpisane pliki pisma (okno podpisu, plakietka)
  *      POST /letters/signatureSummary         { letterIds } - plakietki calej listy pism jednym zapytaniem
+ *      GET  /offer/:id/signableFiles          pliki z folderu "Oferta" oferty zewnetrznej
+ *      GET  /offer/:id/signableFile/:gdFileId/graphicPlace   miejsca na podpis w pliku + rozmiary stron
+ *      GET  /offer/:id/signableFile/:gdFileId/page/:page     obraz strony (PNG) do wskazania miejsca grafiki
+ *      POST /offer/:id/signedPdf              (multipart, pole "file") - "Wgraj podpisany" dla oferty
+ *      GET  /offer/:id/signatures             podpisane pliki oferty
+ *    Trasy oferty nie sa na allowliscie rol zakresowych (projectScopedPolicy): te role dostaja 403.
  *      GET  /signing/program/download         instalator ENVI Podpis (assets/signing/EnviPodpis.exe)
  *      GET  /signing/program/info             { available, version } - wersja tego instalatora
  *
@@ -159,28 +165,26 @@ export function registerSigningRoutes(
         })
     );
 
+    // Autoryzacja przed odczytem pliku, zeby anonim nie zmuszal serwera do buforowania.
+    const receiveUpload = (req: Request, res: Response, next: NextFunction) => {
+        try {
+            requirePerson(req, res);
+        } catch (error) {
+            return next(error);
+        }
+        uploadMiddleware(req, res, (error: unknown) => {
+            if (!error) return next();
+            if ((error as any)?.code === 'LIMIT_FILE_SIZE')
+                return next(
+                    new SigningJobError('BAD_REQUEST', 'Plik jest za duży (limit 10 MB).', 400)
+                );
+            next(error);
+        });
+    };
+
     app.post(
         '/letter/:id/signedPdf',
-        (req: Request, res: Response, next: NextFunction) => {
-            // Autoryzacja przed odczytem pliku, zeby anonim nie zmuszal serwera do buforowania.
-            try {
-                requirePerson(req, res);
-            } catch (error) {
-                return next(error);
-            }
-            uploadMiddleware(req, res, (error: unknown) => {
-                if (!error) return next();
-                if ((error as any)?.code === 'LIMIT_FILE_SIZE')
-                    return next(
-                        new SigningJobError(
-                            'BAD_REQUEST',
-                            'Plik jest za duży (limit 10 MB).',
-                            400
-                        )
-                    );
-                next(error);
-            });
-        },
+        receiveUpload,
         wrap(async (req, res) => {
             const personId = requirePerson(req, res);
             res.send(
@@ -209,6 +213,75 @@ export function registerSigningRoutes(
         wrap(async (req, res) => {
             requirePerson(req, res);
             res.send(await controller.summarizeLetterSignatures(req.body, req.projectScope));
+        })
+    );
+
+    // ---------------------------------------------------------------- A. sesja: oferta
+
+    app.get(
+        '/offer/:id/signableFiles',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.send(
+                await controller.listOfferSignableFiles(Number(req.params.id), req.projectScope)
+            );
+        })
+    );
+
+    app.get(
+        '/offer/:id/signableFile/:gdFileId/graphicPlace',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.setHeader('Cache-Control', 'no-store');
+            res.send(
+                await controller.locateOfferGraphicPlace(
+                    Number(req.params.id),
+                    req.params.gdFileId,
+                    req.projectScope
+                )
+            );
+        })
+    );
+
+    app.get(
+        '/offer/:id/signableFile/:gdFileId/page/:page',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            const png = await controller.renderOfferFilePage(
+                Number(req.params.id),
+                req.params.gdFileId,
+                Number(req.params.page),
+                req.projectScope
+            );
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'no-store');
+            res.send(png);
+        })
+    );
+
+    app.post(
+        '/offer/:id/signedPdf',
+        receiveUpload,
+        wrap(async (req, res) => {
+            const personId = requirePerson(req, res);
+            res.send(
+                await controller.uploadSignedToOffer(
+                    personId,
+                    Number(req.params.id),
+                    req.file,
+                    req.projectScope
+                )
+            );
+        })
+    );
+
+    app.get(
+        '/offer/:id/signatures',
+        wrap(async (req, res) => {
+            requirePerson(req, res);
+            res.send(
+                await controller.listOfferSignatures(Number(req.params.id), req.projectScope)
+            );
         })
     );
 

@@ -5,16 +5,19 @@ import {
     TOKEN_PATTERN,
 } from './SigningJobsConfig';
 import { SigningJobError } from './SigningJobError';
-import { SourceKind } from './SigningJobRepository';
+import { GraphicPlacement, SourceKind } from './SigningJobRepository';
 
 export interface RequestedFile {
     kind: SourceKind;
     gdFileId?: string;
     withGraphic: boolean;
+    /** Miejsce grafiki wskazane na stronie PS; uzywane tylko przez zrodla, ktore tego wymagaja (oferta). */
+    placement?: GraphicPlacement;
 }
 
 export interface CreateJobDto {
-    letterId: number;
+    /** Zrodlo plikow: pismo albo oferta (w zadaniu dokladnie jedno z letterId / offerId). */
+    source: { type: 'LETTER' | 'OFFER'; id: number };
     files: RequestedFile[];
 }
 
@@ -29,6 +32,9 @@ const MAX_CERT_DER_BYTES = 16 * 1024;
 const MAX_CHAIN_LENGTH = 10;
 const MAX_SIGNATURE_BYTES = 1024;
 const MAX_REASON_LENGTH = 255;
+/** Strona PDF ma najwyzej 14400 pt (limit formatu); wieksze liczby to nie jest miejsce na stronie. */
+const MAX_PAGE_POINTS = 14400;
+const MAX_PAGE_NUMBER = 5000;
 
 const bad = (message: string): never => {
     throw new SigningJobError('BAD_REQUEST', message, 400);
@@ -52,10 +58,52 @@ export default class SigningJobValidator {
         return typeof token === 'string' && TOKEN_PATTERN.test(token);
     }
 
+    static isPositiveId(value: unknown): value is number {
+        return typeof value === 'number' && Number.isInteger(value) && value > 0;
+    }
+
+    static isDriveId(value: unknown): value is string {
+        return typeof value === 'string' && DRIVE_ID_PATTERN.test(value);
+    }
+
+    /** Jawne miejsce grafiki: sama skladnia i rozsadne granice; czy miesci sie na stronie, widac w podgladzie. */
+    static parsePlacement(raw: any): GraphicPlacement {
+        const rect = raw?.rect;
+        const numbers = [rect?.x, rect?.y, rect?.width, rect?.height];
+        const valid =
+            Number.isInteger(raw?.page) &&
+            raw.page >= 1 &&
+            raw.page <= MAX_PAGE_NUMBER &&
+            numbers.every(
+                (n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= MAX_PAGE_POINTS
+            ) &&
+            rect.width >= 10 &&
+            rect.height >= 5;
+        if (!valid) return bad('Nieprawidłowe miejsce grafiki podpisu.');
+        const round = (n: number) => Math.round(n * 100) / 100;
+        return {
+            page: raw.page,
+            rect: {
+                x: round(rect.x),
+                y: round(rect.y),
+                width: round(rect.width),
+                height: round(rect.height),
+            },
+        };
+    }
+
     static parseCreateJob(body: any): CreateJobDto {
-        const letterId = Number(body?.letterId);
-        if (!Number.isInteger(letterId) || letterId <= 0)
-            return bad('Brak identyfikatora pisma.');
+        const hasLetter = body?.letterId !== undefined && body?.letterId !== null;
+        const hasOffer = body?.offerId !== undefined && body?.offerId !== null;
+        if (hasLetter === hasOffer)
+            return bad(
+                hasLetter
+                    ? 'Zlecenie może dotyczyć pisma albo oferty, nie obu naraz.'
+                    : 'Brak identyfikatora pisma.'
+            );
+        const sourceId = Number(hasLetter ? body.letterId : body.offerId);
+        if (!Number.isInteger(sourceId) || sourceId <= 0)
+            return bad(hasLetter ? 'Brak identyfikatora pisma.' : 'Brak identyfikatora oferty.');
         const files = body?.files;
         if (!Array.isArray(files) || files.length === 0)
             return bad('Wybierz co najmniej jeden plik do podpisania.');
@@ -80,10 +128,15 @@ export default class SigningJobValidator {
             if (seen.has(key)) return bad('Ten sam plik wybrano dwa razy.');
             seen.add(key);
             // Pismo zawsze z grafika - wymusza kontroler; tu tylko normalizujemy typ.
-            return { kind, gdFileId, withGraphic: raw.withGraphic === true };
+            const withGraphic = raw.withGraphic === true;
+            const placement =
+                withGraphic && raw.placement !== undefined && raw.placement !== null
+                    ? SigningJobValidator.parsePlacement(raw.placement)
+                    : undefined;
+            return { kind, gdFileId, withGraphic, placement };
         });
         if (letterDocs > 1) return bad('Pismo można wybrać tylko raz.');
-        return { letterId, files: parsed };
+        return { source: { type: hasLetter ? 'LETTER' : 'OFFER', id: sourceId }, files: parsed };
     }
 
     static parseCertificateChain(body: any): Buffer[] {

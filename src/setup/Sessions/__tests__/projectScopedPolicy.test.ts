@@ -116,6 +116,12 @@ describe('projectScopedPolicy', () => {
             ['POST', '/letters/signatureSummary'],
             ['GET', '/signing/program/download'],
             ['GET', '/signing/program/info'],
+            // Podpis plikow oferty (SIG-7): oferty nie maja modelu zakresu projektu - role zakresowe nie dostaja ich wcale.
+            ['GET', '/offer/55/signableFiles'],
+            ['GET', '/offer/55/signableFile/OFFER_FORM_ID_0001/graphicPlace'],
+            ['GET', '/offer/55/signableFile/OFFER_FORM_ID_0001/page/1'],
+            ['POST', '/offer/55/signedPdf'],
+            ['GET', '/offer/55/signatures'],
         ];
 
         describe.each(SCOPED_ROLES)('%s', (_label, userData) => {

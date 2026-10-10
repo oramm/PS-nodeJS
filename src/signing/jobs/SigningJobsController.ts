@@ -3,6 +3,11 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 import ProjectScopeGuard from '../../persons/projectAssignments/ProjectScopeGuard';
 import { ProjectScope } from '../../types/sessionTypes';
+import {
+    findContractorSignaturePlaces,
+    SignaturePlaceSearch,
+} from '../ContractorSignaturePlace';
+import { renderPdfPage } from '../PdfPageRenderer';
 import { finalize, prepare, validate } from '../PdfSigning';
 import { SigningError } from '../SigningError';
 import { SignaturePlacement } from '../SigningTypes';
@@ -48,8 +53,11 @@ export interface SigningJobsDeps {
     allowlist?: readonly TrustedCa[];
 }
 
-/** Wskazanie zrodla plikow do podpisu. Dzis tylko pismo; oferta i dokumenty kontraktu dojda jako kolejne typy. */
-export type SigningSourceRef = { type: 'LETTER'; id: number };
+/** Wskazanie zrodla plikow do podpisu: pismo albo oferta zewnetrzna; dokumenty kontraktu dojda jako kolejny typ. */
+export type SigningSourceRef = { type: 'LETTER' | 'OFFER'; id: number };
+
+/** Nazwa podfolderu z plikami oferty w folderze sprawy "Przygotowanie oferty" (tworzy go PS przy zakladaniu oferty). */
+const OFFER_FILES_FOLDER_NAME = 'Oferta';
 
 /**
  * To, czym zrodla roznia sie miedzy soba. Reszta przebiegu (zlecenie, certyfikat, przygotowanie,
@@ -66,6 +74,12 @@ interface SigningSource {
     /** Dopelniacz do komunikatow, np. "w folderze pisma". */
     genitive: string;
     signatureTypes: { mainDoc: SignatureSourceType; file: SignatureSourceType };
+    /**
+     * Grafika w zwyklych plikach folderu: 'lastPageCorner' = serwer stawia ja w prawym dolnym rogu
+     * ostatniej strony (zalaczniki pisma); 'explicit' = miejsce musi przyjsc ze zleceniem, bez
+     * cichego rogu (pliki oferty, D-SIG-10).
+     */
+    fileGraphic: 'lastPageCorner' | 'explicit';
 }
 
 export interface SignableFile {
@@ -92,6 +106,20 @@ export interface SignableFilesResult {
     notSignable: NotSignableFile[];
 }
 
+export interface OfferSignableFilesResult {
+    offerId: number;
+    offerAlias: string;
+    files: SignableFile[];
+    notSignable: NotSignableFile[];
+}
+
+/**
+ * Gdzie w pliku oferty moze stanac grafika podpisu: rozmiary stron, standardowy rozmiar grafiki
+ * i miejsca oznaczone w dokumencie jako podpis wykonawcy. Dokladnie jeden kandydat = strona PS
+ * bierze go sama; zero albo kilka = uzytkownik klika miejsce na obrazie strony.
+ */
+export type GraphicPlaceResult = SignaturePlaceSearch;
+
 export interface CreateJobResult {
     jobId: number;
     protocolUrl: string;
@@ -100,7 +128,9 @@ export interface CreateJobResult {
 
 export interface JobStatusResult {
     jobId: number;
-    letterId: number;
+    /** Zrodlo zlecenia: jedno z dwoch jest ustawione. */
+    letterId: number | null;
+    offerId: number | null;
     status: JobStatus;
     expiresAt: string;
     failureMessage: string | null;
@@ -158,6 +188,11 @@ export interface LetterSignatureView {
 
 export interface LetterSignaturesResult {
     letterId: number;
+    signatures: LetterSignatureView[];
+}
+
+export interface OfferSignaturesResult {
+    offerId: number;
     signatures: LetterSignatureView[];
 }
 
@@ -238,8 +273,21 @@ export function signedFileName(
 }
 
 const isSignedName = (name: string): boolean =>
-    // signed copies: ours (_pdp), Szafir (_sig), earlier draft naming (_podpisany)
-    /_(pdp|sig|podpisany)\b/i.test(name) && /\.pdf$/i.test(name);
+    // signed copies: ours (_pdp), Szafir ("-sig" in the offer folders on Drive, "_sig" per the plan),
+    // earlier draft naming (_podpisany)
+    /[-_](pdp|sig|podpisany)(?![a-z0-9])/i.test(name) && /\.pdf$/i.test(name);
+
+/** Nazwa pliku z przegladarki: multer oddaje ja jako latin1, a sciezka i znaki sterujace sa zbedne. */
+function uploadedFileName(original: unknown): string | null {
+    if (typeof original !== 'string' || original.length === 0) return null;
+    const utf8 = Buffer.from(original, 'latin1').toString('utf8');
+    const name = (utf8.includes('\uFFFD') ? original : utf8)
+        .replace(/^.*[\\/]/, '')
+        .replace(/[\u0000-\u001f]/g, '')
+        .trim()
+        .slice(0, 150);
+    return name.length > 0 ? name : null;
+}
 
 const driveUrl = (id: string): string => `https://drive.google.com/file/d/${id}/view`;
 
@@ -283,6 +331,56 @@ export default class SigningJobsController {
             mainDoc: { gdFileId: letter.gdDocumentId, placement: 'letterClosing' },
             genitive: 'pisma',
             signatureTypes: { mainDoc: 'LETTER', file: 'LETTER_ATTACHMENT' },
+            fileGraphic: 'lastPageCorner',
+        };
+    }
+
+    /**
+     * Oferta zewnetrzna -> folder sprawy "Przygotowanie oferty" -> podfolder "Oferta". Id podfolderu
+     * nie ma w bazie, wiec szukamy go po nazwie (tylko odczyt Dysku). Kazdy brak to czytelna odmowa:
+     * ludzie przenosza foldery recznie, a oferty wlasne podfolderu nie maja.
+     */
+    private async offerSource(offerId: number): Promise<SigningSource> {
+        if (!SigningJobValidator.isPositiveId(offerId))
+            return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator oferty.', 400);
+        const offer = await this.deps.repository.getOfferContext(offerId);
+        if (!offer) return fail('NOT_FOUND', 'Nie znaleziono oferty.', 404);
+        if (offer.isOur)
+            return fail(
+                'BAD_REQUEST',
+                'W PS podpisujemy pliki ofert zewnętrznych (z folderu „Oferta”). To jest oferta własna ENVI.',
+                400
+            );
+        if (offer.makeOfferCaseFolderIds.length !== 1)
+            return fail(
+                'BAD_REQUEST',
+                offer.makeOfferCaseFolderIds.length === 0
+                    ? 'Ta oferta nie ma na Dysku Google folderu sprawy „Przygotowanie oferty”, w którym PS trzyma folder „Oferta”.'
+                    : 'Ta oferta ma więcej niż jedną sprawę „Przygotowanie oferty” - nie wiem, w której szukać folderu „Oferta”.',
+                409
+            );
+        const caseFolderId = offer.makeOfferCaseFolderIds[0];
+        const folders = (await this.deps.drive.listFolder(caseFolderId)).filter(
+            (child) =>
+                child.mimeType === MIME_GOOGLE_FOLDER &&
+                child.name.trim().toLowerCase() === OFFER_FILES_FOLDER_NAME.toLowerCase()
+        );
+        if (folders.length !== 1)
+            return fail(
+                'BAD_REQUEST',
+                folders.length === 0
+                    ? 'W folderze sprawy „Przygotowanie oferty” nie ma podfolderu „Oferta”. Utwórz go tam na Dysku Google i włóż do niego pliki oferty, potem spróbuj ponownie.'
+                    : 'W folderze sprawy „Przygotowanie oferty” jest więcej niż jeden podfolder „Oferta”. Zostaw jeden i spróbuj ponownie.',
+                409
+            );
+        return {
+            ref: { type: 'OFFER', id: offer.id },
+            number: offer.alias || null,
+            gdFolderId: folders[0].id,
+            mainDoc: null,
+            genitive: 'oferty',
+            signatureTypes: { mainDoc: 'OFFER_DOCUMENT', file: 'OFFER_DOCUMENT' },
+            fileGraphic: 'explicit',
         };
     }
 
@@ -291,12 +389,19 @@ export default class SigningJobsController {
         ref: SigningSourceRef,
         scope: ProjectScope | undefined
     ): Promise<SigningSource> {
-        // Kolejne typy zrodel (oferta, dokumenty kontraktu) dochodza tutaj i w resolveSourceForJob.
+        // Kolejne typy zrodel (dokumenty kontraktu) dochodza tutaj i w resolveSourceForJob.
+        if (ref.type === 'OFFER') {
+            // Oferty nie maja modelu zakresu projektu: rola zakresowa nie podpisuje ich wcale.
+            // Polityka tras odmawia jej juz wczesniej; to drugi zamek na wypadek zmiany allowlisty.
+            if (scope) return fail('FORBIDDEN', 'Brak uprawnień do podpisywania plików ofert.', 403);
+            return this.offerSource(ref.id);
+        }
         return this.letterSource(await this.requireLetter(ref.id, scope));
     }
 
     /** Zrodlo dla trwajacego zlecenia (trasy programu): bez sesji, wiec bez sprawdzania zakresu. */
     private async resolveSourceForJob(job: JobRecord): Promise<SigningSource> {
+        if (job.offerId !== null) return this.offerSource(job.offerId);
         return this.letterSource(await this.requireLetterForJob(job));
     }
 
@@ -380,6 +485,87 @@ export default class SigningJobsController {
         return { letterId, letterNumber: source.number, files, notSignable };
     }
 
+    // ------------------------------------------------------------------ oferta i jej pliki
+
+    async listOfferSignableFiles(
+        offerId: number,
+        scope?: ProjectScope
+    ): Promise<OfferSignableFilesResult> {
+        const source = await this.resolveSource({ type: 'OFFER', id: offerId }, scope);
+        const { files, notSignable } = await this.buildSignable(source);
+        return { offerId, offerAlias: source.number ?? '', files, notSignable };
+    }
+
+    /** Tresc jednego pliku z folderu "Oferta" jako PDF - do szukania miejsca grafiki i obrazu strony. Tylko odczyt. */
+    private async readOfferFilePdf(
+        offerId: number,
+        gdFileId: unknown,
+        scope: ProjectScope | undefined
+    ): Promise<{ bytes: Buffer; name: string }> {
+        const source = await this.resolveSource({ type: 'OFFER', id: offerId }, scope);
+        if (!SigningJobValidator.isDriveId(gdFileId))
+            return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator pliku z Dysku Google.', 400);
+        const meta = await this.deps.drive.getFile(gdFileId);
+        // Nazwy pliku spoza folderu oferty nie powtarzamy w komunikacie.
+        const name =
+            meta && (meta.parents ?? []).includes(source.gdFolderId) ? meta.name : 'wybrany plik';
+        const bytes = await this.fetchSourcePdf(
+            { sourceKind: 'DRIVE_FILE', sourceGdFileId: gdFileId, displayName: name },
+            source
+        );
+        return { bytes, name };
+    }
+
+    /** Miejsca na podpis wykonawcy w pliku oferty (propozycja) i rozmiary stron do wskazania wlasnego. */
+    async locateOfferGraphicPlace(
+        offerId: number,
+        gdFileId: unknown,
+        scope?: ProjectScope
+    ): Promise<GraphicPlaceResult> {
+        const { bytes, name } = await this.readOfferFilePdf(offerId, gdFileId, scope);
+        try {
+            return await findContractorSignaturePlaces(bytes);
+        } catch (error) {
+            return fail('PREPARE_FAILED', `Plik „${name}” ${describeSigningError(error)}.`, 422);
+        }
+    }
+
+    /** Obraz jednej strony pliku oferty (PNG) - na nim uzytkownik klika miejsce grafiki. */
+    async renderOfferFilePage(
+        offerId: number,
+        gdFileId: unknown,
+        page: number,
+        scope?: ProjectScope
+    ): Promise<Buffer> {
+        if (!SigningJobValidator.isPositiveId(page))
+            return fail('BAD_REQUEST', 'Nieprawidłowy numer strony.', 400);
+        const { bytes, name } = await this.readOfferFilePdf(offerId, gdFileId, scope);
+        try {
+            return (await renderPdfPage(bytes, page)).png;
+        } catch (error) {
+            if (error instanceof SigningError && error.code === 'INVALID_PLACEMENT')
+                return fail('NOT_FOUND', `Plik „${name}” nie ma strony ${page}.`, 404);
+            console.error(`[Signing] Obraz strony ${page} pliku ${String(gdFileId)} nieudany:`, error);
+            return fail(
+                'PREPARE_FAILED',
+                `Nie udało się pokazać strony ${page} pliku „${name}”. Możesz podpisać ten plik bez grafiki.`,
+                422
+            );
+        }
+    }
+
+    /** Podpisane pliki jednej oferty (ostrzezenie w oknie podpisu przed kolejnym podpisem). */
+    async listOfferSignatures(
+        offerId: number,
+        scope?: ProjectScope
+    ): Promise<OfferSignaturesResult> {
+        if (!SigningJobValidator.isPositiveId(offerId))
+            return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator oferty.', 400);
+        if (scope) return fail('FORBIDDEN', 'Brak uprawnień do podpisywania plików ofert.', 403);
+        const records = await this.deps.repository.listSignaturesByOfferId(offerId);
+        return { offerId, signatures: records.map((r) => this.toSignatureView(r)) };
+    }
+
     // ------------------------------------------------------------------ podpisane pliki pisma
 
     private toSignatureView(record: SignatureRecord): LetterSignatureView {
@@ -444,7 +630,7 @@ export default class SigningJobsController {
         scope?: ProjectScope
     ): Promise<CreateJobResult> {
         const dto: CreateJobDto = SigningJobValidator.parseCreateJob(body);
-        const source = await this.resolveSource({ type: 'LETTER', id: dto.letterId }, scope);
+        const source = await this.resolveSource(dto.source, scope);
         const { files: signable } = await this.buildSignable(source);
 
         const chosen: NewJobFile[] = dto.files.map((requested, fileIndex) => {
@@ -460,13 +646,26 @@ export default class SigningJobsController {
                     `Wybrany plik nie jest już dostępny do podpisu w folderze ${source.genitive}. Odśwież listę.`,
                     409
                 );
+            // Pismo zawsze z grafika (decyzja ownera); zalaczniki wg wyboru.
+            const withGraphic = match.graphicLocked ? true : requested.withGraphic;
+            // Jawne miejsce bierzemy tylko tam, gdzie zrodlo go wymaga; pismo ma wlasne reguly.
+            const graphicPlacement =
+                withGraphic && match.kind === 'DRIVE_FILE' && source.fileGraphic === 'explicit'
+                    ? (requested.placement ?? null)
+                    : null;
+            if (withGraphic && source.fileGraphic === 'explicit' && !graphicPlacement)
+                return fail(
+                    'BAD_REQUEST',
+                    `Wskaż miejsce grafiki podpisu w pliku „${match.name}” albo wyłącz dla niego grafikę.`,
+                    400
+                );
             return {
                 fileIndex,
                 sourceKind: match.kind,
                 sourceGdFileId: match.gdFileId,
                 displayName: match.name,
-                // Pismo zawsze z grafika (decyzja ownera); zalaczniki wg wyboru.
-                withGraphic: match.graphicLocked ? true : requested.withGraphic,
+                withGraphic,
+                graphicPlacement,
             };
         });
 
@@ -479,7 +678,8 @@ export default class SigningJobsController {
             const id = await this.deps.repository.insertJob(
                 {
                     tokenHash: sha256Hex(token),
-                    letterId: source.ref.id,
+                    letterId: source.ref.type === 'LETTER' ? source.ref.id : null,
+                    offerId: source.ref.type === 'OFFER' ? source.ref.id : null,
                     createdByPersonId: personId,
                     minProgramVersion: MIN_PROGRAM_VERSION,
                     createdAt: now,
@@ -533,6 +733,7 @@ export default class SigningJobsController {
         return {
             jobId: job.id,
             letterId: job.letterId,
+            offerId: job.offerId,
             status: job.status,
             expiresAt: new Date(job.expiresAt).toISOString(),
             failureMessage: job.failureMessage,
@@ -787,13 +988,25 @@ export default class SigningJobsController {
 
     private placementFor(file: JobFileRecord, source: SigningSource): SignaturePlacement {
         if (file.sourceKind === 'LETTER_DOC' && source.mainDoc) return source.mainDoc.placement;
-        return file.withGraphic ? 'lastPageCorner' : 'none';
+        if (!file.withGraphic) return 'none';
+        if (source.fileGraphic === 'lastPageCorner') return 'lastPageCorner';
+        // Bez cichego rogu (D-SIG-10): zlecenie bez miejsca nie powinno powstac, a gdyby powstalo - stop.
+        if (!file.graphicPlacement)
+            throw new SigningJobError(
+                'PREPARE_FAILED',
+                `Plik „${file.displayName}” ma mieć grafikę podpisu, ale nie wskazano jej miejsca. Zacznij od nowa.`,
+                409
+            );
+        return file.graphicPlacement;
     }
 
     private async requireLetterForJob(
         job: JobRecord
     ): Promise<LetterContext & { gdDocumentId: string; gdFolderId: string }> {
-        const letter = await this.deps.repository.getLetterContext(job.letterId);
+        const letter =
+            job.letterId === null
+                ? undefined
+                : await this.deps.repository.getLetterContext(job.letterId);
         if (!letter || !letter.gdDocumentId || !letter.gdFolderId)
             return fail('BAD_REQUEST', 'Pismo nie ma już dokumentu albo folderu na Dysku.', 409);
         return letter as LetterContext & { gdDocumentId: string; gdFolderId: string };
@@ -801,7 +1014,7 @@ export default class SigningJobsController {
 
     /** Zamraza tresc pliku zrodlowego jako PDF. Tylko odczyt z Dysku. */
     private async fetchSourcePdf(
-        file: JobFileRecord,
+        file: Pick<JobFileRecord, 'sourceKind' | 'sourceGdFileId' | 'displayName'>,
         source: SigningSource
     ): Promise<Buffer> {
         const tooBig = () =>
@@ -957,6 +1170,7 @@ export default class SigningJobsController {
                             signedGdFileId: item.id,
                             signedName: item.name,
                             letterId: job.letterId,
+                            offerId: job.offerId,
                             method: 'LOCAL_APP',
                             certSubjectCn: job.certSubjectCn as string,
                             certSerial: job.certSerial as string,
@@ -1017,7 +1231,26 @@ export default class SigningJobsController {
         file: { buffer?: Buffer; size?: number } | undefined,
         scope?: ProjectScope
     ): Promise<ManualUploadResult> {
-        const source = await this.resolveSource({ type: 'LETTER', id: letterId }, scope);
+        return this.uploadSignedTo({ type: 'LETTER', id: letterId }, personId, file, scope);
+    }
+
+    /** "Wgraj podpisany" dla oferty: plik trafia do folderu "Oferta" pod wlasna nazwa. */
+    async uploadSignedToOffer(
+        personId: number,
+        offerId: number,
+        file: { buffer?: Buffer; size?: number; originalname?: string } | undefined,
+        scope?: ProjectScope
+    ): Promise<ManualUploadResult> {
+        return this.uploadSignedTo({ type: 'OFFER', id: offerId }, personId, file, scope);
+    }
+
+    private async uploadSignedTo(
+        ref: SigningSourceRef,
+        personId: number,
+        file: { buffer?: Buffer; size?: number; originalname?: string } | undefined,
+        scope?: ProjectScope
+    ): Promise<ManualUploadResult> {
+        const source = await this.resolveSource(ref, scope);
         const bytes = SigningJobValidator.assertPdfUpload(file);
 
         let check;
@@ -1056,7 +1289,18 @@ export default class SigningJobsController {
         const taken = new Set(
             (await this.deps.drive.listFolder(source.gdFolderId)).map((f) => f.name)
         );
-        const name = signedFileName(doc?.name || source.number || 'pismo', taken, now);
+        // Zrodlo z dokumentem glownym: nazwa od niego. Bez niego (oferta): nazwa wgranego pliku;
+        // gdy juz wyglada na podpisana kopie ("…-sig.pdf") i jest wolna, zostaje bez zmian.
+        const uploadedName = source.mainDoc ? null : uploadedFileName(file?.originalname);
+        const lowerTaken = new Set([...taken].map((n) => n.toLowerCase()));
+        const name =
+            uploadedName && isSignedName(uploadedName) && !lowerTaken.has(uploadedName.toLowerCase())
+                ? uploadedName
+                : signedFileName(
+                      uploadedName || doc?.name || source.number || 'pismo',
+                      taken,
+                      now
+                  );
         let createdId: string | undefined;
         try {
             const created = await this.deps.drive.uploadPdf({
@@ -1075,7 +1319,8 @@ export default class SigningJobsController {
                         sourceGdFileId: mainDocId,
                         signedGdFileId: created.id,
                         signedName: name,
-                        letterId: source.ref.id,
+                        letterId: source.ref.type === 'LETTER' ? source.ref.id : null,
+                        offerId: source.ref.type === 'OFFER' ? source.ref.id : null,
                         method: 'MANUAL_UPLOAD',
                         certSubjectCn: verified.subjectCn,
                         certSerial: verified.serial,

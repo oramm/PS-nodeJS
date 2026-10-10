@@ -22,6 +22,10 @@ export interface PageContent {
     obstacles: Box[];
 }
 
+// Keep the padded collision boxes used by letters; offers also need the original path thickness.
+const thinPathObstacles = new WeakSet<Box>();
+export const isThinPathObstacle = (box: Box): boolean => thinPathObstacles.has(box);
+
 /**
  * pdfjs-dist 5 is ESM-only while this backend is CommonJS (and Jest runs it in a VM that cannot
  * import ESM). Node >= 22.12 can `require()` an ES module natively; `createRequire` taken from
@@ -30,11 +34,11 @@ export interface PageContent {
  * the operator-list format parsed below is a pdfjs internal.
  */
 let pdfjsModule: any;
-function nativeRequire(): any {
+export function nativeRequire(): any {
     const nodeModule = (process as any).getBuiltinModule('module');
     return nodeModule.createRequire(path.join(process.cwd(), 'package.json'));
 }
-function loadPdfjs(): any {
+export function loadPdfjs(): any {
     if (!pdfjsModule) {
         pdfjsModule = nativeRequire()('pdfjs-dist/legacy/build/pdf.mjs');
     }
@@ -232,12 +236,24 @@ export async function extractPageContent(
                 minMax[2],
                 minMax[3],
             );
-            content.obstacles.push({
+            const obstacle = {
                 left: box.left - pad,
                 bottom: box.bottom - pad,
                 right: box.right + pad,
                 top: box.top + pad,
-            });
+            };
+            const strokeWidth = fillOnlyOps.has(paintOp)
+                ? 0
+                : state.lineWidth * Math.max(
+                    Math.hypot(state.ctm[0], state.ctm[1]),
+                    Math.hypot(state.ctm[2], state.ctm[3]),
+                );
+            if (
+                Math.min(box.right - box.left, box.top - box.bottom) + strokeWidth <= 1.5
+            ) {
+                thinPathObstacles.add(obstacle);
+            }
+            content.obstacles.push(obstacle);
         };
 
         for (let i = 0; i < operatorList.fnArray.length; i++) {
