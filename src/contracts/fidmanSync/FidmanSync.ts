@@ -109,6 +109,7 @@ export type FidmanEnvelope =
     | { kind: 'contract.folders'; payload: FidmanFoldersPayload };
 
 export type FidmanFoldersPayload = {
+    folderSetVersion: number;
     legacyContractId: number;
     contractFolderId: string | null;
     cases: { psCaseId: number; psCaseTypeId: number; folderId: string }[];
@@ -118,7 +119,7 @@ export type FidmanFoldersPayload = {
 export async function buildContractFoldersPayload(
     contractId: number,
     conn: mysql.PoolConnection
-): Promise<{ kind: 'contract.folders'; payload: FidmanFoldersPayload }> {
+): Promise<{ kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> }> {
     const [contracts] = await conn.query(
         'SELECT GdFolderId FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]
     );
@@ -534,7 +535,7 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
  * commits atomically with the business write — or not at all. Returns insertId.
  */
 async function enqueueRow(
-    envelope: FidmanEnvelope,
+    envelope: FidmanEnvelope | { kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> },
     refId: number | undefined,
     conn: mysql.PoolConnection
 ): Promise<number> {
@@ -860,6 +861,14 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
     try {
         if (!baseUrl) throw new Error('FIDMAN_SYNC_BASE_URL nie ustawione');
 
+        let payload = parsePayload(row.Payload);
+        if (row.Kind === 'contract.folders') {
+            if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
+                throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
+            }
+            // Numer należy do dostarczanego wpisu, także dla starych migawek i ponowień.
+            payload = { ...payload, folderSetVersion: row.Id } satisfies FidmanFoldersPayload;
+        }
         const signal = AbortSignal.timeout(DELIVERY_TIMEOUT_MS);
         const response = await fetch(`${baseUrl}${PUSH_PATH}`, {
             method: 'POST',
@@ -870,7 +879,7 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
             },
             body: JSON.stringify({
                 kind: row.Kind,
-                payload: parsePayload(row.Payload),
+                payload,
             }),
         });
 

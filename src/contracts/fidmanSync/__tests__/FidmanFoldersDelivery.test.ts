@@ -103,9 +103,49 @@ it('F1 contract.upsert zachowuje dostawę bez blokady i filtra stanu', async () 
     await tryDeliverAfterCommit(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).kind).toBe('contract.upsert');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).payload).not.toHaveProperty('folderSetVersion');
     expect(rows[0].Status).toBe('SENT');
     expect(ToolsDb.getPoolConnectionWithTimeout).not.toHaveBeenCalled();
     expect((ToolsDb.executeSQL as jest.Mock).mock.calls[0][0]).not.toContain('AND Status');
+});
+
+it.each([false, true])('stary komplet 5 po zastosowaniu 7 jest SKIPPED; SUPERSEDED=%s', async (replaced) => {
+    rows = [makeRow(5)];
+    let appliedVersion = 0;
+    fetchMock.mockImplementation(async (_url, options) => {
+        const { payload } = JSON.parse(options.body);
+        expect(payload).toEqual({ legacyContractId: 42, contractFolderId: null, cases: [], folderSetVersion: 5 });
+        // Stara dostawa już trwa; FIDman kończy nowszy komplet przed jej zastosowaniem.
+        rows.push({ ...makeRow(7), Status: 'SENT' });
+        appliedVersion = 7;
+        if (replaced) supersede(rows[0]);
+        return payload.folderSetVersion < appliedVersion
+            ? response(200, [{ reason: 'STALE_FOLDER_SET' }]) : response();
+    });
+    expect(await deliverOutboxRow(rows[0])).toBe('SKIPPED');
+    expect(rows[0]).toMatchObject({ Status: 'SKIPPED', SkipReason: replaced ? 'SUPERSEDED' : 'STALE_FOLDER_SET', Attempts: 0 });
+    expect(rows[1]).toMatchObject({ Id: 7, Status: 'SENT' });
+    expect(appliedVersion).toBe(7);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it.each([false, true])('ponowienie wysyła Id wpisu zamiast numeru w migawce; JSON string=%s', async (asString) => {
+    rows = [makeRow(5)];
+    const snapshot = { ...rows[0].Payload, folderSetVersion: 99 };
+    rows[0].Payload = asString ? JSON.stringify(snapshot) : snapshot;
+    fetchMock.mockResolvedValueOnce(response(500)).mockResolvedValueOnce(response());
+    expect(await deliverOutboxRow(rows[0])).toBe('FAILED');
+    expect(rows[0]).toMatchObject({ Status: 'FAILED', Attempts: 1 });
+    expect(await deliverOutboxRow(rows[0])).toBe('SENT');
+    expect(rows[0]).toMatchObject({ Status: 'SENT', Attempts: 1 });
+    expect(fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).payload.folderSetVersion)).toEqual([5, 5]);
+});
+
+it.each([undefined, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])('błędne Id %s zatrzymuje budowę ładunku', async (Id) => {
+    rows[0].Id = Id;
+    expect(await deliverOutboxRow(rows[0])).toBe('FAILED');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(rows[0]).toMatchObject({ Status: 'FAILED', Attempts: 1, LastError: expect.stringContaining('folderSetVersion') });
 });
 
 it('F1 blokada szereguje dwie dostawy tej samej umowy przez cały HTTP', async () => {
