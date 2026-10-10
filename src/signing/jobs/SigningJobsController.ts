@@ -80,6 +80,14 @@ interface SigningSource {
      * cichego rogu (pliki oferty, D-SIG-10).
      */
     fileGraphic: 'lastPageCorner' | 'explicit';
+    /** Czy plik o tej nazwie to wczesniej podpisana kopia (nie proponujemy jej do podpisu). */
+    isSignedCopy: (name: string) => boolean;
+    /**
+     * true = folder nie ma id w bazie i jest szukany po nazwie przy kazdym kroku (oferta). Wtedy przed
+     * zapisem sprawdzamy, ze pliki zrodlowe nadal w nim leza: folder o tej samej nazwie mogl zostac
+     * podmieniony miedzy przygotowaniem a podpisem.
+     */
+    folderFoundByName: boolean;
 }
 
 export interface SignableFile {
@@ -272,10 +280,13 @@ export function signedFileName(
     return candidate;
 }
 
-const isSignedName = (name: string): boolean =>
-    // signed copies: ours (_pdp), Szafir ("-sig" in the offer folders on Drive, "_sig" per the plan),
-    // earlier draft naming (_podpisany)
-    /[-_](pdp|sig|podpisany)(?![a-z0-9])/i.test(name) && /\.pdf$/i.test(name);
+/** Podpisane kopie w folderze pisma: nasze (_pdp), "_sig", wczesniejsze nazewnictwo (_podpisany). Regula z SIG-2, bez zmian. */
+const isSignedLetterCopy = (name: string): boolean =>
+    /_(pdp|sig|podpisany)\b/i.test(name) && /\.pdf$/i.test(name);
+
+/** Podpisane kopie w folderze "Oferta": jak wyzej oraz "-sig" - tak nazywa je Szafir (setki takich plikow na Dysku). */
+const isSignedOfferCopy = (name: string): boolean =>
+    /[-_](pdp|sig|podpisany)\b/i.test(name) && /\.pdf$/i.test(name);
 
 /** Nazwa pliku z przegladarki: multer oddaje ja jako latin1, a sciezka i znaki sterujace sa zbedne. */
 function uploadedFileName(original: unknown): string | null {
@@ -332,6 +343,8 @@ export default class SigningJobsController {
             genitive: 'pisma',
             signatureTypes: { mainDoc: 'LETTER', file: 'LETTER_ATTACHMENT' },
             fileGraphic: 'lastPageCorner',
+            isSignedCopy: isSignedLetterCopy,
+            folderFoundByName: false,
         };
     }
 
@@ -381,6 +394,8 @@ export default class SigningJobsController {
             genitive: 'oferty',
             signatureTypes: { mainDoc: 'OFFER_DOCUMENT', file: 'OFFER_DOCUMENT' },
             fileGraphic: 'explicit',
+            isSignedCopy: isSignedOfferCopy,
+            folderFoundByName: true,
         };
     }
 
@@ -436,7 +451,7 @@ export default class SigningJobsController {
             if (child.mimeType === MIME_GOOGLE_FOLDER) continue;
             const lower = child.name.toLowerCase();
             // Eksport PDF samego pisma i wczesniejsze podpisane pliki nie sa zalacznikami.
-            if (child.mimeType === MIME_PDF && (lower === exportName || isSignedName(child.name)))
+            if (child.mimeType === MIME_PDF && (lower === exportName || source.isSignedCopy(child.name)))
                 continue;
 
             if (child.mimeType === MIME_PDF) {
@@ -1133,6 +1148,17 @@ export default class SigningJobsController {
         try {
             const source = await this.resolveSourceForJob(job);
             const folderId = source.gdFolderId;
+            if (source.folderFoundByName) {
+                for (const file of files) {
+                    const origin = await this.deps.drive.getFile(file.sourceGdFileId);
+                    if (!origin || origin.trashed || !(origin.parents ?? []).includes(folderId))
+                        throw new SigningJobError(
+                            'DRIVE_FAILED',
+                            `Pliku „${file.displayName}” nie ma już w folderze ${source.genitive}: folder zmienił się w trakcie podpisywania. Nic nie zostało zapisane - zacznij od nowa.`,
+                            409
+                        );
+                }
+            }
             const taken = new Set(
                 (await this.deps.drive.listFolder(folderId)).map((f) => f.name)
             );
@@ -1193,21 +1219,28 @@ export default class SigningJobsController {
             });
         } catch (error) {
             // Wszystko albo nic: to, co juz trafilo na Dysk, wraca do kosza (odwracalnie).
+            const leftover: string[] = [];
             for (const item of uploaded) {
                 try {
                     await this.deps.drive.trashFile(item.id);
                 } catch (cleanupError) {
+                    leftover.push(item.name);
                     console.error(
                         `[Signing] Nie udało się wyrzucić do kosza ${item.id} po nieudanym zleceniu ${job.id}:`,
                         cleanupError
                     );
                 }
             }
+            const refused = error instanceof SigningJobError ? error : undefined;
+            // Gdy sprzatanie tez zawiodlo, nie wolno twierdzic, ze nic nie zapisano.
             const message =
-                'Nie udało się zapisać podpisanych plików na Dysku Google. Nic nie zostało zapisane - spróbuj ponownie.';
+                leftover.length > 0
+                    ? `Nie udało się zapisać podpisanych plików na Dysku Google, a po przerwanym zapisie na Dysku został plik: ${leftover.map((n) => `„${n}”`).join(', ')}. Usuń go ręcznie i spróbuj ponownie.`
+                    : (refused?.message ??
+                      'Nie udało się zapisać podpisanych plików na Dysku Google. Nic nie zostało zapisane - spróbuj ponownie.');
             await this.failJob(job, ['finalizing'], message);
             console.error(`[Signing] Zapis zlecenia ${job.id} nieudany:`, error);
-            throw new SigningJobError('DRIVE_FAILED', message, 502);
+            throw new SigningJobError('DRIVE_FAILED', message, refused?.status ?? 502);
         }
         // Po zatwierdzeniu: blad sprzatania nie moze cofac zapisanych plikow (dokonczy go sprzatanie zbiorcze).
         try {
@@ -1294,7 +1327,7 @@ export default class SigningJobsController {
         const uploadedName = source.mainDoc ? null : uploadedFileName(file?.originalname);
         const lowerTaken = new Set([...taken].map((n) => n.toLowerCase()));
         const name =
-            uploadedName && isSignedName(uploadedName) && !lowerTaken.has(uploadedName.toLowerCase())
+            uploadedName && source.isSignedCopy(uploadedName) && !lowerTaken.has(uploadedName.toLowerCase())
                 ? uploadedName
                 : signedFileName(
                       uploadedName || doc?.name || source.number || 'pismo',

@@ -82,6 +82,28 @@ async function resolvePlacement(
                 `Explicit placement needs a page between 1 and ${pageCount} and a rectangle with positive size.`,
             );
         }
+        // The rectangle comes from a click on a picture of the page, converted linearly: that is
+        // valid only for a plain page, and a rectangle outside the page would be an invisible graphic.
+        const target = pdfDoc.getPage(page - 1);
+        if (!isPlaceablePage(target)) {
+            throw new SigningError(
+                'PLACEMENT_BLOCKED',
+                'Rotated or offset page cannot take an explicit rectangle.',
+            );
+        }
+        const size = target.getMediaBox();
+        const slack = 0.5;
+        if (
+            rect.x < -slack ||
+            rect.y < -slack ||
+            rect.x + rect.width > size.width + slack ||
+            rect.y + rect.height > size.height + slack
+        ) {
+            throw new SigningError(
+                'INVALID_PLACEMENT',
+                'Explicit placement must lie entirely on the page.',
+            );
+        }
         return { source: 'explicit', page, rect };
     }
     if (placement !== 'letterClosing' && placement !== 'lastPageCorner') {

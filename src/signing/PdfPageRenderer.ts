@@ -2,6 +2,15 @@ import path from 'path';
 import { loadPdfjs, nativeRequire } from './PdfPageAnalyzer';
 import { SigningError } from './SigningError';
 
+/**
+ * Hard limits of the picture, whatever the page size says: a 576-byte PDF may declare a page
+ * 10 x 14400 pt, and scaling only the width would ask for a canvas of several gigabytes.
+ */
+const MAX_HEIGHT_PX = 2400;
+const MAX_PIXELS = 4_000_000;
+/** pdfjs refuses to decode embedded images above this many pixels (they are drawn as blanks). */
+const MAX_EMBEDDED_IMAGE_PIXELS = 16_000_000;
+
 export async function renderPdfPage(
     pdfBytes: Buffer,
     pageNumber: number,
@@ -24,6 +33,7 @@ export async function renderPdfPage(
         standardFontDataUrl: path.join(pdfjsDir, 'standard_fonts').split(path.sep).join('/') + '/',
         cMapUrl: path.join(pdfjsDir, 'cmaps').split(path.sep).join('/') + '/',
         cMapPacked: true,
+        maxImageSize: MAX_EMBEDDED_IMAGE_PIXELS,
         verbosity: 0,
     });
     let doc: any;
@@ -34,9 +44,14 @@ export async function renderPdfPage(
         }
         const page = await doc.getPage(pageNumber);
         const base = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: Math.floor(maxWidthPx) / base.width });
-        const widthPx = Math.floor(maxWidthPx);
-        const heightPx = Math.max(1, Math.ceil(viewport.height));
+        const scale = Math.min(
+            Math.floor(maxWidthPx) / base.width,
+            MAX_HEIGHT_PX / base.height,
+            Math.sqrt(MAX_PIXELS / (base.width * base.height)),
+        );
+        const viewport = page.getViewport({ scale });
+        const widthPx = Math.max(1, Math.min(Math.floor(maxWidthPx), Math.round(viewport.width)));
+        const heightPx = Math.max(1, Math.min(MAX_HEIGHT_PX, Math.ceil(viewport.height)));
         const canvas = createCanvas(widthPx, heightPx);
         await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' }).promise;
         return { png: canvas.toBuffer('image/png'), widthPx, heightPx };
