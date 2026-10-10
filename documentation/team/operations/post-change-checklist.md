@@ -6,6 +6,14 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-10 - LMF-3: kolejność blokad umów przed kamieniami i sprawami
+
+- Zakres: korekta kolejności blokad w transakcjach wyzwalaczy folderów; bez zmian schematu, danych, ENV i decyzji D-LMF. Trasy bez wspólnej transakcji (`MilestonesController.editFolder`, `.delete`) zachowują dotychczasowy zapis i osobną transakcję kolejki.
+- Lokalne akcje: wyłącznie TypeScript i Jest na atrapach; połączenia sieciowe i uruchamianie serwerów zablokowane podczas testów.
+- Wdrożenie poza zakresem sesji; wcześniejsze wymaganie migracji 014 -> 015 pozostaje aktualne. Nie uruchamiano migracji, migration gate ani aplikacji. Rollback: wycofanie tej poprawki przywraca ryzyko zakleszczenia zwykłych zapisów.
+- Checklist PR z `.github/PULL_REQUEST_TEMPLATE.md`: wpływ DB i lokalna weryfikacja opisane; nowe ENV, Heroku, migracje, zmiana migration gate, frontend i Pages/build: nie dotyczy. PR nie utworzono (Git tylko do odczytu).
+- Weryfikacja: TypeScript 0 błędów; wyzwalacze 59/59 PASS (16 nowych przypadków). Pełny Jest poza piaskownicą wykonawcy (dyspozytor, 2026-10-10): 191 zestawów PASS + 2 pominięte, 2300 testów PASS + 5 pominiętych, 0 FAIL. W piaskownicy wykonawcy dwa zestawy HTTP licencji (`SoftwareLicenses.test.ts`, `SoftwareLicenseReveal.test.ts`) padały, bo nie mogły otworzyć portu — to ograniczenie piaskownicy, nie kodu. Ograniczony przegląd końcowego diffu APPROVE (fallback, 1 przebieg, brak uwag). Node 24.19.0 poza zakresem repo; narzędzia uruchomione przez Yarn z `--ignore-engines`, z istniejących zależności głównego repo.
+
 ## 2026-10-10 - LMF-1/2: pliki migracji i migawka folderów FIDmana
 
 - Zakres: migracja `src/contracts/migrations/015_add_contract_folders_kind_to_fidman_sync_outbox.sql` + `_down` oraz builder/kolejkowanie; bez wyzwalaczy LMF-3, dostawy i wdrożenia. Git wyłącznie odczytywany; bez zapisów do baz.

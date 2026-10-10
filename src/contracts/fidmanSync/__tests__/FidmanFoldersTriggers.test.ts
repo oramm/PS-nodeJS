@@ -2,6 +2,9 @@ jest.mock('../../../tools/ToolsDb');
 
 import ToolsDb from '../../../tools/ToolsDb';
 import Setup from '../../../setup/Setup';
+import ContractsController from '../../ContractsController';
+import ContractRepository from '../../ContractRepository';
+import ContractEntityController from '../../ContractEntityController';
 import MilestonesController from '../../milestones/MilestonesController';
 import MilestoneRepository from '../../milestones/MilestoneRepository';
 import CasesController from '../../milestones/cases/CasesController';
@@ -18,6 +21,7 @@ let contracts: Map<number, any>;
 let milestones: Map<number, any>;
 let cases: Map<number, any>;
 let conn: any;
+let operations: string[];
 
 function milestone(id = 10, contractId = 42, typeId = 50): any {
     return {
@@ -41,6 +45,7 @@ function caseItem(id = 7, milestoneId = 10): any {
 
 beforeEach(() => {
     committed = false;
+    operations = [];
     writes = [];
     contracts = new Map([42, 43].map((id) => [id, {
         TypeId: 3, FidmanSyncEnabled: 1, GdFolderId: `folder_contract_${id}`,
@@ -50,6 +55,8 @@ beforeEach(() => {
     jest.spyOn(Setup, 'FidmanSync', 'get').mockReturnValue({ ...Setup.FidmanSync, contractTypeIds: [3, 4] });
     conn = {
         query: jest.fn(async (sql: string, params: any[]) => {
+            operations.push(sql === 'SELECT Id FROM Contracts WHERE Id = ? FOR UPDATE'
+                ? `lock:${params[0]}` : `query:${sql}`);
             if (sql.includes('SELECT DISTINCT m.ContractId')) {
                 const ids = sql.includes('SELECT MilestoneId FROM Cases')
                     ? [...params.slice(0, -1), cases.get(params[params.length - 1])?.milestoneId]
@@ -66,6 +73,7 @@ beforeEach(() => {
         }),
         execute: jest.fn(async (sql: string, params: any[]) => {
             expect(committed).toBe(false);
+            operations.push(`execute:${sql}`);
             if (sql.startsWith('INSERT')) {
                 writes.push({ kind: params[0], refId: params[1], payload: JSON.parse(params[2]) });
                 return [{ insertId: writes.length }];
@@ -89,21 +97,30 @@ beforeEach(() => {
     });
     jest.spyOn(MilestoneRepository.prototype, 'findById').mockImplementation(async (id) => milestones.get(id));
     const milestoneRepo = (MilestonesController as any).getInstance().repository;
-    jest.spyOn(milestoneRepo, 'addMilestonesWithDates').mockImplementation(async (items: any) => {
+    jest.spyOn(milestoneRepo, 'addMilestonesWithDates').mockImplementation(async (items: any, tx: any) => {
+        expect(tx).toBe(conn);
+        operations.push('save:milestone');
         items.forEach((m: any) => milestones.set(m.id, m));
         return items;
     });
-    jest.spyOn(milestoneRepo, 'editMilestoneWithDates').mockImplementation(async (item: any) => {
+    jest.spyOn(milestoneRepo, 'editMilestoneWithDates').mockImplementation(async (item: any, tx: any) => {
+        expect(tx).toBe(conn);
+        operations.push('save:milestone');
         milestones.set(item.id, item); return item;
     });
     jest.spyOn(milestoneRepo, 'deleteFromDb').mockImplementation(async (item: any) => {
         milestones.delete(item.id);
         for (const c of cases.values()) if (c.milestoneId === item.id) cases.delete(c.id);
     });
-    const saveCase = async (item: any) => { cases.set(item.id, item); return item; };
+    const saveCase = async (item: any, ...args: any[]) => {
+        expect(args).toContain(conn);
+        operations.push('save:case'); cases.set(item.id, item); return item;
+    };
     jest.spyOn(CaseRepository.prototype, 'addWithRelated').mockImplementation(saveCase);
     jest.spyOn(CaseRepository.prototype, 'editWithRelated').mockImplementation(saveCase);
-    jest.spyOn(CaseRepository.prototype, 'deleteFromDb').mockImplementation(async (item: any) => { cases.delete(item.id); });
+    jest.spyOn(CaseRepository.prototype, 'deleteFromDb').mockImplementation(async (item: any, tx: any) => {
+        expect(tx).toBe(conn); operations.push('save:case'); cases.delete(item.id);
+    });
     jest.spyOn(CaseRepository.prototype, 'findSubCaseIds').mockResolvedValue([]);
     jest.spyOn(CaseRepository.prototype, 'countCasesWithGdFolder').mockResolvedValue(0);
     jest.spyOn(CasesController, 'prepareProcessInstances').mockResolvedValue([]);
@@ -218,4 +235,81 @@ it('LMF-3 po kamieniach domyślnych powstaje migawka z nowymi sprawami', async (
     });
     await MilestonesController.addBulkWithDatesAndCases([milestones.get(10)], auth);
     expect(folderWrites().map((w) => w.payload.cases.map((c: any) => c.psCaseId))).toEqual([[], [7]]);
+});
+
+function expectLocksBeforeSave(ids: number[], save: string) {
+    const firstSave = operations.findIndex((op) => op === save);
+    expect(firstSave).toBeGreaterThanOrEqual(0);
+    expect(operations.slice(0, firstSave).filter((op) => op.startsWith('lock:')))
+        .toEqual(ids.map((id) => `lock:${id}`));
+}
+
+it.each(['add', 'addBulkWithDates', 'addBulkWithDatesAndCases', 'edit'] as const)(
+    'LMF-3 blokady: kamień %s blokuje umowę przed zapisem', async (route) => {
+        const item = milestones.get(10);
+        if (route === 'addBulkWithDates') await MilestonesController.addBulkWithDates([item]);
+        else if (route === 'addBulkWithDatesAndCases') await MilestonesController.addBulkWithDatesAndCases([item], auth);
+        else if (route === 'edit') await MilestonesController.edit(item, auth, undefined, ['status']);
+        else await MilestonesController.add(item, auth);
+        expectLocksBeforeSave([42], 'save:milestone');
+    }
+);
+
+it('LMF-3 blokady: zbiorczy zapis kamieni blokuje obie umowy rosnąco', async () => {
+    await MilestonesController.addBulkWithDates([milestones.get(11), milestones.get(10)]);
+    expectLocksBeforeSave([42, 43], 'save:milestone');
+});
+
+it.each(caseRoutes)('LMF-3 blokady: sprawa %s blokuje umowę przed zapisem', async (route) => {
+    const item = caseItem();
+    if (route === 'addBulkWithDefaultTasks') await CasesController.addBulkWithDefaultTasks([item], auth);
+    else if (route === 'edit') await CasesController.edit(item, auth, ['status']);
+    else await CasesController[route](item, auth);
+    expectLocksBeforeSave([42], 'save:case');
+});
+
+it.each([[10, 11], [11, 10]])(
+    'LMF-3 blokady: przeniesienie sprawy z kamienia %s do %s blokuje obie umowy rosnąco',
+    async (from, to) => {
+        cases.set(7, caseItem(7, from));
+        await CasesController.edit(caseItem(7, to), auth, ['milestoneId']);
+        expectLocksBeforeSave([42, 43], 'save:case');
+    }
+);
+
+it('LMF-3 blokady: zbiorczy zapis spraw blokuje obie umowy rosnąco', async () => {
+    await CasesController.addBulkWithDefaultTasks([caseItem(8, 11), caseItem(9, 10)], auth);
+    expectLocksBeforeSave([42, 43], 'save:case');
+});
+
+it('LMF-3 blokady: edycja umowy blokuje ją przed pierwszym zapisem', async () => {
+    jest.spyOn(ContractRepository.prototype, 'editInDb').mockImplementation(async (_item, tx) => {
+        expect(tx).toBe(conn); operations.push('save:contract');
+    });
+    await ContractsController.edit({ id: 42, typeId: 3, fidmanSyncEnabled: true } as any, undefined, ['status']);
+    expectLocksBeforeSave([42], 'save:contract');
+});
+
+it('LMF-3 blokady: nowa umowa jest pierwszym zapisywanym wierszem', async () => {
+    jest.spyOn(ContractRepository.prototype, 'isUniquePerProject').mockResolvedValue(false);
+    jest.spyOn(ContractRepository.prototype, 'addInDb').mockImplementation(async (item, tx) => {
+        expect(tx).toBe(conn); operations.push('insert:contract'); item.id = 42;
+    });
+    jest.spyOn(ContractEntityController, 'addAssociations').mockImplementation(async (_item, tx) => {
+        expect(tx).toBe(conn); operations.push('save:associations');
+    });
+    await ContractsController.add({ alias: 'TEST', typeId: 3, startDate: '2026-01-01', endDate: '2026-12-31' } as any);
+    expect(operations[0]).toBe('insert:contract');
+    expect(operations[1]).toBe('save:associations');
+    expect(operations[2]).toBe('lock:42');
+});
+
+it.each([true, false])('LMF-3 blokady: dopchnięcie (retry: %s) blokuje umowę przed wpisem kolejki', async (retry) => {
+    jest.spyOn(Setup, 'FidmanSync', 'get').mockReturnValue({ ...Setup.FidmanSync, baseUrl: '', token: '' });
+    (ToolsDb.getQueryCallbackAsync as any).mockImplementation(async (sql: string) =>
+        sql.includes("Status IN ('FAILED', 'SKIPPED')") && retry
+            ? [{ Id: 99, Status: 'FAILED', Kind: 'contract.upsert', Attempts: 0, Payload: {} }] : []);
+    await retryOrPushFidmanContract({ id: 42, typeId: 3, fidmanSyncEnabled: true } as any);
+    expect(operations[0]).toBe('lock:42');
+    expect(operations.findIndex((op) => op.startsWith('execute:'))).toBeGreaterThan(0);
 });

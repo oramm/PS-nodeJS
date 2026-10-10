@@ -20,7 +20,7 @@ import Milestone from '../Milestone';
 import MilestoneRepository from '../MilestoneRepository';
 import CaseTypeFolderRepository from './caseTypes/CaseTypeFolderRepository';
 import {
-    findFidmanFoldersContractIds,
+    findAndLockFidmanFoldersContractIds,
     enqueueFidmanFoldersForContracts,
     deliverFidmanFoldersAfterCommit,
 } from '../../fidmanSync/FidmanSync';
@@ -294,7 +294,7 @@ export default class CasesController extends BaseController<
 
             // 2. Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                const contractIds = await findFidmanFoldersContractIds([caseItem.milestoneId!], conn);
+                const contractIds = await findAndLockFidmanFoldersContractIds([caseItem.milestoneId!], conn);
                 // 2a. Numer podsprawy - wewnątrz transakcji z FOR UPDATE aby uniknąć race condition
                 if (caseItem.parentCaseId) {
                     caseItem.subCaseNumber =
@@ -576,7 +576,7 @@ export default class CasesController extends BaseController<
 
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-                const contractIds = await findFidmanFoldersContractIds(
+                const contractIds = await findAndLockFidmanFoldersContractIds(
                     [caseItem.milestoneId!], conn, caseItem.id
                 );
                 // Przygotuj nowe ProcessInstances (jeśli reset)
@@ -696,6 +696,9 @@ export default class CasesController extends BaseController<
                 conn.threadId
             );
             await conn.beginTransaction();
+            const contractIds = await findAndLockFidmanFoldersContractIds(
+                caseItems.map((c) => c.milestoneId!), conn
+            );
 
             for (const caseItem of caseItems) {
                 // Przygotuj ProcessInstances (z Task dla procesu)
@@ -726,9 +729,6 @@ export default class CasesController extends BaseController<
                 });
             }
 
-            const contractIds = await findFidmanFoldersContractIds(
-                caseItems.map((c) => c.milestoneId!), conn
-            );
             const folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             await conn.commit();
             await deliverFidmanFoldersAfterCommit(folderIds);
@@ -863,7 +863,7 @@ export default class CasesController extends BaseController<
 
             // Transakcja DB (Controller zarządza transakcją - zgodnie z wytycznymi)
             const folderIds = await ToolsDb.transaction<number[]>(async (conn: mysql.PoolConnection) => {
-                const contractIds = await findFidmanFoldersContractIds([], conn, caseItem.id);
+                const contractIds = await findAndLockFidmanFoldersContractIds([], conn, caseItem.id);
                 // Usuń Case (CASCADE usunie ProcessInstances, podsprawy i ich zadania)
                 await this.repository.deleteFromDb(caseItem, conn, true);
                 return enqueueFidmanFoldersForContracts(contractIds, conn);

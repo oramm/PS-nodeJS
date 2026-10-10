@@ -20,6 +20,7 @@ import MilestoneRepository, {
 import ApprovedDocsController from './approvedDocs/ApprovedDocsController';
 import Setup from '../../setup/Setup';
 import {
+    lockFidmanFoldersContracts,
     enqueueFidmanFoldersForContracts,
     deliverFidmanFoldersAfterCommit,
 } from '../fidmanSync/FidmanSync';
@@ -90,6 +91,7 @@ export default class MilestonesController extends BaseController<
     ): Promise<Milestone[]> {
         const instance = this.getInstance();
         const ids = await ToolsDb.transaction<number[]>(async (conn) => {
+            await lockFidmanFoldersContracts(milestones.map((m) => m.contractId), conn);
             await instance.repository.addMilestonesWithDates(milestones, conn);
             return enqueueFidmanFoldersForContracts(milestones.map((m) => m.contractId), conn);
         }, externalConn);
@@ -297,6 +299,7 @@ export default class MilestonesController extends BaseController<
 
                     // 1. Transakcja DB - Milestone + Dates
                     const ids = await ToolsDb.transaction<number[]>(async (conn) => {
+                        await lockFidmanFoldersContracts([milestone.contractId], conn);
                         await instance.repository.editMilestoneWithDates(
                             milestone, conn, true, fieldsToUpdate
                         );

@@ -40,6 +40,7 @@ import {
     tryDeliverAfterCommit,
 } from './aqmSync/AqmSync';
 import {
+    lockFidmanFoldersContracts,
     enqueueFidmanContractPush,
     deliverFidmanFoldersAfterCommit,
     isFidmanContractType,
@@ -514,6 +515,7 @@ export default class ContractsController extends BaseController<
             let fidmanOutboxId: number | undefined;
             const fidmanFolderIds: number[] = [];
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await lockFidmanFoldersContracts([contract.id], conn);
                 // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
                 await instance.repository.editInDb(
                     contract,

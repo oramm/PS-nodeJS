@@ -187,8 +187,21 @@ export async function enqueueFidmanFoldersPush(
     return id;
 }
 
-/** Rozwiązuje również starą umowę sprawy przed jej przeniesieniem/usunięciem. */
-export async function findFidmanFoldersContractIds(
+/** Blokuje wszystkie umowy przed zapisem kamieni/spraw lub składaniem migawek. */
+export async function lockFidmanFoldersContracts(
+    contractIds: (number | undefined)[],
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const ids = [...new Set(contractIds)]
+        .filter((id): id is number => id != null).sort((a, b) => a - b);
+    for (const id of ids) {
+        await conn.query('SELECT Id FROM Contracts WHERE Id = ? FOR UPDATE', [id]);
+    }
+    return ids;
+}
+
+/** Rozwiązuje i blokuje również starą umowę sprawy przed przeniesieniem/usunięciem. */
+export async function findAndLockFidmanFoldersContractIds(
     milestoneIds: number[],
     conn: mysql.PoolConnection,
     caseId?: number
@@ -201,7 +214,7 @@ export async function findFidmanFoldersContractIds(
          ${caseId ? 'OR m.Id = (SELECT MilestoneId FROM Cases WHERE Id = ?)' : ''}`,
         [...ids, ...(caseId ? [caseId] : [])]
     );
-    return (rows as any[]).map((row) => row.ContractId).filter((id) => id != null);
+    return lockFidmanFoldersContracts((rows as any[]).map((row) => row.ContractId), conn);
 }
 
 export async function deliverFidmanFoldersAfterCommit(ids: number[]): Promise<void> {
@@ -232,6 +245,7 @@ export async function enqueueFidmanFoldersForContracts(
             return [];
         }
     }
+    await lockFidmanFoldersContracts(contracts, conn);
     const ids: number[] = [];
     for (const contractId of contracts) {
         const id = await enqueueFidmanFoldersPush(contractId, conn);
@@ -502,6 +516,7 @@ export async function enqueueFidmanContractPush(
     conn: mysql.PoolConnection,
     foldersOutboxIds: number[] = []
 ): Promise<number> {
+    await lockFidmanFoldersContracts([(contract as any).id], conn);
     const id = await enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
     await enqueueFidmanPersonnelPush((contract as any).id, conn);
     foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn));
@@ -1027,6 +1042,7 @@ export async function retryOrPushFidmanContract(
     if (retried.ok) {
         // Umowa została ponowiona; personel liczymy z bieżących ról, nie z dawnej migawki.
         const folderIds = await ToolsDb.transaction<number[]>(async (conn) => {
+            await lockFidmanFoldersContracts([contractId], conn);
             await enqueueFidmanPersonnelPush(contractId, conn);
             return enqueueFidmanFoldersForContracts([contractId], conn);
         });
