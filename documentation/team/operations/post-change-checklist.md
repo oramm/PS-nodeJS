@@ -1505,3 +1505,13 @@ Copy the block below for each new change:
 - Verification: backend 144 focused tests and typecheck PASS; frontend 32 focused tests, TypeScript/webpack and artifact copy PASS; real UI/DB add, conditional action, clear and roundtrip PASS. Bounded fallback review APPROVE.
 - Release: production order is now 001 -> 002 -> 003 before backend and frontend. Global verify still hits the known mysql2 `execute` failure locally; no global apply/baseline was run.
 - Rollback: application rollback may retain the nullable column. The 003 down migration removes saved links and requires backup once populated.
+
+## 2026-10-11 - SIG wydanie ofert, umow i kolejnych podpisow
+
+- Jawne GO wlasciciela w czacie: „zrob wydanie”. Zakres tylko SIG, izolowane commity na origin/main; lokalne SPR i CORS poza wydaniem. NODE_ENV=production, envi-konsulting.kylos.pl/envikons_myEnvi.
+- Backup przed 004/005: C:/Users/oram/.envi/release-backups/sig-20261011/signing-pre004005.sql, 34846 bytes, odczyt identyczny; SigningJobs, SigningJobFiles, PersonSigningCertificates, DocumentSignatures, SchemaMigrations. Backup git: backend-pre-release.bundle; poprzedni Heroku v619 (c8f11569).
+- Live precheck: dokladnie 004_signing_offer_source i 005_signing_contract_source pending, drift0. Apply w tej kolejnosci 09:17:46 UTC; verify85/pending0/drift0 PASS. Niezalezny information_schema: kolumny/FK/indexy/CHECK, enum OFFER_DOCUMENT oraz nullable LetterId potwierdzone.
+- Build PASS; targeted Signing/Sessions 22 suites680 tests PASS (30s timeout; w pierwszym przebiegu jeden timeout5s przy generowaniu certow, izolowany rerun45/45 PASS). Review fallback scoped APPROVE, brak P0/P1; FE komunikat o pozostawionym pliku poprawiony z regression.
+- ENV bez nowych kluczy. Frontend wspolne okno, podpis ofert/umow, wskazanie miejsca grafiki per plik. Frontend145 tests PASS, build PASS przed finalna poprawka; finalny build i Pages/deploy readback sa bramkami publikacji.
+- Rollback: frontend potem backend do poprzednich wersji; addytywny schemat moze pozostac. Nie uruchamiac down na uzupelnionych danych bez nowego backupu; down usuwa rejestry ofert/umow. Snapshot SQL przywraca tylko tabele z chwili przed migracja i nie nadaje sie do nadpisania pozniejszych podpisow bez pojednania danych.
+- PR checklist: DB/env/deploy documented; env keys N/A; Heroku config unchanged; local Yarn build/migration actions completed; SQL004/005 apply+verify completed; migration gate unchanged; FE Pages owned by separate repository. No PR created.
