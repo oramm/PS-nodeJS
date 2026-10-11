@@ -34,6 +34,53 @@ function reads(folderId: string | null = 'target') {
         .mockResolvedValueOnce([{ ...project, lettersGdFolderId: folderId }]).mockResolvedValueOnce([row]);
 }
 
+test.each([false, true])('--sourceProject: grupa (a) tylko odczytywana, już przepięte wypisane; apply=%s', async (apply) => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const orphan = { id: 90, number: 'P/90', creationDate: '2026-09-30' };
+    const alreadyMoved = { ...row, id: 101, number: 'P/101', projectId: 2 };
+    query.mockResolvedValueOnce([root]).mockResolvedValueOnce([]).mockResolvedValueOnce([project])
+        .mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce([orphan])
+        .mockResolvedValueOnce([row, alreadyMoved]);
+    if (apply) query.mockResolvedValueOnce({ affectedRows: 1 });
+    await main(['--contractId=10', '--sourceProject=P1', '--limit=1', ...(apply ? ['--apply'] : [])]);
+    expect(query.mock.calls[3]).toEqual(['SELECT Id AS id FROM Projects WHERE OurId = ?', undefined, ['P1']]);
+    const [sql, , params] = query.mock.calls[4];
+    expect(params).toEqual([1]);
+    expect(sql).toContain('l.ProjectId = ? AND l.OfferId IS NULL');
+    expect(sql).toContain('NOT EXISTS (SELECT 1 FROM Letters_Cases lc WHERE lc.LetterId = l.Id)');
+    expect(sql).not.toContain('LIMIT');
+    const output = log.mock.calls.map(([line]) => line).join('\n');
+    expect(output).toContain('Pominięte (a) pisma bez sprawy w projekcie źródłowym: 1\n  Id=90, numer=P/90, data=2026-09-30');
+    expect(output).toContain('Już przepięte: 1\n  Id=101, numer=P/101, data=2026-10-01');
+    expect(output).toContain('Położenia plików już przepiętych pism skrypt nie sprawdza.');
+    expect(output).toContain('pominięte (a)=1');
+    expect(output).toContain('pełny przebieg uruchom bez limitu');
+    expect(getMetadata).toHaveBeenCalledTimes(1);
+    const updates = query.mock.calls.filter(([querySql]) => querySql.startsWith('UPDATE'));
+    expect(updates.map(([, , values]) => values)).toEqual(apply ? [[2, 100, 1]] : []);
+    expect(move).toHaveBeenCalledTimes(apply ? 1 : 0);
+});
+
+test.each([false, true])('nieistniejący --sourceProject przerywa przed zapisami i odczytem Dysku; apply=%s', async (apply) => {
+    query.mockResolvedValueOnce([root]).mockResolvedValueOnce([]).mockResolvedValueOnce([project]).mockResolvedValueOnce([]);
+    await expect(main(['--contractId=10', '--sourceProject=BRAK', ...(apply ? ['--apply'] : [])])).rejects.toThrow('projektu źródłowego BRAK');
+    expect(query.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
+    expect(ToolsGapi.getBackgroundAuth).not.toHaveBeenCalled();
+    expect(getMetadata).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+    expect(ToolsDb.pool.end).toHaveBeenCalled();
+});
+
+test('bez --sourceProject raport wskazuje argument i nie przedstawia grupy (a) jako pustej', async () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    reads();
+    await main(['--contractId=10']);
+    const output = log.mock.calls.map(([line]) => line).join('\n');
+    expect(output).toContain('Listę daje --sourceProject=<OurId>');
+    expect(output).toContain('pominięte (a)=nieustalone');
+    expect(query).toHaveBeenCalledTimes(4);
+});
+
 test('runner podglądu: SELECT i odczyt Dysku, zero zapisów', async () => {
     reads();
     await main(['--contractId=10']);

@@ -30,6 +30,7 @@ export interface LetterPlan {
 export function parseArgs(args: string[]) {
     let contractId: number | undefined;
     let limit: number | undefined;
+    let sourceProject: string | undefined;
     let apply = false;
     let noDriveCheck = false;
     const seen = new Set<string>();
@@ -39,7 +40,9 @@ export function parseArgs(args: string[]) {
         seen.add(key);
         if (arg === '--apply') apply = true;
         else if (arg === '--no-drive-check') noDriveCheck = true;
-        else if (/^--(contractId|limit)=[1-9]\d*$/.test(arg)) {
+        else if (key === '--sourceProject' && arg.startsWith('--sourceProject=') && arg.slice('--sourceProject='.length).trim()) {
+            sourceProject = arg.slice('--sourceProject='.length).trim();
+        } else if (/^--(contractId|limit)=[1-9]\d*$/.test(arg)) {
             const value = Number(arg.split('=')[1]);
             if (!Number.isSafeInteger(value)) throw new Error(`Nieprawidłowy argument: ${arg}`);
             if (key === '--contractId') contractId = value;
@@ -48,7 +51,7 @@ export function parseArgs(args: string[]) {
     }
     if (!contractId) throw new Error('Podaj --contractId=<dodatnie Id umowy inżyniera>.');
     if (apply && noDriveCheck) throw new Error('--no-drive-check jest dozwolone wyłącznie w podglądzie.');
-    return { contractId, limit, apply, noDriveCheck };
+    return { contractId, limit, apply, noDriveCheck, sourceProject };
 }
 
 export function validateScope(contracts: ContractScopeRow[], contractId: number): string {

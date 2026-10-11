@@ -19,14 +19,27 @@ describe('SPR-P dane dofinansowania projektu (bez bazy)', () => {
         expect(normalize('  ')[field]).toBeNull();
         expect(normalize(null)[field]).toBeNull();
         expect(() => normalize('a'.repeat(51))).toThrow('maksymalnie 50 znaków');
-        for (const value of [42, {}, [], true, undefined]) {
+        for (const value of [{}, [], undefined]) {
             expect(() => normalize(value)).toThrow('musi być tekstem lub null');
         }
         expect(ProjectValidator.normalizeFundingFields({})).not.toHaveProperty(field);
     });
 
+    it.each(['fundingAgreementNumber', 'program'] as const)('%s: liczby i boolean zapisuje jako tekst', async (field) => {
+        for (const [value, text] of [[2021, '2021'], [12345, '12345'], [true, 'true'], [false, 'false'], [1.5, '1.5']] as const) {
+            const conn = { execute: jest.fn().mockResolvedValue([{ insertId: 7 }]) } as any;
+            const project = new Project(ProjectValidator.normalizeFundingFields({ [field]: value }));
+            expect(project[field]).toBe(text);
+            await new ProjectRepository().addInDb(project, conn, true);
+            expect(conn.execute.mock.calls[0][1]).toEqual([text]);
+        }
+    });
+
     it.each(['addFromDto', 'editFromDto'] as const)('%s waliduje przed efektami ubocznymi', async (method) => {
         await expect(ProjectsController[method]({ program: 'x'.repeat(51) })).rejects.toThrow('maksymalnie 50 znaków');
+        for (const field of ['program', 'fundingAgreementNumber']) {
+            await expect(ProjectsController[method]({ [field]: 'x'.repeat(51) })).rejects.toMatchObject({ status: 400 });
+        }
     });
 
     it('INSERT zapisuje znormalizowane pola, UPDATE bez kluczy nie zawiera nowych kolumn', async () => {

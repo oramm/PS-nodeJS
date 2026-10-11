@@ -1,7 +1,8 @@
 /**
  * SPR-L, 2026-10: jednorazowe przepięcie pism PO przeniesieniu umowy inżyniera.
- * Lokalnie: yarn letters:move-contract --contractId=123 [--limit=5] [--no-drive-check]
- * Zapis: yarn letters:move-contract:apply --contractId=123 [--limit=5]
+ * Lokalnie: yarn letters:move-contract --contractId=123 [--sourceProject=P1] [--limit=5] [--no-drive-check]
+ * Zapis: yarn letters:move-contract:apply --contractId=123 [--sourceProject=P1] [--limit=5]
+ * Limit tylko do pilotażu: pominięte (d) i pisma z błędem pozostają na początku kolejki; pełny przebieg bez limitu.
  * Produkcja, jak bezpośredni runner fidman-backfill (loadEnv ładuje .env.production):
  *   yarn cross-env NODE_ENV=production TS_NODE_FILES=true ts-node src/scripts/move-contract-letters.ts --contractId=123
  *   ta sama komenda z --apply wykonuje zapis; wpisy package.json używają development.
@@ -39,6 +40,19 @@ export async function main(args = process.argv.slice(2)) {
         ) as Array<{ id: number; ourId: string; name: string; lettersGdFolderId: string | null }>;
         if (projects.length !== 1) throw new Error(`Nie znaleziono jednoznacznego projektu ${projectOurId}.`);
         const project = projects[0];
+        let withoutCases: Array<Pick<LetterRow, 'id' | 'number' | 'creationDate'>> = [];
+        if (options.sourceProject !== undefined) {
+            const sources = await ToolsDb.getQueryCallbackAsync(
+                'SELECT Id AS id FROM Projects WHERE OurId = ?', undefined, [options.sourceProject]
+            ) as Array<{ id: number }>;
+            if (sources.length !== 1) throw new Error(`Nie znaleziono jednoznacznego projektu źródłowego ${options.sourceProject}.`);
+            withoutCases = await ToolsDb.getQueryCallbackAsync(
+                `SELECT l.Id AS id, l.Number AS number, l.CreationDate AS creationDate
+                 FROM Letters l WHERE l.ProjectId = ? AND l.OfferId IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM Letters_Cases lc WHERE lc.LetterId = l.Id)
+                 ORDER BY l.Id`, undefined, [sources[0].id]
+            ) as typeof withoutCases;
+        }
         const contractIds = contracts.map((c) => c.id);
         const sql = lettersSql(contractIds.length);
         const rows = await ToolsDb.getQueryCallbackAsync(sql, undefined, contractIds) as LetterRow[];
@@ -47,12 +61,18 @@ export async function main(args = process.argv.slice(2)) {
         console.log('Umowy w zakresie:');
         for (const c of contracts) console.log(`  Id=${c.id}, ${c.number || '(bez numeru)'} — ${c.name}`);
         console.log(`Projekt docelowy: ${project.ourId} — ${project.name} (Id=${project.id})`);
-        console.log('Pisma bez sprawy nie są objęte; projekt źródłowy nie jest zgadywany.');
+        const describe = (l: Pick<LetterRow, 'id' | 'number' | 'creationDate'>) => `Id=${l.id}, numer=${l.number ?? '(brak)'}, data=${l.creationDate instanceof Date ? l.creationDate.toISOString().slice(0, 10) : l.creationDate ?? '(brak)'}`;
+        if (options.sourceProject !== undefined) {
+            console.log(`Pominięte (a) pisma bez sprawy w projekcie źródłowym: ${withoutCases.length}`);
+            for (const l of withoutCases) console.log(`  ${describe(l)}`);
+        } else console.log('Pisma bez sprawy nie są objęte; projekt źródłowy nie jest zgadywany. Listę daje --sourceProject=<OurId>.');
+        if (options.limit !== undefined) console.log('UWAGA: --limit służy tylko do pilotażu: pisma pominięte (d) i z błędem pozostają na początku kolejki; pełny przebieg uruchom bez limitu.');
         console.log(`Kwalifikujące się: ${plan.qualifying.length}; wybrane przez limit: ${plan.selected.length}; już przepięte: ${plan.alreadyMoved.length}`);
-        for (const [label, letters] of [['Pominięte (b) ofertowe', plan.offers], ['Pominięte (c) sprawy spoza zakresu lub nierozpoznane', plan.outsideScope]] as const) {
+        for (const [label, letters] of [['Już przepięte', plan.alreadyMoved], ['Pominięte (b) ofertowe', plan.offers], ['Pominięte (c) sprawy spoza zakresu lub nierozpoznane', plan.outsideScope]] as const) {
             console.log(`${label}: ${letters.length}`);
-            for (const l of letters) console.log(`  Id=${l.id}, numer=${l.number ?? '(brak)'}, data=${l.creationDate instanceof Date ? l.creationDate.toISOString().slice(0, 10) : l.creationDate ?? '(brak)'}`);
+            for (const l of letters) console.log(`  ${describe(l)}`);
         }
+        console.log('Położenia plików już przepiętych pism skrypt nie sprawdza.');
         const needsDrive = plan.selected.some((l) => driveItemId(l));
         if (needsDrive && !options.noDriveCheck && !project.lettersGdFolderId) {
             throw new Error('PYTANIE: brak Projects.LettersGdFolderId. Opcje: uzupełnić zweryfikowane ID Korespondencji w PS albo uzgodnić wyszukiwanie folderu po nazwie. Przerwano przed zapisami.');
@@ -78,7 +98,6 @@ export async function main(args = process.argv.slice(2)) {
                 return update.affectedRows;
             },
         }, options.noDriveCheck);
-        const describe = (l: LetterRow) => `Id=${l.id}, numer=${l.number ?? '(brak)'}, data=${l.creationDate instanceof Date ? l.creationDate.toISOString().slice(0, 10) : l.creationDate ?? '(brak)'}`;
         for (const [label, letters] of [
             ['Do przeniesienia (IN_SOURCE)', result.inSource],
             ['Tylko baza — już w miejscu docelowym (IN_TARGET)', result.inTarget],
@@ -92,7 +111,7 @@ export async function main(args = process.argv.slice(2)) {
         for (const { letter, reason } of result.elsewhere) console.log(`  ${describe(letter)}: ${reason}`);
         console.log(`Błędy: ${result.errors.length}`);
         for (const error of result.errors) console.log(`  Id=${error.id}: ${error.message}`);
-        console.log(`Podsumowanie${options.apply ? '' : ' (podgląd)'}: kwalifikujące się=${plan.qualifying.length} / przeniesione (Dysk+baza)=${result.moved} / tylko baza=${result.databaseOnly} / pominięte (b)=${plan.offers.length} (c)=${plan.outsideScope.length} (d)=${result.elsewhere.length} / błędy=${result.errors.length}${options.noDriveCheck ? ` / bez sprawdzenia Dysku=${result.unchecked.length}` : ''}`);
+        console.log(`Podsumowanie${options.apply ? '' : ' (podgląd)'}: kwalifikujące się=${plan.qualifying.length} / już przepięte=${plan.alreadyMoved.length} / przeniesione (Dysk+baza)=${result.moved} / tylko baza=${result.databaseOnly} / pominięte (a)=${options.sourceProject !== undefined ? withoutCases.length : 'nieustalone — podaj --sourceProject='} (b)=${plan.offers.length} (c)=${plan.outsideScope.length} (d)=${result.elsewhere.length} / błędy=${result.errors.length}${options.noDriveCheck ? ` / bez sprawdzenia Dysku=${result.unchecked.length}` : ''}`);
         if (result.errors.length) process.exitCode = 1;
     } finally {
         await ToolsDb.pool.end();

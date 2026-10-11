@@ -161,8 +161,15 @@ test('rozjazd projektów umów podległych przerywa planowanie', () => {
 });
 
 test('CLI wymaga dodatniego bezpiecznego Id, domyślnie podgląd; apply i limit', () => {
-    expect(parseArgs(['--contractId=10'])).toEqual({ contractId: 10, apply: false, limit: undefined, noDriveCheck: false });
-    expect(parseArgs(['--contractId=10', '--apply', '--limit=2'])).toEqual({ contractId: 10, apply: true, limit: 2, noDriveCheck: false });
+    expect(parseArgs(['--contractId=10'])).toEqual({ contractId: 10, apply: false, limit: undefined, noDriveCheck: false, sourceProject: undefined });
+    expect(parseArgs(['--contractId=10', '--apply', '--limit=2'])).toEqual({ contractId: 10, apply: true, limit: 2, noDriveCheck: false, sourceProject: undefined });
+});
+
+test('CLI przyjmuje OurId projektu źródłowego i odrzuca pusty lub powtórzony argument', () => {
+    expect(parseArgs(['--contractId=10', '--sourceProject=2021.01'])).toMatchObject({ sourceProject: '2021.01' });
+    for (const args of [['--sourceProject='], ['--sourceProject=  '], ['--sourceProject=P1', '--sourceProject=P2']]) {
+        expect(() => parseArgs(['--contractId=10', ...args])).toThrow();
+    }
 });
 
 test.each([[], ['--contractId=0'], ['--contractId=1', '--limit=-1'], ['--contractId=1', '--limit=1.5'], ['--contractId=9007199254740992'], ['--contractId=1', '--unknown'], ['--contractId=1', '--contractId=2']].map((args) => [args]))('nieprawidłowe argumenty: %j', (args) => {
