@@ -139,6 +139,7 @@ export interface OfferContext {
     id: number;
     alias: string;
     isOur: boolean;
+    gdDocumentId?: string | null;
     makeOfferCaseFolderIds: string[];
 }
 
@@ -281,7 +282,7 @@ export default class SigningJobRepository {
         conn?: mysql.PoolConnection
     ): Promise<OfferContext | undefined> {
         const rows = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT Offers.Id, Offers.Alias, Offers.IsOur, Cases.GdFolderId AS CaseGdFolderId
+            `SELECT Offers.Id, Offers.Alias, Offers.IsOur, Offers.GdDocumentId, Cases.GdFolderId AS CaseGdFolderId
              FROM Offers
              LEFT JOIN Milestones ON Milestones.OfferId = Offers.Id
              LEFT JOIN Cases ON Cases.MilestoneId = Milestones.Id AND Cases.TypeId = ?
@@ -294,6 +295,7 @@ export default class SigningJobRepository {
             id: rows[0].Id,
             alias: rows[0].Alias ?? '',
             isOur: !!rows[0].IsOur,
+            gdDocumentId: (rows[0].GdDocumentId || '').trim() || null,
             makeOfferCaseFolderIds: rows
                 .map((row) => (row.CaseGdFolderId || '').trim())
                 .filter((id) => id.length > 0),

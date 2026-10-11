@@ -1,4 +1,5 @@
 import { SigningJobError } from '../SigningJobError';
+import { makeFixture } from '../../__tests__/testPdfs';
 import {
     Kit,
     KitIdentity,
@@ -77,6 +78,41 @@ async function signAll(offerId: number, gdFileIds: string[]) {
 const uploads = () => kit.drive.writes.filter((w) => w.op === 'upload');
 
 describe('oferta wlasna', () => {
+    it('rozpoznaje zatwierdzenie tylko w dokumencie wskazanym zapisanym ID, bez zmiany grafiki zalacznikow', async () => {
+        kit.repo.offers.get(OUR_OFFER_ID)!.gdDocumentId = OWN_DOC;
+        const pdf = await makeFixture({ lines: [{ x: 320, y: 200, text: 'Ofertę zatwierdził: Marek Gazda' }] });
+        kit.drive.add({ id: OWN_DOC, name: 'Dowolna nowa nazwa', mimeType: MIME.doc, parents: [OWN_CASE_FOLDER] }, pdf);
+        kit.drive.add({ id: OWN_PDF, name: 'Oferta SW test 2026-10-05.pdf', mimeType: MIME.pdf, parents: [OWN_CASE_FOLDER] }, pdf);
+        const found = await kit.controller.locateOfferGraphicPlace(OUR_OFFER_ID, OWN_DOC);
+        expect(found.candidates).toHaveLength(1);
+        expect(found.candidates[0].label).toBe('Ofertę zatwierdził: Marek Gazda');
+        expect((await kit.controller.locateOfferGraphicPlace(OUR_OFFER_ID, OWN_PDF)).candidates).toEqual([]);
+        const listed = await kit.controller.listOfferSignableFiles(OUR_OFFER_ID);
+        expect(listed.files.every((file) => !file.withGraphic && !file.graphicLocked)).toBe(true);
+        const created = await kit.controller.createJob(PERSON_ID, {
+            offerId: OUR_OFFER_ID,
+            files: [{ kind: 'DRIVE_FILE', gdFileId: OWN_DOC, withGraphic: true, placement: found.candidates[0] }],
+        });
+        const prepared = await kit.controller.submitCertificate(tokenOf(created.protocolUrl), { chain: identity.chainDer.map(b64) });
+        expect(prepared.files).toHaveLength(1);
+        expect(uploads()).toEqual([]);
+    });
+
+    it('glowny dokument z wylaczona grafika przygotowuje sie bez bloku zatwierdzenia', async () => {
+        kit.repo.offers.get(OUR_OFFER_ID)!.gdDocumentId = OWN_DOC;
+        const job = await signAll(OUR_OFFER_ID, [OWN_DOC]);
+        expect(job.prepared.files).toHaveLength(1);
+        expect(uploads()).toEqual([]);
+    });
+
+    it('oferta zewnetrzna nie dostaje reguly zatwierdzenia nawet z zapisanym ID dokumentu', async () => {
+        kit.repo.offers.get(OUR_OFFER_ID)!.gdDocumentId = OWN_DOC;
+        kit.repo.offers.get(OUR_OFFER_ID)!.isOur = false;
+        kit.drive.add({ id: OWN_DOC, name: 'Oferta', mimeType: MIME.doc, parents: [OWN_CASE_FOLDER] },
+            await makeFixture({ lines: [{ x: 320, y: 200, text: 'Ofertę zatwierdził: Marek Gazda' }] }));
+        expect((await kit.controller.locateOfferGraphicPlace(OUR_OFFER_ID, OWN_DOC)).candidates).toEqual([]);
+    });
+
     it('lista: pliki wprost z folderu sprawy (dokument oferty i PDF), z cudzym podpisem; folder opisany jako CASE', async () => {
         const result = await kit.controller.listOfferSignableFiles(OUR_OFFER_ID);
         expect(result.folder).toBe('CASE');

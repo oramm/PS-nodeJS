@@ -84,6 +84,7 @@ interface SigningSource {
     isSignedCopy: (name: string) => boolean;
     /** Tylko oferta: czy pliki leza w podfolderze "Oferta", czy wprost w folderze sprawy (gdy podfolderu nie ma). */
     offerFolder?: OfferFolderKind;
+    ownOfferDocId?: string;
     /**
      * true = folder nie ma id w bazie i jest szukany po nazwie przy kazdym kroku (oferta). Wtedy przed
      * zapisem sprawdzamy, ze pliki zrodlowe nadal w nim leza: folder o tej samej nazwie mogl zostac
@@ -419,6 +420,7 @@ export default class SigningJobsController {
             number: offer.alias || null,
             gdFolderId: folders[0]?.id ?? caseFolderId,
             offerFolder: folders[0] ? 'OFERTA' : 'CASE',
+            ownOfferDocId: offer.isOur ? offer.gdDocumentId || undefined : undefined,
             mainDoc: null,
             genitive: 'oferty',
             signatureTypes: { mainDoc: 'OFFER_DOCUMENT', file: 'OFFER_DOCUMENT' },
@@ -589,7 +591,7 @@ export default class SigningJobsController {
         ref: SigningSourceRef,
         gdFileId: unknown,
         scope: ProjectScope | undefined
-    ): Promise<{ bytes: Buffer; name: string }> {
+    ): Promise<{ bytes: Buffer; name: string; source: SigningSource }> {
         const source = await this.resolveSource(ref, scope);
         if (!SigningJobValidator.isDriveId(gdFileId))
             return fail('BAD_REQUEST', 'Nieprawidłowy identyfikator pliku z Dysku Google.', 400);
@@ -601,7 +603,7 @@ export default class SigningJobsController {
             { sourceKind: 'DRIVE_FILE', sourceGdFileId: gdFileId, displayName: name },
             source
         );
-        return { bytes, name };
+        return { bytes, name, source };
     }
 
     /** Miejsca na podpis wykonawcy w pliku oferty (propozycja) i rozmiary stron do wskazania wlasnego. */
@@ -618,11 +620,11 @@ export default class SigningJobsController {
         gdFileId: unknown,
         scope?: ProjectScope
     ): Promise<GraphicPlaceResult> {
-        const { bytes, name } = await this.readSourceFilePdf(ref, gdFileId, scope);
+        const { bytes, name, source } = await this.readSourceFilePdf(ref, gdFileId, scope);
         try {
             return ref.type === 'CONTRACT'
                 ? await findContractorSignaturePlaces(bytes, { partyHeadings: true })
-                : await findContractorSignaturePlaces(bytes);
+                : await findContractorSignaturePlaces(bytes, { ownOfferApproval: gdFileId === source.ownOfferDocId });
         } catch (error) {
             return fail('PREPARE_FAILED', `Plik „${name}” ${describeSigningError(error)}.`, 422);
         }

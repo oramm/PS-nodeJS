@@ -39,7 +39,7 @@ function startsColumn(previous: TextChunk, next: TextChunk): boolean {
     return next.box.left - previous.box.right > Math.max(8, (next.box.top - next.box.bottom) * 0.75);
 }
 
-function pageCandidates(content: PageContent, width: number, height: number, partyHeadings = false): Array<{ rect: PdfRect; label: string }> {
+function pageCandidates(content: PageContent, width: number, height: number, partyHeadings = false, ownOfferApproval = false): Array<{ rect: PdfRect; label: string }> {
     const candidates: Array<{ rect: PdfRect; label: string }> = [];
     const ignorable = new Set(content.chunks
         .filter((chunk) => /^[.\u2026_\s]+$/u.test(chunk.text))
@@ -57,7 +57,9 @@ function pageCandidates(content: PageContent, width: number, height: number, par
         });
         // W umowie liczy sie tylko naglowek "Wykonawca" stojacy w jednym wierszu z "Zamawiajacy": ogolny napis
         // ("podpis osoby...") moze nalezec do drugiej strony, a naglowki w osobnych wierszach to zwykle opis stron.
-        const matches = partyHeadings ? [] : [...text.matchAll(ANCHOR)].map((match) => ({ text: match[0], index: match.index!, party: false }));
+        const matches = ownOfferApproval
+            ? (/^ofertęzatwierdził:[\p{L}][\p{L}.'’-]*$/u.test(text) ? [{ text, index: 0, party: false }] : [])
+            : partyHeadings ? [] : [...text.matchAll(ANCHOR)].map((match) => ({ text: match[0], index: match.index!, party: false }));
         if (partyHeadings && /^zamawiający:?(?:[\p{L}/]{0,25}\/)?wykonawca:?$/u.test(text)) {
             const index = text.match(/^zamawiający:?/u)![0].length;
             matches.push({ text: text.slice(index), index, party: true });
@@ -112,7 +114,7 @@ function pageCandidates(content: PageContent, width: number, height: number, par
     return candidates;
 }
 
-export async function findContractorSignaturePlaces(pdfBytes: Buffer, options?: { partyHeadings?: boolean }): Promise<SignaturePlaceSearch> {
+export async function findContractorSignaturePlaces(pdfBytes: Buffer, options?: { partyHeadings?: boolean; ownOfferApproval?: boolean }): Promise<SignaturePlaceSearch> {
     let doc: PDFDocument;
     try {
         doc = await PDFDocument.load(pdfBytes, { updateMetadata: false, ignoreEncryption: true });
@@ -129,9 +131,9 @@ export async function findContractorSignaturePlaces(pdfBytes: Buffer, options?: 
         const { width, height } = page.getMediaBox();
         const placeable = isPlaceablePage(page);
         result.pages.push({ width, height, placeable });
-        if (!placeable) continue;
+        if (!placeable || (options?.ownOfferApproval && index !== doc.getPageCount() - 1)) continue;
         const content = await extractPageContent(pdfBytes, index + 1, width, height);
-        result.candidates.push(...pageCandidates(content, width, height, options?.partyHeadings).map((c) => ({ page: index + 1, ...c })));
+        result.candidates.push(...pageCandidates(content, width, height, options?.partyHeadings, options?.ownOfferApproval).map((c) => ({ page: index + 1, ...c })));
     }
     return result;
 }

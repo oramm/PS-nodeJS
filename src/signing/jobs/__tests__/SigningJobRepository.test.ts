@@ -20,6 +20,13 @@ beforeEach(() => {
 });
 
 describe('contract signing repository', () => {
+    it('reads the saved main offer document ID rather than deriving it from a filename', async () => {
+        query.mockResolvedValue([{ Id: 71, Alias: 'BOL.AGL.03', IsOur: 1,
+            GdDocumentId: ' OWN_DOC_ID ', CaseGdFolderId: 'FOLDER_A' }]);
+        expect(await repository.getOfferContext(71)).toMatchObject({ gdDocumentId: 'OWN_DOC_ID', isOur: true });
+        expect(query).toHaveBeenCalledWith(expect.stringContaining('Offers.GdDocumentId'), undefined, [100, 71]);
+    });
+
     it('uses configured case types, trims and deduplicates folders, and prefers the ENVI label', async () => {
         query.mockResolvedValue([
             { Id: 55, Number: 'External', OurId: 'ENVI-55', CaseGdFolderId: ' FOLDER_A ' },

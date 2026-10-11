@@ -1,7 +1,7 @@
 import { PDFDocument, degrees, rgb } from 'pdf-lib';
 import { findContractorSignaturePlaces } from '../ContractorSignaturePlace';
 import { extractPageContent } from '../PdfPageAnalyzer';
-import { SIGNATURE_HEIGHT_REL, SIGNATURE_WIDTH_REL } from '../SignaturePlacement';
+import { collides, SIGNATURE_HEIGHT_REL, SIGNATURE_WIDTH_REL } from '../SignaturePlacement';
 import { makeFixture, FixtureOptions } from './testPdfs';
 
 const W = 595;
@@ -10,6 +10,42 @@ const LABEL = { x: 200, y: 400, text: 'Podpis osoby uprawnionej do reprezentacji
 const find = async (options: FixtureOptions) => findContractorSignaturePlaces(await makeFixture(options));
 
 describe('contractor signature places', () => {
+    it('rzeczywisty koniec szablonu oferty: grafika nad zatwierdzeniem, bez kolizji z trescia', async () => {
+        const pdf = await makeFixture({ lines: [
+            { x: 320, y: 200, text: 'Ofertę zatwierdził: Marek Gazda' },
+            { x: 320, y: 300, text: 'Pozostala tresc oferty' },
+        ] });
+        expect((await findContractorSignaturePlaces(pdf)).candidates).toEqual([]);
+        const { candidates } = await findContractorSignaturePlaces(pdf, { ownOfferApproval: true });
+        expect(candidates).toHaveLength(1);
+        const { chunks, obstacles } = await extractPageContent(pdf, 1, W, H);
+        expect(candidates[0].rect.y).toBeCloseTo(chunks.find(c => c.text.includes('zatwierdził'))!.box.top + 4);
+        expect(collides(candidates[0].rect, obstacles)).toBe(false);
+    });
+
+    it('przy zajetym miejscu nie zaslania tresci: pozostawia reczny wybor', async () => {
+        const pdf = await makeFixture({ lines: [
+            { x: 320, y: 200, text: 'Ofertę zatwierdził: Marek Gazda' },
+            { x: 320, y: 225, text: 'Tresc nad blokiem' },
+            { x: 320, y: 180, text: 'Tresc pod blokiem' },
+        ] });
+        expect((await findContractorSignaturePlaces(pdf, { ownOfferApproval: true })).candidates).toEqual([]);
+    });
+
+    it('zatwierdzenie liczy sie na koncowej stronie, takze gdy tekst eksportu jest podzielony', async () => {
+        const first = await makeFixture({ lines: [{ x: 320, y: 200, text: 'Ofertę zatwierdził: Marek Gazda' }] });
+        const last = await makeFixture({ lines: [
+            { x: 320, y: 200, text: 'Ofertę zatwierdził:' },
+            { x: 410, y: 200, text: ' Marek Gazda' },
+        ] });
+        const doc = await PDFDocument.load(first);
+        doc.addPage((await doc.copyPages(await PDFDocument.load(last), [0]))[0]);
+        const result = await findContractorSignaturePlaces(Buffer.from(await doc.save()), { ownOfferApproval: true });
+        expect(result.candidates).toHaveLength(1);
+        expect(result.candidates[0].page).toBe(2);
+        expect(result.candidates[0].label).toBe('Ofertę zatwierdził: Marek Gazda');
+    });
+
     it.each([
         'Podpis / pieczątka',
         'Podpis / piecz ą tka',
