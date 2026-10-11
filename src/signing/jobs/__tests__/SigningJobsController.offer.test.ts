@@ -1,5 +1,6 @@
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber } from 'pdf-lib';
-import { finalize, prepare, validate } from '../..';
+import { finalize, prepare, validate, SigningError } from '../..';
+import * as signing from '../../PdfSigning';
 import { SigningJobError } from '../SigningJobError';
 import {
     Kit,
@@ -100,18 +101,19 @@ async function signatureWidgetRects(pdf: Buffer): Promise<number[][]> {
 }
 
 describe('lista plikow oferty', () => {
-    it('pokazuje tylko PDF-y z folderu Oferta; podpisane kopie, docx i podfolder sa poza lista', async () => {
+    it('pokazuje PDF-y z folderu Oferta wraz z cudzym podpisem; nasze kopie, docx i podfolder sa poza lista', async () => {
         const result = await kit.controller.listOfferSignableFiles(OFFER_ID);
 
         expect(result).toMatchObject({ offerId: OFFER_ID, offerAlias: 'OS test' });
         expect(result.files.map((f) => [f.kind, f.gdFileId, f.name, f.withGraphic, f.graphicLocked])).toEqual([
             ['DRIVE_FILE', FORM, 'Formularz oferty.pdf', false, false],
             ['DRIVE_FILE', ATT2, 'Zalacznik 2.pdf', false, false],
+            ['DRIVE_FILE', OFFER_FILE_IDS.formularzSig, 'Formularz oferty-sig.pdf', false, false],
         ]);
         expect(result.notSignable.map((f) => f.name)).toEqual(['Wykaz.docx']);
         expect(result.notSignable[0].reason).toMatch(/PDF oraz Dokumenty i Arkusze Google/);
         const listed = [...result.files, ...result.notSignable].map((f) => f.name);
-        for (const hidden of ['Formularz oferty-sig.pdf', 'Stary_pdp.pdf', 'MG', 'SWZ.pdf']) {
+        for (const hidden of ['Stary_pdp.pdf', 'MG', 'SWZ.pdf']) {
             expect(listed).not.toContain(hidden);
         }
         noWrites();
@@ -197,7 +199,7 @@ describe('zrodlo oferty: odmowy przed czymkolwiek innym', () => {
 
         const result = await kit.controller.listOfferSignableFiles(OFFER_ID);
 
-        expect(result.files.map((f) => f.name)).toEqual(['Formularz oferty.pdf', 'Zalacznik 2.pdf']);
+        expect(result.files.map((f) => f.name)).toEqual(['Formularz oferty.pdf', 'Zalacznik 2.pdf', 'Formularz oferty-sig.pdf']);
     });
 });
 
@@ -231,8 +233,8 @@ describe('createJob dla oferty: co mozna wskazac', () => {
         noWrites();
     });
 
-    it('podpisana kopia (-sig, _pdp) nie jest wybieralna do podpisu -> 409', async () => {
-        for (const gdFileId of [OFFER_FILE_IDS.formularzSig, OFFER_FILE_IDS.stary]) {
+    it('nasza podpisana kopia (_pdp) nie jest wybieralna do podpisu -> 409', async () => {
+        for (const gdFileId of [OFFER_FILE_IDS.stary]) {
             const error = await rejected(kit.controller.createJob(PERSON_ID, { offerId: OFFER_ID, files: plain(gdFileId) }));
             expect(error.status).toBe(409);
         }
@@ -604,5 +606,69 @@ describe('grafika w pliku oferty: miejsca i podglad strony', () => {
         const error = await rejected(kit.controller.renderOfferFilePage(OFFER_ID, FORM, 0));
 
         expect(error.status).toBe(400);
+    });
+});
+
+describe('kolejny podpis w ofercie', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it.each(['x-sig.pdf', 'x_sig', 'x_podpisany.pdf', 'x-sig-sig', 'x_sig_20261011-123456_2.pdf'])(
+        'cudzy podpis %s jest oznaczony; nasze datowane kopie sa ukryte', async (name) => {
+            kit.drive.add({ id: 'EXTERNAL_SIGNED_00001', name, mimeType: MIME.pdf, parents: [OFFER_FILES_FOLDER_ID_001] });
+            for (const [i, own] of ['x_pdp.pdf', 'x_pdp_20261011-123456.pdf', 'x_pdp_20261011-123456_2.pdf'].entries()) {
+                kit.drive.add({ id: `OWN_COPY_0000000${i}`, name: own, mimeType: MIME.pdf, parents: [OFFER_FILES_FOLDER_ID_001] });
+                await expect(startOfferJob(plain(`OWN_COPY_0000000${i}`))).rejects.toMatchObject({ status: 409 });
+            }
+            const list = await kit.controller.listOfferSignableFiles(OFFER_ID);
+            expect(list.files.find((f) => f.name === name)).toMatchObject({ signedNameHint: true });
+            expect(list.files.some((f) => f.name.startsWith('x_pdp'))).toBe(false);
+        }
+    );
+
+    it('plik -sig jest oznaczony, wybieralny i dostaje nazwe -sig_pdp', async () => {
+        const foreign = await makeIdentity({ commonName: 'Partner' });
+        kit.drive.files.get(OFFER_FILE_IDS.formularzSig)!.bytes = await signElsewhere(foreign, await makePlainPdf('Partner'));
+        const list = await kit.controller.listOfferSignableFiles(OFFER_ID);
+        expect(list.files.find((f) => f.gdFileId === OFFER_FILE_IDS.formularzSig)).toMatchObject({ signedNameHint: true });
+        const job = await prepareOfferJob(plain(OFFER_FILE_IDS.formularzSig));
+        expect(await kit.controller.submitSignatures(job.token, cardSignatures(job.prepared))).toEqual({ status: 'done' });
+        expect(kit.drive.writes[0].name).toBe('Formularz oferty-sig_pdp.pdf');
+        expect(validate(kit.drive.files.get(kit.drive.writes[0].id)!.bytes!).signatures).toHaveLength(2);
+    });
+
+    it.each(['earlier invalid', 'last foreign', 'last incomplete', 'last invalid', 'empty'])(
+        'kontrola ostatniego podpisu: %s', async (variant) => {
+            const job = await prepareOfferJob();
+            const actualValidate = validate;
+            jest.spyOn(signing, 'validate').mockImplementation((pdf) => {
+                const check = actualValidate(pdf);
+                const last = { ...check.signatures[check.signatures.length - 1] };
+                if (variant === 'last foreign') last.certSerial = 'FOREIGN';
+                if (variant === 'last incomplete') last.byteRangeCoversFile = false;
+                if (variant === 'last invalid') last.valid = false;
+                return { ...check, valid: variant !== 'earlier invalid', signatures: variant === 'empty' ? [] : [{ ...last, valid: false, certSerial: 'PARTNER', byteRangeCoversFile: false }, last] };
+            });
+            const result = kit.controller.submitSignatures(job.token, cardSignatures(job.prepared));
+            if (variant === 'earlier invalid') {
+                await expect(result).resolves.toEqual({ status: 'done' });
+            } else {
+                await expect(result).rejects.toMatchObject({ code: 'SIGNATURE_REJECTED', status: 422 });
+                noWrites();
+                expect(kit.repo.jobs[0].status).toBe('failed');
+            }
+        }
+    );
+
+    it.each([
+        ['PDF_LOCKED', 'jest zabezpieczony przed zmianami przez wcześniejszy podpis - podpisz go w Szafirze i użyj „Wgraj podpisany”'],
+        ['PDF_INCREMENTAL_UNSUPPORTED', 'ma budowę, przy której PS nie umie dodać kolejnego podpisu - podpisz go w Szafirze i użyj „Wgraj podpisany”'],
+        ['SIGNATURE_WIDGET_OVERLAP', 'ma już podpis w tym miejscu - wskaż inne miejsce na grafikę'],
+    ] as const)('%s trafia do komunikatu zlecenia', async (code, text) => {
+        const job = await startOfferJob();
+        jest.spyOn(signing, 'prepare').mockRejectedValueOnce(new SigningError(code, 'library detail'));
+        const error = await rejected(kit.controller.submitCertificate(job.token, certBody()));
+        expect(error).toMatchObject({ code: 'PREPARE_FAILED', status: 422, message: `Plik „Formularz oferty.pdf” ${text}.` });
+        expect((await kit.controller.getJobStatus(job.jobId, PERSON_ID)).failureMessage).toBe(error.message);
+        noWrites();
     });
 });

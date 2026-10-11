@@ -75,4 +75,17 @@ export interface ValidationResult {
     reasons: string[];
     /** Additive to the contract: the CMS certificate set, signer certificate first when found. */
     chainDer: Buffer[];
+    /** Signatures ordered by the end of their covered revision. */
+    signatures: SignatureValidationResult[];
+}
+
+export interface SignatureValidationResult {
+    valid: boolean;
+    reasons: string[];
+    signerName: string;
+    certSerial: string;
+    issuer: string;
+    chainDer: Buffer[];
+    revisionEnd: number;
+    byteRangeCoversFile: boolean;
 }

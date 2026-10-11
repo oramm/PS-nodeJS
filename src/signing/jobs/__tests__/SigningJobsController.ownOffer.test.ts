@@ -77,10 +77,10 @@ async function signAll(offerId: number, gdFileIds: string[]) {
 const uploads = () => kit.drive.writes.filter((w) => w.op === 'upload');
 
 describe('oferta wlasna', () => {
-    it('lista: pliki wprost z folderu sprawy (dokument oferty i PDF), bez podpisanych kopii; folder opisany jako CASE', async () => {
+    it('lista: pliki wprost z folderu sprawy (dokument oferty i PDF), z cudzym podpisem; folder opisany jako CASE', async () => {
         const result = await kit.controller.listOfferSignableFiles(OUR_OFFER_ID);
         expect(result.folder).toBe('CASE');
-        expect(result.files.map((f) => f.name)).toEqual(['Oferta SW test 2026-10-05', 'Zaproszenie.pdf']);
+        expect(result.files.map((f) => f.name)).toEqual(['Oferta SW test 2026-10-05', 'Zaproszenie.pdf', 'Zaproszenie-sig.pdf']);
         expect(result.files.every((f) => f.kind === 'DRIVE_FILE' && !f.withGraphic && !f.graphicLocked)).toBe(true);
     });
 
@@ -144,6 +144,6 @@ describe('oferta zewnetrzna z podfolderem "Oferta" (bez zmian)', () => {
         );
         const result = await kit.controller.listOfferSignableFiles(OFFER_ID);
         expect(result.folder).toBe('OFERTA');
-        expect(result.files.map((f) => f.gdFileId)).toEqual([OFFER_FILE_IDS.formularz, OFFER_FILE_IDS.zalacznik2]);
+        expect(result.files.map((f) => f.gdFileId)).toEqual([OFFER_FILE_IDS.formularz, OFFER_FILE_IDS.zalacznik2, OFFER_FILE_IDS.formularzSig]);
     });
 });

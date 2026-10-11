@@ -163,7 +163,7 @@ describe('lista dokumentow umowy ENVI', () => {
         noWrites();
     });
 
-    it('podpisane kopie (_pdp, -sig, -sig-sig, _podpisany) nie sa proponowane; DOCX idzie do nieobslugiwanych; podfolder pominiety', async () => {
+    it('tylko kopie _pdp sa ukryte; cudze podpisy sa proponowane; DOCX idzie do nieobslugiwanych; podfolder pominiety', async () => {
         for (const [id, name] of [
             ['CONTRACT_PDP_ID_0001', 'umowa_pdp.pdf'],
             ['CONTRACT_SIG_ID_0001', 'umowa-sig.pdf'],
@@ -178,12 +178,15 @@ describe('lista dokumentow umowy ENVI', () => {
 
         const result = await kit.controller.listContractSignableFiles(CONTRACT_ID);
 
-        expect(result.files.map((f) => f.name)).toEqual(['Umowa ENVI.pdf', 'Aneks 1.pdf']);
+        expect(result.files.map((f) => f.name)).toEqual(['Umowa ENVI.pdf', 'Aneks 1.pdf', 'umowa-sig.pdf', 'umowa-sig-sig.pdf', 'umowa_podpisany.pdf']);
         expect(result.notSignable.map((f) => f.name)).toEqual(['Wzor.docx']);
         const listed = [...result.files, ...result.notSignable].map((f) => f.name);
-        for (const hidden of ['umowa_pdp.pdf', 'umowa-sig.pdf', 'umowa-sig-sig.pdf', 'umowa_podpisany.pdf', 'Podfolder']) {
+        for (const hidden of ['umowa_pdp.pdf', 'Podfolder']) {
             expect(listed).not.toContain(hidden);
         }
+        expect(result.files.filter((f) => f.signedNameHint).map((f) => f.name)).toEqual(['umowa-sig.pdf', 'umowa-sig-sig.pdf', 'umowa_podpisany.pdf']);
+        await expect(kit.controller.createJob(PERSON_ID, { contractId: CONTRACT_ID, files: plain('CONTRACT_SIG_ID_0001') })).resolves.toHaveProperty('jobId');
+        await expect(kit.controller.createJob(PERSON_ID, { contractId: CONTRACT_ID, files: plain('CONTRACT_PDP_ID_0001') })).rejects.toMatchObject({ status: 409 });
         noWrites();
     });
 
@@ -482,7 +485,7 @@ describe('regresja: pismo i oferta bez zmian po dodaniu umowy', () => {
     it('lista oferty nadal pokazuje tylko pliki z folderu Oferta', async () => {
         const result = await kit.controller.listOfferSignableFiles(OFFER_ID);
 
-        expect(result.files.map((f) => f.name)).toEqual(['Formularz oferty.pdf', 'Zalacznik 2.pdf']);
+        expect(result.files.map((f) => f.name)).toEqual(['Formularz oferty.pdf', 'Zalacznik 2.pdf', 'Formularz oferty-sig.pdf']);
         noWrites();
     });
 });
@@ -543,16 +546,15 @@ describe('po przegladzie Sola (SIG-6)', () => {
 });
 
 describe('po przegladzie wizualnym (SIG-6)', () => {
-    it('plik, ktory ma juz podpis elektroniczny: przy wlaczeniu grafiki odmowa po ludzku zamiast propozycji miejsca', async () => {
+    it('plik, ktory ma juz podpis elektroniczny: przy wlaczeniu grafiki zwraca miejsca', async () => {
         const signed = await signElsewhere(identity, await makePlainPdf('Umowa podpisana przez druga strone'));
         kit.drive.add(
             { id: 'CONTRACT_SIGNED_0000001', name: 'Umowa podpisana.pdf', mimeType: MIME.pdf, size: 1000, parents: [CONTRACT_FOLDER_ID] },
             signed
         );
 
-        const error = await rejected(kit.controller.locateContractGraphicPlace(CONTRACT_ID, 'CONTRACT_SIGNED_0000001'));
-
-        expect(error.status).toBe(422);
-        expect(error.message).toBe('Plik „Umowa podpisana.pdf” ma już podpis - drugiego nie dodajemy.');
+        const places = await kit.controller.locateContractGraphicPlace(CONTRACT_ID, 'CONTRACT_SIGNED_0000001');
+        expect(places.pages).toHaveLength(1);
+        expect(Array.isArray(places.candidates)).toBe(true);
     });
 });

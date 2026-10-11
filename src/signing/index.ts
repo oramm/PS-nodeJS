@@ -7,5 +7,6 @@ export type {
     PrepareOptions,
     PrepareResult,
     SignaturePlacement,
+    SignatureValidationResult,
     ValidationResult,
 } from './SigningTypes';

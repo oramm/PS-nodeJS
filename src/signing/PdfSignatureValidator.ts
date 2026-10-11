@@ -134,7 +134,9 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
 
     const [from1, length1, from2, length2] = range.values;
     if (
+        !range.values.every(Number.isSafeInteger) ||
         from1 !== 0 ||
+        length1 >= from2 ||
         from1 + length1 > range.contentsStart ||
         from2 < range.contentsEnd ||
         from2 + length2 > pdf.length ||
@@ -150,6 +152,7 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
         const parsed = asn1js.fromBER(toArrayBuffer(cmsDer));
         if (parsed.offset === -1) throw new Error('not DER');
         const contentInfo = new pkijs.ContentInfo({ schema: parsed.result });
+        if (contentInfo.contentType !== '1.2.840.113549.1.7.2') throw new Error('not SignedData');
         signedData = new pkijs.SignedData({ schema: contentInfo.content });
     } catch (e: any) {
         return fail('The signature contents are not valid CMS: ' + (e && e.message));
@@ -172,6 +175,11 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
     // Put the signer first, so callers can treat certDers[0] as the leaf.
     const certDer = Buffer.from(cert.toSchema().toBER());
     const ordered = [certDer].concat(certDers.filter((d) => !d.equals(certDer)));
+
+    if (signedData.encapContentInfo.eContentType !== '1.2.840.113549.1.7.1') {
+        reasons.push('Unsupported signature profile: document timestamps and encapsulated content types other than data are not supported.');
+        return { reasons, cert, certDers: ordered };
+    }
 
     const hashName = DIGEST_ALGORITHMS[signerInfo.digestAlgorithm.algorithmId];
     if (!hashName) {
@@ -229,7 +237,8 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
  * qualified issuer, revocation): that is the caller's policy.
  */
 export function validate(pdfBytes: Buffer): ValidationResult {
-    const ranges = readByteRanges(pdfBytes);
+    const ranges = readByteRanges(pdfBytes).sort((a, b) =>
+        (a.values[2] + a.values[3]) - (b.values[2] + b.values[3]));
     const empty: ValidationResult = {
         valid: false,
         signerName: '',
@@ -238,18 +247,35 @@ export function validate(pdfBytes: Buffer): ValidationResult {
         byteRangeCoversFile: false,
         reasons: [],
         chainDer: [],
+        signatures: [],
     };
     if (ranges.length === 0) {
         return { ...empty, reasons: ['The PDF has no signature.'] };
     }
 
     const reasons: string[] = [];
-    let last: SignatureCheck | undefined;
-    ranges.forEach((range, index) => {
-        const check = checkOneSignature(pdfBytes, range);
+    const signatures = ranges.map((range, index) => {
+        let check: SignatureCheck;
+        try { check = checkOneSignature(pdfBytes, range); }
+        catch (e: any) { check = { reasons: ['The signature could not be checked: ' + e.message], certDers: [] }; }
+        const revisionEnd = range.values[2] + range.values[3];
+        if (!Number.isSafeInteger(revisionEnd) || revisionEnd > pdfBytes.length ||
+            !/%%EOF(?:\r\n|\r|\n)?$/.test(pdfBytes.subarray(Math.max(0, revisionEnd - 8), revisionEnd).toString('latin1'))) {
+            check.reasons.push('The signature covered prefix does not end at a PDF revision end (%%EOF).');
+        }
         const prefix = ranges.length > 1 ? `Signature ${index + 1}: ` : '';
         check.reasons.forEach((r) => reasons.push(prefix + r));
-        last = check;
+        const cert = check.cert;
+        return {
+            valid: check.reasons.length === 0 && !!cert,
+            reasons: check.reasons,
+            signerName: cert ? subjectName(cert) : '',
+            certSerial: cert ? serialHex(cert) : '',
+            issuer: cert ? issuerName(cert) : '',
+            chainDer: check.certDers,
+            revisionEnd,
+            byteRangeCoversFile: range.values[0] === 0 && revisionEnd === pdfBytes.length,
+        };
     });
 
     const lastRange = ranges[ranges.length - 1];
@@ -262,15 +288,15 @@ export function validate(pdfBytes: Buffer): ValidationResult {
         );
     }
 
-    const cert = last && last.cert;
+    const last = signatures[signatures.length - 1];
     return {
-        valid: reasons.length === 0 && !!cert,
-        signerName: cert ? subjectName(cert) : '',
-        certSerial: cert ? serialHex(cert) : '',
-        issuer: cert ? issuerName(cert) : '',
+        valid: reasons.length === 0 && signatures.every((signature) => signature.valid),
+        signerName: last.signerName,
+        certSerial: last.certSerial,
+        issuer: last.issuer,
         byteRangeCoversFile: covers,
         reasons,
-        chainDer: last ? last.certDers : [],
+        chainDer: last.chainDer,
+        signatures,
     };
 }
-

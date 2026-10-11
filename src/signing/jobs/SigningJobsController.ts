@@ -8,7 +8,6 @@ import {
     SignaturePlaceSearch,
 } from '../ContractorSignaturePlace';
 import { renderPdfPage } from '../PdfPageRenderer';
-import { readByteRanges } from '../PdfSignatureLayout';
 import { finalize, prepare, validate } from '../PdfSigning';
 import { SigningError } from '../SigningError';
 import { SignaturePlacement } from '../SigningTypes';
@@ -81,7 +80,7 @@ interface SigningSource {
      * cichego rogu (pliki oferty, D-SIG-10).
      */
     fileGraphic: 'lastPageCorner' | 'explicit';
-    /** Czy plik o tej nazwie to wczesniej podpisana kopia (nie proponujemy jej do podpisu). */
+    /** Rozpoznawanie podpisanej kopii przy nadawaniu nazwy recznie wgranego pliku. */
     isSignedCopy: (name: string) => boolean;
     /** Tylko oferta: czy pliki leza w podfolderze "Oferta", czy wprost w folderze sprawy (gdy podfolderu nie ma). */
     offerFolder?: OfferFolderKind;
@@ -106,6 +105,7 @@ export interface SignableFile {
     mimeType: string;
     withGraphic: boolean;
     graphicLocked: boolean;
+    signedNameHint?: boolean;
 }
 
 export interface NotSignableFile {
@@ -244,7 +244,9 @@ const SIGNED_SUFFIX = '_pdp';
 const SIGNING_ERROR_TEXT: Record<string, string> = {
     INVALID_PDF: 'nie jest poprawnym plikiem PDF',
     ENCRYPTED_PDF: 'jest zaszyfrowany, więc nie da się go podpisać',
-    ALREADY_SIGNED: 'ma już podpis - drugiego nie dodajemy',
+    PDF_LOCKED: 'jest zabezpieczony przed zmianami przez wcześniejszy podpis - podpisz go w Szafirze i użyj „Wgraj podpisany”',
+    PDF_INCREMENTAL_UNSUPPORTED: 'ma budowę, przy której PS nie umie dodać kolejnego podpisu - podpisz go w Szafirze i użyj „Wgraj podpisany”',
+    SIGNATURE_WIDGET_OVERLAP: 'ma już podpis w tym miejscu - wskaż inne miejsce na grafikę',
     INVALID_CERTIFICATE: 'certyfikat z karty nie nadaje się do podpisu',
     UNSUPPORTED_KEY: 'karta ma klucz inny niż RSA, a taki nie jest obsługiwany',
     INVALID_PLACEMENT: 'nie da się ustawić grafiki podpisu',
@@ -313,6 +315,13 @@ const isSignedLetterCopy = (name: string): boolean =>
 /** Podpisane kopie w folderze oferty lub umowy: jak wyzej oraz "-sig" - tak nazywa je Szafir (setki takich plikow na Dysku). */
 const isSignedFileCopy = (name: string): boolean =>
     /[-_](pdp|sig|podpisany)(?:_\d{8}-\d{6}(?:_\d+)?)?\b/i.test(name) && /\.pdf$/i.test(name);
+
+/** Nasze kopie: ta sama regula pdp co dotychczas, niezalezna od nazwy cudzych podpisow. */
+const isOwnSignedFileCopy = (name: string): boolean =>
+    /[-_]pdp(?:_\d{8}-\d{6}(?:_\d+)?)?\b/i.test(name) && /\.pdf$/i.test(name);
+
+const hasSignedNameHint = (name: string): boolean =>
+    /[-_](sig|podpisany)(?:_\d{8}-\d{6}(?:_\d+)?)?(?:\.pdf)?$/i.test(name);
 
 /** Nazwa pliku z przegladarki: multer oddaje ja jako latin1, a sciezka i znaki sterujace sa zbedne. */
 function uploadedFileName(original: unknown): string | null {
@@ -503,8 +512,10 @@ export default class SigningJobsController {
             if (child.id === doc?.id) continue;
             if (child.mimeType === MIME_GOOGLE_FOLDER) continue;
             const lower = child.name.toLowerCase();
-            // Eksport PDF samego pisma i wczesniejsze podpisane pliki nie sa zalacznikami.
-            if (child.mimeType === MIME_PDF && (lower === exportName || source.isSignedCopy(child.name)))
+            const hiddenCopy = source.ref.type === 'LETTER'
+                ? source.isSignedCopy(child.name)
+                : isOwnSignedFileCopy(child.name);
+            if (child.mimeType === MIME_PDF && (lower === exportName || hiddenCopy))
                 continue;
 
             if (child.mimeType === MIME_PDF) {
@@ -517,7 +528,10 @@ export default class SigningJobsController {
                     });
                     continue;
                 }
-                files.push(this.asAttachment(child));
+                files.push({
+                    ...this.asAttachment(child),
+                    ...(source.ref.type !== 'LETTER' && hasSignedNameHint(child.name) ? { signedNameHint: true } : {}),
+                });
             } else if (child.mimeType === MIME_GOOGLE_DOC || child.mimeType === MIME_GOOGLE_SHEET) {
                 files.push(this.asAttachment(child));
             } else {
@@ -605,9 +619,6 @@ export default class SigningJobsController {
         scope?: ProjectScope
     ): Promise<GraphicPlaceResult> {
         const { bytes, name } = await this.readSourceFilePdf(ref, gdFileId, scope);
-        // Plik juz podpisany i tak odpadnie przy przygotowaniu; tu mowimy to od razu, zanim uzytkownik ustawi grafike na cudzym podpisie.
-        if (readByteRanges(bytes).length > 0)
-            return fail('PREPARE_FAILED', `Plik „${name}” ${SIGNING_ERROR_TEXT.ALREADY_SIGNED}.`, 422);
         try {
             return ref.type === 'CONTRACT'
                 ? await findContractorSignaturePlaces(bytes, { partyHeadings: true })
@@ -1246,7 +1257,8 @@ export default class SigningJobsController {
                     );
                 }
                 const check = validate(output);
-                if (!check.valid || !check.byteRangeCoversFile || check.certSerial !== job.certSerial)
+                const lastSignature = check.signatures[check.signatures.length - 1];
+                if (!lastSignature?.valid || !lastSignature.byteRangeCoversFile || lastSignature.certSerial !== job.certSerial)
                     throw new SigningJobError(
                         'SIGNATURE_REJECTED',
                         `Po złożeniu podpisu plik „${file.displayName}” nie przeszedł sprawdzenia.`,

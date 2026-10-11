@@ -125,20 +125,22 @@ describe('pisma: rozpoznawanie podpisanych kopii bez zmian', () => {
         kit.drive.add(
             { id: 'ATT_SIG_HYPHEN_0001', name: 'Zalacznik-sig.pdf', mimeType: MIME.pdf, size: 1000, parents: [LETTER_FOLDER_ID] }
         );
-        const names = (await kit.controller.listSignableFiles(LETTER_ID)).files.map((f) => f.name);
+        const files = (await kit.controller.listSignableFiles(LETTER_ID)).files;
+        expect(files.every((f) => f.signedNameHint === undefined)).toBe(true);
+        const names = files.map((f) => f.name);
         expect(names).toContain('formularz_sig_wykonawcy.pdf');
         expect(names).toContain('Zalacznik-sig.pdf');
         // dotychczasowa regula pism zostaje: "_podpisany" na koncu jest ukryty
         expect(names).not.toContain('Umowa_podpisany.pdf');
     });
 
-    it('w folderze oferty "_sig_" w srodku nazwy to zwykly plik, a "-sig" na koncu to podpisana kopia', async () => {
+    it('w folderze oferty "_sig_" w srodku nazwy to zwykly plik, a "-sig" na koncu pozostaje wybieralny', async () => {
         kit.drive.add(
             { id: 'OFFER_SIG_MIDDLE_001', name: 'formularz_sig_wykonawcy.pdf', mimeType: MIME.pdf, size: 1000, parents: [OFFER_FILES_FOLDER_ID_001] }
         );
         const names = (await kit.controller.listOfferSignableFiles(OFFER_ID)).files.map((f) => f.name);
         expect(names).toContain('formularz_sig_wykonawcy.pdf');
-        expect(names).not.toContain('Formularz oferty-sig.pdf');
+        expect(names).toContain('Formularz oferty-sig.pdf');
     });
 });
 
