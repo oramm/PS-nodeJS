@@ -1,49 +1,11 @@
 # Production Kylos DB Migration Memory
 
-This file is the shared memory for the last known migration verification state of the production database.
+Live schema is the source of truth; this is a dated verification record.
 
-It is not the source of truth for schema status. The source of truth is the live database schema checked through `information_schema`.
-
-Use this file to remember what was last verified, what was missing, and what still needs manual follow-up.
-
-## Current Target
-
-- Label: `remote-kylos`
-- Expected env: `production`
-- DB host: unknown until next verification
-- DB name: unknown until next verification
-
-## Last Verified Snapshot
-
-- Verified at: not verified yet
-- Verified by: not verified yet
-- Verified commit: not verified yet
-- Check mode: not verified yet
-- Result summary: baseline file created, no production verification recorded yet
-
-## Verification Scope
-
-- Scope: not verified yet
-- Incremental baseline: not verified yet
-- Forward migrations checked: not verified yet
-
-## Verified Migrations
-
-No production verification has been recorded yet.
-
-| Migration | File hash | Status | Verified at | Notes |
-| --- | --- | --- | --- | --- |
-| none | none | pending | n/a | first remote check will populate this table |
-
-## Known Gaps
-
-- No shared production migration snapshot has been recorded yet.
-
-## Manual Verification Needed
-
-- First remote-kylos read-only verification to establish baseline target (`DB_HOST`, `DB_NAME`) and verified migration set.
-
-## Notes
-
-- Update this file only after a fresh read-only verification against the production schema.
-- Keep entries concise and current so the file stays useful during future migration checks.
+- Target: remote-kylos, NODE_ENV=production, envi-konsulting.kylos.pl/envikons_myEnvi.
+- Verified 2026-10-11 by Codex, release source c5692c4; global runner verify85 migrations/pending0/drift0 PASS.
+- Scoped live information_schema pre/post checks: SigningJobs and DocumentSignatures OfferId/ContractId, nullable LetterId, signing graphic columns, index/FK and CHECK definitions; OFFER_DOCUMENT enum.
+- Applied in order at09:17:46UTC: signing004 then005; execution605ms and369ms.
+- Raw file SHA256 (runner normalizes CRLF):004 7abb83ece25cc5fb148328d7f679fe1ec1482ddd28ab5ab2d80e36aaaf943e93;005 321e05622047450334ac63927fe1d0a3598259513bd22a982e77b0c1f233f8f8. SchemaMigrations runner receipts match normalized hashes (verify PASS).
+- Backup: C:/Users/oram/.envi/release-backups/sig-20261011/signing-pre004005.sql. Rows before: SigningJobs1, SigningJobFiles1, PersonSigningCertificates1, DocumentSignatures1, SchemaMigrations83.
+- Rollback: revert code first; retain additive schema. Down removes offer/contract signature register data, so fresh backup required after use. No other migration applied in this run.
