@@ -5,6 +5,7 @@ import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 import Entity from '../../entities/Entity';
 import Project from '../../projects/Project';
+import ProjectRepository from '../../projects/ProjectRepository';
 import { isValidNipChecksum } from '../aqmSync/AqmSync';
 
 /**
@@ -83,6 +84,8 @@ export type FidmanContractPayload = {
 export type FidmanProjectPayload = FidmanProjectRef & {
     name?: string;
     comment?: string;
+    fundingAgreementNumber?: string;
+    program?: string;
 };
 
 /**
@@ -489,20 +492,25 @@ function collectContractEntities(contract: any): FidmanEntityPayload[] {
     return out;
 }
 
+/** Inline project ref of a `contract.upsert`, built from the project row read from the DB. */
+function buildProjectRef(sourceProject: any): FidmanProjectPayload | undefined {
+    if (!sourceProject) return undefined;
+    return {
+        legacyProjectId: sourceProject.id,
+        ourId: sourceProject.ourId,
+        name: sourceProject.name,
+        ...(sourceProject.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: sourceProject.fundingAgreementNumber.trim() } : {}),
+        ...(sourceProject.program?.trim() ? { program: sourceProject.program.trim() } : {}),
+    };
+}
+
 /**
  * Build the FIDman `contract.upsert` envelope: the contract + inline project ref
  * + entities-with-roles. Source-owned fields only (FIDman owns its own fields).
  */
-export function buildContractPayload(contract: AnyContract): FidmanEnvelope {
+export function buildContractPayload(contract: AnyContract, sourceProject = (contract as any)._project): FidmanEnvelope {
     const c = contract as any;
-    // R7-P1: carry the REAL project name (ContractRepository loads it as _project.name),
-    // not just the natural key. Without it FIDman's `p.name ?? p.ourId` insert fallback
-    // seeds projects.name = ourId → the "Nazwa == Numer" bug in Słowniki → Projekty.
-    // (comment is not loaded onto a contract's _project, so it stays omitted — the
-    // standalone project.upsert still carries it.)
-    const project: FidmanProjectPayload | undefined = c._project
-        ? { legacyProjectId: c._project.id, ourId: c._project.ourId, name: c._project.name }
-        : undefined;
+    const project = buildProjectRef(sourceProject);
 
     return {
         kind: 'contract.upsert',
@@ -533,6 +541,8 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
             ourId: p.ourId,
             name: p.name,
             comment: p.comment,
+            ...(p.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: p.fundingAgreementNumber.trim() } : {}),
+            ...(p.program?.trim() ? { program: p.program.trim() } : {}),
         },
     };
 }
@@ -562,7 +572,8 @@ export async function enqueueFidmanContractPush(
     forceFolders = false
 ): Promise<number> {
     await lockFidmanFoldersContracts([(contract as any).id], conn);
-    const id = await enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
+    const project = await new ProjectRepository().findForContract(contract.id!, conn);
+    const id = await enqueueRow(buildContractPayload(contract, project), contract.id, conn);
     await enqueueFidmanPersonnelPush((contract as any).id, conn);
     foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn, forceFolders));
     return id;
@@ -579,7 +590,8 @@ export async function enqueueFidmanProjectPush(
     project: Project,
     conn: mysql.PoolConnection
 ): Promise<number> {
-    return enqueueRow(buildProjectUpsert(project), (project as any).id, conn);
+    const persisted = await new ProjectRepository().findById(project.id!, conn);
+    return enqueueRow(buildProjectUpsert(persisted), project.id, conn);
 }
 
 // ==================== GLO-P1: user.upsert ====================
@@ -1068,7 +1080,7 @@ export async function getFidmanContractSyncStatus(
  * FAILED/SKIPPED `contract.upsert` outbox row for a contract using the SAME
  * `deliverOutboxRow` P1 uses (no reimplementation of the HTTP/status logic).
  *
- * Ponawia migawkę `Payload` z wiersza, a nie stan żywej umowy — i to zostaje.
+ * Ponawia migawkę umowy, ale projekt odświeża z bazy (SPR-P).
  * Przypadek „umowa nie ma czego ponawiać" obsługuje `retryOrPushFidmanContract()`
  * niżej (WYK-2, zadanie 4); ta funkcja pozostaje wąska i zwraca wtedy `NOT_FOUND`.
  *
@@ -1096,6 +1108,10 @@ export async function retryFidmanContractSync(
     const row = rows?.[0];
     if (!row) return { ok: false, reason: 'NOT_FOUND' };
 
+    const project = await new ProjectRepository().findForContract(contractId);
+    const payload = typeof row.Payload === 'string' ? JSON.parse(row.Payload) : row.Payload;
+    row.Payload = { ...payload, project: buildProjectRef(project) };
+    await ToolsDb.executeSQL(`UPDATE ${OUTBOX_TABLE} SET Payload = ? WHERE Id = ?`, [JSON.stringify(row.Payload), row.Id]);
     await deliverOutboxRow(row);
     return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
 }
@@ -1122,7 +1138,7 @@ export type FidmanPushOutcome =
  *     i ponowienie któregoś odtworzyłoby umowę w FIDmanie — dokładnie to, czemu ten pack
  *     zapobiega. Tamte sześć zamknięto w `WYK-3`, ale bramka nie zależy od tego sprzątania:
  *     następny nieudany wiersz powstanie tak samo;
- *  2. jest wiersz `FAILED`/`SKIPPED` -> zastane zachowanie bez zmian, ponawiamy migawkę;
+ *  2. jest wiersz `FAILED`/`SKIPPED` -> ponawiamy migawkę umowy z projektem z bazy;
  *  3. nie ma czego ponawiać (umowa nigdy nie poszła ALBO ostatnia wysyłka się udała)
  *     -> ładunek budowany od nowa z ŻYWEJ umowy przekazanej przez wywołującego.
  *

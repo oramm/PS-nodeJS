@@ -18,6 +18,7 @@ describe('WNM-2 personel', () => {
         return {
             query: jest.fn(async (sql: string, params: any[]) => {
                 expect(params).toEqual([42]);
+                if (sql.includes('FROM Projects p')) return [[{ Id: 1, OurId: project, Name: 'Projekt' }]];
                 if (!sql.includes('r.ContractId IS NULL')) {
                     if (sql.includes('FROM Contracts')) return [[{ TypeId: 3, FidmanSyncEnabled: 1 }]];
                     return [[]];

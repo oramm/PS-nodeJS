@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import BaseController from '../controllers/BaseController';
 import ToolsDb from '../tools/ToolsDb';
 import Project from './Project';
+import ProjectValidator from './ProjectValidator';
 import ProjectEntitiesController from './ProjectEntitiesController';
 import ProjectEntity from './ProjectEntity';
 import ProjectRepository, { ProjectSearchParams } from './ProjectRepository';
@@ -78,6 +79,14 @@ export default class ProjectsController extends BaseController<
             },
             auth
         );
+    }
+
+    static async addFromDto(dto: any, auth?: OAuth2Client): Promise<Project> {
+        return this.add(new Project(ProjectValidator.normalizeFundingFields(dto)), auth);
+    }
+
+    static async editFromDto(dto: any, auth?: OAuth2Client): Promise<Project> {
+        return this.edit(new Project(ProjectValidator.normalizeFundingFields(dto)), auth);
     }
 
     /**

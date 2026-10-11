@@ -138,9 +138,11 @@ describe('retryFidmanContractSync ("dopchnij synchronizację")', () => {
         let outboxStatus: 'FAILED' | 'SENT' = 'FAILED';
         const OUTBOX_ID = 77;
         const CONTRACT_ID = 42;
+        (ToolsDb.sqlToString as any).mockImplementation((value: any) => value);
 
         (ToolsDb.getQueryCallbackAsync as any).mockImplementation(
             async (sql: any) => {
+                if (sql.includes('FROM Projects p')) return [{ Id: 11, OurId: 'PRJ-001', Name: 'Z bazy', FundingAgreementNumber: 'UD/3', Program: 'FEnIKS' }];
                 if (sql.includes("Status IN ('FAILED', 'SKIPPED')")) {
                     return outboxStatus === 'FAILED'
                         ? [
@@ -187,6 +189,8 @@ describe('retryFidmanContractSync ("dopchnij synchronizację")', () => {
         const result = await retryFidmanContractSync(CONTRACT_ID);
 
         expect((global as any).fetch).toHaveBeenCalledTimes(1); // actually re-delivered
+        const sent = JSON.parse((global as any).fetch.mock.calls[0][1].body);
+        expect(sent.payload.project).toMatchObject({ name: 'Z bazy', fundingAgreementNumber: 'UD/3', program: 'FEnIKS' });
         expect(result.ok).toBe(true);
         if (result.ok) {
             expect(result.status.status).toBe('SENT');

@@ -18,10 +18,7 @@ app.post('/projects', async (req: Request, res: Response, next) => {
 
 app.post('/project', async (req: Request, res: Response, next) => {
     try {
-        const project = new Project(req.parsedBody);
-
-        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        const result = await ProjectsController.add(project);
+        const result = await ProjectsController.addFromDto(req.parsedBody);
 
         res.send(result);
     } catch (error) {
@@ -31,10 +28,7 @@ app.post('/project', async (req: Request, res: Response, next) => {
 
 app.put('/project/:id', async (req: Request, res: Response, next) => {
     try {
-        const project = new Project(req.parsedBody);
-
-        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        const result = await ProjectsController.edit(project);
+        const result = await ProjectsController.editFromDto(req.parsedBody);
 
         res.send(result);
     } catch (error) {

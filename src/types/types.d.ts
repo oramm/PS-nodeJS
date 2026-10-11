@@ -81,6 +81,8 @@ export interface StaffMemberData extends RepositoryDataItem {
 export type MilestoneParentType = 'CONTRACT' | 'OFFER';
 
 export interface ProjectData extends RepositoryDataItem {
+    fundingAgreementNumber?: string | null;
+    program?: string | null;
     ourId: string;
     name: string;
     alias: string;

@@ -157,6 +157,9 @@ export default class ToolsDb {
     }
 
     static prepareValueToPreparedStmtSql(value: any, fieldName?: string): any {
+        // Te pola są tekstem, także gdy wyglądają jak data; parametry SQL nie wymagają escapowania.
+        if (fieldName === 'fundingAgreementNumber' || fieldName === 'program')
+            return value;
         //"startDate":"12-06-2018"
         if (
             value === null ||

@@ -48,6 +48,7 @@ describe('ProjectsController.edit() — WYK-1: zakres projektu ze znacznika przy
             // Atrapa tabeli Contracts dla zapytania bramkującego z projectHasSyncedContract().
             query: jest.fn(async (sql: any, params: any) => {
                 const text = String(sql);
+                if (text.includes('SELECT * FROM Projects')) return [[{ Id: 5, OurId: 'PRJ-001', Name: 'Projekt' }], undefined];
                 const [projectOurId, ...typeIds] = params as any[];
                 const pytaOZnacznik = /FidmanSyncEnabled\s*=\s*1/.test(text);
                 const rows = contractsTable.filter(

@@ -25,6 +25,7 @@ import {
     buildEntityUpsert,
     buildProjectUpsert,
     enqueueFidmanContractPush,
+    enqueueFidmanProjectPush,
     deliverOutboxRow,
     drainFidmanOutbox,
     entityHasSyncedContract,
@@ -125,6 +126,27 @@ describe('isFidmanSyncEligible (typ + znacznik)', () => {
 });
 
 describe('buildContractPayload (contract.upsert)', () => {
+    it('oba buildery niosą dane dofinansowania i pomijają wartości puste', () => {
+        for (const fields of [
+            { fundingAgreementNumber: 'UD/1', program: 'FEnIKS' },
+            { fundingAgreementNumber: '', program: '  ' },
+            { fundingAgreementNumber: null, program: null },
+            {},
+        ]) {
+            const project = { id: 88, ourId: 'P1', name: 'Projekt', ...fields };
+            const payloads = [
+                buildProjectUpsert(project as any).payload,
+                (buildContractPayload(baseContract({ _project: project }) as any).payload as any).project,
+            ];
+            for (const payload of payloads) {
+                if (fields.program === 'FEnIKS') expect(payload).toMatchObject(fields);
+                else {
+                    expect(payload).not.toHaveProperty('fundingAgreementNumber');
+                    expect(payload).not.toHaveProperty('program');
+                }
+            }
+        }
+    });
     it('builds contract + inline project ref + entities-with-roles', () => {
         const env = buildContractPayload(baseContract() as any);
         expect(env.kind).toBe('contract.upsert');
@@ -216,13 +238,17 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
 
 describe('enqueueFidmanContractPush (same tx conn)', () => {
     it('inserts a PENDING row via the provided connection and returns insertId', async () => {
+        (ToolsDb.sqlToString as any).mockImplementation((value: any) => value);
         const conn: any = {
-            query: jest.fn<any>().mockResolvedValue([[], undefined]),
+            query: jest.fn<any>().mockImplementation(async (sql: string) => [
+                sql.includes('FROM Projects p') ? [{ Id: 88, OurId: 'PRJ-001', Name: 'Z bazy', FundingAgreementNumber: 'UD/1', Program: 'FEnIKS' }] : [],
+                undefined,
+            ]),
             execute: jest
                 .fn<any>()
                 .mockResolvedValue([{ insertId: 999 }, undefined]),
         };
-        const id = await enqueueFidmanContractPush(baseContract() as any, conn);
+        const id = await enqueueFidmanContractPush(baseContract({ _project: { id: 999, ourId: 'STARY', name: 'Nieświeży projekt' } }) as any, conn);
         expect(id).toBe(999);
         expect(conn.execute).toHaveBeenCalledTimes(2);
         const [sql, params] = conn.execute.mock.calls[0];
@@ -233,6 +259,21 @@ describe('enqueueFidmanContractPush (same tx conn)', () => {
         const parsed = JSON.parse(params[2]);
         expect(parsed.entities[0].taxNumber).toBe('7471917575');
         expect(parsed.project.ourId).toBe('PRJ-001');
+        expect(parsed.project).toMatchObject({ name: 'Z bazy', fundingAgreementNumber: 'UD/1', program: 'FEnIKS' });
+        expect(conn.query.mock.calls[0][1]).toEqual([4567]);
+    });
+});
+
+describe('SPR-P project.upsert ze starego formularza', () => {
+    it('wysyła zachowane pola z bazy na połączeniu zapisu', async () => {
+        (ToolsDb.sqlToString as any).mockImplementation((value: any) => value);
+        const conn: any = {
+            query: jest.fn<any>().mockResolvedValue([[{ Id: 5, OurId: 'P1', Name: 'Z bazy', FundingAgreementNumber: 'UD/4', Program: 'FEnIKS' }]]),
+            execute: jest.fn<any>().mockResolvedValue([{ insertId: 900 }]),
+        };
+        await enqueueFidmanProjectPush({ id: 5, ourId: 'P1' } as any, conn);
+        expect(conn.query.mock.calls[0][1]).toEqual([5]);
+        expect(JSON.parse(conn.execute.mock.calls[0][1][2])).toMatchObject({ fundingAgreementNumber: 'UD/4', program: 'FEnIKS' });
     });
 });
 
