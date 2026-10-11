@@ -23,6 +23,8 @@
         "aqm:backfill:apply": "cross-env NODE_ENV=development ts-node src/scripts/aqm-backfill.ts --apply",
         "backfill:case-type-folders": "cross-env NODE_ENV=development TS_NODE_FILES=true ts-node src/scripts/backfill-case-type-folders.ts",
         "backfill:case-type-folders:apply": "cross-env NODE_ENV=development TS_NODE_FILES=true ts-node src/scripts/backfill-case-type-folders.ts --apply",
+        "letters:move-contract": "cross-env NODE_ENV=development TS_NODE_FILES=true ts-node src/scripts/move-contract-letters.ts",
+        "letters:move-contract:apply": "cross-env NODE_ENV=development TS_NODE_FILES=true ts-node src/scripts/move-contract-letters.ts --apply",
         "bugfix:scan": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-scan.ts",
         "bugfix:run": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-run.ts",
         "bugfix:sync-github": "cross-env NODE_ENV=development ts-node src/scripts/bugfix-sync-github.ts",
