@@ -5,6 +5,7 @@ import Setup from '../../../setup/Setup';
 import ContractsController from '../../ContractsController';
 import ContractRepository from '../../ContractRepository';
 import ContractEntityController from '../../ContractEntityController';
+import ProjectRepository from '../../../projects/ProjectRepository';
 import MilestonesController from '../../milestones/MilestonesController';
 import MilestoneRepository from '../../milestones/MilestoneRepository';
 import CasesController from '../../milestones/cases/CasesController';
@@ -125,6 +126,9 @@ beforeEach(() => {
     jest.spyOn(CaseRepository.prototype, 'deleteFromDb').mockImplementation(async (item: any, tx: any) => {
         expect(tx).toBe(conn); operations.push('save:case'); cases.delete(item.id);
     });
+    // SPR-P: wysyłka umowy dociąga projekt; poza zakresem testów folderów i blokad.
+    jest.spyOn(ProjectRepository.prototype, 'findForContract')
+        .mockResolvedValue({ id: 1, ourId: 'PRJ.1', name: 'Projekt' } as any);
     jest.spyOn(CaseRepository.prototype, 'findSubCaseIds').mockResolvedValue([]);
     jest.spyOn(CaseRepository.prototype, 'countCasesWithGdFolder').mockResolvedValue(0);
     jest.spyOn(CasesController, 'prepareProcessInstances').mockResolvedValue([]);
