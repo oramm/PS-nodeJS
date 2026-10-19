@@ -26,6 +26,7 @@ import {
     SB_GITHUB_TOKEN_ENV,
     SB_INVITABLE_ROLES,
     SB_MANAGER_ROLES,
+    SB_PROJECTS_TEAM,
     SbAccessError,
     assertOperationAllowed,
     combineResult,
@@ -195,7 +196,31 @@ export default class SbAccessController {
                     note: `Odebrane razem z uprawnieniem: ${removed.map(describeSecretName).join(', ')}. ${CHANGE_SOURCE_PASSWORD}`,
                 });
         });
-        return (await this.repository.getByPersonId(personId))!;
+        const record = (await this.repository.getByPersonId(personId))!;
+        try {
+            await this.syncProjectsTeam(record);
+        } catch (error) {
+            throw new SbAccessError(
+                502,
+                sanitizeNote(
+                    `Poziomy zapisane, ale zapis do repozytorium projektów na GitHubie nie został zmieniony (${errorText(error)}). Zapisz poziomy ponownie.`,
+                ),
+            );
+        }
+        return record;
+    }
+
+    /**
+     * "repozytoria: zapis" = konto GitHub osoby w zespole SB_PROJECTS_TEAM; każdy inny poziom albo
+     * stan inny niż ACTIVE = poza zespołem. Bez przypisanego konta nie ma kogo dodać - nadrobi to
+     * przypisanie konta (linkGithub woła tę samą funkcję). Powtórka bez skutku.
+     */
+    private static async syncProjectsTeam(record: SbAccessRecord): Promise<void> {
+        if (!record.githubLogin) return;
+        const github = this.github();
+        if (record.statusCode === 'ACTIVE' && record.levels.repos === 'write')
+            await github.addTeamMember(SB_PROJECTS_TEAM, record.githubLogin);
+        else await github.removeTeamMember(SB_PROJECTS_TEAM, record.githubLogin);
     }
 
     /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
@@ -715,6 +740,17 @@ export default class SbAccessController {
             });
             notes.push(note);
         }
+        const linked = await this.repository.getByPersonId(personId);
+        if (linked?.levels.repos === 'write')
+            try {
+                await this.syncProjectsTeam(linked);
+            } catch (error) {
+                notes.push(
+                    sanitizeNote(
+                        `Zapis do repozytorium projektów nie nadany (${errorText(error)}) - zapisz poziomy ponownie`,
+                    ),
+                );
+            }
         return {
             result: 'OK',
             note: notes.length ? notes.join('; ') : 'Bez zmian: konto już przypisane',

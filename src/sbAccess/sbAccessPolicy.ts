@@ -9,6 +9,13 @@ import { SbAccessResult, SbAccessStatus } from './sbAccessTypes';
 /** Organizacja GitHub z repozytoriami SB; członkostwo = odczyt kanonu. */
 export const SB_GITHUB_ORG = 'envi-konsulting';
 
+/**
+ * Zespół GitHub z prawem zapisu WYŁĄCZNIE do repozytorium projektów (ENVI.SB.Projekty); kanonu
+ * (ENVI.SB) zespół nie ma. Członkostwo = poziom "repozytoria: zapis" z ekranu; instalator SB
+ * daje rolę "zespół", gdy GitHub potwierdza zapis do repozytorium projektów.
+ */
+export const SB_PROJECTS_TEAM = 'sb-zespol';
+
 /** Dysk współdzielony SB.ENVI (korzeń). Stała, bo zmiana dysku to zmiana modułu, nie środowiska. */
 export const SB_DRIVE_ID = '0AH3vXVwNH5M-Uk9PVA';
 

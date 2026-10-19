@@ -41,7 +41,7 @@ export default class SbGithubGateway {
     constructor(private readonly token: string) {}
 
     private async request(
-        method: 'GET' | 'POST' | 'DELETE',
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
         path: string,
         body?: Record<string, unknown>,
     ): Promise<{ status: number; data: any }> {
@@ -165,6 +165,34 @@ export default class SbGithubGateway {
             await this.request(
                 'DELETE',
                 this.orgPath(`/memberships/${encodeURIComponent(login)}`),
+            );
+            return true;
+        } catch (error) {
+            if (error instanceof GithubApiError && error.httpStatus === 404)
+                return false;
+            throw error;
+        }
+    }
+
+    /** Dodanie konta do zespołu organizacji (powtórka bez skutku). */
+    async addTeamMember(team: string, login: string): Promise<void> {
+        await this.request(
+            'PUT',
+            this.orgPath(
+                `/teams/${encodeURIComponent(team)}/memberships/${encodeURIComponent(login)}`,
+            ),
+            { role: 'member' },
+        );
+    }
+
+    /** Usunięcie konta z zespołu. false = nie był w zespole (404). */
+    async removeTeamMember(team: string, login: string): Promise<boolean> {
+        try {
+            await this.request(
+                'DELETE',
+                this.orgPath(
+                    `/teams/${encodeURIComponent(team)}/memberships/${encodeURIComponent(login)}`,
+                ),
             );
             return true;
         } catch (error) {

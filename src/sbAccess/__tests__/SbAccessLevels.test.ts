@@ -7,6 +7,7 @@ import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessValidator from '../SbAccessValidator';
+import SbGithubGateway from '../SbGithubGateway';
 import { SbAccessError } from '../sbAccessPolicy';
 
 const valid = { repos: 'write', psDb: 'ro', drive: 'connector', mail: ['faktury', 'chocianow-ik'] };
@@ -110,5 +111,47 @@ describe('Poziomy dostępu SB', () => {
         await expect(SbAccessController.setLevels(9, valid as any, 1)).rejects.toMatchObject({ status: 404 });
         expect(append).not.toHaveBeenCalled();
         expect(set).not.toHaveBeenCalled();
+    });
+
+    describe('repozytoria: zapis = zespół GitHub z zapisem do repozytorium projektów', () => {
+        const record = (statusCode: string, repos: string) =>
+            ({ personId: 5, statusCode, githubLogin: 'ania-envi', levels: { ...valid, repos } }) as any;
+        const run = async (state: any) => {
+            process.env.SB_GITHUB_INVITE_TOKEN = 'atrapa';
+            jest.spyOn(ToolsDb, 'transaction').mockImplementation(async (fn: any) => fn({}));
+            jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+            jest.spyOn(SbAccessEventRepository.prototype, 'append').mockResolvedValue(undefined);
+            jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(state);
+            const add = jest.spyOn(SbGithubGateway.prototype, 'addTeamMember').mockResolvedValue(undefined);
+            const remove = jest.spyOn(SbGithubGateway.prototype, 'removeTeamMember').mockResolvedValue(true);
+            return { add, remove };
+        };
+
+        it('aktywna osoba z poziomem zapis trafia do zespołu sb-zespol', async () => {
+            const { add, remove } = await run(record('ACTIVE', 'write'));
+            await SbAccessController.setLevels(5, { ...valid, repos: 'write' } as any, 1);
+            expect(add).toHaveBeenCalledWith('sb-zespol', 'ania-envi');
+            expect(remove).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['ACTIVE', 'read'],
+            ['ACTIVE', 'none'],
+            ['BLOCKED', 'write'],
+        ])('stan %s z poziomem %s = poza zespołem', async (status, repos) => {
+            const { add, remove } = await run(record(status, repos));
+            await SbAccessController.setLevels(5, { ...valid, repos } as any, 1);
+            expect(remove).toHaveBeenCalledWith('sb-zespol', 'ania-envi');
+            expect(add).not.toHaveBeenCalled();
+        });
+
+        it('błąd GitHuba: poziomy zostają zapisane, admin dostaje 502 z prośbą o ponowny zapis', async () => {
+            const { add } = await run(record('ACTIVE', 'write'));
+            add.mockRejectedValue(new Error('GitHub 403: Resource not accessible'));
+            await expect(
+                SbAccessController.setLevels(5, { ...valid, repos: 'write' } as any, 1),
+            ).rejects.toMatchObject({ status: 502, message: expect.stringContaining('Poziomy zapisane') });
+            expect(SbAccessRepository.prototype.setLevels).toHaveBeenCalled();
+        });
     });
 });
