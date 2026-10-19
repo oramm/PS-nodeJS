@@ -94,6 +94,7 @@ import ToolsDb from '../../tools/ToolsDb';
 import StaffMemberRepository from '../../staff/StaffMemberRepository';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessEventRepository from '../SbAccessEventRepository';
+import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessController from '../SbAccessController';
 import { SbAccessError, NOT_CONFIGURED_MESSAGE } from '../sbAccessPolicy';
 import { SbAccessRecord, SbAccessStatus } from '../sbAccessTypes';
@@ -177,6 +178,8 @@ const db = {
     states: new Map<number, SbAccessRecord>(),
     events: [] as any[],
     accounts: new Map<number, any>(),
+    /** Nazwy szyfrogramów haseł osób (SbAccessSecrets). */
+    secrets: new Map<number, string[]>(),
 };
 const TOKEN = 'github_pat_ATRAPA0123456789';
 const MANAGER = 125;
@@ -234,6 +237,7 @@ beforeEach(() => {
     gh.cancelRace = false;
     db.states.clear();
     db.events = [];
+    db.secrets.clear();
     db.accounts = new Map([
         [PERSON, { personId: PERSON, name: 'Jan', surname: 'Test', systemEmail: EMAIL, isActive: true, systemRoleName: 'ENVI_EMPLOYEE' }],
         [MANAGER, { personId: MANAGER, name: 'Kier', surname: 'Ownik', systemEmail: 'k@example.test', isActive: true, systemRoleName: 'ENVI_MANAGER' }],
@@ -270,6 +274,14 @@ beforeEach(() => {
     jest.spyOn(SbAccessEventRepository.prototype, 'append').mockImplementation(async (_conn: any, input: any) => {
         db.events.push(input);
     });
+    jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockImplementation(
+        async (_conn: any, personId: number, names?: string[]) => {
+            const held = db.secrets.get(personId) ?? [];
+            const removed = names ? held.filter((name) => names.includes(name)) : held;
+            db.secrets.set(personId, held.filter((name) => !removed.includes(name)));
+            return removed;
+        },
+    );
     jest.spyOn(StaffMemberRepository, 'hasSbAccessManagement').mockImplementation(
         async (personId: number) => personId === MANAGER,
     );
@@ -879,5 +891,67 @@ describe('SbAccessController - poprawki po przeglądzie', () => {
         gh.fail = { method: 'POST', pattern: /invitations$/, status: 422, body: { message: 'Over invitation rate limit' } };
         const other = await SbAccessController.invite(PERSON, MANAGER);
         expect(other.note).toContain('GitHub: błąd - GitHub 422: Over invitation rate limit');
+    });
+});
+
+describe('SbAccessController - blokada i odebranie kasują szyfrogramy haseł', () => {
+    const SECRETS = ['baza-ps', 'poczta-faktury'];
+
+    it.each([
+        ['block', 'BLOCK', 'BLOCKED', 'blokadą'],
+        ['revoke', 'REVOKE', 'REVOKED', 'odebraniem'],
+    ] as const)('%s: stan, token i szyfrogramy w jednej transakcji; TAKE_SECRET po zdarzeniu operacji', async (op, action, status, word) => {
+        seedExternal('ACTIVE');
+        db.secrets.set(PERSON, [...SECRETS]);
+        db.secrets.set(200, ['baza-ps']); // inna osoba - nietknięta
+        const transaction = ToolsDb.transaction as unknown as jest.Mock;
+        transaction.mockClear();
+        const outcome = await run(op);
+        expect(outcome.result).toBe('OK');
+        expect(db.states.get(PERSON)?.statusCode).toBe(status);
+        expect(db.secrets.get(PERSON)).toEqual([]);
+        expect(db.secrets.get(200)).toEqual(['baza-ps']);
+        expect(transaction).toHaveBeenCalledTimes(1);
+        expect(db.events.slice(-2).map((e) => [e.actionCode, e.resultCode])).toEqual([[action, 'OK'], ['TAKE_SECRET', 'OK']]);
+        const take = db.events.at(-1);
+        expect(take).toMatchObject({ personId: PERSON, requestedByPersonId: MANAGER });
+        expect(take.note).toContain(word);
+        expect(take.note).toContain('baza PS');
+        expect(take.note).toMatch(/Zmień hasło źródłowe/);
+    });
+
+    it('PARTIAL też zmienia stan, więc szyfrogramy znikają', async () => {
+        seedExternal('ACTIVE');
+        db.secrets.set(PERSON, [...SECRETS]);
+        drive.fail = { op: 'delete', code: 500 };
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.result).toBe('PARTIAL');
+        expect(db.secrets.get(PERSON)).toEqual([]);
+        expect(db.events.at(-1)?.actionCode).toBe('TAKE_SECRET');
+    });
+
+    it('FAILED = nic się nie zmieniło: stan i szyfrogramy zostają, bez TAKE_SECRET', async () => {
+        seedExternal('ACTIVE');
+        db.secrets.set(PERSON, [...SECRETS]);
+        gh.fail = { method: 'GET', pattern: /invitations$/, status: 500 };
+        drive.fail = { op: '*', code: 500 };
+        const outcome = await SbAccessController.block(PERSON, MANAGER);
+        expect(outcome.result).toBe('FAILED');
+        expect(db.states.get(PERSON)?.statusCode).toBe('ACTIVE');
+        expect(db.secrets.get(PERSON)).toEqual(SECRETS);
+        expect(db.events.map((e) => e.actionCode)).not.toContain('TAKE_SECRET');
+        expect(SbAccessSecretRepository.prototype.remove).not.toHaveBeenCalled();
+    });
+
+    it('bez haseł do skasowania: brak pustego zdarzenia TAKE_SECRET; przejście do stanu aktywnego haseł nie rusza', async () => {
+        seedExternal('ACTIVE');
+        await SbAccessController.block(PERSON, MANAGER);
+        expect(db.events.map((e) => e.actionCode)).toEqual(['BLOCK']);
+        db.secrets.set(PERSON, ['baza-ps']);
+        gh.members.set('Osoba-GH', { role: 'member' });
+        await SbAccessController.unblock(PERSON, MANAGER);
+        expect(db.states.get(PERSON)?.statusCode).toBe('ACTIVE');
+        expect(db.secrets.get(PERSON)).toEqual(['baza-ps']);
+        expect(db.events.map((e) => e.actionCode)).not.toContain('TAKE_SECRET');
     });
 });

@@ -104,9 +104,11 @@ describe('Poziomy dostępu SB', () => {
 
     it('kontroler: osoba bez wpisu -> 404 i brak zdarzenia', async () => {
         jest.spyOn(ToolsDb, 'transaction').mockImplementation(async (fn: any) => fn({}));
-        jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(false);
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(null);
+        const set = jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(false);
         const append = jest.spyOn(SbAccessEventRepository.prototype, 'append');
         await expect(SbAccessController.setLevels(9, valid as any, 1)).rejects.toMatchObject({ status: 404 });
         expect(append).not.toHaveBeenCalled();
+        expect(set).not.toHaveBeenCalled();
     });
 });

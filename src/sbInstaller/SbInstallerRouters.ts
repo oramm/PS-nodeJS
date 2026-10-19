@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { app } from '../index';
 import SbAccessController from '../sbAccess/SbAccessController';
+import { isFromFrontOrigin } from '../setup/frontOrigins';
 import {
     INSTALLER_FILE_NAME,
     buildInstallerZip,
@@ -43,6 +44,14 @@ app.use('/sbInstaller', async (req, res, next) => {
 
 app.get('/sbInstaller/paczka', async (req: Request, res: Response, next) => {
     try {
+        // Pobranie wydaje nowy token i kasuje poprzedni, a ciasteczko sesji idzie takze z obcych
+        // stron (sameSite none) - obca strona (<img src=.../paczka>) nie moze wiec uniewaznic tokenu.
+        if (!isFromFrontOrigin(req.headers)) {
+            res.status(403).send({
+                errorMessage: 'Pobierz instalator przyciskiem "Pobierz instalator" na stronie Second Brain w PS',
+            });
+            return;
+        }
         const user = req.session.userData;
         // Każde pobranie = nowy token urządzenia (SBD-2); poprzedni przestaje działać. Tokenu nie logujemy.
         const deviceToken = await SbAccessController.issueDeviceToken(user!.enviId);

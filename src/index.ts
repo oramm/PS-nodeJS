@@ -1,5 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
+import { FRONT_ORIGINS } from './setup/frontOrigins';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
 import MongoStore from 'connect-mongo';
@@ -342,14 +343,7 @@ async function runBugRetention(): Promise<void> {
 }
 
 const corsOptions = {
-    origin: [
-        'http://localhost', // Port 80 (domyślny)
-        'http://localhost:9000', // Apache - MUSISZ dodać jawnie
-        'http://localhost:9010', // front dev na porcie zapasowym, gdy 9000 jest zajęty
-                                 // przez równoległą sesję (przegląd wizualny UI lokalnie)
-        'https://erp-envi.herokuapp.com',
-        'https://ps.envi.com.pl',
-    ],
+    origin: [...FRONT_ORIGINS],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 };

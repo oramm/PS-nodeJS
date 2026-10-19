@@ -7,6 +7,7 @@ jest.mock('../../index', () => ({
     app: { get: jest.fn(), use: jest.fn() },
 }));
 
+import SbAccessController from '../../sbAccess/SbAccessController';
 import SbAccessRepository from '../../sbAccess/SbAccessRepository';
 import { SbAccessRecord, SbPersonAccount } from '../../sbAccess/sbAccessTypes';
 
@@ -26,6 +27,7 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
     let packageOrder: number;
     let infoOrder: number;
     let info: (req: any, res: any, next: any) => void;
+    let paczka: (req: any, res: any, next: any) => Promise<void>;
     let account: SbPersonAccount | null;
     let record: SbAccessRecord | null;
 
@@ -38,6 +40,7 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
         const get = app.get as unknown as jest.Mock;
         const getIndex = get.mock.calls.findIndex((call: any) => call[0] === '/sbInstaller/paczka');
         packageOrder = get.mock.invocationCallOrder[getIndex];
+        paczka = get.mock.calls[getIndex][1] as any;
         const infoIndex = get.mock.calls.findIndex((call: any) => call[0] === '/sbInstaller/info');
         infoOrder = get.mock.invocationCallOrder[infoIndex];
         info = get.mock.calls[infoIndex][1] as any;
@@ -128,5 +131,47 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
         expect(version).toMatch(/^\d+\.\d+\.\d+$/);
         expect(cmd).toContain(`set "SB_INSTALATOR_WERSJA=${version}"`);
         expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+    });
+    describe('paczka - tylko klikniecie na stronie PS wydaje nowy token', () => {
+        function makeDownloadRes() {
+            const res: any = makeRes();
+            res.attachment = jest.fn();
+            res.setHeader = jest.fn();
+            return res;
+        }
+
+        it.each([
+            [{}, 'bez Origin i Referer'],
+            [{ referer: 'https://obca.example.com/strona' }, 'Referer obcej strony'],
+            [{ origin: 'https://obca.example.com' }, 'Origin obcej strony'],
+            [{ origin: 'https://obca.example.com', referer: 'https://ps.envi.com.pl/' }, 'obcy Origin ma pierwszenstwo'],
+            [{ referer: 'https://ps.envi.com.pl.obca.example.com/' }, 'podobna nazwa hosta'],
+            [{ referer: 'nie-adres' }, 'Referer nie jest adresem'],
+            [{ referer: 'https://ps.envi.com.pl/', 'sec-fetch-site': 'cross-site' }, 'kontrola: cross-site z PS przechodzi'],
+        ])('%j (%s)', async (headers, label) => {
+            const issue = jest.spyOn(SbAccessController, 'issueDeviceToken').mockResolvedValue('t'.repeat(43));
+            const res = makeDownloadRes();
+            const next = jest.fn();
+            await paczka({ headers, session: { userData: USER } }, res, next);
+            if (label.startsWith('kontrola')) {
+                expect(issue).toHaveBeenCalledWith(USER.enviId);
+                expect(res.attachment).toHaveBeenCalled();
+            } else {
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(issue).not.toHaveBeenCalled();
+                expect(res.attachment).not.toHaveBeenCalled();
+            }
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it.each(['https://ps.envi.com.pl/#/sbInstaller', 'http://localhost:9000/'])(
+            'Referer frontu %s -> paczka z nowym tokenem', async (referer) => {
+                const issue = jest.spyOn(SbAccessController, 'issueDeviceToken').mockResolvedValue('t'.repeat(43));
+                const res = makeDownloadRes();
+                await paczka({ headers: { referer }, session: { userData: USER } }, res, jest.fn());
+                expect(issue).toHaveBeenCalledTimes(1);
+                expect(res.status).not.toHaveBeenCalled();
+                expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
+            });
     });
 });

@@ -2,7 +2,7 @@ import ToolsDb from '../tools/ToolsDb';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import { UserData } from '../types/sessionTypes';
-import SbAccessRepository from './SbAccessRepository';
+import SbAccessRepository, { TOKEN_CLEARING_STATUSES } from './SbAccessRepository';
 import SbAccessEventRepository from './SbAccessEventRepository';
 import SbGithubGateway, {
     GithubApiError,
@@ -135,6 +135,19 @@ export default class SbAccessController {
                 requestedByPersonId: input.requestedByPersonId,
                 note: input.note,
             });
+            // Blokada i odebranie: razem z tokenem (upsertState) znikają szyfrogramy haseł osoby.
+            // Bez zmiany stanu (FAILED) nic się nie dzieje - stan i hasła zostają jak były.
+            if (input.state && TOKEN_CLEARING_STATUSES.includes(input.state.statusCode)) {
+                const removed = await this.secrets.remove(conn, input.personId);
+                if (removed.length)
+                    await this.events.append(conn, {
+                        personId: input.personId,
+                        actionCode: 'TAKE_SECRET',
+                        resultCode: 'OK',
+                        requestedByPersonId: input.requestedByPersonId,
+                        note: `Odebrane razem z ${input.state.statusCode === 'BLOCKED' ? 'blokadą' : 'odebraniem'} dostępu do SB: ${removed.map(describeSecretName).join(', ')}. ${CHANGE_SOURCE_PASSWORD}`,
+                    });
+            }
         });
     }
 
@@ -153,12 +166,16 @@ export default class SbAccessController {
         levels: SbAccessLevels,
         requestedByPersonId: number,
     ): Promise<SbAccessRecord> {
-        // Hasła, których nowe uprawnienia już nie dają, wypadają w tej samej transakcji.
+        // Hasła, których nowe uprawnienia już nie dają, wypadają w tej samej transakcji. Listę
+        // liczymy pod blokadą wiersza osoby (jak giveSecret), żeby równoległe udostępnienie
+        // według starych poziomów nie zostawiło hasła spoza nowych uprawnień.
         const expected = expectedSecretNames(levels);
-        const stale = (await this.secrets.listByPersonId(personId))
-            .map((secret) => secret.name)
-            .filter((name) => !expected.includes(name));
         await ToolsDb.transaction<void>(async (conn) => {
+            if (!(await this.repository.getByPersonId(personId, conn, true)))
+                throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            const stale = (await this.secrets.listByPersonId(personId, conn))
+                .map((secret) => secret.name)
+                .filter((name) => !expected.includes(name));
             if (!(await this.repository.setLevels(conn, personId, levels)))
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
             await this.events.append(conn, {

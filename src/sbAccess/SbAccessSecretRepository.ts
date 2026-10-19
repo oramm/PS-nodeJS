@@ -18,7 +18,8 @@ async function quiet<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export default class SbAccessSecretRepository {
-    async listByPersonId(personId: number): Promise<SbSecretRecord[]> {
+    /** `conn` = odczyt wewnątrz transakcji (po blokadzie wiersza osoby). */
+    async listByPersonId(personId: number, conn?: mysql.PoolConnection): Promise<SbSecretRecord[]> {
         return quiet(
             async () =>
                 (await ToolsDb.getQueryCallbackAsync(
@@ -26,7 +27,7 @@ export default class SbAccessSecretRepository {
                         SharedByPersonId AS sharedByPersonId,
                         CreatedAt AS createdAt, UpdatedAt AS updatedAt
                      FROM SbAccessSecrets WHERE PersonId = ? ORDER BY Name`,
-                    undefined,
+                    conn,
                     [personId],
                 )) as SbSecretRecord[],
         );

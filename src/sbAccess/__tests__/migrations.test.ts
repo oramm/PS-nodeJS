@@ -76,4 +76,10 @@ describe('Migracje SB (bez połączenia z bazą)', () => {
         ).toHaveLength(2);
         expect(source).not.toMatch(/UPDATE|DELETE/i);
     });
+
+    it('006: skrót tokenu urządzenia jednoznaczny (UNIQUE dopuszcza wiele NULL), idempotentnie, bez zmian danych', () => {
+        const source = sql('sbAccess/migrations/006_sb_access_device_token_unique.sql');
+        expect(source).toMatch(/ADD UNIQUE KEY IF NOT EXISTS uq_sbaccess_devicetokenhash \(DeviceTokenHash\)/);
+        expect(source).not.toMatch(/UPDATE\s+\w+\s+SET|DELETE|DROP|INSERT/i);
+    });
 });

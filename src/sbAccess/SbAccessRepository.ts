@@ -39,8 +39,11 @@ function mapState(row: SbAccessRecord): SbAccessRecord {
     };
 }
 
-/** Stany, w których token urządzenia przestaje istnieć (odebranie albo blokada dostępu SB). */
-const TOKEN_CLEARING_STATUSES = ['BLOCKED', 'REVOKED'];
+/**
+ * Stany, w których token urządzenia przestaje istnieć (odebranie albo blokada dostępu SB).
+ * W tych samych stanach kontroler kasuje szyfrogramy haseł osoby (ta sama transakcja).
+ */
+export const TOKEN_CLEARING_STATUSES: readonly string[] = ['BLOCKED', 'REVOKED'];
 
 export default class SbAccessRepository {
     /** `lock` = SELECT ... FOR UPDATE (tylko w transakcji; szereguje zmianę klucza i udostępnienie hasła). */

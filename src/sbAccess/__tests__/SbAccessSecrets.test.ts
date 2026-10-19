@@ -226,13 +226,18 @@ describe('Hasła SB - kontroler', () => {
     });
 
     it('zmiana uprawnień zabiera hasła, których nowe poziomy nie dają (TAKE_SECRET w tej samej transakcji)', async () => {
-        jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
-        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(record());
-        jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([
+        const setLevels = jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+        const get = jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(record());
+        const list = jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([
             { name: 'baza-ps' }, { name: 'poczta-faktury' },
         ] as any);
         remove.mockResolvedValue(['baza-ps']);
         await SbAccessController.setLevels(131, { ...LEVELS, psDb: 'none', mail: ['faktury'] } as any, 1);
+        // Lista do skasowania liczona w transakcji, po blokadzie wiersza osoby (jak giveSecret).
+        expect(get.mock.calls[0]).toEqual([131, conn, true]);
+        expect(list).toHaveBeenCalledWith(131, conn);
+        expect(get.mock.invocationCallOrder[0]).toBeLessThan(list.mock.invocationCallOrder[0]);
+        expect(list.mock.invocationCallOrder[0]).toBeLessThan(setLevels.mock.invocationCallOrder[0]);
         expect(remove).toHaveBeenCalledWith(conn, 131, ['baza-ps']);
         expect(append.mock.calls.map((call: any) => call[1].actionCode)).toEqual(['SET_LEVELS', 'TAKE_SECRET']);
     });
