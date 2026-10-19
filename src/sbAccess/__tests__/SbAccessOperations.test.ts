@@ -193,6 +193,7 @@ function seed(status: SbAccessStatus | null, extra: Partial<SbAccessRecord> = {}
         githubInvitationId: null,
         drivePermissionId: null,
         isGrantedManually: false,
+        levels: { repos: 'none', psDb: 'none', drive: 'none', mail: [] },
         createdAt: new Date(),
         updatedAt: new Date(),
         ...extra,

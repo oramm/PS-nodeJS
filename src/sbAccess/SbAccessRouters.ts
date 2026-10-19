@@ -165,3 +165,14 @@ app.put('/sbAccess/:personId/githubAccount', async (req, res, next) => {
         handleError(error, res, next);
     }
 });
+
+/** Admin zmienia poziomy dostępu (repozytoria, poczta, baza PS, Dysk) wybranej osoby. */
+app.put('/sbAccess/:personId/levels', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        const levels = SbAccessValidator.parseLevels(req.parsedBody);
+        res.send(await SbAccessController.setLevels(personId, levels, requesterId(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});

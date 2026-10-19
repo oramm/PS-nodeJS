@@ -84,7 +84,8 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
         if (status) record = {
             id: 1, personId: USER.enviId, statusCode: status,
             githubLogin: null, githubInvitationId: null, drivePermissionId: null,
-            isGrantedManually: false, createdAt: new Date(), updatedAt: new Date(),
+            isGrantedManually: false, levels: { repos: 'none', psDb: 'none', drive: 'none', mail: [] },
+            createdAt: new Date(), updatedAt: new Date(),
         };
         const res = makeRes();
         const next = jest.fn();

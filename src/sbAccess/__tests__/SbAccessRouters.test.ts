@@ -86,6 +86,7 @@ describe('SbAccessRouters - bramka i trasy', () => {
             ['post', '/sbAccess/:personId/unblock'],
             ['post', '/sbAccess/:personId/revoke'],
             ['put', '/sbAccess/:personId/githubAccount'],
+            ['put', '/sbAccess/:personId/levels'],
         ])
             expect(route(method, path).order).toBeGreaterThan(guardOrder);
         // Nic poza tymi dwiema trasami nie jest zarejestrowane przed bramką.

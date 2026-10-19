@@ -1,6 +1,8 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
+import SbAccessValidator from './SbAccessValidator';
 import {
+    SbAccessLevels,
     SbAccessRecord,
     SbAccessStateInput,
     SbPersonAccount,
@@ -9,10 +11,15 @@ import {
 const STATE_COLUMNS = `s.Id AS id, s.PersonId AS personId, s.StatusCode AS statusCode,
     s.GithubLogin AS githubLogin, s.GithubInvitationId AS githubInvitationId,
     s.DrivePermissionId AS drivePermissionId, s.IsGrantedManually AS isGrantedManually,
-    s.CreatedAt AS createdAt, s.UpdatedAt AS updatedAt`;
+    s.Levels AS levels, s.CreatedAt AS createdAt, s.UpdatedAt AS updatedAt`;
 
 function mapState(row: SbAccessRecord): SbAccessRecord {
-    return { ...row, isGrantedManually: !!row.isGrantedManually };
+    return {
+        ...row,
+        isGrantedManually: !!row.isGrantedManually,
+        ...(row.canManageSb !== undefined && { canManageSb: !!row.canManageSb }),
+        levels: SbAccessValidator.levelsFromDb(row.levels),
+    };
 }
 
 export default class SbAccessRepository {
@@ -40,10 +47,34 @@ export default class SbAccessRepository {
         return rows.length ? mapState(rows[0]) : null;
     }
 
-    async list(): Promise<SbAccessRecord[]> {
+    /** Zapis poziomów istniejącego wpisu; false, gdy osoba nie ma wpisu. */
+    async setLevels(
+        conn: mysql.PoolConnection,
+        personId: number,
+        levels: SbAccessLevels,
+    ): Promise<boolean> {
+        if (!conn)
+            throw new Error('Zapis poziomów SB wymaga połączenia transakcji');
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            'SELECT Id FROM SbAccess WHERE PersonId = ? FOR UPDATE',
+            conn,
+            [personId],
+        )) as { Id: number }[];
+        if (!rows.length) return false;
+        await ToolsDb.executeSQL(
+            'UPDATE SbAccess SET Levels = ? WHERE PersonId = ?',
+            [JSON.stringify(levels), personId],
+            conn,
+        );
+        return true;
+    }
+
+    async list():Promise<SbAccessRecord[]> {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT ${STATE_COLUMNS}, p.Name AS name, p.Surname AS surname,
-                pa.SystemEmail AS systemEmail
+                pa.SystemEmail AS systemEmail,
+                EXISTS (SELECT 1 FROM StaffMembers sm WHERE sm.PersonId = s.PersonId
+                    AND sm.CanManageSbAccess = 1 AND sm.IsActive = 1) AS canManageSb
              FROM SbAccess s
              JOIN Persons p ON p.Id = s.PersonId
              LEFT JOIN PersonAccounts pa ON pa.PersonId = s.PersonId

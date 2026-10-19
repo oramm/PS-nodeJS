@@ -26,6 +26,7 @@ import {
     SB_ACCESS_RESULTS,
     SB_ACCESS_STATUSES,
     SbAccessAction,
+    SbAccessLevels,
     SbAccessOperationOutcome,
     SbAccessRecord,
     SbAccessStateInput,
@@ -119,6 +120,35 @@ export default class SbAccessController {
                 note: input.note,
             });
         });
+    }
+
+    /** Opis poziomów do historii: po ludzku, bez sekretów. */
+    static describeLevels(levels: SbAccessLevels): string {
+        const repos = { none: 'brak', read: 'odczyt', write: 'zapis' }[levels.repos];
+        const psDb = { none: 'brak', ro: 'odczyt', rw: 'zapis' }[levels.psDb];
+        const drive = { none: 'brak', connector: 'konektor' }[levels.drive];
+        const mail = levels.mail.length ? levels.mail.join(', ') : 'brak';
+        return `repozytoria: ${repos}; baza PS: ${psDb}; Dysk: ${drive}; poczta: ${mail}`;
+    }
+
+    /** Zmiana poziomów osoby z wpisem w rejestrze; poziomy i zdarzenie w jednej transakcji. */
+    static async setLevels(
+        personId: number,
+        levels: SbAccessLevels,
+        requestedByPersonId: number,
+    ): Promise<SbAccessRecord> {
+        await ToolsDb.transaction<void>(async (conn) => {
+            if (!(await this.repository.setLevels(conn, personId, levels)))
+                throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            await this.events.append(conn, {
+                personId,
+                actionCode: 'SET_LEVELS',
+                resultCode: 'OK',
+                requestedByPersonId,
+                note: this.describeLevels(levels),
+            });
+        });
+        return (await this.repository.getByPersonId(personId))!;
     }
 
     static list() {

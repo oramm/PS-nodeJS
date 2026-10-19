@@ -101,6 +101,7 @@ describe('SbAccessRepository', () => {
             'pa.SystemEmail AS systemEmail',
         );
         expect(query.mock.calls[2][0]).toContain('LEFT JOIN PersonAccounts');
+        expect(query.mock.calls[2][0]).toContain('sm.CanManageSbAccess = 1');
         expect(query.mock.calls[2][0]).toContain('ORDER BY p.Surname, p.Name');
         query.mockResolvedValue([] as any);
         expect(await repository.getByPersonId(17)).toBeNull();
