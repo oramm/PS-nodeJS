@@ -506,6 +506,8 @@ export interface LetterEventData extends RepositoryDataItem {
     recipientsJSON?: string | null;
     _gdFilesBasicData?: drive_v3.Schema$File[];
     gdFilesJSON?: string | null;
+    /** 1 = zdarzenie zapisał agent osoby (SBZ-1); brak = nie zapisuj kolumny (domyślnie 0). */
+    isByAgent?: 1;
 }
 
 export interface EntityData extends RepositoryDataItem {

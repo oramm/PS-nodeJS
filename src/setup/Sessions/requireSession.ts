@@ -79,6 +79,8 @@ const SIGNING_PROGRAM_ROUTES: { method: string; pattern: RegExp }[] = [
 const SB_DEVICE_ROUTES: { method: string; path: string }[] = [
     { method: 'PUT', path: '/sbaccess/me/publickey' },
     { method: 'GET', path: '/sbaccess/me/secrets' },
+    // Rejestracja skrótu osobistego klucza agenta (SBZ-1).
+    { method: 'PUT', path: '/sbaccess/me/agentkey' },
     // Raport zdrowia komputera (SBD-4a): wysyłka raz dziennie i lekkie pytanie o prośbę admina.
     { method: 'POST', path: '/sbaccess/me/health' },
     { method: 'GET', path: '/sbaccess/me/healthrequest' },

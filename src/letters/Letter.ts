@@ -135,6 +135,8 @@ export default abstract class Letter
             eventType: Setup.LetterEventType.CREATED,
 
             _editor,
+            // SBZ-1: agent osoby zapisuje jako ta osoba, więc znak agenta idzie do zdarzenia.
+            ...(userData.isPersonAgent && { isByAgent: 1 as const }),
         });
         await LetterEventsController.addNew(this._lastEvent);
     }

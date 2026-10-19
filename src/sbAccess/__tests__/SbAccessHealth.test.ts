@@ -354,7 +354,7 @@ describe('Raport zdrowia - trasy i uprawnienia', () => {
     it('pracownik nie podejrzy cudzego raportu: jedyna trasa odczytu jest za bramką, a trasy "me" nie biorą personId', () => {
         const mePaths = routes.filter((r) => r.path.startsWith('/sbAccess/me/')).map((r) => r.path).sort();
         expect(mePaths).toEqual(
-            ['/sbAccess/me/githubAccount', '/sbAccess/me/health', '/sbAccess/me/healthRequest', '/sbAccess/me/publicKey', '/sbAccess/me/secrets'].sort(),
+            ['/sbAccess/me/agentKey', '/sbAccess/me/githubAccount', '/sbAccess/me/health', '/sbAccess/me/healthRequest', '/sbAccess/me/publicKey', '/sbAccess/me/secrets'].sort(),
         );
         expect(routes.filter((r) => r.path.startsWith('/sbAccess/me/')).every((r) => r.order < guardOrder)).toBe(true);
         expect(route('get', '/sbAccess/:personId/healthReport').order).toBeGreaterThan(guardOrder);

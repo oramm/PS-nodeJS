@@ -93,8 +93,8 @@ describe('SbAccessRouters - bramka i trasy', () => {
             ['delete', '/sbAccess/:personId/secrets/:name'],
         ])
             expect(route(method, path).order).toBeGreaterThan(guardOrder);
-        // Nic poza trasami "dla każdego zalogowanego / instalatora" (access, me/githubAccount, publicKey, secrets, health, healthRequest) nie stoi przed bramką.
-        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(6);
+        // Nic poza trasami "dla każdego zalogowanego / instalatora" (access, me/githubAccount, publicKey, agentKey, secrets, health, healthRequest) nie stoi przed bramką.
+        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(7);
     });
 
     it('bez sesji -> 401', async () => {

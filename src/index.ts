@@ -19,6 +19,7 @@ import agentTokenAuth, {
     reportAgentTokenConfig,
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
+import sbAgentKeyAuth from './sbAccess/sbAgentKeyAuth';
 import requireSession from './setup/Sessions/requireSession';
 import requirePrivacyAcknowledgement from './setup/Sessions/requirePrivacyAcknowledgement';
 import { resolveSessionSecrets } from './setup/Sessions/sessionSecret';
@@ -546,6 +547,10 @@ app.use(
 // LIS-2 — headless agent entry. Must sit after session() and before the routes, so the
 // agent reaches the same controllers as the UI. Inactive without AGENT_API_TOKEN.
 app.use(agentTokenAuth);
+
+// SBZ-1 — agent pracownika jego osobistym kluczem: sesja tej osoby ze znakiem agenta.
+// Ten sam punkt co agentTokenAuth: po session(), przed denyDestructiveForAgent i trasami.
+app.use(sbAgentKeyAuth);
 
 // LIS-5 — the agent creates and edits, it never destroys. Must sit directly after the layer
 // that grants the agent identity and before every route, because the identity is what this

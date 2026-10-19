@@ -18,6 +18,7 @@ export const SB_ACCESS_ACTIONS = [
     'TAKE_SECRET',
     'ISSUE_TOKEN',
     'REQUEST_HEALTH',
+    'SET_AGENT_KEY',
 ] as const;
 export const SB_ACCESS_RESULTS = ['OK', 'PARTIAL', 'FAILED'] as const;
 

@@ -18,6 +18,8 @@ export interface UserData {
     picture: string;
     systemRoleName: SystemRoleName;
     systemRoleId: number;
+    /** Sesję założył agent tej osoby jej kluczem (SBZ-1, src/sbAccess/sbAgentKeyAuth.ts). */
+    isPersonAgent?: boolean;
 }
 
 export enum SystemRoleName {

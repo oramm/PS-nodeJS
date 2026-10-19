@@ -308,6 +308,27 @@ export default class SbAccessController {
         return { changed: true, ...view, removedSecrets: removed.length };
     }
 
+    /**
+     * Skrót osobistego klucza agenta (SBZ-1). Instalator przysyła tylko skrót; ten sam skrót
+     * ponownie = bez zmian. Klucz działa dopiero przy ACTIVE i "baza PS: zapis" (sbAgentKeyAuth),
+     * więc rejestracja nie wymaga poziomu: admin może go nadać później.
+     */
+    static async setOwnAgentKey(record: SbAccessRecord, hash: string): Promise<{ changed: boolean }> {
+        if ((await this.repository.getAgentKeyHash(record.personId)) === hash) return { changed: false };
+        await ToolsDb.transaction<void>(async (conn) => {
+            if (!(await this.repository.setAgentKeyHash(conn, record.personId, hash)))
+                throw new SbAccessError(409, 'Ten klucz agenta jest już zarejestrowany. Wylosuj nowy.');
+            await this.events.append(conn, {
+                personId: record.personId,
+                actionCode: 'SET_AGENT_KEY',
+                resultCode: 'OK',
+                requestedByPersonId: record.personId,
+                note: 'Nowy klucz agenta z komputera osoby, poprzedni unieważniony.',
+            });
+        });
+        return { changed: true };
+    }
+
     /** Własne szyfrogramy (tylko te, które wynikają z bieżących uprawnień). */
     static async listOwnSecrets(record: SbAccessRecord) {
         const expected = expectedSecretNames(record.levels);

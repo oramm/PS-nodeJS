@@ -57,7 +57,9 @@ describe('SbAccessRepository', () => {
         expect(sql).toContain('DrivePermissionId = ?');
         // Blokada kasuje też token urządzenia instalatora (SBD-2).
         expect(sql).toContain('DeviceTokenHash = ?');
-        expect(params).toEqual(['BLOCKED', null, null, null, null, 17]);
+        // ...i osobisty klucz agenta (SBZ-1).
+        expect(sql).toContain('AgentKeyHash = ?');
+        expect(params).toEqual(['BLOCKED', null, null, null, null, null, null, 17]);
         expect(usedConn).toBe(conn);
     });
 

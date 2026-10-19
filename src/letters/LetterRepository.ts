@@ -253,6 +253,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 -- i nie autora wiersza) — z niej liczy się znacznik pisma agenta.
                 -- Tylko konto (ROD-5): zaszła kolumna Persons.SystemEmail nie jest czytana.
                 CreationEventEditorAccount.SystemEmail AS CreationEventEditorSystemEmail,
+                CreationLetterEvent.IsByAgent AS CreationEventIsByAgent,
     
                 -- Pobieranie powiązanych encji i spraw
                 GROUP_CONCAT(Entities.Name SEPARATOR ', ') AS EntityNames,
@@ -502,9 +503,10 @@ export default class LetterRepository extends BaseRepository<Letter> {
             responseDueDate: row.ResponseDueDate,
             responseIKNumber: row.ResponseIKNumber,
             addedToApprovedDocumentation: !!row.AddedToApprovedDocumentation,
-            _isCreatedByAgent: this.isAgentSystemEmail(
-                row.CreationEventEditorSystemEmail
-            ),
+            // Agent właściciela po koncie, agent pracownika po znaku zdarzenia (SBZ-1).
+            _isCreatedByAgent:
+                this.isAgentSystemEmail(row.CreationEventEditorSystemEmail) ||
+                !!row.CreationEventIsByAgent,
 
             _cases: _casesAssociationsPerLetter.map((item) => item._case),
             _entitiesMain: _letterEntitiesMainPerLetter.map(

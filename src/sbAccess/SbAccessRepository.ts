@@ -122,6 +122,66 @@ export default class SbAccessRepository {
         return result.affectedRows === 1;
     }
 
+    /** Skrót klucza agenta osoby (SBZ-1); false, gdy skrót już jest u kogoś innego (UNIQUE). */
+    async setAgentKeyHash(
+        conn: mysql.PoolConnection,
+        personId: number,
+        hash: string,
+    ): Promise<boolean> {
+        if (!conn) throw new Error('Zapis klucza agenta SB wymaga połączenia transakcji');
+        try {
+            await ToolsDb.getQueryCallbackAsync(
+                'UPDATE SbAccess SET AgentKeyHash = ?, AgentKeySetAt = NOW() WHERE PersonId = ?',
+                conn,
+                [hash, personId],
+            );
+            return true;
+        } catch (error: any) {
+            if (error?.code === 'ER_DUP_ENTRY') return false;
+            throw error;
+        }
+    }
+
+    async getAgentKeyHash(personId: number): Promise<string | null> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            'SELECT AgentKeyHash AS hash FROM SbAccess WHERE PersonId = ?',
+            undefined,
+            [personId],
+        )) as { hash: string | null }[];
+        return rows[0]?.hash ?? null;
+    }
+
+    /**
+     * Tożsamość agenta osoby po skrócie klucza (warstwa sbAgentKeyAuth). Zwraca wiersz tylko,
+     * gdy wpis SB jest ACTIVE i konto PS aktywne; inaczej null. Poziom "baza PS" ocenia warstwa.
+     * Bez pamięci podręcznej: blokada albo zmiana poziomu działa od następnego żądania.
+     */
+    async getAgentByKeyHash(hash: string): Promise<{
+        personId: number;
+        systemEmail: string;
+        name: string;
+        surname: string;
+        systemRoleId: number;
+        systemRoleName: string;
+        psDb: SbAccessLevels['psDb'];
+    } | null> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT s.PersonId AS personId, pa.SystemEmail AS systemEmail, p.Name AS name,
+                p.Surname AS surname, pa.SystemRoleId AS systemRoleId, sr.Name AS systemRoleName,
+                s.Levels AS levels
+             FROM SbAccess s
+             JOIN Persons p ON p.Id = s.PersonId
+             JOIN PersonAccounts pa ON pa.PersonId = s.PersonId AND pa.IsActive = 1
+             JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
+             WHERE s.AgentKeyHash = ? AND s.StatusCode = 'ACTIVE'`,
+            undefined,
+            [hash],
+        )) as any[];
+        if (rows.length !== 1) return null;
+        const { levels, ...agent } = rows[0];
+        return { ...agent, psDb: SbAccessValidator.levelsFromDb(levels).psDb };
+    }
+
     async setPublicKey(
         conn: mysql.PoolConnection,
         personId: number,
@@ -298,7 +358,13 @@ export default class SbAccessRepository {
         }
         // Blokada i odebranie unieważniają token instalatora; po odblokowaniu pracownik pobiera paczkę ponownie.
         if (TOKEN_CLEARING_STATUSES.includes(input.statusCode))
-            fields.push(['DeviceTokenHash', null], ['DeviceTokenIssuedAt', null]);
+            fields.push(
+                ['DeviceTokenHash', null],
+                ['DeviceTokenIssuedAt', null],
+                // Klucz agenta (SBZ-1) też: po odblokowaniu instalator rejestruje nowy.
+                ['AgentKeyHash', null],
+                ['AgentKeySetAt', null],
+            );
 
         const existing = (await ToolsDb.getQueryCallbackAsync(
             'SELECT Id FROM SbAccess WHERE PersonId = ? FOR UPDATE',

@@ -97,6 +97,20 @@ export function newDeviceToken(): string {
     return randomBytes(32).toString('base64url');
 }
 
+/**
+ * Osobisty klucz agenta (SBZ-1): instalator losuje go jak token urządzenia (32 bajty base64url),
+ * agent podaje go w tym nagłówku, a do PS trafia tylko skrót (PUT /sbAccess/me/agentKey).
+ * Skrót klucza liczy ta sama funkcja co skrót tokenu (deviceTokenHash): format jest ten sam.
+ */
+export const SB_AGENT_KEY_HEADER = 'x-envi-sb-agent-key';
+
+/** Skrót klucza agenta z treści żądania: 64 znaki hex, małe litery. */
+export function parseAgentKeyHash(value: unknown): string {
+    if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value))
+        throw new SbAccessError(400, 'Skrót klucza agenta musi mieć 64 znaki szesnastkowe (SHA-256).');
+    return value;
+}
+
 /** Skrót tokenu do bazy; null dla wartości, która nie może być tokenem (bez zapytania do bazy). */
 export function deviceTokenHash(token: unknown): string | null {
     if (typeof token !== 'string' || !DEVICE_TOKEN_PATTERN.test(token)) return null;

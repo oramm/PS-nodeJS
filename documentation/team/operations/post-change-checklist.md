@@ -6,6 +6,14 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-19 - SBZ-1: osobisty klucz agenta pracownika (lokalnie, bez wdrożenia)
+
+- DB: `src/sbAccess/migrations/007_sb_access_agent_key.sql` (SbAccess.AgentKeyHash CHAR(64) UNIQUE, AgentKeySetAt, akcja `SET_AGENT_KEY`) i `src/letters/migrations/005_letter_events_by_agent.sql` (LetterEvents.IsByAgent TINYINT(1) NOT NULL DEFAULT 0). Obie idempotentne, bez zmian danych.
+- Wykonane wyłącznie na `localhost/envikons_myEnvi` (NODE_ENV=development, cel sprawdzony przed wykonaniem); post-check `information_schema`: kolumny, indeks UNIQUE i akcja obecne. Produkcja (kylos): NIE wykonane, tylko na GO właściciela.
+- Kolejność wdrożenia: najpierw obie migracje, potem kod. Kod przed migracją 005 wywraca listę pism (nieznana kolumna `IsByAgent` w SELECT) i rejestrację pisma agentem osoby; przed 007 warstwa klucza agenta loguje błąd zapytania i nikogo nie wpuszcza (fail-closed).
+- ENV: bez nowych zmiennych. Nowy nagłówek `x-envi-sb-agent-key`, nowa trasa `PUT /sbAccess/me/agentKey` (token urządzenia).
+- Rollback: wycofać kod; kolumny mogą zostać (nieużywane). Usunięcie: `ALTER TABLE SbAccess DROP INDEX uq_sbaccess_agentkeyhash, DROP COLUMN AgentKeyHash, DROP COLUMN AgentKeySetAt; ALTER TABLE LetterEvents DROP COLUMN IsByAgent;` (traci znak agenta przy pismach).
+
 ## 2026-10-10 - LMF: kolejność wdrożenia kompletu folderów (FIDman 0025 -> kod FIDmana -> PS 014/015 -> kod PS -> dopchnięcie)
 
 - Zakres: wpis zbiorczy dla LMF-1..4 i poprawek z recenzji: `c6bd05a` (numer kompletu `folderSetVersion` w `contract.folders`), `8d406c9` (etykieta powodu `STALE_FOLDER_SET`), `e196e8c` (skrypt `src/scripts/fidmanFoldersBackfill.ts`) oraz pięć punktowych poprawek tej rundy: komplet nie wyprzedza umowy oczekującej na dostawę (`deliverOutboxRow`), `deliverOutboxRow` nie rzuca przy wyczerpanej puli, a połączenie po błędzie `RELEASE_LOCK` jest niszczone, ręczne „Dopchnij synchronizację" wymusza komplet, sprawa bez rodzaju jest pomijana w komplecie. Poprawki nie zmieniają schematu, danych ani ENV.

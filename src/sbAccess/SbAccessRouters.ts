@@ -5,6 +5,7 @@ import SbAccessValidator from './SbAccessValidator';
 import { SbAccessError } from './sbAccessPolicy';
 import {
     SB_DEVICE_TOKEN_HEADER,
+    parseAgentKeyHash,
     parseCiphertext,
     parsePublicKeyJwk,
     parseSecretName,
@@ -91,6 +92,19 @@ app.put('/sbAccess/me/publicKey', async (req, res, next) => {
         const record = await self(req);
         const jwk = parsePublicKeyJwk(req.parsedBody?.publicKeyJwk);
         res.send(await SbAccessController.setOwnPublicKey(record, jwk));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/**
+ * Osobisty klucz agenta (SBZ-1): { agentKeyHash: "<sha256 hex>" }. Sam klucz zostaje na
+ * komputerze osoby; agent wchodzi nim do PS przez warstwę sbAgentKeyAuth.
+ */
+app.put('/sbAccess/me/agentKey', async (req, res, next) => {
+    try {
+        const record = await self(req);
+        res.send(await SbAccessController.setOwnAgentKey(record, parseAgentKeyHash(req.body?.agentKeyHash)));
     } catch (error) {
         handleError(error, res, next);
     }

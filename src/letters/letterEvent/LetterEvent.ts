@@ -26,6 +26,7 @@ export default class LetterEvent
     recipientsJSON?: string | null | undefined;
     gdFilesJSON?: string | null | undefined;
     _gdFilesBasicData?: drive_v3.Schema$File[] | undefined;
+    isByAgent?: 1;
 
     constructor(initParamObject: LetterEventData) {
         super({ ...initParamObject, _dbTableName: 'LetterEvents' });
@@ -44,6 +45,7 @@ export default class LetterEvent
             initParamObject._gdFilesBasicData ||
             (this.gdFilesJSON ? JSON.parse(this.gdFilesJSON) : undefined);
         this.recipientsJSON = initParamObject.recipientsJSON || null;
+        this.isByAgent = initParamObject.isByAgent;
         this._recipients =
             initParamObject._recipients ||
             (this.recipientsJSON ? JSON.parse(this.recipientsJSON) : undefined);
