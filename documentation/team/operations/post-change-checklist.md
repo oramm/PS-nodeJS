@@ -9,7 +9,7 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 ## 2026-10-19 - SBZ-1: osobisty klucz agenta pracownika (lokalnie, bez wdrożenia)
 
 - DB: `src/sbAccess/migrations/007_sb_access_agent_key.sql` (SbAccess.AgentKeyHash CHAR(64) UNIQUE, AgentKeySetAt, akcja `SET_AGENT_KEY`) i `src/letters/migrations/005_letter_events_by_agent.sql` (LetterEvents.IsByAgent TINYINT(1) NOT NULL DEFAULT 0). Obie idempotentne, bez zmian danych.
-- Wykonane wyłącznie na `localhost/envikons_myEnvi` (NODE_ENV=development, cel sprawdzony przed wykonaniem); post-check `information_schema`: kolumny, indeks UNIQUE i akcja obecne. Produkcja (kylos): NIE wykonane, tylko na GO właściciela.
+- Wykonane wyłącznie na `localhost/envikons_myEnvi` (NODE_ENV=development, cel sprawdzony przed wykonaniem); post-check `information_schema`: kolumny, indeks UNIQUE i akcja obecne. Produkcja (kylos): wykonane 2026-10-19 21:32 UTC na GO właściciela, runner verify PASS, kopia `pre-sbz1_20261019-2331.sql` (zob. db-migration-memory/production-kylos.md).
 - Kolejność wdrożenia: najpierw obie migracje, potem kod. Kod przed migracją 005 wywraca listę pism (nieznana kolumna `IsByAgent` w SELECT) i rejestrację pisma agentem osoby; przed 007 warstwa klucza agenta loguje błąd zapytania i nikogo nie wpuszcza (fail-closed).
 - ENV: bez nowych zmiennych. Nowy nagłówek `x-envi-sb-agent-key`, nowa trasa `PUT /sbAccess/me/agentKey` (token urządzenia).
 - Rollback: wycofać kod; kolumny mogą zostać (nieużywane). Usunięcie: `ALTER TABLE SbAccess DROP INDEX uq_sbaccess_agentkeyhash, DROP COLUMN AgentKeyHash, DROP COLUMN AgentKeySetAt; ALTER TABLE LetterEvents DROP COLUMN IsByAgent;` (traci znak agenta przy pismach).
