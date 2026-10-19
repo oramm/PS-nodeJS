@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessEventRepository from '../SbAccessEventRepository';
+import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessController from '../SbAccessController';
 import { SbAccessTransitionInput } from '../sbAccessTypes';
 
@@ -147,6 +148,7 @@ describe('SbAccessController', () => {
         const history = jest
             .spyOn(SbAccessEventRepository.prototype, 'listByPersonId')
             .mockResolvedValue([]);
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listNames').mockResolvedValue([]);
         expect(await SbAccessController.list()).toEqual([]);
         expect(await SbAccessController.getByPersonId(17)).toBeNull();
         expect(await SbAccessController.history(17, 10)).toEqual([]);

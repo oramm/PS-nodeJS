@@ -10,6 +10,15 @@ import SbGithubGateway, {
     GithubMembership,
 } from './SbGithubGateway';
 import SbDriveGateway from './SbDriveGateway';
+import SbAccessSecretRepository from './SbAccessSecretRepository';
+import {
+    describeSecretName,
+    deviceTokenHash,
+    displayFingerprint,
+    expectedSecretNames,
+    keyThumbprint,
+    newDeviceToken,
+} from './sbSecretsPolicy';
 import {
     NOT_CONFIGURED_MESSAGE,
     PartOutcome,
@@ -34,6 +43,7 @@ import {
     SbAccessTransitionInput,
     SbPersonAccount,
     SbOwnAccessView,
+    SbPublicKeyJwk,
 } from './sbAccessTypes';
 
 interface GithubPart extends PartOutcome {
@@ -65,6 +75,10 @@ function isAlreadyMemberError(error: unknown): boolean {
     );
 }
 
+/** Szyfrogramu już pobranego nie da się cofnąć - jedyną ochroną jest zmiana hasła u źródła. */
+const CHANGE_SOURCE_PASSWORD =
+    'Zmień hasło źródłowe: szyfrogram mógł już zostać pobrany na komputer pracownika.';
+
 function errorText(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
@@ -87,6 +101,7 @@ function sameText(a?: string | null, b?: string | null): boolean {
 export default class SbAccessController {
     private static repository = new SbAccessRepository();
     private static events = new SbAccessEventRepository();
+    private static secrets = new SbAccessSecretRepository();
 
     static async recordTransition(
         input: SbAccessTransitionInput,
@@ -137,6 +152,11 @@ export default class SbAccessController {
         levels: SbAccessLevels,
         requestedByPersonId: number,
     ): Promise<SbAccessRecord> {
+        // Hasła, których nowe uprawnienia już nie dają, wypadają w tej samej transakcji.
+        const expected = expectedSecretNames(levels);
+        const stale = (await this.secrets.listByPersonId(personId))
+            .map((secret) => secret.name)
+            .filter((name) => !expected.includes(name));
         await ToolsDb.transaction<void>(async (conn) => {
             if (!(await this.repository.setLevels(conn, personId, levels)))
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
@@ -147,12 +167,194 @@ export default class SbAccessController {
                 requestedByPersonId,
                 note: this.describeLevels(levels),
             });
+            const removed = await this.secrets.remove(conn, personId, stale);
+            if (removed.length)
+                await this.events.append(conn, {
+                    personId,
+                    actionCode: 'TAKE_SECRET',
+                    resultCode: 'OK',
+                    requestedByPersonId,
+                    note: `Odebrane razem z uprawnieniem: ${removed.map(describeSecretName).join(', ')}. ${CHANGE_SOURCE_PASSWORD}`,
+                });
         });
         return (await this.repository.getByPersonId(personId))!;
     }
 
-    static list() {
-        return this.repository.list();
+    /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
+    static async list(): Promise<SbAccessRecord[]> {
+        const [records, names] = await Promise.all([
+            this.repository.list(),
+            this.secrets.listNames(),
+        ]);
+        return records.map((record) => {
+            const expected = expectedSecretNames(record.levels);
+            const given = names
+                .filter((row) => row.personId === record.personId && expected.includes(row.name))
+                .map((row) => row.name);
+            return {
+                ...record,
+                ...this.keyView(record.publicKeyJwk ?? null),
+                secretsExpected: expected,
+                secretsGiven: given,
+            };
+        });
+    }
+
+    private static keyView(jwk: SbPublicKeyJwk | null | undefined) {
+        const thumbprint = jwk ? keyThumbprint(jwk) : null;
+        return {
+            keyThumbprint: thumbprint,
+            keyFingerprint: thumbprint ? displayFingerprint(thumbprint) : null,
+        };
+    }
+
+    // ------------------------------------------------ hasła szyfrowane (SBD-2)
+
+    /**
+     * Osoba żądania "me": z sesji przeglądarki albo z tokenu urządzenia (instalator SB bez
+     * przeglądarki). Sesja wygrywa. W obu drogach tylko wpis zaproszony albo aktywny i aktywne
+     * konto w PS; osoby nigdy nie bierze się z treści żądania.
+     */
+    static async resolveSelf(
+        userData: UserData | null | undefined,
+        deviceToken: unknown,
+    ): Promise<SbAccessRecord> {
+        let record: SbAccessRecord | null;
+        if (userData?.enviId) {
+            record = await this.repository.getByPersonId(userData.enviId);
+        } else {
+            const hash = deviceTokenHash(deviceToken);
+            if (!hash) throw new SbAccessError(401, 'Użytkownik niezalogowany');
+            record = await this.repository.getByDeviceTokenHash(hash);
+            if (!record) throw new SbAccessError(401, 'Użytkownik niezalogowany');
+        }
+        const account = record && (await this.repository.getPersonAccount(record.personId));
+        if (
+            !record ||
+            !account?.isActive ||
+            (record.statusCode !== 'INVITED' && record.statusCode !== 'ACTIVE')
+        )
+            throw new SbAccessError(403, 'Brak dostępu do Second Brain.');
+        return record;
+    }
+
+    /**
+     * Klucz publiczny komputera osoby. Ten sam klucz ponownie = bez zmian. Inny klucz kasuje
+     * wszystkie szyfrogramy osoby (stary klucz prywatny ich już nie dotyczy) i zapisuje SET_KEY.
+     */
+    static async setOwnPublicKey(
+        record: SbAccessRecord,
+        jwk: SbPublicKeyJwk,
+    ): Promise<{ changed: boolean; keyThumbprint: string; keyFingerprint: string; removedSecrets: number }> {
+        const thumbprint = keyThumbprint(jwk);
+        const view = { keyThumbprint: thumbprint, keyFingerprint: displayFingerprint(thumbprint) };
+        if (record.publicKeyJwk && keyThumbprint(record.publicKeyJwk) === thumbprint)
+            return { changed: false, ...view, removedSecrets: 0 };
+        let removed: string[] = [];
+        await ToolsDb.transaction<void>(async (conn) => {
+            await this.repository.setPublicKey(conn, record.personId, jwk);
+            removed = await this.secrets.remove(conn, record.personId);
+            await this.events.append(conn, {
+                personId: record.personId,
+                actionCode: 'SET_KEY',
+                resultCode: 'OK',
+                requestedByPersonId: record.personId,
+                note: `Klucz komputera ${view.keyFingerprint}.${removed.length ? ` Usunięte hasła zaszyfrowane starym kluczem: ${removed.map(describeSecretName).join(', ')} - udostępnij je ponownie.` : ''}`,
+            });
+        });
+        return { changed: true, ...view, removedSecrets: removed.length };
+    }
+
+    /** Własne szyfrogramy (tylko te, które wynikają z bieżących uprawnień). */
+    static async listOwnSecrets(record: SbAccessRecord) {
+        const expected = expectedSecretNames(record.levels);
+        const secrets = record.publicKeyJwk
+            ? (await this.secrets.listByPersonId(record.personId)).filter((secret) =>
+                  expected.includes(secret.name),
+              )
+            : [];
+        return {
+            ...this.keyView(record.publicKeyJwk ?? null),
+            secrets: secrets.map((secret) => ({
+                name: secret.name,
+                ciphertext: secret.ciphertext,
+                updatedAt: secret.updatedAt,
+            })),
+        };
+    }
+
+    /**
+     * Admin udostępnia hasło jako szyfrogram. `thumbprint` = odcisk klucza, którym przeglądarka
+     * szyfrowała; inny niż bieżący (klucz zmieniono w międzyczasie) = 409, bo taki szyfrogram
+     * byłby nie do odczytania. Sprawdzenie i zapis pod blokadą wiersza osoby.
+     */
+    static async giveSecret(
+        personId: number,
+        name: string,
+        ciphertext: string,
+        thumbprint: string,
+        requestedByPersonId: number,
+    ): Promise<{ name: string; given: true }> {
+        await ToolsDb.transaction<void>(async (conn) => {
+            const record = await this.repository.getByPersonId(personId, conn, true);
+            if (!record || (record.statusCode !== 'INVITED' && record.statusCode !== 'ACTIVE'))
+                throw new SbAccessError(409, 'Osoba nie ma aktywnego dostępu do Second Brain.');
+            if (!record.publicKeyJwk)
+                throw new SbAccessError(409, 'Brak klucza komputera - hasło da się udostępnić dopiero po uruchomieniu instalatora u pracownika.');
+            if (keyThumbprint(record.publicKeyJwk) !== thumbprint)
+                throw new SbAccessError(409, 'Klucz komputera pracownika zmienił się. Odśwież stronę i udostępnij hasło ponownie.');
+            if (!expectedSecretNames(record.levels).includes(name))
+                throw new SbAccessError(409, 'Uprawnienia tej osoby nie obejmują tego hasła.');
+            await this.secrets.upsert(conn, personId, name, ciphertext, requestedByPersonId);
+            await this.events.append(conn, {
+                personId,
+                actionCode: 'GIVE_SECRET',
+                resultCode: 'OK',
+                requestedByPersonId,
+                note: `Hasło: ${describeSecretName(name)}; klucz ${displayFingerprint(thumbprint)}.`,
+            });
+        });
+        return { name, given: true };
+    }
+
+    static async takeSecret(
+        personId: number,
+        name: string,
+        requestedByPersonId: number,
+    ): Promise<{ name: string; given: false }> {
+        await ToolsDb.transaction<void>(async (conn) => {
+            const removed = await this.secrets.remove(conn, personId, [name]);
+            if (!removed.length)
+                throw new SbAccessError(404, 'To hasło nie jest udostępnione tej osobie.');
+            await this.events.append(conn, {
+                personId,
+                actionCode: 'TAKE_SECRET',
+                resultCode: 'OK',
+                requestedByPersonId,
+                note: `Hasło: ${describeSecretName(name)}. ${CHANGE_SOURCE_PASSWORD}`,
+            });
+        });
+        return { name, given: false };
+    }
+
+    /**
+     * Nowy token urządzenia przy pobraniu paczki instalatora (poprzedni przestaje działać).
+     * Jawny token dostaje tylko wołający, który wkłada go do paczki; w bazie zostaje skrót.
+     */
+    static async issueDeviceToken(personId: number): Promise<string> {
+        const token = newDeviceToken();
+        await ToolsDb.transaction<void>(async (conn) => {
+            if (!(await this.repository.setDeviceTokenHash(conn, personId, deviceTokenHash(token)!)))
+                throw new SbAccessError(409, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            await this.events.append(conn, {
+                personId,
+                actionCode: 'ISSUE_TOKEN',
+                resultCode: 'OK',
+                requestedByPersonId: personId,
+                note: 'Pobranie instalatora: nowy token urządzenia, poprzedni unieważniony.',
+            });
+        });
+        return token;
     }
 
     static getByPersonId(personId: number) {

@@ -41,18 +41,19 @@ app.use('/sbInstaller', async (req, res, next) => {
     }
 });
 
-app.get('/sbInstaller/paczka', (req: Request, res: Response, next) => {
+app.get('/sbInstaller/paczka', async (req: Request, res: Response, next) => {
     try {
         const user = req.session.userData;
-        // ponytail: the trace is a log line, not a table - a dozen downloads in the lifetime of
-        // this route do not earn a migration in the ERP. Ceiling: Heroku keeps roughly a week of
-        // logs, so this answers "who took it recently", not "who ever took it". If a lasting
-        // register is wanted, that is a table plus a screen, and it should be added then.
+        // Każde pobranie = nowy token urządzenia (SBD-2); poprzedni przestaje działać. Tokenu nie logujemy.
+        const deviceToken = await SbAccessController.issueDeviceToken(user!.enviId);
+        // Lasting trace of the download is now the ISSUE_TOKEN event in the SB history (SBD-2);
+        // this log line stays as a quick look. Never add the token to it.
         console.log(
             `[SB-instalator] pobral: ${user?.userName} <${user?.systemEmail}> enviId=${user?.enviId} ${new Date().toISOString()}`,
         );
         res.attachment(INSTALLER_FILE_NAME);
-        res.send(buildInstallerZip());
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(buildInstallerZip(deviceToken));
     } catch (error) {
         next(error);
     }

@@ -5,6 +5,7 @@ import ToolsDb from '../../tools/ToolsDb';
 import SbAccessController from '../SbAccessController';
 import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessRepository from '../SbAccessRepository';
+import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessValidator from '../SbAccessValidator';
 import { SbAccessError } from '../sbAccessPolicy';
 
@@ -13,6 +14,9 @@ const valid = { repos: 'write', psDb: 'ro', drive: 'connector', mail: ['faktury'
 describe('Poziomy dostępu SB', () => {
     beforeEach(() => {
         jest.restoreAllMocks();
+        // Hasła osoby (SBD-2): przy zmianie poziomów kontroler sprawdza, które wypadają.
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([]);
+        jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
     });
 
     it('migracja 003: kolumna Levels JSON NULL i akcja SET_LEVELS, bez sekretów', () => {

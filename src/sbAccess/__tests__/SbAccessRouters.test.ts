@@ -44,7 +44,7 @@ describe('SbAccessRouters - bramka i trasy', () => {
 
     beforeAll(() => {
         require('../SbAccessRouters');
-        for (const method of ['get', 'post', 'put'] as const) {
+        for (const method of ['get', 'post', 'put', 'delete'] as const) {
             const mock = (app as any)[method] as jest.Mock;
             mock.mock.calls.forEach((call: any, i: number) =>
                 routes.push({ method, path: call[0], handler: call[1], order: mock.mock.invocationCallOrder[i] }),
@@ -76,6 +76,8 @@ describe('SbAccessRouters - bramka i trasy', () => {
     it('komplet tras zarządzania stoi ZA bramką, a pytanie o dostęp i "moje konto" przed nią', () => {
         expect(route('get', '/sbAccess/access').order).toBeLessThan(guardOrder);
         expect(route('post', '/sbAccess/me/githubAccount').order).toBeLessThan(guardOrder);
+        expect(route('put', '/sbAccess/me/publicKey').order).toBeLessThan(guardOrder);
+        expect(route('get', '/sbAccess/me/secrets').order).toBeLessThan(guardOrder);
         for (const [method, path] of [
             ['get', '/sbAccess/entries'],
             ['get', '/sbAccess/candidates'],
@@ -87,10 +89,12 @@ describe('SbAccessRouters - bramka i trasy', () => {
             ['post', '/sbAccess/:personId/revoke'],
             ['put', '/sbAccess/:personId/githubAccount'],
             ['put', '/sbAccess/:personId/levels'],
+            ['put', '/sbAccess/:personId/secrets/:name'],
+            ['delete', '/sbAccess/:personId/secrets/:name'],
         ])
             expect(route(method, path).order).toBeGreaterThan(guardOrder);
-        // Nic poza tymi dwiema trasami nie jest zarejestrowane przed bramką.
-        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(2);
+        // Nic poza tymi czterema trasami nie jest zarejestrowane przed bramką.
+        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(4);
     });
 
     it('bez sesji -> 401', async () => {

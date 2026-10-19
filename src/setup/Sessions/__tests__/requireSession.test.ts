@@ -175,4 +175,32 @@ describe('requireSession', () => {
             }
         });
     });
+    describe('trasy instalatora SB (token urzadzenia zamiast sesji, SBD-2)', () => {
+        it('przepuszcza bez sesji dokladnie klucz publiczny i wlasne szyfrogramy', () => {
+            for (const [method, path] of [
+                ['PUT', '/sbAccess/me/publicKey'],
+                ['GET', '/sbAccess/me/secrets'],
+            ]) {
+                const { res, next } = run(method, path);
+                expect(next).toHaveBeenCalled();
+                expect(res.statusCode).toBeUndefined();
+            }
+        });
+
+        it('nie otwiera reszty /sbAccess ani innej metody na tych sciezkach', () => {
+            for (const [method, path] of [
+                ['GET', '/sbAccess/me/publicKey'],
+                ['POST', '/sbAccess/me/secrets'],
+                ['GET', '/sbAccess/entries'],
+                ['PUT', '/sbAccess/5/secrets/baza-ps'],
+                ['DELETE', '/sbAccess/5/secrets/baza-ps'],
+                ['POST', '/sbAccess/me/githubAccount'],
+                ['GET', '/sbAccess/me/secrets/extra'],
+            ]) {
+                const { res, next } = run(method, path);
+                expect(res.statusCode).toBe(401);
+                expect(next).not.toHaveBeenCalled();
+            }
+        });
+    });
 });

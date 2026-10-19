@@ -55,7 +55,9 @@ describe('SbAccessRepository', () => {
         expect(sql).not.toContain('IsGrantedManually');
         expect(sql).toContain('GithubInvitationId = ?');
         expect(sql).toContain('DrivePermissionId = ?');
-        expect(params).toEqual(['BLOCKED', null, null, 17]);
+        // Blokada kasuje też token urządzenia instalatora (SBD-2).
+        expect(sql).toContain('DeviceTokenHash = ?');
+        expect(params).toEqual(['BLOCKED', null, null, null, null, 17]);
         expect(usedConn).toBe(conn);
     });
 

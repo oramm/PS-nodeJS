@@ -1,8 +1,10 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import SbAccessValidator from './SbAccessValidator';
+import { parsePublicKeyJwk } from './sbSecretsPolicy';
 import {
     SbAccessLevels,
+    SbPublicKeyJwk,
     SbAccessRecord,
     SbAccessStateInput,
     SbPersonAccount,
@@ -11,7 +13,18 @@ import {
 const STATE_COLUMNS = `s.Id AS id, s.PersonId AS personId, s.StatusCode AS statusCode,
     s.GithubLogin AS githubLogin, s.GithubInvitationId AS githubInvitationId,
     s.DrivePermissionId AS drivePermissionId, s.IsGrantedManually AS isGrantedManually,
-    s.Levels AS levels, s.CreatedAt AS createdAt, s.UpdatedAt AS updatedAt`;
+    s.Levels AS levels, s.PublicKeyJwk AS publicKeyJwk, s.PublicKeySetAt AS publicKeySetAt,
+    s.CreatedAt AS createdAt, s.UpdatedAt AS updatedAt`;
+
+/** Klucz z bazy: tekst JSON albo obiekt; uszkodzony = brak klucza (hasła nie da się wtedy udostępnić). */
+function publicKeyFromDb(raw: unknown): SbPublicKeyJwk | null {
+    if (raw == null) return null;
+    try {
+        return parsePublicKeyJwk(typeof raw === 'string' ? JSON.parse(raw) : raw);
+    } catch {
+        return null;
+    }
+}
 
 function mapState(row: SbAccessRecord): SbAccessRecord {
     return {
@@ -19,16 +32,23 @@ function mapState(row: SbAccessRecord): SbAccessRecord {
         isGrantedManually: !!row.isGrantedManually,
         ...(row.canManageSb !== undefined && { canManageSb: !!row.canManageSb }),
         levels: SbAccessValidator.levelsFromDb(row.levels),
+        publicKeyJwk: publicKeyFromDb(row.publicKeyJwk),
+        publicKeySetAt: row.publicKeySetAt ?? null,
     };
 }
 
+/** Stany, w których token urządzenia przestaje istnieć (odebranie albo blokada dostępu SB). */
+const TOKEN_CLEARING_STATUSES = ['BLOCKED', 'REVOKED'];
+
 export default class SbAccessRepository {
+    /** `lock` = SELECT ... FOR UPDATE (tylko w transakcji; szereguje zmianę klucza i udostępnienie hasła). */
     async getByPersonId(
         personId: number,
         conn?: mysql.PoolConnection,
+        lock = false,
     ): Promise<SbAccessRecord | null> {
         const rows = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT ${STATE_COLUMNS} FROM SbAccess s WHERE s.PersonId = ?`,
+            `SELECT ${STATE_COLUMNS} FROM SbAccess s WHERE s.PersonId = ?${lock ? ' FOR UPDATE' : ''}`,
             conn,
             [personId],
         )) as SbAccessRecord[];
@@ -67,6 +87,47 @@ export default class SbAccessRepository {
             conn,
         );
         return true;
+    }
+
+    /** Wpis po skrócie tokenu urządzenia (instalator bez sesji). */
+    async getByDeviceTokenHash(hash: string): Promise<SbAccessRecord | null> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT ${STATE_COLUMNS} FROM SbAccess s WHERE s.DeviceTokenHash = ?`,
+            undefined,
+            [hash],
+        )) as SbAccessRecord[];
+        return rows.length === 1 ? mapState(rows[0]) : null;
+    }
+
+    /**
+     * Nowy token urządzenia (poprzedni przestaje działać). Zapis przez query, nie executeSQL:
+     * executeSQL wypisuje parametry do logu.
+     */
+    async setDeviceTokenHash(
+        conn: mysql.PoolConnection,
+        personId: number,
+        hash: string,
+    ): Promise<boolean> {
+        if (!conn) throw new Error('Zapis tokenu SB wymaga połączenia transakcji');
+        const result = (await ToolsDb.getQueryCallbackAsync(
+            'UPDATE SbAccess SET DeviceTokenHash = ?, DeviceTokenIssuedAt = NOW() WHERE PersonId = ?',
+            conn,
+            [hash, personId],
+        )) as { affectedRows: number };
+        return result.affectedRows === 1;
+    }
+
+    async setPublicKey(
+        conn: mysql.PoolConnection,
+        personId: number,
+        jwk: SbPublicKeyJwk,
+    ): Promise<void> {
+        if (!conn) throw new Error('Zapis klucza SB wymaga połączenia transakcji');
+        await ToolsDb.getQueryCallbackAsync(
+            'UPDATE SbAccess SET PublicKeyJwk = ?, PublicKeySetAt = NOW() WHERE PersonId = ?',
+            conn,
+            [JSON.stringify(jwk), personId],
+        );
     }
 
     async list():Promise<SbAccessRecord[]> {
@@ -150,6 +211,9 @@ export default class SbAccessRepository {
             if (value === undefined) continue;
             fields.push([column, typeof value === 'boolean' ? +value : value]);
         }
+        // Blokada i odebranie unieważniają token instalatora; po odblokowaniu pracownik pobiera paczkę ponownie.
+        if (TOKEN_CLEARING_STATUSES.includes(input.statusCode))
+            fields.push(['DeviceTokenHash', null], ['DeviceTokenIssuedAt', null]);
 
         const existing = (await ToolsDb.getQueryCallbackAsync(
             'SELECT Id FROM SbAccess WHERE PersonId = ? FOR UPDATE',

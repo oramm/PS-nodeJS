@@ -3,6 +3,12 @@ import { app } from '../index';
 import SbAccessController from './SbAccessController';
 import SbAccessValidator from './SbAccessValidator';
 import { SbAccessError } from './sbAccessPolicy';
+import {
+    SB_DEVICE_TOKEN_HEADER,
+    parseCiphertext,
+    parsePublicKeyJwk,
+    parseSecretName,
+} from './sbSecretsPolicy';
 import { SbAccessOperationOutcome } from './sbAccessTypes';
 
 /**
@@ -64,6 +70,37 @@ app.post('/sbAccess/me/githubAccount', async (req, res, next) => {
             res,
             await SbAccessController.linkGithub(personId, login, personId, 'self'),
         );
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/**
+ * Hasła szyfrowane (SBD-2), trasy "moje": osoba z sesji ALBO z tokenu urządzenia w nagłówku
+ * x-envi-sb-device-token (instalator SB nie ma przeglądarki). Obie trasy są na liście
+ * requireSession jako sprawdzające poświadczenie same (src/setup/Sessions/requireSession.ts).
+ * Osoby nigdy nie bierze się z treści żądania, więc nie da się ustawić klucza ani pobrać
+ * szyfrogramów za kogoś innego.
+ */
+const self = (req: Request) =>
+    SbAccessController.resolveSelf(req.session?.userData, req.headers?.[SB_DEVICE_TOKEN_HEADER]);
+
+/** Klucz publiczny komputera: { publicKeyJwk: { kty: "RSA", n, e: "AQAB" } }. */
+app.put('/sbAccess/me/publicKey', async (req, res, next) => {
+    try {
+        const record = await self(req);
+        const jwk = parsePublicKeyJwk(req.parsedBody?.publicKeyJwk);
+        res.send(await SbAccessController.setOwnPublicKey(record, jwk));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Własne szyfrogramy (nazwa + base64) i odcisk klucza, którym je zaszyfrowano. */
+app.get('/sbAccess/me/secrets', async (req, res, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(await SbAccessController.listOwnSecrets(await self(req)));
     } catch (error) {
         handleError(error, res, next);
     }
@@ -172,6 +209,37 @@ app.put('/sbAccess/:personId/levels', async (req, res, next) => {
         const personId = SbAccessValidator.requirePersonId(req.params.personId);
         const levels = SbAccessValidator.parseLevels(req.parsedBody);
         res.send(await SbAccessController.setLevels(personId, levels, requesterId(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/**
+ * Admin udostępnia hasło: przeglądarka wysyła wyłącznie szyfrogram (RSA-OAEP-SHA256, base64,
+ * 256 bajtów) i odcisk klucza, którym szyfrowała. Jawne hasło nigdy nie dociera do serwera.
+ */
+app.put('/sbAccess/:personId/secrets/:name', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        const name = parseSecretName(req.params.name);
+        const ciphertext = parseCiphertext(req.parsedBody?.ciphertext);
+        const thumbprint = req.parsedBody?.keyThumbprint;
+        if (typeof thumbprint !== 'string' || !/^[0-9a-f]{64}$/.test(thumbprint))
+            throw new SbAccessError(400, 'Brak odcisku klucza, którym zaszyfrowano hasło.');
+        res.send(
+            await SbAccessController.giveSecret(personId, name, ciphertext, thumbprint, requesterId(req)),
+        );
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Admin odbiera hasło (usunięcie szyfrogramu + zdarzenie z przypomnieniem o zmianie hasła u źródła). */
+app.delete('/sbAccess/:personId/secrets/:name', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        const name = parseSecretName(req.params.name);
+        res.send(await SbAccessController.takeSecret(personId, name, requesterId(req)));
     } catch (error) {
         handleError(error, res, next);
     }

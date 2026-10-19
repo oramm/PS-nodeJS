@@ -13,6 +13,10 @@ export const SB_ACCESS_ACTIONS = [
     'REVOKE',
     'LINK_GITHUB',
     'SET_LEVELS',
+    'SET_KEY',
+    'GIVE_SECRET',
+    'TAKE_SECRET',
+    'ISSUE_TOKEN',
 ] as const;
 export const SB_ACCESS_RESULTS = ['OK', 'PARTIAL', 'FAILED'] as const;
 
@@ -60,6 +64,9 @@ export interface SbAccessRecord {
     isGrantedManually: boolean;
     /** Poziomy dostępu; brak wpisu w bazie = wszystko 'none' / []. */
     levels: SbAccessLevels;
+    /** Klucz publiczny komputera osoby (JWK RSA: kty, n, e); null = instalator go nie zarejestrował. */
+    publicKeyJwk?: SbPublicKeyJwk | null;
+    publicKeySetAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
     name?: string;
@@ -67,6 +74,27 @@ export interface SbAccessRecord {
     systemEmail?: string | null;
     /** Tylko w liście rejestru: znacznik StaffMembers.CanManageSbAccess (administrator SB). */
     canManageSb?: boolean;
+    /** Tylko w liście rejestru: odcisk klucza (RFC 7638 hex i skrót "a3f9 1c07") i nazwy haseł, bez szyfrogramów. */
+    keyThumbprint?: string | null;
+    keyFingerprint?: string | null;
+    secretsExpected?: string[];
+    secretsGiven?: string[];
+}
+
+/** Klucz publiczny RSA w postaci JWK; zapisujemy tylko pola kanoniczne (RFC 7638). */
+export interface SbPublicKeyJwk {
+    kty: 'RSA';
+    n: string;
+    e: 'AQAB';
+}
+
+/** Hasło udostępnione osobie: tylko nazwa i szyfrogram; jawnej wartości PS nie zna. */
+export interface SbSecretRecord {
+    name: string;
+    ciphertext: string;
+    sharedByPersonId: number | null;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 export interface SbAccessEventInput {

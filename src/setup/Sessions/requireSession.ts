@@ -70,6 +70,17 @@ const SIGNING_PROGRAM_ROUTES: { method: string; pattern: RegExp }[] = [
     },
 ];
 
+/**
+ * Trasy instalatora SB na komputerze pracownika (SBD-2): instalator nie ma przegladarki, wiec
+ * przychodzi z tokenem urzadzenia w naglowku x-envi-sb-device-token (token wydany przy pobraniu
+ * paczki z sesji pracownika; w bazie tylko skrot SHA-256). Trasy same rozstrzygaja osobe: sesja
+ * albo token, a bez zadnego z nich odpowiadaja 401 (src/sbAccess/SbAccessRouters.ts).
+ */
+const SB_DEVICE_ROUTES: { method: string; path: string }[] = [
+    { method: 'PUT', path: '/sbaccess/me/publickey' },
+    { method: 'GET', path: '/sbaccess/me/secrets' },
+];
+
 /** Mirrors Express's default routing: case-insensitive, trailing slash ignored. */
 function normalizePath(path: string): string {
     const lower = path.toLowerCase();
@@ -84,6 +95,12 @@ function isPublic(method: string, path: string): boolean {
         SIGNING_PROGRAM_ROUTES.some(
             (route) =>
                 route.method === method.toUpperCase() && route.pattern.test(normalized),
+        )
+    )
+        return true;
+    if (
+        SB_DEVICE_ROUTES.some(
+            (route) => route.method === method.toUpperCase() && route.path === normalized,
         )
     )
         return true;
