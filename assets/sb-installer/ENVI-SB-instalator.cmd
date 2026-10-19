@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.15.2. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.16.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.15.2"
+set "SB_INSTALATOR_WERSJA=0.16.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -61,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 153537
+#SB-PLIK bootstrap.ps1 171769
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -116,6 +116,15 @@ $ErrorActionPreference = 'Continue'
 $RepoUrl          = 'https://github.com/envi-konsulting/ENVI.SB.git'
 $PsUrl            = 'https://ps.envi.com.pl' # strona PS ENVI (GitHub Pages, CNAME), hash-route #/sbInstaller
 $StanInstalatora  = "$env:USERPROFILE\.envi\instalator-stan.json"
+# SBD-3: serwer PS ENVI (API, nie strona) - tam instalator rejestruje klucz komputera i pobiera
+# hasla udostepnione przez administratora SB. Token urzadzenia i klucz komputera leza pod DPAPI.
+$PsApiUrl            = 'https://erp-envi.herokuapp.com'
+$TokenUrzadzeniaPath = "$env:USERPROFILE\.envi\sb-token-urzadzenia.dpapi"
+$KluczKomputeraPath  = "$env:USERPROFILE\.envi\sb-klucz-komputera.dpapi"
+# SBD-4b: codzienny raport zdrowia komputera do PS - zadanie co godzine dla obu rol, launcher
+# z adresem PS, sciezkami i rola (pisze go Install-RaportZdrowia), logika w poczta-lib.ps1 rdzenia.
+$ZdrowieTaskName     = 'ENVI-SB-Raport-Zdrowia'
+$ZdrowieLauncher     = "$env:USERPROFILE\.envi\sb-raport-zdrowia-run.ps1"
 # $VaultPath is the ONE Obsidian vault root (T3). Canon repo A clones directly here (its
 # tracked tree already places 40_wiki/, _index.md and CLAUDE.md at the clone root, so no
 # extra nesting is needed - see the header comment). Kept at the SAME literal path the
@@ -2481,7 +2490,257 @@ function Invoke-N5PocztaSync {
       $script:PocztaSkrzynek = [int]$m.Groups[1].Value
       $script:PocztaZarejestrowanych = [int]$m.Groups[2].Value
     }
+    # SBD-3: stan wpisu bazy PS (envi-db) - ostatnie pole tej samej linii silnika.
+    $mb = [regex]::Match(($out -join "`n"), '(?m)^POCZTA-PODSUMOWANIE .* baza=([^\r\n]*)$')
+    if ($mb.Success) { $script:BazaPsStan = $mb.Groups[1].Value.Trim() }
     Log "[N5] poczta sync done (szczegoly w project-sync.log)"
+  }
+}
+
+# -- SBD-3: token urzadzenia, klucz komputera i hasla udostepnione w PS ----------------------
+# Kontrakt z PS (plan SBD, progress, sesja SBD-2): naglowek x-envi-sb-device-token;
+# PUT /sbAccess/me/publicKey {publicKeyJwk:{kty,n,e}} -> changed, keyThumbprint, keyFingerprint,
+# removedSecrets; GET /sbAccess/me/secrets -> keyThumbprint, secrets[{name, ciphertext}].
+# Szyfrogram: RSA-OAEP SHA-256 kluczem 2048 (WebCrypto w przegladarce administratora).
+# Nazwy hasel: 'poczta-<kod skrzynki>' i 'baza-ps' (regula nazw zyje w PS, sbSecretsPolicy).
+#
+# Token, klucz i haslo bazy leza w tym samym formacie co hasla poczty: ConvertFrom-SecureString
+# bez klucza = DPAPI na konto Windows tej osoby. Jawne haslo istnieje tylko w pamieci.
+#
+# KLUCZ KOMPUTERA: RSA 2048 tworzony tu; prywatny wychodzi z pamieci WYLACZNIE jako plik pod DPAPI
+# w ~/.envi. Odrzucony wariant: trwaly, nieeksportowalny klucz CNG profilu - ta sama ochrona
+# (DPAPI konta), ale magazyn poza ~/.envi, ktorego sprawdzian nie podstawi i nie obejrzy jednym
+# plikiem. Istniejacy klucz jest uzywany ponownie, bo nowy kasuje w PS wszystkie hasla osoby.
+$script:SekretyTodo = @()
+$script:SekretyStan = $null
+$script:SekretyZmiana = $false
+$script:KluczOdcisk = $null
+
+# Odczyt DPAPI, odcisk klucza i rozmowa z PS (Unprotect-TekstDpapi, Read-KluczKomputera,
+# Get-OdciskKlucza, Invoke-PsUrzadzenie, Get-PlikHaslaBazyPs) mieszkaja w poczta-lib.ps1 rdzenia:
+# te same funkcje wola codzienny raport zdrowia (SBD-4b). Invoke-N5Sekrety wczytuje biblioteke
+# na poczatku. Zapis zostaje tutaj, bo token chowa sie zanim rdzen z Dysku jest na maszynie.
+function Protect-TekstDpapi([string]$Sciezka, [string]$Tekst) {
+  $dir = Split-Path -Parent $Sciezka
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+  $tmp = "$Sciezka.tmp"
+  [IO.File]::WriteAllText($tmp, (ConvertTo-SecureString -AsPlainText -Force $Tekst | ConvertFrom-SecureString), [Text.Encoding]::ASCII)
+  Move-Item -LiteralPath $tmp -Destination $Sciezka -Force
+}
+
+function Save-TokenUrzadzenia {
+  # Raz, na starcie przebiegu. PS wstawia token do naglowka .cmd przy kazdym pobraniu paczki
+  # (SB_TOKEN_URZADZENIA); chowamy go pod DPAPI i zabieramy ze srodowiska, zeby nie dostal go
+  # zaden proces potomny. Instalator bez tokenu (kopia z Dysku) korzysta z zapisanego wczesniej.
+  $t = [string]$env:SB_TOKEN_URZADZENIA
+  Remove-Item -LiteralPath Env:\SB_TOKEN_URZADZENIA -ErrorAction SilentlyContinue -WhatIf:$false
+  if (-not $t) { return }
+  if ($t -notmatch '^[A-Za-z0-9_-]{43}$') { Log '[SBD] token urzadzenia w instalatorze ma nieprawidlowa postac - pomijam go'; return }
+  if ($PSCmdlet.ShouldProcess($TokenUrzadzeniaPath, 'zapisz token urzadzenia z paczki PS zaszyfrowany DPAPI')) {
+    Protect-TekstDpapi -Sciezka $TokenUrzadzeniaPath -Tekst $t
+    Log "[SBD] token urzadzenia z paczki PS zapisany zaszyfrowany na Twoje konto Windows: $TokenUrzadzeniaPath"
+  }
+}
+
+function Get-KluczKomputera {
+  # RSACng z kluczem prywatnym. Plik nieczytelny (inne konto Windows, uszkodzenie) odkladamy,
+  # nie kasujemy, i tworzymy nowy - starym i tak nic sie tu nie odszyfruje.
+  # Plik, ktorego chwilowo nie da sie PRZECZYTAC (trzyma go inny program), przerywa krok hasel:
+  # nowy klucz kazalby PS skasowac wszystkie hasla osoby.
+  if (Test-Path -LiteralPath $KluczKomputeraPath -PathType Leaf) {
+    try { $rsa = Read-KluczKomputera $KluczKomputeraPath -BladOdczytuWyjatkiem }
+    catch {
+      $e = $_.Exception; if ($e.InnerException) { $e = $e.InnerException }
+      Log "[SBD] pliku klucza komputera nie da sie teraz przeczytac ($($e.Message)) - klucza nie wymieniam"
+      throw "plik klucza komputera ($KluczKomputeraPath) jest chwilowo nie do odczytu - zwykle trzyma go inny program (antywirus, kopia zapasowa). Klucza nie wymieniam, bo nowy klucz skasowalby w PS hasla udostepnione Ci przez administratora. Uruchom ENVI-SB-instalator.cmd jeszcze raz za kilka minut."
+    }
+    if ($rsa) { return $rsa }
+    $odlozony = '{0}.nieczytelny-{1}' -f $KluczKomputeraPath, (Get-Date -Format 'yyyyMMdd-HHmmss')
+    Move-Item -LiteralPath $KluczKomputeraPath -Destination $odlozony -Force
+    Log "[SBD] klucza komputera nie da sie odczytac na tym koncie Windows - odlozony jako $odlozony, tworze nowy"
+  }
+  $rsa = New-Object Security.Cryptography.RSACng 2048
+  Protect-TekstDpapi -Sciezka $KluczKomputeraPath -Tekst $rsa.ToXmlString($true)
+  Log "[SBD] nowy klucz komputera (RSA 2048) zapisany zaszyfrowany na Twoje konto Windows: $KluczKomputeraPath"
+  return $rsa
+}
+
+function Save-HasloSkrzynki([string]$Kod, [Security.SecureString]$Haslo) {
+  # Ten sam plik, format i droga co okno "Podaj / zmien haslo" (poczta-lib): DPAPI, kopia
+  # poprzedniego, test logowania IMAP. Skrzynka bez konfiguracji dostaje wzorzec skrzynki
+  # wspolnej z paczki serwera; bez wzorca nie zgadujemy serwera - pomijamy z komunikatem.
+  if (-not (Test-NazwaSkrzynki $Kod)) { Log "[SBD] poczta: kod skrzynki '$Kod' nie nadaje sie na nazwe pliku - pomijam"; return 'pominiete' }
+  $cfgPath = Get-SciezkaKonfigu $Kod
+  if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) {
+    $kat = Get-KatalogWzorcow
+    if (-not $kat -or -not (Test-Path -LiteralPath (Join-Path $kat "config.$Kod.json") -PathType Leaf)) {
+      Log "[SBD] poczta ${Kod}: haslo jest w PS, ale ten komputer nie zna serwera tej skrzynki (brak konfiguracji i wzorca skrzynki wspolnej) - pomijam"
+      $script:SekretyTodo += "Skrzynka poczty '$Kod': administrator udostepnil haslo, ale instalator nie zna serwera tej skrzynki. Popros wlasciciela SB o dodanie wzorca tej skrzynki (albo dodaj ja z menu ikony Second Brain: Skrzynki poczty - Dodaj skrzynke), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+      return 'pominiete'
+    }
+    Copy-WzorzecSkrzynki -Nazwa $Kod
+    $script:SekretyZmiana = $true
+    Log "[SBD] poczta ${Kod}: skrzynka dodana ze wzorca skrzynki wspolnej ($cfgPath)"
+  }
+  $plik = [string]((Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json).secret_file)
+  if (-not $plik) { Log "[SBD] poczta ${Kod}: konfiguracja skrzynki nie wskazuje pliku hasla - pomijam"; return 'pominiete' }
+  if ((Unprotect-TekstDpapi $plik) -ceq [Net.NetworkCredential]::new('', $Haslo).Password) { return 'bez zmian' }
+  Write-HasloDpapi -Sciezka $plik -SecureString $Haslo
+  $script:SekretyZmiana = $true
+  $test = Test-LogowanieImap -Nazwa $Kod
+  if ($test.wynik -eq 'OK') { Remove-PoprzednieHaslo -Sciezka $plik; return 'zapisane, serwer poczty wpuscil' }
+  if ($test.wynik -eq 'ODRZUCONE') {
+    [void](Restore-PoprzednieHaslo -Sciezka $plik)
+    $script:SekretyTodo += "Skrzynka poczty '$Kod': serwer poczty odrzucil haslo udostepnione w PS (poprzednie zostalo). Popros administratora SB o sprawdzenie hasla i ponowne udostepnienie, potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+    return 'odrzucone przez serwer poczty'
+  }
+  return ('zapisane, niesprawdzone: {0}' -f $test.opis)
+}
+
+function Save-HasloBazyPs([Security.SecureString]$Haslo) {
+  $plik = Get-PlikHaslaBazyPs
+  if (-not $plik) {
+    $script:SekretyTodo += 'Baza PS: serwer bazy dla agenta jeszcze nie dojechal z Dysku Google, wiec hasla nie bylo gdzie zapisac. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy Dysk skonczy synchronizacje.'
+    return 'pominiete - brak serwera envi-db'
+  }
+  $jawne = [Net.NetworkCredential]::new('', $Haslo).Password
+  try {
+    if ((Unprotect-TekstDpapi $plik) -ceq $jawne) { return 'bez zmian' }
+    Protect-TekstDpapi -Sciezka $plik -Tekst $jawne
+  } finally { $jawne = $null }
+  $script:SekretyZmiana = $true
+  return 'zapisane'
+}
+
+function Invoke-N5Sekrety {
+  # Klucz komputera w PS + hasla od administratora do dotychczasowych plikow DPAPI. Gdy cos sie
+  # zmienilo ($script:SekretyZmiana), Invoke-StepN5 jeszcze raz wola silnik, ktory rejestruje
+  # skrzynki i baze w aplikacji Claude i w Codexie. Kazdy blad konczy sie pozycja DO ZROBIENIA.
+  if (-not $PSCmdlet.ShouldProcess('PS ENVI - Dostepy SB', 'zarejestruj klucz komputera, pobierz hasla udostepnione przez administratora i zapisz je pod DPAPI')) {
+    $script:SekretyStan = 'nie sprawdzane (-WhatIf)'
+    return
+  }
+  $rsa = $null
+  try {
+    $lib = Join-Path (Split-Path $SyncEnginePath -Parent) 'poczta-lib.ps1'
+    if (-not (Test-Path -LiteralPath $lib -PathType Leaf)) { throw 'brak rdzenia SB z Dysku Google (poczta-lib.ps1) - hasel nie ma gdzie zapisac' }
+    . $lib
+    $token = Unprotect-TekstDpapi $TokenUrzadzeniaPath
+    if (-not $token) {
+      Log '[SBD] brak tokenu urzadzenia - ten instalator nie pochodzi ze strony SB w PS, hasel do poczty i bazy nie pobieram'
+      $script:SekretyStan = 'nie pobrane - instalator nie pochodzi ze strony SB w PS'
+      $script:SekretyTodo += "Hasla do poczty i bazy PS: ten instalator nie pochodzi ze strony SB w PS (np. kopia z Dysku Google), wiec nie moze pobrac Twoich hasel. Zaloguj sie do PS, pobierz instalator ze strony $("$PsUrl".TrimEnd("/"))/#/sbInstaller, wypakuj ZIP (Wyodrebnij wszystkie) i uruchom ENVI-SB-instalator.cmd. Reszta instalacji jest juz zrobiona."
+      return
+    }
+    $rsa = Get-KluczKomputera
+    $jwk = Get-JwkKluczaKomputera $rsa
+    $odcisk = Get-OdciskKlucza $jwk
+    $znak = '{0} {1}' -f $odcisk.Substring(0, 4), $odcisk.Substring(4, 4)
+    $odp = Invoke-PsUrzadzenie -Metoda 'PUT' -Sciezka '/sbAccess/me/publicKey' -Token $token -Tresc @{ publicKeyJwk = $jwk }
+    if ([string]$odp.keyThumbprint -ne $odcisk) { throw "PS zapisal klucz o innym odcisku ($($odp.keyFingerprint)) niz klucz tego komputera ($znak)" }
+    $script:KluczOdcisk = $znak
+    if ($odp.changed) {
+      Log "[SBD] klucz komputera zarejestrowany w PS: $znak"
+      if ([int]$odp.removedSecrets -gt 0) {
+        $script:SekretyTodo += "Hasla: ten komputer ma nowy klucz ($znak), wiec PS usunal hasla zaszyfrowane poprzednim kluczem ($([int]$odp.removedSecrets)). Popros administratora SB, zeby udostepnil Ci je ponownie (ekran Dostepy SB w PS), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+      }
+    } else { Log "[SBD] klucz komputera jest juz zarejestrowany w PS: $znak" }
+    $lista = Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/secrets' -Token $token
+    if ($lista.keyThumbprint -and [string]$lista.keyThumbprint -ne $odcisk) { throw 'hasla w PS sa zaszyfrowane innym kluczem niz klucz tego komputera' }
+    $opisy = @()
+    foreach ($s in @($lista.secrets)) {
+      $nazwa = [string]$s.name
+      $haslo = New-Object Security.SecureString
+      try {
+        $bajty = $rsa.Decrypt([Convert]::FromBase64String([string]$s.ciphertext), [Security.Cryptography.RSAEncryptionPadding]::OaepSHA256)
+        $znaki = [Text.Encoding]::UTF8.GetChars($bajty)
+        foreach ($ch in $znaki) { $haslo.AppendChar($ch) }
+        [Array]::Clear($bajty, 0, $bajty.Length); [Array]::Clear($znaki, 0, $znaki.Length)
+      } catch {
+        Log "[SBD] haslo '$nazwa' nie daje sie odszyfrowac kluczem tego komputera - pomijam"
+        $script:SekretyTodo += "Haslo '$nazwa' z PS nie daje sie odszyfrowac kluczem tego komputera ($znak). Popros administratora SB o ponowne udostepnienie (ekran Dostepy SB), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+        $opisy += "$nazwa (nie do odszyfrowania)"
+        $haslo.Dispose()
+        continue
+      }
+      if ($nazwa -eq 'baza-ps') { $w = Save-HasloBazyPs $haslo; $opisy += "baza PS ($w)" }
+      elseif ($nazwa -like 'poczta-*') { $kod = $nazwa.Substring(7); $w = Save-HasloSkrzynki $kod $haslo; $opisy += "poczta $kod ($w)" }
+      else { $w = 'nieznana nazwa - pominiete'; $opisy += "$nazwa ($w)" }
+      $haslo.Dispose()
+      Log "[SBD] haslo ${nazwa}: $w"
+    }
+    $script:SekretyStan = if ($opisy.Count) { $opisy -join ', ' } else { 'administrator jeszcze zadnego nie udostepnil' }
+  } catch {
+    $script:SekretyStan = 'nie pobrane - ' + $_.Exception.Message
+    Add-N5Todo 'Hasla z PS (poczta, baza PS)' $_.Exception.Message
+  } finally {
+    if ($rsa) { $rsa.Dispose() }
+  }
+}
+
+function Install-N5ZaleznosciMcp {
+  # Biblioteki Pythona serwerow MCP (requirements.txt kazdej rozpakowanej paczki). Bez nich serwer
+  # nie wstaje ("Server disconnected"); pip nie pobiera drugi raz tego, co juz jest.
+  foreach ($req in @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'ENVI\mcp\*\requirements.txt') -File -ErrorAction SilentlyContinue)) {
+    $nazwa = $req.Directory.Name
+    try {
+      if (-not $PSCmdlet.ShouldProcess($nazwa, "py -3 -m pip install --user -r $($req.FullName)")) { continue }
+      if (-not $script:PyLauncher) { throw 'brak launchera Python (py) po kroku N1' }
+      $global:LASTEXITCODE = 0
+      foreach ($linia in @(& $script:PyLauncher -3 -m pip install --user --disable-pip-version-check --quiet -r $req.FullName 2>&1)) { Log "[N5]   pip ($nazwa): $linia" }
+      if ($LASTEXITCODE -ne 0) { throw "pip zakonczyl sie bledem (kod $LASTEXITCODE)" }
+      Log "[N5] biblioteki Pythona serwera $nazwa na miejscu"
+    } catch { Add-N5Todo "Biblioteki serwera $nazwa" $_.Exception.Message }
+  }
+}
+
+function Write-RaportZdrowiaLauncher([string]$Path, [string]$Rola) {
+  # Ten sam wzorzec co Write-N3PullLauncher: zadanie wskazuje jednolinijkowy launcher -File (bez
+  # argumentow w /tr schtasks), a wszystko, co wie tylko instalator (adres PS, sciezki, rola, nazwy
+  # zadan), jedzie w nim jako JSON z \uXXXX - profil z polska litera nie psuje pliku bez BOM-u.
+  $c = [ordered]@{
+    api = $PsApiUrl; envi = (Split-Path $SyncEnginePath -Parent); token = $TokenUrzadzeniaPath; klucz = $KluczKomputeraPath
+    vault = $VaultPath; projekty = $ProjectsClonePath; rola = $Rola; zadania = @($TaskName, $SyncTaskName, $ZdrowieTaskName)
+  }
+  $json = [regex]::Replace(($c | ConvertTo-Json -Compress), '[^\x00-\x7F]', { param($m) '\u{0:x4}' -f [int][char]$m.Value }).Replace("'", "''")
+  $body = @(
+    "`$c = '$json' | ConvertFrom-Json"
+    "`$lib = Join-Path `$c.envi 'poczta-lib.ps1'"
+    "if (-not (Test-Path -LiteralPath `$lib)) { return }"
+    ". `$lib"
+    "`$null = Invoke-RaportZdrowia -PsApiUrl `$c.api -EnviDir `$c.envi -TokenPath `$c.token -KluczPath `$c.klucz -VaultPath `$c.vault -ProjektyPath `$c.projekty -Rola `$c.rola -Zadania @(`$c.zadania)"
+  ) -join "`r`n"
+  $dir = Split-Path $Path -Parent
+  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+  Set-JsonFileNoBom -LiteralPath $Path -Content ($body + "`r`n")
+}
+
+function Install-RaportZdrowia {
+  # SBD-4b: zadanie w harmonogramie dla OBU rol, co godzine. Kazde uruchomienie pyta PS (lekko), czy
+  # administrator prosi o swiezy raport; pelny raport idzie na prosbe albo raz na dobe. Brak tokenu
+  # urzadzenia = zadanie konczy sie cicho wpisem w ~/.envi/sb-raport-zdrowia.log, wiec zakladamy je
+  # zawsze - token moze dojechac pozniej, z instalatorem pobranym ze strony SB.
+  $lib = Join-Path (Split-Path $SyncEnginePath -Parent) 'poczta-lib.ps1'
+  if (-not (Test-Path -LiteralPath $lib -PathType Leaf)) {
+    Log '[SBD] raport zdrowia: brak rdzenia SB z Dysku Google (poczta-lib.ps1) - zadania raportu nie zakladam'
+    return
+  }
+  $rola = if ($script:InstallRoleResult) { $script:InstallRoleResult.Role } else { 'consumer' }
+  if ($PSCmdlet.ShouldProcess($ZdrowieLauncher, 'zapisz launcher raportu zdrowia (adres PS, sciezki, rola)')) {
+    Write-RaportZdrowiaLauncher -Path $ZdrowieLauncher -Rola $rola
+    Log "[SBD] launcher raportu zdrowia zapisany: $ZdrowieLauncher"
+  }
+  $tr = 'powershell.exe ' + ('-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $ZdrowieLauncher)
+  if ($PSCmdlet.ShouldProcess($ZdrowieTaskName, "schtasks /create /tn $ZdrowieTaskName /tr <ukryty launcher raportu zdrowia> /sc HOURLY /mo 1 /f")) {
+    Log "[SBD] rejestruje zadanie '$ZdrowieTaskName' (co godzine pyta PS, raport do PS raz na dobe albo na prosbe administratora; bez okna)"
+    Log (Get-ZapowiedzAntywirusa -Krok 'SBD')
+    $zad = Register-ZadanieCogodzinne -Nazwa $ZdrowieTaskName -Polecenie $tr -CoGodzin 1
+    if ($zad.Kod -ne 0) {
+      Log "[SBD] ERROR: schtasks /create dla '$ZdrowieTaskName' nie powiodlo sie (exit $($zad.Kod)): $($zad.Wyjscie)"
+    } else {
+      Log "[SBD] zadanie '$ZdrowieTaskName' zarejestrowane/zaktualizowane (idempotentnie, /f)"
+      Set-ZadanieChodziNaBaterii -Nazwa $ZdrowieTaskName
+    }
   }
 }
 
@@ -2514,6 +2773,12 @@ function Invoke-StepN5 {
   # i agenci. Do 0.14.13 bylo odwrotnie i wyjatek przy agencie zabieral skille (Agnieszka 07.10).
   Invoke-N5SkillsSync
   Invoke-N5PocztaSync
+  # SBD-3: hasla z PS dopiero po pierwszym przebiegu poczty - on rozpakowuje serwery (wzorce
+  # skrzynek wspolnych, config.json bazy). Zmiana = drugi przebieg, ktory je rejestruje.
+  Invoke-N5Sekrety
+  if ($script:SekretyZmiana) { Invoke-N5PocztaSync }
+  Install-RaportZdrowia
+  Install-N5ZaleznosciMcp
   Install-N5NodeJs
   Invoke-N5AgentInstalls
   Set-N5LocalBinPath
@@ -2536,6 +2801,8 @@ Log "Zapis przebiegu: $InstallLogFile"
 try {
 # Runs once, before N1: retires the pre-T3 second vault if - and only if - it is safe to do so.
 # Independent of the N1-N6 sequence below (different, now-obsolete path), so it never blocks it.
+# SBD-3: najpierw jednak token z naglowka .cmd - pod DPAPI, zanim cokolwiek przerwie przebieg.
+Save-TokenUrzadzenia
 Invoke-LegacyOwnVaultCleanup
 foreach ($id in @('N1', 'N2', 'N2b', 'N3', 'N3b', 'N4', 'N5', 'N6')) {
   if ($id -eq 'N1') {
@@ -2660,6 +2927,11 @@ Log ("Skille:                            {0} / {1} aktualne" -f `
 Log ("Skrzynki poczty:                   {0} / {1} zarejestrowane w aplikacji Claude" -f `
   $(if ($null -ne $script:PocztaZarejestrowanych) { $script:PocztaZarejestrowanych } else { '?' }), `
   $(if ($null -ne $script:PocztaSkrzynek) { $script:PocztaSkrzynek } else { '?' }))
+# SBD-3: baza PS, klucz komputera i hasla z PS. Znak klucza administrator porownuje z ekranem
+# "Dostepy SB" w PS, zanim udostepni haslo - to jedyna rzecz, ktora pracownik mu podaje.
+Log ("Baza PS dla agenta (envi-db):      {0}" -f $(if ($script:BazaPsStan) { $script:BazaPsStan } else { '?' }))
+Log ("Klucz komputera:                   {0}" -f $(if ($script:KluczOdcisk) { "$script:KluczOdcisk (administrator widzi ten sam znak w PS, ekran Dostepy SB)" } else { 'brak' }))
+Log ("Hasla z PS:                        {0}" -f $(if ($script:SekretyStan) { $script:SekretyStan } else { '?' }))
 # R1: agenci w podsumowaniu - stan odczytany (Get-Command), nie zamiar z N5. Brakujacy agent
 # albo Node.js to pozycja DO ZROBIENIA, nie FATAL i nie cisza.
 $todoAgenci = @()
@@ -2681,7 +2953,7 @@ if ($sumDesktopIcons.Present -contains $true) {
 # Zasada 'Restricted' nie zostawia sladu w logu silnika, bo skrypt w ogole nie startuje -
 # jedynym sygnalem jest kod ostatniego wyniku w harmonogramie (0 = OK, 267011 = jeszcze nie bylo).
 $todoZadania = @()
-foreach ($zad in @($TaskName, $SyncTaskName)) {
+foreach ($zad in @($TaskName, $SyncTaskName, $ZdrowieTaskName)) {
   if ($zad -eq $SyncTaskName -and $sumRole -ne 'team') { continue }
   $wynik = $null
   try { $wynik = (Get-ScheduledTaskInfo -TaskName $zad -ErrorAction Stop).LastTaskResult } catch { }
@@ -2711,6 +2983,7 @@ if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wi
 if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij plik $InstallLogFile wlascicielowi." }
 $todo += $todoZadania
 $todo += $todoAgenci
+$todo += $script:SekretyTodo
 $todo += $script:N5Todo
 # Stary instalator na PIERWSZYM miejscu: kolejne pozycje kaza uruchomic instalator jeszcze raz,
 # a bez tego czlowiek uruchomilby ponownie ten sam stary plik (weryfikacja R2).
