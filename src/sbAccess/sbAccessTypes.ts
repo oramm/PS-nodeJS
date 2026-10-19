@@ -17,6 +17,7 @@ export const SB_ACCESS_ACTIONS = [
     'GIVE_SECRET',
     'TAKE_SECRET',
     'ISSUE_TOKEN',
+    'REQUEST_HEALTH',
 ] as const;
 export const SB_ACCESS_RESULTS = ['OK', 'PARTIAL', 'FAILED'] as const;
 
@@ -79,6 +80,31 @@ export interface SbAccessRecord {
     keyFingerprint?: string | null;
     secretsExpected?: string[];
     secretsGiven?: string[];
+    /** Tylko w liście rejestru: podsumowanie ostatniego raportu instalatora (SBD-4a); null = nie było raportu. */
+    health?: SbHealthSummary | null;
+}
+
+/** Raport instalatora po białej liście (patrz sbHealthPolicy.ts); to jedyne, co trafia do bazy. */
+export interface SbHealthTool {
+    name: string;
+    ok: boolean;
+    /** Krótki opis błędu, tylko gdy ok = false. */
+    error?: string;
+}
+export interface SbHealthReport {
+    sbVersion: string | null;
+    installerVersion: string | null;
+    tools: SbHealthTool[];
+    events: string[];
+}
+export interface SbHealthSummary extends SbHealthReport {
+    reportedAt: Date;
+    /** ok = wszystkie narzędzia działają; fail = którekolwiek nie. */
+    state: 'ok' | 'fail';
+    /** Raport starszy niż SB_HEALTH_STALE_DAYS - na ekranie szary "brak raportu". */
+    stale: boolean;
+    /** Admin poprosił o świeży raport i instalator jeszcze go nie przysłał. */
+    refreshRequested: boolean;
 }
 
 /** Klucz publiczny RSA w postaci JWK; zapisujemy tylko pola kanoniczne (RFC 7638). */

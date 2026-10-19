@@ -11,6 +11,7 @@ import SbGithubGateway, {
 } from './SbGithubGateway';
 import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
+import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
 import {
     describeSecretName,
     deviceTokenHash,
@@ -335,6 +336,64 @@ export default class SbAccessController {
             });
         });
         return { name, given: false };
+    }
+
+    // ------------------------------------------------ raport zdrowia komputera (SBD-4a)
+
+    /**
+     * Instalator przysyła raport o sobie (osoba z `resolveSelf`, nigdy z treści żądania).
+     * Zapisujemy wyłącznie to, co przepuści biała lista; zapis czyści prośbę admina.
+     * Bez wpisu w historii: raport przychodzi raz dziennie, a historia ma służyć decyzjom adminów.
+     */
+    static async recordOwnHealth(record: SbAccessRecord, rawBody: unknown): Promise<{ ok: true }> {
+        await this.repository.saveHealthReport(record.personId, parseHealthReport(rawBody));
+        return { ok: true };
+    }
+
+    /** Lekkie pytanie instalatora: czy admin prosi o świeży raport. */
+    static async isOwnHealthRequested(record: SbAccessRecord): Promise<{ refreshRequested: boolean }> {
+        return { refreshRequested: await this.repository.isHealthRefreshRequested(record.personId) };
+    }
+
+    /** Admin prosi o świeży raport; powtórna prośba, gdy jedna już czeka, nie dubluje zdarzenia. */
+    static async requestHealthRefresh(
+        personId: number,
+        requestedByPersonId: number,
+    ): Promise<{ requested: true; alreadyPending: boolean }> {
+        let alreadyPending = false;
+        await ToolsDb.transaction<void>(async (conn) => {
+            const record = await this.repository.getByPersonId(personId, conn, true);
+            if (!record || (record.statusCode !== 'INVITED' && record.statusCode !== 'ACTIVE'))
+                throw new SbAccessError(409, 'Osoba nie ma aktywnego dostępu do Second Brain.');
+            alreadyPending = await this.repository.requestHealthRefresh(conn, personId);
+            if (!alreadyPending)
+                await this.events.append(conn, {
+                    personId,
+                    actionCode: 'REQUEST_HEALTH',
+                    resultCode: 'OK',
+                    requestedByPersonId,
+                    note: 'Prośba o świeży raport komputera; instalator dośle go przy najbliższym sprawdzeniu.',
+                });
+        });
+        return { requested: true, alreadyPending };
+    }
+
+    /** Ostatni raport osoby jako plik do pobrania (nazwa z nazwiskiem i datą raportu). */
+    static async healthReportFile(personId: number): Promise<{ fileName: string; content: object }> {
+        const [health, account] = await Promise.all([
+            this.repository.getHealth(personId),
+            this.repository.getPersonAccount(personId),
+        ]);
+        if (!health?.report || !health.reportedAt || !account)
+            throw new SbAccessError(404, 'Ta osoba nie przysłała jeszcze raportu z komputera.');
+        return {
+            fileName: healthReportFileName(account.surname, health.reportedAt),
+            content: {
+                person: { name: account.name, surname: account.surname },
+                reportedAt: health.reportedAt,
+                ...health.report,
+            },
+        };
     }
 
     /**

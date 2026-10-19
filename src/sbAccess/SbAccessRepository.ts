@@ -2,9 +2,11 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import SbAccessValidator from './SbAccessValidator';
 import { parsePublicKeyJwk } from './sbSecretsPolicy';
+import { healthReportFromDb, summarizeHealth } from './sbHealthPolicy';
 import {
     SbAccessLevels,
     SbPublicKeyJwk,
+    SbHealthReport,
     SbAccessRecord,
     SbAccessStateInput,
     SbPersonAccount,
@@ -130,18 +132,98 @@ export default class SbAccessRepository {
         );
     }
 
-    async list():Promise<SbAccessRecord[]> {
+    async list(now: Date = new Date()): Promise<SbAccessRecord[]> {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT ${STATE_COLUMNS}, p.Name AS name, p.Surname AS surname,
                 pa.SystemEmail AS systemEmail,
                 EXISTS (SELECT 1 FROM StaffMembers sm WHERE sm.PersonId = s.PersonId
-                    AND sm.CanManageSbAccess = 1 AND sm.IsActive = 1) AS canManageSb
+                    AND sm.CanManageSbAccess = 1 AND sm.IsActive = 1) AS canManageSb,
+                s.HealthReport AS healthReport, s.HealthReportedAt AS healthReportedAt,
+                s.HealthRefreshRequestedAt AS healthRefreshRequestedAt
              FROM SbAccess s
              JOIN Persons p ON p.Id = s.PersonId
              LEFT JOIN PersonAccounts pa ON pa.PersonId = s.PersonId
              ORDER BY p.Surname, p.Name, s.PersonId`,
-        )) as SbAccessRecord[];
-        return rows.map(mapState);
+        )) as (SbAccessRecord & {
+            healthReport?: unknown;
+            healthReportedAt?: Date | null;
+            healthRefreshRequestedAt?: Date | null;
+        })[];
+        return rows.map(({ healthReport, healthReportedAt, healthRefreshRequestedAt, ...row }) => {
+            const report = healthReportedAt ? healthReportFromDb(healthReport) : null;
+            return {
+                ...mapState(row),
+                health: report
+                    ? summarizeHealth(report, healthReportedAt!, healthRefreshRequestedAt ?? null, now)
+                    : null,
+            };
+        });
+    }
+
+    /**
+     * Ostatni raport instalatora (SBD-4a): nadpisuje poprzedni (bez historii raportów), czas
+     * ustawia serwer, a zapis czyści prośbę admina o świeży raport. Zapis przez query, nie
+     * executeSQL (ten wypisuje parametry do logu).
+     */
+    async saveHealthReport(personId: number, report: SbHealthReport): Promise<void> {
+        await ToolsDb.getQueryCallbackAsync(
+            `UPDATE SbAccess SET HealthReport = ?, HealthReportedAt = NOW(), HealthRefreshRequestedAt = NULL
+             WHERE PersonId = ?`,
+            undefined,
+            [JSON.stringify(report), personId],
+        );
+    }
+
+    /** Raport do pobrania przez admina: raport, czas przyjęcia i prośba; null = osoba bez wpisu. */
+    async getHealth(personId: number): Promise<{
+        report: SbHealthReport | null;
+        reportedAt: Date | null;
+        refreshRequestedAt: Date | null;
+    } | null> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT HealthReport AS healthReport, HealthReportedAt AS reportedAt,
+                HealthRefreshRequestedAt AS refreshRequestedAt
+             FROM SbAccess WHERE PersonId = ?`,
+            undefined,
+            [personId],
+        )) as { healthReport: unknown; reportedAt: Date | null; refreshRequestedAt: Date | null }[];
+        if (!rows.length) return null;
+        const { healthReport, reportedAt, refreshRequestedAt } = rows[0];
+        return {
+            report: reportedAt ? healthReportFromDb(healthReport) : null,
+            reportedAt: reportedAt ?? null,
+            refreshRequestedAt: refreshRequestedAt ?? null,
+        };
+    }
+
+    /**
+     * Ustawia prośbę o świeży raport. Zwraca, czy prośba już czekała (wtedy wołający nie
+     * dopisuje kolejnego zdarzenia). Wiersz blokowany do końca transakcji.
+     */
+    async requestHealthRefresh(conn: mysql.PoolConnection, personId: number): Promise<boolean> {
+        if (!conn) throw new Error('Zapis prośby o raport SB wymaga połączenia transakcji');
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            'SELECT HealthRefreshRequestedAt AS requestedAt FROM SbAccess WHERE PersonId = ? FOR UPDATE',
+            conn,
+            [personId],
+        )) as { requestedAt: Date | null }[];
+        const alreadyPending = !!rows[0]?.requestedAt;
+        if (!alreadyPending)
+            await ToolsDb.getQueryCallbackAsync(
+                'UPDATE SbAccess SET HealthRefreshRequestedAt = NOW() WHERE PersonId = ?',
+                conn,
+                [personId],
+            );
+        return alreadyPending;
+    }
+
+    async isHealthRefreshRequested(personId: number): Promise<boolean> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            'SELECT HealthRefreshRequestedAt AS requestedAt FROM SbAccess WHERE PersonId = ?',
+            undefined,
+            [personId],
+        )) as { requestedAt: Date | null }[];
+        return !!rows[0]?.requestedAt;
     }
 
     /**

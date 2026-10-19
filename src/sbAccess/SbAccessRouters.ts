@@ -106,6 +106,30 @@ app.get('/sbAccess/me/secrets', async (req, res, next) => {
     }
 });
 
+/**
+ * Raport zdrowia komputera (SBD-4a): instalator wysyła raz dziennie, serwer przepuszcza tylko
+ * pola z białej listy (sbHealthPolicy.ts). Odpowiedź na POST to samo {ok:true}.
+ * Ciało czytamy z `req.body`, nie z `req.parsedBody`: ten drugi parsuje JSON-em każde pole
+ * najwyższego poziomu, więc wersja "1.10" stałaby się liczbą 1.1.
+ */
+app.post('/sbAccess/me/health', async (req, res, next) => {
+    try {
+        res.send(await SbAccessController.recordOwnHealth(await self(req), req.body));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Lekkie pytanie, które instalator może zadawać często: czy admin prosi o świeży raport. */
+app.get('/sbAccess/me/healthRequest', async (req, res, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(await SbAccessController.isOwnHealthRequested(await self(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
 // ------------------------------------------------ bramka zarządzania
 
 async function sbAccessManagementGuard(
@@ -240,6 +264,31 @@ app.delete('/sbAccess/:personId/secrets/:name', async (req, res, next) => {
         const personId = SbAccessValidator.requirePersonId(req.params.personId);
         const name = parseSecretName(req.params.name);
         res.send(await SbAccessController.takeSecret(personId, name, requesterId(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Admin prosi o świeży raport z komputera pracownika (zdarzenie w historii). */
+app.post('/sbAccess/:personId/healthRequest', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        res.send(await SbAccessController.requestHealthRefresh(personId, requesterId(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Ostatni raport diagnostyczny osoby jako plik JSON do pobrania. */
+app.get('/sbAccess/:personId/healthReport', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        const file = await SbAccessController.healthReportFile(personId);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        // Nazwa jest czystym ASCII (healthReportFileName), więc wystarcza prosty filename.
+        res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+        res.send(JSON.stringify(file.content, null, 2));
     } catch (error) {
         handleError(error, res, next);
     }

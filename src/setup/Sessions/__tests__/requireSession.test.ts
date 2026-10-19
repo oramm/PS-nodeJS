@@ -180,6 +180,8 @@ describe('requireSession', () => {
             for (const [method, path] of [
                 ['PUT', '/sbAccess/me/publicKey'],
                 ['GET', '/sbAccess/me/secrets'],
+                ['POST', '/sbAccess/me/health'],
+                ['GET', '/sbAccess/me/healthRequest'],
             ]) {
                 const { res, next } = run(method, path);
                 expect(next).toHaveBeenCalled();
@@ -196,6 +198,11 @@ describe('requireSession', () => {
                 ['DELETE', '/sbAccess/5/secrets/baza-ps'],
                 ['POST', '/sbAccess/me/githubAccount'],
                 ['GET', '/sbAccess/me/secrets/extra'],
+                ['GET', '/sbAccess/me/health'],
+                ['PUT', '/sbAccess/me/health'],
+                ['POST', '/sbAccess/me/healthRequest'],
+                ['POST', '/sbAccess/5/healthRequest'],
+                ['GET', '/sbAccess/5/healthReport'],
             ]) {
                 const { res, next } = run(method, path);
                 expect(res.statusCode).toBe(401);
