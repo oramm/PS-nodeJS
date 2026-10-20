@@ -9,6 +9,10 @@ import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import resolveRouteLetterId from './resolveRouteLetterId';
+import {
+    assertTargetCasesInScope,
+    pinEditorForPersonAgent,
+} from './letterWriteGuards';
 import multer from 'multer';
 import ProjectScopeGuard, {
     ForbiddenError,
@@ -196,6 +200,7 @@ app.post(
                 initParamsFromClient,
                 req.projectScope,
             );
+            pinEditorForPersonAgent(initParamsFromClient, req.session.userData);
 
             if (initParamsFromClient.isOur === false) {
                 await LettersController.prepareIncomingNumber(
@@ -263,6 +268,11 @@ app.put(
                 req.params.id,
                 initParamsFromClient.id
             );
+            await assertTargetCasesInScope(
+                initParamsFromClient._cases,
+                req.projectScope,
+            );
+            pinEditorForPersonAgent(initParamsFromClient, req.session.userData);
 
             const _fieldsToUpdate = initParamsFromClient._fieldsToUpdate;
 

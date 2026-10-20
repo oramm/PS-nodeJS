@@ -49,4 +49,20 @@ describe('resolveRouteLetterId', () => {
             );
         }
     });
+
+    it('niezgodność to błąd klienta (400), nie awaria serwera (500)', () => {
+        try {
+            resolveRouteLetterId('6163', 6164);
+            throw new Error('nie rzucił');
+        } catch (e: any) {
+            expect(e.status).toBe(400);
+        }
+    });
+
+    it('SBZ-3: chroni też PUT /contract/:id — komunikat nazywa kontrakt', () => {
+        expect(resolveRouteLetterId('42', 42, 'kontraktu')).toBe(42);
+        expect(() => resolveRouteLetterId('42', 43, 'kontraktu')).toThrow(
+            /Niezgodny identyfikator kontraktu: adres wskazuje 42/
+        );
+    });
 });

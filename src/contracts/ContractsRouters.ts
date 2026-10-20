@@ -5,6 +5,7 @@ import ContractsController, {
 import ContractTemplatesTreeController from './contractTemplatesTree/ContractTemplatesTreeController';
 import { parseOptionalFoldersSelection } from './contractFolders/optionalContractFolders';
 import { app } from '../index';
+import resolveRouteLetterId from '../letters/resolveRouteLetterId';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
@@ -230,8 +231,13 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         const _fieldsToUpdate: string[] | undefined =
             req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
-        if (!itemFromClient || !itemFromClient.id)
-            throw new Error(`Próba edycji kontraktu bez Id`);
+        // SBZ-3: edytowany był kontrakt o id z CIAŁA, nie z adresu. Adres rozstrzyga,
+        // niezgodne id w ciele to 400 — ta sama reguła co dla pism.
+        itemFromClient.id = resolveRouteLetterId(
+            req.params.id,
+            itemFromClient.id,
+            'kontraktu',
+        );
 
         // Stwórz instancję odpowiedniej klasy
         const contractInstance =
