@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.16.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.17.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.16.0"
+set "SB_INSTALATOR_WERSJA=0.17.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -61,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 171769
+#SB-PLIK bootstrap.ps1 175715
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -2493,6 +2493,9 @@ function Invoke-N5PocztaSync {
     # SBD-3: stan wpisu bazy PS (envi-db) - ostatnie pole tej samej linii silnika.
     $mb = [regex]::Match(($out -join "`n"), '(?m)^POCZTA-PODSUMOWANIE .* baza=([^\r\n]*)$')
     if ($mb.Success) { $script:BazaPsStan = $mb.Groups[1].Value.Trim() }
+    # SBZ-2: stan wpisu envi-ps - osobna linia silnika.
+    $mz = [regex]::Match(($out -join "`n"), '(?m)^ZAPIS-PS-PODSUMOWANIE zapis=([^\r\n]*)$')
+    if ($mz.Success) { $script:ZapisPsStan = $mz.Groups[1].Value.Trim() }
     Log "[N5] poczta sync done (szczegoly w project-sync.log)"
   }
 }
@@ -2515,9 +2518,10 @@ $script:SekretyTodo = @()
 $script:SekretyStan = $null
 $script:SekretyZmiana = $false
 $script:KluczOdcisk = $null
+$script:KluczAgentaStan = $null
 
 # Odczyt DPAPI, odcisk klucza i rozmowa z PS (Unprotect-TekstDpapi, Read-KluczKomputera,
-# Get-OdciskKlucza, Invoke-PsUrzadzenie, Get-PlikHaslaBazyPs) mieszkaja w poczta-lib.ps1 rdzenia:
+# Get-OdciskKlucza, Invoke-PsUrzadzenie, Get-PlikSekretuSerwera) mieszkaja w poczta-lib.ps1 rdzenia:
 # te same funkcje wola codzienny raport zdrowia (SBD-4b). Invoke-N5Sekrety wczytuje biblioteke
 # na poczatku. Zapis zostaje tutaj, bo token chowa sie zanim rdzen z Dysku jest na maszynie.
 function Protect-TekstDpapi([string]$Sciezka, [string]$Tekst) {
@@ -2598,7 +2602,7 @@ function Save-HasloSkrzynki([string]$Kod, [Security.SecureString]$Haslo) {
 }
 
 function Save-HasloBazyPs([Security.SecureString]$Haslo) {
-  $plik = Get-PlikHaslaBazyPs
+  $plik = Get-PlikSekretuSerwera 'envi-db'
   if (-not $plik) {
     $script:SekretyTodo += 'Baza PS: serwer bazy dla agenta jeszcze nie dojechal z Dysku Google, wiec hasla nie bylo gdzie zapisac. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy Dysk skonczy synchronizacje.'
     return 'pominiete - brak serwera envi-db'
@@ -2610,6 +2614,50 @@ function Save-HasloBazyPs([Security.SecureString]$Haslo) {
   } finally { $jawne = $null }
   $script:SekretyZmiana = $true
   return 'zapisane'
+}
+
+function Register-KluczAgenta([string]$Token) {
+  # SBZ-2 (plan SBZ w PS.APP.01): osobisty klucz agenta - 32 losowe bajty, base64url, 43 znaki,
+  # ten sam format co token urzadzenia. Jawny klucz zostaje na tym komputerze pod DPAPI; do PS
+  # idzie tylko skrot SHA-256 (PUT /sbAccess/me/agentKey -> changed; 409 = skrot zajety, losujemy
+  # nowy). Rejestrujemy zawsze; PS wpuszcza klucz dopiero przy poziomie "baza PS: zapis".
+  # Istniejacy klucz uzywamy ponownie: po blokadzie PS kasuje skrot, a ten przebieg go przywraca.
+  $plik = Get-PlikSekretuSerwera 'envi-ps'
+  if (-not $plik) {
+    $script:SekretyTodo += 'Zapis do PS przez agenta: serwer envi-ps jeszcze nie dojechal z Dysku Google, wiec klucza agenta nie bylo gdzie zapisac. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy Dysk skonczy synchronizacje.'
+    return 'pominiety - brak serwera envi-ps'
+  }
+  # Plik chwilowo nie do odczytu (antywirus) przerywa krok: nowy klucz uniewaznilby w PS klucz,
+  # ktory trzyma w pamieci dzialajacy serwer envi-ps. Nowy losujemy tylko bez pliku albo bez DPAPI.
+  try { $klucz = Unprotect-TekstDpapi $plik -BladOdczytuWyjatkiem }
+  catch { throw "plik klucza agenta ($plik) jest chwilowo nie do odczytu - klucza nie wymieniam. Uruchom ENVI-SB-instalator.cmd jeszcze raz za kilka minut." }
+  $nowy = $klucz -notmatch '^[A-Za-z0-9_-]{43}$'
+  for ($proba = 1; $proba -le 3; $proba++) {
+    if ($nowy) {
+      $b = New-Object byte[] 32
+      $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+      try { $rng.GetBytes($b) } finally { $rng.Dispose() }
+      $klucz = ConvertTo-Base64Url $b
+      Protect-TekstDpapi -Sciezka $plik -Tekst $klucz
+      $script:SekretyZmiana = $true
+    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $skrot = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($klucz)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
+    try {
+      $odp = Invoke-PsUrzadzenie -Metoda 'PUT' -Sciezka '/sbAccess/me/agentKey' -Token $Token -Tresc @{ agentKeyHash = $skrot }
+      $klucz = $null
+      Log ("[SBZ] klucz agenta {0} w PS" -f $(if ($odp.changed) { 'zarejestrowany' } else { 'juz zarejestrowany' }))
+      if ($nowy) { return 'nowy, zarejestrowany w PS' }
+      if ($odp.changed) { return 'zarejestrowany w PS ponownie' }
+      return 'zarejestrowany w PS'
+    } catch {
+      # Invoke-PsUrzadzenie podaje kod w tresci wyjatku ("PS odpowiedzial bledem 409: ...").
+      if ($_.Exception.Message -notlike 'PS odpowiedzial bledem 409*') { throw }
+      Log '[SBZ] skrot klucza agenta zajety w PS - losuje nowy klucz'
+      $nowy = $true
+    }
+  }
+  throw 'PS trzy razy odrzucil skrot klucza agenta jako zajety'
 }
 
 function Invoke-N5Sekrety {
@@ -2629,6 +2677,7 @@ function Invoke-N5Sekrety {
     if (-not $token) {
       Log '[SBD] brak tokenu urzadzenia - ten instalator nie pochodzi ze strony SB w PS, hasel do poczty i bazy nie pobieram'
       $script:SekretyStan = 'nie pobrane - instalator nie pochodzi ze strony SB w PS'
+      $script:KluczAgentaStan = 'nie zarejestrowany - instalator nie pochodzi ze strony SB w PS'
       $script:SekretyTodo += "Hasla do poczty i bazy PS: ten instalator nie pochodzi ze strony SB w PS (np. kopia z Dysku Google), wiec nie moze pobrac Twoich hasel. Zaloguj sie do PS, pobierz instalator ze strony $("$PsUrl".TrimEnd("/"))/#/sbInstaller, wypakuj ZIP (Wyodrebnij wszystkie) i uruchom ENVI-SB-instalator.cmd. Reszta instalacji jest juz zrobiona."
       return
     }
@@ -2645,6 +2694,13 @@ function Invoke-N5Sekrety {
         $script:SekretyTodo += "Hasla: ten komputer ma nowy klucz ($znak), wiec PS usunal hasla zaszyfrowane poprzednim kluczem ($([int]$odp.removedSecrets)). Popros administratora SB, zeby udostepnil Ci je ponownie (ekran Dostepy SB w PS), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
       }
     } else { Log "[SBD] klucz komputera jest juz zarejestrowany w PS: $znak" }
+    # SBZ-2: klucz agenta po rejestracji klucza komputera (PS juz zna ten komputer); osobno od hasel -
+    # jego blad nie zatrzymuje pobrania hasel i odwrotnie.
+    try { $script:KluczAgentaStan = Register-KluczAgenta $token }
+    catch {
+      $script:KluczAgentaStan = 'nie zarejestrowany - ' + $_.Exception.Message
+      Add-N5Todo 'Klucz agenta do zapisu w PS' $_.Exception.Message
+    }
     $lista = Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/secrets' -Token $token
     if ($lista.keyThumbprint -and [string]$lista.keyThumbprint -ne $odcisk) { throw 'hasla w PS sa zaszyfrowane innym kluczem niz klucz tego komputera' }
     $opisy = @()
@@ -2672,6 +2728,7 @@ function Invoke-N5Sekrety {
     $script:SekretyStan = if ($opisy.Count) { $opisy -join ', ' } else { 'administrator jeszcze zadnego nie udostepnil' }
   } catch {
     $script:SekretyStan = 'nie pobrane - ' + $_.Exception.Message
+    if (-not $script:KluczAgentaStan) { $script:KluczAgentaStan = 'nie zarejestrowany - PS nie przyjal klucza komputera (patrz Hasla z PS)' }
     Add-N5Todo 'Hasla z PS (poczta, baza PS)' $_.Exception.Message
   } finally {
     if ($rsa) { $rsa.Dispose() }
@@ -2930,6 +2987,9 @@ Log ("Skrzynki poczty:                   {0} / {1} zarejestrowane w aplikacji Cl
 # SBD-3: baza PS, klucz komputera i hasla z PS. Znak klucza administrator porownuje z ekranem
 # "Dostepy SB" w PS, zanim udostepni haslo - to jedyna rzecz, ktora pracownik mu podaje.
 Log ("Baza PS dla agenta (envi-db):      {0}" -f $(if ($script:BazaPsStan) { $script:BazaPsStan } else { '?' }))
+# SBZ-2: zapis do PS przez agenta - klucz w PS i wpis serwera envi-ps. Klucz dziala dopiero przy
+# poziomie "baza PS: zapis" na ekranie Dostepy SB.
+Log ("Zapis do PS przez agenta (envi-ps): klucz {0}; wpis {1}" -f $(if ($script:KluczAgentaStan) { $script:KluczAgentaStan } else { '?' }), $(if ($script:ZapisPsStan) { $script:ZapisPsStan } else { '?' }))
 Log ("Klucz komputera:                   {0}" -f $(if ($script:KluczOdcisk) { "$script:KluczOdcisk (administrator widzi ten sam znak w PS, ekran Dostepy SB)" } else { 'brak' }))
 Log ("Hasla z PS:                        {0}" -f $(if ($script:SekretyStan) { $script:SekretyStan } else { '?' }))
 # R1: agenci w podsumowaniu - stan odczytany (Get-Command), nie zamiar z N5. Brakujacy agent
