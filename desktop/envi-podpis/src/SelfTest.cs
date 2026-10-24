@@ -24,6 +24,8 @@ namespace EnviPodpis
 
         public static int Run(string[] args)
         {
+            WorkflowStore.Root = Path.Combine(Path.GetTempPath(), "envi-podpis-selftest-" + Guid.NewGuid().ToString("N"));
+            MailClient.DataDirectory = Path.Combine(WorkflowStore.Root, "mail");
             string outFile = args.Length > 1 ? args[1] : "selftest.txt";
             string mode = args.Length > 2 ? args[2] : "unit";
             string arg = args.Length > 3 ? args[3] : null;
@@ -31,7 +33,16 @@ namespace EnviPodpis
             {
                 try
                 {
-                    if (mode == "unit") Unit();
+                    if (mode == "loading") LoadingSelfTest.Run(arg, Check);
+                    else if (mode == "extract") InstallerSelfTest.Extract(arg, args[4], Check);
+                    else if (mode == "installer") InstallerSelfTest.Run(arg, Check);
+                    else if (mode == "local" || mode == "localui") LocalSelfTest.Run(args, Check);
+                    else if (mode == "oauth" || mode == "oauthui") DriveAuthSelfTest.Run(args, Check);
+                    else if (mode == "mail") MailSelfTest.Run(Check);
+                    else if (mode == "preview") PreviewSelfTest.Run(Check);
+                    else if (mode == "drivefiles") DriveFilesSelfTest.Run(Check);
+                    else if (mode == "flow") FlowSelfTest.Run(args, Check);
+                    else if (mode == "unit") Unit();
                     else if (mode == "card") Card(arg);
                     else if (mode == "soft") Soft(arg);
                     else if (mode == "ui") Ui(arg);
@@ -241,7 +252,7 @@ namespace EnviPodpis
             Shot(f, Path.Combine(dir, "10-no-card.png"), delegate { f.ShowError(Messages.NoCertificate(0)); });
             Shot(f, Path.Combine(dir, "11-installed.png"), delegate
             {
-                f.ShowInfo("Zainstalowano", "Zainstalowano. Wróć do PS i kliknij „Podpisz”.\r\n\r\nProgram (wersja 1.0.0) będzie się uruchamiał sam, gdy klikniesz „Podpisz” w PS. Nie trzeba go otwierać ręcznie. Przy pierwszym podpisie przeglądarka zapyta, czy otworzyć ENVI Podpis: zaznacz „zawsze zezwalaj” i potwierdź.", "Zamknij", null);
+                f.ShowInfo("Zainstalowano", "Wersja testowa. Otwórz skrót ENVI Podpis na pulpicie, aby wybrać lokalne pliki PDF.\r\n\r\nPodpisywanie z PS nadal działa: kliknij „Podpisz” w PS i zezwól przeglądarce na otwarcie programu.", "Zamknij", null);
             });
             Check(true, "zrzuty zapisane w " + dir);
             f.Dispose();

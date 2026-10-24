@@ -13,6 +13,6 @@ goto build
 set "OUT=bin\EnviPodpis.debug.exe"
 set "DEF=/define:DEBUG"
 :build
-"%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /codepage:65001 %DEF% /win32manifest:src\app.manifest /out:%OUT% /r:System.dll /r:System.Core.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll src\*.cs
+"%CSC%" /nologo /target:winexe /main:EnviPodpis.Program /platform:anycpu /optimize+ /codepage:65001 %DEF% /win32icon:assets\envi-podpis.ico /win32manifest:src\app.manifest /out:%OUT% /r:System.dll /r:System.Core.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.Security.dll /r:System.Net.Http.dll /r:System.Web.dll src\*.cs
 if errorlevel 1 exit /b 1
 echo OK: %OUT%

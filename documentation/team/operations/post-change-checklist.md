@@ -6,6 +6,23 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-10-24 - ENVI Podpis 1.3.1: dystrybucja z PS
+
+- Owner zlecil publikacje przez PS, komunikat ladowania mail/PDF, ikone turbiny z piorem bez przyciecia oraz dokumentacje; osobiscie potwierdzil rzeczywisty obieg poczty. Wczesniejszy brak zlecenia publikacji dotyczy historii D3/D4, nie tego wydania.
+- Paczka: installer-9kICN3/EnviPodpisSetup.exe, 70697472 B, SHA256 CF599FF0B43475915458E0A983D832B9EBDA499A4849A91FBB129D4A97FC9D4E. Zasob assets/signing/EnviPodpis.exe jest kompletnym instalatorem. Kopia poprzedniego zasobu: %TEMP%/envi-podpis-distribution-proof/distributed-before.exe.
+- DB/ENV: bez zmian; odczytowy production migrate verify PASS, repo=92/pending=0/drift=0. Nie wykonywano apply ani baseline. MIN_PROGRAM_VERSION i frontend bez zmian. Push main uruchamia auto-deploy Heroku; wynik publikacji musi byc odczytany osobno.
+- Weryfikacja: C# loading 8, unit 25, mail 15, preview 7, Drive 33, OAuth 64 PASS; software PS 2 podpisy RSA PASS; rzeczywiste okno 780x560 obejrzane. Instalator i trasa pobierania: wynik w %TEMP%/envi-podpis-distribution-proof/. Review poprawki: fallback ograniczonego diffu; przed publikacja odczyt finalnego raportu review.txt.
+- Rollback: przywrocic poprzedni zasob z kopii i ponownie wdrozyc backend; lokalnie instalator /rollback zachowuje poprzednia wersje. Czynnosci dla uzytkownika i build: desktop/envi-podpis/README.md; instrukcja w wiki SB. Bez nowych zmiennych, migracji, konfiguracji Heroku, Pages i frontend pointera. PR nie tworzono.
+- Stan wdrozenia: przygotowanie; potwierdzenie produkcji zostanie dopisane po publikacji. Odbior prawdziwej karty i Dysku pozostaje odrebny; agent nie podpisywal ani nie wysylal rzeczywistej poczty.
+
+## 2026-10-21 - ENVI Podpis D3: instalator do przegladu, bez publikacji
+
+- Aktualizacja po osobnym GO ownera: WGinZh zainstalowany na jego komputerze, osobisty odbior „instalacja zakonczona, bez ostrzezen”. Niezalezny odczyt: aktywna 1.1.0.0, 2390 plikow manifestu zgodnych; poprzednia 1.0.0.0 zachowana, skrot/protokol PS/wpis uninstall zgodne. D3 CLOSED. Dowod lokalny: `%TEMP%/envi-podpis-d3-proof/owner-install-acceptance-2026-10-21.txt`. Brak nowej proby karta lub rzeczywistego zlecenia PS; publikacja nadal bez GO. Ponizsze punkty dokumentuja stan przygotowania przed ta instalacja.
+- Tylko lokalny build 1.1.0: `desktop/envi-podpis/bin/installer-WGinZh/EnviPodpisSetup.exe`, SHA256 `700FCDEE1F7E0E1D8ED079FF51CDE0C8FBD551322D2F971E40D7EFD67E23896C`. Aktywna instalacja ownera 1.0.0.0 i `assets/signing/EnviPodpis.exe` pozostaja bez podmiany; backend oraz minimalna wersja PS bez zmian. Nie wykonano deploy/pusha ani migracji.
+- Przed publikacja wymagane osobne GO na konkretny build oraz odbior ownera: dwuklik, rzeczywiste SmartScreen/Defender, instalacja i karta zgodnie z planem D6. Nie rozszerzac dystrybucji na instalator SB bez sprawdzenia rzeczywistego srodowiska odbiorcow. Komendy budowania, naprawy i cofniecia: `desktop/envi-podpis/README.md`.
+- Weryfikacja: debug/release/setup build PASS; 25 unit, 3 kontrole osadzonej paczki, 31 kontroli instalacji, 64 lokalnego flow, 7 kontroli PS na atrapie PASS. Niezaleznie 2390 plikow SHA256 bez roznic i 9 PDF/10 podpisow CMS PASS. Rzeczywiste okna startu, linku PS i anulowania instalatora obejrzane; hash/wersja/komenda protokolu aktywnej instalacji zgodne przed i po anulowaniu. Dowody lokalne: `%TEMP%/envi-podpis-d3-proof/`.
+- Checklist PR z `.github/PULL_REQUEST_TEMPLATE.md`: post-change zaktualizowany; lokalne akcje opisane w README. ENV/`.env.example`, DB/migracje/migration gate, Heroku, frontend pointer i Pages: nie dotyczy. PR nie utworzono. Nie testowano wymuszonego zabicia instalatora/awarii zasilania ani faktycznego opoznionego usuwania aktywnej instalacji; test uninstall dotyczy izolowanych wpisow i skrotu.
+
 ## 2026-10-19 - SBZ-1: osobisty klucz agenta pracownika (lokalnie, bez wdrożenia)
 
 - DB: `src/sbAccess/migrations/007_sb_access_agent_key.sql` (SbAccess.AgentKeyHash CHAR(64) UNIQUE, AgentKeySetAt, akcja `SET_AGENT_KEY`) i `src/letters/migrations/005_letter_events_by_agent.sql` (LetterEvents.IsByAgent TINYINT(1) NOT NULL DEFAULT 0). Obie idempotentne, bez zmian danych.
@@ -1548,3 +1565,23 @@ Copy the block below for each new change:
 - Zapis najpierw przenosi element Dysku, potem zmienia wyłącznie `Letters.ProjectId`, pod warunkiem zgodności poprzedniego ProjectId z planem. Zero zmienionych wierszy jest błędem pisma. Błąd bazy po udanym ruchu pozostawia element w folderze docelowym; ponowienie dokańcza bazę po ponownym sprawdzeniu położenia. Brak docelowego `Projects.LettersGdFolderId` przy pismach z Dyskiem przerywa przed zapisami (poza podglądem `--no-drive-check`). Uruchamiać bez równoległego przenoszenia umów, edycji powiązań pism i porządkowania Dysku; zachować raport i kopię danych przed wykonaniem.
 - Weryfikacja: 48 testów w dwóch plikach SPR-L: tests=48/pass=48/fail=0/skipped=0; łącznie ze wskazanymi testami projektów tests=65/pass=65/fail=0/skipped=0 (atrapy DB/Drive), typecheck PASS, bez uruchomienia skryptu, migracji i dostępu do rzeczywistej DB/Drive. Pełna suita pominięta. Lokalny Node 24.19.0 poza zakresem engines; kontrole przez Yarn z `--ignore-engines`.
 - PR checklist: wpływ na dane i wymagane działania opisane tutaj; nowe env, migracje, Heroku, frontend i GitHub Pages — nie dotyczą. `.env.example` i szablon PR bez zmian; PR/commit/push poza zakresem. Cofnięcie wykonanych przenosin wymaga indywidualnego przywrócenia rodzica Dysku i poprzedniego ProjectId z zachowanego raportu/kopii danych.
+
+## 2026-10-21 - ENVI Podpis D4: osobny projekt OAuth, przygotowanie
+
+- Owner zatwierdzil osobny Desktop OAuth / Internal / drive i wskazal system@envi.com.pl. Po logowaniu utworzono ENVI Podpis (envi-podpis, 618971825086) w organizacji envi.com.pl; sukces odczytany w konsoli. Bez credentiali PS i bez zmian istniejacych projektow SB/agent.
+- Formularz OAuth przygotowany, ale niezapisany: czeka akceptacja Google API Services User Data Policy. Klient OAuth i Drive API jeszcze nieskonfigurowane. Brak tokenow/dostepu do dokumentow, wdrozenia, instalacji, backendu/DB i nowych kluczy ENV. D4 OPEN; brak nowego kodu do testow/review, brak commitu/pusha. Nie usuwac projektu bez sprawdzenia jego aktualnej zawartosci i osobnej zgody ownera.
+
+
+## 2026-10-22 - ENVI Podpis D4: lokalna paczka do odbioru logowania Google
+
+- Wersja 1.2.0.0 zbudowana do przeglądu obok aktywnej 1.1.0.0; bez podmiany aktywnej instalacji, assets i publikacji. Próba prawdziwego logowania pozostaje osobistym odbiorem właściciela. Procedura lokalna: `desktop/envi-podpis/README.md`, sekcja Konto Google.
+- Osobny projekt Google `envi-podpis`, Internal i zatwierdzony zakres `drive`; 2026-10-22 włączono Drive API na koncie system@envi.com.pl i odczytano stan Włączono. Bez odczytu rzeczywistego JSON-a, credentiali PS i bez dostępu do dokumentów. Nie mylić zgody na zasady Google z osobistą zgodą na dostęp aplikacji.
+- DB/backend/migracje/ENV/Heroku/frontend/Pages: bez zmian. `.env.example` nie wymaga zmiany. Testy OAuth są syntetyczne, regresje lokalnego/PS podpisu korzystają z kluczy programowych. Bez karty/PIN, commitu, pusha i wdrożenia. Checklist PR przejrzany, PR nie utworzono. Dowody odbioru i ograniczenia: pack desktop w SB, D4.
+- Uzupelnienie D4 2026-10-22: po jawnej zgodzie ownera zapisano deklaracje drive; potwierdzono wiersz drive i komunikat Google o zapisaniu zmian. Automatyczna odmowa przed ta zgoda pozostaje w historii SB. Osobiste logowanie nadal oczekuje na odbior.
+
+- Odbior D4 2026-10-22: CLOSED po osobistym logowaniu ownera; zrzut programu potwierdza Zalogowano i zaszyfrowany zapis zgody. Wczesniejszy stan oczekiwania na logowanie jest historyczny. Niezalezny odczyt hashy przejrzanego kodu i zachowanych raportow PASS; bez zmian kodu i bez ponawiania buildow. Aktywna instalacja/skrot nadal 1.1.0.0, paczka D4 1.2.0.0 nie instalowana. Bez publikacji, DB/ENV/backendu, karty, pusha i D5. Dowod: lokalny envi-podpis-d4-proof/owner-login-acceptance-2026-10-22.txt; bez odczytu magazynu tokenow.
+## 2026-10-22 - ENVI Podpis: drobna poprawka okna Konto Google
+
+- Osobna paczka 1.2.1.0 tylko do odbioru; zastana aktywna 1.1.0.0 i skrot pulpitu pozostaja bez podmiany. D4 pozostaje CLOSED po osobistym odbiorze; konfiguracji Google nie powtarzano. Dokladny build i dowody: progress packa desktop w SB.
+- Weryfikacja na syntetycznych danych i rzeczywistym oknie WinForms; bez odczytu rzeczywistego JSON-a/tokenow, karty/PIN i plikow Drive. Bez tworzenia kolejnego skrotu i bez testowej instalacji. DB/ENV/migracje/backend/frontend/Heroku/Pages bez zmian; .env.example bez zmian. D5, publikacja, commit/push poza zakresem; podmiana tylko po GO ownera na dokladny build.
+- GO i instalacja 2026-10-22: owner zatwierdzil dokladny DTseAd (SHA256 290DB0148AFBB8A79566BF9A21F2012CF0B9B1598BAE810AB7447D60F995A381). Instalacja /silent exit 0; niezaleznie aktywna 1.2.1.0, 2390 plikow / 0 roznic, poprzednia 1.1 zachowana, jeden istniejacy skrot i protokol zgodne. To zastepuje powyzszy stan oczekiwania na GO. Bez publikacji w PS, karty, odczytu danych konta, DB/ENV i pusha. Instrukcja uzytkownika w wiki PS ENVI; dowod lokalny envi-podpis-account-fix-proof/installed-acceptance.json.

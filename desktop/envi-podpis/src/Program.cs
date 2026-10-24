@@ -27,7 +27,17 @@ namespace EnviPodpis
             }
 #endif
 
-            if (first == null) return RunInstall(silent);
+            if (first == null || string.Equals(first, "/local", StringComparison.OrdinalIgnoreCase))
+            {
+                string package = args.Length > 1 ? args[1] : System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pdf-worker");
+                Application.Run(new LocalForm(package));
+                return 0;
+            }
+
+            if (string.Equals(first, "/cleanup", StringComparison.OrdinalIgnoreCase))
+            {
+                try { return Installer.Cleanup(args); } catch (Exception) { return 1; }
+            }
             if (string.Equals(first, "/uninstall", StringComparison.OrdinalIgnoreCase)) return RunUninstall(silent);
 
             if (first.StartsWith(Config.ProtocolName + ":", StringComparison.OrdinalIgnoreCase))
@@ -50,8 +60,8 @@ namespace EnviPodpis
             }
 
             return ShowSimple("ENVI Podpis",
-                "Ten program uruchamia się sam z PS. Nie trzeba go otwierać ręcznie.",
-                "Wróć do PS i kliknij „Podpisz”.");
+                "Nie rozpoznaję tego polecenia.",
+                "Otwórz skrót ENVI Podpis bez argumentów albo kliknij „Podpisz” w PS.");
         }
 
         private static int ShowSimple(string title, string body, string next)
@@ -66,9 +76,8 @@ namespace EnviPodpis
             return 0;
         }
 
-        private static int RunInstall(bool silent)
+        internal static int ShowInstallResult(InstallResult r, bool silent)
         {
-            InstallResult r = Installer.InstallOrUpdate();
             if (silent) return r.Outcome == InstallOutcome.CopyFailed ? 1 : 0;
 
             string ver = r.InstalledVersion != null ? Config.FormatVersion(r.InstalledVersion) : "";
@@ -80,12 +89,12 @@ namespace EnviPodpis
                 {
                     case InstallOutcome.Installed:
                         form.ShowInfo("Zainstalowano",
-                            "Zainstalowano. Wróć do PS i kliknij „Podpisz”.\r\n\r\nProgram (wersja " + ver + ") będzie się uruchamiał sam, gdy klikniesz „Podpisz” w PS. Nie trzeba go otwierać ręcznie. Przy pierwszym podpisie przeglądarka zapyta, czy otworzyć ENVI Podpis: zaznacz „zawsze zezwalaj” i potwierdź.",
+                            "Wersja " + ver + ". Otwórz skrót ENVI Podpis na pulpicie, aby wybrać lokalne pliki PDF.\r\n\r\nPodpisywanie z PS nadal działa: kliknij „Podpisz” w PS i zezwól przeglądarce na otwarcie programu.",
                             "Zamknij", null);
                         break;
                     case InstallOutcome.Updated:
                         form.ShowInfo("Zaktualizowano",
-                            "Program został zaktualizowany do wersji " + ver + ". Wróć do PS i kliknij „Podpisz”.",
+                            "Wersja " + ver + ". Otwórz skrót ENVI Podpis na pulpicie lub kliknij „Podpisz” w PS. Poprzednia wersja jest zachowana; możesz ją przywrócić instalatorem z /rollback.",
                             "Zamknij", null);
                         break;
                     case InstallOutcome.NewerAlreadyInstalled:
@@ -97,7 +106,7 @@ namespace EnviPodpis
                         {
                             ErrorInfo e = new ErrorInfo();
                             e.Title = "Nie udało się zainstalować";
-                            e.Message = "Nie mogę zapisać programu na tym komputerze. Najczęściej dlatego, że program jest właśnie otwarty.";
+                            e.Message = "Instalacja nie została zakończona. Dotychczasowa wersja jest zachowana.";
                             e.NextStep = "Zamknij okno ENVI Podpis, jeśli jest otwarte, i uruchom ten plik jeszcze raz.";
                             e.Technical = r.Detail;
                             form.ShowError(e);
@@ -105,7 +114,7 @@ namespace EnviPodpis
                         }
                     default:
                         form.ShowInfo("ENVI Podpis działa",
-                            "Wersja " + ver + ". Program jest zainstalowany i uruchamia się sam z PS. Nie trzeba go otwierać ręcznie.\r\n\r\nCo teraz: wróć do PS i kliknij „Podpisz”.",
+                            "Wersja " + ver + ". Otwórz skrót ENVI Podpis na pulpicie lub kliknij „Podpisz” w PS.",
                             "Zamknij", null);
                         break;
                 }
@@ -116,7 +125,14 @@ namespace EnviPodpis
 
         private static int RunUninstall(bool silent)
         {
-            Installer.Uninstall();
+            if (!silent && MessageBox.Show("Usunąć ENVI Podpis? Zapisane dokumenty PDF pozostaną na dysku.",
+                "ENVI Podpis", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return 0;
+            try { Installer.Uninstall(); }
+            catch (Exception ex)
+            {
+                if (silent) return 1;
+                return ShowSimple("Nie udało się odinstalować", "Nie mogę usunąć programu. " + ex.Message, "Zamknij inne okna ENVI Podpis. Jeśli komunikat dotyczy dodatkowych plików, przenieś je z katalogu programu i spróbuj ponownie.");
+            }
             if (silent) return 0;
             MainForm form = new MainForm();
             form.Shown += delegate

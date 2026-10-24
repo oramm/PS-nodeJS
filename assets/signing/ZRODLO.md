@@ -14,3 +14,10 @@ Zasoby widocznego podpisu w PDF (modul `src/signing`, pack SIG).
   licencja OFL, ale po podzbiorze (subset) w `@pdf-lib/fontkit` renderuja sie z brakujacymi znakami.
   Roboto, Lato i Open Sans podzbior znosza. Nowa czcionke trzeba sprawdzic RENDEREM, nie tylko
   ekstrakcja tekstu: ekstrakcja potrafi byc poprawna przy zepsutych glifach.
+
+## Instalator aplikacji - 2026-10-24
+
+EnviPodpis.exe to kompletny instalator 1.3.1, zbudowany z desktop/envi-podpis.
+Pochodzenie: installer-9kICN3/EnviPodpisSetup.exe; SHA256 CF599FF0B43475915458E0A983D832B9EBDA499A4849A91FBB129D4A97FC9D4E.
+Ikona aplikacji (turbina z piorem) jest osobnym zasobem desktop/envi-podpis/assets;
+pozostala grafika w tym folderze nadal sluzy podpisowi widocznemu w PDF.
