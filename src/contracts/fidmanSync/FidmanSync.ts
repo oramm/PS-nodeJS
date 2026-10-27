@@ -7,6 +7,7 @@ import Entity from '../../entities/Entity';
 import Project from '../../projects/Project';
 import ProjectRepository from '../../projects/ProjectRepository';
 import { isValidNipChecksum } from '../aqmSync/AqmSync';
+import { SystemRoleName } from '../../types/sessionTypes';
 
 /**
  * SYNC-P1 — PS ENVI -> FIDman sync.
@@ -94,6 +95,7 @@ export type FidmanProjectPayload = FidmanProjectRef & {
  * Kształt jest kopią schematu zod po stronie FIDmana (apps/api/src/ps-sync/validation.ts,
  * `userPayloadSchema`), bo to on decyduje o 200 albo 400. `email` to SystemEmail, czyli
  * tożsamość logowania Google — nie adres kontaktowy.
+ * Rola systemowa jest przekazywana tylko, gdy jest znana FIDmanowi.
  */
 export type FidmanUserPayload = {
     legacyPersonId: number;
@@ -102,6 +104,7 @@ export type FidmanUserPayload = {
     name: string;
     surname: string;
     phone?: string;
+    systemRole?: SystemRoleName;
     enabled: boolean;
 };
 
@@ -607,6 +610,7 @@ export type FidmanUserSource = {
     surname?: string | null;
     /** PersonAccounts.SystemEmail - jedyne źródło e-maila logowania (ROD-5; zaszła kolumna Persons.SystemEmail nie jest już czytana). */
     systemEmail?: string | null;
+    systemRoleName?: string | null;
     /** PS Persons.Cellphone. */
     cellphone?: string | null;
 };
@@ -696,6 +700,8 @@ export function buildUserUpsert(
             name: trimmedOrEmpty(source.name),
             surname: trimmedOrEmpty(source.surname),
             ...(phone ? { phone } : {}),
+            ...(Object.values(SystemRoleName).includes(source.systemRoleName as SystemRoleName)
+                ? { systemRole: source.systemRoleName as SystemRoleName } : {}),
             enabled,
         },
     };

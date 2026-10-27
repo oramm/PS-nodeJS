@@ -236,6 +236,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         name: string | null;
         surname: string | null;
         systemEmail: string | null;
+        systemRoleName: string | null;
         cellphone: string | null;
     } | undefined> {
         const [rows] = await conn.query<any[]>(
@@ -244,9 +245,11 @@ export default class PersonRepository extends BaseRepository<Person> {
                     Persons.Name AS Name,
                     Persons.Surname AS Surname,
                     Persons.Cellphone AS Cellphone,
-                    PersonAccounts.SystemEmail AS SystemEmail
+                    PersonAccounts.SystemEmail AS SystemEmail,
+                    SystemRoles.Name AS SystemRoleName
              FROM Persons
              LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
+             LEFT JOIN SystemRoles ON PersonAccounts.SystemRoleId = SystemRoles.Id
              WHERE Persons.Id = ?
              LIMIT 1`,
             [personId],
@@ -259,6 +262,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             name: row.Name ?? null,
             surname: row.Surname ?? null,
             systemEmail: row.SystemEmail ?? null,
+            systemRoleName: row.SystemRoleName ?? null,
             cellphone: row.Cellphone ?? null,
         };
     }
