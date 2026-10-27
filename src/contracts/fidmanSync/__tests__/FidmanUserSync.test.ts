@@ -38,9 +38,9 @@ describe('buildUserUpsert — kształt payloadu', () => {
         expect(payload).toHaveProperty('systemRole', 'ENVI_EMPLOYEE');
     });
 
-    it.each([null, 'UNKNOWN'])('pomija nieznaną lub brakującą rolę: %s', (systemRoleName) => {
+    it.each([null, 'UNKNOWN'])('wysyła pustą rolę dla nieznanej lub brakującej roli: %s', (systemRoleName) => {
         const payload = buildUserUpsert(source({ systemRoleName }), true).payload;
-        expect(payload).not.toHaveProperty('systemRole');
+        expect(payload).toHaveProperty('systemRole', '');
     });
 
     it('niesie klucze idempotencji i pola należące do PS', () => {
@@ -53,6 +53,7 @@ describe('buildUserUpsert — kształt payloadu', () => {
                 name: 'Anna',
                 surname: 'Kowalska',
                 phone: '600100200',
+                systemRole: '',
                 enabled: true,
             },
         });

@@ -95,7 +95,7 @@ export type FidmanProjectPayload = FidmanProjectRef & {
  * Kształt jest kopią schematu zod po stronie FIDmana (apps/api/src/ps-sync/validation.ts,
  * `userPayloadSchema`), bo to on decyduje o 200 albo 400. `email` to SystemEmail, czyli
  * tożsamość logowania Google — nie adres kontaktowy.
- * Rola systemowa jest przekazywana tylko, gdy jest znana FIDmanowi.
+ * Rola systemowa: '' oznacza jawny brak roli i powoduje wyczyszczenie poprzedniej w FIDmanie.
  */
 export type FidmanUserPayload = {
     legacyPersonId: number;
@@ -104,7 +104,7 @@ export type FidmanUserPayload = {
     name: string;
     surname: string;
     phone?: string;
-    systemRole?: SystemRoleName;
+    systemRole: SystemRoleName | '';
     enabled: boolean;
 };
 
@@ -700,8 +700,8 @@ export function buildUserUpsert(
             name: trimmedOrEmpty(source.name),
             surname: trimmedOrEmpty(source.surname),
             ...(phone ? { phone } : {}),
-            ...(Object.values(SystemRoleName).includes(source.systemRoleName as SystemRoleName)
-                ? { systemRole: source.systemRoleName as SystemRoleName } : {}),
+            systemRole: Object.values(SystemRoleName).includes(source.systemRoleName as SystemRoleName)
+                ? source.systemRoleName as SystemRoleName : '',
             enabled,
         },
     };
