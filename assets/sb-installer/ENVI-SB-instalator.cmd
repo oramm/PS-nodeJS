@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.17.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.18.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.17.0"
+set "SB_INSTALATOR_WERSJA=0.18.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="
@@ -61,7 +61,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 175715
+#SB-PLIK bootstrap.ps1 175740
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -1621,7 +1621,7 @@ function Install-RdzenZDysku {
   # skrzynek poczty (menu ikony z M3) - ta sama lista, co $PlikiRdzenia/$RdzenPliki,
   # zeby swiezy install mial poczte OD RAZU, a nie dopiero po pierwszej samoaktualizacji.
   $enviDir = Split-Path $SyncEnginePath -Parent
-  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-usun-skrzynke.ps1')) {
+  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-usun-skrzynke.ps1', 'sb-konflikty-okno.ps1')) {
     $zrodlo = Join-Path $rozpakowane $plik
     if (-not (Test-Path -LiteralPath $zrodlo)) {
       Log "[N3b] ERROR: paczka $($manifest.paczka) nie zawiera pliku $plik - rdzen jest niekompletny, zglos to wlascicielowi"
