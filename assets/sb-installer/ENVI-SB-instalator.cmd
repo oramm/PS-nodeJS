@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.18.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.18.1. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.18.0"
+set "SB_INSTALATOR_WERSJA=0.18.1"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 set "SB_Z_ZIPA="

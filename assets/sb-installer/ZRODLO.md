@@ -8,7 +8,7 @@ SB konfiguruje").
 
 - Zrodlo: `envi-konsulting/ENVI.SB.Rdzen`, `bootstrap/`
 - Commit, z ktorego pochodzi ta kopia: `4defcbd3c8cab30d90d54b4cf27403aa460f8c5a`
-- Zlozono: 2026-10-27, wersja w naglowku pliku 0.18.0
+- Zlozono: 2026-10-28, wersja w naglowku pliku 0.18.1
 
 **`ENVI-SB-instalator.cmd` nie jest plikiem z repo - jest skladany.** Funkcja `New-InstalatorCmd`
 z `bootstrap/build-instalator.ps1` skleja naglowek wsadowy z `bootstrap.ps1` i README bajt w bajt.
