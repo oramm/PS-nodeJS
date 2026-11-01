@@ -126,6 +126,20 @@ describe('isFidmanSyncEligible (typ + znacznik)', () => {
 });
 
 describe('buildContractPayload (contract.upsert)', () => {
+    it.each(['1_project-folder_123', null, undefined])(
+        'oba buildery wysyłają gdFolderId=%s jako string albo jawne null',
+        (gdFolderId) => {
+            const project = { id: 88, ourId: 'P1', name: 'Projekt', gdFolderId };
+            const standalone = buildProjectUpsert(project as any);
+            const contract = buildContractPayload(baseContract({ _project: project }) as any);
+            expect(standalone.kind).toBe('project.upsert');
+            expect(contract.kind).toBe('contract.upsert');
+            for (const payload of [standalone.payload, (contract.payload as any).project]) {
+                expect(JSON.parse(JSON.stringify(payload))).toHaveProperty('gdFolderId', gdFolderId ?? null);
+            }
+        }
+    );
+
     it('oba buildery niosą dane dofinansowania i pomijają wartości puste', () => {
         for (const fields of [
             { fundingAgreementNumber: 'UD/1', program: 'FEnIKS' },
@@ -165,6 +179,7 @@ describe('buildContractPayload (contract.upsert)', () => {
             legacyProjectId: 88,
             ourId: 'PRJ-001',
             name: 'Projekt',
+            gdFolderId: null,
         });
         expect(p.entities).toEqual([
             {
@@ -232,6 +247,7 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
             ourId: 'PRJ-9',
             name: 'Nowy',
             comment: 'komentarz',
+            gdFolderId: null,
         });
     });
 });

@@ -85,6 +85,7 @@ export type FidmanContractPayload = {
 export type FidmanProjectPayload = FidmanProjectRef & {
     name?: string;
     comment?: string;
+    gdFolderId: string | null;
     fundingAgreementNumber?: string;
     program?: string;
 };
@@ -502,6 +503,7 @@ function buildProjectRef(sourceProject: any): FidmanProjectPayload | undefined {
         legacyProjectId: sourceProject.id,
         ourId: sourceProject.ourId,
         name: sourceProject.name,
+        gdFolderId: sourceProject.gdFolderId ?? null,
         ...(sourceProject.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: sourceProject.fundingAgreementNumber.trim() } : {}),
         ...(sourceProject.program?.trim() ? { program: sourceProject.program.trim() } : {}),
     };
@@ -544,6 +546,7 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
             ourId: p.ourId,
             name: p.name,
             comment: p.comment,
+            gdFolderId: p.gdFolderId ?? null,
             ...(p.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: p.fundingAgreementNumber.trim() } : {}),
             ...(p.program?.trim() ? { program: p.program.trim() } : {}),
         },
