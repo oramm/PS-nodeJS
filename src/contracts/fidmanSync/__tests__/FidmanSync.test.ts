@@ -126,16 +126,23 @@ describe('isFidmanSyncEligible (typ + znacznik)', () => {
 });
 
 describe('buildContractPayload (contract.upsert)', () => {
-    it.each(['1_project-folder_123', null, undefined])(
-        'oba buildery wysyłają gdFolderId=%s jako string albo jawne null',
-        (gdFolderId) => {
+    it.each([
+        ['1_project-folder_123', '1_project-folder_123'],
+        [null, null],
+        [undefined, null],
+        ['', null],
+        ['   ', null],
+        [' \t1_project-folder_123\r\n', '1_project-folder_123'],
+    ])(
+        'oba buildery normalizują gdFolderId=%s do %s',
+        (gdFolderId, expected) => {
             const project = { id: 88, ourId: 'P1', name: 'Projekt', gdFolderId };
             const standalone = buildProjectUpsert(project as any);
             const contract = buildContractPayload(baseContract({ _project: project }) as any);
             expect(standalone.kind).toBe('project.upsert');
             expect(contract.kind).toBe('contract.upsert');
             for (const payload of [standalone.payload, (contract.payload as any).project]) {
-                expect(JSON.parse(JSON.stringify(payload))).toHaveProperty('gdFolderId', gdFolderId ?? null);
+                expect(JSON.parse(JSON.stringify(payload))).toHaveProperty('gdFolderId', expected);
             }
         }
     );

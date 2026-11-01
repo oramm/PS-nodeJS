@@ -503,7 +503,7 @@ function buildProjectRef(sourceProject: any): FidmanProjectPayload | undefined {
         legacyProjectId: sourceProject.id,
         ourId: sourceProject.ourId,
         name: sourceProject.name,
-        gdFolderId: sourceProject.gdFolderId ?? null,
+        gdFolderId: sourceProject.gdFolderId?.trim() || null,
         ...(sourceProject.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: sourceProject.fundingAgreementNumber.trim() } : {}),
         ...(sourceProject.program?.trim() ? { program: sourceProject.program.trim() } : {}),
     };
@@ -542,13 +542,8 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
     return {
         kind: 'project.upsert',
         payload: {
-            legacyProjectId: p.id,
-            ourId: p.ourId,
-            name: p.name,
+            ...buildProjectRef(p)!,
             comment: p.comment,
-            gdFolderId: p.gdFolderId ?? null,
-            ...(p.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: p.fundingAgreementNumber.trim() } : {}),
-            ...(p.program?.trim() ? { program: p.program.trim() } : {}),
         },
     };
 }
