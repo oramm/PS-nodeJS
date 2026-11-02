@@ -13,6 +13,7 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 - Backup kodu przed wydaniem: C:/Users/oram/dev/ps-chat-proof/backend-before.zip oraz frontend-before.zip. Poprzedni backend: Heroku v635 / 5b64e583; frontend: 9428c29. Cofniecie: revert wlasnych commitow i ponowne wdrozenie (albo Heroku rollback do poprzedniego sluga). Nie zmieniano kont Google ani uprawnien istniejacego pokoju.
 - Testy: pelny backend 2899 PASS / 5 SKIP / 1 timeout testu PDF; osobne powtorzenie calego zestawu PdfSigning 91/91 PASS. Kontrakty frontendu 139 PASS. Build obu repo PASS. Lokalna baza odswiezona na jawna zgode ownera i zamaskowana (4171 wartosci); dowody i zrzuty pozostaja na laptopie w C:/Users/oram/dev/ps-chat-proof/. Live Google: odczyt czlonkostwa zglaszajacej, testowy pokoj i zaproszenie konta systemowego do samego siebie; testowy pokoj usuniety i brak potwierdzony lista.
 - Checklist PR: operacje i cofniecie powyzej; nowe ENV, migracje i zmiana bramki: nie dotyczy. Pages i UI nalezy do repo frontendu. Bez instalacji nowych zaleznosci. Potwierdzenie wersji produkcyjnych po wydaniu w logu SB.
+- Uzupelnienie tej samej poprawki: test HTTP odtworzyl utrate tablicy z jedna osoba w starym parserze formularzy. Kontrole brzegowe HTTP/kontrolera/helpera 54/54 PASS. Heroku v636 to pierwsza czesc wydania; finalne potwierdzenie wymaga takze uzupelniajacego commita backendu. Nie zmieniano globalnego parsera innych modulow.
 
 ## 2026-10-24 - ENVI Podpis 1.3.1: dystrybucja z PS
 

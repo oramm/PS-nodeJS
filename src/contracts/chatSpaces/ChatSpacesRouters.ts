@@ -17,6 +17,13 @@ function parseContractId(req: Request): number {
     return parseInt(req.params.id, 10);
 }
 
+function memberIds(req: Request): unknown {
+    // Stary parser zamienia JSON-owa tablice [7] na liczbe 7.
+    return Array.isArray(req.body?.personIds)
+        ? req.body.personIds
+        : req.parsedBody?.personIds;
+}
+
 app.get('/chatSpaces', async (req: Request, res: Response, next) => {
     try {
         const projectOurId =
@@ -54,7 +61,7 @@ app.post(
                             ? body.displayName
                             : undefined,
                     actorPersonId: req.session?.userData?.enviId,
-                    personIds: body.personIds,
+                    personIds: memberIds(req),
                 }
             );
             res.send(result);
@@ -68,9 +75,8 @@ app.post(
     '/contract/:id/chatSpace/members',
     async (req: Request, res: Response, next) => {
         try {
-            const body = req.parsedBody ?? req.body ?? {};
             res.send(await ChatSpacesController.inviteMembers(
-                parseContractId(req), body.personIds, req.session?.userData?.enviId
+                parseContractId(req), memberIds(req), req.session?.userData?.enviId
             ));
         } catch (error) {
             next(error);
