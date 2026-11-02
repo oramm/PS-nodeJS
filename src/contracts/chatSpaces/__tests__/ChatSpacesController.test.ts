@@ -50,6 +50,7 @@ function resetDb() {
         5: { account: 'nieaktywny@envi.com.pl', active: false },
         3: { account: 'Kierownik@envi.com.pl' }, // ten sam adres co 1 (inna wielkość liter)
         4: { account: '  ', legacy: null }, // brak adresu
+        6: { account: 'drugi@gmail.com' },
     };
     nextSpaceId = 10;
     insertedSql = [];
@@ -59,17 +60,18 @@ function resetDb() {
             const text = String(sql);
             if (text.includes('FROM Contracts'))
                 return contract ? [contract] : [];
-            if (text.includes('FROM PersonAccounts')) {
+            if (text.includes('FROM Persons')) {
                 const ids = (text.match(/IN \(([\d, ]+)\)/)?.[1] || '')
                     .split(',')
                     .map((s) => Number(s.trim()));
                 return ids
                     .filter(
-                        (id) => persons[id] && persons[id].active !== false
+                        (id) => persons[id]
                     )
                     .map((id) => ({
                         Id: id,
-                        Email: (persons[id].account || '').trim() || null,
+                        Email: persons[id].active === false ? null : (persons[id].account || '').trim() || null,
+                        Name: 'Osoba', Surname: String(id),
                     }));
             }
             if (text.includes('FROM ChatSpaces WHERE Id')) {
@@ -142,7 +144,79 @@ describe('ChatSpacesController', () => {
         mockGoogle();
     });
 
+    describe('zapraszanie do istniejacego pokoju', () => {
+        beforeEach(() => {
+            contract.ChatSpaceId = 10;
+            spaces.push({ Id: 10, GoogleName: 'spaces/AAAA1', DisplayName: 'Pokoj', Uri: null,
+                ProjectOurId: null, CreatedAt: '2026-11-02', CreatedByPersonId: 1 });
+            (ToolsChat.hasJoinedMember as jest.Mock<any>).mockResolvedValue(true);
+            (ToolsChat.inviteMembers as jest.Mock<any>).mockResolvedValue([
+                { email: 'kierownik@envi.com.pl', state: 'INVITED' },
+            ]);
+        });
+
+        it('zaprasza przez wspolny helper dopiero po sprawdzeniu czlonkostwa aktywnego konta', async () => {
+            const result = await ChatSpacesController.inviteMembers(100, [3, 3], 1);
+            expect(ToolsChat.hasJoinedMember).toHaveBeenCalledWith('spaces/AAAA1', 'kierownik@envi.com.pl');
+            expect(ToolsChat.inviteMembers).toHaveBeenCalledWith('spaces/AAAA1', ['kierownik@envi.com.pl']);
+            expect(result.members[0].state).toBe('INVITED');
+            expect(ToolsDb.executeSQL).not.toHaveBeenCalled();
+        });
+
+        it.each([undefined, '', [], [0], [-1], ['3'], [1.5], [1, null], Array(51).fill(1)])(
+            'odrzuca nieprawidlowy adres %p bez wywolania Google', async (email) => {
+                await expect(ChatSpacesController.inviteMembers(100, email, 1)).rejects.toMatchObject({status: 400});
+                expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+                expect(ToolsChat.hasJoinedMember).not.toHaveBeenCalled();
+            }
+        );
+
+        it.each([undefined, 2, 4, 5])('odmawia osobie bez aktywnego konta: %p', async (actor) => {
+            await expect(ChatSpacesController.inviteMembers(100, [3], actor)).rejects.toMatchObject({status: 403});
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('odmawia nieczlonkowi (w tym osobie dopiero zaproszonej)', async () => {
+            (ToolsChat.hasJoinedMember as jest.Mock<any>).mockResolvedValue(false);
+            await expect(ChatSpacesController.inviteMembers(100, [3], 1)).rejects.toMatchObject({status: 403});
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('odmawia bez podpietego pokoju', async () => {
+            contract.ChatSpaceId = null;
+            await expect(ChatSpacesController.inviteMembers(100, [3], 1)).rejects.toMatchObject({status: 409});
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('nie ukrywa niepowodzenia zaproszenia', async () => {
+            (ToolsChat.inviteMembers as jest.Mock<any>).mockResolvedValue([{email:'kierownik@envi.com.pl',state:'FAILED',error:'odmowa Google'}]);
+            expect((await ChatSpacesController.inviteMembers(100, [3], 1)).members[0]).toMatchObject({state:'FAILED',error:'odmowa Google'});
+        });
+
+        it('zaprasza wielu, nie dubluje adresow i raportuje brak konta osobno', async () => {
+            (ToolsChat.inviteMembers as jest.Mock<any>).mockResolvedValue([{email:'kierownik@envi.com.pl',state:'INVITED'},{email:'drugi@gmail.com',state:'JOINED'}]);
+            const result = await ChatSpacesController.inviteMembers(100, [1, 6, 3, 4, 5], 1);
+            expect(ToolsChat.inviteMembers).toHaveBeenCalledWith('spaces/AAAA1', ['kierownik@envi.com.pl','drugi@gmail.com']);
+            expect(result.members.map(m=>m.state)).toEqual(['INVITED','JOINED','INVITED','FAILED','FAILED']);
+            expect(result.members[3]).toMatchObject({personId:4,displayName:'Osoba 4',error:'Brak aktywnego konta Google w PS.'});
+        });
+
+        it('nie wysyla nic dla nieistniejacej osoby', async () => {
+            await expect(ChatSpacesController.inviteMembers(100, [999], 1)).rejects.toMatchObject({status:400});
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+    });
+
     describe('utworzenie pokoju', () => {
+        it('dolacza wybrane osoby do domyslnych i usuwa duplikaty adresow', async () => {
+            await ChatSpacesController.createForContract(100, {scope:'contract',actorPersonId:1,personIds:[1,6]});
+            expect(ToolsChat.createSpaceWithMembers).toHaveBeenCalledWith(expect.any(String),['kierownik@envi.com.pl','drugi@gmail.com'],expect.any(String));
+        });
+
+        it('przed utworzeniem pokoju wskazuje osobe bez konta Google', async () => {
+            await expect(ChatSpacesController.createForContract(100, {scope:'contract',personIds:[4]})).rejects.toThrow('Osoba 4');
+            expect(ToolsChat.createSpaceWithMembers).not.toHaveBeenCalled();
+        });
         it('zakres contract: nazwa "<OurId> <alias>", członkowie bez duplikatów, zapis w bazie i podpięcie', async () => {
             const result = await ChatSpacesController.createForContract(100, {
                 scope: 'contract',
@@ -365,6 +439,17 @@ describe('ChatSpacesController', () => {
     });
 
     describe('provisionAfterContractCreation', () => {
+        it('przenosi wybor osob z rejestracji kontraktu do utworzenia pokoju', async () => {
+            const selection = ChatSpacesController.parseSelection({mode:'new',scope:'contract',personIds:[6]});
+            expect(selection).toMatchObject({personIds:[6]});
+            const result = await ChatSpacesController.provisionAfterContractCreation(100, selection, 1);
+            expect(result.error).toBeUndefined();
+            expect(ToolsChat.createSpaceWithMembers).toHaveBeenCalledWith(expect.any(String),['kierownik@envi.com.pl','drugi@gmail.com'],expect.any(String));
+        });
+
+        it('bledny wybor osob nie wywraca rejestracji kontraktu', () => {
+            expect(ChatSpacesController.parseSelection({mode:'new',scope:'contract',personIds:['6']})).toEqual({mode:'none'});
+        });
         it('none: nic nie robi', async () => {
             expect(
                 await ChatSpacesController.provisionAfterContractCreation(

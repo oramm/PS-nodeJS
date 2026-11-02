@@ -26,7 +26,7 @@ export type ContractChatInfo = {
     adminId: number | null;
 };
 
-export type PersonEmailRow = { personId: number; email: string | null };
+export type PersonEmailRow = { personId: number; email: string | null; displayName: string };
 
 /**
  * Tylko SQL, bez reguł biznesowych (te siedzą w ChatSpacesController).
@@ -86,15 +86,17 @@ export default class ChatSpaceRepository {
         if (!personIds.length) return [];
         const rows = (await ToolsDb.getQueryCallbackAsync(
             mysql.format(
-                `SELECT PersonAccounts.PersonId AS Id,
+                `SELECT Persons.Id, Persons.Name, Persons.Surname,
                         NULLIF(TRIM(PersonAccounts.SystemEmail), '') AS Email
-                 FROM PersonAccounts
-                 WHERE PersonAccounts.PersonId IN (?)
-                   AND PersonAccounts.IsActive = 1`,
+                 FROM Persons
+                 LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
+                     AND PersonAccounts.IsActive = 1
+                 WHERE Persons.Id IN (?)`,
                 [personIds]
             )
         )) as any[];
-        return rows.map((r) => ({ personId: r.Id, email: r.Email ?? null }));
+        return rows.map((r) => ({ personId: r.Id, email: r.Email ?? null,
+            displayName: `${r.Name ?? ''} ${r.Surname ?? ''}`.trim() }));
     }
 
     async findSpaceById(

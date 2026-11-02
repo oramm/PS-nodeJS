@@ -6,6 +6,14 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-11-02 - CHT: zapraszanie osob z bazy do pokoju
+
+- Owner zlecil naprawe zgloszenia Agnieszki Brodziak i wydanie; doprecyzowal wielokrotny wybor istniejacym PersonSelector, takze przy rejestracji. Google blokuje dodawanie osob przez zewnetrzne konta Gmail (https://support.google.com/chat/answer/13340792?hl=en); sama zmiana prywatnosci nie usuwa tej przeszkody.
+- Bez migracji, zapisow produkcyjnej bazy i zmian ENV. Produkcyjne migrate verify: 92 migracje, pending=0, drift=0. Wydanie backendu przed frontendem; frontend wymaga osobnego pusha na master i zielonego Pages.
+- Backup kodu przed wydaniem: C:/Users/oram/dev/ps-chat-proof/backend-before.zip oraz frontend-before.zip. Poprzedni backend: Heroku v635 / 5b64e583; frontend: 9428c29. Cofniecie: revert wlasnych commitow i ponowne wdrozenie (albo Heroku rollback do poprzedniego sluga). Nie zmieniano kont Google ani uprawnien istniejacego pokoju.
+- Testy: pelny backend 2899 PASS / 5 SKIP / 1 timeout testu PDF; osobne powtorzenie calego zestawu PdfSigning 91/91 PASS. Kontrakty frontendu 139 PASS. Build obu repo PASS. Lokalna baza odswiezona na jawna zgode ownera i zamaskowana (4171 wartosci); dowody i zrzuty pozostaja na laptopie w C:/Users/oram/dev/ps-chat-proof/. Live Google: odczyt czlonkostwa zglaszajacej, testowy pokoj i zaproszenie konta systemowego do samego siebie; testowy pokoj usuniety i brak potwierdzony lista.
+- Checklist PR: operacje i cofniecie powyzej; nowe ENV, migracje i zmiana bramki: nie dotyczy. Pages i UI nalezy do repo frontendu. Bez instalacji nowych zaleznosci. Potwierdzenie wersji produkcyjnych po wydaniu w logu SB.
+
 ## 2026-10-24 - ENVI Podpis 1.3.1: dystrybucja z PS
 
 - Owner zlecil publikacje przez PS, komunikat ladowania mail/PDF, ikone turbiny z piorem bez przyciecia oraz dokumentacje; osobiscie potwierdzil rzeczywisty obieg poczty. Wczesniejszy brak zlecenia publikacji dotyczy historii D3/D4, nie tego wydania.

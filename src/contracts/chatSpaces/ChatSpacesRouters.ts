@@ -54,9 +54,24 @@ app.post(
                             ? body.displayName
                             : undefined,
                     actorPersonId: req.session?.userData?.enviId,
+                    personIds: body.personIds,
                 }
             );
             res.send(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+app.post(
+    '/contract/:id/chatSpace/members',
+    async (req: Request, res: Response, next) => {
+        try {
+            const body = req.parsedBody ?? req.body ?? {};
+            res.send(await ChatSpacesController.inviteMembers(
+                parseContractId(req), body.personIds, req.session?.userData?.enviId
+            ));
         } catch (error) {
             next(error);
         }

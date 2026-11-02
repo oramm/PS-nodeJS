@@ -51,11 +51,36 @@ export default class ToolsChat {
                 externalUserAllowed: true,
             },
         });
+        const members = await this.inviteMembers(space.name!, emails);
+        return {
+            name: space.name!,
+            displayName: space.displayName || displayName,
+            uri: space.spaceUri || '',
+            members,
+        };
+    }
+
+    static async hasJoinedMember(name: string, email: string): Promise<boolean> {
+        try {
+            const { data } = await this.getChat().spaces.members.get({
+                name: `${name}/members/${email}`,
+            });
+            return data.state === 'JOINED';
+        } catch (e) {
+            const status = (e as { response?: { status?: number } }).response?.status;
+            if (status === 403 || status === 404) return false;
+            throw e;
+        }
+    }
+
+    /** Konto systemowe zaprasza takze w imieniu pracownikow z Gmaila. */
+    static async inviteMembers(name: string, emails: string[]): Promise<ChatMemberResult[]> {
+        const chat = this.getChat();
         const members: ChatMemberResult[] = [];
         for (const email of emails) {
             try {
                 const { data } = await chat.spaces.members.create({
-                    parent: space.name!,
+                    parent: name,
                     requestBody: {
                         member: { name: `users/${email}`, type: 'HUMAN' },
                     },
@@ -69,12 +94,7 @@ export default class ToolsChat {
                 });
             }
         }
-        return {
-            name: space.name!,
-            displayName: space.displayName || displayName,
-            uri: space.spaceUri || '',
-            members,
-        };
+        return members;
     }
 
     static async listSpaces(): Promise<chat_v1.Schema$Space[]> {
