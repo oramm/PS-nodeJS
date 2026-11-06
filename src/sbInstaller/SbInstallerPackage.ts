@@ -20,6 +20,16 @@ import path from 'path';
  */
 export const INSTALLER_FILE_NAME = 'ENVI-SB-instalator.zip';
 
+/**
+ * Nazwa pobieranego pliku z numerem wersji: w Pobranych widać, która paczka jest nowa (u pracownika
+ * leżał zip z poprzedniej próby i uruchomił starą wersję). Wersja spoza [0-9A-Za-z.-] = stara nazwa.
+ */
+export function installerFileName(version: string | null): string {
+    return version && /^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(version)
+        ? `ENVI-SB-instalator-${version}.zip`
+        : INSTALLER_FILE_NAME;
+}
+
 export const INSTALLER_ENTRIES = ['ENVI-SB-instalator.cmd'];
 
 // Resolved from the process working directory, the way loadEnv already resolves .env — `tsc`

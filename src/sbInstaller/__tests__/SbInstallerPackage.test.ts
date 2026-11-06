@@ -4,7 +4,9 @@ import path from 'path';
 import {
     DEVICE_TOKEN_VARIABLE,
     INSTALLER_ENTRIES,
+    INSTALLER_FILE_NAME,
     buildInstallerZip,
+    installerFileName,
     installerAssetsDir,
     withDeviceToken,
 } from '../SbInstallerPackage';
@@ -48,5 +50,15 @@ describe('paczka instalatora Second Brain', () => {
 
     it('token o złym kształcie nie trafia do skryptu', () => {
         expect(() => withDeviceToken(Buffer.from('set "SB_INSTALATOR_WERSJA=1"\r\n'), 'x" & del *')).toThrow();
+    });
+
+    it('nazwa pobieranego pliku niesie numer wersji, żeby w Pobranych było widać, która to paczka', () => {
+        expect(installerFileName('0.18.1')).toBe('ENVI-SB-instalator-0.18.1.zip');
+        // Stary wzorzec "usuń ENVI-SB-instalator* z Pobranych" nadal łapie nową nazwę.
+        expect(installerFileName('0.18.1').startsWith('ENVI-SB-instalator')).toBe(true);
+    });
+
+    it.each([null, '', '1.0"; rm', '../1.0'])('wersja %j nie trafia do nazwy pliku - zostaje stara nazwa', (version) => {
+        expect(installerFileName(version)).toBe(INSTALLER_FILE_NAME);
     });
 });

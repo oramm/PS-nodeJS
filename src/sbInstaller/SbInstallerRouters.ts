@@ -5,8 +5,8 @@ import { app } from '../index';
 import SbAccessController from '../sbAccess/SbAccessController';
 import { isFromFrontOrigin } from '../setup/frontOrigins';
 import {
-    INSTALLER_FILE_NAME,
     buildInstallerZip,
+    installerFileName,
     installerAssetsDir,
 } from './SbInstallerPackage';
 
@@ -60,7 +60,7 @@ app.get('/sbInstaller/paczka', async (req: Request, res: Response, next) => {
         console.log(
             `[SB-instalator] pobral: ${user?.userName} <${user?.systemEmail}> enviId=${user?.enviId} ${new Date().toISOString()}`,
         );
-        res.attachment(INSTALLER_FILE_NAME);
+        res.attachment(installerFileName(readSbInstallerVersion()));
         res.setHeader('Cache-Control', 'no-store');
         res.send(buildInstallerZip(deviceToken));
     } catch (error) {

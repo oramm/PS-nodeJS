@@ -173,5 +173,14 @@ describe('SbInstallerRouters - bramka rejestru SB', () => {
                 expect(res.status).not.toHaveBeenCalled();
                 expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
             });
+
+        it('plik ma w nazwie wersję z nagłówka instalatora', async () => {
+            jest.spyOn(SbAccessController, 'issueDeviceToken').mockResolvedValue('t'.repeat(43));
+            const script = fs.readFileSync(path.resolve(process.cwd(), 'assets', 'sb-installer', 'ENVI-SB-instalator.cmd'), 'utf8');
+            const version = /set "SB_INSTALATOR_WERSJA=([^"]+)"/.exec(script)![1];
+            const res = makeDownloadRes();
+            await paczka({ headers: { referer: 'https://ps.envi.com.pl/' }, session: { userData: USER } }, res, jest.fn());
+            expect(res.attachment).toHaveBeenCalledWith(`ENVI-SB-instalator-${version}.zip`);
+        });
     });
 });
