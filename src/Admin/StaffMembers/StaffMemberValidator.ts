@@ -23,7 +23,7 @@ export default class StaffMemberValidator {
     static readonly OPTIONAL_FLAGS = ['canManageSbAccess'] as const;
 
     /**
-     * Pola konta (systemRoleId, systemEmail, fidmanEnabled) w treści są IGNOROWANE,
+     * Pola konta (systemRoleId, systemEmail, fidmanEnabled, finEnabled) w treści są IGNOROWANE,
      * nie odrzucane: klient wysyła cały wiersz scalony z formularzem, a konto zapisuje
      * osobnym żądaniem trasą PUT /v2/persons/:personId/account - jedyną, która
      * unieważnia sesje po zmianie roli i kolejkuje push do FIDmana (pack PER).

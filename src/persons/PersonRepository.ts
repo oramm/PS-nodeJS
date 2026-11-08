@@ -25,6 +25,11 @@ export interface PersonsSearchParams {
     experienceText?: string;
 }
 
+const ACCOUNT_SYNC_FLAGS = [
+    ['fidmanEnabled', 'FidmanEnabled'],
+    ['finEnabled', 'FinEnabled'],
+] as const;
+
 export default class PersonRepository extends BaseRepository<Person> {
     static readonly ACCOUNT_FIELDS = [
         'systemRoleId',
@@ -35,6 +40,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         'microsoftRefreshToken',
         'isActive',
         'fidmanEnabled',
+        'finEnabled',
     ] as const;
 
     static readonly PROFILE_FIELDS = [
@@ -201,7 +207,8 @@ export default class PersonRepository extends BaseRepository<Person> {
                     GoogleId,
                     MicrosoftId,
                     IsActive,
-                    FidmanEnabled
+                    FidmanEnabled,
+                    FinEnabled
              FROM PersonAccounts
              WHERE PersonId = ?
              LIMIT 1`,
@@ -218,6 +225,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             microsoftId: row.MicrosoftId ?? undefined,
             isActive: Boolean(row.IsActive),
             fidmanEnabled: Boolean(row.FidmanEnabled),
+            finEnabled: Boolean(row.FinEnabled),
         };
     }
 
@@ -471,6 +479,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             microsoftRefreshToken?: string;
             isActive?: boolean;
             fidmanEnabled?: boolean;
+            finEnabled?: boolean;
         },
         conn: mysql.PoolConnection,
         fieldsToSync: Array<
@@ -482,6 +491,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'microsoftRefreshToken'
             | 'isActive'
             | 'fidmanEnabled'
+            | 'finEnabled'
         > = [
             'systemRoleId',
             'systemEmail',
@@ -491,6 +501,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             'microsoftRefreshToken',
             'isActive',
             'fidmanEnabled',
+            'finEnabled',
         ],
     ): Promise<void> {
         if (!person.id)
@@ -521,6 +532,9 @@ export default class PersonRepository extends BaseRepository<Person> {
             fidmanEnabled:
                 fieldsToSync.includes('fidmanEnabled') &&
                 person.fidmanEnabled !== undefined,
+            finEnabled:
+                fieldsToSync.includes('finEnabled') &&
+                person.finEnabled !== undefined,
         };
 
         if (!Object.values(syncFieldMap).some(Boolean)) return;
@@ -575,9 +589,11 @@ export default class PersonRepository extends BaseRepository<Person> {
                     setParts.push('IsActive = ?');
                     updateValues.push(person.isActive ? 1 : 0);
                 }
-                if (syncFieldMap.fidmanEnabled) {
-                    setParts.push('FidmanEnabled = ?');
-                    updateValues.push(person.fidmanEnabled ? 1 : 0);
+                for (const [field, column] of ACCOUNT_SYNC_FLAGS) {
+                    if (syncFieldMap[field]) {
+                        setParts.push(`${column} = ?`);
+                        updateValues.push(person[field] ? 1 : 0);
+                    }
                 }
 
                 updateValues.push(person.id);
@@ -625,10 +641,12 @@ export default class PersonRepository extends BaseRepository<Person> {
                     placeholders.push('?');
                     insertValues.push(person.isActive ? 1 : 0);
                 }
-                if (syncFieldMap.fidmanEnabled) {
-                    columns.push('FidmanEnabled');
-                    placeholders.push('?');
-                    insertValues.push(person.fidmanEnabled ? 1 : 0);
+                for (const [field, column] of ACCOUNT_SYNC_FLAGS) {
+                    if (syncFieldMap[field]) {
+                        columns.push(column);
+                        placeholders.push('?');
+                        insertValues.push(person[field] ? 1 : 0);
+                    }
                 }
 
                 await conn.execute(
@@ -738,13 +756,14 @@ export default class PersonRepository extends BaseRepository<Person> {
     }
 
     /**
-     * GLO-P1: flagę FIDmana wolno zapisać WYŁĄCZNIE trasą konta v2
+     * GLO-P1: flagi FIDmana i FIN wolno zapisać WYŁĄCZNIE trasą konta v2
      * (PersonsController.upsertPersonAccountV2), bo tylko ona kolejkuje `user.upsert`.
-     * Ogólna trasa edycji osoby zapisałaby ją po cichu, bez pusha - i FIDman rozjechałby
+     * Ogólna trasa edycji osoby zapisałaby ją po cichu, bez pusha - i odbiorca rozjechałby
      * się z PS bez żadnego śladu. Dlatego pole wypada tu z listy pól konta do zapisu.
      */
     static readonly ACCOUNT_FIELDS_WRITABLE_ONLY_VIA_ACCOUNT_ROUTE = [
         'fidmanEnabled',
+        'finEnabled',
     ] as const;
 
     getAccountWriteFields(
@@ -759,6 +778,7 @@ export default class PersonRepository extends BaseRepository<Person> {
         | 'microsoftRefreshToken'
         | 'isActive'
         | 'fidmanEnabled'
+        | 'finEnabled'
     > {
         const restricted = new Set<string>([
             ...PersonRepository.ACCOUNT_FIELDS_WRITABLE_ONLY_VIA_ACCOUNT_ROUTE,
@@ -780,6 +800,7 @@ export default class PersonRepository extends BaseRepository<Person> {
             | 'microsoftRefreshToken'
             | 'isActive'
             | 'fidmanEnabled'
+            | 'finEnabled'
         >;
     }
 

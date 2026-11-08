@@ -639,41 +639,47 @@ const trimmedOrEmpty = (value: string | null | undefined): string =>
  * Ta funkcja nie zgaduje i niczego nie naprawia: obcięcie za długiego imienia dałoby
  * w FIDmanie inne nazwisko niż w PS, a to gorsze niż odmowa zapisu.
  */
-export function validateFidmanUserSource(source: FidmanUserSource): string[] {
+export type UserSyncRecipient = 'fidman' | 'fin';
+
+export function validateFidmanUserSource(
+    source: FidmanUserSource,
+    recipient: UserSyncRecipient = 'fidman',
+): string[] {
+    const recipientName = recipient === 'fin' ? 'FIN' : 'FIDmana';
     const problems: string[] = [];
     const email = trimmedOrEmpty(source.systemEmail);
     const name = trimmedOrEmpty(source.name);
     const surname = trimmedOrEmpty(source.surname);
 
     if (!email) {
-        problems.push('Użytkownik FIDmana musi mieć e-mail systemowy.');
+        problems.push(`Użytkownik ${recipientName} musi mieć e-mail systemowy.`);
     } else if (
         email.length < FIDMAN_USER_LIMITS.email.min ||
         !FIDMAN_EMAIL_PATTERN.test(email)
     ) {
         problems.push(
-            'E-mail systemowy użytkownika FIDmana ma nieprawidłowy format.'
+            `E-mail systemowy użytkownika ${recipientName} ma nieprawidłowy format.`
         );
     } else if (email.length > FIDMAN_USER_LIMITS.email.max) {
         problems.push(
-            `E-mail systemowy użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
+            `E-mail systemowy użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
         );
     }
 
-    if (!name) problems.push('Użytkownik FIDmana musi mieć imię.');
+    if (!name) problems.push(`Użytkownik ${recipientName} musi mieć imię.`);
     else if (name.length > FIDMAN_USER_LIMITS.name)
         problems.push(
-            `Imię użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
+            `Imię użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
         );
 
-    if (!surname) problems.push('Użytkownik FIDmana musi mieć nazwisko.');
+    if (!surname) problems.push(`Użytkownik ${recipientName} musi mieć nazwisko.`);
     else if (surname.length > FIDMAN_USER_LIMITS.surname)
         problems.push(
-            `Nazwisko użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
+            `Nazwisko użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
         );
 
-    if (!source.entityId)
-        problems.push('Użytkownik FIDmana musi być przypisany do podmiotu.');
+    if (recipient === 'fidman' && !source.entityId)
+        problems.push(`Użytkownik ${recipientName} musi być przypisany do podmiotu.`);
 
     return problems;
 }
@@ -715,13 +721,13 @@ export function buildUserUpsert(
 export async function enqueueFidmanUserPush(
     source: FidmanUserSource,
     enabled: boolean,
-    conn: mysql.PoolConnection
+    conn: mysql.PoolConnection,
+    recipient: UserSyncRecipient = 'fidman',
 ): Promise<number> {
-    return enqueueRow(
-        buildUserUpsert(source, enabled),
-        source.personId,
-        conn
-    );
+    const envelope = buildUserUpsert(source, enabled);
+    // Jawna flaga kolejkuje FIN także bez konfiguracji, aby drainer mógł ponowić dostawę.
+    if (recipient === 'fin') Object.assign(envelope.payload, { _recipient: 'fin' });
+    return enqueueRow(envelope, source.personId, conn);
 }
 
 function typeIdInClause(): { clause: string; ids: number[] } {
@@ -898,11 +904,18 @@ export async function deliverOutboxRow(
 }
 
 async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnection): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
-    const { baseUrl, token } = Setup.FidmanSync;
+    let errorPrefix = '';
     try {
-        if (!baseUrl) throw new Error('FIDMAN_SYNC_BASE_URL nie ustawione');
+        const { _recipient, ...wirePayload } = parsePayload(row.Payload);
+        const recipient =
+            row.Kind === 'user.upsert' && _recipient === 'fin' ? 'fin' : 'fidman';
+        errorPrefix = recipient === 'fin' ? '[FIN] ' : '';
+        const { baseUrl, token } =
+            recipient === 'fin' ? Setup.FinSync : Setup.FidmanSync;
+        if (!baseUrl) throw new Error(`${recipient.toUpperCase()}_SYNC_BASE_URL nie ustawione`);
+        if (recipient === 'fin' && !token) throw new Error('FIN_SYNC_TOKEN nie ustawione');
 
-        let payload = parsePayload(row.Payload);
+        let payload = wirePayload;
         if (row.Kind === 'contract.folders') {
             if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
                 throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
@@ -963,11 +976,11 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
         const bodyText = await response.text().catch(() => '');
         await markFailed(
             row,
-            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
+            `${errorPrefix}HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
         );
         return 'FAILED';
     } catch (err: any) {
-        await markFailed(row, err?.message ?? String(err), conn).catch((dbErr) =>
+        await markFailed(row, errorPrefix + (err?.message ?? String(err)), conn).catch((dbErr) =>
             console.error('[FidmanSync] nie udało się zapisać FAILED:', dbErr)
         );
         return 'FAILED';

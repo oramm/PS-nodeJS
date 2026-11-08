@@ -12,7 +12,7 @@ import {
  * autora z JOIN) nie jadą w INSERT.
  *
  * DLACZEGO WARTOŚCI JAKO JSON, A NIE KOLUMNY PER POLE: lista zmienianych pól konta rośnie
- * (rola, e-mail, aktywność, FIDman, zakres projektów, sześć flag panelu) i różni się typem;
+ * (rola, e-mail, aktywność, FIDman, FIN, zakres projektów, sześć flag panelu) i różni się typem;
  * jedna para (przed/po) jako tekst JSON trzyma to bez kolejnych migracji.
  *
  * SEKRETY NIGDY TU NIE TRAFIAJĄ: tokeny odświeżania są poza zamkniętą listą pól, które

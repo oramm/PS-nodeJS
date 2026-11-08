@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
 import PersonRepository from '../PersonRepository';
+import PersonAccountEventsController from '../accountEvents/PersonAccountEventsController';
 import {
     enqueueFidmanUserPush,
     tryDeliverAfterCommit,
@@ -57,6 +58,7 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
      */
     async function setUp(options: {
         previousFlag?: boolean;
+        previousFinFlag?: boolean;
         source?: typeof fullSource | undefined;
     }) {
         jest.clearAllMocks();
@@ -76,6 +78,7 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
                       personId: PERSON_ID,
                       systemEmail: fullSource.systemEmail,
                       fidmanEnabled: options.previousFlag,
+                      finEnabled: options.previousFinFlag,
                   };
 
         jest.spyOn(PersonRepository.prototype, 'getPersonAccountV2')
@@ -99,6 +102,55 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         return PersonsController;
     }
 
+    it.each([
+        [false, false, false, false],
+        [false, false, true, false],
+        [false, false, false, true],
+        [false, false, true, true],
+        [true, true, false, false],
+        [false, true, false, false],
+        [true, false, false, true],
+        [true, true, true, true],
+    ])('niezależne flagi: wcześniej FID=%s FIN=%s, potem FID=%s FIN=%s', async (oldFid, oldFin, fidmanEnabled, finEnabled) => {
+        const controller = await setUp({ previousFlag: oldFid, previousFinFlag: oldFin });
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, fidmanEnabled, finEnabled });
+        const expected = [];
+        if (oldFid || fidmanEnabled) expected.push([fullSource, fidmanEnabled, mockConn, 'fidman']);
+        if (oldFin || finEnabled) expected.push([fullSource, finEnabled, mockConn, 'fin']);
+        expect(enqueueMock.mock.calls).toEqual(expected);
+        expect(deliverMock).toHaveBeenCalledTimes(expected.length);
+    });
+
+    it('zdarzenie finEnabled jest w transakcji konta', async () => {
+        const controller = await setUp({ previousFlag: false, previousFinFlag: false });
+        const events = jest.spyOn(PersonAccountEventsController, 'recordChanges').mockResolvedValue(1);
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, finEnabled: true }, 7);
+        expect(events).toHaveBeenCalledWith(mockConn, expect.objectContaining({
+            editorId: 7,
+            changes: [{ field: 'finEnabled', before: false, after: true }],
+        }));
+    });
+
+    it('zapis innego pola przy zapalonej FIN nadal kolejkuje FIN', async () => {
+        const controller = await setUp({ previousFlag: false, previousFinFlag: true });
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, systemEmail: fullSource.systemEmail });
+        expect(enqueueMock).toHaveBeenCalledWith(fullSource, true, mockConn, 'fin');
+    });
+
+    it('FIN przyjmuje osobę bez podmiotu, ale odrzuca brak imienia', async () => {
+        const controller = await setUp({ previousFlag: false, source: { ...fullSource, entityId: null } as any });
+        await expect(controller.upsertPersonAccountV2({ personId: PERSON_ID, finEnabled: true })).resolves.toBeDefined();
+        const invalidController = await setUp({ previousFlag: false, source: { ...fullSource, name: '' } });
+        await expect(invalidController.upsertPersonAccountV2({ personId: PERSON_ID, finEnabled: true })).rejects.toThrow('Użytkownik FIN musi mieć imię.');
+    });
+
+    it('błąd pierwszej dostawy nie zatrzymuje drugiej ani zapisu', async () => {
+        const controller = await setUp({ previousFlag: false });
+        deliverMock.mockRejectedValueOnce(new Error('awaria FIDmana'));
+        await expect(controller.upsertPersonAccountV2({ personId: PERSON_ID, fidmanEnabled: true, finEnabled: true })).resolves.toBeDefined();
+        expect(deliverMock).toHaveBeenCalledTimes(2);
+    });
+
     it('zaznaczenie (0 -> 1) kolejkuje push z enabled:true w tej samej transakcji', async () => {
         const PersonsController = await setUp({ previousFlag: false });
 
@@ -111,7 +163,8 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         expect(enqueueMock).toHaveBeenCalledWith(
             expect.objectContaining({ personId: PERSON_ID }),
             true,
-            mockConn
+            mockConn,
+            'fidman'
         );
         // Dostawa jest post-commit: kolejkowanie dostaje połączenie transakcji, dostawa nie.
         expect(deliverMock).toHaveBeenCalledWith(9001);
@@ -128,7 +181,8 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         expect(enqueueMock).toHaveBeenCalledWith(
             expect.anything(),
             true,
-            mockConn
+            mockConn,
+            'fidman'
         );
     });
 
@@ -144,7 +198,8 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         expect(enqueueMock).toHaveBeenCalledWith(
             expect.anything(),
             false,
-            mockConn
+            mockConn,
+            'fidman'
         );
     });
 
@@ -193,7 +248,7 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
             mockConn,
             expect.arrayContaining(['fidmanEnabled'])
         );
-        expect(enqueueMock).toHaveBeenCalledWith(expect.anything(), true, mockConn);
+        expect(enqueueMock).toHaveBeenCalledWith(expect.anything(), true, mockConn, 'fidman');
     });
 
     it('payload bez pola flagi nie znaczy „wyłącz" — przy zapalonej fladze push nadal enabled:true', async () => {
@@ -207,7 +262,8 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         expect(enqueueMock).toHaveBeenCalledWith(
             expect.anything(),
             true,
-            mockConn
+            mockConn,
+            'fidman'
         );
     });
 
