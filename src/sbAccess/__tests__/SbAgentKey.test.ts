@@ -32,6 +32,14 @@ import { newDeviceToken, parseAgentKeyHash } from '../sbSecretsPolicy';
 import Letter from '../../letters/Letter';
 import PersonsController from '../../persons/PersonsController';
 import LetterEventsController from '../../letters/letterEvent/LetterEventsController';
+import { enqueueFinUserRefresh } from '../../contracts/fidmanSync/FidmanSync';
+// PE6: kolejka kont do FIN ma własne testy (FinUserSync.test.ts); tu tylko sprawdzamy, że Dostępy SB ją wołają.
+jest.mock('../../contracts/fidmanSync/FidmanSync', () => ({
+    ...(jest.requireActual('../../contracts/fidmanSync/FidmanSync') as object),
+    enqueueFinUserRefresh: jest.fn(async () => undefined),
+    tryDeliverAfterCommit: jest.fn(async () => undefined),
+}));
+
 
 const KEY = newDeviceToken();
 const KEY_HASH = createHash('sha256').update(KEY, 'utf8').digest('hex');
@@ -213,6 +221,8 @@ describe('SBZ-1: PUT /sbAccess/me/agentKey', () => {
         expect(await SbAccessController.setOwnAgentKey(record, KEY_HASH)).toEqual({ changed: true });
         expect(setHash).toHaveBeenCalledWith({} as any, 140, KEY_HASH);
         expect(append).toHaveBeenCalledWith({} as any, expect.objectContaining({ personId: 140, actionCode: 'SET_AGENT_KEY' }));
+        // PE6: nowy klucz idzie też do FIN, w tej samej transakcji (konto osoby z aktualnym skrótem).
+        expect(enqueueFinUserRefresh).toHaveBeenCalledWith({} as any, 140, expect.any(Function));
 
         getHash.mockResolvedValue(KEY_HASH);
         append.mockClear();

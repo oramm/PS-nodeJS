@@ -916,6 +916,9 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
         if (recipient === 'fin' && !token) throw new Error('FIN_SYNC_TOKEN nie ustawione');
 
         let payload = wirePayload;
+        // PE6: dostęp do FIN i skrót klucza agenta czytane w chwili dostawy, nie przy kolejkowaniu - ponowienie
+        // starego wiersza nie przywróci dostępu ani klucza odebranego później.
+        if (recipient === 'fin') payload = await withCurrentFinState(payload, row.RefId, conn);
         if (row.Kind === 'contract.folders') {
             if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
                 throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
@@ -924,7 +927,7 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
             payload = { ...payload, folderSetVersion: row.Id } satisfies FidmanFoldersPayload;
         }
         const signal = AbortSignal.timeout(DELIVERY_TIMEOUT_MS);
-        const response = await fetch(`${baseUrl}${PUSH_PATH}`, {
+        const post = (p: unknown) => fetch(`${baseUrl}${PUSH_PATH}`, {
             method: 'POST',
             signal,
             headers: {
@@ -933,9 +936,19 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
             },
             body: JSON.stringify({
                 kind: row.Kind,
-                payload,
+                payload: p,
             }),
         });
+        const response = await post(payload);
+        // PE6: dwie dostawy tej samej osoby mogą się wyprzedzić (stary skrót dojdzie po odebraniu). Po przyjęciu
+        // czytamy stan jeszcze raz i dosyłamy bieżący, gdy zmienił się w trakcie - FIN kończy na stanie z bazy PS.
+        for (let i = 0; recipient === 'fin' && response.status === 200 && i < 3; i++) {
+            const now = await withCurrentFinState(payload, row.RefId, conn);
+            if (now.enabled === payload.enabled && now.sbAgentKeyHash === payload.sbAgentKeyHash) break;
+            payload = now;
+            const again = await post(payload);
+            if (again.status !== 200) throw new Error(`HTTP ${again.status} przy dosłaniu bieżącego stanu klucza agenta`);
+        }
 
         if (response.status === 200) {
             const body = (await response
@@ -996,6 +1009,66 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
  * fire — this post-commit attempt is the primary delivery, the drainer is the
  * backstop. Same shape as AqmSync.tryDeliverAfterCommit.
  */
+/**
+ * PE6 (FIN): skrót osobistego klucza agenta (SbAccess.AgentKeyHash) - tylko przy wpisie SB ACTIVE, inaczej null.
+ * FIN wpuszcza nim agenta pracownika tak jak PS (sbAgentKeyAuth); sam klucz zostaje na komputerze osoby.
+ */
+async function currentSbAgentKeyHash(personId: number, conn?: mysql.PoolConnection): Promise<string | null> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        "SELECT AgentKeyHash AS hash FROM SbAccess WHERE PersonId = ? AND StatusCode = 'ACTIVE'",
+        conn,
+        [personId]
+    )) as { hash: string | null }[];
+    return rows?.[0]?.hash ?? null;
+}
+
+/** Bieżący dostęp do FIN (PersonAccounts.FinEnabled) i skrót klucza; bez konta w PS zostaje to, co we wpisie. */
+async function withCurrentFinState(payload: any, personId: number, conn?: mysql.PoolConnection) {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT FinEnabled AS fin FROM PersonAccounts WHERE PersonId = ?',
+        conn,
+        [personId]
+    )) as { fin: number }[];
+    const enabled = rows?.length ? Number(rows[0].fin) === 1 : payload.enabled === true;
+    return { ...payload, enabled, sbAgentKeyHash: enabled ? await currentSbAgentKeyHash(personId, conn) : null };
+}
+
+/**
+ * PE6 (FIN): zmiana w Dostępach SB (klucz agenta, blokada, odebranie, odblokowanie) dosyła do FIN konto osoby
+ * z aktualnym skrótem klucza - tylko gdy osoba ma dostęp do FIN (PersonAccounts.FinEnabled). Ta sama transakcja
+ * co zmiana SB (L8); dostawa po commicie. Dane, których FIN nie przyjmie, nie blokują zmiany SB - ślad w logu.
+ */
+export async function enqueueFinUserRefresh(
+    conn: mysql.PoolConnection,
+    personId: number,
+    loadSource: (conn: mysql.PoolConnection, personId: number) => Promise<FidmanUserSource | undefined>,
+): Promise<number | undefined> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT 1 AS fin FROM PersonAccounts WHERE PersonId = ? AND FinEnabled = 1',
+        conn,
+        [personId]
+    )) as { fin: number }[];
+    if (!rows?.length) return undefined;
+    const source = await loadSource(conn, personId);
+    if (!source) return undefined;
+    if (validateFidmanUserSource(source, 'fin').length) {
+        // Odebranie klucza nie może utknąć na danych osoby (np. za długie nazwisko po zmianie w PS): przy braku
+        // aktywnego klucza wysyłamy imię i nazwisko przycięte do limitów FIN. Nowego klucza z takimi danymi nie wysyłamy.
+        const clipped = {
+            ...source,
+            name: source.name?.slice(0, FIDMAN_USER_LIMITS.name),
+            surname: source.surname?.slice(0, FIDMAN_USER_LIMITS.surname),
+        };
+        const revoking = (await currentSbAgentKeyHash(personId, conn)) === null;
+        if (!revoking || validateFidmanUserSource(clipped, 'fin').length) {
+            console.error(`[FIN] nie wysłano zmiany klucza agenta dla PersonId=${personId}: dane osoby nie spełniają kontraktu FIN.${revoking ? ' Klucz w FIN trzeba odebrać ręcznie.' : ''}`);
+            return undefined;
+        }
+        return enqueueFidmanUserPush(clipped, true, conn, 'fin');
+    }
+    return enqueueFidmanUserPush(source, true, conn, 'fin');
+}
+
 export async function tryDeliverAfterCommit(outboxId: number): Promise<void> {
     try {
         const rows = (await ToolsDb.getQueryCallbackAsync(

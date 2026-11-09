@@ -98,6 +98,13 @@ import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessController from '../SbAccessController';
 import { SbAccessError, NOT_CONFIGURED_MESSAGE } from '../sbAccessPolicy';
 import { SbAccessRecord, SbAccessStatus } from '../sbAccessTypes';
+// PE6: kolejka kont do FIN ma własne testy (FinUserSync.test.ts); tu tylko sprawdzamy, że Dostępy SB ją wołają.
+jest.mock('../../contracts/fidmanSync/FidmanSync', () => ({
+    ...(jest.requireActual('../../contracts/fidmanSync/FidmanSync') as object),
+    enqueueFinUserRefresh: jest.fn(async () => undefined),
+    tryDeliverAfterCommit: jest.fn(async () => undefined),
+}));
+
 
 // ------------------------------------------------------------------ atrapa GitHuba
 const gh = {

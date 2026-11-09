@@ -5,6 +5,14 @@ import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessController from '../SbAccessController';
 import { SbAccessTransitionInput } from '../sbAccessTypes';
+import { enqueueFinUserRefresh } from '../../contracts/fidmanSync/FidmanSync';
+// PE6: kolejka kont do FIN ma własne testy (FinUserSync.test.ts); tu tylko sprawdzamy, że Dostępy SB ją wołają.
+jest.mock('../../contracts/fidmanSync/FidmanSync', () => ({
+    ...(jest.requireActual('../../contracts/fidmanSync/FidmanSync') as object),
+    enqueueFinUserRefresh: jest.fn(async () => undefined),
+    tryDeliverAfterCommit: jest.fn(async () => undefined),
+}));
+
 
 describe('SbAccessController', () => {
     let pending: string[];
@@ -70,6 +78,8 @@ describe('SbAccessController', () => {
             note: input.note,
         });
         expect(saved).toEqual(['stan', 'zdarzenie']);
+        // PE6: zmiana stanu SB dosyła do FIN konto z aktualnym skrótem klucza, w tej samej transakcji.
+        expect(enqueueFinUserRefresh).toHaveBeenCalledWith(conn, 17, expect.any(Function));
         expect(conn.beginTransaction).toHaveBeenCalledTimes(1);
         expect(conn.commit).toHaveBeenCalledTimes(1);
         expect(conn.rollback).not.toHaveBeenCalled();

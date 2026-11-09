@@ -1,7 +1,7 @@
 import { createServer } from 'http';
 import { AddressInfo } from 'net';
 import ToolsDb from '../../../tools/ToolsDb';
-import { buildUserUpsert, deliverOutboxRow, drainFidmanOutbox, enqueueFidmanUserPush, validateFidmanUserSource } from '../FidmanSync';
+import { buildUserUpsert, deliverOutboxRow, drainFidmanOutbox, enqueueFidmanUserPush, enqueueFinUserRefresh, validateFidmanUserSource } from '../FidmanSync';
 
 jest.mock('../../../tools/ToolsDb');
 
@@ -17,6 +17,8 @@ const realFetch = global.fetch;
 
 beforeEach(() => {
     jest.clearAllMocks();
+    // PE6: dostawa do FIN czyta stan z bazy - odpowiedzi z poprzedniego testu nie mogą przeciekać.
+    (ToolsDb.getQueryCallbackAsync as jest.Mock).mockReset();
     process.env.FIN_SYNC_BASE_URL = 'https://fin.invalid';
     process.env.FIN_SYNC_TOKEN = 'fin-test-token';
     process.env.FIDMAN_SYNC_BASE_URL = 'https://fidman.invalid';
@@ -109,9 +111,84 @@ it('prawdziwy fetch dostarcza FIN do lokalnej atrapy HTTP', async () => {
         process.env.FIN_SYNC_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
         global.fetch = realFetch;
         expect(await deliverOutboxRow(row())).toBe('SENT');
-        expect(received).toEqual({ method: 'POST', path: '/api/ps-sync', auth: 'Bearer fin-test-token', body: buildUserUpsert(source, true) });
+        const upsert = buildUserUpsert(source, true);
+        expect(received).toEqual({ method: 'POST', path: '/api/ps-sync', auth: 'Bearer fin-test-token', body: { ...upsert, payload: { ...upsert.payload, sbAgentKeyHash: null } } });
     } finally {
         server.closeAllConnections();
         await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
+});
+
+describe('PE6: skrót klucza agenta z Dostępów SB w koncie dla FIN', () => {
+    const HASH = 'ab'.repeat(32);
+    const sent = (fetchMock: jest.Mock) => fetchMock.mock.calls.map((call: any[]) => JSON.parse(call[1].body).payload);
+    // Stan bazy PS czytany przy dostawie: dostęp do FIN (PersonAccounts) i skrót klucza (SbAccess ACTIVE).
+    const ps = (stan: { fin?: number | null; hash?: string | null }) =>
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string) =>
+            sql.includes('FROM PersonAccounts') ? (stan.fin == null ? [] : [{ fin: stan.fin }])
+                : sql.includes('FROM SbAccess') ? (stan.hash ? [{ hash: stan.hash }] : []) : undefined);
+    const ok = () => jest.fn().mockResolvedValue({ status: 200, json: async () => ({}) });
+
+    it('FIN dostaje aktualny skrót (tylko wpis ACTIVE), FIDman nie dostaje pola', async () => {
+        const fetchMock = ok();
+        global.fetch = fetchMock as any;
+        ps({ fin: 1, hash: HASH });
+        expect(await deliverOutboxRow(row(true))).toBe('SENT');
+        expect(await deliverOutboxRow(row(false))).toBe('SENT');
+        const [fin, fidman] = sent(fetchMock);
+        expect(fin).toMatchObject({ enabled: true, sbAgentKeyHash: HASH });
+        expect(fidman).not.toHaveProperty('sbAgentKeyHash');
+        expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledWith(expect.stringContaining("StatusCode = 'ACTIVE'"), undefined, [42]);
+    });
+
+    it('brak wpisu ACTIVE = null; dostęp do FIN wyłączony w PS = enabled false i null, choć stary wpis mówi „włączony”', async () => {
+        const fetchMock = ok();
+        global.fetch = fetchMock as any;
+        ps({ fin: 1, hash: null });
+        await deliverOutboxRow(row(true));
+        ps({ fin: 0, hash: HASH });
+        await deliverOutboxRow(row(true));
+        expect(sent(fetchMock).map((p: any) => [p.enabled, p.sbAgentKeyHash])).toEqual([[true, null], [false, null]]);
+    });
+
+    it('wyścig: stan zmienił się w trakcie dostawy - FIN dostaje jeszcze bieżący stan', async () => {
+        let blokada = false;
+        const fetchMock = jest.fn(async () => { blokada = true; return { status: 200, json: async () => ({}) }; });
+        global.fetch = fetchMock as any;
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string) =>
+            sql.includes('FROM PersonAccounts') ? [{ fin: 1 }] : sql.includes('FROM SbAccess') ? (blokada ? [] : [{ hash: HASH }]) : undefined);
+        expect(await deliverOutboxRow(row(true))).toBe('SENT');
+        expect(sent(fetchMock).map((p: any) => p.sbAgentKeyHash)).toEqual([HASH, null]);
+        // Kontrola: bez zmiany w trakcie jedna wysyłka.
+        fetchMock.mockClear();
+        await deliverOutboxRow(row(true));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('zmiana w Dostępach SB kolejkuje konto do FIN tylko u osoby z dostępem do FIN', async () => {
+        const conn = { execute: jest.fn().mockResolvedValue([{ insertId: 7 }]) } as any;
+        const load = jest.fn().mockResolvedValue(source);
+        ps({ fin: null });
+        expect(await enqueueFinUserRefresh(conn, 42, load)).toBeUndefined();
+        expect(load).not.toHaveBeenCalled();
+        expect(conn.execute).not.toHaveBeenCalled();
+
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockReset();
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValueOnce([{ fin: 1 }]);
+        expect(await enqueueFinUserRefresh(conn, 42, load)).toBe(7);
+        expect(JSON.parse(conn.execute.mock.calls[0][1][2])).toMatchObject({ _recipient: 'fin', enabled: true, legacyPersonId: 42 });
+    });
+
+    it('odebranie klucza przechodzi mimo za długiego nazwiska (przycięte); nowy klucz z takimi danymi - nie', async () => {
+        const conn = { execute: jest.fn().mockResolvedValue([{ insertId: 8 }]) } as any;
+        const load = jest.fn().mockResolvedValue({ ...source, surname: 'N'.repeat(40) });
+        ps({ fin: 1, hash: null });
+        expect(await enqueueFinUserRefresh(conn, 42, load)).toBe(8);
+        expect(JSON.parse(conn.execute.mock.calls[0][1][2]).surname).toBe('N'.repeat(32));
+        ps({ fin: 1, hash: HASH });
+        const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        expect(await enqueueFinUserRefresh(conn, 42, load)).toBeUndefined();
+        expect(conn.execute).toHaveBeenCalledTimes(1);
+        err.mockRestore();
+    });
 });
