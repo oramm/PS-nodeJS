@@ -123,9 +123,9 @@ describe('PE6: skrót klucza agenta z Dostępów SB w koncie dla FIN', () => {
     const HASH = 'ab'.repeat(32);
     const sent = (fetchMock: jest.Mock) => fetchMock.mock.calls.map((call: any[]) => JSON.parse(call[1].body).payload);
     // Stan bazy PS czytany przy dostawie: dostęp do FIN (PersonAccounts) i skrót klucza (SbAccess ACTIVE).
-    const ps = (stan: { fin?: number | null; hash?: string | null }) =>
+    const ps = (stan: { fin?: number | null; active?: number; hash?: string | null }) =>
         (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string) =>
-            sql.includes('FROM PersonAccounts') ? (stan.fin == null ? [] : [{ fin: stan.fin }])
+            sql.includes('FROM PersonAccounts') ? (stan.fin == null ? [] : [{ fin: stan.fin, active: stan.active ?? 1 }])
                 : sql.includes('FROM SbAccess') ? (stan.hash ? [{ hash: stan.hash }] : []) : undefined);
     const ok = () => jest.fn().mockResolvedValue({ status: 200, json: async () => ({}) });
 
@@ -151,12 +151,22 @@ describe('PE6: skrót klucza agenta z Dostępów SB w koncie dla FIN', () => {
         expect(sent(fetchMock).map((p: any) => [p.enabled, p.sbAgentKeyHash])).toEqual([[true, null], [false, null]]);
     });
 
+    it('konto PS wyłączone (IsActive = 0) przy zostawionym dostępie do FIN = enabled false i pusty skrót; włączone z powrotem = dostęp wraca', async () => {
+        const fetchMock = ok();
+        global.fetch = fetchMock as any;
+        ps({ fin: 1, active: 0, hash: HASH });
+        await deliverOutboxRow(row(true));
+        ps({ fin: 1, active: 1, hash: HASH });
+        await deliverOutboxRow(row(true));
+        expect(sent(fetchMock).map((p: any) => [p.enabled, p.sbAgentKeyHash])).toEqual([[false, null], [true, HASH]]);
+    });
+
     it('wyścig: stan zmienił się w trakcie dostawy - FIN dostaje jeszcze bieżący stan', async () => {
         let blokada = false;
         const fetchMock = jest.fn(async () => { blokada = true; return { status: 200, json: async () => ({}) }; });
         global.fetch = fetchMock as any;
         (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string) =>
-            sql.includes('FROM PersonAccounts') ? [{ fin: 1 }] : sql.includes('FROM SbAccess') ? (blokada ? [] : [{ hash: HASH }]) : undefined);
+            sql.includes('FROM PersonAccounts') ? [{ fin: 1, active: 1 }] : sql.includes('FROM SbAccess') ? (blokada ? [] : [{ hash: HASH }]) : undefined);
         expect(await deliverOutboxRow(row(true))).toBe('SENT');
         expect(sent(fetchMock).map((p: any) => p.sbAgentKeyHash)).toEqual([HASH, null]);
         // Kontrola: bez zmiany w trakcie jedna wysyłka.

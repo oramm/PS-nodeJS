@@ -59,6 +59,7 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
     async function setUp(options: {
         previousFlag?: boolean;
         previousFinFlag?: boolean;
+        previousActive?: boolean;
         source?: typeof fullSource | undefined;
     }) {
         jest.clearAllMocks();
@@ -79,6 +80,7 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
                       systemEmail: fullSource.systemEmail,
                       fidmanEnabled: options.previousFlag,
                       finEnabled: options.previousFinFlag,
+                      isActive: options.previousActive,
                   };
 
         jest.spyOn(PersonRepository.prototype, 'getPersonAccountV2')
@@ -119,6 +121,29 @@ describe('PersonsController.upsertPersonAccountV2 — flaga FIDmana', () => {
         if (oldFin || finEnabled) expected.push([fullSource, finEnabled, mockConn, 'fin']);
         expect(enqueueMock.mock.calls).toEqual(expected);
         expect(deliverMock).toHaveBeenCalledTimes(expected.length);
+    });
+
+    it('wyłączenie konta PS (isActive false) przy zostawionej FIN kolejkuje wyłączenie w FIN, FIDmana nie rusza', async () => {
+        const controller = await setUp({ previousFlag: false, previousFinFlag: true, previousActive: true });
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, isActive: false });
+        expect(enqueueMock.mock.calls).toEqual([[fullSource, false, mockConn, 'fin']]);
+        expect(deliverMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('wyłączenie konta PS nie jest blokowane danymi, których FIN nie przyjmie', async () => {
+        const controller = await setUp({ previousFlag: false, previousFinFlag: true, previousActive: true, source: { ...fullSource, systemEmail: '' } });
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        await expect(controller.upsertPersonAccountV2({ personId: PERSON_ID, isActive: false })).resolves.toBeDefined();
+        warn.mockRestore();
+    });
+
+    it('ponowne włączenie konta PS przy zostawionej FIN kolejkuje włączenie w FIN; zapis innego pola przy wyłączonym koncie - nic', async () => {
+        let controller = await setUp({ previousFlag: false, previousFinFlag: true, previousActive: false });
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, isActive: true });
+        expect(enqueueMock.mock.calls).toEqual([[fullSource, true, mockConn, 'fin']]);
+        controller = await setUp({ previousFlag: false, previousFinFlag: true, previousActive: false });
+        await controller.upsertPersonAccountV2({ personId: PERSON_ID, systemEmail: fullSource.systemEmail });
+        expect(enqueueMock).not.toHaveBeenCalled();
     });
 
     it('zdarzenie finEnabled jest w transakcji konta', async () => {

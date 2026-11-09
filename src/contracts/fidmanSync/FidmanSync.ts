@@ -1022,14 +1022,17 @@ async function currentSbAgentKeyHash(personId: number, conn?: mysql.PoolConnecti
     return rows?.[0]?.hash ?? null;
 }
 
-/** Bieżący dostęp do FIN (PersonAccounts.FinEnabled) i skrót klucza; bez konta w PS zostaje to, co we wpisie. */
+/**
+ * Bieżący dostęp do FIN (PersonAccounts.FinEnabled przy aktywnym koncie PS - „zalogowany w PS = zalogowany w FIN”)
+ * i skrót klucza; bez konta w PS zostaje to, co we wpisie.
+ */
 async function withCurrentFinState(payload: any, personId: number, conn?: mysql.PoolConnection) {
     const rows = (await ToolsDb.getQueryCallbackAsync(
-        'SELECT FinEnabled AS fin FROM PersonAccounts WHERE PersonId = ?',
+        'SELECT FinEnabled AS fin, IsActive AS active FROM PersonAccounts WHERE PersonId = ?',
         conn,
         [personId]
-    )) as { fin: number }[];
-    const enabled = rows?.length ? Number(rows[0].fin) === 1 : payload.enabled === true;
+    )) as { fin: number; active: number }[];
+    const enabled = rows?.length ? Number(rows[0].fin) === 1 && Number(rows[0].active) === 1 : payload.enabled === true;
     return { ...payload, enabled, sbAgentKeyHash: enabled ? await currentSbAgentKeyHash(personId, conn) : null };
 }
 

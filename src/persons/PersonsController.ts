@@ -499,11 +499,19 @@ export default class PersonsController extends BaseController<
             );
 
             for (const { recipient, field } of recipients) {
-                const wasEnabled = previousAccount?.[field] === true;
+                // FIN: „zalogowany w PS = zalogowany w FIN” — wyłączone konto PS (IsActive = 0) wyłącza też FIN,
+                // a ponowne włączenie przywraca; dostawa i tak czyta bieżący stan (FidmanSync.withCurrentFinState).
+                const activeBefore =
+                    recipient !== 'fin' || previousAccount?.isActive !== false;
+                const activeAfter =
+                    recipient !== 'fin' ||
+                    (accountData.isActive ?? previousAccount?.isActive) !== false;
+                const flagBefore = previousAccount?.[field] === true;
+                const wasEnabled = flagBefore && activeBefore;
                 const willBeEnabled =
-                    accountData[field] === undefined
-                        ? wasEnabled
-                        : accountData[field] === true;
+                    (accountData[field] === undefined
+                        ? flagBefore
+                        : accountData[field] === true) && activeAfter;
                 const id = await this.enqueueFidmanUserPushIfNeeded(
                     conn,
                     accountData.personId,
