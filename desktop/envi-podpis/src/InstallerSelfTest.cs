@@ -81,11 +81,20 @@ namespace EnviPodpis
                     try { Installer.PayloadPath(fixture, path); } catch (IOException) { denied = true; }
                     check(denied, "odrzucona sciezka: " + path);
                 }
-                // Upgrade from the actual shipped PS-only executable, without touching the active installation.
+                // The download asset is now an installer; make a fixed PS-only 1.0 fixture instead.
                 Installer.RemoveTree(Installer.InstallDir);
                 Installer.RemoveTree(Installer.InstallDir + ".previous");
                 Directory.CreateDirectory(Installer.InstallDir);
-                string legacy = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\assets\signing\EnviPodpis.exe");
+                string legacy = Path.Combine(root, "legacy.exe"), legacySource = Path.Combine(root, "legacy.cs");
+                File.WriteAllText(legacySource, "using System.Reflection; [assembly: AssemblyVersion(\"1.0.0.0\")] static class Legacy { static void Main() {} }");
+                using (Process compiler = Process.Start(new ProcessStartInfo {
+                    FileName = Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "csc.exe"),
+                    Arguments = "/nologo /target:winexe /out:\"" + legacy + "\" \"" + legacySource + "\"", UseShellExecute = false, CreateNoWindow = true }))
+                {
+                    if (!compiler.WaitForExit(30000)) { compiler.Kill(); throw new IOException("Nie zbudowano testowej wersji 1.0 w terminie."); }
+                    if (compiler.ExitCode != 0) throw new IOException("Nie zbudowano testowej wersji 1.0.");
+                }
+                check(FileVersionInfo.GetVersionInfo(legacy).FileVersion == "1.0.0.0", "stala testowa wersja PS-only 1.0 niezalezna od publikowanego instalatora");
                 File.Copy(legacy, Installer.InstalledExe);
                 string legacyHash = Hash(Installer.InstalledExe);
                 result = Installer.InstallOrUpdate(payload, false);

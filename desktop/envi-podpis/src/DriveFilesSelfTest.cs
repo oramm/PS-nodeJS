@@ -1,11 +1,14 @@
 #if DEBUG
 using System;
 using System.IO;
+using System.Drawing;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace EnviPodpis
 {
@@ -26,6 +29,93 @@ namespace EnviPodpis
         {
             RunAsync(check).GetAwaiter().GetResult();
         }
+        internal static void RunPicker(string directory, Action<bool, string> check)
+        {
+            string lastQuery = null, lastFolderRequest = null;
+            Transport transport = new Transport();
+            transport.Handle = delegate(HttpRequestMessage request) {
+                string path = request.RequestUri.AbsolutePath;
+                if (path.EndsWith("/about")) return Task.FromResult(Response("{\"user\":{\"permissionId\":\"test-picker\"}}"));
+                if (path.EndsWith("/drives")) return Task.FromResult(Response("{\"drives\":[]}"));
+                if (path.EndsWith("/files/root")) { lastFolderRequest = "root"; return Task.FromResult(Response("{\"id\":\"root\",\"name\":\"Mój Dysk\",\"mimeType\":\"application/vnd.google-apps.folder\"}")); }
+                if (path.EndsWith("/files/folder")) { lastFolderRequest = "folder"; return Task.FromResult(Response("{\"id\":\"folder\",\"name\":\"Folder testowy\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"]}")); }
+                lastQuery = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["q"];
+                return Task.FromResult(Response("{\"files\":[{\"id\":\"folder\",\"name\":\"Folder testowy\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"]},{\"id\":\"one\",\"name\":\"Pierwszy.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"]},{\"id\":\"two\",\"name\":\"Drugi.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"]}]}"));
+            };
+            using (DriveFilesForm form = new DriveFilesForm(new DriveAuth(), new DriveFiles(delegate { return Task.FromResult("offline-test"); }, transport)))
+            {
+                form.Show(); Application.DoEvents();
+                check(Field<ComboBox>(form, "location").SelectedIndex >= 0 && !string.IsNullOrEmpty(Field<ComboBox>(form, "location").Text), "Drive picker: visible location control has a selected readable label");
+                ListView list = Field<ListView>(form, "list");
+                TextBox search = Field<TextBox>(form, "search");
+                typeof(DriveFilesForm).GetField("folder", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(form,
+                    new DriveFile { Id = "unrelated", Name = "Inny folder", MimeType = "application/vnd.google-apps.folder" });
+                search.Text = "https://drive.google.com/drive/folders/folder";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                check(lastQuery.Contains("'folder' in parents") && search.Text == "", "Drive picker: pasted link opens folder rather than searching link text");
+                Wait((Task)typeof(DriveFilesForm).GetMethod("GoUp", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(lastFolderRequest == "root" && Field<DriveFile>(form, "folder").Id == "root", "Drive picker: up from pasted link opens actual parent, not previous unrelated folder");
+                search.Text = "https://drive.google.com/drive/folders/folder";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                search.Text = "Folder";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                check(lastQuery.Contains("name contains 'Folder'") && !lastQuery.Contains(" in parents"), "Drive picker: default name search reaches folders outside current folder");
+                list.Items[0].Selected = true;
+                Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                Wait((Task)typeof(DriveFilesForm).GetMethod("GoUp", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(lastFolderRequest == "root" && Field<DriveFile>(form, "folder").Id == "root", "Drive picker: up from global folder result opens actual parent");
+                search.Text = "https://drive.google.com/drive/folders/folder";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                search.Text = "Folder";
+                Field<CheckBox>(form, "everywhere").Checked = false;
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                check(lastQuery.Contains("'folder' in parents"), "Drive picker: user can restrict name search to current folder");
+                list.Items[0].Selected = true; list.Items[1].Selected = true;
+                Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(form.SelectedFiles == null && !form.IsDisposed, "Drive picker: mixed folder and document selection does not sign a folder");
+                list.Items[0].Selected = false; list.Items[2].Selected = true; form.Capacity = 1;
+                Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(form.SelectedFiles == null, "Drive picker: selection exceeding remaining batch capacity stays open");
+                form.Capacity = 8;
+                list.Items[1].Selected = false; list.Items[1].Selected = true;
+                Snapshot(form, directory, "drive-folders-860.png", new Size(860, 560));
+                Snapshot(form, directory, "drive-folders-680.png", new Size(680, 460));
+                Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(form.SelectedFiles != null && form.SelectedFiles.Count == 2 && form.SelectedFiles[0].ParentId == "folder" && form.SelectedFiles[1].ParentId == "folder", "Drive picker: arbitrary multiple documents preserve each original parent");
+            }
+            Transport folderTransport = new Transport { Handle = transport.Handle };
+            using (DriveFilesForm form = new DriveFilesForm(new DriveAuth(), new DriveFiles(delegate { return Task.FromResult("offline-test"); }, folderTransport), true))
+            {
+                form.Show(); Application.DoEvents();
+                TextBox search = Field<TextBox>(form, "search");
+                search.Text = "https://drive.google.com/file/d/document/view";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                check(!Field<Button>(form, "choose").Enabled, "Drive picker: invalid pasted link cannot confirm stale destination folder");
+                search.Text = "Folder";
+                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                check(!Field<Button>(form, "choose").Enabled, "Drive picker: destination mode cannot choose unrelated previous folder from global results");
+                ListView list = Field<ListView>(form, "list"); list.Items[0].Selected = true;
+                Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
+                check(Field<Button>(form, "choose").Enabled && search.Text == "", "Drive picker: destination mode enters found folder before confirming it");
+                Field<Button>(form, "choose").PerformClick();
+                check(form.SelectedFile != null && form.SelectedFile.Id == "folder", "Drive picker: destination mode preserves single-folder compatibility");
+            }
+        }
+        private static void Snapshot(Form form, string directory, string name, Size size)
+        {
+            if (string.IsNullOrEmpty(directory)) return;
+            Directory.CreateDirectory(directory); form.ClientSize = size; Application.DoEvents();
+            using (Bitmap bitmap = new Bitmap(form.Width, form.Height)) { form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size)); bitmap.Save(Path.Combine(directory, name)); }
+        }
+        private static T Field<T>(object value, string name)
+        { return (T)value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(value); }
+        private static void Wait(Task task)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!task.IsCompleted && DateTime.UtcNow < deadline) { Application.DoEvents(); Thread.Sleep(1); }
+            if (!task.IsCompleted) throw new TimeoutException("Picker operation did not complete.");
+            task.GetAwaiter().GetResult();
+        }
         private static async Task RunAsync(Action<bool, string> check)
         {
             string root = Path.Combine(Path.GetTempPath(), "envi-drive-offline-" + Guid.NewGuid().ToString("N"));
@@ -36,6 +126,27 @@ namespace EnviPodpis
             {
                 using (DriveFiles drive = new DriveFiles(delegate { return Task.FromResult("offline-test"); }, transport))
                 {
+                    check(DriveFiles.FolderIdFromLink("https://drive.google.com/drive/folders/folder-123?usp=sharing") == "folder-123", "Drive: pasted folder sharing link");
+                    check(DriveFiles.FolderIdFromLink(" https://drive.google.com/drive/u/0/folders/team_folder/ ") == "team_folder", "Drive: pasted account-specific folder link");
+                    check(DriveFiles.FolderIdFromLink("https://drive.google.com/open?id=folder_123") == "folder_123", "Drive: pasted legacy folder link");
+                    foreach (string bad in new[] { "http://drive.google.com/drive/folders/x", "https://drive.google.com.evil.invalid/drive/folders/x", "https://user@drive.google.com/drive/folders/x", "https://drive.google.com/file/d/x/view", "https://drive.google.com/open?id=x%2Fy", "https://drive.google.com:444/drive/folders/x" })
+                    {
+                        bool invalidLink = false; try { DriveFiles.FolderIdFromLink(bad); } catch (InvalidOperationException) { invalidLink = true; }
+                        check(invalidLink, "Drive: invalid or non-folder link rejected without fetching URL");
+                    }
+                    transport.Handle = delegate(HttpRequestMessage request) {
+                        string q = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["q"];
+                        check(q.Contains("mimeType='application/vnd.google-apps.folder'") && q.Contains("name contains 'O\\'Brien'"), "Drive: name search includes folders and escapes apostrophes");
+                        check(!q.Contains(" in parents") && request.RequestUri.Query.Contains("corpora=allDrives"), "Drive: global search is not restricted to the current folder or shared drive");
+                        return Task.FromResult(Response("{\"files\":[{\"id\":\"found-folder\",\"name\":\"O'Brien\",\"mimeType\":\"application/vnd.google-apps.folder\"}]}"));
+                    };
+                    check((await drive.List("O'Brien", null, null, null, ct)).Files[0].IsFolder, "Drive: folder found by name can be browsed");
+                    transport.Handle = delegate(HttpRequestMessage request) {
+                        string q = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["q"];
+                        check(q.Contains("'folder' in parents") && q.Contains("name contains 'Pismo'"), "Drive: optional folder-only search keeps name and parent filters");
+                        return Task.FromResult(Response("{\"files\":[]}"));
+                    };
+                    await drive.List("Pismo", "folder", null, null, ct);
                     transport.Handle = delegate { return Task.FromResult(Response("{\"user\":{\"permissionId\":\"account-A\"}}")); };
                     check(await drive.AccountKey(ct) == "account-A", "Drive: remembered folder scoped to current Google account");
                     transport.Handle = delegate { return Task.FromResult(Response("{\"id\":\"folder\",\"name\":\"Original folder\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"]}")); };

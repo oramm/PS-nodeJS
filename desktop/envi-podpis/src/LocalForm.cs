@@ -25,6 +25,7 @@ namespace EnviPodpis
         private readonly Button sign = new Button();
         private readonly Button cancel = new Button();
         private readonly Button save = new Button();
+        private readonly ToolTip tips = new ToolTip { AutoPopDelay = 15000, InitialDelay = 400, ReshowDelay = 100 };
         private CancellationTokenSource operation;
         private bool busy;
         private string outputDirectory;
@@ -69,17 +70,20 @@ namespace EnviPodpis
             DragEnter += over; DragDrop += drop; files.DragEnter += over; files.DragDrop += drop;
 
             actions.AutoSize = true; actions.Dock = DockStyle.Fill;
-            AddButton(actions, "Z Dysku…", async delegate { try { await FromDrive(); } catch (Exception ex) { note.Text = ex.Message; } });
+            AddButton(actions, "Z Dysku Google…", async delegate { try { await FromDrive(); } catch (Exception ex) { note.Text = ex.Message; } });
             AddButton(actions, "Z poczty…", async delegate { try { await FromMail(); } catch (Exception ex) { note.Text = ex.Message; } });
-            AddButton(actions, "Dodaj PDF…", async delegate {
-                using (OpenFileDialog dialog = new OpenFileDialog { Filter = "PDF (*.pdf)|*.pdf", Multiselect = true })
-                    if (dialog.ShowDialog(this) == DialogResult.OK) await AddFiles(dialog.FileNames);
+            AddButton(actions, "Z komputera…", async delegate {
+                try {
+                    using (LocalFilesForm picker = new LocalFilesForm())
+                        if (picker.ShowDialog(this) == DialogResult.OK) await AddFiles(picker.SelectedPaths, null, false);
+                } catch (Exception ex) { note.Text = ex.Message; }
             });
             AddButton(actions, "Usuń z listy", delegate {
                 LocalDocument doc = Selected();
                 if (files.SelectedRows.Count == 0) return;
                 if (doc != null) {
-                    if (doc.RecoveryPath != null) { note.Text = "Podpisana kopia czeka na dostarczenie. Najpierw zapisz / dostarcz ją przyciskiem poniżej."; return; }
+                    try { WorkflowStore.Dismiss(doc); }
+                    catch (Exception ex) { note.Text = "Nie usunięto wpisu: " + ex.Message; return; }
                     doc.Dispose(); documents.Remove(doc);
                 }
                 files.Rows.RemoveAt(files.SelectedRows[0].Index); UpdateButtons();
@@ -135,7 +139,11 @@ namespace EnviPodpis
             Setup(sign, "Sprawdź i podpisz"); sign.Click += async delegate { await WithOperation(ReviewAndSign); };
             Setup(save, "Zapisz / dostarcz ponownie"); save.Click += async delegate { await WithOperation(async delegate {
                 LocalDocument doc = Selected(); if (doc == null || doc.ValidatedCopy == null) return;
-                await Deliver(doc); RefreshRow(doc); await ReplyToMail();
+                try { await Deliver(doc); RefreshRow(doc); await ReplyToMail(doc); }
+                catch (Exception ex) {
+                    doc.Status = "Nie ukończono dostarczenia — podpis zachowany";
+                    RefreshRow(doc, ex.Message); throw;
+                }
             }); };
             Setup(cancel, "Przerwij"); cancel.Click += delegate { if (operation != null) { operation.Cancel(); note.Text = "Przerywanie. Trwający podpis karty zostanie sprawdzony i zapisany przed zatrzymaniem."; } };
             footer.Controls.Add(prepare); footer.Controls.Add(sign); footer.Controls.Add(save); footer.Controls.Add(cancel);
@@ -157,6 +165,7 @@ namespace EnviPodpis
             };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (busy) { e.Cancel = true; operation.Cancel(); note.Text = "Poczekaj na zatrzymanie operacji, potem zamknij okno."; } };
             FormClosed += delegate {
+                tips.Dispose();
                 foreach (LocalDocument doc in documents) doc.Dispose();
                 foreach (CertCandidate cc in certificate.Items) cc.Cert.Reset();
             };
@@ -190,13 +199,32 @@ namespace EnviPodpis
             files.ClearSelection(); files.Rows[index].Selected = true;
         }
 
-        private static void Setup(Button b, string text) { b.Text = text; b.AutoSize = true; b.MinimumSize = new Size(90, 36); }
-        private static void AddButton(FlowLayoutPanel panel, string text, Action action)
+        private void Setup(Button b, string text)
+        {
+            b.Text = text; b.AutoSize = true; b.MinimumSize = new Size(90, 36);
+            string hint = "";
+            switch (text)
+            {
+                case "Z Dysku Google…": hint = "Wybierz dokument z Dysku Google. Podpisana kopia wróci do jego folderu."; break;
+                case "Z poczty…": hint = "Wybierz załączniki PDF z Outlooka lub innej skrzynki. Po podpisaniu przygotujesz odpowiedź."; break;
+                case "Z komputera…": hint = "Dodaj pliki PDF z komputera do listy podpisywania."; break;
+                case "Usuń z listy": hint = "Usuń zaznaczony wpis także po błędzie dostarczenia. Oryginał i zapisane PDF pozostaną; zachowany podpis trafi do lokalnego archiwum."; break;
+                case "Miejsce kopii…": hint = "Wybierz folder podpisanej kopii: dla zaznaczonego pliku z poczty lub Dysku, albo dla plików lokalnych."; break;
+                case "Kopie obok oryginału": hint = "Zapisuj kopie plików lokalnych w folderach ich oryginałów."; break;
+                case "Odśwież kartę": hint = "Ponownie odczytaj dostępne certyfikaty po włożeniu karty."; break;
+                case "Podgląd / miejsce": hint = "Sprawdź zaznaczony dokument i wybierz miejsce grafiki podpisu przed podpisaniem."; break;
+                case "Sprawdź i podpisz": hint = "Sprawdź podglądy wszystkich niepodpisanych plików z listy, następnie podpisz je po wpisaniu PIN-u."; break;
+                case "Zapisz / dostarcz ponownie": hint = "Ponów zapis zaznaczonej podpisanej kopii bez karty i PIN-u. Dysk: wyślij kopię do folderu. Poczta: przygotuj odpowiedź do sprawdzenia i zatwierdzenia."; break;
+                case "Przerwij": hint = "Przerwij operację. Podpis już złożony kartą zostanie sprawdzony i zachowany."; break;
+            }
+            tips.SetToolTip(b, hint);
+        }
+        private void AddButton(FlowLayoutPanel panel, string text, Action action)
         { Button b = new Button(); Setup(b, text); b.Click += delegate { action(); }; panel.Controls.Add(b); }
         private LocalDocument Selected() { return files.SelectedRows.Count == 0 ? null : files.SelectedRows[0].Tag as LocalDocument; }
         private CertCandidate Cert() { return certificate.SelectedItem as CertCandidate; }
 
-        internal async Task AddFiles(string[] paths, Action<LocalDocument> configure = null)
+        internal async Task AddFiles(string[] paths, Action<LocalDocument> configure = null, bool review = true)
         {
             await WithOperation(async delegate {
                 foreach (string path in paths)
@@ -228,25 +256,39 @@ namespace EnviPodpis
                         note.Text = Path.GetFileName(path) + ": " + ex.Message;
                     }
                 }
-                if (automaticReview) await ReviewAndSign();
+                if (automaticReview && review) await ReviewAndSign();
             });
         }
 
         private async Task FromDrive()
         {
-            DriveFile source;
-            using (DriveFilesForm picker = new DriveFilesForm(driveAuth))
-            { if (picker.ShowDialog(this) != DialogResult.OK) return; source = picker.SelectedFile; }
-            string path = null;
+            List<DriveFile> sources;
+            if (documents.Count >= 8) { note.Text = "Usuń zapisane dokumenty z listy przed dodaniem kolejnych."; return; }
+            using (DriveFilesForm picker = new DriveFilesForm(driveAuth) { Capacity = 8 - documents.Count })
+            { if (picker.ShowDialog(this) != DialogResult.OK) return; sources = picker.SelectedFiles; }
+            if (sources.Count > 8 - documents.Count) { note.Text = "Na liście mieści się do 8 PDF. Wybierz mniej plików lub usuń zapisane dokumenty z listy."; return; }
+            Dictionary<string, DriveFile> downloads = new Dictionary<string, DriveFile>(StringComparer.OrdinalIgnoreCase);
+            bool downloadedAll = false;
             await WithOperation(async delegate {
                 using (DriveFiles client = new DriveFiles(driveAuth))
-                    path = await client.Download(source, Path.Combine(WorkflowStore.Root, "incoming", Guid.NewGuid().ToString("N")), operation.Token);
+                    foreach (DriveFile source in sources)
+                    {
+                        note.Text = "Pobieranie z Dysku: " + source.Name;
+                        try {
+                            string path = await client.Download(source, Path.Combine(WorkflowStore.Root, "incoming", Guid.NewGuid().ToString("N")), operation.Token);
+                            downloads.Add(path, source);
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex) { throw new IOException("Nie pobrano „" + source.Name + "”: " + ex.Message + " Nie dodano tej partii do podpisu. Wybierz dokumenty ponownie.", ex); }
+                    }
+                downloadedAll = true;
             });
-            if (path != null) await AddFiles(new[] { path }, delegate(LocalDocument doc) {
-                doc.Origin = "drive"; doc.SourceContext = source;
+            if (!downloadedAll) return;
+            if (downloads.Count > 0) await AddFiles(downloads.Keys.ToArray(), delegate(LocalDocument doc) {
+                doc.Origin = "drive"; doc.SourceContext = downloads[doc.Source];
                 doc.TargetDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ENVI Podpis", "Dysk");
                 Directory.CreateDirectory(doc.TargetDirectory);
-            });
+            }, false);
         }
 
         private async Task FromMail()
@@ -319,9 +361,9 @@ namespace EnviPodpis
             else { doc.Status = "Zapisano"; WorkflowStore.Complete(doc); }
         }
 
-        private async Task ReplyToMail()
+        private async Task ReplyToMail(LocalDocument selected = null)
         {
-            List<LocalDocument> ready = documents.Where(d => d.Origin == "mail" && d.ValidatedCopy != null && d.Output != null && d.RecoveryPath != null).ToList();
+            List<LocalDocument> ready = documents.Where(d => (selected == null || d == selected) && d.Origin == "mail" && d.ValidatedCopy != null && d.Output != null && d.RecoveryPath != null).ToList();
             foreach (var group in ready.GroupBy(d => Json.Serialize(d.SourceContext)))
             {
                 MailMessageContext context = MailMessageContext.FromJson(Json.Parse(Json.Serialize(group.First().SourceContext)));
@@ -501,7 +543,7 @@ namespace EnviPodpis
             destination.Text = string.IsNullOrEmpty(outputDirectory) ? "Kopie lokalne: obok oryginału. Dysk: folder dokumentu. Poczta: zachowane lokalnie i w odpowiedzi." : "Kopie lokalne: " + outputDirectory + ". Dysk i poczta zachowują własne miejsca.";
             sign.Text = pending.Any(d => !d.Confirmed) ? "Sprawdź i podpisz" : "Podpisz — wpisz PIN";
             if (!busy && Cert() == null) note.Text = "Brak ważnego certyfikatu. Włóż kartę i kliknij Odśwież kartę; lista dokumentów zostanie zachowana.";
-            else if (!busy && documents.Count == 0) note.Text = "Dodaj PDF, wybierz Z Dysku lub Z poczty. Podgląd otworzy się automatycznie.";
+            else if (!busy && documents.Count == 0) note.Text = "Dodaj PDF, wybierz Z Dysku Google lub Z poczty. Podgląd otworzy się automatycznie.";
             else if (!busy && selected != null && selected.RecoveryPath != null) note.Text = "Podpis jest zachowany. Zapisz / dostarcz ponownie użyje tej kopii bez karty i PIN-u.";
         }
 

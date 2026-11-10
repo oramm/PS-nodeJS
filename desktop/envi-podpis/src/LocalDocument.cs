@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -121,8 +121,7 @@ namespace EnviPodpis
         public static string SaveCopy(string directory, string basename, byte[] bytes)
         {
             directory = Path.GetFullPath(directory);
-            if (!Directory.Exists(directory) || string.IsNullOrWhiteSpace(basename) || basename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                basename.EndsWith(".") || basename.EndsWith(" ")) throw new IOException("Wybierz istniejący katalog i poprawną nazwę pliku.");
+            if (!Directory.Exists(directory) || string.IsNullOrWhiteSpace(basename) || basename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) throw new IOException("Wybierz istniejący katalog i poprawną nazwę pliku.");
             string temporary = Path.Combine(directory, ".envi-podpis-" + Guid.NewGuid().ToString("N") + ".tmp");
             try
             {

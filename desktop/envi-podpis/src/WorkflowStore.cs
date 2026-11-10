@@ -79,5 +79,16 @@ namespace EnviPodpis
         }
         internal static void Complete(LocalDocument doc)
         { if (doc.RecoveryPath != null && File.Exists(doc.RecoveryPath)) File.Delete(doc.RecoveryPath); doc.RecoveryPath = null; }
+
+        internal static void Dismiss(LocalDocument doc)
+        {
+            if (doc.RecoveryPath != null && File.Exists(doc.RecoveryPath))
+            {
+                string archive = Path.Combine(Root, "dismissed", Path.GetFileName(doc.RecoveryPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(archive));
+                File.Move(doc.RecoveryPath, archive);
+            }
+            doc.RecoveryPath = null;
+        }
     }
 }

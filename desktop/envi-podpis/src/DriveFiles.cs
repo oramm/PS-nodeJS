@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -51,6 +52,21 @@ namespace EnviPodpis
             if (string.IsNullOrEmpty(value) || value.Length > 256 || value.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '_'))
                 throw new InvalidOperationException("Nieprawidłowy identyfikator pliku Google.");
             return value;
+        }
+        internal static string FolderIdFromLink(string value)
+        {
+            Uri uri;
+            if (!Uri.TryCreate((value ?? "").Trim(), UriKind.Absolute, out uri) || uri.Scheme != "https" ||
+                !string.Equals(uri.Host, "drive.google.com", StringComparison.OrdinalIgnoreCase) || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo))
+                throw new InvalidOperationException("Wklej link folderu z https://drive.google.com/drive/folders/…");
+            Match folder = Regex.Match(uri.AbsolutePath, @"^/drive/(?:u/\d+/)?folders/([A-Za-z0-9_-]+)/?$");
+            if (folder.Success) return Id(folder.Groups[1].Value);
+            if (uri.AbsolutePath == "/open")
+            {
+                string id = System.Web.HttpUtility.ParseQueryString(uri.Query)["id"];
+                if (!string.IsNullOrEmpty(id)) return Id(id);
+            }
+            throw new InvalidOperationException("To nie jest link folderu. Wklej link folderu z Dysku Google.");
         }
         private async Task<HttpResponseMessage> Send(HttpMethod method, string url, HttpContent content, CancellationToken ct)
         {
@@ -99,7 +115,7 @@ namespace EnviPodpis
         internal async Task<DriveFile> GetFolder(string id, CancellationToken ct)
         {
             DriveFile result = FileInfo(await GetJson(Api + "files/" + Id(id) + "?supportsAllDrives=true&fields=" + E(Fields), ct));
-            if (!result.IsFolder) throw new InvalidOperationException("Zapamiętane miejsce nie jest już folderem.");
+            if (!result.IsFolder) throw new InvalidOperationException("Wybrane miejsce nie jest folderem.");
             return result;
         }
         internal async Task<DriveFilePage> List(string search, string folderId, string driveId, string pageToken, CancellationToken ct)
@@ -109,6 +125,7 @@ namespace EnviPodpis
             if (!string.IsNullOrWhiteSpace(search)) query += " and name contains " + Q(search.Trim());
             string url = Api + "files?pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=" + E(string.IsNullOrEmpty(folderId) ? "modifiedTime desc" : "folder,name") + "&fields=" + E("nextPageToken,incompleteSearch,files(" + Fields + ")") + "&q=" + E(query);
             if (!string.IsNullOrEmpty(driveId)) url += "&corpora=drive&driveId=" + E(Id(driveId));
+            else if (string.IsNullOrEmpty(folderId) && !string.IsNullOrWhiteSpace(search)) url += "&corpora=allDrives";
             if (!string.IsNullOrEmpty(pageToken)) url += "&pageToken=" + E(pageToken);
             object data = await GetJson(url, ct);
             DriveFilePage result = new DriveFilePage { NextPageToken = Json.GetString(data, "nextPageToken"), Incomplete = Json.GetString(data, "incompleteSearch") == "True" };

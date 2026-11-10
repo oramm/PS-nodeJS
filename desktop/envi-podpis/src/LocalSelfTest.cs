@@ -133,6 +133,8 @@ namespace EnviPodpis
             string first = LocalDocument.SaveCopy(output, "collision", original);
             string second = LocalDocument.SaveCopy(output, "collision", new byte[] { 4, 5 });
             check(first != second && File.ReadAllBytes(first).SequenceEqual(original), "kolizja nazwy nie nadpisuje kopii");
+            string dotted = LocalDocument.SaveCopy(output, "wniosek popr.", original);
+            check(Path.GetFileName(dotted) == "wniosek popr._pdp.pdf" && File.ReadAllBytes(dotted).SequenceEqual(original), "kropka przed rozszerzeniem nie blokuje zapisu podpisu");
             bool traversal = false;
             try { LocalDocument.SaveCopy(output, "../escape", original); } catch (IOException) { traversal = true; }
             check(traversal, "nazwa ze sciezka odrzucona");

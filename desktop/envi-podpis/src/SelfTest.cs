@@ -33,7 +33,8 @@ namespace EnviPodpis
             {
                 try
                 {
-                    if (mode == "loading") LoadingSelfTest.Run(arg, Check);
+                    if (mode == "recovery") RecoverySelfTest.Run(arg, Check);
+                    else if (mode == "loading") LoadingSelfTest.Run(arg, Check);
                     else if (mode == "extract") InstallerSelfTest.Extract(arg, args[4], Check);
                     else if (mode == "installer") InstallerSelfTest.Run(arg, Check);
                     else if (mode == "local" || mode == "localui") LocalSelfTest.Run(args, Check);
@@ -41,6 +42,8 @@ namespace EnviPodpis
                     else if (mode == "mail") MailSelfTest.Run(Check);
                     else if (mode == "preview") PreviewSelfTest.Run(Check);
                     else if (mode == "drivefiles") DriveFilesSelfTest.Run(Check);
+                    else if (mode == "drivepicker") DriveFilesSelfTest.RunPicker(arg, Check);
+                    else if (mode == "localfolders") LocalFilesSelfTest.Run(args, Check);
                     else if (mode == "flow") FlowSelfTest.Run(args, Check);
                     else if (mode == "unit") Unit();
                     else if (mode == "card") Card(arg);

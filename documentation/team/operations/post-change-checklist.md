@@ -6,6 +6,13 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-11-02 - ENVI Podpis 1.4.0: lokalna instalacja
+
+- Owner jawnie zatwierdzil konkretny build 1.4.0 / installer-s3nxr4 z zachowaniem obecnej 1.3.1 do cofniecia. Instalator SHA256 B1390971C44ED63961064568EB5D3774E2B5C48880EBFAAE96E27901A7759A25, /silent exit 0.
+- Niezalezny odczyt: aktywna 1.4.0.0, poprzednia 1.3.1.0 w %LOCALAPPDATA%/ENVI/Podpis.previous; po 3552 pliki manifestu zweryfikowane w obu wersjach, 0 roznic. EXE i manifest poprzedniej wersji zgodne z odczytem sprzed instalacji. Skrot pulpitu, ikona i komenda protokolu PS zgodne z aktywnym EXE.
+- Dowod: C:/Users/oram/dev/envi-podpis-folders-proof/installed-acceptance-20261102.json. Cofniecie: zatwierdzony EnviPodpisSetup.exe z installer-s3nxr4 z parametrem /rollback (wylacznie w razie odrebnego zlecenia, nie wykonywano na aktywnej instalacji).
+- DB/ENV/backend/Heroku/frontend i assets/signing: bez zmian; bez commita/pusha i publikacji. Nie wykonywano podpisu karta ani operacji na rzeczywistym Dysku lub poczcie. Osobisty odbior karty/Dysku pozostaje odrebny w planie obiegu SB.
+
 ## 2026-10-24 - ENVI Podpis 1.3.1: dystrybucja z PS
 
 - Owner zlecil publikacje przez PS, komunikat ladowania mail/PDF, ikone turbiny z piorem bez przyciecia oraz dokumentacje; osobiscie potwierdzil rzeczywisty obieg poczty. Wczesniejszy brak zlecenia publikacji dotyczy historii D3/D4, nie tego wydania.
@@ -1585,3 +1592,13 @@ Copy the block below for each new change:
 - Osobna paczka 1.2.1.0 tylko do odbioru; zastana aktywna 1.1.0.0 i skrot pulpitu pozostaja bez podmiany. D4 pozostaje CLOSED po osobistym odbiorze; konfiguracji Google nie powtarzano. Dokladny build i dowody: progress packa desktop w SB.
 - Weryfikacja na syntetycznych danych i rzeczywistym oknie WinForms; bez odczytu rzeczywistego JSON-a/tokenow, karty/PIN i plikow Drive. Bez tworzenia kolejnego skrotu i bez testowej instalacji. DB/ENV/migracje/backend/frontend/Heroku/Pages bez zmian; .env.example bez zmian. D5, publikacja, commit/push poza zakresem; podmiana tylko po GO ownera na dokladny build.
 - GO i instalacja 2026-10-22: owner zatwierdzil dokladny DTseAd (SHA256 290DB0148AFBB8A79566BF9A21F2012CF0B9B1598BAE810AB7447D60F995A381). Instalacja /silent exit 0; niezaleznie aktywna 1.2.1.0, 2390 plikow / 0 roznic, poprzednia 1.1 zachowana, jeden istniejacy skrot i protokol zgodne. To zastepuje powyzszy stan oczekiwania na GO. Bez publikacji w PS, karty, odczytu danych konta, DB/ENV i pusha. Instrukcja uzytkownika w wiki PS ENVI; dowod lokalny envi-podpis-account-fix-proof/installed-acceptance.json.
+
+### 2026-11-03 - ENVI Podpis 1.4.1 local installation
+
+- Owner approved the exact 1.4.1 installer (SHA256 4EED659B20831DC7EF44C739258BD390BE2573929CBDE315E39C663E8C74B468). Exit 0; active 1.4.1 and previous 1.4.0 each verified against their 3552-file manifest; shortcut and PS protocol verified. Older 1.3.1 retained separately under `C:/Users/oram/envi-podpis-fix-20261103/backup-1.3.1` and verified. Evidence: `C:/Users/oram/envi-podpis-fix-20261103/installed-acceptance-20261103.json`.
+- Local installation only. No production deploy, DB or environment changes, real-card signature, or email sent.
+
+### 2026-11-04 - ENVI Podpis 1.4.2 local installation
+
+- Owner approved installer-rfVMz3, SHA256 17B8ADAD1B27149262E833F2DBC079524E0C423E906E87758237A9F656935022. Installer exit 0. Active 1.4.2 and retained previous 1.4.1: each 3552 payload files verified, zero differences. Previous EXE and manifest match the pre-install snapshot; desktop shortcut and PS protocol verified. Evidence: `C:/Users/oram/envi-podpis-fix-20261104/installed-acceptance.json`.
+- Exactly two owner-selected stale entries archived locally with signed bytes retained; pending queue empty. No publication, DB/env change, real-card signing or email sent.
