@@ -2,6 +2,7 @@ import {
     assertNewLetterInScope,
     assertTargetCasesInScope,
     pinEditorForPersonAgent,
+    pinProjectFromDb,
 } from '../letterWriteGuards';
 import { ForbiddenError } from '../../persons/projectAssignments/ProjectScopeGuard';
 import ToolsDb from '../../tools/ToolsDb';
@@ -136,5 +137,42 @@ describe('assertNewLetterInScope (POST /letterReact)', () => {
         await expect(
             assertNewLetterInScope({ _cases: [] }, SCOPE),
         ).rejects.toThrow(ForbiddenError);
+    });
+});
+
+describe('pinProjectFromDb', () => {
+    beforeEach(() => jest.resetAllMocks());
+    const DB_ROW = [{ OurId: '2023.10', LettersGdFolderId: 'folder-z-bazy' }] as any;
+
+    it('brak _project albo id projektu: nic do sprawdzenia', async () => {
+        await pinProjectFromDb(undefined, SCOPE);
+        await pinProjectFromDb(null, SCOPE);
+        await pinProjectFromDb({ lettersGdFolderId: 'x' }, SCOPE);
+        expect(mockedToolsDb.getQueryCallbackAsync).not.toHaveBeenCalled();
+    });
+
+    it('folder i numer projektu z bazy, nie z ciała (także bez zakresu)', async () => {
+        mockedToolsDb.getQueryCallbackAsync.mockResolvedValue(DB_ROW);
+        const project: any = { id: 7, ourId: '2099.99', lettersGdFolderId: 'obcy-folder' };
+        await pinProjectFromDb(project, undefined);
+        expect(project).toEqual({ id: 7, ourId: '2023.10', lettersGdFolderId: 'folder-z-bazy' });
+    });
+
+    it('rola zakresowa: projekt w zakresie przechodzi', async () => {
+        mockedToolsDb.getQueryCallbackAsync.mockResolvedValue(DB_ROW);
+        await expect(pinProjectFromDb({ id: 7 }, SCOPE)).resolves.toBeUndefined();
+    });
+
+    it('rola zakresowa: cudzy projekt = odmowa', async () => {
+        mockedToolsDb.getQueryCallbackAsync.mockResolvedValue([
+            { OurId: '2099.99', LettersGdFolderId: 'x' },
+        ] as any);
+        await expect(pinProjectFromDb({ id: 8 }, SCOPE)).rejects.toThrow(ForbiddenError);
+    });
+
+    it('nieistniejący albo nieprawidłowy projekt = odmowa', async () => {
+        mockedToolsDb.getQueryCallbackAsync.mockResolvedValue([] as any);
+        await expect(pinProjectFromDb({ id: 9 }, undefined)).rejects.toThrow(ForbiddenError);
+        await expect(pinProjectFromDb({ id: 'abc' }, undefined)).rejects.toThrow(ForbiddenError);
     });
 });

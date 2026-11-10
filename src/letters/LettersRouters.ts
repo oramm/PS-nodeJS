@@ -13,6 +13,7 @@ import {
     assertNewLetterInScope,
     assertTargetCasesInScope,
     pinEditorForPersonAgent,
+    pinProjectFromDb,
 } from './letterWriteGuards';
 import multer from 'multer';
 import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
@@ -175,6 +176,10 @@ app.post(
                 initParamsFromClient,
                 req.projectScope,
             );
+            await pinProjectFromDb(
+                initParamsFromClient._project,
+                req.projectScope,
+            );
             pinEditorForPersonAgent(initParamsFromClient, req.session.userData);
 
             if (initParamsFromClient.isOur === false) {
@@ -245,6 +250,10 @@ app.put(
             );
             await assertTargetCasesInScope(
                 initParamsFromClient._cases,
+                req.projectScope,
+            );
+            await pinProjectFromDb(
+                initParamsFromClient._project,
                 req.projectScope,
             );
             pinEditorForPersonAgent(initParamsFromClient, req.session.userData);

@@ -2,6 +2,7 @@ import ProjectScopeGuard, {
     ForbiddenError,
 } from '../persons/projectAssignments/ProjectScopeGuard';
 import { ProjectScope, UserData } from '../types/sessionTypes';
+import ToolsDb from '../tools/ToolsDb';
 
 /**
  * SBZ-3 — agent pracownika zapisuje jako ta osoba, więc autorem pisma jest osoba z sesji,
@@ -55,4 +56,32 @@ export async function assertNewLetterInScope(
     if (hasContract)
         await ProjectScopeGuard.assertContractInScope(contractId, scope);
     await assertTargetCasesInScope(cases, scope);
+}
+
+/**
+ * SBZ-3 — `_project` z ciała wyznacza projekt pisma w rejestrze (Letters.ProjectId) i folder
+ * pisma na Dysku (`lettersGdFolderId`), a ciało kontroluje wywołujący. Dlatego numer i folder
+ * projektu nadpisujemy wartościami z bazy, a rola zakresowa musi mieć projekt w zakresie.
+ * Dotyczy wszystkich, nie tylko ról zakresowych: inaczej każdy (także agent pracownika)
+ * mógł kazać zapisać plik pisma w dowolnym folderze konta systemowego.
+ */
+export async function pinProjectFromDb(
+    project: any,
+    scope?: ProjectScope,
+): Promise<void> {
+    // Bez id pismo nie jest kontraktowe: konstruktor pisma kontraktowego je odrzuci.
+    if (project?.id == null) return;
+    const id = Number(project?.id);
+    const rows = Number.isInteger(id) && id > 0
+        ? ((await ToolsDb.getQueryCallbackAsync(
+              'SELECT OurId, LettersGdFolderId FROM Projects WHERE Id = ?',
+              undefined,
+              [id],
+          )) as any[])
+        : [];
+    const row = rows[0];
+    if (!row || (scope && !scope.projectOurIds.includes(row.OurId)))
+        throw new ForbiddenError('Brak uprawnień do tego zasobu (projekt).');
+    project.ourId = row.OurId;
+    project.lettersGdFolderId = row.LettersGdFolderId;
 }
