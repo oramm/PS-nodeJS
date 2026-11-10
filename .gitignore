@@ -48,3 +48,7 @@ tmp/pettycash-sheet-structure*.json
 
 # Prywatne nadpisania Claude Code (per maszyna)
 .claude/settings.local.json
+
+# Lokalna kolejka zdarzen bledow PS
+/tmp/bug-events-outbox.jsonl
+/tmp/bug-events-outbox.jsonl.processing
