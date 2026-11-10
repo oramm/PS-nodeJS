@@ -373,10 +373,13 @@ export default class ToolsAI {
         }
         messages.push({ role: 'user', content: prompt });
 
+        const model = process.env.OPENAI_MODEL ?? 'gpt-6-luna';
         const payload = {
-            model: process.env.OPENAI_MODEL ?? 'gpt-3.5-turbo-16k',
+            model,
             messages,
-            temperature: 0,
+            // Luna supports temperature when reasoning is disabled.
+            ...(model === 'gpt-6-luna' ? { reasoning_effort: 'none' } : {}),
+            temperature: 1,
             response_format: { type: 'json_object' },
         };
 
@@ -428,7 +431,7 @@ ${text.substring(0, 6000)}
                 },
                 { role: 'user' as const, content: prompt },
             ],
-            temperature: 0,
+            temperature: 1,
             response_format: { type: 'json_object' as const },
         };
 

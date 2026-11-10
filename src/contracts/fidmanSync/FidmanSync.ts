@@ -637,41 +637,47 @@ const trimmedOrEmpty = (value: string | null | undefined): string =>
  * Ta funkcja nie zgaduje i niczego nie naprawia: obcięcie za długiego imienia dałoby
  * w FIDmanie inne nazwisko niż w PS, a to gorsze niż odmowa zapisu.
  */
-export function validateFidmanUserSource(source: FidmanUserSource): string[] {
+export type UserSyncRecipient = 'fidman' | 'fin';
+
+export function validateFidmanUserSource(
+    source: FidmanUserSource,
+    recipient: UserSyncRecipient = 'fidman',
+): string[] {
+    const recipientName = recipient === 'fin' ? 'FIN' : 'FIDmana';
     const problems: string[] = [];
     const email = trimmedOrEmpty(source.systemEmail);
     const name = trimmedOrEmpty(source.name);
     const surname = trimmedOrEmpty(source.surname);
 
     if (!email) {
-        problems.push('Użytkownik FIDmana musi mieć e-mail systemowy.');
+        problems.push(`Użytkownik ${recipientName} musi mieć e-mail systemowy.`);
     } else if (
         email.length < FIDMAN_USER_LIMITS.email.min ||
         !FIDMAN_EMAIL_PATTERN.test(email)
     ) {
         problems.push(
-            'E-mail systemowy użytkownika FIDmana ma nieprawidłowy format.'
+            `E-mail systemowy użytkownika ${recipientName} ma nieprawidłowy format.`
         );
     } else if (email.length > FIDMAN_USER_LIMITS.email.max) {
         problems.push(
-            `E-mail systemowy użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
+            `E-mail systemowy użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
         );
     }
 
-    if (!name) problems.push('Użytkownik FIDmana musi mieć imię.');
+    if (!name) problems.push(`Użytkownik ${recipientName} musi mieć imię.`);
     else if (name.length > FIDMAN_USER_LIMITS.name)
         problems.push(
-            `Imię użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
+            `Imię użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
         );
 
-    if (!surname) problems.push('Użytkownik FIDmana musi mieć nazwisko.');
+    if (!surname) problems.push(`Użytkownik ${recipientName} musi mieć nazwisko.`);
     else if (surname.length > FIDMAN_USER_LIMITS.surname)
         problems.push(
-            `Nazwisko użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
+            `Nazwisko użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
         );
 
-    if (!source.entityId)
-        problems.push('Użytkownik FIDmana musi być przypisany do podmiotu.');
+    if (recipient === 'fidman' && !source.entityId)
+        problems.push(`Użytkownik ${recipientName} musi być przypisany do podmiotu.`);
 
     return problems;
 }
@@ -713,13 +719,13 @@ export function buildUserUpsert(
 export async function enqueueFidmanUserPush(
     source: FidmanUserSource,
     enabled: boolean,
-    conn: mysql.PoolConnection
+    conn: mysql.PoolConnection,
+    recipient: UserSyncRecipient = 'fidman',
 ): Promise<number> {
-    return enqueueRow(
-        buildUserUpsert(source, enabled),
-        source.personId,
-        conn
-    );
+    const envelope = buildUserUpsert(source, enabled);
+    // Jawna flaga kolejkuje FIN także bez konfiguracji, aby drainer mógł ponowić dostawę.
+    if (recipient === 'fin') Object.assign(envelope.payload, { _recipient: 'fin' });
+    return enqueueRow(envelope, source.personId, conn);
 }
 
 function typeIdInClause(): { clause: string; ids: number[] } {
@@ -896,11 +902,21 @@ export async function deliverOutboxRow(
 }
 
 async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnection): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
-    const { baseUrl, token } = Setup.FidmanSync;
+    let errorPrefix = '';
     try {
-        if (!baseUrl) throw new Error('FIDMAN_SYNC_BASE_URL nie ustawione');
+        const { _recipient, ...wirePayload } = parsePayload(row.Payload);
+        const recipient =
+            row.Kind === 'user.upsert' && _recipient === 'fin' ? 'fin' : 'fidman';
+        errorPrefix = recipient === 'fin' ? '[FIN] ' : '';
+        const { baseUrl, token } =
+            recipient === 'fin' ? Setup.FinSync : Setup.FidmanSync;
+        if (!baseUrl) throw new Error(`${recipient.toUpperCase()}_SYNC_BASE_URL nie ustawione`);
+        if (recipient === 'fin' && !token) throw new Error('FIN_SYNC_TOKEN nie ustawione');
 
-        let payload = parsePayload(row.Payload);
+        let payload = wirePayload;
+        // PE6: dostęp do FIN i skrót klucza agenta czytane w chwili dostawy, nie przy kolejkowaniu - ponowienie
+        // starego wiersza nie przywróci dostępu ani klucza odebranego później.
+        if (recipient === 'fin') payload = await withCurrentFinState(payload, row.RefId, conn);
         if (row.Kind === 'contract.folders') {
             if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
                 throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
@@ -909,7 +925,7 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
             payload = { ...payload, folderSetVersion: row.Id } satisfies FidmanFoldersPayload;
         }
         const signal = AbortSignal.timeout(DELIVERY_TIMEOUT_MS);
-        const response = await fetch(`${baseUrl}${PUSH_PATH}`, {
+        const post = (p: unknown) => fetch(`${baseUrl}${PUSH_PATH}`, {
             method: 'POST',
             signal,
             headers: {
@@ -918,9 +934,19 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
             },
             body: JSON.stringify({
                 kind: row.Kind,
-                payload,
+                payload: p,
             }),
         });
+        const response = await post(payload);
+        // PE6: dwie dostawy tej samej osoby mogą się wyprzedzić (stary skrót dojdzie po odebraniu). Po przyjęciu
+        // czytamy stan jeszcze raz i dosyłamy bieżący, gdy zmienił się w trakcie - FIN kończy na stanie z bazy PS.
+        for (let i = 0; recipient === 'fin' && response.status === 200 && i < 3; i++) {
+            const now = await withCurrentFinState(payload, row.RefId, conn);
+            if (now.enabled === payload.enabled && now.sbAgentKeyHash === payload.sbAgentKeyHash) break;
+            payload = now;
+            const again = await post(payload);
+            if (again.status !== 200) throw new Error(`HTTP ${again.status} przy dosłaniu bieżącego stanu klucza agenta`);
+        }
 
         if (response.status === 200) {
             const body = (await response
@@ -961,11 +987,11 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
         const bodyText = await response.text().catch(() => '');
         await markFailed(
             row,
-            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
+            `${errorPrefix}HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
         );
         return 'FAILED';
     } catch (err: any) {
-        await markFailed(row, err?.message ?? String(err), conn).catch((dbErr) =>
+        await markFailed(row, errorPrefix + (err?.message ?? String(err)), conn).catch((dbErr) =>
             console.error('[FidmanSync] nie udało się zapisać FAILED:', dbErr)
         );
         return 'FAILED';
@@ -981,6 +1007,69 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
  * fire — this post-commit attempt is the primary delivery, the drainer is the
  * backstop. Same shape as AqmSync.tryDeliverAfterCommit.
  */
+/**
+ * PE6 (FIN): skrót osobistego klucza agenta (SbAccess.AgentKeyHash) - tylko przy wpisie SB ACTIVE, inaczej null.
+ * FIN wpuszcza nim agenta pracownika tak jak PS (sbAgentKeyAuth); sam klucz zostaje na komputerze osoby.
+ */
+async function currentSbAgentKeyHash(personId: number, conn?: mysql.PoolConnection): Promise<string | null> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        "SELECT AgentKeyHash AS hash FROM SbAccess WHERE PersonId = ? AND StatusCode = 'ACTIVE'",
+        conn,
+        [personId]
+    )) as { hash: string | null }[];
+    return rows?.[0]?.hash ?? null;
+}
+
+/**
+ * Bieżący dostęp do FIN (PersonAccounts.FinEnabled przy aktywnym koncie PS - „zalogowany w PS = zalogowany w FIN”)
+ * i skrót klucza; bez konta w PS zostaje to, co we wpisie.
+ */
+async function withCurrentFinState(payload: any, personId: number, conn?: mysql.PoolConnection) {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT FinEnabled AS fin, IsActive AS active FROM PersonAccounts WHERE PersonId = ?',
+        conn,
+        [personId]
+    )) as { fin: number; active: number }[];
+    const enabled = rows?.length ? Number(rows[0].fin) === 1 && Number(rows[0].active) === 1 : payload.enabled === true;
+    return { ...payload, enabled, sbAgentKeyHash: enabled ? await currentSbAgentKeyHash(personId, conn) : null };
+}
+
+/**
+ * PE6 (FIN): zmiana w Dostępach SB (klucz agenta, blokada, odebranie, odblokowanie) dosyła do FIN konto osoby
+ * z aktualnym skrótem klucza - tylko gdy osoba ma dostęp do FIN (PersonAccounts.FinEnabled). Ta sama transakcja
+ * co zmiana SB (L8); dostawa po commicie. Dane, których FIN nie przyjmie, nie blokują zmiany SB - ślad w logu.
+ */
+export async function enqueueFinUserRefresh(
+    conn: mysql.PoolConnection,
+    personId: number,
+    loadSource: (conn: mysql.PoolConnection, personId: number) => Promise<FidmanUserSource | undefined>,
+): Promise<number | undefined> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT 1 AS fin FROM PersonAccounts WHERE PersonId = ? AND FinEnabled = 1',
+        conn,
+        [personId]
+    )) as { fin: number }[];
+    if (!rows?.length) return undefined;
+    const source = await loadSource(conn, personId);
+    if (!source) return undefined;
+    if (validateFidmanUserSource(source, 'fin').length) {
+        // Odebranie klucza nie może utknąć na danych osoby (np. za długie nazwisko po zmianie w PS): przy braku
+        // aktywnego klucza wysyłamy imię i nazwisko przycięte do limitów FIN. Nowego klucza z takimi danymi nie wysyłamy.
+        const clipped = {
+            ...source,
+            name: source.name?.slice(0, FIDMAN_USER_LIMITS.name),
+            surname: source.surname?.slice(0, FIDMAN_USER_LIMITS.surname),
+        };
+        const revoking = (await currentSbAgentKeyHash(personId, conn)) === null;
+        if (!revoking || validateFidmanUserSource(clipped, 'fin').length) {
+            console.error(`[FIN] nie wysłano zmiany klucza agenta dla PersonId=${personId}: dane osoby nie spełniają kontraktu FIN.${revoking ? ' Klucz w FIN trzeba odebrać ręcznie.' : ''}`);
+            return undefined;
+        }
+        return enqueueFidmanUserPush(clipped, true, conn, 'fin');
+    }
+    return enqueueFidmanUserPush(source, true, conn, 'fin');
+}
+
 export async function tryDeliverAfterCommit(outboxId: number): Promise<void> {
     try {
         const rows = (await ToolsDb.getQueryCallbackAsync(

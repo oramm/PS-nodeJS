@@ -75,6 +75,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 PersonAccounts.SystemRoleId AS SystemRoleId,
                 PersonAccounts.SystemEmail AS SystemEmail,
                 COALESCE(PersonAccounts.FidmanEnabled, 0) AS FidmanEnabled,
+                COALESCE(PersonAccounts.FinEnabled, 0) AS FinEnabled,
                 StaffMembers.Id AS StaffMemberId,
                 COALESCE(StaffMembers.IsDriver, 0) AS IsDriver,
                 COALESCE(StaffMembers.IsInScrum, 0) AS IsInScrum,
@@ -104,6 +105,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                     SELECT RefId, MAX(Id) AS LastId
                     FROM FidmanSyncOutbox
                     WHERE Kind = 'user.upsert'
+                      AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(Payload, '$._recipient')), 'fidman') = 'fidman'
                     GROUP BY RefId
                 ) LastPush ON LastPush.LastId = Outbox.Id
             ) FidmanUserSync ON FidmanUserSync.RefId = Persons.Id
@@ -241,6 +243,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
             _systemRoleId: row.SystemRoleId ?? null,
             _systemEmail: row.SystemEmail ?? null,
             _fidmanEnabled: !!row.FidmanEnabled,
+            _finEnabled: !!row.FinEnabled,
             _hasStaffRow: row.StaffMemberId !== null && row.StaffMemberId !== undefined,
             _fidmanSync: this.mapFidmanSync(row),
         });

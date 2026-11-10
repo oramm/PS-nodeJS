@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import ChatSpaceValidator, { ChatSpaceError } from './ChatSpaceValidator';
+export { ChatSpaceError } from './ChatSpaceValidator';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 import ToolsChat, { ChatMemberResult } from '../../setup/Sessions/ToolsChat';
@@ -14,7 +16,7 @@ export type ChatSpaceScope = 'contract' | 'project';
 /** Wybór z formularza tworzenia kontraktu (`_chatSpaceSelection`). Brak pola = none. */
 export type ChatSpaceSelection =
     | { mode: 'none' }
-    | { mode: 'new'; scope: ChatSpaceScope; displayName?: string }
+    | { mode: 'new'; scope: ChatSpaceScope; displayName?: string; personIds?: number[] }
     | { mode: 'existing'; chatSpaceId: number };
 
 export type CreateChatSpaceResult = {
@@ -22,17 +24,6 @@ export type CreateChatSpaceResult = {
     /** Wynik per osoba. INVITED = zaproszenie wysłane (sukces), FAILED nie wywraca operacji. */
     members: ChatMemberResult[];
 };
-
-/** Błąd biznesowy z kodem HTTP czytanym przez globalny error handler (4xx bez raportu awarii). */
-export class ChatSpaceError extends Error {
-    constructor(
-        message: string,
-        readonly status: number
-    ) {
-        super(message);
-        this.name = 'ChatSpaceError';
-    }
-}
 
 /**
  * Pokoje Google Chat umów ENVI. Kolejność przy tworzeniu: najpierw Google, potem baza
@@ -140,6 +131,7 @@ export default class ChatSpacesController {
             scope: ChatSpaceScope;
             displayName?: string;
             actorPersonId?: number | null;
+            personIds?: unknown;
             memberEmailsOverride?: string[];
         }
     ): Promise<CreateChatSpaceResult> {
@@ -160,9 +152,17 @@ export default class ChatSpacesController {
             options.scope,
             options.displayName
         );
-        const emails =
+        const selectedIds = ChatSpaceValidator.personIds(options.personIds ?? []);
+        const selected = await this.repository.getGoogleEmails(selectedIds);
+        if (selected.length !== selectedIds.length)
+            throw new ChatSpaceError('Nie znaleziono wszystkich wybranych osób.', 400);
+        const unavailable = selected.filter(person => !person.email);
+        if (unavailable.length)
+            throw new ChatSpaceError(`Brak aktywnego konta Google w PS: ${unavailable.map(person => person.displayName).join(', ')}.`, 400);
+        const defaultEmails =
             options.memberEmailsOverride ??
             (await this.resolveMemberEmails(info, options.actorPersonId));
+        const emails = [...new Set([...defaultEmails, ...selected.map(person => person.email!)].map(email => email.toLowerCase()))];
 
         let google;
         try {
@@ -224,6 +224,34 @@ export default class ChatSpacesController {
         }
     }
 
+    /** Zewnetrzne konta Gmail nie moga zapraszac z interfejsu Google Chat. */
+    static async inviteMembers(contractId: number, personIds: unknown, actorPersonId?: number | null) {
+        const ids = ChatSpaceValidator.personIds(personIds);
+        if (!ids.length) throw new ChatSpaceError('Wybierz osoby do zaproszenia.', 400);
+        const info = await this.requireOurContract(contractId);
+        if (!info.chatSpaceId)
+            throw new ChatSpaceError('Kontrakt nie ma pokoju Google Chat.', 409);
+        const space = await this.repository.findSpaceById(info.chatSpaceId);
+        if (!space) throw new ChatSpaceError('Nie znaleziono pokoju.', 404);
+        if (!actorPersonId)
+            throw new ChatSpaceError('Nie ustalono osoby zapraszającej.', 403);
+        const [actor] = await this.repository.getGoogleEmails([actorPersonId]);
+        if (!actor?.email || !(await ToolsChat.hasJoinedMember(space.googleName, actor.email)))
+            throw new ChatSpaceError('Zapraszać może tylko osoba należąca do tego pokoju.', 403);
+        const persons = await this.repository.getGoogleEmails(ids);
+        if (persons.length !== ids.length)
+            throw new ChatSpaceError('Nie znaleziono wszystkich wybranych osób.', 400);
+        const emails = [...new Set(persons.filter(p => p.email).map(p => p.email!.toLowerCase()))];
+        const results = emails.length ? await ToolsChat.inviteMembers(space.googleName, emails) : [];
+        return { members: persons.map(person => ({
+            personId: person.personId,
+            displayName: person.displayName,
+            ...(results.find(result => result.email === person.email?.toLowerCase()) ?? {
+                email: person.email || '', state: 'FAILED', error: 'Brak aktywnego konta Google w PS.',
+            }),
+        })) };
+    }
+
     /** Podpina kontrakt do istniejącego wiersza ChatSpaces. Kontrakt z innym pokojem: odmowa (najpierw odepnij). */
     static async attach(
         contractId: number,
@@ -280,9 +308,17 @@ export default class ChatSpacesController {
         if (value.mode === 'new') {
             if (value.scope !== 'contract' && value.scope !== 'project')
                 return none;
+            let personIds: number[] | undefined;
+            try {
+                if (value.personIds !== undefined)
+                    personIds = ChatSpaceValidator.personIds(value.personIds);
+            } catch {
+                return none;
+            }
             return {
                 mode: 'new',
                 scope: value.scope,
+                ...(personIds !== undefined ? { personIds } : {}),
                 displayName:
                     typeof value.displayName === 'string' &&
                     value.displayName.trim()
@@ -320,6 +356,7 @@ export default class ChatSpacesController {
             const result = await this.createForContract(contractId, {
                 scope: selection.scope,
                 displayName: selection.displayName,
+                personIds: selection.personIds,
                 actorPersonId,
             });
             return { chatSpaceId: result.chatSpace.id };

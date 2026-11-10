@@ -1,4 +1,6 @@
 import ToolsDb from '../tools/ToolsDb';
+import PersonRepository from '../persons/PersonRepository';
+import { enqueueFinUserRefresh, tryDeliverAfterCommit } from '../contracts/fidmanSync/FidmanSync';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import { UserData } from '../types/sessionTypes';
@@ -123,12 +125,16 @@ export default class SbAccessController {
         )
             throw new Error('Niepoprawny identyfikator zlecającego');
 
+        let finOutboxId: number | undefined;
         await ToolsDb.transaction<void>(async (conn) => {
-            if (input.state)
+            if (input.state) {
                 await this.repository.upsertState(conn, {
                     ...input.state,
                     personId: input.personId,
                 });
+                // PE6: stan SB decyduje, czy klucz agenta działa też w FIN - FIN dostaje aktualny skrót (albo null).
+                finOutboxId = await this.enqueueFinRefresh(conn, input.personId);
+            }
             await this.events.append(conn, {
                 personId: input.personId,
                 actionCode: input.actionCode,
@@ -150,6 +156,18 @@ export default class SbAccessController {
                     });
             }
         });
+        await this.deliverFinRefresh(finOutboxId);
+    }
+
+    private static enqueueFinRefresh(conn: Parameters<typeof enqueueFinUserRefresh>[0], personId: number) {
+        const persons = new PersonRepository();
+        return enqueueFinUserRefresh(conn, personId, (c, id) => persons.getFidmanUserSourceInConn(c, id));
+    }
+
+    /** Dostawa do FIN po commicie nigdy nie wywraca zmiany w Dostępach SB (ponowi ją kolejka). */
+    private static async deliverFinRefresh(outboxId: number | undefined): Promise<void> {
+        if (outboxId !== undefined)
+            await tryDeliverAfterCommit(outboxId).catch((err) => console.error('[FIN] post-commit (Dostępy SB):', err));
     }
 
     /** Opis poziomów do historii: po ludzku, bez sekretów. */
@@ -315,9 +333,11 @@ export default class SbAccessController {
      */
     static async setOwnAgentKey(record: SbAccessRecord, hash: string): Promise<{ changed: boolean }> {
         if ((await this.repository.getAgentKeyHash(record.personId)) === hash) return { changed: false };
+        let finOutboxId: number | undefined;
         await ToolsDb.transaction<void>(async (conn) => {
             if (!(await this.repository.setAgentKeyHash(conn, record.personId, hash)))
                 throw new SbAccessError(409, 'Ten klucz agenta jest już zarejestrowany. Wylosuj nowy.');
+            finOutboxId = await this.enqueueFinRefresh(conn, record.personId);
             await this.events.append(conn, {
                 personId: record.personId,
                 actionCode: 'SET_AGENT_KEY',
@@ -326,6 +346,7 @@ export default class SbAccessController {
                 note: 'Nowy klucz agenta z komputera osoby, poprzedni unieważniony.',
             });
         });
+        await this.deliverFinRefresh(finOutboxId);
         return { changed: true };
     }
 

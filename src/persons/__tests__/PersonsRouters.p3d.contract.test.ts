@@ -191,6 +191,7 @@ describe('PersonsRouters P3-D transition validation', () => {
         ['cudza rola', { enviId: 7, systemRoleId: 3 }, { systemRoleId: 2 }],
         ['własna, ale ta sama rola', { enviId: 591, systemRoleId: 3 }, { systemRoleId: 3 }],
         ['własne konto bez roli w treści', { enviId: 591, systemRoleId: 3 }, { fidmanEnabled: true }],
+        ['własne konto z flagą FIN', { enviId: 591, systemRoleId: 3 }, { finEnabled: true }],
     ])('%s: sesja wołającego zostaje, odpowiedź bez znacznika', async (_label, userData, body) => {
         const destroy = jest.fn((cb: () => void) => cb());
         const req = {
@@ -212,6 +213,9 @@ describe('PersonsRouters P3-D transition validation', () => {
         await accountPutHandler(req, res, jest.fn());
 
         expect(destroy).not.toHaveBeenCalled();
+        if ('finEnabled' in body) {
+            expect(PersonsController.upsertPersonAccountV2).toHaveBeenCalledWith(expect.objectContaining({ finEnabled: true }), 591);
+        }
         expect(res.send.mock.calls[0][0]).not.toHaveProperty('_selfSessionRevoked');
     });
 

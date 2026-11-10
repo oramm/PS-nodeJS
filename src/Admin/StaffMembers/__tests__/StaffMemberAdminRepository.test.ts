@@ -231,3 +231,13 @@ describe('StaffMemberAdminRepository - uprawnienie do zarządzania dostępem SB'
         }
     });
 });
+
+
+it('lista uprawnień czyta flagę FIN, a plakietka FIDmana wyklucza FIN przed MAX(Id)', async () => {
+    const query = jest.spyOn(ToolsDb, 'getQueryCallbackAsync').mockResolvedValue([]);
+    await repository.find([{}]);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain('COALESCE(PersonAccounts.FinEnabled, 0) AS FinEnabled');
+    expect(sql).toMatch(/WHERE Kind = 'user.upsert'\s+AND COALESCE\(JSON_UNQUOTE\(JSON_EXTRACT\(Payload, '\$\._recipient'\)\), 'fidman'\) = 'fidman'\s+GROUP BY RefId/);
+    expect((repository as any).mapRowToModel({ PersonId: 7, FinEnabled: 1 })._finEnabled).toBe(true);
+});

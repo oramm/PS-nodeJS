@@ -401,6 +401,7 @@ export default class PersonsController extends BaseController<
         'systemEmail',
         'isActive',
         'fidmanEnabled',
+        'finEnabled',
     ] as const;
 
     /**
@@ -424,7 +425,7 @@ export default class PersonsController extends BaseController<
             .map(([fieldName]) => fieldName);
         const fieldsToSync = instance.repository.getAccountWriteFields(
             providedAccountFields,
-            // Jedyne miejsce, w którym flaga FIDmana ma prawo być zapisana - bo tylko tu
+            // Jedyne miejsce, w którym flagi odbiorców mają prawo być zapisane - bo tylko tu
             // kolejkuje się push (patrz ACCOUNT_FIELDS_WRITABLE_ONLY_VIA_ACCOUNT_ROUTE).
             { allowAccountRouteOnlyFields: true },
         );
@@ -432,7 +433,7 @@ export default class PersonsController extends BaseController<
             throw new Error('No account fields provided for v2 account upsert');
         }
 
-        // Stan konta sprzed zapisu: rola do porównania po commicie, flaga FIDmana do
+        // Stan konta sprzed zapisu: rola do porównania po commicie, flagi odbiorców do
         // rozstrzygnięcia, czy push w ogóle ma polecieć (przejście 0->0 nie wysyła nic).
         const roleIsBeingWritten = fieldsToSync.includes('systemRoleId');
         const previousAccount = await instance.repository.getPersonAccountV2(
@@ -442,19 +443,18 @@ export default class PersonsController extends BaseController<
             ? previousAccount?.systemRoleId
             : undefined;
 
-        const wasFidmanEnabled = previousAccount?.fidmanEnabled === true;
-        // Payload bez pola flagi nie znaczy „wyłącz" - znaczy „nie ruszaj".
-        const willBeFidmanEnabled =
-            accountData.fidmanEnabled !== undefined
-                ? accountData.fidmanEnabled === true
-                : wasFidmanEnabled;
-
-        let fidmanOutboxId: number | undefined;
+        const recipients = [
+            { recipient: 'fidman', field: 'fidmanEnabled' },
+            { recipient: 'fin', field: 'finEnabled' },
+        ] as const;
+        const outboxIds: number[] = [];
 
         await ToolsDb.transaction(async (conn) => {
             // Zdjęcie sprzed zapisu - potrzebne WYŁĄCZNIE przy wyłączaniu (patrz
             // enqueueFidmanUserPushIfNeeded), więc konta bez flagi nie płacą za nie zapytaniem.
-            const sourceBefore = wasFidmanEnabled
+            const sourceBefore = recipients.some(
+                ({ field }) => previousAccount?.[field] === true,
+            )
                 ? await instance.repository.getFidmanUserSourceInConn(
                       conn,
                       accountData.personId,
@@ -472,6 +472,7 @@ export default class PersonsController extends BaseController<
                     microsoftRefreshToken: accountData.microsoftRefreshToken,
                     isActive: accountData.isActive,
                     fidmanEnabled: accountData.fidmanEnabled,
+                    finEnabled: accountData.finEnabled,
                 },
                 conn,
                 fieldsToSync,
@@ -497,22 +498,36 @@ export default class PersonsController extends BaseController<
                 conn,
             );
 
-            fidmanOutboxId = await this.enqueueFidmanUserPushIfNeeded(
-                conn,
-                accountData.personId,
-                sourceBefore,
-                wasFidmanEnabled,
-                willBeFidmanEnabled,
-            );
+            for (const { recipient, field } of recipients) {
+                // FIN: „zalogowany w PS = zalogowany w FIN” — wyłączone konto PS (IsActive = 0) wyłącza też FIN,
+                // a ponowne włączenie przywraca; dostawa i tak czyta bieżący stan (FidmanSync.withCurrentFinState).
+                const activeBefore =
+                    recipient !== 'fin' || previousAccount?.isActive !== false;
+                const activeAfter =
+                    recipient !== 'fin' ||
+                    (accountData.isActive ?? previousAccount?.isActive) !== false;
+                const flagBefore = previousAccount?.[field] === true;
+                const wasEnabled = flagBefore && activeBefore;
+                const willBeEnabled =
+                    (accountData[field] === undefined
+                        ? flagBefore
+                        : accountData[field] === true) && activeAfter;
+                const id = await this.enqueueFidmanUserPushIfNeeded(
+                    conn,
+                    accountData.personId,
+                    sourceBefore,
+                    wasEnabled,
+                    willBeEnabled,
+                    recipient,
+                );
+                if (id !== undefined) outboxIds.push(id);
+            }
         });
 
-        // L8: dostawa wyłącznie po commicie i nigdy nie wywraca zapisu konta.
-        if (fidmanOutboxId !== undefined) {
-            await tryDeliverFidmanAfterCommit(fidmanOutboxId).catch((err) =>
-                console.error(
-                    '[FidmanSync] post-commit push (zapis konta osoby) error:',
-                    err,
-                ),
+        // Dostawa po commicie nie może wywrócić zapisu ani zablokować drugiego odbiorcy.
+        for (const id of outboxIds) {
+            await tryDeliverFidmanAfterCommit(id).catch((err) =>
+                console.error('[UserSync] post-commit:', err),
             );
         }
 
@@ -535,7 +550,7 @@ export default class PersonsController extends BaseController<
     }
 
     /**
-     * GLO-P1 (D-GLO-4) — decyduje, czy zapis konta ma dołożyć `user.upsert` do outboxu FIDmana,
+     * GLO-P1 (D-GLO-4) — decyduje, czy zapis konta ma dołożyć `user.upsert` do outboxu odbiorcy,
      * i robi to w TEJ SAMEJ transakcji co zapis (L8). Zwraca Id wiersza albo undefined.
      *
      * Kiedy push leci:
@@ -543,10 +558,10 @@ export default class PersonsController extends BaseController<
      *    porównujemy payloadu pole po polu, bo dane osoby - imię, nazwisko, telefon, podmiot -
      *    zapisuje wcześniejsze żądanie i porównanie i tak by ich zmiany nie zobaczyło.
      *    `applyUser` po stronie FIDmana jest idempotentny, więc powtórka jest tania);
-     *  - flaga przeszła 1 -> 0 -> `enabled: false` (FIDman wyłącza konto, nigdy nie kasuje);
+     *  - flaga przeszła 1 -> 0 -> `enabled: false` (odbiorca wyłącza konto, nigdy nie kasuje);
      *  - flaga 0 bez wcześniejszej 1 -> nic nie leci.
      *
-     * Flaga = 1 z danymi, których FIDman nie przyjmie, **odrzuca zapis** (400 z komunikatem po
+     * Flaga = 1 z danymi, których odbiorca nie przyjmie, **odrzuca zapis** (400 z komunikatem po
      * polsku), zamiast wysyłać payload, który wróci czterystką jako FAILED w outboxie.
      */
     private static async enqueueFidmanUserPushIfNeeded(
@@ -555,6 +570,7 @@ export default class PersonsController extends BaseController<
         sourceBefore: FidmanUserSource | undefined,
         wasEnabled: boolean,
         willBeEnabled: boolean,
+        recipient: 'fidman' | 'fin',
     ): Promise<number | undefined> {
         if (!willBeEnabled && !wasEnabled) return undefined;
 
@@ -566,28 +582,28 @@ export default class PersonsController extends BaseController<
         if (!sourceAfter) return undefined;
 
         if (willBeEnabled) {
-            const problems = validateFidmanUserSource(sourceAfter);
+            const problems = validateFidmanUserSource(sourceAfter, recipient);
             if (problems.length > 0) {
                 throw new PersonAccountValidationError(problems.join(' '));
             }
-            return enqueueFidmanUserPush(sourceAfter, true, conn);
+            return enqueueFidmanUserPush(sourceAfter, true, conn, recipient);
         }
 
         // Wyłączanie nie może być zablokowane brakiem danych - to byłaby pułapka: żeby
         // odznaczyć osobę, trzeba by najpierw poprawić dane, które przestały być potrzebne.
-        // Bierzemy więc pierwsze zdjęcie, które FIDman przyjmie: po zapisie albo sprzed niego
+        // Bierzemy więc pierwsze zdjęcie, które odbiorca przyjmie: po zapisie albo sprzed niego
         // (stan sprzed jest z definicji ten, przy którym flaga została zapalona).
         const usable = [sourceAfter, sourceBefore].find(
             (candidate) =>
-                candidate && validateFidmanUserSource(candidate).length === 0,
+                candidate && validateFidmanUserSource(candidate, recipient).length === 0,
         );
         if (!usable) {
             console.warn(
-                `[FidmanSync] nie wysłano wyłączenia konta dla PersonId=${personId}: dane osoby nie spełniają kontraktu FIDmana. Konto w FIDmanie trzeba wyłączyć ręcznie.`,
+                `[${recipient.toUpperCase()}] nie wysłano wyłączenia konta dla PersonId=${personId}: dane osoby nie spełniają kontraktu odbiorcy. Konto trzeba wyłączyć ręcznie.`,
             );
             return undefined;
         }
-        return enqueueFidmanUserPush(usable, false, conn);
+        return enqueueFidmanUserPush(usable, false, conn, recipient);
     }
 
     /**

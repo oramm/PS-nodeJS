@@ -16,6 +16,7 @@ const ACCOUNT_UPSERT_WRITE_FIELDS = [
     'microsoftRefreshToken',
     'isActive',
     'fidmanEnabled',
+    'finEnabled',
 ] as const;
 
 const parsePositiveInt = (raw: string, fieldName: string): number => {
@@ -275,6 +276,7 @@ app.put(
                 microsoftRefreshToken: payload?.microsoftRefreshToken,
                 isActive: payload?.isActive,
                 fidmanEnabled: payload?.fidmanEnabled,
+                finEnabled: payload?.finEnabled,
             }, req.session?.userData?.enviId);
             if (ownRoleChange) {
                 await destroyOwnSession(req);
