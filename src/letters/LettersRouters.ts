@@ -10,40 +10,15 @@ import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import resolveRouteLetterId from './resolveRouteLetterId';
 import {
+    assertNewLetterInScope,
     assertTargetCasesInScope,
     pinEditorForPersonAgent,
 } from './letterWriteGuards';
 import multer from 'multer';
-import ProjectScopeGuard, {
-    ForbiddenError,
-} from '../persons/projectAssignments/ProjectScopeGuard';
-import { ProjectScope } from '../types/sessionTypes';
+import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
 
 // Middleware do parsowania plików
 const uploadLetters = multer({ storage: multer.memoryStorage() });
-
-/**
- * Sprawdza zakres dla NOWEGO pisma, którego jeszcze nie ma w bazie: bierzemy kontrakt
- * z ciała żądania, a gdy go nie ma - pierwszą wskazaną sprawę. Gdy nie da się ustalić
- * ani jednego, odmawiamy: bez punktu zaczepienia nie ma jak potwierdzić uprawnienia.
- */
-async function assertNewLetterInScope(
-    payload: any,
-    scope?: ProjectScope,
-): Promise<void> {
-    if (!scope) return;
-    const contractId = Number(payload?._contract?.id);
-    if (Number.isInteger(contractId) && contractId > 0)
-        return ProjectScopeGuard.assertContractInScope(contractId, scope);
-
-    const caseId = Number(payload?._cases?.[0]?.id);
-    if (Number.isInteger(caseId) && caseId > 0)
-        return ProjectScopeGuard.assertCaseInScope(caseId, scope);
-
-    throw new ForbiddenError(
-        'Nie można ustalić kontraktu pisma - brak uprawnień.',
-    );
-}
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {

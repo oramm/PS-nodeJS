@@ -1,4 +1,5 @@
 import {
+    assertNewLetterInScope,
     assertTargetCasesInScope,
     pinEditorForPersonAgent,
 } from '../letterWriteGuards';
@@ -70,5 +71,70 @@ describe('assertTargetCasesInScope', () => {
         await expect(assertTargetCasesInScope([{}], SCOPE)).rejects.toThrow(
             ForbiddenError,
         );
+    });
+});
+
+describe('assertNewLetterInScope (POST /letterReact)', () => {
+    beforeEach(() => jest.resetAllMocks());
+    const inScope = [{ ProjectOurId: '2023.10' }] as any;
+    const foreign = [{ ProjectOurId: '2099.99' }] as any;
+
+    it('rola bez ograniczeń: nie pyta bazy', async () => {
+        await assertNewLetterInScope({ _cases: [{ id: 1 }] }, undefined);
+        expect(mockedToolsDb.getQueryCallbackAsync).not.toHaveBeenCalled();
+    });
+
+    it('przepuszcza, gdy kontrakt i wszystkie sprawy są w zakresie', async () => {
+        mockedToolsDb.getQueryCallbackAsync.mockResolvedValue(inScope);
+        await expect(
+            assertNewLetterInScope(
+                { _contract: { id: 5 }, _cases: [{ id: 1 }, { id: 2 }] },
+                SCOPE,
+            ),
+        ).resolves.toBeUndefined();
+        expect(mockedToolsDb.getQueryCallbackAsync).toHaveBeenCalledTimes(3);
+    });
+
+    it('odmawia, gdy druga sprawa jest z cudzego projektu (kontrakt swój)', async () => {
+        mockedToolsDb.getQueryCallbackAsync
+            .mockResolvedValueOnce(inScope)
+            .mockResolvedValueOnce(inScope)
+            .mockResolvedValueOnce(foreign);
+        await expect(
+            assertNewLetterInScope(
+                { _contract: { id: 5 }, _cases: [{ id: 1 }, { id: 2 }] },
+                SCOPE,
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('odmawia, gdy kontrakt z ciała jest cudzy, choć sprawy są swoje', async () => {
+        mockedToolsDb.getQueryCallbackAsync
+            .mockResolvedValueOnce(foreign)
+            .mockResolvedValue(inScope);
+        await expect(
+            assertNewLetterInScope(
+                { _contract: { id: 5 }, _cases: [{ id: 1 }] },
+                SCOPE,
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('bez kontraktu sprawdza każdą sprawę', async () => {
+        mockedToolsDb.getQueryCallbackAsync
+            .mockResolvedValueOnce(inScope)
+            .mockResolvedValueOnce(foreign);
+        await expect(
+            assertNewLetterInScope({ _cases: [{ id: 1 }, { id: 2 }] }, SCOPE),
+        ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('odmawia bez kontraktu i bez spraw', async () => {
+        await expect(assertNewLetterInScope({}, SCOPE)).rejects.toThrow(
+            ForbiddenError,
+        );
+        await expect(
+            assertNewLetterInScope({ _cases: [] }, SCOPE),
+        ).rejects.toThrow(ForbiddenError);
     });
 });

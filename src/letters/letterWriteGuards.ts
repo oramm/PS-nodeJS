@@ -1,4 +1,6 @@
-import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
+import ProjectScopeGuard, {
+    ForbiddenError,
+} from '../persons/projectAssignments/ProjectScopeGuard';
 import { ProjectScope, UserData } from '../types/sessionTypes';
 
 /**
@@ -29,4 +31,28 @@ export async function assertTargetCasesInScope(
         return ProjectScopeGuard.assertCaseInScope(undefined, scope);
     for (const item of cases)
         await ProjectScopeGuard.assertCaseInScope(Number(item?.id), scope);
+}
+
+/**
+ * Zakres dla NOWEGO pisma, którego jeszcze nie ma w bazie (POST /letterReact).
+ * Kontrakt z ciała sprawdzamy, bo z niego liczony jest numer pisma przychodzącego
+ * i on nadpisuje kontrakt spraw; SBZ-3 — sprawdzamy też KAŻDĄ sprawę z `_cases`,
+ * bo wcześniej tylko pierwszą, więc rola zakresowa dopinała pismo do cudzej sprawy.
+ * Bez kontraktu i bez spraw odmawiamy: nie ma czym potwierdzić uprawnienia.
+ */
+export async function assertNewLetterInScope(
+    payload: any,
+    scope?: ProjectScope,
+): Promise<void> {
+    if (!scope) return;
+    const contractId = Number(payload?._contract?.id);
+    const hasContract = Number.isInteger(contractId) && contractId > 0;
+    const cases = payload?._cases;
+    if (!hasContract && !(Array.isArray(cases) && cases.length))
+        throw new ForbiddenError(
+            'Nie można ustalić kontraktu pisma - brak uprawnień.',
+        );
+    if (hasContract)
+        await ProjectScopeGuard.assertContractInScope(contractId, scope);
+    await assertTargetCasesInScope(cases, scope);
 }
