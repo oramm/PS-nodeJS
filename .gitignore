@@ -52,3 +52,7 @@ tmp/pettycash-sheet-structure*.json
 # Lokalna kolejka zdarzen bledow PS
 /tmp/bug-events-outbox.jsonl
 /tmp/bug-events-outbox.jsonl.processing
+
+# Generowana kopia kodu Pomocy
+.pomoc-src/
+.pomoc-src-*/

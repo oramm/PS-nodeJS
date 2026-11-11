@@ -11,7 +11,7 @@
         "dev:status": "powershell -ExecutionPolicy Bypass -File scripts/dev-status.ps1",
         "dev:logs": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1",
         "dev:logs:follow": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1 -Follow",
-        "build": "tsc",
+        "build": "node scripts/pomoc-snapshot.mjs && tsc",
         "debug": "cross-env NODE_ENV=development nodemon --inspect-brk ts-node src/index.ts",
         "migrate:list": "yarn build && yarn node build/scripts/migrate.js list",
         "migrate:verify": "yarn build && yarn node build/scripts/migrate.js verify",

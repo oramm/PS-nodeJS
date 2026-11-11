@@ -32,6 +32,9 @@ type RoutePattern = { method: string; path: string };
  * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
 const BASE_ROUTES: RoutePattern[] = [
+    // Pomoc nadal wymaga osobistej sesji i obecności na liście POMOC_USERS.
+    { method: 'GET', path: '/pomoc/available' },
+    { method: 'POST', path: '/pomoc/ask' },
     { method: 'GET', path: '/v2/privacy/system' },
     { method: 'POST', path: '/v2/privacy/system/acknowledgements' },
     // --- Start aplikacji: repozytoria ładowane przez frontend dla każdego zalogowanego.

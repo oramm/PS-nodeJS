@@ -50,6 +50,8 @@ declare global {
 }
 
 export type SessionTask = {
+    /** Wynik Pomocy jest prywatny dla osobistej sesji autora. */
+    pomocOwnerId?: number;
     status: 'processing' | 'done' | 'error';
     result?: any;
     error?: string;

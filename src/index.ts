@@ -1,3 +1,4 @@
+import { pomocJson, pomocBodyError } from './pomoc/body';
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import { FRONT_ORIGINS } from './setup/frontOrigins';
@@ -352,6 +353,8 @@ app.use(cors(corsOptions));
 
 app.set('trust proxy', resolveTrustProxySetting());
 
+// Limit Pomocy przed ogólnym parserem, aby nie przyjmować 10 MB historii.
+app.use('/pomoc/ask', pomocJson, pomocBodyError);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Do NOT automatically parse multipart/form-data here — let route-level
@@ -685,6 +688,7 @@ app.get('/admin/bug-events', async (req, res) => {
     });
 });
 
+require('./pomoc/PomocRouters');
 require('./setup/Sessions/Gauth2Routers');
 require('./persons/privacy/PrivacyRouters');
 require('./persons/PersonsRouters');
