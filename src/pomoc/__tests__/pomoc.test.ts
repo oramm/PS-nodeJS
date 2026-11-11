@@ -16,11 +16,16 @@ import projectScopedPolicy from '../../setup/Sessions/projectScopedPolicy';
 import ProjectAssignmentRepository from '../../persons/projectAssignments/ProjectAssignmentRepository';
 import ContractsController from '../../contracts/ContractsController';
 import { SystemRoleName } from '../../types/sessionTypes';
+import { AGENT_SYSTEM_EMAIL } from '../../setup/Sessions/agentTokenAuth';
 
 jest.mock('../../index', () => ({ app: require('express')() }));
 jest.mock('../../contracts/ContractsController', () => ({ __esModule: true, default: { find: jest.fn() } }));
 jest.mock('../../persons/projectAssignments/ProjectAssignmentRepository', () => ({ __esModule: true, default: { getAssignedProjectOurIds: jest.fn() } }));
 jest.mock('../../tools/ToolsDb', () => ({ __esModule: true, default: {} }));
+jest.mock('../../setup/Sessions/agentTokenAuth', () => ({ AGENT_SYSTEM_EMAIL: 'konto-techniczne@example.invalid' }));
+jest.mock('../../setup/Sessions/ToolsGapi', () => ({ __esModule: true, default: {}, oAuthClient: { on: jest.fn() } }));
+jest.mock('../../tools/ToolsGd', () => ({ __esModule: true, default: {} }));
+jest.mock('../../tools/ToolsMail', () => ({ __esModule: true, default: {} }));
 
 let codeDir: string;
 let server: Server;
@@ -31,10 +36,13 @@ const create = jest.fn();
 const deps = { ...pomocDefaults, env: {} as NodeJS.ProcessEnv, codeDir: '',
     readPolicy: jest.fn(), client: jest.fn(), store: () => createUsageStore({ execute } as any) };
 const input = { question: 'Jak dodać sprawę?', screen: { name: 'Sprawy', path: '/tasks' } };
+const serverSha = 'abc1234' + 'a'.repeat(33);
+const siteSha = 'def5678' + 'b'.repeat(33);
+const versionLabel = 'serwer abc1234, ekran def5678';
 
 beforeAll(async () => {
     codeDir = await mkdtemp(join(tmpdir(), 'ps-pomoc-test-'));
-    await writeFile(join(codeDir, 'build-info.json'), JSON.stringify({ version: 'wersja-testowa' }));
+    await writeFile(join(codeDir, 'build-info.json'), JSON.stringify({ version: serverSha, hasSite: true, siteVersion: siteSha }));
     deps.codeDir = codeDir;
     const app = express();
     app.use((req, _res, next) => { (req as any).session = { userData: user }; next(); });
@@ -42,6 +50,8 @@ beforeAll(async () => {
     app.use('/pomoc/ask', pomocJson, pomocBodyError);
     app.use(express.json({ limit: '10mb' }));
     registerPomocRoutes(app, deps);
+    require('../../setup/Sessions/Gauth2Routers');
+    app.use(require('../../index').app);
     server = createServer(app);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     url = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -90,7 +100,7 @@ test('odmawia kontu spoza listy', async () => {
     expect(deps.client).not.toHaveBeenCalled();
 });
 test.each(['naglowek', 'tozsamosc', 'osobisty'])('odmawia agentowi: %s', async (mode) => {
-    if (mode === 'tozsamosc') { user.systemEmail = 'agent@ps.envi.com.pl'; deps.env.POMOC_USERS += ',agent@ps.envi.com.pl'; }
+    if (mode === 'tozsamosc') { user.systemEmail = AGENT_SYSTEM_EMAIL; deps.env.POMOC_USERS += `,${AGENT_SYSTEM_EMAIL}`; }
     if (mode === 'osobisty') user.isPersonAgent = true;
     const headers: Record<string, string> = mode === 'naglowek' ? { 'x-envi-agent-token': 'atrapa' } : {};
     expect((await ask(input, headers)).status).toBe(403);
@@ -124,11 +134,12 @@ test('przycina historię i stosuje etykiety katalogu serwera', () => {
     expect(parsed.markers[0].label).toBe('Dodaj sprawę');
 });
 test('odpowiedź atrapy trafia do klienta, koszt do rzeczywistego adaptera SQL', async () => {
-    expect(await (await fetch(`${url}/pomoc/available`)).json()).toEqual({ available: true, version: 'wersja-testowa' });
+    deps.env.SOURCE_VERSION = serverSha;
+    expect(await (await fetch(`${url}/pomoc/available`)).json()).toEqual({ available: true, version: versionLabel });
     const response = await ask();
     expect(response.status).toBe(202);
     const answer = await response.json();
-    expect(answer).toMatchObject({ decision: 'allowed', text: 'Wybierz Dodaj sprawę.', based_on: 'Na podstawie PS ENVI wersja-testowa', cost_usd: 0.0006 });
+    expect(answer).toMatchObject({ decision: 'allowed', text: 'Wybierz Dodaj sprawę.', based_on: `Na podstawie PS ENVI ${versionLabel}`, cost_usd: 0.0006 });
     expect(answer.conversation).toEqual([{ role: 'user', content: input.question }, { role: 'assistant', content: 'Wybierz Dodaj sprawę.' }]);
     const writes = execute.mock.calls.filter(([sql]) => sql.startsWith('INSERT'));
     expect(writes).toHaveLength(1);
@@ -149,6 +160,56 @@ test('licznik odtwarza JSON i kwotę oraz pyta o półotwarty przedział UTC', a
     expect(result[0]).toMatchObject({ tokens: { input_tokens: 100 }, cost_usd: 0.5 });
     expect(execute.mock.calls[0][0]).toContain('Time >= ? AND Time < ?');
     expect(execute.mock.calls[0][1]).toEqual(['2026-11-01 00:00:00.000', '2026-12-01 00:00:00.000']);
+});
+
+test('czas MariaDB z sześcioma cyframi przechodzi rzeczywisty decideStart i nadal liczy limit', async () => {
+    execute.mockResolvedValue([[{ time: '2026-11-11T08:20:56.993000Z', kind: 'HELP', user: 'osoba@example.invalid', model: POMOC_MODEL, bucket: 'pomoc', tokens: '{"input_tokens":100}', cost_usd: '0.5000000000' }], []]);
+    const store = deps.store();
+    const entries = await store.list({ start: '2026-11-01T00:00:00.000Z', end: '2026-12-01T00:00:00.000Z' });
+    const policy = await deps.readPolicy();
+    policy.pomoc.users = ['osoba@example.invalid'];
+    const request = { now: '2026-11-11T09:00:00.000Z', kind: 'HELP', user: 'osoba@example.invalid', model: POMOC_MODEL, bucket: 'pomoc', estimated_cost_usd: 0.5 };
+    const { decideStart } = require('@envi/agent-server');
+    expect(await decideStart(policy, store, request)).toEqual({ decision: 'allowed' });
+    expect(entries[0].time).toBe(new Date(entries[0].time).toISOString());
+    expect(entries[0].time).toBe('2026-11-11T08:20:56.993Z');
+    policy.pomoc.daily_questions_per_user = 1;
+    expect(await decideStart(policy, store, request)).toMatchObject({ decision: 'denied', reason: expect.stringContaining('Dzienny limit') });
+});
+
+test('etykieta zachowuje datę master, gdy archiwum nie zawiera SHA', async () => {
+    try {
+        await writeFile(join(codeDir, 'build-info.json'), JSON.stringify({ version: serverSha, hasSite: true, siteVersion: 'master z 2026-11-11T09:00:00.000Z' }));
+        expect(await (await fetch(`${url}/pomoc/available`)).json()).toEqual({ available: true, version: 'serwer abc1234, ekran master z 2026-11-11T09:00:00.000Z' });
+    } finally {
+        await writeFile(join(codeDir, 'build-info.json'), JSON.stringify({ version: serverSha, hasSite: true, siteVersion: siteSha }));
+    }
+});
+
+test('prawdziwa trasa wyniku odmawia obcej osobie bez usunięcia zadania, potem autor odbiera wynik', async () => {
+    const previousUsers = process.env.POMOC_USERS;
+    process.env.POMOC_USERS = deps.env.POMOC_USERS;
+    try {
+        const answer = await (await ask()).json();
+        const taskId = Object.keys(TaskStore.items)[0];
+        user = { ...user, enviId: 8, systemEmail: 'druga@example.invalid' };
+        const denied = await fetch(`${url}/sessionTaskStatus/${taskId}`);
+        expect(denied.status).toBe(403);
+        expect(await denied.json()).not.toHaveProperty('result');
+        expect(TaskStore.get(taskId)?.result).toEqual(answer);
+        user = { ...user, enviId: 7, systemEmail: 'osoba@example.invalid' };
+        const accepted = await fetch(`${url}/sessionTaskStatus/${taskId}`);
+        expect(accepted.status).toBe(200);
+        expect(accepted.headers.get('cache-control')).toBe('no-store');
+        const body = await accepted.json();
+        expect(body).toMatchObject({ status: 'done', result: answer });
+        expect(body).not.toHaveProperty('timeout');
+        expect(body).not.toHaveProperty('pomocOwnerId');
+        expect(TaskStore.get(taskId)).toBeUndefined();
+    } finally {
+        if (previousUsers === undefined) delete process.env.POMOC_USERS;
+        else process.env.POMOC_USERS = previousUsers;
+    }
 });
 test('dane kontraktu używają tego samego zakresu i funkcji co lista kontraktów', async () => {
     const req = { session: { userData: { ...user, systemRoleName: SystemRoleName.CLIENT } }, projectScope: { projectOurIds: ['P-1'] } } as Request;

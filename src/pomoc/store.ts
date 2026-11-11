@@ -23,6 +23,7 @@ export function createUsageStore(db: Pick<Pool, 'execute'>): UsageStore {
             );
             return rows.map((row) => ({
                 ...row,
+                time: new Date(row.time).toISOString(),
                 tokens: typeof row.tokens === 'string' ? JSON.parse(row.tokens) : row.tokens,
                 cost_usd: Number(row.cost_usd),
             })) as Awaited<ReturnType<UsageStore['list']>>;

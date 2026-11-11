@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const ts = createRequire(import.meta.url)('typescript');
@@ -61,7 +62,7 @@ async function copySource(sourceRoot, target) {
     await walk('src');
 }
 
-export async function snapshot(target, { serverRoot = root, siteRoot, version } = {}) {
+export async function snapshot(target, { serverRoot = root, siteRoot, version, siteVersion } = {}) {
     target = resolve(target);
     for (let dir = target; ; dir = dirname(dir)) {
         const info = await lstat(dir).catch((error) => { if (error.code !== 'ENOENT') throw error; });
@@ -85,18 +86,23 @@ export async function snapshot(target, { serverRoot = root, siteRoot, version } 
             console.warn('[pomoc] Nie udało się skopiować ekranu; dostępny jest tylko kod serwera.');
         }
     } else console.warn('[pomoc] Brak ekranu; dostępny jest tylko kod serwera.');
-    await writeFile(join(target, 'build-info.json'), JSON.stringify({ version, hasSite }) + '\n', { flag: 'wx' });
+    if (hasSite && !siteVersion) {
+        try { siteVersion = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: siteRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+        catch { siteVersion = `master z ${new Date().toISOString()}`; }
+    }
+    await writeFile(join(target, 'build-info.json'), JSON.stringify({ version, hasSite, siteVersion: hasSite ? siteVersion : null }) + '\n', { flag: 'wx' });
     return hasSite;
 }
 
-async function downloadSite(temp) {
+export async function downloadSite(temp, request = fetch) {
     // shortcut: kopia ekranu z master w chwili budowy serwera, zmiana samego ekranu jej nie odświeża; upgrade gdy ekran i serwer wdrażane razem
-    const response = await fetch('https://codeload.github.com/oramm/ENVI.ProjectSite/tar.gz/master', { signal: AbortSignal.timeout(60000) });
+    const response = await request('https://codeload.github.com/oramm/ENVI.ProjectSite/tar.gz/master', { signal: AbortSignal.timeout(60000) });
     if (!response.ok || !response.body) throw new Error('Nie udało się pobrać kodu ekranu.');
     const archive = join(temp, 'site.tar.gz');
     await pipeline(Readable.fromWeb(response.body), createWriteStream(archive, { flags: 'wx' }));
-    execFileSync('tar', ['-xzf', archive, '-C', temp, '--strip-components=1', 'ENVI.ProjectSite-master/src'], { timeout: 60000 });
-    return temp;
+    execFileSync('tar', ['-xzf', 'site.tar.gz', '--strip-components=1', 'ENVI.ProjectSite-master/src'], { cwd: temp, timeout: 60000 });
+    const sha = /\bcomment=([a-f0-9]{40})\n/i.exec(gunzipSync(await readFile(archive)).subarray(0, 1024).toString('utf8'))?.[1];
+    return { siteRoot: temp, siteVersion: sha || `master z ${new Date().toISOString()}` };
 }
 
 async function main() {
@@ -105,14 +111,15 @@ async function main() {
     const configured = resolve(root, process.argv[2] || process.env.POMOC_SITE_DIR || '../pomoc-site');
     let siteRoot = (await lstat(join(configured, 'src')).catch(() => null))?.isDirectory() ? configured : undefined;
     let downloaded;
+    let siteVersion;
     const staging = await mkdtemp(join(root, '.pomoc-src-'));
     try {
         if (!siteRoot && (process.env.SOURCE_VERSION || process.env.HEROKU_SLUG_COMMIT || process.env.DYNO)) {
             downloaded = await mkdtemp(join(tmpdir(), 'ps-pomoc-site-'));
-            try { siteRoot = await downloadSite(downloaded); }
+            try { ({ siteRoot, siteVersion } = await downloadSite(downloaded)); }
             catch { console.warn('[pomoc] Pobranie publicznego kodu ekranu nie powiodło się.'); }
         }
-        const hasSite = await snapshot(staging, { serverRoot: root, siteRoot, version });
+        const hasSite = await snapshot(staging, { serverRoot: root, siteRoot, version, siteVersion });
         const target = join(root, '.pomoc-src');
         if ((await lstat(target).catch(() => null))?.isSymbolicLink()) throw new Error('Katalog kopii jest dowiązaniem.');
         await rm(target, { recursive: true, force: true });

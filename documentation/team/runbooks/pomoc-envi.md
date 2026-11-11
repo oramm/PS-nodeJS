@@ -4,11 +4,11 @@ Pomoc korzysta z paczek ENVI Agenta przypiętych w `envi-agent.version`. Instruk
 
 ## Kolejność uruchomienia
 
-1. Potwierdź docelową bazę i `NODE_ENV`. Przejrzyj `yarn migrate:list` zgodnie z [procedurą migracji](db-migration-execution.md). Nowy SQL: `src/pomoc/migrations/001_create_pomoc_api_usage.sql`. Runner rozpoznaje go automatycznie; pomija `_down.sql`.
-2. Przed wdrożeniem wykonaj nową migrację na zatwierdzonym celu i sprawdź strukturę `PomocApiUsage`, indeksy i wpis/checksum w `SchemaMigrations`. `yarn migrate:apply` wykonuje wszystkie oczekujące migracje, więc nie uruchamiaj go bez przeglądu całej listy. `yarn migrate:verify` musi przejść przed release — istniejący Procfile już ma tę bramkę. W tym zadaniu nie łączono się z bazą i nie wykonywano migracji.
-3. W konfiguracji serwera/Heroku ustaw `POMOC_ANTHROPIC_API_KEY`, `POMOC_CANON_TOKEN` (tylko odczyt kanonu) i `POMOC_USERS` (CSV e-maili). Wartości nie trafiają do repo ani przeglądarki. Brak klucza/tokena/listy wyłącza Pomoc i nie zatrzymuje serwera. Kanon musi dopuszczać Pomoc i zawierać cennik modelu używanego we wzorcu AQM.
-4. Wdróż serwer, następnie ekran. Przycisk pojawi się dopiero po odpowiedzi `available=true`; stara wersja serwera/błąd sieci nie pokazuje przycisku. GitHub Pages/build ekranu pozostają w repo `pomoc-site`, poza Heroku serwera.
-5. Sprawdź osobistą sesję dozwolonego konta, konto spoza listy, agentów oraz rolę ograniczoną do projektów. Potwierdź odpowiedź z etykietą wdrożonej wersji i jeden wpis kosztu w liczniku. Testy automatyczne używają atrapy modelu i bazy.
+1. Najpierw scal ekran do `master` i opublikuj go przez GitHub Pages w repo `pomoc-site`. Budowa serwera pobiera właśnie `master`, więc ekran musi być scalony przed jej rozpoczęciem.
+2. Następnie wykonaj migrację na produkcji: potwierdź docelową bazę i `NODE_ENV`, przejrzyj `yarn migrate:list` zgodnie z [procedurą migracji](db-migration-execution.md). Nowy SQL: `src/pomoc/migrations/001_create_pomoc_api_usage.sql`. Po wykonaniu na zatwierdzonym celu sprawdź strukturę `PomocApiUsage`, indeksy i wpis/checksum w `SchemaMigrations`. `yarn migrate:apply` wykonuje wszystkie oczekujące migracje, więc wymaga przeglądu całej listy; `_down.sql` jest pomijany. `yarn migrate:verify` musi przejść przed release — istniejący Procfile już ma tę bramkę.
+3. Potem wdróż serwer. Przycisk pojawi się dopiero po odpowiedzi `available=true`; stara wersja serwera/błąd sieci nie pokazuje przycisku. GitHub Pages/build ekranu pozostają poza Heroku serwera.
+4. Zanim wpiszesz kogokolwiek do `POMOC_USERS`, potwierdź na Heroku dokładnie jeden proces web (jedno dyno i jeden proces aplikacji). Dopiero wtedy ustaw `POMOC_ANTHROPIC_API_KEY`, `POMOC_CANON_TOKEN` (tylko odczyt kanonu) i `POMOC_USERS` (CSV e-maili). Wartości nie trafiają do repo ani przeglądarki. Brak klucza/tokena/listy wyłącza Pomoc i nie zatrzymuje serwera. Kanon musi dopuszczać Pomoc i zawierać cennik modelu używanego we wzorcu AQM.
+5. Sprawdź osobistą sesję dozwolonego konta, konto spoza listy, agentów oraz rolę ograniczoną do projektów. Zadaj co najmniej dwa kolejne pytania; potwierdź odpowiedzi z wersjami serwera i ekranu oraz osobny wpis kosztu każdego pytania. Testy automatyczne używają atrapy modelu i bazy. W tym zadaniu nie wykonywano migracji ani wdrożenia.
 
 ## Kopia kodu i wersja
 
@@ -16,7 +16,7 @@ Pomoc korzysta z paczek ENVI Agenta przypiętych w `envi-agent.version`. Instruk
 
 Na Heroku brak lokalnego ekranu uruchamia pobranie publicznego archiwum `https://codeload.github.com/oramm/ENVI.ProjectSite/tar.gz/master`. Niepowodzenie pobrania/kopiowania ekranu nie przerywa budowy serwera. Build wymaga dostępnego `tar`. Archiwum i katalog tymczasowy są sprzątane, a istniejąca kopia zastępowana po przygotowaniu nowej. Lista dozwolonych pomija pliki środowiska, dane/testy, skrypty operacyjne, poświadczenia, dowiązania i pliki binarne. Komentarze są usuwane, rozpoznawane sekrety i dane osobowe maskowane przed zapisem.
 
-Wersja pochodzi kolejno z `HEROKU_SLUG_COMMIT`, `SOURCE_VERSION` albo `git rev-parse HEAD` przy budowie lokalnej. Serwer odczytuje manifest tej kopii; rozbieżność z wersją zadeklarowaną przez Heroku wyłącza Pomoc. Zmiana samego ekranu nie odświeża kopii na serwerze — potrzebna jest ponowna budowa serwera.
+Wersja serwera pochodzi kolejno z `HEROKU_SLUG_COMMIT`, `SOURCE_VERSION` albo `git rev-parse HEAD` przy budowie lokalnej. `build-info.json` zapisuje też wersję ekranu: lokalny SHA lub SHA z nagłówka PAX pobranego tarballa `master`; gdy SHA jest nieosiągalne, zapisuje „master z <data budowy>”. Etykieta odpowiedzi pokazuje oba SHA skrócone do siedmiu znaków, np. „Na podstawie PS ENVI serwer abc1234, ekran def5678”. Serwer porównuje pełny SHA serwera z wersją zadeklarowaną przez Heroku; rozbieżność wyłącza Pomoc. Zmiana samego ekranu nie odświeża kopii na serwerze — potrzebna jest ponowna budowa serwera.
 
 ## Czas, zakres i wycofanie
 
@@ -80,7 +80,7 @@ Szablon `.github/PULL_REQUEST_TEMPLATE.md` pozostaje ogólnym szablonem dla kole
 - `src/View/Modals/GeneralModalButtons.tsx`
 - `src/View/Modals/ModalsTypes.ts`
 
-## Wyniki weryfikacji 2026-11-11
+## Wyniki weryfikacji 2026-11-11 — etap A
 
 | Kontrola | Przed | Po |
 |---|---|---|
@@ -97,3 +97,5 @@ W pierwszym pełnym Jest zastany test certyfikatów przekroczył 5 s; oba pełne
 `git diff --check` przechodzi w obu repozytoriach. Nowy kod przejrzano także bezpośrednio w diffie; odczyt profilu z lokalnymi `SKILL.md` był blokowany przez piaskownicę. Nie wykonano prawdziwego API/modelu, pobrania tarballa na Heroku, migracji na rzeczywistej DB ani testu przeglądarki na produkcji. Decyzje operatora: konta pilotażowe i sekrety, zatwierdzony cel migracji, pojedynczy proces web oraz termin wspólnego wdrożenia serwera/ekranu.
 
 Surowe logi porównania: `pomoc-server/tmp/dev-runtime/pomoc-validation/` oraz `pomoc-site/tmp/pomoc-validation/` (artefakty lokalne, ignorowane przez git).
+
+Poprawki po etapie A: pełny Jest 3000 → 3003 zaliczonych (5 pominiętych), pełny Vitest 926 → 928, `tsc --noEmit` przed/po bez błędów w obu repo. Pomoc: serwer 23 → 26, ekran 8 → 10; wewnętrzne testy snapshotu 1 → 3. Sprawdzono również rzeczywisty publiczny tarball `master` i lokalny manifest obu SHA. Logi poprawek znajdują się w podkatalogach `fixes-20261111/` powyższych lokalizacji. Przegląd diffu bez ustaleń blokujących. Bez prawdziwego modelu, DB, przeglądarki ani wdrożenia Heroku.

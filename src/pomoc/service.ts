@@ -7,6 +7,7 @@ import { runPomoc, ModelClient, PomocResult, DataTool } from '@envi/agent-server
 import { PomocInput } from './input';
 import { SessionTask } from '../types/sessionTypes';
 import { pomocUsageStore } from './store';
+import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 
 export const POMOC_MODEL = 'claude-sonnet-5-5';
 export const POMOC_EFFORT = 'medium';
@@ -46,7 +47,7 @@ export const pomocDefaults: PomocDependencies = {
 export function pomocIdentity(req: Request, env = process.env): string | undefined {
     const user = req.session?.userData;
     const email = user?.systemEmail?.trim().toLowerCase();
-    if (!user || !Number.isSafeInteger(user.enviId) || user.enviId <= 0 || user.isPersonAgent || req.headers['x-envi-agent-token'] !== undefined || req.headers['x-envi-sb-agent-key'] !== undefined || email === 'agent@ps.envi.com.pl') return;
+    if (!user || !Number.isSafeInteger(user.enviId) || user.enviId <= 0 || user.isPersonAgent || req.headers['x-envi-agent-token'] !== undefined || req.headers['x-envi-sb-agent-key'] !== undefined || email === AGENT_SYSTEM_EMAIL) return;
     const users = (env.POMOC_USERS ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
     return email && users.includes(email) ? email : undefined;
 }
@@ -65,7 +66,8 @@ export async function pomocAccess(req: Request, deps = pomocDefaults) {
         const info = JSON.parse(await readFile(join(deps.codeDir, 'build-info.json'), 'utf8'));
         const deployed = deps.env.HEROKU_SLUG_COMMIT || deps.env.SOURCE_VERSION;
         if (typeof info.version !== 'string' || !info.version.trim() || (deployed && info.version !== deployed)) return;
-        return { email, key, token, version: info.version as string };
+        const siteVersion = /^[a-f0-9]{40}$/i.test(info.siteVersion) ? info.siteVersion.slice(0, 7) : info.siteVersion || 'brak kopii';
+        return { email, key, token, version: `serwer ${info.version.slice(0, 7)}, ekran ${siteVersion}` };
     } catch { return; }
 }
 
