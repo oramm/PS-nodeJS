@@ -32,7 +32,7 @@ type RoutePattern = { method: string; path: string };
  * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
 const BASE_ROUTES: RoutePattern[] = [
-    // Pomoc nadal wymaga osobistej sesji i obecności na liście POMOC_USERS.
+    // Pomoc nadal wymaga osobistej sesji i dostępu przez POMOC_ROLES lub POMOC_USERS.
     { method: 'GET', path: '/pomoc/available' },
     { method: 'POST', path: '/pomoc/ask' },
     { method: 'GET', path: '/v2/privacy/system' },

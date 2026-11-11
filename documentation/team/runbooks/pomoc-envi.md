@@ -7,7 +7,7 @@ Pomoc korzysta z paczek ENVI Agenta przypiętych w `envi-agent.version`. Instruk
 1. Najpierw scal ekran do `master` i opublikuj go przez GitHub Pages w repo `pomoc-site`. Budowa serwera pobiera właśnie `master`, więc ekran musi być scalony przed jej rozpoczęciem.
 2. Następnie wykonaj migrację na produkcji: potwierdź docelową bazę i `NODE_ENV`, przejrzyj `yarn migrate:list` zgodnie z [procedurą migracji](db-migration-execution.md). Nowy SQL: `src/pomoc/migrations/001_create_pomoc_api_usage.sql`. Po wykonaniu na zatwierdzonym celu sprawdź strukturę `PomocApiUsage`, indeksy i wpis/checksum w `SchemaMigrations`. `yarn migrate:apply` wykonuje wszystkie oczekujące migracje, więc wymaga przeglądu całej listy; `_down.sql` jest pomijany. `yarn migrate:verify` musi przejść przed release — istniejący Procfile już ma tę bramkę.
 3. Potem wdróż serwer. Przycisk pojawi się dopiero po odpowiedzi `available=true`; stara wersja serwera/błąd sieci nie pokazuje przycisku. GitHub Pages/build ekranu pozostają poza Heroku serwera.
-4. Zanim wpiszesz kogokolwiek do `POMOC_USERS`, potwierdź na Heroku dokładnie jeden proces web (jedno dyno i jeden proces aplikacji). Dopiero wtedy ustaw `POMOC_ANTHROPIC_API_KEY`, `POMOC_CANON_TOKEN` (tylko odczyt kanonu) i `POMOC_USERS` (CSV e-maili). Wartości nie trafiają do repo ani przeglądarki. Brak klucza/tokena/listy wyłącza Pomoc i nie zatrzymuje serwera. Kanon musi dopuszczać Pomoc i zawierać cennik modelu używanego we wzorcu AQM.
+4. Zanim wpiszesz kogokolwiek do `POMOC_USERS` lub włączysz `POMOC_ROLES`, potwierdź na Heroku dokładnie jeden proces web (jedno dyno i jeden proces aplikacji). Dopiero wtedy ustaw `POMOC_ANTHROPIC_API_KEY`, `POMOC_CANON_TOKEN` (tylko odczyt kanonu) i `POMOC_USERS` (CSV e-maili). Opcjonalne `POMOC_ROLES=ENVI_MANAGER,ENVI_EMPLOYEE` dopuszcza wszystkich pracowników ENVI przez CSV dokładnych nazw ról zamiast wpisu e-maila w `POMOC_USERS`, a brak tej zmiennej zachowuje dotychczasowe zasady. Wartości nie trafiają do repo ani przeglądarki. Brak klucza/tokena lub obu list wyłącza Pomoc i nie zatrzymuje serwera. Kanon musi dopuszczać Pomoc i zawierać cennik modelu używanego we wzorcu AQM.
 5. Sprawdź osobistą sesję dozwolonego konta, konto spoza listy, agentów oraz rolę ograniczoną do projektów. Zadaj co najmniej dwa kolejne pytania; potwierdź odpowiedzi z wersjami serwera i ekranu oraz osobny wpis kosztu każdego pytania. Testy automatyczne używają atrapy modelu i bazy. W tym zadaniu nie wykonywano migracji ani wdrożenia.
 
 ## Kopia kodu i wersja
@@ -24,7 +24,7 @@ Pytanie zwraca HTTP 202 z identyfikatorem istniejącego mechanizmu `TaskStore`. 
 
 Jak we wzorcu AQM, blokada budżetu działa w jednym procesie. `TaskStore` również jest lokalny dla procesu. Włączenie na wielu dyno/procesach wymaga wspólnego magazynu zadań i blokady budżetu; obecny moduł uruchamiaj na jednym procesie web.
 
-Wycofanie: usuń `POMOC_USERS` albo klucz API i wdróż poprzedni kod. Zachowaj tabelę kosztów. `_down.sql` usuwa historię i jest wyłącznie jawną operacją administratora. Nie zmieniono działania pozostałych tras ani źródeł w cudzych kopiach roboczych.
+Wycofanie: usuń obie listy (`POMOC_USERS` i `POMOC_ROLES`) albo klucz API i wdróż poprzedni kod. Zachowaj tabelę kosztów. `_down.sql` usuwa historię i jest wyłącznie jawną operacją administratora. Nie zmieniono działania pozostałych tras ani źródeł w cudzych kopiach roboczych.
 
 ## Weryfikacja i lista PR
 

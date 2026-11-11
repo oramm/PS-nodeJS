@@ -99,10 +99,44 @@ test('odmawia kontu spoza listy', async () => {
     expect(await (await fetch(`${url}/pomoc/available`)).json()).toEqual({ available: false });
     expect(deps.client).not.toHaveBeenCalled();
 });
-test.each(['naglowek', 'tozsamosc', 'osobisty'])('odmawia agentowi: %s', async (mode) => {
+test.each([SystemRoleName.ENVI_EMPLOYEE, SystemRoleName.ENVI_MANAGER])('dopuszcza rolę z POMOC_ROLES bez e-maila na liście: %s', async (role) => {
+    deps.env.POMOC_ROLES = ' ENVI_MANAGER, ENVI_EMPLOYEE, ';
+    delete deps.env.POMOC_USERS;
+    user.systemRoleName = role;
+    expect((await (await fetch(`${url}/pomoc/available`)).json()).available).toBe(true);
+    expect((await (await ask()).json()).decision).toBe('allowed');
+    const writes = execute.mock.calls.filter(([sql]) => sql.startsWith('INSERT'));
+    expect(writes[0][1][2]).toBe(user.systemEmail);
+});
+
+test.each([SystemRoleName.ENVI_COOPERATOR, SystemRoleName.EXTERNAL_USER, SystemRoleName.CONTRACT_WORKER, SystemRoleName.CLIENT, SystemRoleName.ADMIN, 'envi_employee', '', undefined])('odmawia roli spoza POMOC_ROLES bez e-maila na liście: %s', async (role) => {
+    deps.env.POMOC_ROLES = ' ENVI_MANAGER, ENVI_EMPLOYEE, ';
+    delete deps.env.POMOC_USERS;
+    user.systemRoleName = role;
+    expect((await ask()).status).toBe(403);
+    expect((await (await fetch(`${url}/pomoc/available`)).json()).available).toBe(false);
+    expect(create).not.toHaveBeenCalled();
+});
+
+test.each(['envi_employee', 'ENVI_EMPLOYEE_EXTRA'])('POMOC_ROLES porównuje pełne nazwy i wielkość liter: %s', async (roles) => {
+    deps.env.POMOC_ROLES = roles;
+    delete deps.env.POMOC_USERS;
+    expect((await ask()).status).toBe(403);
+    expect(create).not.toHaveBeenCalled();
+});
+
+test('e-mail z POMOC_USERS daje dostęp bez roli z listy', async () => {
+    deps.env.POMOC_ROLES = 'ENVI_MANAGER,ENVI_EMPLOYEE';
+    user.systemRoleName = SystemRoleName.ENVI_COOPERATOR;
+    expect((await (await ask()).json()).decision).toBe('allowed');
+});
+
+test.each(['naglowek', 'naglowek-sb', 'tozsamosc', 'osobisty'])('odmawia agentowi z rolą z listy: %s', async (mode) => {
+    deps.env.POMOC_ROLES = 'ENVI_MANAGER,ENVI_EMPLOYEE';
     if (mode === 'tozsamosc') { user.systemEmail = AGENT_SYSTEM_EMAIL; deps.env.POMOC_USERS += `,${AGENT_SYSTEM_EMAIL}`; }
     if (mode === 'osobisty') user.isPersonAgent = true;
     const headers: Record<string, string> = mode === 'naglowek' ? { 'x-envi-agent-token': 'atrapa' } : {};
+    if (mode === 'naglowek-sb') headers['x-envi-sb-agent-key'] = 'atrapa';
     expect((await ask(input, headers)).status).toBe(403);
     expect((await (await fetch(`${url}/pomoc/available`, { headers })).json()).available).toBe(false);
     expect(create).not.toHaveBeenCalled();
@@ -253,6 +287,7 @@ test('wynik zadania Pomocy jest dostępny tylko autorowi z osobistą sesją', ()
 });
 
 test('niepełna sesja bez identyfikatora osoby nie tworzy publicznego zadania', async () => {
+    deps.env.POMOC_ROLES = 'ENVI_MANAGER,ENVI_EMPLOYEE';
     delete user.enviId;
     expect((await ask()).status).toBe(403);
     expect(create).not.toHaveBeenCalled();

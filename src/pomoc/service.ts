@@ -49,7 +49,8 @@ export function pomocIdentity(req: Request, env = process.env): string | undefin
     const email = user?.systemEmail?.trim().toLowerCase();
     if (!user || !Number.isSafeInteger(user.enviId) || user.enviId <= 0 || user.isPersonAgent || req.headers['x-envi-agent-token'] !== undefined || req.headers['x-envi-sb-agent-key'] !== undefined || email === AGENT_SYSTEM_EMAIL) return;
     const users = (env.POMOC_USERS ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
-    return email && users.includes(email) ? email : undefined;
+    const roles = (env.POMOC_ROLES ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+    return email && (roles.includes(user.systemRoleName) || users.includes(email)) ? email : undefined;
 }
 
 export function canReadPomocTask(req: Request, task: SessionTask, env = process.env): boolean {
