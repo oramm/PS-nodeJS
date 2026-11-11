@@ -729,6 +729,10 @@
   dependencies:
     tslib "^2.4.0"
 
+"@envi/agent-server@file:vendor/envi-agent-server.tgz":
+  version "0.1.0"
+  resolved "file:vendor/envi-agent-server.tgz#a1311a7fbf7999212eebd0ecf14dab7fc35944cd"
+
 "@epic-web/invariant@^1.0.0":
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/@epic-web/invariant/-/invariant-1.0.0.tgz#1073e5dee6dd540410784990eb73e4acd25c9813"
