@@ -1,13 +1,16 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.18.1. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.19.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.18.1"
+set "SB_INSTALATOR_WERSJA=0.19.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
+if defined CODEX_THREAD_ID goto :agent
+if defined CODEX_SESSION_ID goto :agent
+if defined CLAUDECODE goto :agent
 set "SB_Z_ZIPA="
 if defined TEMP call :czy_temp "%TEMP%"
 if defined LOCALAPPDATA call :czy_temp "%LOCALAPPDATA%\Temp"
@@ -41,6 +44,9 @@ set "SB_T=%~1\"
 call set "SB_R=%%SB_TU:%SB_T%=%%"
 if /i not "%SB_R%"=="%SB_TU%" set "SB_Z_ZIPA=1"
 exit /b 0
+:agent
+echo Instalator Second Brain uruchom dwuklikiem na pliku ENVI-SB-instalator.cmd, nie przez agenta (Codex, Claude) - w jego piaskownicy instalacja sie nie udaje.
+exit /b 2
 :zip
 echo(
 echo Ten plik uruchomiono z wnetrza archiwum ZIP. Windows trzyma go wtedy w folderze tymczasowym:
@@ -61,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 175740
+#SB-PLIK bootstrap.ps1 178066
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -769,20 +775,37 @@ function Move-FolderBezGit {
   # R1/D4 (proba u Agnieszki 2026-10-07): folder kanonu zostal po przerwanym przebiegu bez .git,
   # a git nie klonuje do niepustego katalogu (kod 128). Przenosimy go pod nowa nazwe - NIGDY
   # nie kasujemy (moga tam lezec notatki czlowieka). Zwraca $true, gdy sciezka jest wolna.
-  param([string]$Sciezka)
+  param([string]$Sciezka, [string]$Krok = 'N2', [string]$Powod = 'nie ma klonu (.git)')
   $cel = '{0}-stary-{1}' -f $Sciezka.TrimEnd('\'), (Get-Date -Format 'yyyy-MM-dd-HHmm')
   if (Test-Path -LiteralPath $cel) {
-    Log "[N2] folder '$Sciezka' nie ma klonu (.git), a miejsce '$cel' jest zajete - nic nie przenosze; uruchom ENVI-SB-instalator.cmd jeszcze raz za minute."
+    Log "[$Krok] folder '$Sciezka' $Powod, a miejsce '$cel' jest zajete - nic nie przenosze; uruchom ENVI-SB-instalator.cmd jeszcze raz za minute."
     return $false
   }
   try {
     Move-Item -LiteralPath $Sciezka -Destination $cel -ErrorAction Stop
   } catch {
-    Log "[N2] folder '$Sciezka' nie ma klonu (.git) i nie dal sie przeniesc ($($_.Exception.Message)). Zamknij Obsidiana i okna Eksploratora w tym folderze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+    Log "[$Krok] folder '$Sciezka' $Powod i nie dal sie przeniesc ($($_.Exception.Message)). Zamknij Obsidiana i okna Eksploratora w tym folderze, potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
     return $false
   }
-  Log "[N2] folder '$Sciezka' nie mial klonu (.git) - przeniesiony na '$cel' (nic nie skasowane), klonuje od nowa"
+  Log "[$Krok] folder '$Sciezka' $Powod - przeniesiony na '$cel' (nic nie skasowane), klonuje od nowa"
   return $true
+}
+
+function Test-KlonBezHistorii {
+  # N3 pulapek instalacji: klon przerwany przed zapisem galezi - .git jest, ale HEAD wskazuje galaz,
+  # ktorej nie ma ani w refs/, ani w packed-refs. Odczyt plikow, NIE wywolanie gita: git, ktory pada
+  # z innego powodu (brak gita, safe.directory), nie moze kazac przeniesc zdrowego klonu.
+  param([string]$Sciezka)
+  $g = Join-Path $Sciezka '.git'
+  if (-not (Test-Path -LiteralPath $g -PathType Container)) { return $false }
+  $head = Join-Path $g 'HEAD'
+  if (-not (Test-Path -LiteralPath $head -PathType Leaf)) { return $true }
+  $t = ([IO.File]::ReadAllText($head)).Trim()
+  if ($t -notmatch '^ref: (refs/\S+)$') { return $false }   # odlaczony HEAD = jest commit
+  $ref = $Matches[1]
+  if (Test-Path -LiteralPath (Join-Path $g $ref) -PathType Leaf) { return $false }
+  $packed = Join-Path $g 'packed-refs'
+  return -not ((Test-Path -LiteralPath $packed -PathType Leaf) -and ([IO.File]::ReadAllText($packed) -match ('(?m) ' + [regex]::Escape($ref) + '\r?$')))
 }
 
 function Invoke-KlonKanonu {
@@ -934,8 +957,17 @@ function Invoke-StepN2b {
     return
   }
   $gitDir = Join-Path $ProjectsClonePath '.git'
+  # N3 pulapek instalacji: przerwany klon. Bez historii -> przeniesienie pod nowa nazwe (nic nie kasujemy)
+  # i klon od nowa. Z historia, ale bez spisu plikow -> domyka pierwszy przebieg silnika w N3b (odbudowa
+  # spisu i przywrocenie brakujacych plikow, project-sync.ps1) - tu tylko wpis, bez drugiej implementacji.
+  if ((Test-KlonBezHistorii $ProjectsClonePath) -and $PSCmdlet.ShouldProcess($ProjectsClonePath, 'przenies przerwany klon pod nowa nazwe i sklonuj od nowa')) {
+    [void](Move-FolderBezGit -Sciezka $ProjectsClonePath -Krok 'N2b' -Powod 'ma przerwany klon (.git bez zadnego commita)')
+  }
   if (Test-Path -LiteralPath $gitDir) {
     Log "[N2b] projects repo already cloned at $ProjectsClonePath - left untouched (bidirectional sync handled by N3b/project-sync.ps1, not here)"
+    if (-not (Test-Path -LiteralPath (Join-Path $gitDir 'index'))) {
+      Log "[N2b] brak spisu plikow gita (.git\index) - klon przerwany w trakcie wypakowania; pierwszy przebieg synchronizacji (krok N3b) odbuduje spis i przywroci brakujace pliki"
+    }
   } else {
     $target = $ProjectsClonePath
     $action = "git clone --config core.longpaths=true $ProjectsRepoUrl $ProjectsClonePath"
@@ -1224,6 +1256,21 @@ function Install-SbDesktopShortcuts {
   }
 }
 
+# N3 pulapek instalacji (pulapka 1): nieudany zapis skrotu (piaskownica agenta, antywirus) konczyl
+# dotad caly przebieg "FATAL" i pomijal reszte krokow. Skrot to wygoda, nie warunek dzialania SB:
+# ostrzezenie w logu i pozycja w podsumowaniu, instalacja idzie dalej. Raport zdrowia widzi brak
+# skrotu Autostartu sam (Get-BrakiAutostartu w poczta-lib.ps1).
+$script:SkrotyTodo = @()
+function Save-Skrot($Skrot, [string]$Krok) {
+  try { $Skrot.Save(); return $true }
+  catch {
+    $nazwa = Split-Path $Skrot.FullName -Leaf
+    Log "[$Krok] OSTRZEZENIE: nie udalo sie zapisac skrotu '$($Skrot.FullName)' ($($_.Exception.Message)) - reszta instalacji idzie dalej"
+    $script:SkrotyTodo += "Skrot '$nazwa' sie nie zapisal. Uruchom ENVI-SB-instalator.cmd jeszcze raz dwuklikiem (nie przez agenta); jesli wroci, wyslij plik $InstallLogFile wlascicielowi."
+    return $false
+  }
+}
+
 function Invoke-StepN3 {
   Log "[N3] scheduled auto-pull step starting"
   # -ExecutionPolicy Bypass: na swiezym Windows 11 zasada wykonywania to Restricted, wiec
@@ -1262,8 +1309,7 @@ function Invoke-StepN3 {
     $sc.Arguments = $launcherArgs
     $sc.WindowStyle = 7
     $sc.Description = 'ENVI.SB canon: hidden git pull --ff-only (at logon)'
-    $sc.Save()
-    Log "[N3] at-logon shortcut written: $lnkPath"
+    if (Save-Skrot $sc 'N3') { Log "[N3] at-logon shortcut written: $lnkPath" }
   }
 
   # P2: rola 'konsument' nie ma obszaru projektowego, wiec JEDYNYM jej pierwszym przebiegiem
@@ -1766,8 +1812,7 @@ function Invoke-StepN3b {
       # jest to znak ENVI, ten sam co przy zegarze; $ikonaSkrotu wyzej pilnuje zapasu.
       $sc.IconLocation = $ikonaSkrotu
       $sc.Description = 'Second Brain: wyslij i pobierz teraz zmiany z obszaru projektowego'
-      $sc.Save()
-      Log "[N3b] skrot 'Synchronizuj teraz' zapisany: $lnkPath"
+      if (Save-Skrot $sc 'N3b') { Log "[N3b] skrot 'Synchronizuj teraz' zapisany: $lnkPath" }
     }
   }
 
@@ -1797,8 +1842,7 @@ function Invoke-StepN3b {
       $sct.WindowStyle = 7
       $sct.IconLocation = $ikonaSkrotu
       $sct.Description = 'Second Brain: ikona stanu przy zegarze (start przy logowaniu)'
-      $sct.Save()
-      Log "[N3b] skrot autostartu ikony zapisany: $trayLnk"
+      if (Save-Skrot $sct 'N3b') { Log "[N3b] skrot autostartu ikony zapisany: $trayLnk" }
     }
   } else {
     Log "[N3b] nie znalazlem folderu Autostart - ikona wstanie dopiero przy przebiegu silnika, jak dotad"
@@ -1917,8 +1961,7 @@ function Invoke-StepN4 {
     $sc.TargetPath = Join-Path $env:WINDIR 'explorer.exe'
     $sc.Arguments = "`"$uri`""
     $sc.Description = 'ENVI SB vault (kanon 40_wiki + obszar projektowy 20_projects) - open in Obsidian'
-    $sc.Save()
-    Log "[N4] Start Menu shortcut written: $lnkPath"
+    if (Save-Skrot $sc 'N4') { Log "[N4] Start Menu shortcut written: $lnkPath" }
   }
 
   # Non-destructive vault registration. If obsidian.json does not exist yet (Obsidian
@@ -2496,6 +2539,13 @@ function Invoke-N5PocztaSync {
     # SBZ-2: stan wpisu envi-ps - osobna linia silnika.
     $mz = [regex]::Match(($out -join "`n"), '(?m)^ZAPIS-PS-PODSUMOWANIE zapis=([^\r\n]*)$')
     if ($mz.Success) { $script:ZapisPsStan = $mz.Groups[1].Value.Trim() }
+    # O3-A: biblioteki Pythona serwerow MCP instaluje silnik (Install-BibliotekiMcp) - tu tylko jego wynik.
+    $mbib = [regex]::Match(($out -join "`n"), '(?m)^BIBLIOTEKI-MCP-PODSUMOWANIE bledy=([^\r\n]*)$')
+    if ($mbib.Success) {
+      foreach ($n in @($mbib.Groups[1].Value.Trim() -split ',' | Where-Object { $_ })) {
+        if (-not @($script:N5Todo | Where-Object { $_.StartsWith("Biblioteki serwera ${n}:") }).Count) { Add-N5Todo "Biblioteki serwera $n" 'pip zakonczyl sie bledem (szczegoly w project-sync.log)' }
+      }
+    }
     Log "[N5] poczta sync done (szczegoly w project-sync.log)"
   }
 }
@@ -2735,22 +2785,6 @@ function Invoke-N5Sekrety {
   }
 }
 
-function Install-N5ZaleznosciMcp {
-  # Biblioteki Pythona serwerow MCP (requirements.txt kazdej rozpakowanej paczki). Bez nich serwer
-  # nie wstaje ("Server disconnected"); pip nie pobiera drugi raz tego, co juz jest.
-  foreach ($req in @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'ENVI\mcp\*\requirements.txt') -File -ErrorAction SilentlyContinue)) {
-    $nazwa = $req.Directory.Name
-    try {
-      if (-not $PSCmdlet.ShouldProcess($nazwa, "py -3 -m pip install --user -r $($req.FullName)")) { continue }
-      if (-not $script:PyLauncher) { throw 'brak launchera Python (py) po kroku N1' }
-      $global:LASTEXITCODE = 0
-      foreach ($linia in @(& $script:PyLauncher -3 -m pip install --user --disable-pip-version-check --quiet -r $req.FullName 2>&1)) { Log "[N5]   pip ($nazwa): $linia" }
-      if ($LASTEXITCODE -ne 0) { throw "pip zakonczyl sie bledem (kod $LASTEXITCODE)" }
-      Log "[N5] biblioteki Pythona serwera $nazwa na miejscu"
-    } catch { Add-N5Todo "Biblioteki serwera $nazwa" $_.Exception.Message }
-  }
-}
-
 function Write-RaportZdrowiaLauncher([string]$Path, [string]$Rola) {
   # Ten sam wzorzec co Write-N3PullLauncher: zadanie wskazuje jednolinijkowy launcher -File (bez
   # argumentow w /tr schtasks), a wszystko, co wie tylko instalator (adres PS, sciezki, rola, nazwy
@@ -2835,7 +2869,6 @@ function Invoke-StepN5 {
   Invoke-N5Sekrety
   if ($script:SekretyZmiana) { Invoke-N5PocztaSync }
   Install-RaportZdrowia
-  Install-N5ZaleznosciMcp
   Install-N5NodeJs
   Invoke-N5AgentInstalls
   Set-N5LocalBinPath
@@ -3042,6 +3075,7 @@ if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy 
 if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom ENVI-SB-instalator.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij plik $InstallLogFile wlascicielowi." }
 if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij plik $InstallLogFile wlascicielowi." }
 $todo += $todoZadania
+$todo += $script:SkrotyTodo
 $todo += $todoAgenci
 $todo += $script:SekretyTodo
 $todo += $script:N5Todo
