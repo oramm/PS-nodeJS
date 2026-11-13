@@ -17,6 +17,8 @@ import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 import ToolsMail from '../tools/ToolsMail';
 import ChatSpacesController from './chatSpaces/ChatSpacesController';
+import MailboxController from '../mailboxes/MailboxController';
+import { parseContractSelectedPersonIds } from './contractAssignees';
 
 function getAsyncTaskErrorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -100,6 +102,12 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         const chatSpaceSelection = ChatSpacesController.parseSelection(
             req.parsedBody._chatSpaceSelection,
         );
+        const selectedPersonIds = req.body?._selectedPersonIds ?? req.parsedBody._selectedPersonIds
+            ?? (chatSpaceSelection.mode === 'new' ? chatSpaceSelection.personIds : undefined);
+        if (selectedPersonIds !== undefined)
+            creationOptions.selectedPersonIds = parseContractSelectedPersonIds(selectedPersonIds);
+        const mailboxSelection = MailboxController.parseSelection(req.parsedBody._mailboxSelection);
+        await MailboxController.validateContractSelection(mailboxSelection, contract.projectOurId!, (contract as ContractOur).ourId);
 
         // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
@@ -122,6 +130,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                     taskId,
                     creationOptions,
                 );
+                Object.assign(contract, await MailboxController.afterContract(contract.id!, mailboxSelection, req.session?.userData?.enviId ?? null));
                 // Chat nigdy nie wywraca tworzenia kontraktu: błąd = log + zgłoszenie,
                 // kontrakt zostaje (provision... nie rzuca).
                 if (chatSpaceSelection.mode !== 'none' && contract.id) {

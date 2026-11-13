@@ -719,6 +719,7 @@ require('./contracts/caseListSheet/CaseListSheetRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
 require('./contracts/fidmanSync/FidmanSyncRouters');
 require('./contracts/chatSpaces/ChatSpacesRouters');
+require('./mailboxes/MailboxRouters');
 require('./contracts/contractDocuments/ContractDocumentsRouters');
 require('./meetings/MeetingsRouters');
 require('./meetings/meetingArrangements/MeetingArrangementsRouters');

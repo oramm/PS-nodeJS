@@ -42,4 +42,13 @@ describe('personMailboxes (reguła MBX-2)', () => {
     it('kod ręczny spoza spisu jest pomijany; obcy nie dostaje niczego', () => {
         expect(personMailboxes(9, rows, ['marek'])).toEqual([]);
     });
+
+    it('osoba wybrana przy kontrakcie dostaje skrzynkę, a sama rola zewnętrzna z PersonProjects jej nie daje', () => {
+        const assigned = [{ ...row('proj-a', 1, 2), selectedPersonId: 9 }];
+        expect(personMailboxes(9, assigned, [])).toEqual([
+            { code: 'proj-a', address: 'proj-a@envi.com.pl', source: 'assignment' },
+        ]);
+        // PersonProjects nie jest źródłem przypisań w personMailboxes.
+        expect(personMailboxes(10, assigned, [])).toEqual([]);
+    });
 });

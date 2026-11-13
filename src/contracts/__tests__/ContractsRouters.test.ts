@@ -33,6 +33,15 @@ jest.mock('../chatSpaces/ChatSpacesController', () => ({
     },
 }));
 
+jest.mock('../../mailboxes/MailboxController', () => ({
+    __esModule: true,
+    default: {
+        parseSelection: jest.fn(() => ({ mode: 'none' })),
+        validateContractSelection: jest.fn(),
+        afterContract: jest.fn(async () => ({})),
+    },
+}));
+
 jest.mock('../ContractsWithChildrenController', () => ({
     __esModule: true,
     default: {

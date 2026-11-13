@@ -258,6 +258,11 @@ export default class ContractRepository extends BaseRepository<
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
     ): Promise<void> {
+        if (!externalConn) {
+            await ToolsDb.transaction(conn => this.deleteFromDb(item, conn, true));
+            return;
+        }
+        await ToolsDb.executeSQL('DELETE FROM ContractSelectedPersons WHERE ContractId = ?', [item.id], externalConn);
         if (item instanceof ContractOur) {
             const sql = `DELETE FROM OurContractsData WHERE Id = ?`;
             await ToolsDb.executePreparedStmt(

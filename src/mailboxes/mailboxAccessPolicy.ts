@@ -1,11 +1,12 @@
 import { contractAssigneeIds } from '../contracts/contractAssignees';
 
-/** Wiersz z bazy: skrzynka + kierownik/administrator jednego z jej kontraktów (brak kontraktu = null). */
+/** Skrzynka i osoby przypisane do jednego z jej kontraktów (brak kontraktu = null). */
 export interface MailboxAssigneeRow {
     code: string;
     address: string;
     managerId: number | null;
     adminId: number | null;
+    selectedPersonId?: number | null;
 }
 
 export type MailboxAccessSource = 'assignment' | 'manual' | 'both';
@@ -18,7 +19,7 @@ export interface PersonMailbox {
 
 /**
  * JEDYNE miejsce reguły "jakie skrzynki ma osoba" (plan MBX, D2): skrzynki projektów i kontraktów,
- * do których jest przypisana (kierownik / administrator umowy; skrzynka projektu = każdy kontrakt
+ * do których jest przypisana (kierownik / administrator / wybrana osoba; skrzynka projektu = każdy kontrakt
  * projektu), plus wyjątki ręczne z SbAccess.Levels.mail. Kody ręczne spoza spisu są pomijane
  * (nie ma dla nich adresu). Limit SB_MAX_MAILBOXES dotyczy tylko wyjątków ręcznych.
  * Czysta funkcja, bez I/O; obok `expectedSecretNames` (hasła wynikają wyłącznie z wyjątków ręcznych).
@@ -31,7 +32,7 @@ export function personMailboxes(
     const byCode = new Map<string, PersonMailbox & { assigned: boolean }>();
     for (const row of rows) {
         const entry = byCode.get(row.code) ?? { code: row.code, address: row.address, source: 'manual' as const, assigned: false };
-        if (contractAssigneeIds(row.managerId, row.adminId).includes(personId)) entry.assigned = true;
+        if (contractAssigneeIds(row.managerId, row.adminId, row.selectedPersonId).includes(personId)) entry.assigned = true;
         byCode.set(row.code, entry);
     }
     const manual = new Set(manualCodes);

@@ -53,6 +53,7 @@ import ContractTemplatesTreeController, {
     ResolvedCaseType,
 } from './contractTemplatesTree/ContractTemplatesTreeController';
 import { OptionalContractFolderKey } from './contractFolders/optionalContractFolders';
+import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
 
 /**
  * Opcje jednorazowe dla tworzenia kontraktu: co użytkownik wybrał w drzewie
@@ -62,6 +63,7 @@ import { OptionalContractFolderKey } from './contractFolders/optionalContractFol
 export type ContractCreationOptions = {
     milestonesSelection?: MilestoneSelectionItem[];
     foldersSelection?: OptionalContractFolderKey[];
+    selectedPersonIds?: number[];
 };
 
 /** Znormalizowany opis kamienia do utworzenia - wspólny dla obu ścieżek. */
@@ -241,6 +243,8 @@ export default class ContractsController extends BaseController<
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
                 await instance.repository.addInDb(contract, conn, true);
+                if (options?.selectedPersonIds?.length)
+                    await ContractSelectedPersonsRepository.add(contract.id!, options.selectedPersonIds, conn);
 
                 // 2. Dodaj asocjacje Entity (CONTRACTOR, ENGINEER, EMPLOYER)
                 await ContractEntityController.addAssociations(contract, conn);

@@ -114,6 +114,18 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
         jest.restoreAllMocks();
     });
 
+    it('usunięcie kontraktu sprząta wybrane osoby w tej samej transakcji, bez usuwania skrzynki', async () => {
+        const ContractRepository = (await import('../ContractRepository')).default;
+        const contract = { id: 123 } as any;
+        await new ContractRepository().deleteFromDb(contract);
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+            'DELETE FROM ContractSelectedPersons WHERE ContractId = ?', [123], mockConn,
+        );
+        expect(ToolsDb.deleteFromDb).toHaveBeenCalledWith('Contracts', contract, mockConn, true);
+        expect((ToolsDb.executeSQL as jest.Mock).mock.calls.every(call => !String(call[0]).includes('Mailboxes'))).toBe(true);
+    });
+
     describe('TEST 1: ContractOur - Pola w tabeli Contracts', () => {
         it('powinien zapisać ContractOur z poprawnymi polami w tabeli Contracts', async () => {
             // Ten test będzie weryfikował WYWOŁANIA, nie rzeczywiste obiekty
@@ -171,7 +183,13 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
             Object.setPrototypeOf(mockContract, ContractOur.prototype);
 
             // Act
-            await ContractsController.add(mockContract as any);
+            await ContractsController.add(mockContract as any, undefined, undefined, { selectedPersonIds: [7, 9] });
+            expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+                'INSERT INTO ContractSelectedPersons (ContractId, PersonId) VALUES (?, ?)', [123, 7], mockConn,
+            );
+            expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+                'INSERT INTO ContractSelectedPersons (ContractId, PersonId) VALUES (?, ?)', [123, 9], mockConn,
+            );
 
             // Assert - sprawdź co zostało zapisane w tabeli Contracts
             expect(savedContractsData).not.toBeNull();
