@@ -110,6 +110,19 @@ app.put('/sbAccess/me/agentKey', async (req, res, next) => {
     }
 });
 
+/**
+ * Skrzynki osoby (MBX-2): { mailboxes: [{ code, address, source: assignment|manual|both }] }.
+ * Z tej trasy czyta serwer poczty agenta (MBX-5); osoba zawsze z sesji albo tokenu urządzenia.
+ */
+app.get('/sbAccess/me/mailboxes', async (req, res, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(await SbAccessController.listPersonMailboxes(await self(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
 /** Własne szyfrogramy (nazwa + base64) i odcisk klucza, którym je zaszyfrowano. */
 app.get('/sbAccess/me/secrets', async (req, res, next) => {
     try {
@@ -203,6 +216,16 @@ app.get('/sbAccess/candidates', async (_req, res, next) => {
 app.get('/sbAccess/githubMembers/unlinked', async (_req, res, next) => {
     try {
         res.send(await SbAccessController.listUnlinkedGithubMembers());
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
+/** Skrzynki wskazanej osoby (ekran Dostępy SB): ta sama reguła co trasa "moje". */
+app.get('/sbAccess/:personId/mailboxes', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        res.send(await SbAccessController.listMailboxesOfPerson(personId));
     } catch (error) {
         handleError(error, res, next);
     }

@@ -3,6 +3,7 @@ import ChatSpaceValidator, { ChatSpaceError } from './ChatSpaceValidator';
 export { ChatSpaceError } from './ChatSpaceValidator';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
+import { contractAssigneeIds } from '../contractAssignees';
 import ToolsChat, { ChatMemberResult } from '../../setup/Sessions/ToolsChat';
 import ChatSpaceRepository, {
     ChatSpaceRecord,
@@ -56,13 +57,7 @@ export default class ChatSpacesController {
         info: ContractChatInfo,
         actorPersonId?: number | null
     ): Promise<string[]> {
-        const ids = Array.from(
-            new Set(
-                [info.managerId, info.adminId, actorPersonId].filter(
-                    (id): id is number => typeof id === 'number' && id > 0
-                )
-            )
-        );
+        const ids = contractAssigneeIds(info.managerId, info.adminId, actorPersonId);
         const rows = await this.repository.getGoogleEmails(ids);
         const seen = new Set<string>();
         const emails: string[] = [];

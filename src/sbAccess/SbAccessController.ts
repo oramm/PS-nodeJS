@@ -14,6 +14,7 @@ import SbGithubGateway, {
 import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
 import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
+import { PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
 import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
 import {
     describeSecretName,
@@ -112,6 +113,18 @@ export default class SbAccessController {
     /** Spis skrzynek do wyboru na ekranie Dostępy SB (plan MBX). */
     static async listMailboxes(): Promise<MailboxRecord[]> {
         return this.mailboxes.find();
+    }
+
+    /** Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina. */
+    static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: PersonMailbox[] }> {
+        const rows = await this.mailboxes.findWithAssignees();
+        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail) };
+    }
+
+    static async listMailboxesOfPerson(personId: number): Promise<{ mailboxes: PersonMailbox[] }> {
+        const record = await this.repository.getByPersonId(personId);
+        if (!record) throw new SbAccessError(404, 'Osoba nie ma wpisu w Dostępach SB.');
+        return this.listPersonMailboxes(record);
     }
 
     static async recordTransition(

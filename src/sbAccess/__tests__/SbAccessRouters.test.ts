@@ -78,10 +78,12 @@ describe('SbAccessRouters - bramka i trasy', () => {
         expect(route('post', '/sbAccess/me/githubAccount').order).toBeLessThan(guardOrder);
         expect(route('put', '/sbAccess/me/publicKey').order).toBeLessThan(guardOrder);
         expect(route('get', '/sbAccess/me/secrets').order).toBeLessThan(guardOrder);
+        expect(route('get', '/sbAccess/me/mailboxes').order).toBeLessThan(guardOrder);
         for (const [method, path] of [
             ['get', '/sbAccess/entries'],
             ['get', '/sbAccess/candidates'],
             ['get', '/sbAccess/mailboxes'],
+            ['get', '/sbAccess/:personId/mailboxes'],
             ['get', '/sbAccess/githubMembers/unlinked'],
             ['get', '/sbAccess/:personId/events'],
             ['post', '/sbAccess/:personId/invite'],
@@ -94,8 +96,8 @@ describe('SbAccessRouters - bramka i trasy', () => {
             ['delete', '/sbAccess/:personId/secrets/:name'],
         ])
             expect(route(method, path).order).toBeGreaterThan(guardOrder);
-        // Nic poza trasami "dla każdego zalogowanego / instalatora" (access, me/githubAccount, publicKey, agentKey, secrets, health, healthRequest) nie stoi przed bramką.
-        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(7);
+        // Nic poza trasami "dla każdego zalogowanego / instalatora" (access, me/githubAccount, publicKey, agentKey, secrets, mailboxes, health, healthRequest) nie stoi przed bramką.
+        expect(routes.filter((r) => r.order < guardOrder)).toHaveLength(8);
     });
 
     it('bez sesji -> 401', async () => {
