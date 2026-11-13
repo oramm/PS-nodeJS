@@ -81,6 +81,7 @@ describe('SbAccessRouters - bramka i trasy', () => {
         for (const [method, path] of [
             ['get', '/sbAccess/entries'],
             ['get', '/sbAccess/candidates'],
+            ['get', '/sbAccess/mailboxes'],
             ['get', '/sbAccess/githubMembers/unlinked'],
             ['get', '/sbAccess/:personId/events'],
             ['post', '/sbAccess/:personId/invite'],

@@ -9,6 +9,18 @@ const sql = (path: string) =>
     );
 
 describe('Migracje SB (bez połączenia z bazą)', () => {
+    it('spis skrzynek (MBX-1): idempotentny, jeden właściciel, bez imiennych marek/wp i bez stałych Id', () => {
+        const source = sql('mailboxes/migrations/001_create_mailboxes.sql');
+        expect(source.match(/CREATE TABLE IF NOT EXISTS/g)).toHaveLength(2);
+        expect(source).toContain('CHECK (ProjectId IS NULL OR ContractId IS NULL)');
+        expect(source).toMatch(/UNIQUE KEY \w+ \(Code\)/);
+        expect(source).not.toMatch(/CASCADE/);
+        expect(source).not.toMatch(/'marek'|'wp'/);
+        expect(source).toContain("'faktury@envi.com.pl'");
+        expect(source).toContain("WHERE OurId = 'CHC.IK.02'");
+        expect(source).not.toMatch(/ContractId\s*=\s*\d+|,\s*\d+\)/);
+    });
+
     it('tworzy idempotentnie pięć tabel, zgodne FK, indeksy i unikalny stan/login', () => {
         const source = sql('sbAccess/migrations/001_create_sb_access.sql');
         expect(source.match(/CREATE TABLE IF NOT EXISTS/g)).toHaveLength(5);

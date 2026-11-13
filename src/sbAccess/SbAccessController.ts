@@ -13,6 +13,7 @@ import SbGithubGateway, {
 } from './SbGithubGateway';
 import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
+import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
 import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
 import {
     describeSecretName,
@@ -106,6 +107,12 @@ export default class SbAccessController {
     private static repository = new SbAccessRepository();
     private static events = new SbAccessEventRepository();
     private static secrets = new SbAccessSecretRepository();
+    private static mailboxes = new MailboxRepository();
+
+    /** Spis skrzynek do wyboru na ekranie Dostępy SB (plan MBX). */
+    static async listMailboxes(): Promise<MailboxRecord[]> {
+        return this.mailboxes.find();
+    }
 
     static async recordTransition(
         input: SbAccessTransitionInput,
@@ -185,6 +192,12 @@ export default class SbAccessController {
         levels: SbAccessLevels,
         requestedByPersonId: number,
     ): Promise<SbAccessRecord> {
+        if (levels.mail.length) {
+            const known = new Set((await this.mailboxes.find()).map((mailbox) => mailbox.code));
+            const unknown = levels.mail.filter((code) => !known.has(code));
+            if (unknown.length)
+                throw new SbAccessError(400, `Skrzynki spoza spisu w PS: ${unknown.join(', ')}.`);
+        }
         // Hasła, których nowe uprawnienia już nie dają, wypadają w tej samej transakcji. Listę
         // liczymy pod blokadą wiersza osoby (jak giveSecret), żeby równoległe udostępnienie
         // według starych poziomów nie zostawiło hasła spoza nowych uprawnień.

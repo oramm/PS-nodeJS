@@ -19,6 +19,7 @@ import SbAccessController from '../SbAccessController';
 import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessSecretRepository from '../SbAccessSecretRepository';
+import MailboxRepository from '../../mailboxes/MailboxRepository';
 import { SbAccessError } from '../sbAccessPolicy';
 import {
     deviceTokenHash,
@@ -152,6 +153,7 @@ describe('Hasła SB - kontroler', () => {
         remove = jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
         upsert = jest.spyOn(SbAccessSecretRepository.prototype, 'upsert').mockResolvedValue(undefined);
         jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ personId: 131, isActive: true } as any);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
     });
 
     it('ten sam klucz ponownie: bez zapisu, bez zdarzenia, szyfrogramy zostają', async () => {

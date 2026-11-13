@@ -7,6 +7,7 @@ import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import SbAccessValidator from '../SbAccessValidator';
+import MailboxRepository from '../../mailboxes/MailboxRepository';
 import SbGithubGateway from '../SbGithubGateway';
 import { SbAccessError } from '../sbAccessPolicy';
 
@@ -18,6 +19,7 @@ describe('Poziomy dostępu SB', () => {
         // Hasła osoby (SBD-2): przy zmianie poziomów kontroler sprawdza, które wypadają.
         jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([]);
         jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
     });
 
     it('migracja 003: kolumna Levels JSON NULL i akcja SET_LEVELS, bez sekretów', () => {
@@ -101,6 +103,24 @@ describe('Poziomy dostępu SB', () => {
             requestedByPersonId: 1,
             note: 'repozytoria: zapis; baza PS: odczyt; Dysk: brak; poczta: faktury',
         });
+    });
+
+    it('kontroler: skrzynka spoza spisu w PS -> 400 bez transakcji (MBX-1)', async () => {
+        const transaction = jest.spyOn(ToolsDb, 'transaction');
+        await expect(
+            SbAccessController.setLevels(5, { ...valid, mail: ['faktury', 'marek'] } as any, 1),
+        ).rejects.toMatchObject({ status: 400, message: 'Skrzynki spoza spisu w PS: marek.' });
+        expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it('kontroler: bez skrzynek nie pyta spisu (MBX-1)', async () => {
+        jest.spyOn(ToolsDb, 'transaction').mockImplementation(async (fn: any) => fn({}));
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue({ personId: 5 } as any);
+        jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+        jest.spyOn(SbAccessEventRepository.prototype, 'append').mockResolvedValue(undefined);
+        const find = jest.spyOn(MailboxRepository.prototype, 'find');
+        await SbAccessController.setLevels(5, { ...valid, mail: [] } as any, 1);
+        expect(find).not.toHaveBeenCalled();
     });
 
     it('kontroler: osoba bez wpisu -> 404 i brak zdarzenia', async () => {

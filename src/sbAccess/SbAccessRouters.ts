@@ -181,6 +181,15 @@ app.get('/sbAccess/entries', async (_req, res, next) => {
     }
 });
 
+/** Spis skrzynek poczty z bazy PS (lista wyboru w poziomach dostępu). */
+app.get('/sbAccess/mailboxes', async (_req, res, next) => {
+    try {
+        res.send(await SbAccessController.listMailboxes());
+    } catch (error) {
+        next(error);
+    }
+});
+
 /** Kogo można zaprosić (role wg D2, bez wpisu albo z dostępem odebranym). */
 app.get('/sbAccess/candidates', async (_req, res, next) => {
     try {
