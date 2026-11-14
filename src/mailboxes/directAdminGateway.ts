@@ -42,8 +42,8 @@ export default class DirectAdminGateway {
         const existing = list.get(user);
         const recipients = existing === null ? [] : existing.split(',');
         if (recipients.some(recipient => recipient.trim().toLowerCase() === copy)) return;
-        // shortcut: niesprawdzone na prawdziwym serwerze, test kopii za GO wlasciciela
-        const email = existing === null ? `${address},${copy}` : `${existing},${copy}`;
+        // Przekierowanie o nazwie skrzynki nie zabiera jej poczty (test na serwerze 2026-11-14), więc bez własnego adresu.
+        const email = existing === null ? copy : `${existing},${copy}`;
         await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({
             action: existing === null ? 'create' : 'modify', domain: 'envi.com.pl', user, email,
         }));

@@ -137,7 +137,7 @@ describe('DirectAdminGateway (wyłącznie atrapa sieci)', () => {
         expect(Object.fromEntries(new URLSearchParams(fetchMock.mock.calls[0][1].body)))
             .toEqual({ action: 'list', domain: 'envi.com.pl' });
         expect(Object.fromEntries(new URLSearchParams(fetchMock.mock.calls[1][1].body)))
-            .toEqual({ action: 'create', domain: 'envi.com.pl', user: 'projekt.ik.01', email: `${address},sb-agent@envi.com.pl` });
+            .toEqual({ action: 'create', domain: 'envi.com.pl', user: 'projekt.ik.01', email: 'sb-agent@envi.com.pl' });
         expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe(fetchMock.mock.calls[0][1].headers.Authorization);
     });
 
