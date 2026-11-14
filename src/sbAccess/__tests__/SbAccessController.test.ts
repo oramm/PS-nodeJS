@@ -33,6 +33,7 @@ describe('SbAccessController', () => {
 
     beforeEach(() => {
         jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue([]);
         pending = [];
         saved = [];
         conn = {

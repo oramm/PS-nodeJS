@@ -93,6 +93,15 @@ describe('Hasła SB - reguły (bez bazy)', () => {
         expect(describeSecretName(SB_SECRET_AGENT_MAIL)).toBe('konto techniczne poczty (agent)');
     });
 
+    it.each([
+        [['kontrakt'], [SB_SECRET_AGENT_MAIL]],
+        [['faktury'], ['poczta-faktury']],
+        [['kontrakt', 'projekt', 'faktury', 'nieznany'], ['poczta-faktury', 'poczta-nieznany', SB_SECRET_AGENT_MAIL]],
+    ])('ręczny wyjątek %j wybiera hasła według właściciela skrzynki', (mail, expected) => {
+        expect(expectedSecretNames({ ...LEVELS, psDb: 'none', mail } as any, false, new Set(['kontrakt', 'projekt'])))
+            .toEqual(expected);
+    });
+
     it('odcisk klucza = RFC 7638 (wektor z RFC 7638 rozdz. 3.1), na ekranie 8 znaków hex w dwóch grupach', () => {
         const rfc = {
             kty: 'RSA' as const, e: 'AQAB' as const,
@@ -338,6 +347,33 @@ describe('Hasła SB - kontroler', () => {
             logs: logs.map(log => log.mock.calls), reports: report.mock.calls });
         expect(observable).not.toContain(ciphertext);
         expect(observable).not.toContain('SekretKontaTechnicznego123');
+    });
+
+    it.each(['projectId', 'contractId'])('ręczne udostępnienie skrzynki z %s używa konta technicznego we wszystkich drogach sekretów', async ownerField => {
+        const levels = { ...LEVELS, psDb: 'none', mail: ['chocianow-ik', 'faktury'] } as any;
+        const person = record({ levels });
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(person);
+        jest.spyOn(SbAccessRepository.prototype, 'list').mockResolvedValue([person]);
+        jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue([
+            { code: 'chocianow-ik', [ownerField]: 21, statusCode: 'PENDING' },
+            { code: 'faktury', projectId: null, contractId: null },
+        ] as any);
+        const ciphertext = await encryptLikeBrowser(A.jwk, 'Secret123');
+        const names = [SB_SECRET_AGENT_MAIL, 'poczta-faktury', 'poczta-chocianow-ik'];
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue(names.map(name => ({ name, ciphertext })) as any);
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listNames').mockResolvedValue(names.map(name => ({ personId: 131, name })));
+        const listed = (await SbAccessController.list())[0];
+        expect(listed.secretsExpected).toEqual(['poczta-faktury', SB_SECRET_AGENT_MAIL]);
+        expect(listed.secretsGiven).toEqual([SB_SECRET_AGENT_MAIL, 'poczta-faktury']);
+        expect((await SbAccessController.listOwnSecrets(person)).secrets.map(secret => secret.name))
+            .toEqual([SB_SECRET_AGENT_MAIL, 'poczta-faktury']);
+        await SbAccessController.giveSecret(131, SB_SECRET_AGENT_MAIL, ciphertext, keyThumbprint(A.jwk as any), 1);
+        expect(upsert).toHaveBeenCalledWith(conn, 131, SB_SECRET_AGENT_MAIL, ciphertext, 1);
+        await expect(SbAccessController.giveSecret(131, 'poczta-chocianow-ik', ciphertext, keyThumbprint(A.jwk as any), 1))
+            .rejects.toMatchObject({ status: 409 });
+        await SbAccessController.setLevels(131, levels, 1);
+        expect(remove).toHaveBeenLastCalledWith(conn, 131, ['poczta-chocianow-ik']);
     });
 
     it('tożsamość "me": sesja; ważny token; zły token 401; zablokowany 403', async () => {

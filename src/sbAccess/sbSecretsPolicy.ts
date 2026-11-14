@@ -16,14 +16,14 @@ export const SB_SECRET_AGENT_MAIL = 'poczta-sb-agent';
 const MAIL_PREFIX = 'poczta-';
 
 /**
- * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": jedno na każdą ręcznie przyznaną skrzynkę, konto techniczne dla przypisań
+ * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": konto techniczne dla skrzynek projektów i kontraktów, własne hasła dla pozostałych skrzynek
  * i jedno na bazę PS, gdy poziom bazy jest inny niż brak. Hasła spoza tej listy nie da się
  * udostępnić, a przy zmianie poziomów wypadają z bazy.
  */
-export function expectedSecretNames(levels: SbAccessLevels, hasAssignedMailbox = false): string[] {
+export function expectedSecretNames(levels: SbAccessLevels, hasAssignedMailbox = false, ownedCodes: ReadonlySet<string> = new Set()): string[] {
     return [
-        ...levels.mail.map((code) => MAIL_PREFIX + code),
-        ...(hasAssignedMailbox ? [SB_SECRET_AGENT_MAIL] : []),
+        ...levels.mail.filter(code => !ownedCodes.has(code)).map((code) => MAIL_PREFIX + code),
+        ...(hasAssignedMailbox || levels.mail.some(code => ownedCodes.has(code)) ? [SB_SECRET_AGENT_MAIL] : []),
         ...(levels.psDb !== 'none' ? [SB_SECRET_PS_DB] : []),
     ];
 }

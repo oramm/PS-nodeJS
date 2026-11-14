@@ -1,4 +1,4 @@
-import DirectAdminGateway from '../directAdminGateway';
+import DirectAdminGateway, { DirectAdminRejectionError, DirectAdminUnknownResultError } from '../directAdminGateway';
 
 const envKeys = [
     'DIRECTADMIN_URL', 'DIRECTADMIN_LOGIN_USER', 'DIRECTADMIN_LOGIN_KEY', 'DIRECTADMIN_MAILBOX_QUOTA_MB', 'DIRECTADMIN_AGENT_COPY_ADDRESS',
@@ -50,15 +50,12 @@ describe('DirectAdminGateway (wyłącznie atrapa sieci)', () => {
         expect(request.signal).toBeInstanceOf(AbortSignal);
     });
 
-    it('zmiana hasła wysyła modify z tymi samymi wymaganymi polami', async () => {
-        process.env.DIRECTADMIN_MAILBOX_QUOTA_MB = '4096';
+    it('zmiana hasła nie wysyła limitów ani nie waliduje pojemności', async () => {
+        process.env.DIRECTADMIN_MAILBOX_QUOTA_MB = 'invalid';
         await DirectAdminGateway.changePassword(address, password);
         const body = new URLSearchParams(fetchMock.mock.calls[0][1].body);
-        expect(body.get('action')).toBe('modify');
-        expect(body.get('domain')).toBe('envi.com.pl');
-        expect(body.get('limit')).toBe('10000');
-        expect(body.get('quota')).toBe('4096');
-        expect(body.get('passwd2')).toBe(password);
+        expect(Object.fromEntries(body)).toEqual({ action: 'modify', domain: 'envi.com.pl',
+            user: 'projekt.ik.01', passwd: password, passwd2: password });
     });
 
     it.each(envKeys.slice(0, 3))('brak %s nie wywołuje sieci', async (key) => {
@@ -90,6 +87,7 @@ describe('DirectAdminGateway (wyłącznie atrapa sieci)', () => {
         });
         const error = await DirectAdminGateway.create(address, password).catch((caught) => caught);
         expect(error).toBeInstanceOf(Error);
+        expect(error).toBeInstanceOf(DirectAdminRejectionError);
         expect(error.message).toBe(expected);
         expect(error.cause).toBeUndefined();
         expect(JSON.stringify(error)).not.toContain(password);
@@ -98,13 +96,13 @@ describe('DirectAdminGateway (wyłącznie atrapa sieci)', () => {
 
     it('brak error=0 nie jest sukcesem nawet przy HTTP 200', async () => {
         fetchMock.mockResolvedValue({ ok: true, text: async () => 'text=OK' });
-        await expect(DirectAdminGateway.create(address, password)).rejects.toThrow('Serwer poczty odrzucił operację');
+        await expect(DirectAdminGateway.create(address, password)).rejects.toBeInstanceOf(DirectAdminUnknownResultError);
     });
 
     it('błąd HTTP nie jest sukcesem i jego treść nie jest odczytywana', async () => {
         const text = jest.fn().mockResolvedValue(password);
         fetchMock.mockResolvedValue({ ok: false, status: 500, text });
-        await expect(DirectAdminGateway.create(address, password)).rejects.toThrow('Nie można połączyć się z serwerem poczty');
+        await expect(DirectAdminGateway.create(address, password)).rejects.toBeInstanceOf(DirectAdminUnknownResultError);
         expect(text).not.toHaveBeenCalled();
     });
 

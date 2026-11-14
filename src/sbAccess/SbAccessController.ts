@@ -127,9 +127,11 @@ export default class SbAccessController {
         return this.listPersonMailboxes(record);
     }
 
-    private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[]): Promise<string[]> {
+    private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[], registry?: MailboxRecord[]): Promise<string[]> {
         const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail);
-        return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'));
+        const ownedCodes = new Set((registry ?? (levels.mail.length ? await this.mailboxes.find() : []))
+            .filter(mailbox => mailbox.projectId != null || mailbox.contractId != null).map(mailbox => mailbox.code));
+        return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'), ownedCodes);
     }
 
     static async recordTransition(
@@ -274,13 +276,14 @@ export default class SbAccessController {
 
     /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
     static async list(): Promise<SbAccessRecord[]> {
-        const [records, names, rows] = await Promise.all([
+        const [records, names, rows, registry] = await Promise.all([
             this.repository.list(),
             this.secrets.listNames(),
             this.mailboxes.findWithAssignees(),
+            this.mailboxes.find(),
         ]);
         return Promise.all(records.map(async (record) => {
-            const expected = await this.expectedSecrets(record.personId, record.levels, rows);
+            const expected = await this.expectedSecrets(record.personId, record.levels, rows, registry);
             const given = names
                 .filter((row) => row.personId === record.personId && expected.includes(row.name))
                 .map((row) => row.name);

@@ -375,7 +375,8 @@ export default class ContractsController extends BaseController<
     static async edit(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
+        selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
         const instance = this.getInstance();
 
@@ -527,6 +528,8 @@ export default class ContractsController extends BaseController<
                     true,
                     fieldsToUpdate
                 );
+                if (selectedPersonIds !== undefined)
+                    await ContractSelectedPersonsRepository.replace(contract.id!, selectedPersonIds, conn);
 
                 // 2. Update asocjacji Entity - ten sam warunek, który wyżej zdecydował
                 // o losie wskazania lidera. Jedno wyliczenie, żeby krok folderowy i zapis
@@ -649,10 +652,11 @@ export default class ContractsController extends BaseController<
      */
     static async editWithAuth(
         contract: ContractOur | ContractOther,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
+        selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
         return await this.withAuth(async (instance, auth) => {
-            return await this.edit(contract, auth, fieldsToUpdate);
+            return await this.edit(contract, auth, fieldsToUpdate, selectedPersonIds);
         });
     }
 

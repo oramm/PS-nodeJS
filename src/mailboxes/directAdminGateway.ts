@@ -1,5 +1,10 @@
 const NOT_CONFIGURED = 'Serwer poczty nie jest skonfigurowany';
 
+export class DirectAdminUnknownResultError extends Error {}
+export class DirectAdminRejectionError extends Error {
+    constructor(message: string, readonly addressTaken: boolean) { super(message); }
+}
+
 function rejectionMessage(details: string): string {
     const message = details.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     if (/already exists|already in use|istnieje|zajet/.test(message))
@@ -17,18 +22,31 @@ export default class DirectAdminGateway {
     }
 
     static async changePassword(address: string, password: string): Promise<void> {
-        // shortcut: action=modify nie sprawdzono na prawdziwym serwerze; zweryfikować przy odbiorze integracji za GO właściciela.
+        // Test na serwerze 2026-11-14: modify bez quota i limit zachowuje dotychczasowe limity skrzynki.
         await this.request('modify', address, password);
     }
 
     private static async request(action: 'create' | 'modify', address: string, password: string): Promise<void> {
-        const quota = process.env.DIRECTADMIN_MAILBOX_QUOTA_MB?.trim() || '2048';
-        if (!/^\d+$/.test(quota) || !Number.isSafeInteger(Number(quota)) || Number(quota) <= 0)
-            throw new Error(NOT_CONFIGURED);
-        await this.send('CMD_API_POP', new URLSearchParams({
+        const body = new URLSearchParams({
             action, domain: 'envi.com.pl', user: address.split('@')[0],
-            passwd: password, passwd2: password, quota, limit: '10000',
-        }));
+            passwd: password, passwd2: password,
+        });
+        if (action === 'create') {
+            const quota = process.env.DIRECTADMIN_MAILBOX_QUOTA_MB?.trim() || '2048';
+            if (!/^\d+$/.test(quota) || !Number.isSafeInteger(Number(quota)) || Number(quota) <= 0)
+                throw new Error(NOT_CONFIGURED);
+            body.set('quota', quota);
+            body.set('limit', '10000');
+        }
+        await this.send('CMD_API_POP', body);
+    }
+
+    static async accountExists(address: string): Promise<boolean> {
+        const result = await this.send('CMD_API_POP', new URLSearchParams({ action: 'list', domain: 'envi.com.pl' }), true);
+        if ([...result.keys()].some(key => key !== 'list[]' && key !== 'error') ||
+            result.getAll('list[]').some(user => !/^[a-z0-9][a-z0-9._+-]*$/i.test(user)))
+            throw new DirectAdminUnknownResultError('Nie udało się odczytać listy skrzynek z serwera poczty.');
+        return result.getAll('list[]').some(user => user.toLowerCase() === address.split('@')[0].toLowerCase());
     }
 
     static async setAgentCopy(address: string): Promise<void> {
@@ -79,10 +97,14 @@ export default class DirectAdminGateway {
             result = new URLSearchParams(await response.text());
         } catch {
             // Nie przekazujemy błędu klienta HTTP: może zawierać hasło w treści żądania.
-            throw new Error('Nie można połączyć się z serwerem poczty. Spróbuj ponownie później');
+            throw new DirectAdminUnknownResultError('Nie można połączyć się z serwerem poczty. Spróbuj ponownie później');
         }
-        if (listing ? result.has('error') && result.get('error') !== '0' : result.get('error') !== '0')
-            throw new Error(rejectionMessage(`${result.get('details') || ''} ${result.get('text') || ''}`));
+        if (!listing && !/^\d+$/.test(result.get('error') ?? ''))
+            throw new DirectAdminUnknownResultError('Nie udało się odczytać wyniku operacji na serwerze poczty. Sprawdź skrzynkę ręcznie.');
+        if (listing ? result.has('error') && result.get('error') !== '0' : result.get('error') !== '0') {
+            const message = rejectionMessage(`${result.get('details') || ''} ${result.get('text') || ''}`);
+            throw new DirectAdminRejectionError(message, message === 'Ten adres e-mail jest już zajęty na serwerze poczty');
+        }
         return result;
     }
 }

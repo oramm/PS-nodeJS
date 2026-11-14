@@ -18,7 +18,9 @@ jest.mock('../../tools/ToolsDb', () => ({ __esModule: true, default: { transacti
 jest.mock('../../tools/ToolsMail', () => ({ __esModule: true, default: { sendServerErrorReport: jest.fn() } }));
 jest.mock('../../sbAccess/SbAccessController', () => ({ __esModule: true, default: { canManage: jest.fn() } }));
 jest.mock('../../sbAccess/SbAccessRepository', () => ({ __esModule: true, default: jest.fn(() => ({ getPersonAccount: jest.fn(), getByPersonId: jest.fn() })) }));
-jest.mock('../directAdminGateway', () => ({ __esModule: true, default: { create: jest.fn(), changePassword: jest.fn(), setAgentCopy: jest.fn() } }));
+jest.mock('../directAdminGateway', () => ({ ...jest.requireActual('../directAdminGateway'), __esModule: true, default: {
+    create: jest.fn(), changePassword: jest.fn(), setAgentCopy: jest.fn(), accountExists: jest.fn(),
+} }));
 jest.mock('../MailboxRepository', () => ({ __esModule: true, default: jest.fn(() => ({
     find: jest.fn(), get: jest.fn(), forOwner: jest.fn(), addressExists: jest.fn(), reserve: jest.fn(),
     setState: jest.fn(), setAgentCopyState: jest.fn(), project: jest.fn(), contract: jest.fn(), moveToProject: jest.fn(), findWithAssignees: jest.fn(),
@@ -48,7 +50,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         require('../../projects/ProjectsRouters');
         require('../MailboxRouters');
         handlers = {};
-        for (const method of ['get', 'post'] as const)
+        for (const method of ['get', 'post', 'put'] as const)
             for (const [path, handler] of (app[method] as jest.Mock).mock.calls)
                 handlers[`${method} ${path}`] = handler;
     });
@@ -200,7 +202,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     ])('%s (%s): zakładający bez przypisań dostaje hasło, inna osoba dostaje 403', async (route, mode) => {
         repository.findWithAssignees.mockResolvedValue([]);
         (SbAccessRepository as jest.Mock).mockImplementation(() => ({
-            getPersonAccount: jest.fn().mockResolvedValue(undefined),
+            getPersonAccount: jest.fn().mockResolvedValue({ isActive: true }),
             getByPersonId: jest.fn().mockResolvedValue(undefined),
         }));
         const registered = await call(route, {
@@ -231,14 +233,67 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         expect((ContractsController.addWithAuth as jest.Mock).mock.calls[0][2].selectedPersonIds).toEqual([7]);
     });
 
-    it('rejestracja projektu tworzy jego skrzynkę; wybór bez skrzynki pomija pocztę', async () => {
+    it('rejestracja projektu tworzy jego skrzynkę; wybór bez skrzynki odrzuca przed zapisem', async () => {
         const result = await call('post /project', { ourId: 'CHC.IK.01' });
         expect(result.body).toMatchObject({ id: 10, _mailbox: { projectId: 10, statusCode: 'ACTIVE' } });
         expect(savedProjects).toEqual([10]);
         jest.clearAllMocks();
         const skipped = await call('post /project', { ourId: 'ALT.IK.01', _mailboxSelection: { mode: 'none' } });
-        expect(skipped.body).toEqual({ id: 10, ourId: 'ALT.IK.01' });
+        expect(skipped.next).toHaveBeenCalledWith(expect.objectContaining({ status: 400, message: expect.stringContaining('musi mieć skrzynkę') }));
+        expect(ProjectsController.addFromDto).not.toHaveBeenCalled();
         expect(DirectAdminGateway.create).not.toHaveBeenCalled();
+    });
+
+    it('kontrakt nadal można utworzyć bez skrzynki', async () => {
+        const result = await call('post /contractReact', { _mailboxSelection: { mode: 'none' } });
+        expect(result.next).not.toHaveBeenCalled();
+        expect(savedContracts).toEqual([21]);
+        expect(DirectAdminGateway.create).not.toHaveBeenCalled();
+    });
+
+    it.each(['password', 'provision', 'project', 'agentCopy'])('nieaktywny zakładający nie może wykonać %s', async action => {
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null,
+            createdByPersonId: 77, statusCode: 'ACTIVE', agentCopyStatus: 'PENDING', agentCopyLastError: null });
+        (SbAccessRepository as jest.Mock).mockImplementation(() => ({
+            getPersonAccount: jest.fn().mockResolvedValue({ isActive: false }),
+        }));
+        const denied = await call(`post /mailboxes/:id/${action}`, {}, 77, { id: '1' });
+        expect(denied.next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+        expect(DirectAdminGateway.changePassword).not.toHaveBeenCalled();
+        expect(DirectAdminGateway.create).not.toHaveBeenCalled();
+        expect(DirectAdminGateway.setAgentCopy).not.toHaveBeenCalled();
+    });
+
+    it.each<[(number[] | undefined)]>([[[7]], [[]], [undefined]])('edycja przekazuje surową listę %j, także pojedynczą osobę', async ids => {
+        const body = { id: 21, ...(ids === undefined ? {} : { _selectedPersonIds: ids }) };
+        const response = { send: jest.fn() };
+        const next = jest.fn();
+        await handlers['put /contract/:id']({ body, parsedBody: Tools.parseObjectsJSON(body), params: { id: '21' } }, response, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(ContractsController.editWithAuth).toHaveBeenCalledWith(expect.objectContaining({ id: 21 }), undefined, ids);
+    });
+
+    it.each<[unknown]>([[null], [[0]], [[1.5]], ['7'], [Array(51).fill(7)]])('edycja odrzuca błędną listę %j przed zapisem', async ids => {
+        const result = await call('put /contract/:id', { _selectedPersonIds: ids }, 1, { id: '21' });
+        expect(result.next).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+        expect(ContractsController.editWithAuth).not.toHaveBeenCalled();
+    });
+
+    it('odczyt osób używa tego samego zakresu co odczyt kontraktu i nie ujawnia osób spoza niego', async () => {
+        const scope = { projectOurIds: ['CHC.IK.01'] };
+        (ContractsController.find as jest.Mock).mockResolvedValueOnce([]);
+        const find = jest.spyOn(ContractSelectedPersonsRepository, 'find').mockResolvedValue([{ id: 3, name: 'Anna' }] as any);
+        const response = { send: jest.fn() };
+        const next = jest.fn();
+        const req = { params: { id: '21' }, projectScope: scope };
+        await handlers['get /contract/:id/selectedPersons'](req, response, next);
+        expect(ContractsController.find).toHaveBeenCalledWith([{ id: 21 }], scope);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
+        expect(find).not.toHaveBeenCalled();
+        (ContractsController.find as jest.Mock).mockResolvedValueOnce([{ id: 21 }]);
+        await handlers['get /contract/:id/selectedPersons'](req, response, jest.fn());
+        expect(find).toHaveBeenCalledWith(21);
+        expect(response.send).toHaveBeenCalledWith([{ id: 3, name: 'Anna' }]);
     });
 
     it('umowa zewnętrzna bez oznaczenia ENVI wymaga adresu osobnej skrzynki przed rejestracją', async () => {
@@ -322,6 +377,10 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         await ContractSelectedPersonsRepository.add(21, [3, 4], connection);
         expect(ToolsDb.executeSQL).toHaveBeenNthCalledWith(1, expect.stringContaining('INSERT INTO ContractSelectedPersons'), [21, 3], connection);
         expect(ToolsDb.executeSQL).toHaveBeenNthCalledWith(2, expect.stringContaining('INSERT INTO ContractSelectedPersons'), [21, 4], connection);
+        const persons = [{ id: 3, name: 'Anna', surname: 'Kowalska', email: 'anna@example.test' }];
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValueOnce(persons);
+        expect(await ContractSelectedPersonsRepository.find(21)).toEqual(persons);
+        expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledWith(expect.stringContaining('WHERE sp.ContractId = ?'), undefined, [21]);
     });
 
     it('rzeczywisty odczyt przypisań zawiera wybrane osoby, a nie role zewnętrzne PersonProjects', async () => {
@@ -391,6 +450,52 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
             const provision = await call('post /mailboxes/:id/provision', {}, 1, { id: '1' });
             expect(provision.body).toMatchObject({ statusCode: 'ACTIVE', agentCopyStatus: 'PENDING' });
             assertNoSecretElsewhere(generatedPasswords, provision.body);
+        } finally { process.env = before; }
+    });
+
+    it.each([
+        ['timeout', 'list[]=chc.ik.01', true, 'Nie zakładaj jej ponownie'],
+        ['timeout', 'list[]=inne-konto', false, 'Możesz ponowić próbę'],
+        ['timeout', null, true, 'Sprawdź ją ręcznie'],
+        ['timeout', '<html>awaria</html>', true, 'Sprawdź ją ręcznie'],
+        ['http', 'list[]=chc.ik.01', true, 'Nie zakładaj jej ponownie'],
+        ['unreadable', 'list[]=chc.ik.01', true, 'Nie zakładaj jej ponownie'],
+        ['taken', null, true, 'adres e-mail jest już zajęty'],
+    ])('wynik create=%s, lista=%s: zostawia PENDING, uzgadnia wynik i raportuje gdy trzeba', async (failure, listing, reports, message) => {
+        const before = { ...process.env };
+        try {
+            process.env.DIRECTADMIN_URL = 'https://mail.example.test';
+            process.env.DIRECTADMIN_LOGIN_USER = 'test';
+            process.env.DIRECTADMIN_LOGIN_KEY = 'key';
+            process.env.DIRECTADMIN_MAILBOX_QUOTA_MB = '10';
+            const actual = jest.requireActual('../directAdminGateway').default;
+            (DirectAdminGateway.create as jest.Mock).mockImplementation((...args) => actual.create(...args));
+            (DirectAdminGateway.accountExists as jest.Mock).mockImplementation((...args) => actual.accountExists(...args));
+            const passwords: string[] = [];
+            const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+                expect(String(url)).toBe('https://mail.example.test/CMD_API_POP');
+                const body = new URLSearchParams(options?.body as string);
+                expect(body.get('domain')).toBe('envi.com.pl');
+                if (body.get('action') === 'list') {
+                    expect(body.has('passwd')).toBe(false);
+                    if (listing === null) throw new Error('list timeout');
+                    return { ok: true, text: async () => listing } as Response;
+                }
+                passwords.push(body.get('passwd')!);
+                if (failure === 'timeout') throw new Error(`timeout ${passwords[0]}`);
+                return { ok: failure !== 'http', text: async () => failure === 'taken'
+                    ? new URLSearchParams({ error: '1', details: `Email account already exists ${passwords[0]}` }).toString()
+                    : `<html>${passwords[0]}</html>` } as Response;
+            });
+            const result = await call('post /project', { ourId: 'CHC.IK.01' });
+            expect(result.next).not.toHaveBeenCalled();
+            expect(result.body._mailbox).toMatchObject({ statusCode: 'PENDING', lastError: expect.stringContaining(message) });
+            expect(rows[0].statusCode).toBe('PENDING');
+            expect(DirectAdminGateway.setAgentCopy).not.toHaveBeenCalled();
+            expect(fetchMock).toHaveBeenCalledTimes(failure === 'taken' ? 1 : 2);
+            expect(ToolsMail.sendServerErrorReport).toHaveBeenCalledTimes(reports ? 1 : 0);
+            if (reports) expect(ToolsMail.sendServerErrorReport).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('chc.ik.01@envi.com.pl') }));
+            assertNoSecretElsewhere(passwords, result.body);
         } finally { process.env = before; }
     });
 

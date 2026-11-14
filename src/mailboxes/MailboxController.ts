@@ -6,7 +6,7 @@ import SbAccessRepository from '../sbAccess/SbAccessRepository';
 import { SB_MAILBOX_PATTERN } from '../sbAccess/sbAccessTypes';
 import { UserData } from '../types/sessionTypes';
 import MailboxRepository, { MailboxRecord } from './MailboxRepository';
-import DirectAdminGateway from './directAdminGateway';
+import DirectAdminGateway, { DirectAdminRejectionError, DirectAdminUnknownResultError } from './directAdminGateway';
 import { personMailboxes } from './mailboxAccessPolicy';
 
 export class MailboxError extends Error {
@@ -41,7 +41,10 @@ export default class MailboxController {
         if (mode !== 'none' && mode !== 'project' && (mode !== 'separate' || isProject))
             throw new MailboxError('Wybierz sposób założenia skrzynki.', 400);
         if (address !== undefined && typeof address !== 'string') throw new MailboxError('Podaj poprawny adres skrzynki.', 400);
-        if (mode === 'none') return { mode };
+        if (mode === 'none') {
+            if (isProject) throw new MailboxError('Każdy projekt musi mieć skrzynkę e-mail.', 400);
+            return { mode };
+        }
         if (address) validateMailboxAddress(address);
         return { mode, ...(address ? { address: address as string } : {}) };
     }
@@ -126,7 +129,22 @@ export default class MailboxController {
                     await DirectAdminGateway.create(mailbox.address, crypto.randomBytes(24).toString('hex'));
                 } catch (error) {
                     // Brama zwraca wyłącznie własne komunikaty, nigdy żądanie ani hasło.
-                    const lastError = error instanceof Error ? error.message : 'Nie udało się połączyć z serwerem poczty.';
+                    let lastError = error instanceof Error ? error.message : 'Nie udało się połączyć z serwerem poczty.';
+                    if (error instanceof DirectAdminUnknownResultError) {
+                        try {
+                            if (await DirectAdminGateway.accountExists(mailbox.address)) {
+                                lastError = `Serwer poczty mógł założyć skrzynkę ${mailbox.address}. Wymaga ona ręcznego uzgodnienia. Nie zakładaj jej ponownie.`;
+                                await this.report(lastError);
+                            } else {
+                                lastError = 'Serwer poczty nie potwierdził założenia skrzynki. Nie ma jej na liście kont. Możesz ponowić próbę.';
+                            }
+                        } catch {
+                            lastError = `Wynik założenia skrzynki ${mailbox.address} jest nieznany. Sprawdź ją ręcznie przed ponowną próbą.`;
+                            await this.report(lastError);
+                        }
+                    } else if (error instanceof DirectAdminRejectionError && error.addressTaken) {
+                        await this.report(`Adres zarezerwowany w PS jest zajęty na serwerze poczty: ${mailbox.address}. Sprawdź skrzynkę ręcznie.`);
+                    }
                     await this.repository.setState(id, 'PENDING', lastError, conn);
                     return { ...mailbox, lastError };
                 }
@@ -175,10 +193,10 @@ export default class MailboxController {
         if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
         if (await SbAccessController.canManage(user)) return mailbox;
         if (!user?.enviId) throw new MailboxError('Zaloguj się, aby zarządzać skrzynką.', 403);
-        if (mailbox.createdByPersonId === user.enviId) return mailbox;
         const sb = new SbAccessRepository();
         const account = await sb.getPersonAccount(user.enviId);
         if (!account?.isActive) throw new MailboxError('Brak uprawnień do tej skrzynki.', 403);
+        if (mailbox.createdByPersonId === user.enviId) return mailbox;
         const record = await sb.getByPersonId(user.enviId);
         const rows = await this.repository.findWithAssignees(true);
         if (!personMailboxes(user.enviId, rows, record?.levels.mail ?? []).some(m => m.code === mailbox.code))

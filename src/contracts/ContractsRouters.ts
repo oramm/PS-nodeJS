@@ -19,6 +19,7 @@ import ToolsMail from '../tools/ToolsMail';
 import ChatSpacesController from './chatSpaces/ChatSpacesController';
 import MailboxController from '../mailboxes/MailboxController';
 import { parseContractSelectedPersonIds } from './contractAssignees';
+import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
 
 function getAsyncTaskErrorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -235,11 +236,23 @@ app.put('/contract/:id/move', async (req: Request, res: Response, next) => {
     }
 });
 
+app.get('/contract/:id/selectedPersons', async (req: Request, res: Response, next) => {
+    try {
+        const id = resolveRouteLetterId(req.params.id, undefined, 'kontraktu');
+        const contracts = await ContractsController.find([{ id }], req.projectScope);
+        if (!contracts.length) throw Object.assign(new Error('Nie znaleziono kontraktu.'), { status: 404 });
+        res.send(await ContractSelectedPersonsRepository.find(id));
+    } catch (error) { next(error); }
+});
+
 app.put('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
             req.parsedBody._fieldsToUpdate;
         const itemFromClient = req.parsedBody;
+        const rawSelectedPersonIds = req.body?._selectedPersonIds;
+        const selectedPersonIds = rawSelectedPersonIds === undefined
+            ? undefined : parseContractSelectedPersonIds(rawSelectedPersonIds);
         // SBZ-3: edytowany był kontrakt o id z CIAŁA, nie z adresu. Adres rozstrzyga,
         // niezgodne id w ciele to 400 — ta sama reguła co dla pism.
         itemFromClient.id = resolveRouteLetterId(
@@ -259,6 +272,7 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         const updatedContract = await ContractsController.editWithAuth(
             contractInstance,
             _fieldsToUpdate,
+            selectedPersonIds,
         );
 
         res.send(updatedContract);
