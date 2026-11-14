@@ -14,7 +14,6 @@ function rejectionMessage(details: string): string {
 export default class DirectAdminGateway {
     static async create(address: string, password: string): Promise<void> {
         await this.request('create', address, password);
-        // MBX-4: tutaj dojdzie kopia poczty na sb-agent@envi.com.pl przez CMD_API_EMAIL_FORWARDERS.
     }
 
     static async changePassword(address: string, password: string): Promise<void> {
@@ -23,6 +22,34 @@ export default class DirectAdminGateway {
     }
 
     private static async request(action: 'create' | 'modify', address: string, password: string): Promise<void> {
+        const quota = process.env.DIRECTADMIN_MAILBOX_QUOTA_MB?.trim() || '2048';
+        if (!/^\d+$/.test(quota) || !Number.isSafeInteger(Number(quota)) || Number(quota) <= 0)
+            throw new Error(NOT_CONFIGURED);
+        await this.send('CMD_API_POP', new URLSearchParams({
+            action, domain: 'envi.com.pl', user: address.split('@')[0],
+            passwd: password, passwd2: password, quota, limit: '10000',
+        }));
+    }
+
+    static async setAgentCopy(address: string): Promise<void> {
+        const copy = process.env.DIRECTADMIN_AGENT_COPY_ADDRESS?.trim().toLowerCase();
+        if (!copy || !/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?@envi\.com\.pl$/.test(copy) || copy.includes('..'))
+            throw new Error('Kopia poczty dla agenta nie jest skonfigurowana');
+        if (address.toLowerCase() === copy)
+            throw new Error('Nie można ustawić kopii konta technicznego na nie samo');
+        const user = address.split('@')[0];
+        const list = await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({ action: 'list', domain: 'envi.com.pl' }), true);
+        const existing = list.get(user);
+        const recipients = existing === null ? [] : existing.split(',');
+        if (recipients.some(recipient => recipient.trim().toLowerCase() === copy)) return;
+        // shortcut: niesprawdzone na prawdziwym serwerze, test kopii za GO wlasciciela
+        const email = existing === null ? `${address},${copy}` : `${existing},${copy}`;
+        await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({
+            action: existing === null ? 'create' : 'modify', domain: 'envi.com.pl', user, email,
+        }));
+    }
+
+    private static async send(command: string, body: URLSearchParams, listing = false): Promise<URLSearchParams> {
         const { DIRECTADMIN_URL, DIRECTADMIN_LOGIN_USER, DIRECTADMIN_LOGIN_KEY } = process.env;
         if (!DIRECTADMIN_URL?.trim() || !DIRECTADMIN_LOGIN_USER?.trim() || !DIRECTADMIN_LOGIN_KEY?.trim())
             throw new Error(NOT_CONFIGURED);
@@ -32,23 +59,10 @@ export default class DirectAdminGateway {
             const base = new URL(DIRECTADMIN_URL);
             if (base.protocol !== 'https:' || base.username || base.password)
                 throw new Error();
-            endpoint = new URL('/CMD_API_POP', base);
+            endpoint = new URL(`/${command}`, base);
         } catch {
             throw new Error(NOT_CONFIGURED);
         }
-        const quota = process.env.DIRECTADMIN_MAILBOX_QUOTA_MB?.trim() || '2048';
-        if (!/^\d+$/.test(quota) || !Number.isSafeInteger(Number(quota)) || Number(quota) <= 0)
-            throw new Error(NOT_CONFIGURED);
-
-        const body = new URLSearchParams({
-            action,
-            domain: 'envi.com.pl',
-            user: address.split('@')[0],
-            passwd: password,
-            passwd2: password,
-            quota,
-            limit: '10000',
-        });
         let result: URLSearchParams;
         try {
             const response = await fetch(endpoint, {
@@ -67,7 +81,8 @@ export default class DirectAdminGateway {
             // Nie przekazujemy błędu klienta HTTP: może zawierać hasło w treści żądania.
             throw new Error('Nie można połączyć się z serwerem poczty. Spróbuj ponownie później');
         }
-        if (result.get('error') !== '0')
+        if (listing ? result.has('error') && result.get('error') !== '0' : result.get('error') !== '0')
             throw new Error(rejectionMessage(`${result.get('details') || ''} ${result.get('text') || ''}`));
+        return result;
     }
 }

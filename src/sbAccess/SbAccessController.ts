@@ -14,7 +14,7 @@ import SbGithubGateway, {
 import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
 import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
-import { PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
+import { MailboxAssigneeRow, PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
 import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
 import {
     describeSecretName,
@@ -127,6 +127,11 @@ export default class SbAccessController {
         return this.listPersonMailboxes(record);
     }
 
+    private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[]): Promise<string[]> {
+        const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail);
+        return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'));
+    }
+
     static async recordTransition(
         input: SbAccessTransitionInput,
     ): Promise<void> {
@@ -214,10 +219,10 @@ export default class SbAccessController {
         // Hasła, których nowe uprawnienia już nie dają, wypadają w tej samej transakcji. Listę
         // liczymy pod blokadą wiersza osoby (jak giveSecret), żeby równoległe udostępnienie
         // według starych poziomów nie zostawiło hasła spoza nowych uprawnień.
-        const expected = expectedSecretNames(levels);
         await ToolsDb.transaction<void>(async (conn) => {
             if (!(await this.repository.getByPersonId(personId, conn, true)))
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            const expected = await this.expectedSecrets(personId, levels);
             const stale = (await this.secrets.listByPersonId(personId, conn))
                 .map((secret) => secret.name)
                 .filter((name) => !expected.includes(name));
@@ -269,12 +274,13 @@ export default class SbAccessController {
 
     /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
     static async list(): Promise<SbAccessRecord[]> {
-        const [records, names] = await Promise.all([
+        const [records, names, rows] = await Promise.all([
             this.repository.list(),
             this.secrets.listNames(),
+            this.mailboxes.findWithAssignees(),
         ]);
-        return records.map((record) => {
-            const expected = expectedSecretNames(record.levels);
+        return Promise.all(records.map(async (record) => {
+            const expected = await this.expectedSecrets(record.personId, record.levels, rows);
             const given = names
                 .filter((row) => row.personId === record.personId && expected.includes(row.name))
                 .map((row) => row.name);
@@ -284,7 +290,7 @@ export default class SbAccessController {
                 secretsExpected: expected,
                 secretsGiven: given,
             };
-        });
+        }));
     }
 
     private static keyView(jwk: SbPublicKeyJwk | null | undefined) {
@@ -378,7 +384,7 @@ export default class SbAccessController {
 
     /** Własne szyfrogramy (tylko te, które wynikają z bieżących uprawnień). */
     static async listOwnSecrets(record: SbAccessRecord) {
-        const expected = expectedSecretNames(record.levels);
+        const expected = await this.expectedSecrets(record.personId, record.levels);
         const secrets = record.publicKeyJwk
             ? (await this.secrets.listByPersonId(record.personId)).filter((secret) =>
                   expected.includes(secret.name),
@@ -414,7 +420,7 @@ export default class SbAccessController {
                 throw new SbAccessError(409, 'Brak klucza komputera - hasło da się udostępnić dopiero po uruchomieniu instalatora u pracownika.');
             if (keyThumbprint(record.publicKeyJwk) !== thumbprint)
                 throw new SbAccessError(409, 'Klucz komputera pracownika zmienił się. Odśwież stronę i udostępnij hasło ponownie.');
-            if (!expectedSecretNames(record.levels).includes(name))
+            if (!(await this.expectedSecrets(record.personId, record.levels)).includes(name))
                 throw new SbAccessError(409, 'Uprawnienia tej osoby nie obejmują tego hasła.');
             await this.secrets.upsert(conn, personId, name, ciphertext, requestedByPersonId);
             await this.events.append(conn, {

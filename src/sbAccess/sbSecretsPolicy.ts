@@ -12,16 +12,18 @@ import { SbAccessLevels, SbPublicKeyJwk } from './sbAccessTypes';
 
 /** Hasło bazy PS: jedno wspólne konto agentów (decyzja właściciela 2026-10-19); poziom odczyt/zapis to etykieta. */
 export const SB_SECRET_PS_DB = 'baza-ps';
+export const SB_SECRET_AGENT_MAIL = 'poczta-sb-agent';
 const MAIL_PREFIX = 'poczta-';
 
 /**
- * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": jedno na każdą skrzynkę poczty
+ * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": jedno na każdą ręcznie przyznaną skrzynkę, konto techniczne dla przypisań
  * i jedno na bazę PS, gdy poziom bazy jest inny niż brak. Hasła spoza tej listy nie da się
  * udostępnić, a przy zmianie poziomów wypadają z bazy.
  */
-export function expectedSecretNames(levels: SbAccessLevels): string[] {
+export function expectedSecretNames(levels: SbAccessLevels, hasAssignedMailbox = false): string[] {
     return [
         ...levels.mail.map((code) => MAIL_PREFIX + code),
+        ...(hasAssignedMailbox ? [SB_SECRET_AGENT_MAIL] : []),
         ...(levels.psDb !== 'none' ? [SB_SECRET_PS_DB] : []),
     ];
 }
@@ -29,6 +31,7 @@ export function expectedSecretNames(levels: SbAccessLevels): string[] {
 /** Nazwa po ludzku do historii i na ekran. */
 export function describeSecretName(name: string): string {
     if (name === SB_SECRET_PS_DB) return 'baza PS';
+    if (name === SB_SECRET_AGENT_MAIL) return 'konto techniczne poczty (agent)';
     return name.startsWith(MAIL_PREFIX) ? `poczta ${name.slice(MAIL_PREFIX.length)}` : name;
 }
 

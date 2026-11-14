@@ -779,6 +779,7 @@ require('./bankSync/BankSyncRouter');
 app.use(
     async (err: unknown, req: Request, res: Response, next: NextFunction) => {
         err = require('./Admin/SoftwareLicenses/SoftwareLicenseHttp').sanitizeSoftwareLicenseError(err, req);
+        err = require('./sbAccess/sbSecretsHttp').sanitizeSbSecretError(err, req);
         console.error('Wystąpił błąd:', err);
 
         // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.

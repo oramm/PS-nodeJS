@@ -12,10 +12,13 @@ export interface MailboxRecord {
     createdByPersonId?: number | null;
     statusCode: string;
     lastError?: string | null;
+    agentCopyStatus: 'PENDING' | 'SET';
+    agentCopyLastError: string | null;
 }
 
 const COLUMNS = `Id AS id, Code AS code, Address AS address, ProjectId AS projectId,
-    ContractId AS contractId, CreatedByPersonId AS createdByPersonId, StatusCode AS statusCode, LastError AS lastError`;
+    ContractId AS contractId, CreatedByPersonId AS createdByPersonId, StatusCode AS statusCode, LastError AS lastError,
+    AgentCopyStatus AS agentCopyStatus, AgentCopyLastError AS agentCopyLastError`;
 
 export default class MailboxRepository {
     /**
@@ -70,11 +73,17 @@ export default class MailboxRepository {
             `INSERT INTO Mailboxes (Code, Address, ProjectId, ContractId, CreatedByPersonId, StatusCode)
              VALUES (?, ?, ?, ?, ?, 'PENDING')`, [code, address, projectId, contractId, createdByPersonId],
         );
-        return { id: result.insertId, code, address, projectId, contractId, createdByPersonId, statusCode: 'PENDING', lastError: null };
+        return { id: result.insertId, code, address, projectId, contractId, createdByPersonId, statusCode: 'PENDING', lastError: null,
+            agentCopyStatus: 'PENDING', agentCopyLastError: null };
     }
 
     async setState(id: number, status: string, lastError: string | null, conn: mysql.PoolConnection): Promise<void> {
         await ToolsDb.executeSQL('UPDATE Mailboxes SET StatusCode = ?, LastError = ? WHERE Id = ?',
+            [status, lastError, id], conn);
+    }
+
+    async setAgentCopyState(id: number, status: 'PENDING' | 'SET', lastError: string | null, conn: mysql.PoolConnection): Promise<void> {
+        await ToolsDb.executeSQL('UPDATE Mailboxes SET AgentCopyStatus = ?, AgentCopyLastError = ? WHERE Id = ?',
             [status, lastError, id], conn);
     }
 

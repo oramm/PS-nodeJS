@@ -18,10 +18,10 @@ jest.mock('../../tools/ToolsDb', () => ({ __esModule: true, default: { transacti
 jest.mock('../../tools/ToolsMail', () => ({ __esModule: true, default: { sendServerErrorReport: jest.fn() } }));
 jest.mock('../../sbAccess/SbAccessController', () => ({ __esModule: true, default: { canManage: jest.fn() } }));
 jest.mock('../../sbAccess/SbAccessRepository', () => ({ __esModule: true, default: jest.fn(() => ({ getPersonAccount: jest.fn(), getByPersonId: jest.fn() })) }));
-jest.mock('../directAdminGateway', () => ({ __esModule: true, default: { create: jest.fn(), changePassword: jest.fn() } }));
+jest.mock('../directAdminGateway', () => ({ __esModule: true, default: { create: jest.fn(), changePassword: jest.fn(), setAgentCopy: jest.fn() } }));
 jest.mock('../MailboxRepository', () => ({ __esModule: true, default: jest.fn(() => ({
     find: jest.fn(), get: jest.fn(), forOwner: jest.fn(), addressExists: jest.fn(), reserve: jest.fn(),
-    setState: jest.fn(), project: jest.fn(), contract: jest.fn(), moveToProject: jest.fn(), findWithAssignees: jest.fn(),
+    setState: jest.fn(), setAgentCopyState: jest.fn(), project: jest.fn(), contract: jest.fn(), moveToProject: jest.fn(), findWithAssignees: jest.fn(),
 })) }));
 jest.mock('../../contracts/ContractsController', () => ({ __esModule: true, default: {
     find: jest.fn(), createContractFromDto: jest.fn(), addWithAuth: jest.fn(), editWithAuth: jest.fn(), deleteWithAuth: jest.fn(),
@@ -68,6 +68,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         (ToolsMail.sendServerErrorReport as jest.Mock).mockResolvedValue(undefined);
         (DirectAdminGateway.create as jest.Mock).mockResolvedValue(undefined);
         (DirectAdminGateway.changePassword as jest.Mock).mockResolvedValue(undefined);
+        (DirectAdminGateway.setAgentCopy as jest.Mock).mockResolvedValue(undefined);
         (SbAccessController.canManage as jest.Mock).mockResolvedValue(false);
         (SbAccessRepository as jest.Mock).mockImplementation(() => ({
             getPersonAccount: jest.fn().mockResolvedValue({ isActive: true }),
@@ -81,12 +82,15 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         repository.project.mockResolvedValue({ id: 10, ourId: 'CHC.IK.01' });
         repository.contract.mockResolvedValue({ id: 21, projectId: 10, projectOurId: 'CHC.IK.01', ourId: 'CHC.IK.02' });
         repository.reserve.mockImplementation(async (address: string, code: string, projectId: number | null, contractId: number | null, createdByPersonId: number | null) => {
-            const row = { id: rows.length + 1, address, code, projectId, contractId, createdByPersonId, statusCode: 'PENDING', lastError: null };
+            const row: MailboxRecord = { id: rows.length + 1, address, code, projectId, contractId, createdByPersonId, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'PENDING', lastError: null };
             rows.push(row);
             return row;
         });
         repository.setState.mockImplementation(async (id: number, statusCode: string, lastError: string | null) => {
             Object.assign(rows.find(row => row.id === id)!, { statusCode, lastError });
+        });
+        repository.setAgentCopyState.mockImplementation(async (id: number, agentCopyStatus: string, agentCopyLastError: string | null) => {
+            Object.assign(rows.find(row => row.id === id)!, { agentCopyStatus, agentCopyLastError });
         });
         repository.moveToProject.mockImplementation(async (id: number, projectId: number) => {
             if (rows.some(row => row.projectId === projectId)) throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
@@ -155,7 +159,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         (DirectAdminGateway.create as jest.Mock).mockRejectedValueOnce(new Error(message));
         const registered = await call('post /contractReact');
         expect(savedContracts).toEqual([21]);
-        expect(publicTask(registered.body.taskId)).toMatchObject({ status: 'done', result: { _mailbox: { statusCode: 'PENDING', lastError: message } } });
+        expect(publicTask(registered.body.taskId)).toMatchObject({ status: 'done', result: { _mailbox: { agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'PENDING', lastError: message } } });
         const retry = await call('post /mailboxes/:id/provision', {}, 3, { id: '1' });
         expect(retry.next).not.toHaveBeenCalled();
         expect(retry.body).toMatchObject({ statusCode: 'ACTIVE', lastError: null });
@@ -167,7 +171,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         (DirectAdminGateway.create as jest.Mock).mockRejectedValueOnce(new Error('Serwer poczty nie jest skonfigurowany'));
         const registered = await call('post /contractReact');
         expect(savedContracts).toEqual([21]);
-        expect(publicTask(registered.body.taskId)).toMatchObject({ status: 'done', result: { _mailbox: { lastError: 'Serwer poczty nie jest skonfigurowany', statusCode: 'PENDING' } } });
+        expect(publicTask(registered.body.taskId)).toMatchObject({ status: 'done', result: { _mailbox: { lastError: 'Serwer poczty nie jest skonfigurowany', agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'PENDING' } } });
     });
 
     it('błąd DB po sukcesie serwera raportuje osieroconą skrzynkę z adresem, kontrakt pozostaje zapisany', async () => {
@@ -181,7 +185,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it('domyślnie korzysta z istniejącej skrzynki projektu bez ponownego zakładania', async () => {
-        rows.push({ id: 1, code: 'chc-ik-01', address: mailboxAddress('CHC.IK.01'), projectId: 10, contractId: null, createdByPersonId: 77, statusCode: 'ACTIVE' });
+        rows.push({ id: 1, code: 'chc-ik-01', address: mailboxAddress('CHC.IK.01'), projectId: 10, contractId: null, createdByPersonId: 77, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
         const registered = await call('post /contractReact');
         expect(publicTask(registered.body.taskId)).toMatchObject({ status: 'done', result: { _mailboxCreated: false } });
         expect(DirectAdminGateway.create).not.toHaveBeenCalled();
@@ -267,7 +271,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it.each([1, 2, 3, 9])('osoba %s z reguły ma prawo ponowić skrzynkę PENDING', async personId => {
-        rows.push({ id: 1, code: personId === 9 ? 'manual' : 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, statusCode: 'PENDING' });
+        rows.push({ id: 1, code: personId === 9 ? 'manual' : 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'PENDING' });
         const result = await call('post /mailboxes/:id/provision', {}, personId, { id: '1' });
         expect(result.next).not.toHaveBeenCalled();
         expect(result.body.statusCode).toBe('ACTIVE');
@@ -275,8 +279,8 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it('osoba obca, w tym przypisana zewnętrznie w PersonProjects, nie może zarządzać skrzynką', async () => {
-        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, statusCode: 'ACTIVE' });
-        for (const action of ['password', 'provision', 'project']) {
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
+        for (const action of ['password', 'provision', 'project', 'agentCopy']) {
             const result = await call(`post /mailboxes/:id/${action}`, {}, 99, { id: '1' });
             expect(result.next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
         }
@@ -285,7 +289,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it('zarządzający Dostępami SB ma dostęp niezależnie od przypisania', async () => {
-        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, statusCode: 'ACTIVE' });
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
         (SbAccessController.canManage as jest.Mock).mockResolvedValue(true);
         const result = await call('post /mailboxes/:id/password', {}, 99, { id: '1' });
         expect(result.next).not.toHaveBeenCalled();
@@ -293,7 +297,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it('zmiana hasła odrzucona przez pocztę nie ujawnia nowego hasła w innych odpowiedziach ani logach', async () => {
-        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, statusCode: 'ACTIVE' });
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
         (DirectAdminGateway.changePassword as jest.Mock).mockRejectedValueOnce(new Error('Serwer poczty odrzucił operację. Skontaktuj się z administratorem'));
         const rejected = await call('post /mailboxes/:id/password', {}, 3, { id: '1' });
         expect(rejected.body).toBeUndefined();
@@ -303,10 +307,10 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     });
 
     it('przepięcie kontrakt → projekt zachowuje adres i nie woła poczty; drugi adres projektu daje 409', async () => {
-        rows.push({ id: 1, code: 'contract', address: 'contract@envi.com.pl', projectId: null, contractId: 21, statusCode: 'ACTIVE' });
+        rows.push({ id: 1, code: 'contract', address: 'contract@envi.com.pl', projectId: null, contractId: 21, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
         const moved = await call('post /mailboxes/:id/project', {}, 1, { id: '1' });
         expect(moved.body).toMatchObject({ address: 'contract@envi.com.pl', projectId: 10, contractId: null });
-        rows.push({ id: 2, code: 'other', address: 'other@envi.com.pl', projectId: null, contractId: 22, statusCode: 'ACTIVE' });
+        rows.push({ id: 2, code: 'other', address: 'other@envi.com.pl', projectId: null, contractId: 22, agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'ACTIVE' });
         const conflict = await call('post /mailboxes/:id/project', {}, 1, { id: '2' });
         expect(conflict.next).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
         expect(DirectAdminGateway.create).not.toHaveBeenCalled();
@@ -342,4 +346,74 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         expect(await actual.get(1)).toEqual(mailbox);
         expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledWith(expect.stringContaining('CreatedByPersonId AS createdByPersonId'), undefined, [1]);
     });
+    it('MBX-4: rejestracja i ponowienie z prawdziwą bramą/fetch: błąd kopii zostawia ACTIVE/PENDING, ponowienie daje SET', async () => {
+        const before = { ...process.env };
+        try {
+            process.env.DIRECTADMIN_URL = 'https://mail.example.test';
+            process.env.DIRECTADMIN_LOGIN_USER = 'test';
+            process.env.DIRECTADMIN_LOGIN_KEY = 'key';
+            process.env.DIRECTADMIN_AGENT_COPY_ADDRESS = 'sb-agent@envi.com.pl';
+            process.env.DIRECTADMIN_MAILBOX_QUOTA_MB = '2048';
+            const actual = jest.requireActual('../directAdminGateway').default;
+            (DirectAdminGateway.create as jest.Mock).mockImplementation((...args) => actual.create(...args));
+            (DirectAdminGateway.changePassword as jest.Mock).mockImplementation((...args) => actual.changePassword(...args));
+            (DirectAdminGateway.setAgentCopy as jest.Mock).mockImplementation((...args) => actual.setAgentCopy(...args));
+            let failCopy = true;
+            const generatedPasswords: string[] = [];
+            const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+                const body = new URLSearchParams(options?.body as string);
+                const pop = String(url).endsWith('/CMD_API_POP');
+                if (pop) generatedPasswords.push(body.get('passwd')!);
+                const response = pop ? 'error=0' : body.get('action') === 'list' ? '' : failCopy
+                    ? new URLSearchParams({ error: '1', details: generatedPasswords[0] }).toString() : 'error=0';
+                return { ok: true, text: async () => response } as Response;
+            });
+            const registered = await call('post /project', { ourId: 'CHC.IK.01' });
+            expect(registered.body._mailbox).toMatchObject({ statusCode: 'ACTIVE', agentCopyStatus: 'PENDING',
+                agentCopyLastError: 'Serwer poczty odrzucił operację. Skontaktuj się z administratorem' });
+            expect(rows[0]).toMatchObject(registered.body._mailbox);
+            const password = await call('post /mailboxes/:id/password', {}, 1, { id: '1' });
+            expect(password.body.password).toBe(generatedPasswords[1]);
+            failCopy = false;
+            const retried = await call('post /mailboxes/:id/agentCopy', {}, 1, { id: '1' });
+            expect(retried.next).not.toHaveBeenCalled();
+            expect(retried.body).toMatchObject({ statusCode: 'ACTIVE', agentCopyStatus: 'SET', agentCopyLastError: null });
+            const count = fetchMock.mock.calls.length;
+            await call('post /mailboxes/:id/agentCopy', {}, 1, { id: '1' });
+            expect(fetchMock).toHaveBeenCalledTimes(count);
+            const list = await call('get /mailboxes', {}, 1, {}, { projectId: '10' });
+            const sbList = await MailboxController.list(10);
+            assertNoSecretElsewhere(generatedPasswords, registered.body, retried.body, list.body, sbList);
+
+            // Ta sama ścieżka po ponowieniu zakładania skrzynki z MBX-3.
+            Object.assign(rows[0], { statusCode: 'PENDING', agentCopyStatus: 'PENDING' });
+            failCopy = true;
+            const provision = await call('post /mailboxes/:id/provision', {}, 1, { id: '1' });
+            expect(provision.body).toMatchObject({ statusCode: 'ACTIVE', agentCopyStatus: 'PENDING' });
+            assertNoSecretElsewhere(generatedPasswords, provision.body);
+        } finally { process.env = before; }
+    });
+
+    it('kopia wymaga ACTIVE; nie wywołuje serwera dla PENDING', async () => {
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null,
+            agentCopyStatus: 'PENDING', agentCopyLastError: null, statusCode: 'PENDING' });
+        const rejected = await call('post /mailboxes/:id/agentCopy', {}, 1, { id: '1' });
+        expect(rejected.next).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
+        expect(DirectAdminGateway.setAgentCopy).not.toHaveBeenCalled();
+    });
+
+    it.each(['sb-agent@envi.com.pl', 'sb.agent@envi.com.pl', 'technical@envi.com.pl'])('adres konta technicznego %s jest zarezerwowany przed zapisem i siecią', async address => {
+        const before = process.env.DIRECTADMIN_AGENT_COPY_ADDRESS;
+        process.env.DIRECTADMIN_AGENT_COPY_ADDRESS = 'technical@envi.com.pl';
+        try {
+            const result = await call('post /project', { ourId: 'CHC.IK.01', _mailboxSelection: { mode: 'project', address } });
+            expect(result.next).toHaveBeenCalledWith(expect.objectContaining({ status: 400, message: expect.stringContaining('zarezerwowany') }));
+            expect(ProjectsController.addFromDto).not.toHaveBeenCalled();
+            expect(DirectAdminGateway.create).not.toHaveBeenCalled();
+        } finally {
+            if (before === undefined) delete process.env.DIRECTADMIN_AGENT_COPY_ADDRESS;
+            else process.env.DIRECTADMIN_AGENT_COPY_ADDRESS = before;
+        }
+    });
+
 });

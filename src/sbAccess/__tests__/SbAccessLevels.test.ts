@@ -19,6 +19,7 @@ describe('Poziomy dostępu SB', () => {
         // Hasła osoby (SBD-2): przy zmianie poziomów kontroler sprawdza, które wypadają.
         jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([]);
         jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
+        jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
         jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
     });
 

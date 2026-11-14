@@ -15,16 +15,20 @@ jest.mock('../../staff/StaffMemberRepository', () => ({
 }));
 
 import ToolsDb from '../../tools/ToolsDb';
+import ToolsMail from '../../tools/ToolsMail';
 import SbAccessController from '../SbAccessController';
 import SbAccessEventRepository from '../SbAccessEventRepository';
 import SbAccessRepository from '../SbAccessRepository';
 import SbAccessSecretRepository from '../SbAccessSecretRepository';
 import MailboxRepository from '../../mailboxes/MailboxRepository';
 import { SbAccessError } from '../sbAccessPolicy';
+import { sanitizeSbSecretError } from '../sbSecretsHttp';
 import {
     deviceTokenHash,
     displayFingerprint,
     expectedSecretNames,
+    describeSecretName,
+    SB_SECRET_AGENT_MAIL,
     keyThumbprint,
     newDeviceToken,
     parseCiphertext,
@@ -80,6 +84,13 @@ describe('Hasła SB - reguły (bez bazy)', () => {
         expect(expectedSecretNames({ ...LEVELS, mail: ['faktury', 'marek'] })).toEqual(['poczta-faktury', 'poczta-marek', 'baza-ps']);
         // Odczyt i zapis bazy dają to samo jedno hasło (jedno wspólne konto agentów).
         expect(expectedSecretNames({ ...LEVELS, psDb: 'rw', mail: [] })).toEqual(['baza-ps']);
+    });
+
+    it('konto techniczne tylko dla przypisań; ręczne wyjątki zachowują swoje sekrety', () => {
+        const levels = { ...LEVELS, psDb: 'none', mail: ['faktury'] } as any;
+        expect(expectedSecretNames(levels, false)).toEqual(['poczta-faktury']);
+        expect(expectedSecretNames(levels, true)).toEqual(['poczta-faktury', SB_SECRET_AGENT_MAIL]);
+        expect(describeSecretName(SB_SECRET_AGENT_MAIL)).toBe('konto techniczne poczty (agent)');
     });
 
     it('odcisk klucza = RFC 7638 (wektor z RFC 7638 rozdz. 3.1), na ekranie 8 znaków hex w dwóch grupach', () => {
@@ -153,6 +164,7 @@ describe('Hasła SB - kontroler', () => {
         remove = jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
         upsert = jest.spyOn(SbAccessSecretRepository.prototype, 'upsert').mockResolvedValue(undefined);
         jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ personId: 131, isActive: true } as any);
+        jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
         jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
     });
 
@@ -268,6 +280,64 @@ describe('Hasła SB - kontroler', () => {
         const out = await SbAccessController.listOwnSecrets(record());
         expect(out.secrets.map((secret) => secret.name)).toEqual(['poczta-faktury']);
         expect(out.keyThumbprint).toBe(keyThumbprint(A.jwk as any));
+    });
+
+    it('MBX-4: nowa osoba -> kierownik kontraktu -> sekret -> zmiana poziomów -> odebranie przypisania', async () => {
+        const levels = { repos: 'none', psDb: 'none', drive: 'none', mail: [] } as any;
+        const person = record({ levels });
+        const get = jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(person);
+        jest.spyOn(SbAccessRepository.prototype, 'list').mockResolvedValue([person, record({ personId: 8, levels })]);
+        jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+        jest.spyOn(SbAccessRepository.prototype, 'upsertState').mockResolvedValue(undefined);
+        jest.spyOn(SbAccessController as any, 'enqueueFinRefresh').mockResolvedValue(undefined);
+        const rows = [{ code: 'projekt', address: 'projekt@envi.com.pl', managerId: null as number | null, adminId: null }];
+        const assignees = jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockImplementation(async () => rows);
+        const ciphertext = await encryptLikeBrowser(A.jwk, 'SekretKontaTechnicznego123');
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([{ name: SB_SECRET_AGENT_MAIL, ciphertext }] as any);
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listNames').mockResolvedValue([{ personId: 131, name: SB_SECRET_AGENT_MAIL }]);
+        const logs = ['log', 'warn', 'error'].map(method => jest.spyOn(console, method as 'log').mockImplementation(() => undefined));
+        const report = jest.spyOn(ToolsMail, 'sendServerErrorReport').mockResolvedValue(undefined as any);
+        expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toEqual([]);
+        expect((await SbAccessController.list())[0].secretsExpected).toEqual([]);
+        await expect(SbAccessController.giveSecret(131, SB_SECRET_AGENT_MAIL, ciphertext, keyThumbprint(A.jwk as any), 1))
+            .rejects.toMatchObject({ status: 409 });
+
+        // Skrzynka projektu ma przypisanie przez kierownika jednego z jego kontraktów.
+        rows[0].managerId = 131;
+        expect((await SbAccessController.listPersonMailboxes(person)).mailboxes)
+            .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment' }]);
+        assignees.mockClear();
+        const listed = await SbAccessController.list();
+        expect(assignees).toHaveBeenCalledTimes(1); // wszystkie osoby, bez N zapytań
+        expect(listed[0].secretsExpected).toEqual([SB_SECRET_AGENT_MAIL]);
+        expect(listed[1].secretsExpected).toEqual([]);
+        const given = await SbAccessController.giveSecret(131, SB_SECRET_AGENT_MAIL, ciphertext, keyThumbprint(A.jwk as any), 1);
+        expect(given).toEqual({ name: SB_SECRET_AGENT_MAIL, given: true });
+        expect(upsert).toHaveBeenCalledWith(conn, 131, SB_SECRET_AGENT_MAIL, ciphertext, 1);
+        expect((await SbAccessController.listOwnSecrets(person)).secrets).toMatchObject([{ name: SB_SECRET_AGENT_MAIL, ciphertext }]);
+        const changed = await SbAccessController.setLevels(131, { ...levels, drive: 'connector' }, 1);
+        expect(remove).toHaveBeenLastCalledWith(conn, 131, []);
+        await SbAccessController.recordTransition({ personId: 131, actionCode: 'ACTIVATE', resultCode: 'OK',
+            requestedByPersonId: 1, state: { statusCode: 'ACTIVE' }, note: 'Aktywowano' });
+        expect(remove).toHaveBeenCalledTimes(1); // przejście nie usuwa sekretów przy ACTIVE
+        expect(get).toHaveBeenCalledWith(131, conn, true);
+
+        // Jednoczesny ręczny wyjątek daje source=both i nadal oczekuje konta technicznego.
+        expect((await SbAccessController.listPersonMailboxes(record({ levels: { ...levels, mail: ['projekt'] } }))).mailboxes[0].source).toBe('both');
+        expect((await SbAccessController.listOwnSecrets(record({ levels: { ...levels, mail: ['projekt'] } }))).secrets)
+            .toMatchObject([{ name: SB_SECRET_AGENT_MAIL }]);
+        rows[0].managerId = null;
+        const withdrawn = await SbAccessController.listOwnSecrets(person);
+        expect(withdrawn.secrets).toEqual([]);
+        expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toEqual([]);
+        await SbAccessController.setLevels(131, levels, 1);
+        expect(remove).toHaveBeenLastCalledWith(conn, 131, [SB_SECRET_AGENT_MAIL]);
+        await expect(SbAccessController.giveSecret(131, SB_SECRET_AGENT_MAIL, ciphertext, keyThumbprint(A.jwk as any), 1))
+            .rejects.toMatchObject({ status: 409 });
+        const observable = JSON.stringify({ listed, given, changed, withdrawn, events: append.mock.calls,
+            logs: logs.map(log => log.mock.calls), reports: report.mock.calls });
+        expect(observable).not.toContain(ciphertext);
+        expect(observable).not.toContain('SekretKontaTechnicznego123');
     });
 
     it('tożsamość "me": sesja; ważny token; zły token 401; zablokowany 403', async () => {
@@ -433,5 +503,34 @@ describe('Hasła SB - trasy', () => {
         res = makeRes();
         await handler({ session: { userData: { enviId: 1 } }, params: { personId: '131', name: 'baza-ps' } }, res, jest.fn());
         expect(take).toHaveBeenCalledWith(131, 'baza-ps', 1);
+    });
+});
+
+describe('MBX-4: szyfrogram nie trafia do globalnego logu, odpowiedzi błędu ani raportu', () => {
+    it.each(['/sbAccess/131/secrets/poczta-sb-agent', '/sbAccess/me/secrets', '/sbAccess/invalid/secrets/poczta-sb-agent'])('%s: czyści żądanie i błąd przed raportowaniem', async path => {
+        const ciphertext = Buffer.alloc(256, 23).toString('base64');
+        const plaintext = 'SekretTechnicznyNigdyWLogu123';
+        const request = { path, method: 'PUT', originalUrl: `${path}?secret=${plaintext}`, body: { ciphertext, password: plaintext },
+            parsedBody: { ciphertext }, query: { secret: plaintext }, parsedQuery: { secret: plaintext }, session: {} } as any;
+        const raw = Object.assign(new Error(`Parser/DB: ${plaintext}`), { sql: ciphertext, body: ciphertext, status: 400 });
+        const safe = sanitizeSbSecretError(raw, request);
+        expect(safe).toMatchObject({ message: 'Nie można wykonać operacji na hasłach SB.', status: 400 });
+        const log = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const send = jest.spyOn(ToolsMail, 'sendMail').mockResolvedValue(undefined as any);
+        console.error('Wystąpił błąd:', safe);
+        await ToolsMail.sendServerErrorReport(safe, request);
+        expect(send).toHaveBeenCalledTimes(1); // raport z atrapą transportu, bez SMTP
+        const observable = JSON.stringify({ safe: String(safe), request, logs: log.mock.calls, reports: send.mock.calls });
+        expect(observable).not.toContain(ciphertext);
+        expect(observable).not.toContain(plaintext);
+    });
+
+    it('globalny handler czyści sekrety przed logowaniem; inne trasy zostają bez zmian', () => {
+        const source = readFileSync(join(__dirname, '../../index.ts'), 'utf8');
+        expect(source.indexOf('sanitizeSbSecretError(err, req)')).toBeLessThan(source.indexOf("console.error('Wystąpił błąd:', err)"));
+        const error = new Error('zwykły błąd');
+        const request = { path: '/project', body: { ourId: 'TST' } } as any;
+        expect(sanitizeSbSecretError(error, request)).toBe(error);
+        expect(request.body).toEqual({ ourId: 'TST' });
     });
 });

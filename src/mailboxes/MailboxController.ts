@@ -25,6 +25,8 @@ export function validateMailboxAddress(value: unknown): { address: string; code:
     if (typeof value !== 'string' || !/^[a-z0-9](?:[a-z0-9.-]{0,38}[a-z0-9])?@envi\.com\.pl$/.test(value) || value.includes('..'))
         throw new MailboxError('Podaj adres @envi.com.pl: od 1 do 40 małych liter, cyfr, kropek lub myślników, z literą lub cyfrą na początku i końcu.', 400);
     const code = value.split('@')[0].replace(/\./g, '-');
+    if (code === 'sb-agent' || value === process.env.DIRECTADMIN_AGENT_COPY_ADDRESS?.trim().toLowerCase())
+        throw new MailboxError('Ten adres jest zarezerwowany dla konta technicznego poczty agenta.', 400);
     if (!SB_MAILBOX_PATTERN.test(code)) throw new MailboxError('Nieprawidłowe oznaczenie skrzynki.', 400);
     return { address: value, code };
 }
@@ -113,8 +115,9 @@ export default class MailboxController {
     static async provision(id: number): Promise<MailboxRecord> {
         let createdAddress: string | undefined;
         let current: MailboxRecord | undefined;
+        let provisioned: MailboxRecord;
         try {
-            return await ToolsDb.transaction(async (conn) => {
+            provisioned = await ToolsDb.transaction(async (conn) => {
                 const mailbox = await this.repository.get(id, conn, true);
                 if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
                 if (mailbox.statusCode !== 'PENDING') throw new MailboxError('Ta skrzynka jest już założona.', 409);
@@ -139,6 +142,26 @@ export default class MailboxController {
             }
             throw error;
         }
+        // Stan ACTIVE jest już zapisany: niepowodzenie kopii nie cofa założenia skrzynki.
+        return provisioned.statusCode === 'ACTIVE' ? this.agentCopy(id) : provisioned;
+    }
+
+    static async agentCopy(id: number): Promise<MailboxRecord> {
+        return ToolsDb.transaction(async (conn) => {
+            const mailbox = await this.repository.get(id, conn, true);
+            if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
+            if (mailbox.statusCode !== 'ACTIVE') throw new MailboxError('Najpierw załóż skrzynkę przyciskiem „Ponów”.', 409);
+            if (mailbox.agentCopyStatus === 'SET') return mailbox;
+            let agentCopyLastError: string | null = null;
+            try { await DirectAdminGateway.setAgentCopy(mailbox.address); }
+            catch (error) {
+                // Brama usuwa treść żądania i surowe błędy HTTP.
+                agentCopyLastError = error instanceof Error ? error.message : 'Nie udało się ustawić kopii poczty dla agenta.';
+            }
+            const agentCopyStatus = agentCopyLastError === null ? 'SET' : 'PENDING';
+            await this.repository.setAgentCopyState(id, agentCopyStatus, agentCopyLastError, conn);
+            return { ...mailbox, agentCopyStatus, agentCopyLastError };
+        });
     }
 
     private static async report(message: string): Promise<void> {

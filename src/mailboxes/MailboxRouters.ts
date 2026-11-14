@@ -44,6 +44,14 @@ app.post('/mailboxes/:id/password', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+app.post('/mailboxes/:id/agentCopy', async (req, res, next) => {
+    try {
+        const mailboxId = id(req.params.id);
+        await MailboxController.assertAccess(mailboxId, req.session?.userData);
+        res.send(await MailboxController.agentCopy(mailboxId));
+    } catch (error) { next(error); }
+});
+
 app.post('/mailboxes/:id/project', async (req, res, next) => {
     try {
         const mailboxId = id(req.params.id);

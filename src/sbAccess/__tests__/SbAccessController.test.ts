@@ -1,3 +1,4 @@
+import MailboxRepository from '../../mailboxes/MailboxRepository';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
 import SbAccessRepository from '../SbAccessRepository';
@@ -31,6 +32,7 @@ describe('SbAccessController', () => {
     };
 
     beforeEach(() => {
+        jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
         pending = [];
         saved = [];
         conn = {

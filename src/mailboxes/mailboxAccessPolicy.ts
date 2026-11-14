@@ -22,7 +22,7 @@ export interface PersonMailbox {
  * do których jest przypisana (kierownik / administrator / wybrana osoba; skrzynka projektu = każdy kontrakt
  * projektu), plus wyjątki ręczne z SbAccess.Levels.mail. Kody ręczne spoza spisu są pomijane
  * (nie ma dla nich adresu). Limit SB_MAX_MAILBOXES dotyczy tylko wyjątków ręcznych.
- * Czysta funkcja, bez I/O; obok `expectedSecretNames` (hasła wynikają wyłącznie z wyjątków ręcznych).
+ * Czysta funkcja, bez I/O; hasła rozstrzyga osobno `expectedSecretNames`.
  */
 export function personMailboxes(
     personId: number,
