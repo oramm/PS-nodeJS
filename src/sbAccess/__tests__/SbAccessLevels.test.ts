@@ -20,6 +20,7 @@ describe('Poziomy dostępu SB', () => {
         jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([]);
         jest.spyOn(SbAccessSecretRepository.prototype, 'remove').mockResolvedValue([]);
         jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
+        jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ isActive: true, systemRoleName: 'ENVI_EMPLOYEE' } as any);
         jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
     });
 

@@ -105,6 +105,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         );
         const selectedPersonIds = req.body?._selectedPersonIds ?? req.parsedBody._selectedPersonIds
             ?? (chatSpaceSelection.mode === 'new' ? chatSpaceSelection.personIds : undefined);
+        // Przy rejestracji lista sluzy tez zaproszeniom do Chatu, wiec osob zewnetrznych nie odrzucamy: skrzynki im nie daje regula personMailboxes.
         if (selectedPersonIds !== undefined)
             creationOptions.selectedPersonIds = parseContractSelectedPersonIds(selectedPersonIds);
         const mailboxSelection = MailboxController.parseSelection(req.parsedBody._mailboxSelection);

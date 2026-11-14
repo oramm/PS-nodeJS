@@ -16,39 +16,51 @@ describe('contractAssigneeIds', () => {
 
 describe('personMailboxes (reguła MBX-2)', () => {
     it('osoba w dwóch projektach ma obie skrzynki z przypisań', () => {
-        expect(personMailboxes(1, rows, [])).toEqual([
+        expect(personMailboxes(1, rows, [], 'ENVI_EMPLOYEE')).toEqual([
             { code: 'proj-a', address: 'proj-a@envi.com.pl', source: 'assignment' },
             { code: 'proj-b', address: 'proj-b@envi.com.pl', source: 'assignment' },
         ]);
     });
 
     it('administrator jednego z kontraktów projektu widzi skrzynkę projektu; kierownik drugiego kontraktu też', () => {
-        expect(personMailboxes(2, rows, []).map((m) => m.code)).toEqual(['proj-a']);
-        expect(personMailboxes(3, rows, []).map((m) => m.code)).toEqual(['proj-a']);
+        expect(personMailboxes(2, rows, [], 'ENVI_EMPLOYEE').map((m) => m.code)).toEqual(['proj-a']);
+        expect(personMailboxes(3, rows, [], 'ENVI_EMPLOYEE').map((m) => m.code)).toEqual(['proj-a']);
     });
 
     it('odebrane przypisanie = brak skrzynki (reguła liczy z bieżących danych)', () => {
         const after = [row('proj-a', null, 2), row('proj-a', 3, 2), row('proj-b', null, null)];
-        expect(personMailboxes(1, after, [])).toEqual([]);
+        expect(personMailboxes(1, after, [], 'ENVI_EMPLOYEE')).toEqual([]);
     });
 
     it('wyjątek ręczny działa bez przypisania; przy przypisaniu źródło = both', () => {
-        expect(personMailboxes(9, rows, ['faktury'])).toEqual([
+        expect(personMailboxes(9, rows, ['faktury'], 'ENVI_EMPLOYEE')).toEqual([
             { code: 'faktury', address: 'faktury@envi.com.pl', source: 'manual' },
         ]);
-        expect(personMailboxes(1, rows, ['proj-a']).find((m) => m.code === 'proj-a')?.source).toBe('both');
+        expect(personMailboxes(1, rows, ['proj-a'], 'ENVI_EMPLOYEE').find((m) => m.code === 'proj-a')?.source).toBe('both');
     });
 
     it('kod ręczny spoza spisu jest pomijany; obcy nie dostaje niczego', () => {
-        expect(personMailboxes(9, rows, ['marek'])).toEqual([]);
+        expect(personMailboxes(9, rows, ['marek'], 'ENVI_EMPLOYEE')).toEqual([]);
     });
 
     it('osoba wybrana przy kontrakcie dostaje skrzynkę, a sama rola zewnętrzna z PersonProjects jej nie daje', () => {
         const assigned = [{ ...row('proj-a', 1, 2), selectedPersonId: 9 }];
-        expect(personMailboxes(9, assigned, [])).toEqual([
+        expect(personMailboxes(9, assigned, [], 'ENVI_EMPLOYEE')).toEqual([
             { code: 'proj-a', address: 'proj-a@envi.com.pl', source: 'assignment' },
         ]);
         // PersonProjects nie jest źródłem przypisań w personMailboxes.
-        expect(personMailboxes(10, assigned, [])).toEqual([]);
+        expect(personMailboxes(10, assigned, [], 'ENVI_EMPLOYEE')).toEqual([]);
     });
+    it.each(['CONTRACT_WORKER', 'CLIENT'])('%s nie dostaje skrzynek z żadnego przypisania', role => {
+        const assigned = [
+            { ...row('manager', 9, null) },
+            { ...row('admin', null, 9) },
+            { ...row('selected', 1, 2), selectedPersonId: 9 },
+        ];
+        expect(personMailboxes(9, assigned, [], role)).toEqual([]);
+        expect(personMailboxes(9, assigned, ['selected'], role)).toEqual([
+            { code: 'selected', address: 'selected@envi.com.pl', source: 'manual' },
+        ]);
+    });
+
 });

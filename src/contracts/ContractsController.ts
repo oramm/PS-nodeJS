@@ -378,6 +378,8 @@ export default class ContractsController extends BaseController<
         fieldsToUpdate?: string[],
         selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
+        if (selectedPersonIds !== undefined)
+            await ContractSelectedPersonsRepository.validate(selectedPersonIds);
         const instance = this.getInstance();
 
         console.group(`Editing contract ${contract._ourIdOrNumber_Name}`);

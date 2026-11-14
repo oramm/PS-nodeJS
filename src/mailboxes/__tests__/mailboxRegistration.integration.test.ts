@@ -58,6 +58,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
     beforeEach(() => {
         jest.clearAllMocks();
         rows = [];
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValue([]);
         savedContracts = [];
         savedProjects = [];
         background = undefined;
@@ -101,6 +102,7 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         repository.findWithAssignees.mockImplementation(async () => rows.map(row => ({
             code: row.code, address: row.address, managerId: 1, adminId: 2, selectedPersonId: 3,
         })));
+        (ContractsController.editWithAuth as jest.Mock).mockReset();
         (ContractsController.createContractFromDto as jest.Mock).mockResolvedValue({ id: 21, projectOurId: 'CHC.IK.01', ourId: 'CHC.IK.02' });
         (ContractsController.addWithAuth as jest.Mock).mockImplementation(async contract => { savedContracts.push(contract.id); });
         (ProjectsController.addFromDto as jest.Mock).mockImplementation(async dto => {
@@ -370,6 +372,40 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         expect(conflict.next).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
         expect(DirectAdminGateway.create).not.toHaveBeenCalled();
         expect(DirectAdminGateway.changePassword).not.toHaveBeenCalled();
+    });
+
+    it.each(['CONTRACT_WORKER', 'CLIENT'])('%s wybrany przy kontrakcie nie przechodzi assertAccess', async systemRoleName => {
+        rows.push({ id: 1, code: 'assigned', address: 'assigned@envi.com.pl', projectId: 10, contractId: null,
+            statusCode: 'ACTIVE', agentCopyStatus: 'SET', agentCopyLastError: null, createdByPersonId: 3 });
+        (SbAccessRepository as jest.Mock).mockImplementation(() => ({
+            getPersonAccount: jest.fn().mockResolvedValue({ isActive: true, systemRoleName }),
+            getByPersonId: jest.fn().mockResolvedValue({ levels: { mail: [] } }),
+        }));
+        // Bieżąca rola z bazy rozstrzyga także po zmianie roli zakładającego.
+        await expect(MailboxController.assertAccess(1, { enviId: 3, systemRoleName: 'ENVI_EMPLOYEE' } as any))
+            .rejects.toMatchObject({ status: 403 });
+        const result = await call('post /mailboxes/:id/password', {}, 3, { id: '1' });
+        expect(result.next).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+        expect(DirectAdminGateway.changePassword).not.toHaveBeenCalled();
+    });
+
+    it.each(['CONTRACT_WORKER', 'CLIENT'])('edycja odrzuca osobę z rolą %s błędem 400', async role => {
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (_sql, _conn, params) =>
+            params[1].includes(role) ? [{ PersonId: 3 }] : []);
+        (ContractsController.editWithAuth as jest.Mock).mockImplementation(async (contract, fields, ids) =>
+            jest.requireActual('../../contracts/ContractsController').default.edit(contract, undefined, fields, ids));
+        const result = await call('put /contract/:id', { _selectedPersonIds: [3] }, 1, { id: '21' });
+        expect(result.next).toHaveBeenCalledWith(expect.objectContaining({ status: 400, message: expect.stringContaining('klienta') }));
+        expect(ToolsDb.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it.each(['CONTRACT_WORKER', 'CLIENT'])('rola %s: rejestracja przechodzi (lista służy też zaproszeniom do Chatu), edycja listy osób odrzuca 400', async role => {
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (_sql, _conn, params) =>
+            params?.[1]?.includes?.(role) ? [{ PersonId: 3 }] : []);
+        const result = await call('post /contractReact', { _selectedPersonIds: [3] });
+        expect(result.next).not.toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+        expect(ContractsController.addWithAuth).toHaveBeenCalled();
+        await expect(ContractSelectedPersonsRepository.validate([3])).rejects.toMatchObject({ status: 400, message: expect.stringContaining('klienta') });
     });
 
     it('repozytorium osób zapisuje wybór przy kontrakcie w przekazanej transakcji', async () => {

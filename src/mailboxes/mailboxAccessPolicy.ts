@@ -1,4 +1,6 @@
 import { contractAssigneeIds } from '../contracts/contractAssignees';
+import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
+import { SystemRoleName } from '../types/sessionTypes';
 
 /** Skrzynka i osoby przypisane do jednego z jej kontraktów (brak kontraktu = null). */
 export interface MailboxAssigneeRow {
@@ -28,11 +30,13 @@ export function personMailboxes(
     personId: number,
     rows: MailboxAssigneeRow[],
     manualCodes: string[],
+    systemRoleName: string | null | undefined,
 ): PersonMailbox[] {
     const byCode = new Map<string, PersonMailbox & { assigned: boolean }>();
     for (const row of rows) {
         const entry = byCode.get(row.code) ?? { code: row.code, address: row.address, source: 'manual' as const, assigned: false };
-        if (contractAssigneeIds(row.managerId, row.adminId, row.selectedPersonId).includes(personId)) entry.assigned = true;
+        if (!PROJECT_SCOPED_ROLES.includes(systemRoleName as SystemRoleName)
+            && contractAssigneeIds(row.managerId, row.adminId, row.selectedPersonId).includes(personId)) entry.assigned = true;
         byCode.set(row.code, entry);
     }
     const manual = new Set(manualCodes);

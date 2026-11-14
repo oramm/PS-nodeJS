@@ -118,7 +118,8 @@ export default class SbAccessController {
     /** Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina. */
     static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: PersonMailbox[] }> {
         const rows = await this.mailboxes.findWithAssignees();
-        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail) };
+        const account = await this.repository.getPersonAccount(record.personId);
+        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail, account?.systemRoleName) };
     }
 
     static async listMailboxesOfPerson(personId: number): Promise<{ mailboxes: PersonMailbox[] }> {
@@ -128,7 +129,8 @@ export default class SbAccessController {
     }
 
     private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[], registry?: MailboxRecord[]): Promise<string[]> {
-        const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail);
+        const account = await this.repository.getPersonAccount(personId);
+        const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail, account?.systemRoleName);
         const ownedCodes = new Set((registry ?? (levels.mail.length ? await this.mailboxes.find() : []))
             .filter(mailbox => mailbox.projectId != null || mailbox.contractId != null).map(mailbox => mailbox.code));
         return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'), ownedCodes);

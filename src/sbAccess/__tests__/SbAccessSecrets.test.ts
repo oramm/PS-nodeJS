@@ -291,6 +291,26 @@ describe('Hasła SB - kontroler', () => {
         expect(out.keyThumbprint).toBe(keyThumbprint(A.jwk as any));
     });
 
+    it.each(['CONTRACT_WORKER', 'CLIENT'])('%s wybrany przy kontrakcie nie widzi skrzynki ani sekretu konta technicznego', async systemRoleName => {
+        const person = record({ levels: { repos: 'none', psDb: 'none', drive: 'none', mail: [] } });
+        jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ isActive: true, systemRoleName } as any);
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(person);
+        jest.spyOn(SbAccessRepository.prototype, 'list').mockResolvedValue([person]);
+        jest.spyOn(SbAccessSecretRepository.prototype, 'listNames').mockResolvedValue([]);
+        jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([
+            { code: 'projekt', address: 'projekt@envi.com.pl', managerId: null, adminId: null, selectedPersonId: 131 },
+        ]);
+        expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toEqual([]);
+        expect((await SbAccessController.list())[0].secretsExpected).toEqual([]);
+        await expect(SbAccessController.giveSecret(131, SB_SECRET_AGENT_MAIL, Buffer.alloc(256).toString('base64'), keyThumbprint(A.jwk as any), 1))
+            .rejects.toMatchObject({ status: 409 });
+        expect(upsert).not.toHaveBeenCalled();
+        // Zmiana roli na pracownika od razu przywraca dostęp z tego samego przypisania.
+        jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ isActive: true, systemRoleName: 'ENVI_EMPLOYEE' } as any);
+        expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toHaveLength(1);
+        expect((await SbAccessController.list())[0].secretsExpected).toEqual([SB_SECRET_AGENT_MAIL]);
+    });
+
     it('MBX-4: nowa osoba -> kierownik kontraktu -> sekret -> zmiana poziomów -> odebranie przypisania', async () => {
         const levels = { repos: 'none', psDb: 'none', drive: 'none', mail: [] } as any;
         const person = record({ levels });
