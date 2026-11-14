@@ -62,8 +62,6 @@ const BASE_ROUTES: RoutePattern[] = [
     { method: 'POST', path: '/securities' },
     { method: 'GET', path: '/risks' },
     { method: 'GET', path: '/risk/:id' },
-    { method: 'GET', path: '/risksReactions' },
-    { method: 'GET', path: '/risksReaction/:id' },
     { method: 'GET', path: '/caseEvents' },
     { method: 'GET', path: '/caseEvent/:id' },
     // Świadomie NIE ma tu /materialCards, /processes ani /contractRangesContracts:

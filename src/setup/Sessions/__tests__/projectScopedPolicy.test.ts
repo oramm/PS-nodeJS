@@ -109,6 +109,9 @@ describe('projectScopedPolicy', () => {
             ['PUT', '/milestoneDate/5'],
             ['POST', '/security'],
             ['POST', '/city'],
+            // Reakcje na ryzyka nie niosa zakresu projektow (front ich nie wola).
+            ['GET', '/risksReactions'],
+            ['GET', '/risksReaction/5'],
             // Podpis kwalifikowany (SIG-2): karta jest osoby z ENVI; role zakresowe nie podpisuja.
             ['GET', '/letter/5/signableFiles'],
             ['POST', '/signingJob'],
