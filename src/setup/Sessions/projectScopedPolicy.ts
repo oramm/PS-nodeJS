@@ -202,7 +202,7 @@ const ROUTES_BY_ROLE: Partial<Record<SystemRoleName, RoutePattern[]>> = {
  * do projektów. Pusty zakres projektów odciąłby im pisma przypisanych kontraktów, więc go
  * nie ustawiamy; ich jedyną trasę z danymi zawęża LetterRepository.
  */
-const CONTRACT_ASSIGNMENT_ROLES: SystemRoleName[] = [SystemRoleName.EXTERNAL_USER];
+export const CONTRACT_ASSIGNMENT_ROLES: SystemRoleName[] = [SystemRoleName.EXTERNAL_USER];
 
 export const PROJECT_SCOPED_ROLES = Object.keys(
     ROUTES_BY_ROLE
@@ -257,6 +257,16 @@ export function isAllowedForRole(
         (route) =>
             route.method === upperMethod && route.regExp.test(normalized)
     );
+}
+
+/**
+ * Czy rola w ogóle dociera do trasy: rola spoza tej warstwy (pracownicy ENVI) dociera
+ * wszędzie, rola z mapy tylko do tras z listy. Czyta to przegląd dostępów (DOSTEP-7),
+ * żeby ekran mówił to samo, co ta warstwa robi z żądaniem.
+ */
+export function roleReachesRoute(role: SystemRoleName | undefined, method: string, path: string): boolean {
+    if (!role) return false;
+    return !COMPILED_ROUTES_BY_ROLE.has(role) || isAllowedForRole(role, method, path);
 }
 
 export default async function projectScopedPolicy(

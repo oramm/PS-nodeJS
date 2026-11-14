@@ -697,6 +697,7 @@ require('./persons/experiences/ExperienceRouters');
 
 require('./persons/projectRoles/RolesRouters');
 require('./persons/projectAssignments/ProjectAssignmentsRouters');
+require('./persons/accessOverview/AccessOverviewRouters');
 require('./persons/educations/EducationRouters');
 require('./persons/skills/SkillsDictionaryRouters');
 require('./persons/profileSkills/ProfileSkillRouters');

@@ -28,17 +28,22 @@ export default class MailboxRepository {
      */
     async findWithAssignees(includePending = false): Promise<MailboxAssigneeRow[]> {
         const [mailboxes, edges] = await Promise.all([
-            ToolsDb.getQueryCallbackAsync(
-                `SELECT m.Code AS code, m.Address AS address, m.ContractId AS contractId,
-                    COALESCE(c.ProjectOurId, p.OurId) AS projectOurId
-                FROM Mailboxes m
-                LEFT JOIN Contracts c ON c.Id = m.ContractId
-                LEFT JOIN Projects p ON p.Id = m.ProjectId
-                WHERE m.StatusCode IN (${includePending ? "'ACTIVE', 'PENDING'" : "'ACTIVE'"})`,
-            ) as Promise<MailboxOwnerRow[]>,
+            this.findOwners(includePending),
             ProjectAssignmentRepository.findMembership(),
         ]);
         return mailboxAssigneeRows(mailboxes, edges);
+    }
+
+    /** Skrzynki z właścicielem (projekt albo kontrakt) - wejście reguły mailboxAssigneeRows. */
+    async findOwners(includePending = false): Promise<MailboxOwnerRow[]> {
+        return (await ToolsDb.getQueryCallbackAsync(
+            `SELECT m.Code AS code, m.Address AS address, m.ContractId AS contractId,
+                COALESCE(c.ProjectOurId, p.OurId) AS projectOurId
+            FROM Mailboxes m
+            LEFT JOIN Contracts c ON c.Id = m.ContractId
+            LEFT JOIN Projects p ON p.Id = m.ProjectId
+            WHERE m.StatusCode IN (${includePending ? "'ACTIVE', 'PENDING'" : "'ACTIVE'"})`,
+        )) as MailboxOwnerRow[];
     }
 
     async find(): Promise<MailboxRecord[]> {

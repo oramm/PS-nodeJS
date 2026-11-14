@@ -71,7 +71,7 @@ export function memberChanges(before: MemberSnapshot, after: MemberSnapshot) {
  * Furtka lokalna jak dla zadań w tle (index.ts): CHAT_MEMBER_SYNC=true.
  */
 /** Pracownik kontraktowy i klient nie dostają pokoju z przypisania - ta sama granica co poczta (MBX). */
-const roomFromAssignment = (role?: string | null) => !NO_PROJECT_MAIL_ROLES.includes(role as SystemRoleName);
+export const roomFromAssignment = (role?: string | null) => !NO_PROJECT_MAIL_ROLES.includes(role as SystemRoleName);
 
 function memberSyncEnabled(): boolean {
     return (process.env.NODE_ENV || 'production') === 'production' || process.env.CHAT_MEMBER_SYNC === 'true';
