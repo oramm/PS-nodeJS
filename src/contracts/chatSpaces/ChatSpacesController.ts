@@ -11,6 +11,8 @@ import {
     projectMemberIds,
 } from '../../persons/projectAssignments/projectMembership';
 import { PROJECT_SCOPED_ROLES } from '../../setup/Sessions/projectScopedPolicy';
+import { NO_PROJECT_MAIL_ROLES } from '../../mailboxes/mailboxAccessPolicy';
+import ToolsMail from '../../tools/ToolsMail';
 import { SystemRoleName } from '../../types/sessionTypes';
 import ChatSpaceRepository, {
     ChatSpaceRecord,
@@ -68,6 +70,9 @@ export function memberChanges(before: MemberSnapshot, after: MemberSnapshot) {
  * Lokalna kopia bazy ma prawdziwe adresy i pokoje: poza produkcją wyrównanie składu nie woła Google.
  * Furtka lokalna jak dla zadań w tle (index.ts): CHAT_MEMBER_SYNC=true.
  */
+/** Pracownik kontraktowy i klient nie dostają pokoju z przypisania - ta sama granica co poczta (MBX). */
+const roomFromAssignment = (role?: string | null) => !NO_PROJECT_MAIL_ROLES.includes(role as SystemRoleName);
+
 function memberSyncEnabled(): boolean {
     return (process.env.NODE_ENV || 'production') === 'production' || process.env.CHAT_MEMBER_SYNC === 'true';
 }
@@ -98,7 +103,10 @@ export default class ChatSpacesController {
         return label.trim().slice(0, CHAT_SPACE_NAME_MAX);
     }
 
-    /** Osoby kontraktu (pokój projektu: osoby projektu) według reguły projectMembership + osoba wywołująca. */
+    /**
+     * Osoby kontraktu (pokój projektu: osoby projektu) według reguły projectMembership, bez pracownika
+     * kontraktowego i klienta, + osoba wywołująca.
+     */
     static async resolveMemberEmails(
         info: ContractChatInfo,
         actorPersonId?: number | null,
@@ -115,6 +123,7 @@ export default class ChatSpacesController {
         const seen = new Set<string>();
         const emails: string[] = [];
         for (const row of rows) {
+            if (row.personId !== actorPersonId && !roomFromAssignment(row.systemRoleName)) continue;
             const email = (row.email || '').trim();
             if (!email || seen.has(email.toLowerCase())) continue;
             seen.add(email.toLowerCase());
@@ -341,9 +350,11 @@ export default class ChatSpacesController {
      * Wykonuje zmianę przypisań i wyrównuje skład pokoi projektów (oraz wskazanych pokoi): kto doszedł
      * do reguły, dostaje zaproszenie; kto wypadł - wychodzi z pokoju, ale tylko rola ograniczona
      * (dla niej przypisanie jest granicą, D4). Pracownik ENVI nie traci pokoju, a osoby spoza reguły
-     * (zaproszone ręcznie) zostają. Błąd Chatu nie cofa zmiany - idzie do logu.
-     * shortcut: projekty bierzemy z chwili przed zmianą; kontrakt przeniesiony do innego projektu
-     * nie zabiera osób z pokoju starego projektu - dopisać stary projekt, gdy edycja zacznie to robić często.
+     * (zaproszone ręcznie) zostają. Pracownik kontraktowy i klient nie są ani zapraszani, ani usuwani
+     * (pokój nie wynika dla nich z przypisania). Błąd Chatu nie cofa zmiany - idzie do zgłoszeń błędów.
+     * Przeniesienie kontraktu do innego projektu: wołający podaje stary i nowy projekt.
+     * shortcut: edycja kontraktu podaje tylko projekt z formularza; gdyby edycja zmieniała projekt, stary
+     * projekt nie jest wyrównany - przeniesienie idzie przez moveToProject, które podaje oba.
      */
     static async withMemberSync<T>(
         projectOurIds: (string | null | undefined)[],
@@ -356,7 +367,7 @@ export default class ChatSpacesController {
         try {
             before = await this.memberSnapshot(projects, spaceIds);
         } catch (e) {
-            console.error('[ChatSpaces] Nie odczytano składu pokoi przed zmianą przypisań - pokoje bez wyrównania:', e);
+            await this.report(`Nie odczytano składu pokoi przed zmianą przypisań - pokoje bez wyrównania: ${e instanceof Error ? e.message : String(e)}`);
         }
         const result = await work();
         if (before?.size) await this.syncMembers(projects, before);
@@ -382,26 +393,40 @@ export default class ChatSpacesController {
             const changes = memberChanges(before, await this.memberSnapshot(projectOurIds, [...before.keys()]));
             const ids = [...new Set(changes.flatMap((change) => [...change.add, ...change.remove]))];
             if (!ids.length) return;
-            const persons = new Map((await this.repository.getGoogleEmails(ids)).map((p) => [p.personId, p]));
+            // Także konto nieaktywne: usunięcie z pokoju nie może zależeć od aktywności konta.
+            const persons = new Map((await this.repository.getGoogleEmails(ids, true)).map((p) => [p.personId, p]));
             const emailOf = (id: number) => persons.get(id)?.email?.toLowerCase();
+            const failures: string[] = [];
             for (const change of changes) {
-                const add = [...new Set(change.add.map(emailOf).filter((email): email is string => !!email))];
+                const add = [...new Set(change.add
+                    .filter((id) => persons.get(id)?.isActive && roomFromAssignment(persons.get(id)?.systemRoleName))
+                    .map(emailOf).filter((email): email is string => !!email))];
                 const invited = add.length ? await ToolsChat.inviteMembers(change.googleName, add) : [];
                 for (const failed of invited.filter((result) => result.state === 'FAILED'))
-                    console.error(`[ChatSpaces] ${change.googleName}: nie dodano ${failed.email}: ${failed.error}`);
+                    failures.push(`${change.googleName}: nie dodano ${failed.email}: ${failed.error}`);
                 for (const id of change.remove) {
                     const email = emailOf(id);
-                    if (!email || !PROJECT_SCOPED_ROLES.includes(persons.get(id)?.systemRoleName as SystemRoleName)) continue;
+                    const role = persons.get(id)?.systemRoleName;
+                    if (!email || !roomFromAssignment(role) || !PROJECT_SCOPED_ROLES.includes(role as SystemRoleName)) continue;
                     try {
                         await ToolsChat.removeMember(change.googleName, email);
                     } catch (e) {
-                        console.error(`[ChatSpaces] ${change.googleName}: nie usunięto ${email}:`, e);
+                        failures.push(`${change.googleName}: nie usunięto ${email}: ${e instanceof Error ? e.message : String(e)}`);
                     }
                 }
             }
+            if (failures.length) await this.report(failures.join('\n'));
         } catch (e) {
-            console.error('[ChatSpaces] Wyrównanie składu pokoi po zmianie przypisań nie powiodło się:', e);
+            await this.report(`Wyrównanie składu pokoi po zmianie przypisań nie powiodło się: ${e instanceof Error ? e.message : String(e)}`);
         }
+    }
+
+    /** Wzorzec MailboxController.report: log + zgłoszenie błędu serwera; samo zgłoszenie też nie rzuca. */
+    private static async report(details: string): Promise<void> {
+        const message = `[ChatSpaces] Wyrównanie składu pokoi Google Chat - do poprawy ręcznie:\n${details}`;
+        console.error(message);
+        try { await ToolsMail.sendServerErrorReport(new Error(message)); }
+        catch { console.error('[ChatSpaces] Nie udało się wysłać zgłoszenia o błędzie wyrównania pokoi.'); }
     }
 
     /** Odpina kontrakt (ChatSpaceId = NULL). Wiersz ChatSpaces i pokój w Google zostają. */
@@ -412,9 +437,10 @@ export default class ChatSpacesController {
                 'Kontrakt nie ma przypiętego pokoju.',
                 409
             );
-        await ToolsDb.transaction(async (conn) => {
+        // Pokój traci osoby odpinanego kontraktu (współpracownik wychodzi, jeśli nie trzyma go nic innego).
+        await this.withMemberSync([info.projectOurId], () => ToolsDb.transaction(async (conn) => {
             await this.repository.setContractSpace(contractId, null, conn);
-        });
+        }), [info.chatSpaceId]);
     }
 
     static parseSelection(raw: unknown): ChatSpaceSelection {

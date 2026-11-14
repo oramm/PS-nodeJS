@@ -9,24 +9,25 @@ jest.mock('../../../tools/ToolsDb');
 
 import ToolsDb from '../../../tools/ToolsDb';
 import ProjectAssignmentRepository from '../ProjectAssignmentRepository';
-import { contractMemberIds, MembershipEdge, memberProjectOurIds, projectMemberIds } from '../projectMembership';
+import { contractMemberIds, dataScopeProjectOurIds, MembershipEdge, projectMemberIds } from '../projectMembership';
 
 const edge = (projectOurId: string, contractId: number | null, personId: number): MembershipEdge => ({ projectOurId, contractId, personId });
 // 1 = kierownik kontraktu 11 w A i kontraktu 21 w B; 2 = osoba dodatkowa kontraktu 12 w A; 3 = PersonProjects w A
 const edges = [edge('A', 11, 1), edge('A', 12, 2), edge('A', null, 3), edge('B', 21, 1)];
 
 describe('projectMembership', () => {
-    it('osoba w dwóch projektach ma oba w zakresie', () => {
-        expect(memberProjectOurIds(edges, 1)).toEqual(['A', 'B']);
+    it('osoba w dwóch projektach ma oba w zakresie danych', () => {
+        expect(dataScopeProjectOurIds([...edges, edge('B', null, 3)], 3)).toEqual(['A', 'B']);
     });
 
-    it('przypisanie do kontraktu daje cały projekt w zakresie danych', () => {
-        expect(memberProjectOurIds(edges, 2)).toEqual(['A']);
+    it('rola w kontrakcie (kierownik, osoba dodatkowa) nie daje projektu w zakresie danych', () => {
+        expect(dataScopeProjectOurIds(edges, 1)).toEqual([]);
+        expect(dataScopeProjectOurIds(edges, 2)).toEqual([]);
+        expect(dataScopeProjectOurIds(edges, 3)).toEqual(['A']);
     });
 
     it('odebrane przypisanie zabiera projekt', () => {
-        expect(memberProjectOurIds(edges.filter((e) => !(e.personId === 1 && e.projectOurId === 'B')), 1)).toEqual(['A']);
-        expect(memberProjectOurIds([], 1)).toEqual([]);
+        expect(dataScopeProjectOurIds(edges.filter((e) => e.personId !== 3), 3)).toEqual([]);
     });
 
     it('osoby projektu = każdy kontrakt + PersonProjects; osoby kontraktu = ten kontrakt + PersonProjects', () => {
@@ -55,10 +56,10 @@ describe('ProjectAssignmentRepository.findMembership', () => {
         expect(ToolsDb.getQueryCallbackAsync).not.toHaveBeenCalled();
     });
 
-    it('zakres danych osoby liczony z przynależności', async () => {
+    it('zakres danych osoby: tylko przypisanie do projektu, kontrakt w B go nie rozszerza', async () => {
         (ToolsDb.getQueryCallbackAsync as jest.Mock<any>).mockResolvedValue([
             { projectOurId: 'B', contractId: 21, personId: 7 }, { projectOurId: 'A', contractId: null, personId: 7 },
         ]);
-        expect(await ProjectAssignmentRepository.getMemberProjectOurIds(7)).toEqual(['A', 'B']);
+        expect(await ProjectAssignmentRepository.getDataScopeProjectOurIds(7)).toEqual(['A']);
     });
 });

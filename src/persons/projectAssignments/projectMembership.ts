@@ -1,15 +1,17 @@
 /**
  * JEDYNE miejsce reguły "kto należy do projektu i kontraktu" (plan DOSTEP, DOSTEP-2; uogólnia MBX D2).
  *
- * Przypisanie to jedna z czterech dróg, wszystkie równorzędne:
+ * Przypisanie to jedna z czterech dróg:
  * - kierownik albo administrator umowy ENVI (OurContractsData.ManagerId / AdminId) - kontrakt,
  * - osoba dodatkowa kontraktu (ContractSelectedPersons) - kontrakt,
  * - przypisanie do projektu (PersonProjects) - projekt, czyli każdy jego kontrakt.
  * SQL tych dróg jest w ProjectAssignmentRepository.findMembership; tu tylko czyste funkcje.
  *
- * Z przynależności korzystają trzy miejsca i każde rozstrzyga tylko, co z niej wynika dla roli:
- * zakres danych ról ograniczonych (projectScopedPolicy), poczta (mailboxAccessPolicy - bez
- * pracownika kontraktowego i klienta, MBX) i pokoje Google Chat (ChatSpacesController).
+ * Co daje droga przypisania:
+ * - każda droga: pocztę (mailboxAccessPolicy - bez pracownika kontraktowego i klienta, MBX)
+ *   i pokój Google Chat (ChatSpacesController - też bez nich);
+ * - zakres danych ról ograniczonych (projectScopedPolicy) daje WYŁĄCZNIE przypisanie do projektu
+ *   (dataScopeProjectOurIds) - rola w kontrakcie nie otwiera danych całego projektu (jak przed DOSTEP-2).
  * Persons_Contracts (pisma użytkownika zewnętrznego) celowo nie jest tu drogą - patrz LetterRepository.
  */
 export interface MembershipEdge {
@@ -33,7 +35,7 @@ export function contractMemberIds(edges: MembershipEdge[], contractId: number, p
         .map((e) => e.personId));
 }
 
-/** Projekty osoby - zakres danych ról ograniczonych. */
-export function memberProjectOurIds(edges: MembershipEdge[], personId: number): string[] {
-    return unique(edges.filter((e) => e.personId === personId).map((e) => e.projectOurId)).sort();
+/** Zakres danych roli ograniczonej: tylko projekty przypisane wprost (PersonProjects), nie przez kontrakt. */
+export function dataScopeProjectOurIds(edges: MembershipEdge[], personId: number): string[] {
+    return unique(edges.filter((e) => e.personId === personId && e.contractId === null).map((e) => e.projectOurId)).sort();
 }

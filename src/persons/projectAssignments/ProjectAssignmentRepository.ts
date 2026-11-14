@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
-import { MembershipEdge, memberProjectOurIds } from './projectMembership';
+import { dataScopeProjectOurIds, MembershipEdge } from './projectMembership';
 
 export type AssignedProject = {
     ourId: string;
@@ -53,9 +53,9 @@ export default class ProjectAssignmentRepository {
         }));
     }
 
-    /** Projekty osoby wszystkimi drogami przypisania - zakres danych ról ograniczonych. */
-    static async getMemberProjectOurIds(personId: number): Promise<string[]> {
-        return memberProjectOurIds(await this.findMembership({ personId }), personId);
+    /** Zakres danych roli ograniczonej według reguły projectMembership (tylko przypisanie do projektu). */
+    static async getDataScopeProjectOurIds(personId: number): Promise<string[]> {
+        return dataScopeProjectOurIds(await this.findMembership({ personId }), personId);
     }
 
     /** Projekty z nazwami - do wyświetlenia w formularzu użytkownika. */

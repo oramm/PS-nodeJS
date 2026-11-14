@@ -20,7 +20,7 @@ import { AGENT_SYSTEM_EMAIL } from '../../setup/Sessions/agentTokenAuth';
 
 jest.mock('../../index', () => ({ app: require('express')() }));
 jest.mock('../../contracts/ContractsController', () => ({ __esModule: true, default: { find: jest.fn() } }));
-jest.mock('../../persons/projectAssignments/ProjectAssignmentRepository', () => ({ __esModule: true, default: { getMemberProjectOurIds: jest.fn() } }));
+jest.mock('../../persons/projectAssignments/ProjectAssignmentRepository', () => ({ __esModule: true, default: { getDataScopeProjectOurIds: jest.fn() } }));
 jest.mock('../../tools/ToolsDb', () => ({ __esModule: true, default: {} }));
 jest.mock('../../setup/Sessions/agentTokenAuth', () => ({ AGENT_SYSTEM_EMAIL: 'konto-techniczne@example.invalid' }));
 jest.mock('../../setup/Sessions/ToolsGapi', () => ({ __esModule: true, default: {}, oAuthClient: { on: jest.fn() } }));
@@ -72,7 +72,7 @@ beforeEach(() => {
     create.mockReset().mockResolvedValue({ model: POMOC_MODEL, content: [{ type: 'text', text: 'Wybierz Dodaj sprawę.' }], stop_reason: 'end_turn', usage: { input_tokens: 100, output_tokens: 20 } });
     deps.client.mockReturnValue({ messages: { create } });
     execute.mockReset().mockImplementation(async (sql: string) => sql.startsWith('SELECT') ? [[], []] : [{ affectedRows: 1 }, []]);
-    jest.mocked(ProjectAssignmentRepository.getMemberProjectOurIds).mockResolvedValue(['P-1']);
+    jest.mocked(ProjectAssignmentRepository.getDataScopeProjectOurIds).mockResolvedValue(['P-1']);
     jest.mocked(ContractsController.find).mockResolvedValue([]);
 });
 async function ask(body: unknown = input, headers = {}) {
@@ -258,7 +258,7 @@ test('dane kontraktu używają tego samego zakresu i funkcji co lista kontraktó
 test('rola zakresowa dostaje Pomoc po wyliczeniu swoich projektów', async () => {
     user.systemRoleName = SystemRoleName.CONTRACT_WORKER;
     expect((await (await fetch(`${url}/pomoc/available`)).json()).available).toBe(true);
-    expect(ProjectAssignmentRepository.getMemberProjectOurIds).toHaveBeenCalledWith(7);
+    expect(ProjectAssignmentRepository.getDataScopeProjectOurIds).toHaveBeenCalledWith(7);
 });
 test('adapter modelu nie ponawia żądania i przekazuje klucz tylko do API', async () => {
     const request = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ content: [] }) });

@@ -3,6 +3,7 @@ import { SystemRoleName } from '../types/sessionTypes';
 
 /**
  * Role, które nie dostają poczty projektu z przypisania (MBX: pracownik wykonawcy i klient)
+ * ani pokoju Google Chat z przypisania (ChatSpacesController - ta sama granica)
  * i których edycja kontraktu nie przyjmuje jako osoby dodatkowej (ContractSelectedPersonsRepository.validate).
  * Celowo węższe niż PROJECT_SCOPED_ROLES ("kto jest ograniczony do przypisań"):
  * współpracownik jest ograniczony, ale pocztę przypisanych projektów ma (plan DOSTEP, D7).

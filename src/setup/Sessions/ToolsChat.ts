@@ -98,7 +98,9 @@ export default class ToolsChat {
     }
 
     /**
-     * Usuwa członka (adres e-mail jako alias członkostwa, jak w hasJoinedMember).
+     * Usuwa członka (adres e-mail jako alias członkostwa, jak w hasJoinedMember). Dokumentacja
+     * spaces.members.delete (developers.google.com/workspace/chat/api/reference/rest/v1/spaces.members/delete,
+     * sprawdzone 2026-11-14): "You can use the email as an alias for {member}" - bez wcześniejszego odczytu.
      * Brak członkostwa (404) to nie błąd: stan docelowy już jest.
      */
     static async removeMember(name: string, email: string): Promise<'REMOVED' | 'NOT_A_MEMBER'> {

@@ -755,9 +755,11 @@ export default class ContractsController extends BaseController<
     static async deleteWithAuth(
         contract: ContractOur | ContractOther
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.delete(contract, auth);
-        });
+        // Osoby usuwanego kontraktu wychodzą z pokoi projektu i z pokoju kontraktu (DOSTEP-2).
+        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+            this.withAuth(async (instance, auth) => {
+                return await this.delete(contract, auth);
+            }));
     }
 
     /**
@@ -812,7 +814,9 @@ export default class ContractsController extends BaseController<
         );
 
         try {
-            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            // Osoby kontraktu przechodzą z pokoi starego projektu do pokoi nowego (DOSTEP-2).
+            await ChatSpacesController.withMemberSync([oldProjectOurId, newProjectOurId], () =>
+            ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 await conn.execute(
                     `UPDATE Contracts SET ProjectOurId = ? WHERE Id = ?`,
                     [newProjectOurId, contractOur.id]
@@ -821,7 +825,7 @@ export default class ContractsController extends BaseController<
                     `UPDATE Contracts SET ProjectOurId = ? WHERE OurIdRelated = ?`,
                     [newProjectOurId, contractOur.ourId]
                 );
-            });
+            }));
         } catch (err) {
             // Rollback GD — cofnij przeniesienie folderu
             await ToolsGd.moveFileOrFolder(

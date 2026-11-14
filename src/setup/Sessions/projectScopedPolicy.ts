@@ -285,11 +285,11 @@ export default async function projectScopedPolicy(
 
     try {
         // Zakres liczony raz na żądanie i czytany dalej przez repozytoria i guardy zapisu.
-        // Przypisanie każdą drogą reguły projectMembership (projekt albo kontrakt) daje projekt.
+        // Zakres danych daje tylko przypisanie do projektu (projectMembership.dataScopeProjectOurIds), nie rola w kontrakcie.
         // Brak przypisań daje pustą listę, którą warstwa SQL traktuje jako "nic nie widać".
         req.projectScope = {
             projectOurIds:
-                await ProjectAssignmentRepository.getMemberProjectOurIds(
+                await ProjectAssignmentRepository.getDataScopeProjectOurIds(
                     userData.enviId
                 ),
         };

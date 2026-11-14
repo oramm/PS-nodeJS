@@ -58,7 +58,7 @@ async function run(method: string, path: string, userData: any) {
 
 describe('projectScopedPolicy', () => {
     beforeEach(() => {
-        mockedRepository.getMemberProjectOurIds.mockResolvedValue([
+        mockedRepository.getDataScopeProjectOurIds.mockResolvedValue([
             '2023.10',
         ]);
     });
@@ -255,7 +255,7 @@ describe('projectScopedPolicy', () => {
             expect(next).toHaveBeenCalled();
             // Pisma zawęża LetterRepository po Persons_Contracts; pusty zakres projektów odciąłby je.
             expect(req.projectScope).toBeUndefined();
-            expect(mockedRepository.getMemberProjectOurIds).not.toHaveBeenCalled();
+            expect(mockedRepository.getDataScopeProjectOurIds).not.toHaveBeenCalled();
         });
 
         it.each([
@@ -293,7 +293,7 @@ describe('projectScopedPolicy', () => {
         });
 
         it('brak przypisań daje pustą listę, a nie brak filtra', async () => {
-            mockedRepository.getMemberProjectOurIds.mockResolvedValue([]);
+            mockedRepository.getDataScopeProjectOurIds.mockResolvedValue([]);
 
             const { req } = await run('POST', '/contracts', userData);
 
@@ -332,7 +332,7 @@ describe('projectScopedPolicy', () => {
             await run('POST', '/invoices', makeSession(SystemRoleName.ADMIN, 1));
 
             expect(
-                mockedRepository.getMemberProjectOurIds
+                mockedRepository.getDataScopeProjectOurIds
             ).not.toHaveBeenCalled();
         });
     });

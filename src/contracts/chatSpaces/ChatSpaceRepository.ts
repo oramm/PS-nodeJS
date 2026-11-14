@@ -26,7 +26,7 @@ export type ContractChatInfo = {
     adminId: number | null;
 };
 
-export type PersonEmailRow = { personId: number; email: string | null; displayName: string; systemRoleName?: string | null };
+export type PersonEmailRow = { personId: number; email: string | null; displayName: string; systemRoleName?: string | null; isActive?: boolean };
 
 /** Pokój i jeden podpięty do niego kontrakt (pokój bez kontraktów = jeden wiersz z null). */
 export type SpaceContractRow = {
@@ -91,24 +91,28 @@ export default class ChatSpaceRepository {
         };
     }
 
-    /** E-mail Google osoby: wylacznie PersonAccounts.SystemEmail aktywnego konta (ROD-5; Persons.SystemEmail i Persons.Email nie sa czytane). */
-    async getGoogleEmails(personIds: number[]): Promise<PersonEmailRow[]> {
+    /**
+     * E-mail Google osoby: wylacznie PersonAccounts.SystemEmail aktywnego konta (ROD-5; Persons.SystemEmail i Persons.Email nie sa czytane).
+     * includeInactive: takze konto nieaktywne (adres i rola) - do usuwania z pokoju; isActive mowi, ktore jest aktywne.
+     */
+    async getGoogleEmails(personIds: number[], includeInactive = false): Promise<PersonEmailRow[]> {
         if (!personIds.length) return [];
         const rows = (await ToolsDb.getQueryCallbackAsync(
             mysql.format(
                 `SELECT Persons.Id, Persons.Name, Persons.Surname,
                         NULLIF(TRIM(PersonAccounts.SystemEmail), '') AS Email,
-                        SystemRoles.Name AS SystemRoleName
+                        SystemRoles.Name AS SystemRoleName, PersonAccounts.IsActive
                  FROM Persons
                  LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
-                     AND PersonAccounts.IsActive = 1
+                     ${includeInactive ? '' : 'AND PersonAccounts.IsActive = 1'}
                  LEFT JOIN SystemRoles ON SystemRoles.Id = PersonAccounts.SystemRoleId
                  WHERE Persons.Id IN (?)`,
                 [personIds]
             )
         )) as any[];
         return rows.map((r) => ({ personId: r.Id, email: r.Email ?? null,
-            displayName: `${r.Name ?? ''} ${r.Surname ?? ''}`.trim(), systemRoleName: r.SystemRoleName ?? null }));
+            displayName: `${r.Name ?? ''} ${r.Surname ?? ''}`.trim(), systemRoleName: r.SystemRoleName ?? null,
+            isActive: Number(r.IsActive) === 1 }));
     }
 
     /**

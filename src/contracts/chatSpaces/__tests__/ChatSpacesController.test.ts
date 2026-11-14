@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 
 jest.mock('../../../tools/ToolsDb');
 jest.mock('../../../setup/Sessions/ToolsChat');
+jest.mock('../../../tools/ToolsMail');
 
 import ToolsDb from '../../../tools/ToolsDb';
 import ToolsChat from '../../../setup/Sessions/ToolsChat';
+import ToolsMail from '../../../tools/ToolsMail';
 import ProjectAssignmentRepository from '../../../persons/projectAssignments/ProjectAssignmentRepository';
 import { MembershipEdge } from '../../../persons/projectAssignments/projectMembership';
 import ChatSpaceRepository from '../ChatSpaceRepository';
@@ -79,7 +81,9 @@ function resetDb() {
                     )
                     .map((id) => ({
                         Id: id,
-                        Email: persons[id].active === false ? null : (persons[id].account || '').trim() || null,
+                        // Konto nieaktywne odpada w JOIN, chyba że zapytanie czyta też nieaktywne (usuwanie z pokoju).
+                        Email: persons[id].active === false && text.includes('IsActive = 1') ? null : (persons[id].account || '').trim() || null,
+                        IsActive: persons[id].active === false ? 0 : 1,
                         Name: 'Osoba', Surname: String(id), SystemRoleName: persons[id].role ?? 'ENVI_EMPLOYEE',
                     }));
             }
@@ -220,6 +224,14 @@ describe('ChatSpacesController', () => {
         it('dolacza wybrane osoby do domyslnych i usuwa duplikaty adresow', async () => {
             await ChatSpacesController.createForContract(100, {scope:'contract',actorPersonId:1,personIds:[1,6]});
             expect(ToolsChat.createSpaceWithMembers).toHaveBeenCalledWith(expect.any(String),['kierownik@envi.com.pl','drugi@gmail.com'],expect.any(String));
+        });
+
+        it('pracownik kontraktowy i klient z przypisania nie trafiają do nowego pokoju', async () => {
+            persons[1].role = 'CLIENT';
+            persons[6].role = 'CONTRACT_WORKER';
+            contract.AdminId = 6;
+            await ChatSpacesController.createForContract(100, { scope: 'contract', actorPersonId: null });
+            expect((ToolsChat.createSpaceWithMembers as jest.Mock<any>).mock.calls[0][1]).toEqual([]);
         });
 
         it('przed utworzeniem pokoju wskazuje osobe bez konta Google', async () => {
@@ -537,13 +549,39 @@ describe('ChatSpacesController', () => {
             expect(ToolsChat.removeMember).not.toHaveBeenCalled();
         });
 
-        it('odebrane przypisanie usuwa rolę ograniczoną (współpracownik, klient), a pracownika ENVI zostawia', async () => {
+        it('odebrane przypisanie usuwa współpracownika, a pracownika ENVI i klienta (zaproszonego ręcznie) zostawia', async () => {
             edges.push(edge('A', 100, 6), edge('A', null, 7), edge('A', null, 3));
             await ChatSpacesController.withMemberSync(['A'], async () => { edges = [edge('B', 200, 1)]; });
-            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([
-                ['spaces/A', 'drugi@gmail.com'], ['spaces/A', 'klient@gmail.com'],
-            ]);
+            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([['spaces/A', 'drugi@gmail.com']]);
             expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('pracownik kontraktowy i klient nie są zapraszani z przypisania (jak poczta)', async () => {
+            persons[9] = { account: 'wykonawca@gmail.com', role: 'CONTRACT_WORKER' };
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 7), edge('A', 100, 9), edge('A', null, 6)); });
+            expect((ToolsChat.inviteMembers as jest.Mock<any>).mock.calls).toEqual([['spaces/A', ['drugi@gmail.com']]]);
+        });
+
+        it('usuwa współpracownika także z nieaktywnym kontem; nieaktywnego nie zaprasza', async () => {
+            persons[6].active = false;
+            edges.push(edge('A', 100, 6));
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges = [edge('A', 100, 1)]; });
+            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([['spaces/A', 'drugi@gmail.com']]);
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 6)); });
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('odpięcie kontraktu wyrównuje odpinany pokój: współpracownik kontraktu wychodzi', async () => {
+            spaces.push({ Id: 8, GoogleName: 'spaces/B', DisplayName: 'B', Uri: null, ProjectOurId: null, CreatedAt: '2026-11-01', CreatedByPersonId: null });
+            contract.ChatSpaceId = 8;
+            const rows = jest.spyOn(ChatSpaceRepository.prototype, 'spacesWithContracts');
+            rows.mockResolvedValueOnce([{ spaceId: 8, googleName: 'spaces/B', spaceProjectOurId: null, createdByPersonId: null, contractId: 100, contractProjectOurId: 'A' }]);
+            rows.mockResolvedValueOnce([{ spaceId: 8, googleName: 'spaces/B', spaceProjectOurId: null, createdByPersonId: null, contractId: null, contractProjectOurId: null }]);
+            edges = [edge('A', 100, 1), edge('A', 100, 6)];
+            await ChatSpacesController.detach(100);
+            expect(contract.ChatSpaceId).toBeNull();
+            expect(rows).toHaveBeenNthCalledWith(1, ['PRU.PT.00'], [8]);
+            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([['spaces/B', 'drugi@gmail.com']]);
         });
 
         it('osoba w dwóch projektach: odebranie jednego zabiera tylko jego pokój', async () => {
@@ -555,12 +593,15 @@ describe('ChatSpacesController', () => {
         });
 
         it('błąd Google nie cofa zmiany przypisań i nie przerywa pozostałych usunięć', async () => {
-            edges.push(edge('A', 100, 6), edge('A', 100, 7));
+            persons[9] = { account: 'trzeci@gmail.com', role: 'ENVI_COOPERATOR' };
+            edges.push(edge('A', 100, 6), edge('A', 100, 9));
             (ToolsChat.removeMember as jest.Mock<any>).mockRejectedValueOnce(new Error('Google niedostępny'));
             const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
             await expect(ChatSpacesController.withMemberSync(['A'], async () => { edges = []; return 'zapisane'; })).resolves.toBe('zapisane');
             expect(ToolsChat.removeMember).toHaveBeenCalledTimes(2);
             expect(errors).toHaveBeenCalled();
+            expect(ToolsMail.sendServerErrorReport).toHaveBeenCalledTimes(1);
+            expect(String((ToolsMail.sendServerErrorReport as jest.Mock<any>).mock.calls[0][0])).toContain('nie usunięto drugi@gmail.com');
         });
 
         it('poza produkcją bez furtki nie czyta składu i nie woła Google (lokalna kopia bazy)', async () => {
