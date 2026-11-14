@@ -5,6 +5,8 @@ export type ChatMemberResult = {
     email: string;
     state: string; // JOINED | INVITED | FAILED
     error?: string;
+    /** Kod HTTP odmowy Google przy FAILED (409 = osoba już jest w pokoju). */
+    status?: number;
 };
 
 export type ChatSpaceResult = {
@@ -91,6 +93,7 @@ export default class ToolsChat {
                     email,
                     state: 'FAILED',
                     error: e instanceof Error ? e.message : String(e),
+                    status: (e as { response?: { status?: number } }).response?.status,
                 });
             }
         }

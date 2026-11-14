@@ -402,7 +402,8 @@ export default class ChatSpacesController {
                     .filter((id) => persons.get(id)?.isActive && roomFromAssignment(persons.get(id)?.systemRoleName))
                     .map(emailOf).filter((email): email is string => !!email))];
                 const invited = add.length ? await ToolsChat.inviteMembers(change.googleName, add) : [];
-                for (const failed of invited.filter((result) => result.state === 'FAILED'))
+                // 409 = już w pokoju (pracownik ENVI, którego wyrównanie nie usuwa, albo zaproszony ręcznie) - stan docelowy, nie błąd.
+                for (const failed of invited.filter((result) => result.state === 'FAILED' && result.status !== 409))
                     failures.push(`${change.googleName}: nie dodano ${failed.email}: ${failed.error}`);
                 for (const id of change.remove) {
                     const email = emailOf(id);

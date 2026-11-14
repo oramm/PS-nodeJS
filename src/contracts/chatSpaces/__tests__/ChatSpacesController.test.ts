@@ -604,6 +604,20 @@ describe('ChatSpacesController', () => {
             expect(String((ToolsMail.sendServerErrorReport as jest.Mock<any>).mock.calls[0][0])).toContain('nie usunięto drugi@gmail.com');
         });
 
+        it('osoba już obecna w pokoju (409 z Google) nie jest zgłaszana jako błąd; inny błąd zaproszenia jest', async () => {
+            persons[9] = { account: 'trzeci@gmail.com', role: 'ENVI_COOPERATOR' };
+            (ToolsChat.inviteMembers as jest.Mock<any>).mockResolvedValue([
+                { email: 'drugi@gmail.com', state: 'FAILED', error: 'Member already exists', status: 409 },
+                { email: 'trzeci@gmail.com', state: 'FAILED', error: 'Google niedostępny', status: 503 },
+            ]);
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 6), edge('A', null, 9)); });
+            expect(ToolsMail.sendServerErrorReport).toHaveBeenCalledTimes(1);
+            const report = String((ToolsMail.sendServerErrorReport as jest.Mock<any>).mock.calls[0][0]);
+            expect(report).toContain('nie dodano trzeci@gmail.com');
+            expect(report).not.toContain('drugi@gmail.com');
+        });
+
         it('poza produkcją bez furtki nie czyta składu i nie woła Google (lokalna kopia bazy)', async () => {
             delete process.env.CHAT_MEMBER_SYNC;
             await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 6)); });
