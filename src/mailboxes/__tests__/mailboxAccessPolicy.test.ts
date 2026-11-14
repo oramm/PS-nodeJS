@@ -63,4 +63,9 @@ describe('personMailboxes (reguła MBX-2)', () => {
         ]);
     });
 
+    it('współpracownik jest ograniczony do przypisań, ale poczty przypisanych projektów nie traci (DOSTEP, D7)', () => {
+        const assigned = [{ ...row('manager', 9, null) }, { ...row('selected', 1, 2), selectedPersonId: 9 }];
+        expect(personMailboxes(9, assigned, [], 'ENVI_COOPERATOR').map((m) => m.code)).toEqual(['manager', 'selected']);
+    });
+
 });

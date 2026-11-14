@@ -692,12 +692,8 @@ export default class PersonsController extends BaseController<
     static async getRegisteringEditors(userData: UserData): Promise<Person[]> {
         const loggedInPerson = await this.getPersonFromSessionUserData(userData);
 
-        // Współpracownik i role zakresowe (pracownik kontraktowy, klient) rejestrują
-        // wyłącznie na siebie
-        if (
-            userData.systemRoleName === 'ENVI_COOPERATOR' ||
-            PROJECT_SCOPED_ROLES.includes(userData.systemRoleName)
-        ) {
+        // Role zakresowe (w tym współpracownik) rejestrują wyłącznie na siebie
+        if (PROJECT_SCOPED_ROLES.includes(userData.systemRoleName)) {
             return [loggedInPerson];
         }
 

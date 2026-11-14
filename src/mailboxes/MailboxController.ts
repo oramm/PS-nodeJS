@@ -5,10 +5,9 @@ import SbAccessController from '../sbAccess/SbAccessController';
 import SbAccessRepository from '../sbAccess/SbAccessRepository';
 import { SB_MAILBOX_PATTERN } from '../sbAccess/sbAccessTypes';
 import { SystemRoleName, UserData } from '../types/sessionTypes';
-import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 import MailboxRepository, { MailboxRecord } from './MailboxRepository';
 import DirectAdminGateway, { DirectAdminRejectionError, DirectAdminUnknownResultError } from './directAdminGateway';
-import { personMailboxes } from './mailboxAccessPolicy';
+import { NO_PROJECT_MAIL_ROLES, personMailboxes } from './mailboxAccessPolicy';
 
 export class MailboxError extends Error {
     constructor(message: string, readonly status: number) { super(message); }
@@ -198,7 +197,7 @@ export default class MailboxController {
         const account = await sb.getPersonAccount(user.enviId);
         if (!account?.isActive) throw new MailboxError('Brak uprawnień do tej skrzynki.', 403);
         if (mailbox.createdByPersonId === user.enviId
-            && !PROJECT_SCOPED_ROLES.includes(account.systemRoleName as SystemRoleName)) return mailbox;
+            && !NO_PROJECT_MAIL_ROLES.includes(account.systemRoleName as SystemRoleName)) return mailbox;
         const record = await sb.getByPersonId(user.enviId);
         const rows = await this.repository.findWithAssignees(true);
         if (!personMailboxes(user.enviId, rows, record?.levels.mail ?? [], account.systemRoleName).some(m => m.code === mailbox.code))

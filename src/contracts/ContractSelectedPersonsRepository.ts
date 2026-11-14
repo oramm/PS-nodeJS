@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import { PersonData } from '../types/types';
-import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
+import { NO_PROJECT_MAIL_ROLES } from '../mailboxes/mailboxAccessPolicy';
 
 export default class ContractSelectedPersonsRepository {
     static async validate(personIds: number[]): Promise<void> {
@@ -10,7 +10,7 @@ export default class ContractSelectedPersonsRepository {
             `SELECT pa.PersonId FROM PersonAccounts pa
              JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
              WHERE pa.PersonId IN (?) AND sr.Name IN (?) LIMIT 1`,
-            undefined, [personIds, PROJECT_SCOPED_ROLES],
+            undefined, [personIds, NO_PROJECT_MAIL_ROLES],
         ) as { PersonId: number }[];
         if (external.length)
             throw Object.assign(new Error('Dodatkowe osoby przy kontrakcie nie mogą mieć roli pracownika wykonawcy ani klienta.'), { status: 400 });

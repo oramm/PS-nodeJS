@@ -34,7 +34,8 @@ export enum SystemRoleName {
 
 /**
  * Projekty (Projects.OurId), do których zalogowany ma dostęp. Ustawiane przez
- * projectScopedPolicy dla ról ograniczonych zakresem (CONTRACT_WORKER, CLIENT);
+ * projectScopedPolicy dla ról ograniczonych zakresem (CONTRACT_WORKER, CLIENT, ENVI_COOPERATOR;
+ * EXTERNAL_USER ma zakres po kontraktach, filtrowany w LetterRepository);
  * dla pozostałych ról jest undefined, co repozytoria interpretują jako brak ograniczeń.
  */
 export type ProjectScope = {

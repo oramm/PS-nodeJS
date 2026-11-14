@@ -1,5 +1,6 @@
 import { app } from '../index';
 import MailboxController, { MailboxError, mailboxAddress, validateMailboxAddress } from './MailboxController';
+import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
 
 function id(value: unknown): number {
     if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value)))
@@ -20,10 +21,12 @@ app.get('/mailboxes', async (req, res, next) => {
     try {
         if ((req.query.projectId === undefined) === (req.query.contractId === undefined))
             throw new MailboxError('Wskaż projekt albo kontrakt.', 400);
-        res.send({ mailboxes: await MailboxController.list(
-            req.query.projectId === undefined ? undefined : id(req.query.projectId),
-            req.query.contractId === undefined ? undefined : id(req.query.contractId),
-        ) });
+        const projectId = req.query.projectId === undefined ? undefined : id(req.query.projectId);
+        const contractId = req.query.contractId === undefined ? undefined : id(req.query.contractId);
+        // Współpracownik (rola zakresowa z pocztą) widzi skrzynki tylko przypisanych projektów.
+        if (contractId) await ProjectScopeGuard.assertContractInScope(contractId, req.projectScope);
+        else await ProjectScopeGuard.assertProjectInScope(projectId, req.projectScope);
+        res.send({ mailboxes: await MailboxController.list(projectId, contractId) });
     } catch (error) { next(error); }
 });
 

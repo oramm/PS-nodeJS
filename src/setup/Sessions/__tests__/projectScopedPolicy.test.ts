@@ -21,11 +21,14 @@ function makeSession(systemRoleName: SystemRoleName, systemRoleId: number) {
 
 const CONTRACT_WORKER = makeSession(SystemRoleName.CONTRACT_WORKER, 6);
 const CLIENT = makeSession(SystemRoleName.CLIENT, 7);
+const COOPERATOR = makeSession(SystemRoleName.ENVI_COOPERATOR, 4);
+const EXTERNAL_USER = makeSession(SystemRoleName.EXTERNAL_USER, 5);
 
-/** Zrąb uprawnień jest wspólny dla obu ról zakresowych - różnice testujemy osobno. */
+/** Zrąb uprawnień jest wspólny dla ról zakresowych po projektach - różnice testujemy osobno. */
 const SCOPED_ROLES: [string, ReturnType<typeof makeSession>][] = [
     ['pracownik kontraktowy', CONTRACT_WORKER],
     ['klient', CLIENT],
+    ['współpracownik', COOPERATOR],
 ];
 
 const allowed = (role: SystemRoleName) => (method: string, path: string) =>
@@ -129,7 +132,7 @@ describe('projectScopedPolicy', () => {
             ['GET', '/contract/55/signatures'],
         ];
 
-        describe.each(SCOPED_ROLES)('%s', (_label, userData) => {
+        describe.each([...SCOPED_ROLES, ['użytkownik zewnętrzny', EXTERNAL_USER] as [string, ReturnType<typeof makeSession>]])('%s', (_label, userData) => {
             it.each(BLOCKED)('odmawia %s %s', async (method, path) => {
                 const { res, next } = await run(method, path, userData);
 
@@ -212,6 +215,61 @@ describe('projectScopedPolicy', () => {
         );
     });
 
+    describe('poczta projektu - współpracownik ją ma, pracownik kontraktowy i klient nie (D7)', () => {
+        const MAIL: [string, string][] = [
+            ['GET', '/mailboxes'],
+            ['POST', '/mailboxes/5/password'],
+            ['POST', '/mailboxes/5/provision'],
+            ['POST', '/mailboxes/5/agentCopy'],
+            ['POST', '/mailboxes/5/project'],
+        ];
+
+        it.each(MAIL)('współpracownik dostaje %s %s', (method, path) => {
+            expect(allowed(SystemRoleName.ENVI_COOPERATOR)(method, path)).toBe(true);
+        });
+
+        it.each(MAIL)('pracownik kontraktowy i klient nie dostają %s %s', (method, path) => {
+            expect(workerAllows(method, path)).toBe(false);
+            expect(clientAllows(method, path)).toBe(false);
+        });
+    });
+
+    describe('użytkownik zewnętrzny - tylko pisma przypisanych kontraktów (O5)', () => {
+        const externalAllows = allowed(SystemRoleName.EXTERNAL_USER);
+
+        it.each([
+            ['POST', '/contractsLetters'],
+            ['POST', '/persons'],
+            ['POST', '/contractTypes'],
+            ['POST', '/documentTemplates'],
+            ['POST', '/contractRanges'],
+            ['GET', '/session'],
+            ['GET', '/v2/privacy/system'],
+        ])('przepuszcza %s %s bez zakresu projektów i bez pytania bazy', async (method, path) => {
+            const { req, res, next } = await run(method, path, EXTERNAL_USER);
+
+            expect(res.statusCode).toBeUndefined();
+            expect(next).toHaveBeenCalled();
+            // Pisma zawęża LetterRepository po Persons_Contracts; pusty zakres projektów odciąłby je.
+            expect(req.projectScope).toBeUndefined();
+            expect(mockedRepository.getAssignedProjectOurIds).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['POST', '/contracts'],
+            ['POST', '/projects'],
+            ['POST', '/offersLetters'],
+            ['POST', '/letterReact'],
+            ['PUT', '/letter/12'],
+            ['GET', '/mailboxes'],
+            ['GET', '/mileage/access'],
+            ['GET', '/site-visits/access'],
+            ['POST', '/zupelnie-nowy-modul'],
+        ])('odmawia %s %s', (method, path) => {
+            expect(externalAllows(method, path)).toBe(false);
+        });
+    });
+
     describe.each(SCOPED_ROLES)('zakres projektów - %s', (_label, userData) => {
         it('domyślnie odmawia trasie, o której nic nie wie - nowy endpoint nie otwiera się sam', async () => {
             const { res, next } = await run(
@@ -245,8 +303,6 @@ describe('projectScopedPolicy', () => {
             makeSession(SystemRoleName.ADMIN, 1),
             makeSession(SystemRoleName.ENVI_MANAGER, 2),
             makeSession(SystemRoleName.ENVI_EMPLOYEE, 3),
-            makeSession(SystemRoleName.ENVI_COOPERATOR, 4),
-            makeSession(SystemRoleName.EXTERNAL_USER, 5),
         ];
 
         it('przepuszcza je bez zmian i bez zakresu - ta warstwa ich nie dotyczy', async () => {
