@@ -298,7 +298,7 @@ describe('Hasła SB - kontroler', () => {
         jest.spyOn(SbAccessRepository.prototype, 'list').mockResolvedValue([person]);
         jest.spyOn(SbAccessSecretRepository.prototype, 'listNames').mockResolvedValue([]);
         jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([
-            { code: 'projekt', address: 'projekt@envi.com.pl', managerId: null, adminId: null, selectedPersonId: 131 },
+            { code: 'projekt', address: 'projekt@envi.com.pl', personId: 131 },
         ]);
         expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toEqual([]);
         expect((await SbAccessController.list())[0].secretsExpected).toEqual([]);
@@ -319,7 +319,7 @@ describe('Hasła SB - kontroler', () => {
         jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
         jest.spyOn(SbAccessRepository.prototype, 'upsertState').mockResolvedValue(undefined);
         jest.spyOn(SbAccessController as any, 'enqueueFinRefresh').mockResolvedValue(undefined);
-        const rows = [{ code: 'projekt', address: 'projekt@envi.com.pl', managerId: null as number | null, adminId: null }];
+        const rows = [{ code: 'projekt', address: 'projekt@envi.com.pl', personId: null as number | null }];
         const assignees = jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockImplementation(async () => rows);
         const ciphertext = await encryptLikeBrowser(A.jwk, 'SekretKontaTechnicznego123');
         jest.spyOn(SbAccessSecretRepository.prototype, 'listByPersonId').mockResolvedValue([{ name: SB_SECRET_AGENT_MAIL, ciphertext }] as any);
@@ -332,7 +332,7 @@ describe('Hasła SB - kontroler', () => {
             .rejects.toMatchObject({ status: 409 });
 
         // Skrzynka projektu ma przypisanie przez kierownika jednego z jego kontraktów.
-        rows[0].managerId = 131;
+        rows[0].personId = 131;
         expect((await SbAccessController.listPersonMailboxes(person)).mailboxes)
             .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment' }]);
         assignees.mockClear();
@@ -355,7 +355,7 @@ describe('Hasła SB - kontroler', () => {
         expect((await SbAccessController.listPersonMailboxes(record({ levels: { ...levels, mail: ['projekt'] } }))).mailboxes[0].source).toBe('both');
         expect((await SbAccessController.listOwnSecrets(record({ levels: { ...levels, mail: ['projekt'] } }))).secrets)
             .toMatchObject([{ name: SB_SECRET_AGENT_MAIL }]);
-        rows[0].managerId = null;
+        rows[0].personId = null;
         const withdrawn = await SbAccessController.listOwnSecrets(person);
         expect(withdrawn.secrets).toEqual([]);
         expect((await SbAccessController.listPersonMailboxes(person)).mailboxes).toEqual([]);

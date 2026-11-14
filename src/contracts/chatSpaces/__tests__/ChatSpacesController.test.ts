@@ -3,14 +3,19 @@
  * Baza jest atrapą na poziomie ToolsDb (SQL przechodzi przez prawdziwe repozytorium),
  * Google (ToolsChat) mockowany. Żadne zaproszenie nigdzie nie wychodzi.
  */
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 jest.mock('../../../tools/ToolsDb');
 jest.mock('../../../setup/Sessions/ToolsChat');
 
 import ToolsDb from '../../../tools/ToolsDb';
 import ToolsChat from '../../../setup/Sessions/ToolsChat';
+import ProjectAssignmentRepository from '../../../persons/projectAssignments/ProjectAssignmentRepository';
+import { MembershipEdge } from '../../../persons/projectAssignments/projectMembership';
+import ChatSpaceRepository from '../ChatSpaceRepository';
 import ChatSpacesController, {
+    memberChanges,
+    spaceMemberIds,
     ChatSpaceError,
 } from '../ChatSpacesController';
 
@@ -26,7 +31,7 @@ type SpaceRow = {
 
 let contract: any;
 let spaces: SpaceRow[];
-let persons: Record<number, { account?: string | null; legacy?: string | null; personal?: string; active?: boolean }>;
+let persons: Record<number, { account?: string | null; legacy?: string | null; personal?: string; active?: boolean; role?: string }>;
 let nextSpaceId: number;
 let insertedSql: string[];
 
@@ -58,6 +63,10 @@ function resetDb() {
     (ToolsDb.getQueryCallbackAsync as jest.Mock<any>).mockImplementation(
         async (sql: any) => {
             const text = String(sql);
+            // Reguła przynależności (ProjectAssignmentRepository.findMembership): kierownik i administrator kontraktu.
+            if (text.includes('ContractSelectedPersons'))
+                return contract ? [contract.ManagerId, contract.AdminId].filter(Boolean)
+                    .map((personId) => ({ projectOurId: contract.ProjectOurId, contractId: contract.Id, personId })) : [];
             if (text.includes('FROM Contracts'))
                 return contract ? [contract] : [];
             if (text.includes('FROM Persons')) {
@@ -71,7 +80,7 @@ function resetDb() {
                     .map((id) => ({
                         Id: id,
                         Email: persons[id].active === false ? null : (persons[id].account || '').trim() || null,
-                        Name: 'Osoba', Surname: String(id),
+                        Name: 'Osoba', Surname: String(id), SystemRoleName: persons[id].role ?? 'ENVI_EMPLOYEE',
                     }));
             }
             if (text.includes('FROM ChatSpaces WHERE Id')) {
@@ -494,6 +503,92 @@ describe('ChatSpacesController', () => {
                     chatSpaceId: '7',
                 })
             ).toEqual({ mode: 'existing', chatSpaceId: 7 });
+        });
+    });
+
+    describe('wyrównanie składu pokoju po zmianie przypisań (DOSTEP-2)', () => {
+        let edges: MembershipEdge[];
+        const edge = (projectOurId: string, contractId: number | null, personId: number): MembershipEdge => ({ projectOurId, contractId, personId });
+
+        beforeEach(() => {
+            process.env.CHAT_MEMBER_SYNC = 'true';
+            persons[6].role = 'ENVI_COOPERATOR';
+            persons[7] = { account: 'klient@gmail.com', role: 'CLIENT' };
+            // Pokój 7 = pokój projektu A z podpiętym kontraktem 100; pokój 8 = pokój kontraktu 200 z projektu B.
+            jest.spyOn(ChatSpaceRepository.prototype, 'spacesWithContracts').mockResolvedValue([
+                { spaceId: 7, googleName: 'spaces/A', spaceProjectOurId: 'A', createdByPersonId: null, contractId: 100, contractProjectOurId: 'A' },
+                { spaceId: 8, googleName: 'spaces/B', spaceProjectOurId: null, createdByPersonId: null, contractId: 200, contractProjectOurId: 'B' },
+            ]);
+            edges = [edge('A', 100, 1), edge('B', 200, 1)];
+            jest.spyOn(ProjectAssignmentRepository, 'findMembership').mockImplementation(async () => [...edges]);
+            (ToolsChat.inviteMembers as jest.Mock<any>).mockImplementation(async (_space: any, emails: any) =>
+                (emails as string[]).map((email) => ({ email, state: 'INVITED' })));
+            (ToolsChat.removeMember as jest.Mock<any>).mockResolvedValue('REMOVED');
+        });
+        afterEach(() => {
+            delete process.env.CHAT_MEMBER_SYNC;
+            jest.restoreAllMocks();
+        });
+
+        it('przypisanie do projektu dodaje do pokoju projektu, nikogo nie usuwa', async () => {
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 6)); });
+            expect(ToolsChat.inviteMembers).toHaveBeenCalledTimes(1);
+            expect(ToolsChat.inviteMembers).toHaveBeenCalledWith('spaces/A', ['drugi@gmail.com']);
+            expect(ToolsChat.removeMember).not.toHaveBeenCalled();
+        });
+
+        it('odebrane przypisanie usuwa rolę ograniczoną (współpracownik, klient), a pracownika ENVI zostawia', async () => {
+            edges.push(edge('A', 100, 6), edge('A', null, 7), edge('A', null, 3));
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges = [edge('B', 200, 1)]; });
+            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([
+                ['spaces/A', 'drugi@gmail.com'], ['spaces/A', 'klient@gmail.com'],
+            ]);
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('osoba w dwóch projektach: odebranie jednego zabiera tylko jego pokój', async () => {
+            edges.push(edge('A', 100, 6), edge('B', 200, 6));
+            await ChatSpacesController.withMemberSync(['A', 'B'], async () => {
+                edges = edges.filter((e) => !(e.personId === 6 && e.projectOurId === 'A'));
+            });
+            expect((ToolsChat.removeMember as jest.Mock<any>).mock.calls).toEqual([['spaces/A', 'drugi@gmail.com']]);
+        });
+
+        it('błąd Google nie cofa zmiany przypisań i nie przerywa pozostałych usunięć', async () => {
+            edges.push(edge('A', 100, 6), edge('A', 100, 7));
+            (ToolsChat.removeMember as jest.Mock<any>).mockRejectedValueOnce(new Error('Google niedostępny'));
+            const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            await expect(ChatSpacesController.withMemberSync(['A'], async () => { edges = []; return 'zapisane'; })).resolves.toBe('zapisane');
+            expect(ToolsChat.removeMember).toHaveBeenCalledTimes(2);
+            expect(errors).toHaveBeenCalled();
+        });
+
+        it('poza produkcją bez furtki nie czyta składu i nie woła Google (lokalna kopia bazy)', async () => {
+            delete process.env.CHAT_MEMBER_SYNC;
+            await ChatSpacesController.withMemberSync(['A'], async () => { edges.push(edge('A', null, 6)); });
+            expect(ProjectAssignmentRepository.findMembership).not.toHaveBeenCalled();
+            expect(ToolsChat.inviteMembers).not.toHaveBeenCalled();
+        });
+
+        it('podpięcie kontraktu do pokoju dodaje osoby tego kontraktu', async () => {
+            spaces.push({ Id: 8, GoogleName: 'spaces/B', DisplayName: 'B', Uri: null, ProjectOurId: null, CreatedAt: '2026-11-01', CreatedByPersonId: null });
+            const rows = jest.spyOn(ChatSpaceRepository.prototype, 'spacesWithContracts');
+            rows.mockResolvedValueOnce([{ spaceId: 8, googleName: 'spaces/B', spaceProjectOurId: null, createdByPersonId: null, contractId: null, contractProjectOurId: null }]);
+            rows.mockResolvedValueOnce([{ spaceId: 8, googleName: 'spaces/B', spaceProjectOurId: null, createdByPersonId: null, contractId: 100, contractProjectOurId: 'A' }]);
+            edges = [edge('A', 100, 1), edge('A', 100, 2)];
+            await ChatSpacesController.attach(100, 8);
+            expect(rows).toHaveBeenNthCalledWith(1, ['PRU.PT.00'], [8]);
+            expect(ToolsChat.inviteMembers).toHaveBeenCalledWith('spaces/B', ['kierownik@envi.com.pl']);
+        });
+
+        it('spaceMemberIds i memberChanges: pokój projektu = osoby projektu + osoby podpiętych kontraktów', () => {
+            const e = [edge('A', 100, 1), edge('A', 101, 2), edge('B', 200, 3)];
+            expect(spaceMemberIds([{ spaceId: 7, googleName: 'g', spaceProjectOurId: 'A', createdByPersonId: null, contractId: 200, contractProjectOurId: 'B' }], e)).toEqual([1, 2, 3]);
+            expect(spaceMemberIds([{ spaceId: 7, googleName: 'g', spaceProjectOurId: null, createdByPersonId: null, contractId: 100, contractProjectOurId: 'A' }], e)).toEqual([1]);
+            // Zakładający zostaje w składzie, także bez przypisania.
+            expect(spaceMemberIds([{ spaceId: 7, googleName: 'g', spaceProjectOurId: null, createdByPersonId: 9, contractId: 100, contractProjectOurId: 'A' }], e)).toEqual([9, 1]);
+            expect(memberChanges(new Map([[7, { googleName: 'g', personIds: [1, 2] }]]), new Map([[7, { googleName: 'g', personIds: [2, 3] }]])))
+                .toEqual([{ spaceId: 7, googleName: 'g', add: [3], remove: [1] }]);
         });
     });
 });

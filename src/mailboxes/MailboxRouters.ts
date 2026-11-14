@@ -23,10 +23,10 @@ app.get('/mailboxes', async (req, res, next) => {
             throw new MailboxError('Wskaż projekt albo kontrakt.', 400);
         const projectId = req.query.projectId === undefined ? undefined : id(req.query.projectId);
         const contractId = req.query.contractId === undefined ? undefined : id(req.query.contractId);
-        // Współpracownik (rola zakresowa z pocztą) widzi skrzynki tylko przypisanych projektów.
+        // Współpracownik (rola zakresowa z pocztą) widzi tylko przypisane projekty i tylko swoje skrzynki.
         if (contractId) await ProjectScopeGuard.assertContractInScope(contractId, req.projectScope);
         else await ProjectScopeGuard.assertProjectInScope(projectId, req.projectScope);
-        res.send({ mailboxes: await MailboxController.list(projectId, contractId) });
+        res.send({ mailboxes: await MailboxController.list(projectId, contractId, req.session?.userData) });
     } catch (error) { next(error); }
 });
 

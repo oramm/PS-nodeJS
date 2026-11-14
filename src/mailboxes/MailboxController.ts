@@ -8,6 +8,7 @@ import { SystemRoleName, UserData } from '../types/sessionTypes';
 import MailboxRepository, { MailboxRecord } from './MailboxRepository';
 import DirectAdminGateway, { DirectAdminRejectionError, DirectAdminUnknownResultError } from './directAdminGateway';
 import { NO_PROJECT_MAIL_ROLES, personMailboxes } from './mailboxAccessPolicy';
+import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 
 export class MailboxError extends Error {
     constructor(message: string, readonly status: number) { super(message); }
@@ -198,11 +199,16 @@ export default class MailboxController {
         if (!account?.isActive) throw new MailboxError('Brak uprawnień do tej skrzynki.', 403);
         if (mailbox.createdByPersonId === user.enviId
             && !NO_PROJECT_MAIL_ROLES.includes(account.systemRoleName as SystemRoleName)) return mailbox;
-        const record = await sb.getByPersonId(user.enviId);
-        const rows = await this.repository.findWithAssignees(true);
-        if (!personMailboxes(user.enviId, rows, record?.levels.mail ?? [], account.systemRoleName).some(m => m.code === mailbox.code))
+        if (!(await this.personCodes(user.enviId, account.systemRoleName)).has(mailbox.code))
             throw new MailboxError('Brak uprawnień do tej skrzynki.', 403);
         return mailbox;
+    }
+
+    /** Kody skrzynek osoby według reguły personMailboxes (przypisania i wyjątki ręczne). */
+    private static async personCodes(personId: number, systemRoleName: string | null | undefined): Promise<Set<string>> {
+        const record = await new SbAccessRepository().getByPersonId(personId);
+        const rows = await this.repository.findWithAssignees(true);
+        return new Set(personMailboxes(personId, rows, record?.levels.mail ?? [], systemRoleName).map(m => m.code));
     }
 
     /** Jedyne API, które otrzymuje hasło; nie zapisujemy go nawet na czas zadania. */
@@ -234,8 +240,13 @@ export default class MailboxController {
         }
     }
 
-    static async list(projectId?: number, contractId?: number): Promise<MailboxRecord[]> {
-        const all = await this.repository.find();
+    /** Rola ograniczona widzi tylko skrzynki, które daje jej ta sama reguła co hasło i akcje (assertAccess). */
+    static async list(projectId?: number, contractId?: number, user?: UserData): Promise<MailboxRecord[]> {
+        let all = await this.repository.find();
+        if (user && PROJECT_SCOPED_ROLES.includes(user.systemRoleName)) {
+            const codes = await this.personCodes(user.enviId, user.systemRoleName);
+            all = all.filter(m => codes.has(m.code));
+        }
         if (contractId) {
             const info = await this.repository.contract(contractId);
             if (!info) throw new MailboxError('Nie znaleziono kontraktu.', 404);

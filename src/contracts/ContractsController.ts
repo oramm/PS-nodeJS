@@ -54,6 +54,7 @@ import ContractTemplatesTreeController, {
 } from './contractTemplatesTree/ContractTemplatesTreeController';
 import { OptionalContractFolderKey } from './contractFolders/optionalContractFolders';
 import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
+import ChatSpacesController from './chatSpaces/ChatSpacesController';
 
 /**
  * Opcje jednorazowe dla tworzenia kontraktu: co użytkownik wybrał w drzewie
@@ -358,9 +359,11 @@ export default class ContractsController extends BaseController<
         taskId?: string,
         options?: ContractCreationOptions
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.add(contract, auth, taskId, options);
-        });
+        // Nowy kierownik, administrator i osoby dodatkowe trafiają do istniejących pokoi projektu (DOSTEP-2).
+        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+            this.withAuth(async (instance, auth) => {
+                return await this.add(contract, auth, taskId, options);
+            }));
     }
 
     /**
@@ -657,9 +660,11 @@ export default class ContractsController extends BaseController<
         fieldsToUpdate?: string[],
         selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.edit(contract, auth, fieldsToUpdate, selectedPersonIds);
-        });
+        // Zmiana kierownika, administratora albo osób dodatkowych wyrównuje pokoje projektu (DOSTEP-2).
+        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+            this.withAuth(async (instance, auth) => {
+                return await this.edit(contract, auth, fieldsToUpdate, selectedPersonIds);
+            }));
     }
 
     private static ensureAliasPresent(

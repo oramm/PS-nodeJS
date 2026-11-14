@@ -26,7 +26,17 @@ export type ContractChatInfo = {
     adminId: number | null;
 };
 
-export type PersonEmailRow = { personId: number; email: string | null; displayName: string };
+export type PersonEmailRow = { personId: number; email: string | null; displayName: string; systemRoleName?: string | null };
+
+/** Pokój i jeden podpięty do niego kontrakt (pokój bez kontraktów = jeden wiersz z null). */
+export type SpaceContractRow = {
+    spaceId: number;
+    googleName: string;
+    spaceProjectOurId: string | null;
+    createdByPersonId: number | null;
+    contractId: number | null;
+    contractProjectOurId: string | null;
+};
 
 /**
  * Tylko SQL, bez reguł biznesowych (te siedzą w ChatSpacesController).
@@ -87,16 +97,48 @@ export default class ChatSpaceRepository {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             mysql.format(
                 `SELECT Persons.Id, Persons.Name, Persons.Surname,
-                        NULLIF(TRIM(PersonAccounts.SystemEmail), '') AS Email
+                        NULLIF(TRIM(PersonAccounts.SystemEmail), '') AS Email,
+                        SystemRoles.Name AS SystemRoleName
                  FROM Persons
                  LEFT JOIN PersonAccounts ON PersonAccounts.PersonId = Persons.Id
                      AND PersonAccounts.IsActive = 1
+                 LEFT JOIN SystemRoles ON SystemRoles.Id = PersonAccounts.SystemRoleId
                  WHERE Persons.Id IN (?)`,
                 [personIds]
             )
         )) as any[];
         return rows.map((r) => ({ personId: r.Id, email: r.Email ?? null,
-            displayName: `${r.Name ?? ''} ${r.Surname ?? ''}`.trim() }));
+            displayName: `${r.Name ?? ''} ${r.Surname ?? ''}`.trim(), systemRoleName: r.SystemRoleName ?? null }));
+    }
+
+    /**
+     * Pokoje związane z projektami (pokój projektu albo pokój podpięty do jego kontraktu) lub wskazane
+     * wprost - każdy ze wszystkimi podpiętymi kontraktami.
+     */
+    async spacesWithContracts(projectOurIds: string[], spaceIds: number[] = []): Promise<SpaceContractRow[]> {
+        if (!projectOurIds.length && !spaceIds.length) return [];
+        const projects = projectOurIds.length ? projectOurIds : [''];
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            mysql.format(
+                `SELECT ChatSpaces.Id AS SpaceId, ChatSpaces.GoogleName, ChatSpaces.ProjectOurId AS SpaceProjectOurId,
+                        ChatSpaces.CreatedByPersonId,
+                        Contracts.Id AS ContractId, Contracts.ProjectOurId AS ContractProjectOurId
+                 FROM ChatSpaces
+                 LEFT JOIN Contracts ON Contracts.ChatSpaceId = ChatSpaces.Id
+                 WHERE ChatSpaces.ProjectOurId IN (?)
+                    OR ChatSpaces.Id IN (SELECT ChatSpaceId FROM Contracts WHERE ProjectOurId IN (?) AND ChatSpaceId IS NOT NULL)
+                    OR ChatSpaces.Id IN (?)`,
+                [projects, projects, spaceIds.length ? spaceIds : [0]]
+            )
+        )) as any[];
+        return rows.map((r) => ({
+            spaceId: r.SpaceId,
+            googleName: r.GoogleName,
+            spaceProjectOurId: r.SpaceProjectOurId ?? null,
+            createdByPersonId: r.CreatedByPersonId ?? null,
+            contractId: r.ContractId ?? null,
+            contractProjectOurId: r.ContractProjectOurId ?? null,
+        }));
     }
 
     async findSpaceById(

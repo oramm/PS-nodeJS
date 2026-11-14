@@ -1,6 +1,7 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import { MailboxAssigneeRow } from './mailboxAccessPolicy';
+import { MailboxAssigneeRow, mailboxAssigneeRows, MailboxOwnerRow } from './mailboxAccessPolicy';
+import ProjectAssignmentRepository from '../persons/projectAssignments/ProjectAssignmentRepository';
 
 /** Skrzynka poczty ze spisu PS (plan MBX); bez haseł. */
 export interface MailboxRecord {
@@ -22,21 +23,22 @@ const COLUMNS = `Id AS id, Code AS code, Address AS address, ProjectId AS projec
 
 export default class MailboxRepository {
     /**
-     * Skrzynki z kierownikiem, administratorem i wybranymi osobami kontraktów, do których należą
-     * (skrzynka projektu: wszystkie kontrakty projektu; ogólnofirmowa: jeden wiersz z null-ami).
-     * Kto z tego ma dostęp, rozstrzyga `personMailboxes` - tu tylko SQL.
+     * Skrzynki z osobami przypisanymi według reguły projectMembership (mailboxAssigneeRows).
+     * Kto z tego ma dostęp, rozstrzyga `personMailboxes` - tu tylko odczyt.
      */
     async findWithAssignees(includePending = false): Promise<MailboxAssigneeRow[]> {
-        return (await ToolsDb.getQueryCallbackAsync(
-            `SELECT DISTINCT m.Code AS code, m.Address AS address, o.ManagerId AS managerId, o.AdminId AS adminId,
-                sp.PersonId AS selectedPersonId
-            FROM Mailboxes m
-            LEFT JOIN Contracts c ON c.Id = m.ContractId
-                OR (m.ProjectId IS NOT NULL AND c.ProjectOurId = (SELECT OurId FROM Projects WHERE Id = m.ProjectId))
-            LEFT JOIN OurContractsData o ON o.Id = c.Id
-            LEFT JOIN ContractSelectedPersons sp ON sp.ContractId = c.Id
-            WHERE m.StatusCode IN (${includePending ? "'ACTIVE', 'PENDING'" : "'ACTIVE'"})`,
-        )) as MailboxAssigneeRow[];
+        const [mailboxes, edges] = await Promise.all([
+            ToolsDb.getQueryCallbackAsync(
+                `SELECT m.Code AS code, m.Address AS address, m.ContractId AS contractId,
+                    COALESCE(c.ProjectOurId, p.OurId) AS projectOurId
+                FROM Mailboxes m
+                LEFT JOIN Contracts c ON c.Id = m.ContractId
+                LEFT JOIN Projects p ON p.Id = m.ProjectId
+                WHERE m.StatusCode IN (${includePending ? "'ACTIVE', 'PENDING'" : "'ACTIVE'"})`,
+            ) as Promise<MailboxOwnerRow[]>,
+            ProjectAssignmentRepository.findMembership(),
+        ]);
+        return mailboxAssigneeRows(mailboxes, edges);
     }
 
     async find(): Promise<MailboxRecord[]> {

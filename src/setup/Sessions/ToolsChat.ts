@@ -97,6 +97,20 @@ export default class ToolsChat {
         return members;
     }
 
+    /**
+     * Usuwa członka (adres e-mail jako alias członkostwa, jak w hasJoinedMember).
+     * Brak członkostwa (404) to nie błąd: stan docelowy już jest.
+     */
+    static async removeMember(name: string, email: string): Promise<'REMOVED' | 'NOT_A_MEMBER'> {
+        try {
+            await this.getChat().spaces.members.delete({ name: `${name}/members/${email}` });
+            return 'REMOVED';
+        } catch (e) {
+            if ((e as { response?: { status?: number } }).response?.status === 404) return 'NOT_A_MEMBER';
+            throw e;
+        }
+    }
+
     static async listSpaces(): Promise<chat_v1.Schema$Space[]> {
         const chat = this.getChat();
         const spaces: chat_v1.Schema$Space[] = [];

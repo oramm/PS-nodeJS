@@ -99,9 +99,9 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
             if (rows.some(row => row.projectId === projectId)) throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
             Object.assign(rows.find(row => row.id === id)!, { contractId: null, projectId });
         });
-        repository.findWithAssignees.mockImplementation(async () => rows.map(row => ({
-            code: row.code, address: row.address, managerId: 1, adminId: 2, selectedPersonId: 3,
-        })));
+        repository.findWithAssignees.mockImplementation(async () => rows.flatMap(row => [1, 2, 3].map(personId => ({
+            code: row.code, address: row.address, personId,
+        }))));
         (ContractsController.editWithAuth as jest.Mock).mockReset();
         (ContractsController.createContractFromDto as jest.Mock).mockResolvedValue({ id: 21, projectOurId: 'CHC.IK.01', ourId: 'CHC.IK.02' });
         (ContractsController.addWithAuth as jest.Mock).mockImplementation(async contract => { savedContracts.push(contract.id); });
@@ -389,6 +389,20 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         expect(DirectAdminGateway.changePassword).not.toHaveBeenCalled();
     });
 
+    it('lista skrzynek współpracownika = te same przypisania co hasło i akcje (DOSTEP-2); pracownik widzi wszystkie', async () => {
+        rows.push(
+            { id: 1, code: 'proj', address: 'proj@envi.com.pl', projectId: 10, contractId: null, statusCode: 'ACTIVE', agentCopyStatus: 'SET', agentCopyLastError: null },
+            { id: 2, code: 'kontr', address: 'kontr@envi.com.pl', projectId: null, contractId: 21, statusCode: 'ACTIVE', agentCopyStatus: 'SET', agentCopyLastError: null },
+        );
+        repository.findWithAssignees.mockResolvedValue([
+            { code: 'proj', address: 'proj@envi.com.pl', personId: 9 }, { code: 'kontr', address: 'kontr@envi.com.pl', personId: 1 },
+        ]);
+        (SbAccessRepository as jest.Mock).mockImplementation(() => ({ getByPersonId: jest.fn().mockResolvedValue(null) }));
+        const codes = async (userData: any) => (await MailboxController.list(undefined, 21, userData)).map(m => m.code);
+        expect(await codes({ enviId: 9, systemRoleName: 'ENVI_COOPERATOR' })).toEqual(['proj']);
+        expect(await codes({ enviId: 9, systemRoleName: 'ENVI_EMPLOYEE' })).toEqual(['proj', 'kontr']);
+    });
+
     it.each(['CONTRACT_WORKER', 'CLIENT'])('edycja odrzuca osobę z rolą %s błędem 400', async role => {
         (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (_sql, _conn, params) =>
             params[1].includes(role) ? [{ PersonId: 3 }] : []);
@@ -419,13 +433,14 @@ describe('MBX-3 rejestracja i trasy (prawdziwy kontroler i TaskStore, atrapy DB 
         expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledWith(expect.stringContaining('WHERE sp.ContractId = ?'), undefined, [21]);
     });
 
-    it('rzeczywisty odczyt przypisań zawiera wybrane osoby, a nie role zewnętrzne PersonProjects', async () => {
+    it('rzeczywisty odczyt przypisań idzie przez regułę przynależności (DOSTEP-2): wszystkie drogi, bez zakładającego', async () => {
         const ActualRepository = jest.requireActual('../MailboxRepository').default;
         (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValue([]);
         await new ActualRepository().findWithAssignees(true);
-        const sql = (ToolsDb.getQueryCallbackAsync as jest.Mock).mock.calls[0][0];
+        const sql = (ToolsDb.getQueryCallbackAsync as jest.Mock).mock.calls.map(call => call[0]).join(' ');
         expect(sql).toContain('ContractSelectedPersons');
-        expect(sql).not.toContain('PersonProjects');
+        expect(sql).toContain('PersonProjects');
+        expect(sql).toContain('ManagerId');
         expect(sql).not.toContain('CreatedByPersonId');
         expect(sql).toContain("'PENDING'");
     });

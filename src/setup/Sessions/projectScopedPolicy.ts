@@ -155,7 +155,7 @@ const CLIENT_EXTRA_ROUTES: RoutePattern[] = [
 /**
  * Czego współpracownik ma ponad pracownika kontraktowego: poczta przypisanych projektów
  * (D7). Którą skrzynkę konkretnie, rozstrzyga MailboxController.assertAccess (reguła
- * personMailboxes), a listę skrzynek zawęża zakres projektów w MailboxRouters.
+ * personMailboxes), a lista skrzynek (MailboxController.list) pokazuje tylko te, które daje ta sama reguła.
  */
 const COOPERATOR_EXTRA_ROUTES: RoutePattern[] = [
     { method: 'GET', path: '/mailboxes' },
@@ -285,10 +285,11 @@ export default async function projectScopedPolicy(
 
     try {
         // Zakres liczony raz na żądanie i czytany dalej przez repozytoria i guardy zapisu.
+        // Przypisanie każdą drogą reguły projectMembership (projekt albo kontrakt) daje projekt.
         // Brak przypisań daje pustą listę, którą warstwa SQL traktuje jako "nic nie widać".
         req.projectScope = {
             projectOurIds:
-                await ProjectAssignmentRepository.getAssignedProjectOurIds(
+                await ProjectAssignmentRepository.getMemberProjectOurIds(
                     userData.enviId
                 ),
         };

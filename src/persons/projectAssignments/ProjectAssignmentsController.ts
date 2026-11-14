@@ -4,6 +4,7 @@ import ProjectAssignmentRepository, {
     AssignedProject,
 } from './ProjectAssignmentRepository';
 import { BadRequestError } from './ProjectScopeGuard';
+import ChatSpacesController from '../../contracts/chatSpaces/ChatSpacesController';
 
 /**
  * Przypisania projektów osoby (zakres ról CONTRACT_WORKER / CLIENT).
@@ -45,7 +46,8 @@ export default class ProjectAssignmentsController {
         const before =
             await ProjectAssignmentRepository.getAssignedProjectOurIds(personId);
 
-        await ToolsDb.transaction(async (conn) => {
+        // Pokoje projektów sprzed i po zmianie wyrównują skład (DOSTEP-2).
+        await ChatSpacesController.withMemberSync([...before, ...projectOurIds], () => ToolsDb.transaction(async (conn) => {
             await ProjectAssignmentRepository.setAssignments(
                 personId,
                 projectOurIds,
@@ -59,7 +61,7 @@ export default class ProjectAssignmentsController {
                     { field: 'projectOurIds', before, after: projectOurIds },
                 ],
             });
-        });
+        }));
 
         return await ProjectAssignmentRepository.getAssignedProjects(personId);
     }
