@@ -1,6 +1,8 @@
 import Person from './Person';
 import { UserData } from '../types/sessionTypes';
 import SessionRevoker from '../setup/Sessions/SessionRevoker';
+import SbAccessController from '../sbAccess/SbAccessController';
+import ChatSpacesController from '../contracts/chatSpaces/ChatSpacesController';
 import PersonAccountEventsController from './accountEvents/PersonAccountEventsController';
 import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
 import PersonRepository, { PersonsSearchParams } from './PersonRepository';
@@ -12,6 +14,7 @@ import BaseController from '../controllers/BaseController';
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
+import ToolsMail from '../tools/ToolsMail';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import Setup from '../setup/Setup';
 import {
@@ -337,11 +340,12 @@ export default class PersonsController extends BaseController<
             }
             console.log(`User ${user.name} ${user.surname} updated in db`);
 
-            if (user.id)
+            // Lista pól zaszłej trasy zawsze zawiera rolę; brak pola w treści = rola nie była zapisywana.
+            if (user.id && roleIsBeingWritten && userData.systemRoleId !== undefined)
                 await PersonsController.revokeSessionsOnRoleChange(
                     user.id,
                     previousRoleId,
-                    roleIsBeingWritten ? user.systemRoleId : undefined,
+                    user.systemRoleId,
                 );
 
             // TODO:
@@ -432,6 +436,17 @@ export default class PersonsController extends BaseController<
         if (fieldsToSync.length === 0) {
             throw new Error('No account fields provided for v2 account upsert');
         }
+        // Aktywność konta steruje logowaniem i wszystkimi skutkami wyłączenia - bez niejawnej konwersji
+        // (0 albo 'false' z API zapisałyby co innego, niż liczą skutki).
+        if (accountData.isActive !== undefined && typeof accountData.isActive !== 'boolean') {
+            throw new PersonAccountValidationError('Pole „aktywne konto” musi być wartością logiczną (true/false).');
+        }
+        // Wyłączenie konta kasuje wszystkie sesje osoby - własne odcięłoby wołającego w pół odpowiedzi.
+        if (accountData.isActive === false && actorPersonId === accountData.personId) {
+            throw new PersonAccountValidationError(
+                'Nie możesz wyłączyć własnego konta - poproś o to innego administratora.',
+            );
+        }
 
         // Stan konta sprzed zapisu: rola do porównania po commicie, flagi odbiorców do
         // rozstrzygnięcia, czy push w ogóle ma polecieć (przejście 0->0 nie wysyła nic).
@@ -498,14 +513,13 @@ export default class PersonsController extends BaseController<
                 conn,
             );
 
+            // „Zalogowany w PS = zalogowany w FIN i FIDmanie” (U2): wyłączone konto PS (IsActive = 0)
+            // wyłącza oba konta, a ponowne włączenie przywraca je według flag, które zostają.
+            // FIN i tak czyta bieżący stan przy dostawie (FidmanSync.withCurrentFinState).
+            const activeBefore = previousAccount?.isActive !== false;
+            const activeAfter =
+                (accountData.isActive ?? previousAccount?.isActive) !== false;
             for (const { recipient, field } of recipients) {
-                // FIN: „zalogowany w PS = zalogowany w FIN” — wyłączone konto PS (IsActive = 0) wyłącza też FIN,
-                // a ponowne włączenie przywraca; dostawa i tak czyta bieżący stan (FidmanSync.withCurrentFinState).
-                const activeBefore =
-                    recipient !== 'fin' || previousAccount?.isActive !== false;
-                const activeAfter =
-                    recipient !== 'fin' ||
-                    (accountData.isActive ?? previousAccount?.isActive) !== false;
                 const flagBefore = previousAccount?.[field] === true;
                 const wasEnabled = flagBefore && activeBefore;
                 const willBeEnabled =
@@ -540,13 +554,40 @@ export default class PersonsController extends BaseController<
             );
         }
 
-        await this.revokeSessionsOnRoleChange(
-            accountData.personId,
-            previousRoleId,
-            roleIsBeingWritten ? account.systemRoleId : undefined,
-        );
+        const deactivated =
+            previousAccount?.isActive !== false && account.isActive === false;
+        if (deactivated) {
+            await this.withdrawAccessOfDeactivatedAccount(
+                accountData.personId,
+                actorPersonId,
+            );
+        } else if (roleIsBeingWritten) {
+            await this.revokeSessionsOnRoleChange(
+                accountData.personId,
+                previousRoleId,
+                account.systemRoleId,
+            );
+        }
 
         return account;
+    }
+
+    /**
+     * U2: wyłączenie konta PS zabiera to, co PS nadał, a czego samo IsActive = 0 nie gasi: otwarte
+     * sesje, Second Brain (ta sama blokada co ekran „Dostępy SB”) i pokoje Google Chat. FIN i FIDman
+     * idą kolejką w transakcji zapisu (pętla odbiorców wyżej). Wołane PO commicie; żaden krok nie rzuca.
+     * Ponowne włączenie nie przywraca SB ani pokoi - to świadome nadanie, nie skutek uboczny.
+     */
+    private static async withdrawAccessOfDeactivatedAccount(
+        personId: number,
+        actorPersonId?: number,
+    ): Promise<void> {
+        await SessionRevoker.revokeForPerson(personId);
+        await SbAccessController.blockAfterAccountDeactivation(
+            personId,
+            actorPersonId ?? null,
+        );
+        await ChatSpacesController.removeFromAllSpaces(personId);
     }
 
     /**
@@ -598,9 +639,13 @@ export default class PersonsController extends BaseController<
                 candidate && validateFidmanUserSource(candidate, recipient).length === 0,
         );
         if (!usable) {
-            console.warn(
-                `[${recipient.toUpperCase()}] nie wysłano wyłączenia konta dla PersonId=${personId}: dane osoby nie spełniają kontraktu odbiorcy. Konto trzeba wyłączyć ręcznie.`,
-            );
+            const message = `[${recipient.toUpperCase()}] nie wysłano wyłączenia konta dla PersonId=${personId}: dane osoby nie spełniają kontraktu odbiorcy. Konto trzeba wyłączyć ręcznie.`;
+            console.warn(message);
+            // Zgłoszenie bez czekania: jesteśmy w transakcji zapisu konta, a poczta nie może jej trzymać.
+            // Promise.resolve().then: nawet synchroniczny błąd wysyłki nie wywraca zapisu.
+            void Promise.resolve()
+                .then(() => ToolsMail.sendServerErrorReport(new Error(message)))
+                .catch(() => undefined);
             return undefined;
         }
         return enqueueFidmanUserPush(usable, false, conn, recipient);
@@ -613,15 +658,15 @@ export default class PersonsController extends BaseController<
      * z `rolling: true` nie wygasa osobie korzystającej z witryny na bieżąco. Bez tego kroku
      * odebranie uprawnień nie zaczęłoby obowiązywać - stara, szersza rola zostałaby w sesji.
      *
-     * Wołane PO commicie: dopóki zapis się nie powiódł, nie ma czego unieważniać.
+     * Wołane PO commicie i tylko wtedy, gdy rola była zapisywana: dopóki zapis się nie powiódł,
+     * nie ma czego unieważniać. Brak roli (NULL, odczyt daje undefined) to też zmiana roli.
      */
     private static async revokeSessionsOnRoleChange(
         personId: number,
         previousRoleId: number | undefined | null,
         newRoleId: number | undefined | null,
     ): Promise<void> {
-        if (newRoleId === undefined) return;
-        if (previousRoleId === newRoleId) return;
+        if ((previousRoleId ?? null) === (newRoleId ?? null)) return;
 
         await SessionRevoker.revokeForPerson(personId);
     }

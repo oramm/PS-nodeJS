@@ -422,6 +422,31 @@ export default class ChatSpacesController {
         }
     }
 
+    /**
+     * U2: wyłączone konto wychodzi ze wszystkich pokoi założonych przez PS - także pracownik ENVI
+     * i osoba zaproszona ręcznie (reguła składu wpuszcza tylko aktywne konta). Brak członkostwa nie
+     * jest błędem. Nigdy nie rzuca: konto jest już wyłączone; błąd Google idzie do zgłoszeń błędów.
+     */
+    static async removeFromAllSpaces(personId: number): Promise<void> {
+        if (!memberSyncEnabled()) return;
+        try {
+            const [person] = await this.repository.getGoogleEmails([personId], true);
+            const email = person?.email?.toLowerCase();
+            if (!email) return;
+            const failures: string[] = [];
+            for (const space of await this.repository.listSpaces()) {
+                try {
+                    await ToolsChat.removeMember(space.googleName, email);
+                } catch (e) {
+                    failures.push(`${space.googleName}: nie usunięto ${email}: ${e instanceof Error ? e.message : String(e)}`);
+                }
+            }
+            if (failures.length) await this.report(failures.join('\n'));
+        } catch (e) {
+            await this.report(`Usunięcie osoby ${personId} z pokoi po wyłączeniu konta nie powiodło się: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
     /** Wzorzec MailboxController.report: log + zgłoszenie błędu serwera; samo zgłoszenie też nie rzuca. */
     private static async report(details: string): Promise<void> {
         const message = `[ChatSpaces] Wyrównanie składu pokoi Google Chat - do poprawy ręcznie:\n${details}`;

@@ -4,6 +4,10 @@ import PersonRepository from '../PersonRepository';
 import ExperienceRepository from '../experiences/ExperienceRepository';
 
 jest.mock('../../tools/ToolsDb');
+// UPR-2: wyłączenie konta woła sesje, SB i Chat - w teście atrapy, nic nie wychodzi na zewnątrz.
+jest.mock('../../setup/Sessions/SessionRevoker');
+jest.mock('../../sbAccess/SbAccessController');
+jest.mock('../../contracts/chatSpaces/ChatSpacesController');
 
 describe('PersonsController P3-A v2 dedicated endpoints', () => {
     const mockConn = { threadId: 1001 } as any;

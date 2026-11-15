@@ -18,6 +18,12 @@ import {
 } from '../../contracts/fidmanSync/FidmanSync';
 
 jest.mock('../../tools/ToolsDb');
+// Brak danych dla odbiorcy przy wyłączaniu idzie do zgłoszeń błędów - w teście bez poczty.
+jest.mock('../../tools/ToolsMail');
+// UPR-2: wyłączenie konta woła sesje, SB i Chat - w teście atrapy, nic nie wychodzi na zewnątrz.
+jest.mock('../../setup/Sessions/SessionRevoker');
+jest.mock('../../sbAccess/SbAccessController');
+jest.mock('../../contracts/chatSpaces/ChatSpacesController');
 jest.mock('../../contracts/fidmanSync/FidmanSync', () => {
     const actual = jest.requireActual(
         '../../contracts/fidmanSync/FidmanSync'

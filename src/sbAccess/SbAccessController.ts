@@ -1,4 +1,5 @@
 import ToolsDb from '../tools/ToolsDb';
+import ToolsMail from '../tools/ToolsMail';
 import PersonRepository from '../persons/PersonRepository';
 import { enqueueFinUserRefresh, tryDeliverAfterCommit } from '../contracts/fidmanSync/FidmanSync';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
@@ -654,12 +655,42 @@ export default class SbAccessController {
         return this.grant(github, 'UNBLOCK', account, record, requestedByPersonId);
     }
 
-    static block(personId: number, requestedByPersonId: number) {
+    static block(personId: number, requestedByPersonId: number | null) {
         return this.withdraw('BLOCK', 'BLOCKED', personId, requestedByPersonId);
     }
 
     static revoke(personId: number, requestedByPersonId: number) {
         return this.withdraw('REVOKE', 'REVOKED', personId, requestedByPersonId);
+    }
+
+    /**
+     * U2: wyłączone konto PS traci SB tą samą blokadą co z ekranu „Dostępy SB” (GitHub, dysk
+     * SB.ENVI, skróty kluczy). Bez wpisu albo po odebraniu - nic do zdjęcia. Nigdy nie rzuca: konto
+     * jest już wyłączone; niepełna blokada (też dostęp nadany ręcznie) idzie do zgłoszeń błędów.
+     */
+    static async blockAfterAccountDeactivation(
+        personId: number,
+        requestedByPersonId: number | null,
+    ): Promise<void> {
+        let problem: string | undefined;
+        try {
+            const record = await this.repository.getByPersonId(personId);
+            if (!record || record.statusCode === 'REVOKED') return;
+            const outcome = await this.block(personId, requestedByPersonId);
+            if (outcome.result !== 'OK') problem = outcome.note;
+        } catch (error) {
+            problem = errorText(error);
+        }
+        if (!problem) return;
+        const message = sanitizeNote(
+            `[SB] Konto osoby ${personId} wyłączone w PS, ale blokada Second Brain nie jest pełna - dokończ na ekranie „Dostępy SB” albo ręcznie na GitHubie i Dysku: ${problem}`,
+        );
+        console.error(message);
+        try {
+            await ToolsMail.sendServerErrorReport(new Error(message));
+        } catch {
+            console.error('[SB] Nie udało się wysłać zgłoszenia o niepełnej blokadzie.');
+        }
     }
 
     /**
@@ -897,7 +928,7 @@ export default class SbAccessController {
         action: Extract<SbAccessAction, 'BLOCK' | 'REVOKE'>,
         target: Extract<SbAccessStatus, 'BLOCKED' | 'REVOKED'>,
         personId: number,
-        requestedByPersonId: number,
+        requestedByPersonId: number | null,
     ): Promise<SbAccessOperationOutcome> {
         const github = this.github();
         const record = await this.repository.getByPersonId(personId);
@@ -929,7 +960,7 @@ export default class SbAccessController {
         result: SbAccessOperationOutcome['result'],
         parts: PartOutcome[],
         state: SbAccessStateInput | undefined,
-        requestedByPersonId: number,
+        requestedByPersonId: number | null,
     ): Promise<SbAccessOperationOutcome> {
         const note = sanitizeNote(parts.map((part) => part.note).join('; '));
         try {
