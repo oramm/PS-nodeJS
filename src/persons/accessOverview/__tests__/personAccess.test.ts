@@ -102,3 +102,26 @@ describe('personAccess', () => {
         expect(area({ ...creator, role: SystemRoleName.CLIENT }, 'mail').sees).toBe(false);
     });
 });
+
+describe('przegląd faktur sprzedaży przy włączonym filtrze', () => {
+    const flag = process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES;
+    beforeEach(() => { process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES = 'true'; });
+    afterEach(() => {
+        if (flag === undefined) delete process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES;
+        else process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES = flag;
+    });
+    it('rola w kontrakcie daje faktury tylko z przypisania', () => {
+        const result = area(base(1, SystemRoleName.ENVI_EMPLOYEE, [edge('A', 11, 1)]), 'salesInvoices');
+        expect(result).toMatchObject({ sees: true, source: 'przypisanie' });
+        expect(result.why).toContain('kontrakty: 11');
+    });
+    it('przypisanie do projektu daje faktury kontraktów projektu', () => {
+        expect(area(base(1, SystemRoleName.ENVI_EMPLOYEE, [edge('A', null, 1)]), 'salesInvoices').why).toContain('projekty: A');
+    });
+    it('bez członkostwa nie ma faktur', () => {
+        expect(area(base(1, SystemRoleName.ENVI_EMPLOYEE, []), 'salesInvoices').sees).toBe(false);
+    });
+    it('kierownik nadal widzi wszystkie faktury', () => {
+        expect(area(base(1, SystemRoleName.ENVI_MANAGER, []), 'salesInvoices')).toMatchObject({ sees: true, value: 'wszystkie', source: 'rola' });
+    });
+});

@@ -1,5 +1,6 @@
+import { salesInvoicesScopedForRole } from '../../invoices/salesInvoiceScope';
 import { SystemRoleName } from '../../types/sessionTypes';
-import { dataScopeProjectOurIds, MembershipEdge } from '../projectAssignments/projectMembership';
+import { dataScopeProjectOurIds, personContractScope, MembershipEdge } from '../projectAssignments/projectMembership';
 import {
     CONTRACT_ASSIGNMENT_ROLES,
     PROJECT_SCOPED_ROLES,
@@ -136,12 +137,25 @@ export function personAccess(input: PersonAccessInput): AreaAccess[] {
             ? yes(area, 'wszystkie', 'rola', `${what} są dla pracowników ENVI.`)
             : no(area, `Ta rola nie widzi: ${what.toLowerCase()}.`);
 
+    const salesInvoicesArea = (): AreaAccess => {
+        if (!salesInvoicesScopedForRole(role)) return staffOnly('salesInvoices', '/invoices', 'Faktury sprzedaży');
+        const contracts = personContractScope(edges, personId);
+        if (!contracts.projectOurIds.length && !contracts.contractIds.length)
+            return no('salesInvoices', 'Brak przypisania do projektu lub roli w kontrakcie, więc nie widzi faktur sprzedaży.');
+        const where = [
+            contracts.projectOurIds.length ? `projekty: ${contracts.projectOurIds.join(', ')}` : '',
+            contracts.contractIds.length ? `kontrakty: ${contracts.contractIds.join(', ')}` : '',
+        ].filter(Boolean).join('; ');
+        return yes('salesInvoices', 'z przypisań', 'przypisanie',
+            `Faktury sprzedaży tylko z kontraktów osoby (przypisanie do projektu albo rola w kontrakcie): ${where}.`);
+    };
+
     return [
         projectsArea(),
         lettersArea(),
         mailArea(),
         chatArea(),
         staffOnly('offers', '/offers', 'Oferty'),
-        staffOnly('salesInvoices', '/invoices', 'Faktury sprzedaży'),
+        salesInvoicesArea(),
     ];
 }

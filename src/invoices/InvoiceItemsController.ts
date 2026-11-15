@@ -1,3 +1,4 @@
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 import mysql from 'mysql2/promise';
 import Invoice from './Invoice';
 import { PersonData } from '../types/types';
@@ -31,10 +32,11 @@ export default class InvoiceItemsController extends BaseController<
     }
 
     static async find(
-        searchParams: InvoiceItemsSearchParams[] = []
+        searchParams: InvoiceItemsSearchParams[] = [],
+        scope?: ContractScope
     ): Promise<InvoiceItem[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(searchParams);
+        return await instance.repository.find(searchParams, scope);
     }
 
     static async addNewInvoiceItem(

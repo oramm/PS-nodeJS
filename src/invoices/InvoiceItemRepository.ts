@@ -1,3 +1,5 @@
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
+import { makeContractScopeCondition } from '../tools/ProjectScope';
 import BaseRepository from '../repositories/BaseRepository';
 import InvoiceItem from './InvoiceItem';
 import ToolsDb from '../tools/ToolsDb';
@@ -60,7 +62,7 @@ export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
         });
     }
 
-    async find(orConditions: InvoiceItemsSearchParams[] = []) {
+    async find(orConditions: InvoiceItemsSearchParams[] = [], scope?: ContractScope) {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
@@ -106,7 +108,7 @@ export default class InvoiceItemRepository extends BaseRepository<InvoiceItem> {
                         JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
                         JOIN ContractTypes ON ContractTypes.Id=Contracts.TypeId
                         LEFT JOIN Persons AS Editors ON Editors.Id=InvoiceItems.EditorId
-                        WHERE ${conditions}
+                        WHERE (${conditions}) AND ${makeContractScopeCondition(scope)}
                         ORDER BY InvoiceItems.Id DESC`;
 
         const rows = await this.executeQuery(sql);

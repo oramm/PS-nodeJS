@@ -1,6 +1,7 @@
 // sessionTypes.ts
 import 'express-session';
 import { Credentials } from 'google-auth-library';
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 
 declare module 'express-session' {
     interface SessionData {
@@ -46,6 +47,7 @@ declare global {
     namespace Express {
         interface Request {
             projectScope?: ProjectScope;
+            salesInvoiceScope?: ContractScope;
         }
     }
 }

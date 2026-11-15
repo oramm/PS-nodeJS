@@ -1,12 +1,13 @@
+import { salesInvoiceAccess } from './salesInvoiceScope';
 import { Request, Response } from 'express';
 import InvoiceItemsController from './InvoiceItemsController';
 import { app } from '../index';
 
-app.post('/invoiceItems', async (req: Request, res: Response, next) => {
+app.post('/invoiceItems', salesInvoiceAccess('itemsList'), async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
         const result = await InvoiceItemsController.find(
-            orConditions
+            orConditions, req.salesInvoiceScope
         );
         res.send(result);
     } catch (error) {
@@ -14,7 +15,7 @@ app.post('/invoiceItems', async (req: Request, res: Response, next) => {
     }
 });
 
-app.post('/invoiceItem', async (req: Request, res: Response, next) => {
+app.post('/invoiceItem', salesInvoiceAccess('newItem'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const item = await InvoiceItemsController.addNewInvoiceItem(req.body, req.session.userData);
@@ -24,7 +25,7 @@ app.post('/invoiceItem', async (req: Request, res: Response, next) => {
     }
 });
 
-app.post('/copyInvoiceItem', async (req: Request, res: Response, next) => {
+app.post('/copyInvoiceItem', salesInvoiceAccess('newItem'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const item = await InvoiceItemsController.addNewInvoiceItem(req.body, req.session.userData);
@@ -34,7 +35,7 @@ app.post('/copyInvoiceItem', async (req: Request, res: Response, next) => {
     }
 });
 
-app.put('/invoiceItem/:id', async (req: Request, res: Response, next) => {
+app.put('/invoiceItem/:id', salesInvoiceAccess('item'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
         const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
@@ -45,7 +46,7 @@ app.put('/invoiceItem/:id', async (req: Request, res: Response, next) => {
     }
 });
 
-app.delete('/invoiceItem/:id', async (req: Request, res: Response, next) => {
+app.delete('/invoiceItem/:id', salesInvoiceAccess('item'), async (req: Request, res: Response, next) => {
     try {
         const result = await InvoiceItemsController.deleteInvoiceItem(req.body);
         res.send(result);

@@ -23,6 +23,20 @@ export interface MembershipEdge {
 
 const unique = <T>(values: T[]): T[] => [...new Set(values)];
 
+export interface ContractScope {
+    projectOurIds: string[];
+    contractIds: number[];
+}
+
+/** Kontrakty osoby: role w konkretnych kontraktach oraz wszystkie kontrakty przypisanych projektów. */
+export function personContractScope(edges: MembershipEdge[], personId: number): ContractScope {
+    return {
+        projectOurIds: dataScopeProjectOurIds(edges, personId),
+        contractIds: unique(edges.filter((e) => e.personId === personId && e.contractId !== null)
+            .map((e) => e.contractId as number)),
+    };
+}
+
 /** Osoby projektu: przypisane do niego albo do któregokolwiek jego kontraktu. */
 export function projectMemberIds(edges: MembershipEdge[], projectOurId: string): number[] {
     return unique(edges.filter((e) => e.projectOurId === projectOurId).map((e) => e.personId));
