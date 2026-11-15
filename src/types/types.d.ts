@@ -57,6 +57,7 @@ export interface StaffMemberData extends RepositoryDataItem {
     hasBankAccess: boolean;
     canLogSiteVisits: boolean;
     canManageSbAccess: boolean;
+    /** Aktywność KONTA logowania (PersonAccounts.IsActive) - odczyt; zapis wyłącznie trasą konta (U2). */
     isActive: boolean;
     /** Dane osoby z JOIN - tylko do odczytu, nie zapisywane. */
     _personName?: string;

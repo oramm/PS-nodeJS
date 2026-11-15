@@ -83,7 +83,8 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 COALESCE(StaffMembers.HasBankAccess, 0) AS HasBankAccess,
                 COALESCE(StaffMembers.CanLogSiteVisits, 0) AS CanLogSiteVisits,
                 COALESCE(StaffMembers.CanManageSbAccess, 0) AS CanManageSbAccess,
-                COALESCE(StaffMembers.IsActive, 1) AS IsActive,
+                /* „Aktywny” w panelu = konto logowania (U2); StaffMembers.IsActive nie jest już czytane. */
+                COALESCE(PersonAccounts.IsActive, 1) AS IsActive,
                 FidmanUserSync.Status AS FidmanSyncStatus,
                 FidmanUserSync.SkipReason AS FidmanSkipReason,
                 FidmanUserSync.LastError AS FidmanLastError,
@@ -187,16 +188,15 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
     ): Promise<any> {
         const sql = `INSERT INTO StaffMembers
                 (PersonId, IsDriver, IsInScrum, HasCostInvoiceAccess,
-                 HasBankAccess, CanLogSiteVisits, CanManageSbAccess, IsActive)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 HasBankAccess, CanLogSiteVisits, CanManageSbAccess)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 IsDriver = VALUES(IsDriver),
                 IsInScrum = VALUES(IsInScrum),
                 HasCostInvoiceAccess = VALUES(HasCostInvoiceAccess),
                 HasBankAccess = VALUES(HasBankAccess),
                 CanLogSiteVisits = VALUES(CanLogSiteVisits),
-                CanManageSbAccess = VALUES(CanManageSbAccess),
-                IsActive = VALUES(IsActive)`;
+                CanManageSbAccess = VALUES(CanManageSbAccess)`;
 
         return await ToolsDb.executeSQL(
             sql,
@@ -208,7 +208,6 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 entity.hasBankAccess ? 1 : 0,
                 entity.canLogSiteVisits ? 1 : 0,
                 entity.canManageSbAccess ? 1 : 0,
-                entity.isActive ? 1 : 0,
             ],
             externalConn
         );

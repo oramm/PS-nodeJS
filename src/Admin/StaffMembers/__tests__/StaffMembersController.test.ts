@@ -27,7 +27,6 @@ const flags = {
     hasCostInvoiceAccess: false,
     hasBankAccess: false,
     canLogSiteVisits: false,
-    isActive: true,
 };
 
 describe('StaffMembersController.editFromDto()', () => {
@@ -107,12 +106,15 @@ describe('StaffMembersController.editFromDto()', () => {
             systemRoleId: 1,
             systemEmail: 'admin@envi.com.pl',
             fidmanEnabled: true,
+            // U2: „Aktywny” to konto - trasa flag go ignoruje, tak jak rolę.
+            isActive: false,
         });
 
         expect(repository.upsertInDb).toHaveBeenCalledTimes(1);
         const saved = repository.upsertInDb.mock.calls[0][0];
         expect(saved).toMatchObject({ personId: PERSON_ID, ...flags });
         expect(saved.systemRoleId).toBeUndefined();
+        expect(saved.isActive).toBeUndefined();
 
         // Jedyny ruch w bazie poza odczytami to upsert flag - żadnego UPDATE roli.
         const usedMethods = Object.keys(repository)

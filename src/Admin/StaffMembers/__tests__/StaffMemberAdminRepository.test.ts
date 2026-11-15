@@ -219,13 +219,15 @@ describe('StaffMemberAdminRepository - uprawnienie do zarządzania dostępem SB'
             }), conn);
 
             expect(executeSpy).toHaveBeenCalledWith(
-                expect.stringContaining('HasBankAccess, CanLogSiteVisits, CanManageSbAccess, IsActive'),
-                [7, 1, 0, 1, 0, 1, value ? 1 : 0, 1],
+                expect.stringContaining('HasBankAccess, CanLogSiteVisits, CanManageSbAccess)'),
+                [7, 1, 0, 1, 0, 1, value ? 1 : 0],
                 conn,
             );
             const sql = String(executeSpy.mock.calls[0][0]);
-            expect(sql).toContain('VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            expect(sql).toContain('VALUES (?, ?, ?, ?, ?, ?, ?)');
             expect(sql).toContain('CanManageSbAccess = VALUES(CanManageSbAccess)');
+            // U2: „Aktywny” to konto logowania - panel flag go nie zapisuje.
+            expect(sql).not.toContain('IsActive');
         } finally {
             executeSpy.mockRestore();
         }

@@ -9,7 +9,6 @@ const allFlags = {
     hasCostInvoiceAccess: false,
     hasBankAccess: false,
     canLogSiteVisits: true,
-    isActive: true,
 };
 
 describe('StaffMemberValidator', () => {
@@ -23,6 +22,11 @@ describe('StaffMemberValidator', () => {
         expect(result.hasBankAccess).toBe(false);
         expect(result.canManageSbAccess).toBeUndefined();
         expect(result).not.toHaveProperty('canManageSbAccess');
+    });
+
+    it('„Aktywny” (isActive) nie jest flagą panelu - brak przechodzi, podany jest pomijany (U2)', () => {
+        const result = StaffMemberValidator.validateUpdatePayload({ personId: 42, ...allFlags, isActive: false });
+        expect(result).not.toHaveProperty('isActive');
     });
 
     it.each([true, false])('przepuszcza opcjonalną flagę SB: %p', (value) => {

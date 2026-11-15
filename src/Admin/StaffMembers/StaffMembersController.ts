@@ -15,7 +15,7 @@ import StaffMemberValidator from './StaffMemberValidator';
  * Controller uprawnień personelu.
  *
  * Brak add i delete - to nie słownik. Panel edytuje flagi istniejących osób,
- * nie tworzy ludzi. Odejście z firmy to isActive = false, nie usunięcie wiersza.
+ * nie tworzy ludzi. Odejście z firmy to wyłączenie konta trasą konta (U2), nie usunięcie wiersza.
  */
 export default class StaffMembersController extends BaseController<
     StaffMember,
@@ -50,7 +50,7 @@ export default class StaffMembersController extends BaseController<
     }
 
     /**
-     * Zapisuje flagi i „aktywny" osoby i zwraca odczytany stan.
+     * Zapisuje flagi osoby i zwraca odczytany stan. „Aktywny” to konto - zapisuje je trasa konta.
      *
      * Tylko flagi. Rola, e-mail systemowy i flaga FIDmana w treści są ignorowane -
      * konto ma jedną drogę zapisu, PUT /v2/persons/:personId/account, bo tylko ona

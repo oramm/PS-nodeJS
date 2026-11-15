@@ -199,8 +199,8 @@ export default class SbAccessRepository {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT ${STATE_COLUMNS}, p.Name AS name, p.Surname AS surname,
                 pa.SystemEmail AS systemEmail,
-                EXISTS (SELECT 1 FROM StaffMembers sm WHERE sm.PersonId = s.PersonId
-                    AND sm.CanManageSbAccess = 1 AND sm.IsActive = 1) AS canManageSb,
+                (pa.IsActive = 1 AND EXISTS (SELECT 1 FROM StaffMembers sm WHERE sm.PersonId = s.PersonId
+                    AND sm.CanManageSbAccess = 1)) AS canManageSb,
                 s.HealthReport AS healthReport, s.HealthReportedAt AS healthReportedAt,
                 s.HealthRefreshRequestedAt AS healthRefreshRequestedAt
              FROM SbAccess s

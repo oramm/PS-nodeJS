@@ -40,7 +40,7 @@ export default class AccessOverviewRepository {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT p.Id AS personId, p.Name AS name, p.Surname AS surname, e.Name AS entityName,
                 pa.SystemRoleId AS systemRoleId, sr.Name AS role,
-                COALESCE(sm.CanManageSbAccess = 1 AND sm.IsActive = 1, 0) AS sbFlag
+                COALESCE(sm.CanManageSbAccess = 1, 0) AS sbFlag
             FROM Persons p
             JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
             JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
