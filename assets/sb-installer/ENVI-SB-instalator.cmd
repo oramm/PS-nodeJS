@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.20.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.20.1. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.20.0"
+set "SB_INSTALATOR_WERSJA=0.20.1"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 if defined CODEX_THREAD_ID goto :agent
@@ -67,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 178066
+#SB-PLIK bootstrap.ps1 181724
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -2271,11 +2271,11 @@ function Invoke-N5DesktopInstalls {
         # Przy bledzie zapytania zatrzymujemy ten krok; nie zgadujemy, ze trzeba instalowac.
         $null = winget list --id Anthropic.Claude --exact --accept-source-agreements 2>&1
         $code = $LASTEXITCODE
-        if ($code -eq 0) { Log "[N5] $($app.Name) juz jest"; continue }
+        if ($code -eq 0) { Log "[N5] $($app.Name) juz jest"; $script:N5AplikacjeJest[$app.Id] = $true; continue }
         # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND (0x8A150014).
         if ($code -ne -1978335212) { throw "winget zglosil blad przy sprawdzaniu aplikacji (kod $code)" }
       } elseif (Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction Stop) {
-        Log "[N5] $($app.Name) juz jest"; continue
+        Log "[N5] $($app.Name) juz jest"; $script:N5AplikacjeJest[$app.Id] = $true; continue
       }
       if (-not $PSCmdlet.ShouldProcess($app.Name, $app.Cmd)) { continue }
       Log "[N5]   Windows moze teraz zapytac o zgode (takze w Sklepie Microsoft) - to instalacja $($app.Name), zaakceptuj ja. $script:PoradaOknoZgody"
@@ -2283,8 +2283,26 @@ function Invoke-N5DesktopInstalls {
       & ([scriptblock]::Create($app.Cmd))
       if ($LASTEXITCODE -ne 0) { throw "winget zglosil blad (kod $LASTEXITCODE)" }
       Log "[N5] $($app.Name) zainstalowana"
+      $script:N5AplikacjeJest[$app.Id] = $true
     } catch { Add-N5Todo $app.Name $_.Exception.Message }
   }
+}
+
+function Invoke-N5PocztaPoAplikacjach {
+  # Pulapka 15 (2026-11-14): na swiezym komputerze poczta rejestrowala sie, zanim byly aplikacje, a silnik
+  # pomija aplikacje bez katalogu konfiguracji (tworzy go dopiero pierwsze uruchomienie aplikacji).
+  # Katalog zakladamy sami - plik w nim dopisze silnik - i rejestrujemy poczte jeszcze raz.
+  $katalogi = @()
+  if ($script:N5AplikacjeJest['Anthropic.Claude']) { $katalogi += (Join-Path $env:APPDATA 'Claude') }
+  if ($script:N5AplikacjeJest['OpenAI.Codex']) { $katalogi += $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }) }
+  $brak = @($katalogi | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Container) })
+  if (-not $brak.Count) { return }
+  if (-not $PSCmdlet.ShouldProcess(($brak -join ', '), 'utworz katalog konfiguracji aplikacji i zarejestruj w niej poczte')) { return }
+  foreach ($k in $brak) {
+    try { New-Item -ItemType Directory -Path $k -Force -ErrorAction Stop | Out-Null; Log "[N5] katalog konfiguracji aplikacji utworzony: $k" }
+    catch { Add-N5Todo "Katalog konfiguracji $k" $_.Exception.Message }
+  }
+  Invoke-N5PocztaSync
 }
 
 function Set-N5GoogleInstructions {
@@ -2533,6 +2551,11 @@ function Invoke-N5PocztaSync {
       $script:PocztaSkrzynek = [int]$m.Groups[1].Value
       $script:PocztaZarejestrowanych = [int]$m.Groups[2].Value
     }
+    # Pulapka 14: silnik nie zapisal konfiguracji, bo aplikacja Claude chodzi (cofnelaby zmiane).
+    # Rozstrzyga ostatnie wywolanie silnika w tym przebiegu - stad usuniecie przed dopisaniem.
+    $czekaClaude = 'Aplikacja Claude: zmiana serwerow poczty i PS czeka, az ja zamkniesz. Zamknij Claude calkowicie (takze ikone przy zegarze: prawy przycisk - Quit), kliknij w menu ikony Second Brain "Synchronizuj teraz", potem otworz Claude ponownie.'
+    $script:N5Todo = @($script:N5Todo | Where-Object { $_ -ne $czekaClaude })
+    if (($out -join "`n") -match '(?m)^POCZTA-PODSUMOWANIE .* uwagi=czeka na zamkniecie aplikacji Claude baza=') { $script:N5Todo += $czekaClaude }
     # SBD-3: stan wpisu bazy PS (envi-db) - ostatnie pole tej samej linii silnika.
     $mb = [regex]::Match(($out -join "`n"), '(?m)^POCZTA-PODSUMOWANIE .* baza=([^\r\n]*)$')
     if ($mb.Success) { $script:BazaPsStan = $mb.Groups[1].Value.Trim() }
@@ -2565,6 +2588,7 @@ function Invoke-N5PocztaSync {
 # (DPAPI konta), ale magazyn poza ~/.envi, ktorego sprawdzian nie podstawi i nie obejrzy jednym
 # plikiem. Istniejacy klucz jest uzywany ponownie, bo nowy kasuje w PS wszystkie hasla osoby.
 $script:SekretyTodo = @()
+$script:N5AplikacjeJest = @{}
 $script:SekretyStan = $null
 $script:SekretyZmiana = $false
 $script:KluczOdcisk = $null
@@ -2776,6 +2800,21 @@ function Invoke-N5Sekrety {
       Log "[SBD] haslo ${nazwa}: $w"
     }
     $script:SekretyStan = if ($opisy.Count) { $opisy -join ', ' } else { 'administrator jeszcze zadnego nie udostepnil' }
+    # Pulapka 13 (MBX, 2026-11-14): skrzynki projektow agent czyta przez konto techniczne, a jego haslo
+    # administrator moze udostepnic dopiero dla klucza, ktory ten przebieg opublikowal. Bez tej pozycji
+    # instalator konczyl "Nic nie zostalo do zrobienia", a agent nie widzial zadnej skrzynki projektu.
+    $cfgAgenta = Get-SciezkaKonfigu 'sb-agent'
+    $hasloAgentaLokalnie = $false
+    try { $hasloAgentaLokalnie = (Test-Path -LiteralPath $cfgAgenta -PathType Leaf) -and (Test-Path -LiteralPath ([string](Get-Content -LiteralPath $cfgAgenta -Raw -Encoding UTF8 | ConvertFrom-Json).secret_file) -PathType Leaf) } catch { }
+    if (-not $hasloAgentaLokalnie -and -not @(@($lista.secrets) | Where-Object { [string]$_.name -eq 'poczta-sb-agent' }).Count) {
+      $skrzynkiPs = @()
+      try { $skrzynkiPs = @((Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/mailboxes' -Token $token).mailboxes | Where-Object { $_ }) }
+      catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
+      if ($skrzynkiPs.Count) {
+        Log "[SBD] PS przypisal tej osobie skrzynki projektow ($($skrzynkiPs.Count)), a hasla konta technicznego sb-agent nie udostepniono temu komputerowi"
+        $script:SekretyTodo += "Poczta projektow ($($skrzynkiPs.Count) w PS): administrator jeszcze nie udostepnil temu komputerowi hasla konta technicznego sb-agent, wiec agent nie przeczyta tych skrzynek. Popros administratora SB o udostepnienie go na ekranie Dostepy SB (znak klucza tego komputera: $znak), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+      }
+    }
   } catch {
     $script:SekretyStan = 'nie pobrane - ' + $_.Exception.Message
     if (-not $script:KluczAgentaStan) { $script:KluczAgentaStan = 'nie zarejestrowany - PS nie przyjal klucza komputera (patrz Hasla z PS)' }
@@ -2873,6 +2912,7 @@ function Invoke-StepN5 {
   Invoke-N5AgentInstalls
   Set-N5LocalBinPath
   Invoke-N5DesktopInstalls
+  Invoke-N5PocztaPoAplikacjach
   Set-N5GoogleInstructions
   Invoke-N5Google
   Invoke-N5ChannelSeparationGuard
@@ -3102,7 +3142,7 @@ if ($env:SB_INSTALATOR_KONIEC) {
   catch { Log "Nie udalo sie zapisac znacznika konca '$env:SB_INSTALATOR_KONIEC' ($($_.Exception.Message)) - okno instalatora powie, ze przebieg sie urwal, choc doszedl do konca." }
 }
 
-#SB-PLIK README-onboarding.md 9143
+#SB-PLIK README-onboarding.md 9811
 # Second Brain ENVI: pierwsze uruchomienie na Twoim komputerze
 
 Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Nie zakładasz żadnych kont i niczego nikomu nie wysyłasz: do wszystkiego używasz **jednego konta Google, którym logujesz się do PS ENVI**. Tym samym kontem logujesz się do Dysku Google i do GitHuba.
@@ -3168,7 +3208,11 @@ Na komputerze zainstalowany jest agent (Claude Code i/lub Codex; używasz tego, 
 
 ## Skrzynki poczty
 
-Żeby agent widział Twoją skrzynkę pocztową, kliknij ikonę Second Brain przy zegarze, wybierz "Skrzynki poczty", a potem "Dodaj skrzynkę…". Wybierz skrzynkę wspólną z listy albo wpisz dane swojego konta. Hasło wpisujesz raz, w oknie, które się otworzy: nikt, także agent, go nie widzi. Po hasło do skrzynki wspólnej (np. `faktury@`) zapytaj osobę, która tę skrzynkę prowadzi. Agent go nie zna i nie może Ci go podać.
+Skrzynki projektów, do których masz dostęp w PS, agent widzi sam: czyta je przez konto techniczne firmy, tylko do odczytu, a PS mówi mu, które projekty są Twoje. Nie dodajesz ich ręcznie. Hasło konta technicznego administrator może udostępnić Twojemu komputerowi (ekran "Dostępy SB" w PS) dopiero po pierwszej instalacji, więc za pierwszym razem instalator pokaże to na liście "do zrobienia". Poproś wtedy administratora o udostępnienie i uruchom `ENVI-SB-instalator.cmd` jeszcze raz.
+
+Własną skrzynkę albo wyjątek uzgodniony z administratorem (np. `faktury@`) dodajesz z ikony Second Brain przy zegarze: "Skrzynki poczty", potem "Dodaj skrzynkę…". Hasło wpisujesz raz, w oknie, które się otworzy: nikt, także agent, go nie widzi. Hasło do wyjątku daje administrator. Agent go nie zna i nie może Ci go podać.
+
+Po każdej zmianie skrzynek zamknij aplikację Claude całkowicie (także ikonę przy zegarze) i otwórz ją ponownie. Działająca aplikacja Claude cofa zmiany w swoich ustawieniach, dlatego Second Brain czeka z nimi, aż ją zamkniesz, i mówi o tym w menu ikony.
 
 ## Jeśli coś wygląda na zawieszone
 
