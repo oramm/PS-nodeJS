@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.20.1. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.21.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.20.1"
+set "SB_INSTALATOR_WERSJA=0.21.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 if defined CODEX_THREAD_ID goto :agent
@@ -67,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 181724
+#SB-PLIK bootstrap.ps1 177766
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -2643,53 +2643,6 @@ function Get-KluczKomputera {
   return $rsa
 }
 
-function Save-HasloSkrzynki([string]$Kod, [Security.SecureString]$Haslo) {
-  # Ten sam plik, format i droga co okno "Podaj / zmien haslo" (poczta-lib): DPAPI, kopia
-  # poprzedniego, test logowania IMAP. Skrzynka bez konfiguracji dostaje wzorzec skrzynki
-  # wspolnej z paczki serwera; bez wzorca nie zgadujemy serwera - pomijamy z komunikatem.
-  if (-not (Test-NazwaSkrzynki $Kod)) { Log "[SBD] poczta: kod skrzynki '$Kod' nie nadaje sie na nazwe pliku - pomijam"; return 'pominiete' }
-  $cfgPath = Get-SciezkaKonfigu $Kod
-  if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) {
-    $kat = Get-KatalogWzorcow
-    if (-not $kat -or -not (Test-Path -LiteralPath (Join-Path $kat "config.$Kod.json") -PathType Leaf)) {
-      Log "[SBD] poczta ${Kod}: haslo jest w PS, ale ten komputer nie zna serwera tej skrzynki (brak konfiguracji i wzorca skrzynki wspolnej) - pomijam"
-      $script:SekretyTodo += "Skrzynka poczty '$Kod': administrator udostepnil haslo, ale instalator nie zna serwera tej skrzynki. Popros wlasciciela SB o dodanie wzorca tej skrzynki (albo dodaj ja z menu ikony Second Brain: Skrzynki poczty - Dodaj skrzynke), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
-      return 'pominiete'
-    }
-    Copy-WzorzecSkrzynki -Nazwa $Kod
-    $script:SekretyZmiana = $true
-    Log "[SBD] poczta ${Kod}: skrzynka dodana ze wzorca skrzynki wspolnej ($cfgPath)"
-  }
-  $plik = [string]((Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json).secret_file)
-  if (-not $plik) { Log "[SBD] poczta ${Kod}: konfiguracja skrzynki nie wskazuje pliku hasla - pomijam"; return 'pominiete' }
-  if ((Unprotect-TekstDpapi $plik) -ceq [Net.NetworkCredential]::new('', $Haslo).Password) { return 'bez zmian' }
-  Write-HasloDpapi -Sciezka $plik -SecureString $Haslo
-  $script:SekretyZmiana = $true
-  $test = Test-LogowanieImap -Nazwa $Kod
-  if ($test.wynik -eq 'OK') { Remove-PoprzednieHaslo -Sciezka $plik; return 'zapisane, serwer poczty wpuscil' }
-  if ($test.wynik -eq 'ODRZUCONE') {
-    [void](Restore-PoprzednieHaslo -Sciezka $plik)
-    $script:SekretyTodo += "Skrzynka poczty '$Kod': serwer poczty odrzucil haslo udostepnione w PS (poprzednie zostalo). Popros administratora SB o sprawdzenie hasla i ponowne udostepnienie, potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
-    return 'odrzucone przez serwer poczty'
-  }
-  return ('zapisane, niesprawdzone: {0}' -f $test.opis)
-}
-
-function Save-HasloBazyPs([Security.SecureString]$Haslo) {
-  $plik = Get-PlikSekretuSerwera 'envi-db'
-  if (-not $plik) {
-    $script:SekretyTodo += 'Baza PS: serwer bazy dla agenta jeszcze nie dojechal z Dysku Google, wiec hasla nie bylo gdzie zapisac. Uruchom ENVI-SB-instalator.cmd jeszcze raz, gdy Dysk skonczy synchronizacje.'
-    return 'pominiete - brak serwera envi-db'
-  }
-  $jawne = [Net.NetworkCredential]::new('', $Haslo).Password
-  try {
-    if ((Unprotect-TekstDpapi $plik) -ceq $jawne) { return 'bez zmian' }
-    Protect-TekstDpapi -Sciezka $plik -Tekst $jawne
-  } finally { $jawne = $null }
-  $script:SekretyZmiana = $true
-  return 'zapisane'
-}
-
 function Register-KluczAgenta([string]$Token) {
   # SBZ-2 (plan SBZ w PS.APP.01): osobisty klucz agenta - 32 losowe bajty, base64url, 43 znaki,
   # ten sam format co token urzadzenia. Jawny klucz zostaje na tym komputerze pod DPAPI; do PS
@@ -2765,7 +2718,7 @@ function Invoke-N5Sekrety {
     if ($odp.changed) {
       Log "[SBD] klucz komputera zarejestrowany w PS: $znak"
       if ([int]$odp.removedSecrets -gt 0) {
-        $script:SekretyTodo += "Hasla: ten komputer ma nowy klucz ($znak), wiec PS usunal hasla zaszyfrowane poprzednim kluczem ($([int]$odp.removedSecrets)). Popros administratora SB, zeby udostepnil Ci je ponownie (ekran Dostepy SB w PS), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+        $script:SekretyTodo += "Hasla: ten komputer ma nowy klucz ($znak), wiec PS usunal hasla zaszyfrowane poprzednim kluczem ($([int]$odp.removedSecrets)). Popros administratora SB, zeby udostepnil Ci je ponownie (ekran Dostepy SB w PS); dojada same w ciagu godziny albo po Synchronizuj teraz."
       }
     } else { Log "[SBD] klucz komputera jest juz zarejestrowany w PS: $znak" }
     # SBZ-2: klucz agenta po rejestracji klucza komputera (PS juz zna ten komputer); osobno od hasel -
@@ -2775,29 +2728,16 @@ function Invoke-N5Sekrety {
       $script:KluczAgentaStan = 'nie zarejestrowany - ' + $_.Exception.Message
       Add-N5Todo 'Klucz agenta do zapisu w PS' $_.Exception.Message
     }
-    $lista = Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/secrets' -Token $token
-    if ($lista.keyThumbprint -and [string]$lista.keyThumbprint -ne $odcisk) { throw 'hasla w PS sa zaszyfrowane innym kluczem niz klucz tego komputera' }
+    $sekrety = Sync-SekretyZPs -Token $token -EnviDir (Split-Path $SyncEnginePath -Parent) -KluczPath $KluczKomputeraPath
+    if ($sekrety.blad) { throw $sekrety.blad }
+    $lista = $sekrety.ps
+    $script:SekretyZmiana = $script:SekretyZmiana -or $sekrety.zmiana
     $opisy = @()
-    foreach ($s in @($lista.secrets)) {
-      $nazwa = [string]$s.name
-      $haslo = New-Object Security.SecureString
-      try {
-        $bajty = $rsa.Decrypt([Convert]::FromBase64String([string]$s.ciphertext), [Security.Cryptography.RSAEncryptionPadding]::OaepSHA256)
-        $znaki = [Text.Encoding]::UTF8.GetChars($bajty)
-        foreach ($ch in $znaki) { $haslo.AppendChar($ch) }
-        [Array]::Clear($bajty, 0, $bajty.Length); [Array]::Clear($znaki, 0, $znaki.Length)
-      } catch {
-        Log "[SBD] haslo '$nazwa' nie daje sie odszyfrowac kluczem tego komputera - pomijam"
-        $script:SekretyTodo += "Haslo '$nazwa' z PS nie daje sie odszyfrowac kluczem tego komputera ($znak). Popros administratora SB o ponowne udostepnienie (ekran Dostepy SB), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
-        $opisy += "$nazwa (nie do odszyfrowania)"
-        $haslo.Dispose()
-        continue
-      }
-      if ($nazwa -eq 'baza-ps') { $w = Save-HasloBazyPs $haslo; $opisy += "baza PS ($w)" }
-      elseif ($nazwa -like 'poczta-*') { $kod = $nazwa.Substring(7); $w = Save-HasloSkrzynki $kod $haslo; $opisy += "poczta $kod ($w)" }
-      else { $w = 'nieznana nazwa - pominiete'; $opisy += "$nazwa ($w)" }
-      $haslo.Dispose()
-      Log "[SBD] haslo ${nazwa}: $w"
+    foreach ($w in @($sekrety.wyniki)) {
+      $nazwa = if ($w.nazwa -eq 'baza-ps') { 'baza PS' } else { $w.nazwa -replace '^poczta-', 'poczta ' }
+      $opisy += "$nazwa ($($w.wynik))"
+      Log "[SBD] haslo $($w.nazwa): $($w.wynik) - $($w.opis)"
+      if ($w.wynik -notin @('zapisane', 'bez zmian')) { $script:SekretyTodo += "${nazwa}: $($w.opis)" }
     }
     $script:SekretyStan = if ($opisy.Count) { $opisy -join ', ' } else { 'administrator jeszcze zadnego nie udostepnil' }
     # Pulapka 13 (MBX, 2026-11-14): skrzynki projektow agent czyta przez konto techniczne, a jego haslo
@@ -2812,7 +2752,7 @@ function Invoke-N5Sekrety {
       catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
       if ($skrzynkiPs.Count) {
         Log "[SBD] PS przypisal tej osobie skrzynki projektow ($($skrzynkiPs.Count)), a hasla konta technicznego sb-agent nie udostepniono temu komputerowi"
-        $script:SekretyTodo += "Poczta projektow ($($skrzynkiPs.Count) w PS): administrator jeszcze nie udostepnil temu komputerowi hasla konta technicznego sb-agent, wiec agent nie przeczyta tych skrzynek. Popros administratora SB o udostepnienie go na ekranie Dostepy SB (znak klucza tego komputera: $znak), potem uruchom ENVI-SB-instalator.cmd jeszcze raz."
+        $script:SekretyTodo += "Poczta projektow ($($skrzynkiPs.Count) w PS): administrator jeszcze nie udostepnil temu komputerowi hasla konta technicznego sb-agent, wiec agent nie przeczyta tych skrzynek. Popros administratora SB o udostepnienie go na ekranie Dostepy SB (znak klucza tego komputera: $znak); dojedzie samo w ciagu godziny albo po Synchronizuj teraz."
       }
     }
   } catch {
