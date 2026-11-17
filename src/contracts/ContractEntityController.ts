@@ -3,6 +3,7 @@ import BaseController from '../controllers/BaseController';
 import ContractEntityRepository from './ContractEntityRepository';
 import ContractEntity from './ContractEntity';
 import { ContractData, EntityData } from '../types/types';
+import { enqueueFinEntityRefresh } from './fidmanSync/FidmanSync';
 
 export default class ContractEntityController extends BaseController<
     ContractEntity,
@@ -61,6 +62,9 @@ export default class ContractEntityController extends BaseController<
                 'EMPLOYER',
                 conn
             );
+            for (const entityId of new Set(contract._employers.map((entity) => entity.id))) {
+                if (entityId != null) await enqueueFinEntityRefresh(conn, entityId);
+            }
         }
     }
 

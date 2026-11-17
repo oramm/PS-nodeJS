@@ -2,6 +2,9 @@ import BaseController from '../../controllers/BaseController';
 import NeedFocusAreaRepository, { NeedsFocusAreasSearchParams } from './NeedFocusAreaRepository';
 import NeedsFocusArea from './NeedFocusArea';
 import { NeedsFocusAreasData } from '../../types/types';
+import ToolsDb from '../../tools/ToolsDb';
+import NeedRepository from '../Needs/NeedRepository';
+import { enqueueFinEntityRefresh } from '../../contracts/fidmanSync/FidmanSync';
 
 export type { NeedsFocusAreasSearchParams };
 
@@ -32,7 +35,12 @@ export default class NeedsFocusAreasController extends BaseController<
     static async addNewNeedFocusArea(needFocusAreaData: NeedsFocusAreasData): Promise<NeedsFocusArea> {
         const instance = this.getInstance();
         const item = new NeedsFocusArea(needFocusAreaData);
-        await instance.create(item);
+        await ToolsDb.transaction(async (conn) => {
+            const clientId = await new NeedRepository().findClientIdInConn(conn, item.needId);
+            await instance.repository.addInDb(item, conn, true);
+            if (clientId != null) await enqueueFinEntityRefresh(conn, clientId);
+        });
+        item.id = '' + item.needId + item.focusAreaId;
         console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) added in db`);
         return item;
     }
@@ -40,7 +48,11 @@ export default class NeedsFocusAreasController extends BaseController<
     static async updateNeedFocusArea(needFocusAreaData: NeedsFocusAreasData, fieldsToUpdate: string[]): Promise<NeedsFocusArea> {
         const instance = this.getInstance();
         const item = new NeedsFocusArea(needFocusAreaData);
-        await instance.edit(item, undefined, undefined, fieldsToUpdate);
+        await ToolsDb.transaction(async (conn) => {
+            const clientId = await new NeedRepository().findClientIdInConn(conn, item.needId);
+            await instance.repository.editInDb(item, conn, true, fieldsToUpdate);
+            if (clientId != null) await enqueueFinEntityRefresh(conn, clientId);
+        });
         console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) updated in db`);
         return item;
     }
@@ -48,7 +60,11 @@ export default class NeedsFocusAreasController extends BaseController<
     static async deleteNeedFocusArea(needFocusAreaData: NeedsFocusAreasData): Promise<void> {
         const instance = this.getInstance();
         const item = new NeedsFocusArea(needFocusAreaData);
-        await instance.delete(item);
+        await ToolsDb.transaction(async (conn) => {
+            const clientId = await new NeedRepository().findClientIdInConn(conn, item.needId);
+            await instance.repository.deleteFromDb(item, conn, true);
+            if (clientId != null) await enqueueFinEntityRefresh(conn, clientId);
+        });
         console.log(`NeedFocusArea (NeedId: ${item.needId}, FocusAreaId: ${item.focusAreaId}) deleted from db`);
     }
 }

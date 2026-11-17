@@ -554,7 +554,7 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
  * commits atomically with the business write — or not at all. Returns insertId.
  */
 async function enqueueRow(
-    envelope: FidmanEnvelope | { kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> },
+    envelope: FidmanEnvelope | { kind: 'entity.upsert'; payload: { _recipient: 'fin'; entity: { id: number } } } | { kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> },
     refId: number | undefined,
     conn: mysql.PoolConnection
 ): Promise<number> {
@@ -585,6 +585,60 @@ export async function enqueueFidmanEntityPush(
     conn: mysql.PoolConnection
 ): Promise<number> {
     return enqueueRow(buildEntityUpsert(entity), entity.id, conn);
+}
+
+/** Wspólny zakres FIN dla edycji podmiotu i backfillu (wariant B). */
+export async function findFinClientIds(conn: mysql.PoolConnection, entityId?: number): Promise<number[]> {
+    const [rows] = await conn.query<mysql.RowDataPacket[]>(
+        `SELECT e.Id FROM Entities e
+         WHERE (EXISTS (SELECT 1 FROM Needs n WHERE n.ClientId = e.Id)
+             OR EXISTS (SELECT 1 FROM Contracts_Entities ce
+                        WHERE ce.EntityId = e.Id AND ce.ContractRole = 'EMPLOYER'))
+         ${entityId === undefined ? '' : 'AND e.Id = ?'}
+         ORDER BY e.Id`,
+        entityId === undefined ? [] : [entityId]
+    );
+    return rows.map((row) => row.Id);
+}
+
+/** Bez bramki zakresu: usunięcie ostatniej potrzeby też musi wyczyścić listę w FIN. */
+export async function enqueueFinEntityRefresh(conn: mysql.PoolConnection, entityId: number): Promise<number> {
+    return enqueueRow({ kind: 'entity.upsert', payload: { _recipient: 'fin', entity: { id: entityId } } }, entityId, conn);
+}
+
+async function currentFinEntity(entityId: number, conn?: mysql.PoolConnection) {
+    // Jeden odczyt daje pełny, spójny zestaw; złączenie nie może powielać potrzeb w payloadzie.
+    const sql = `SELECT e.Id, e.Name, e.TaxNumber, e.Address,
+                       n.Id AS NeedId, n.Name AS NeedName, n.Description, n.Status,
+                       fa.Name AS FocusAreaName, fa.Alias AS FocusAreaAlias
+                FROM Entities e
+                LEFT JOIN Needs n ON n.ClientId = e.Id
+                LEFT JOIN Needs_FocusAreas nf ON nf.NeedId = n.Id
+                LEFT JOIN FocusAreas fa ON fa.Id = nf.FocusAreaId
+                WHERE e.Id = ? ORDER BY n.Id, fa.Id`;
+    const rows = (await ToolsDb.getQueryCallbackAsync(sql, conn, [entityId])) as mysql.RowDataPacket[];
+    if (!rows.length) return null;
+    const entity = rows[0];
+    const needs = new Map<number, { id: number; name: string; description: string | null; status: string | null; focusAreas: string[] }>();
+    for (const row of rows) {
+        if (row.NeedId == null) continue;
+        if (!needs.has(row.NeedId)) needs.set(row.NeedId, {
+            id: row.NeedId, name: row.NeedName, description: row.Description ?? null,
+            status: row.Status ?? null, focusAreas: [],
+        });
+        if (row.FocusAreaName != null) {
+            const name = row.FocusAreaName.trim();
+            const code = row.FocusAreaAlias?.trim();
+            const label = code && !name.toLowerCase().includes(code.toLowerCase()) ? `${code} ${name}` : name;
+            const areas = needs.get(row.NeedId)!.focusAreas;
+            if (!areas.includes(label)) areas.push(label);
+        }
+    }
+    return {
+        _recipient: 'fin',
+        entity: { id: entity.Id, name: entity.Name, taxNumber: entity.TaxNumber ?? null, address: entity.Address ?? null },
+        needs: [...needs.values()],
+    };
 }
 
 export async function enqueueFidmanProjectPush(
@@ -906,7 +960,7 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
     try {
         const { _recipient, ...wirePayload } = parsePayload(row.Payload);
         const recipient =
-            row.Kind === 'user.upsert' && _recipient === 'fin' ? 'fin' : 'fidman';
+            ['user.upsert', 'entity.upsert'].includes(row.Kind) && _recipient === 'fin' ? 'fin' : 'fidman';
         errorPrefix = recipient === 'fin' ? '[FIN] ' : '';
         const { baseUrl, token } =
             recipient === 'fin' ? Setup.FinSync : Setup.FidmanSync;
@@ -916,7 +970,18 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
         let payload = wirePayload;
         // PE6: dostęp do FIN i skrót klucza agenta czytane w chwili dostawy, nie przy kolejkowaniu - ponowienie
         // starego wiersza nie przywróci dostępu ani klucza odebranego później.
-        if (recipient === 'fin') payload = await withCurrentFinState(payload, row.RefId, conn);
+        if (recipient === 'fin' && row.Kind === 'user.upsert') payload = await withCurrentFinState(payload, row.RefId, conn);
+        if (recipient === 'fin' && row.Kind === 'entity.upsert') {
+            const current = await currentFinEntity(row.RefId, conn);
+            if (!current) {
+                await ToolsDb.executeSQL(
+                    `UPDATE ${OUTBOX_TABLE} SET Status = 'SKIPPED', SkipReason = 'ENTITY_NOT_FOUND', LastError = NULL WHERE Id = ?`,
+                    [row.Id], ...(conn ? [conn] : [])
+                );
+                return 'SKIPPED';
+            }
+            payload = current;
+        }
         if (row.Kind === 'contract.folders') {
             if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
                 throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
@@ -940,7 +1005,7 @@ async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnect
         const response = await post(payload);
         // PE6: dwie dostawy tej samej osoby mogą się wyprzedzić (stary skrót dojdzie po odebraniu). Po przyjęciu
         // czytamy stan jeszcze raz i dosyłamy bieżący, gdy zmienił się w trakcie - FIN kończy na stanie z bazy PS.
-        for (let i = 0; recipient === 'fin' && response.status === 200 && i < 3; i++) {
+        for (let i = 0; recipient === 'fin' && row.Kind === 'user.upsert' && response.status === 200 && i < 3; i++) {
             const now = await withCurrentFinState(payload, row.RefId, conn);
             if (now.enabled === payload.enabled && now.sbAgentKeyHash === payload.sbAgentKeyHash) break;
             payload = now;
