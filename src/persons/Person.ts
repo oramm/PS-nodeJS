@@ -26,6 +26,7 @@ export default class Person extends BusinessObject implements PersonData {
      * _projectAssignments: klient dostaje z odpowiedzi to, co wysłał, i dopiero wtedy
      * zapisuje ją trasą konta v2. Bez tego zaznaczenie ginęło po drodze. */
     fidmanEnabled?: boolean;
+    finEnabled?: boolean;
 
     constructor(initParamObject: any) {
         super({ ...initParamObject, _dbTableName: 'Persons' });
@@ -51,5 +52,6 @@ export default class Person extends BusinessObject implements PersonData {
         this._skillNames = initParamObject._skillNames;
         this._projectAssignments = initParamObject._projectAssignments;
         this.fidmanEnabled = initParamObject.fidmanEnabled;
+        this.finEnabled = initParamObject.finEnabled;
     }
 }

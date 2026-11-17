@@ -4,7 +4,15 @@ import MileageController from './MileageController';
 import { MileageYearError } from './MileageYear';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import { ForbiddenError } from '../persons/projectAssignments/ProjectScopeGuard';
-import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
+import { SystemRoleName } from '../types/sessionTypes';
+
+/**
+ * Role, którym kilometrówkę daje wyłącznie flaga. Celowo nie PROJECT_SCOPED_ROLES: współpracownik
+ * jest ograniczony do przypisań, ale kilometrówkę miał zawsze i nikt nie ma u niego wiersza
+ * StaffMembers - podpięcie pod flagę odebrałoby ją po cichu (plan DOSTEP, etap 1).
+ * Użytkownikowi zewnętrznemu trasy kilometrówki zamyka allowlista projectScopedPolicy.
+ */
+const DRIVER_FLAG_ROLES: SystemRoleName[] = [SystemRoleName.CONTRACT_WORKER, SystemRoleName.CLIENT];
 
 /**
  * Dostęp do kilometrówki wynika z flagi StaffMembers.IsDriver, nie z roli systemowej.
@@ -16,7 +24,7 @@ async function hasModuleAccess(req: Request): Promise<boolean> {
     const personId = req.session.userData?.enviId;
     if (!personId) return false;
     const role = req.session.userData?.systemRoleName;
-    if (!role || !PROJECT_SCOPED_ROLES.includes(role)) return true;
+    if (!role || !DRIVER_FLAG_ROLES.includes(role)) return true;
     return StaffMemberRepository.isDriver(personId);
 }
 

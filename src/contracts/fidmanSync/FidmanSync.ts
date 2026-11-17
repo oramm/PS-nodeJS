@@ -5,7 +5,9 @@ import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 import Entity from '../../entities/Entity';
 import Project from '../../projects/Project';
+import ProjectRepository from '../../projects/ProjectRepository';
 import { isValidNipChecksum } from '../aqmSync/AqmSync';
+import { SystemRoleName } from '../../types/sessionTypes';
 
 /**
  * SYNC-P1 — PS ENVI -> FIDman sync.
@@ -30,6 +32,12 @@ import { isValidNipChecksum } from '../aqmSync/AqmSync';
 
 const OUTBOX_TABLE = 'FidmanSyncOutbox';
 const PUSH_PATH = '/api/ps-sync';
+// Krótka próba blokady; zajętą dostawę ponowi drainer.
+const FOLDERS_DELIVERY_LOCK_SECONDS = 5;
+// Ogranicza także oczekiwanie na treść odpowiedzi FIDmana.
+const DELIVERY_TIMEOUT_MS = 15_000;
+// Limit prób drainera; ten sam próg rozstrzyga, czy umowa jest jeszcze „do dostarczenia".
+const FIDMAN_OUTBOX_MAX_ATTEMPTS = 10;
 
 type AnyContract = ContractOur | ContractOther;
 
@@ -37,7 +45,9 @@ export type FidmanKind =
     | 'contract.upsert'
     | 'entity.upsert'
     | 'project.upsert'
-    | 'user.upsert';
+    | 'user.upsert'
+    | 'contract.personnel'
+    | 'contract.folders';
 
 export type FidmanRole = 'EMPLOYER' | 'ENGINEER' | 'CONTRACTOR';
 
@@ -75,6 +85,9 @@ export type FidmanContractPayload = {
 export type FidmanProjectPayload = FidmanProjectRef & {
     name?: string;
     comment?: string;
+    gdFolderId: string | null;
+    fundingAgreementNumber?: string;
+    program?: string;
 };
 
 /**
@@ -83,6 +96,7 @@ export type FidmanProjectPayload = FidmanProjectRef & {
  * Kształt jest kopią schematu zod po stronie FIDmana (apps/api/src/ps-sync/validation.ts,
  * `userPayloadSchema`), bo to on decyduje o 200 albo 400. `email` to SystemEmail, czyli
  * tożsamość logowania Google — nie adres kontaktowy.
+ * Rola systemowa: '' oznacza jawny brak roli i powoduje wyczyszczenie poprzedniej w FIDmanie.
  */
 export type FidmanUserPayload = {
     legacyPersonId: number;
@@ -91,6 +105,7 @@ export type FidmanUserPayload = {
     name: string;
     surname: string;
     phone?: string;
+    systemRole: SystemRoleName | '';
     enabled: boolean;
 };
 
@@ -98,7 +113,315 @@ export type FidmanEnvelope =
     | { kind: 'contract.upsert'; payload: FidmanContractPayload }
     | { kind: 'entity.upsert'; payload: FidmanEntityPayload }
     | { kind: 'project.upsert'; payload: FidmanProjectPayload }
-    | { kind: 'user.upsert'; payload: FidmanUserPayload };
+    | { kind: 'user.upsert'; payload: FidmanUserPayload }
+    | { kind: 'contract.personnel'; payload: FidmanPersonnelPayload }
+    | { kind: 'contract.folders'; payload: FidmanFoldersPayload };
+
+export type FidmanFoldersPayload = {
+    folderSetVersion: number;
+    legacyContractId: number;
+    contractFolderId: string | null;
+    cases: { psCaseId: number; psCaseTypeId: number; folderId: string }[];
+};
+
+/** Pełna lista kamieni 50, włącznie z podsprawami i sprawami zamkniętymi. */
+export async function buildContractFoldersPayload(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<{ kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> }> {
+    const [contracts] = await conn.query(
+        'SELECT GdFolderId FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]
+    );
+    const contract = (contracts as any[])[0];
+    if (!contract) throw new Error(`Nie znaleziono umowy ${contractId}.`);
+    const [rows] = await conn.query(
+        `SELECT c.Id, c.TypeId, c.GdFolderId
+         FROM Cases c JOIN Milestones m ON m.Id = c.MilestoneId
+         WHERE m.ContractId = ? AND m.TypeId = 50
+         ORDER BY c.Id FOR UPDATE`, [contractId]
+    );
+    const cases: FidmanFoldersPayload['cases'] = [];
+    for (const row of rows as any[]) {
+        // Kolumna dopuszcza NULL, a FIDman odrzuciłby cały komplet z jednym psCaseTypeId bez wartości.
+        if (row.TypeId == null) {
+            console.warn(`[FidmanSync] Pominięto sprawę bez rodzaju: umowa ${contractId}, sprawa ${row.Id}.`);
+            continue;
+        }
+        // Wzorzec driveFolderId z contractFoldersPayloadSchema po stronie FIDmana.
+        if (!row.GdFolderId || !/^[A-Za-z0-9_-]{10,128}$/.test(row.GdFolderId)) {
+            console.warn(`[FidmanSync] Pominięto sprawę bez poprawnego folderu: umowa ${contractId}, sprawa ${row.Id}.`);
+            continue;
+        }
+        cases.push({ psCaseId: row.Id, psCaseTypeId: row.TypeId, folderId: row.GdFolderId });
+    }
+    let contractFolderId = contract.GdFolderId || null;
+    if (contractFolderId && !/^[A-Za-z0-9_-]{10,128}$/.test(contractFolderId)) {
+        console.warn(`[FidmanSync] Pominięto niepoprawny folder umowy ${contractId}.`);
+        contractFolderId = null;
+    }
+    return {
+        kind: 'contract.folders',
+        payload: { legacyContractId: contractId, contractFolderId, cases },
+    };
+}
+
+/** Wywoływać w transakcji zapisu; force jest dla jednorazowego dopchnięcia. */
+export async function enqueueFidmanFoldersPush(
+    contractId: number,
+    conn: mysql.PoolConnection,
+    force = false
+): Promise<number | null> {
+    // Blokada umowy szereguje równoległe porównania i wpisy, także gdy kolejka jest pusta.
+    const [contracts] = await conn.query(
+        'SELECT TypeId, FidmanSyncEnabled FROM Contracts WHERE Id = ? FOR UPDATE', [contractId]
+    );
+    const contract = (contracts as any[])[0];
+    if (!contract || !isFidmanSyncEligible({
+        typeId: contract.TypeId, fidmanSyncEnabled: !!contract.FidmanSyncEnabled,
+    })) return null;
+    const envelope = await buildContractFoldersPayload(contractId, conn);
+    if (!force) {
+        const [rows] = await conn.query(
+            `SELECT Payload, Status FROM ${OUTBOX_TABLE}
+             WHERE Kind = 'contract.folders' AND RefId = ?
+             ORDER BY Id DESC LIMIT 1 FOR UPDATE`, [contractId]
+        );
+        const latest = (rows as any[])[0];
+        if (latest && ['PENDING', 'SENT'].includes(latest.Status)) {
+            const previous = typeof latest.Payload === 'string'
+                ? JSON.parse(latest.Payload) : latest.Payload;
+            // MariaDB może zmienić kolejność kluczy JSON; porównujemy jawne pola migawki.
+            if (previous.legacyContractId === envelope.payload.legacyContractId &&
+                previous.contractFolderId === envelope.payload.contractFolderId &&
+                Array.isArray(previous.cases) && previous.cases.length === envelope.payload.cases.length &&
+                previous.cases.every((entry: any, i: number) => {
+                    const current = envelope.payload.cases[i];
+                    return entry.psCaseId === current.psCaseId &&
+                        entry.psCaseTypeId === current.psCaseTypeId && entry.folderId === current.folderId;
+                })) return null;
+        }
+    }
+    const id = await enqueueRow(envelope, contractId, conn);
+    await conn.execute(
+        `UPDATE ${OUTBOX_TABLE}
+         SET Status = 'SKIPPED', SkipReason = 'SUPERSEDED', LastError = NULL
+         WHERE Kind = 'contract.folders' AND RefId = ? AND Id < ?
+           AND Status IN ('PENDING', 'FAILED')`, [contractId, id]
+    );
+    return id;
+}
+
+/** Blokuje wszystkie umowy przed zapisem kamieni/spraw lub składaniem migawek. */
+export async function lockFidmanFoldersContracts(
+    contractIds: (number | undefined)[],
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const ids = [...new Set(contractIds)]
+        .filter((id): id is number => id != null).sort((a, b) => a - b);
+    for (const id of ids) {
+        await conn.query('SELECT Id FROM Contracts WHERE Id = ? FOR UPDATE', [id]);
+    }
+    return ids;
+}
+
+/** Rozwiązuje i blokuje również starą umowę sprawy przed przeniesieniem/usunięciem. */
+export async function findAndLockFidmanFoldersContractIds(
+    milestoneIds: number[],
+    conn: mysql.PoolConnection,
+    caseId?: number,
+    additionalContractIds: (number | undefined)[] = []
+): Promise<number[]> {
+    const ids = [...new Set(milestoneIds)].filter((id) => id != null);
+    if (!ids.length && !caseId) return lockFidmanFoldersContracts(additionalContractIds, conn);
+    const sql = (locking = false) => `SELECT DISTINCT m.ContractId FROM Milestones m
+         WHERE ${ids.length ? `m.Id IN (${ids.map(() => '?').join(',')})` : '0'}
+         ${caseId ? `OR m.Id = (SELECT MilestoneId FROM Cases WHERE Id = ?${locking ? ' FOR UPDATE' : ''})` : ''}
+         ${locking ? 'FOR UPDATE' : ''}`;
+    const params = [...ids, ...(caseId ? [caseId] : [])];
+    const [rows] = await conn.query(sql(), params);
+    const locked = await lockFidmanFoldersContracts([
+        ...additionalContractIds, ...(rows as any[]).map((row) => row.ContractId),
+    ], conn);
+    // Blokujący odczyt także wewnątrz podzapytania widzi bieżącego właściciela przy REPEATABLE READ.
+    const [current] = await conn.query(sql(true), params);
+    const missing = (current as any[]).map((row) => row.ContractId)
+        .filter((id) => id != null && !locked.includes(id));
+    // Dobranie blokady poza kolejnością jest świadome: podwójny wyścig przeniesień jest skrajnie rzadki.
+    return [...locked, ...await lockFidmanFoldersContracts(missing, conn)].sort((a, b) => a - b);
+}
+
+/** Umowy, których komplet zmieni kaskadowe usunięcie rodzaju. */
+export async function findFidmanFoldersContractsForType(
+    kind: 'case' | 'milestone', typeId: number
+): Promise<number[]> {
+    const rows = await ToolsDb.getQueryCallbackAsync(
+        kind === 'case'
+            ? `SELECT DISTINCT m.ContractId FROM Milestones m JOIN Cases c ON c.MilestoneId = m.Id
+               WHERE m.TypeId = 50 AND c.TypeId = ? AND m.ContractId IS NOT NULL`
+            : `SELECT DISTINCT m.ContractId FROM Milestones m
+               WHERE m.TypeId = 50 AND m.TypeId = ? AND m.ContractId IS NOT NULL`,
+        undefined, [typeId]
+    ) as { ContractId: number }[];
+    return rows.map((row) => row.ContractId);
+}
+
+export async function deliverFidmanFoldersAfterCommit(ids: number[]): Promise<void> {
+    for (const id of ids) {
+        await tryDeliverAfterCommit(id).catch((err) =>
+            console.error('[FidmanSync] folder delivery error:', err)
+        );
+    }
+}
+
+/** Bez conn zapis użytkownika jest już zatwierdzony: błąd synchronizacji tylko logujemy. */
+export async function enqueueFidmanFoldersForContracts(
+    contractIds: (number | undefined)[],
+    conn?: mysql.PoolConnection,
+    force = false
+): Promise<number[]> {
+    const contracts = [...new Set(contractIds)]
+        .filter((id): id is number => id != null).sort((a, b) => a - b);
+    if (!contracts.length) return [];
+    if (!conn) {
+        try {
+            const ids = await ToolsDb.transaction<number[]>(async (connection) =>
+                enqueueFidmanFoldersForContracts(contracts, connection, force)
+            );
+            void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
+                console.error('[FidmanSync] folder delivery error:', err)
+            );
+            return ids;
+        } catch (err) {
+            console.error('[FidmanSync] folder enqueue after save error:', err);
+            return [];
+        }
+    }
+    await lockFidmanFoldersContracts(contracts, conn);
+    const ids: number[] = [];
+    for (const contractId of contracts) {
+        const id = await enqueueFidmanFoldersPush(contractId, conn, force);
+        if (id !== null) ids.push(id);
+    }
+    return ids;
+}
+
+export type FidmanPersonnelPayload = {
+    legacyContractId: number;
+    personnel: {
+        psPersonId: number;
+        firstName: string;
+        lastName: string;
+        email: string;
+        loginEmail?: string;
+        roleName: string;
+        group: 'Zamawiający' | 'Inżynier' | 'Wykonawca/Podwykonawcy' | 'Pozostali';
+    }[];
+};
+
+export type FidmanRoleScope = {
+    ContractId: number | null;
+    ProjectOurId: string | null;
+};
+
+/** ContractId ma pierwszeństwo; kod ROZNE. wyklucza wyłącznie rozwijanie projektu. */
+export async function findFidmanPersonnelContracts(
+    scopes: FidmanRoleScope[] | undefined,
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const conditions: string[] = [];
+    const params: (number | string)[] = [];
+    if (scopes) {
+        for (const scope of scopes) {
+            if (scope.ContractId != null) {
+                conditions.push('c.Id = ?');
+                params.push(scope.ContractId);
+            } else if (scope.ProjectOurId && !scope.ProjectOurId.startsWith('ROZNE.')) {
+                conditions.push('c.ProjectOurId = ?');
+                params.push(scope.ProjectOurId);
+            }
+        }
+        if (!conditions.length) return [];
+    }
+    const [rows] = await conn.query(
+        `SELECT c.Id, c.TypeId, c.FidmanSyncEnabled FROM Contracts c
+         WHERE ${scopes ? `(${conditions.join(' OR ')})` : '1'}
+         ORDER BY c.Id`, params
+    );
+    return [...new Set((rows as any[])
+        .filter((row) => isFidmanSyncEligible({
+            typeId: row.TypeId, fidmanSyncEnabled: !!row.FidmanSyncEnabled,
+        }))
+        .map((row) => row.Id as number))];
+}
+
+/** Pełna migawka po zmianie roli; odczyty korzystają z połączenia transakcji. */
+export async function buildContractPersonnelPayload(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<{ kind: 'contract.personnel'; payload: FidmanPersonnelPayload }> {
+    const [rows] = await conn.query(
+        `SELECT r.PersonId, p.Name AS FirstName, p.Surname AS LastName,
+                p.Email, pa.SystemEmail AS LoginEmail, r.Name AS RoleName, r.GroupName
+         FROM Contracts c
+         JOIN Roles r ON (r.ContractId = c.Id AND
+             (r.ProjectOurId IS NULL OR LEFT(r.ProjectOurId, 6) <> 'ROZNE.')) OR
+             (r.ContractId IS NULL AND r.ProjectOurId = c.ProjectOurId
+              AND LEFT(c.ProjectOurId, 6) <> 'ROZNE.')
+         JOIN Persons p ON p.Id = r.PersonId
+         LEFT JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
+         WHERE c.Id = ?
+         ORDER BY (r.ContractId IS NULL), r.Id`, [contractId]
+    );
+    const personnel: FidmanPersonnelPayload['personnel'] = [];
+    const seen = new Set<string>();
+    for (const row of rows as any[]) {
+        const loginEmail = trimmedOrEmpty(row.LoginEmail);
+        const entry = {
+            psPersonId: row.PersonId,
+            firstName: trimmedOrEmpty(row.FirstName),
+            lastName: trimmedOrEmpty(row.LastName),
+            email: trimmedOrEmpty(row.Email),
+            ...(loginEmail.length >= 6 && loginEmail.length <= 96 &&
+                FIDMAN_EMAIL_PATTERN.test(loginEmail) ? { loginEmail } : {}),
+            roleName: trimmedOrEmpty(row.RoleName),
+            group: row.GroupName,
+        };
+        // Limity i wzorzec z contractPersonnelPayloadSchema w FIDmanie.
+        if (!Number.isInteger(entry.psPersonId) ||
+            !entry.firstName || entry.firstName.length > 63 ||
+            !entry.lastName || entry.lastName.length > 32 ||
+            entry.email.length < 6 || entry.email.length > 96 ||
+            !FIDMAN_EMAIL_PATTERN.test(entry.email) ||
+            !entry.roleName || entry.roleName.length > 100 ||
+            !['Zamawiający', 'Inżynier', 'Wykonawca/Podwykonawcy', 'Pozostali'].includes(entry.group)) {
+            console.warn(`[FidmanSync] Pominięto niepoprawny personel: umowa ${contractId}, osoba ${row.PersonId}.`);
+            continue;
+        }
+        const key = JSON.stringify([entry.psPersonId, entry.roleName]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        personnel.push(entry);
+    }
+    return { kind: 'contract.personnel', payload: { legacyContractId: contractId, personnel } };
+}
+
+export async function enqueueFidmanPersonnelPush(
+    contractId: number,
+    conn: mysql.PoolConnection
+): Promise<number> {
+    return enqueueRow(await buildContractPersonnelPayload(contractId, conn), contractId, conn);
+}
+
+export async function enqueueFidmanPersonnelForRoles(
+    scopes: FidmanRoleScope[],
+    conn: mysql.PoolConnection
+): Promise<number[]> {
+    const ids: number[] = [];
+    for (const contractId of await findFidmanPersonnelContracts(scopes, conn)) {
+        ids.push(await enqueueFidmanPersonnelPush(contractId, conn));
+    }
+    return ids;
+}
 
 export type FidmanIngestResponse = {
     created?: number;
@@ -173,20 +496,26 @@ function collectContractEntities(contract: any): FidmanEntityPayload[] {
     return out;
 }
 
+/** Inline project ref of a `contract.upsert`, built from the project row read from the DB. */
+function buildProjectRef(sourceProject: any): FidmanProjectPayload | undefined {
+    if (!sourceProject) return undefined;
+    return {
+        legacyProjectId: sourceProject.id,
+        ourId: sourceProject.ourId,
+        name: sourceProject.name,
+        gdFolderId: sourceProject.gdFolderId?.trim() || null,
+        ...(sourceProject.fundingAgreementNumber?.trim() ? { fundingAgreementNumber: sourceProject.fundingAgreementNumber.trim() } : {}),
+        ...(sourceProject.program?.trim() ? { program: sourceProject.program.trim() } : {}),
+    };
+}
+
 /**
  * Build the FIDman `contract.upsert` envelope: the contract + inline project ref
  * + entities-with-roles. Source-owned fields only (FIDman owns its own fields).
  */
-export function buildContractPayload(contract: AnyContract): FidmanEnvelope {
+export function buildContractPayload(contract: AnyContract, sourceProject = (contract as any)._project): FidmanEnvelope {
     const c = contract as any;
-    // R7-P1: carry the REAL project name (ContractRepository loads it as _project.name),
-    // not just the natural key. Without it FIDman's `p.name ?? p.ourId` insert fallback
-    // seeds projects.name = ourId → the "Nazwa == Numer" bug in Słowniki → Projekty.
-    // (comment is not loaded onto a contract's _project, so it stays omitted — the
-    // standalone project.upsert still carries it.)
-    const project: FidmanProjectPayload | undefined = c._project
-        ? { legacyProjectId: c._project.id, ourId: c._project.ourId, name: c._project.name }
-        : undefined;
+    const project = buildProjectRef(sourceProject);
 
     return {
         kind: 'contract.upsert',
@@ -213,9 +542,7 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
     return {
         kind: 'project.upsert',
         payload: {
-            legacyProjectId: p.id,
-            ourId: p.ourId,
-            name: p.name,
+            ...buildProjectRef(p)!,
             comment: p.comment,
         },
     };
@@ -227,7 +554,7 @@ export function buildProjectUpsert(project: Project): FidmanEnvelope {
  * commits atomically with the business write — or not at all. Returns insertId.
  */
 async function enqueueRow(
-    envelope: FidmanEnvelope,
+    envelope: FidmanEnvelope | { kind: 'contract.folders'; payload: Omit<FidmanFoldersPayload, 'folderSetVersion'> },
     refId: number | undefined,
     conn: mysql.PoolConnection
 ): Promise<number> {
@@ -241,9 +568,16 @@ async function enqueueRow(
 
 export async function enqueueFidmanContractPush(
     contract: AnyContract,
-    conn: mysql.PoolConnection
+    conn: mysql.PoolConnection,
+    foldersOutboxIds: number[] = [],
+    forceFolders = false
 ): Promise<number> {
-    return enqueueRow(buildContractPayload(contract), (contract as any).id, conn);
+    await lockFidmanFoldersContracts([(contract as any).id], conn);
+    const project = await new ProjectRepository().findForContract(contract.id!, conn);
+    const id = await enqueueRow(buildContractPayload(contract, project), contract.id, conn);
+    await enqueueFidmanPersonnelPush((contract as any).id, conn);
+    foldersOutboxIds.push(...await enqueueFidmanFoldersForContracts([(contract as any).id], conn, forceFolders));
+    return id;
 }
 
 export async function enqueueFidmanEntityPush(
@@ -257,7 +591,8 @@ export async function enqueueFidmanProjectPush(
     project: Project,
     conn: mysql.PoolConnection
 ): Promise<number> {
-    return enqueueRow(buildProjectUpsert(project), (project as any).id, conn);
+    const persisted = await new ProjectRepository().findById(project.id!, conn);
+    return enqueueRow(buildProjectUpsert(persisted), project.id, conn);
 }
 
 // ==================== GLO-P1: user.upsert ====================
@@ -273,6 +608,7 @@ export type FidmanUserSource = {
     surname?: string | null;
     /** PersonAccounts.SystemEmail - jedyne źródło e-maila logowania (ROD-5; zaszła kolumna Persons.SystemEmail nie jest już czytana). */
     systemEmail?: string | null;
+    systemRoleName?: string | null;
     /** PS Persons.Cellphone. */
     cellphone?: string | null;
 };
@@ -301,41 +637,47 @@ const trimmedOrEmpty = (value: string | null | undefined): string =>
  * Ta funkcja nie zgaduje i niczego nie naprawia: obcięcie za długiego imienia dałoby
  * w FIDmanie inne nazwisko niż w PS, a to gorsze niż odmowa zapisu.
  */
-export function validateFidmanUserSource(source: FidmanUserSource): string[] {
+export type UserSyncRecipient = 'fidman' | 'fin';
+
+export function validateFidmanUserSource(
+    source: FidmanUserSource,
+    recipient: UserSyncRecipient = 'fidman',
+): string[] {
+    const recipientName = recipient === 'fin' ? 'FIN' : 'FIDmana';
     const problems: string[] = [];
     const email = trimmedOrEmpty(source.systemEmail);
     const name = trimmedOrEmpty(source.name);
     const surname = trimmedOrEmpty(source.surname);
 
     if (!email) {
-        problems.push('Użytkownik FIDmana musi mieć e-mail systemowy.');
+        problems.push(`Użytkownik ${recipientName} musi mieć e-mail systemowy.`);
     } else if (
         email.length < FIDMAN_USER_LIMITS.email.min ||
         !FIDMAN_EMAIL_PATTERN.test(email)
     ) {
         problems.push(
-            'E-mail systemowy użytkownika FIDmana ma nieprawidłowy format.'
+            `E-mail systemowy użytkownika ${recipientName} ma nieprawidłowy format.`
         );
     } else if (email.length > FIDMAN_USER_LIMITS.email.max) {
         problems.push(
-            `E-mail systemowy użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
+            `E-mail systemowy użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.email.max} znaków.`
         );
     }
 
-    if (!name) problems.push('Użytkownik FIDmana musi mieć imię.');
+    if (!name) problems.push(`Użytkownik ${recipientName} musi mieć imię.`);
     else if (name.length > FIDMAN_USER_LIMITS.name)
         problems.push(
-            `Imię użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
+            `Imię użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.name} znaków.`
         );
 
-    if (!surname) problems.push('Użytkownik FIDmana musi mieć nazwisko.');
+    if (!surname) problems.push(`Użytkownik ${recipientName} musi mieć nazwisko.`);
     else if (surname.length > FIDMAN_USER_LIMITS.surname)
         problems.push(
-            `Nazwisko użytkownika FIDmana może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
+            `Nazwisko użytkownika ${recipientName} może mieć maksymalnie ${FIDMAN_USER_LIMITS.surname} znaków.`
         );
 
-    if (!source.entityId)
-        problems.push('Użytkownik FIDmana musi być przypisany do podmiotu.');
+    if (recipient === 'fidman' && !source.entityId)
+        problems.push(`Użytkownik ${recipientName} musi być przypisany do podmiotu.`);
 
     return problems;
 }
@@ -362,6 +704,8 @@ export function buildUserUpsert(
             name: trimmedOrEmpty(source.name),
             surname: trimmedOrEmpty(source.surname),
             ...(phone ? { phone } : {}),
+            systemRole: Object.values(SystemRoleName).includes(source.systemRoleName as SystemRoleName)
+                ? source.systemRoleName as SystemRoleName : '',
             enabled,
         },
     };
@@ -375,13 +719,13 @@ export function buildUserUpsert(
 export async function enqueueFidmanUserPush(
     source: FidmanUserSource,
     enabled: boolean,
-    conn: mysql.PoolConnection
+    conn: mysql.PoolConnection,
+    recipient: UserSyncRecipient = 'fidman',
 ): Promise<number> {
-    return enqueueRow(
-        buildUserUpsert(source, enabled),
-        source.personId,
-        conn
-    );
+    const envelope = buildUserUpsert(source, enabled);
+    // Jawna flaga kolejkuje FIN także bez konfiguracji, aby drainer mógł ponowić dostawę.
+    if (recipient === 'fin') Object.assign(envelope.payload, { _recipient: 'fin' });
+    return enqueueRow(envelope, source.personId, conn);
 }
 
 function typeIdInClause(): { clause: string; ids: number[] } {
@@ -494,12 +838,12 @@ function parsePayload(raw: any): any {
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
 
-async function markFailed(row: OutboxRow, error: string): Promise<void> {
+async function markFailed(row: OutboxRow, error: string, conn?: mysql.PoolConnection): Promise<void> {
     await ToolsDb.executeSQL(
         `UPDATE ${OUTBOX_TABLE}
          SET Status = 'FAILED', Attempts = Attempts + 1, LastError = ?
-         WHERE Id = ?`,
-        [error?.slice(0, 60000) ?? null, row.Id]
+         WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+        [error?.slice(0, 60000) ?? null, row.Id], ...(conn ? [conn] : [])
     );
 }
 
@@ -512,42 +856,120 @@ async function markFailed(row: OutboxRow, error: string): Promise<void> {
  */
 export async function deliverOutboxRow(
     row: OutboxRow
-): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
-    const { baseUrl, token } = Setup.FidmanSync;
+): Promise<'SENT' | 'FAILED' | 'SKIPPED' | null> {
+    if (row.Kind !== 'contract.folders') return deliverUnlockedOutboxRow(row);
+    const lockName = `fidman:contract.folders:${row.RefId}`;
+    let conn: mysql.PoolConnection | undefined;
+    let acquired = false;
+    let destroyConn = false;
     try {
-        if (!baseUrl) throw new Error('FIDMAN_SYNC_BASE_URL nie ustawione');
+        conn = await ToolsDb.getPoolConnectionWithTimeout();
+        const [locks] = await conn.query('SELECT GET_LOCK(?, ?) AS Acquired',
+            [lockName, FOLDERS_DELIVERY_LOCK_SECONDS]);
+        acquired = (locks as any[])[0]?.Acquired === 1;
+        if (!acquired) return null;
+        // Komplet nie wyprzedza umowy: bez SENT i z wpisem umowy jeszcze możliwym do dostarczenia
+        // czeka na drainer. Umowa martwa (próby wyczerpane) albo pominięta nie wstrzymuje kompletu.
+        const [rows] = await conn.query(
+            `SELECT Id, Kind, RefId, Payload, Status, Attempts, SkipReason FROM ${OUTBOX_TABLE}
+             WHERE Id = ? AND Status IN ('PENDING', 'FAILED')
+               AND NOT EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} newer
+                   WHERE newer.Kind = 'contract.folders' AND newer.RefId = ? AND newer.Id > ?)
+               AND (EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} sent
+                       WHERE sent.Kind = 'contract.upsert' AND sent.RefId = ? AND sent.Status = 'SENT')
+                    OR NOT EXISTS (SELECT 1 FROM ${OUTBOX_TABLE} pending
+                       WHERE pending.Kind = 'contract.upsert' AND pending.RefId = ?
+                         AND pending.Status IN ('PENDING', 'FAILED') AND pending.Attempts < ?))`,
+            [row.Id, row.RefId, row.Id, row.RefId, row.RefId, FIDMAN_OUTBOX_MAX_ATTEMPTS]
+        );
+        const current = (rows as OutboxRow[])[0];
+        return current ? await deliverUnlockedOutboxRow(current, conn) : null;
+    } catch (err) {
+        console.error('[FidmanSync] folder delivery lock error:', err);
+        return null;
+    } finally {
+        if (conn) {
+            try {
+                if (acquired) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+            } catch (err) {
+                // Połączenie może nadal trzymać blokadę nazwaną; do puli nie wraca.
+                console.error('[FidmanSync] folder delivery RELEASE_LOCK error:', err);
+                destroyConn = true;
+            }
+            if (destroyConn) conn.destroy(); else conn.release();
+        }
+    }
+}
 
-        const response = await fetch(`${baseUrl}${PUSH_PATH}`, {
+async function deliverUnlockedOutboxRow(row: OutboxRow, conn?: mysql.PoolConnection): Promise<'SENT' | 'FAILED' | 'SKIPPED'> {
+    let errorPrefix = '';
+    try {
+        const { _recipient, ...wirePayload } = parsePayload(row.Payload);
+        const recipient =
+            row.Kind === 'user.upsert' && _recipient === 'fin' ? 'fin' : 'fidman';
+        errorPrefix = recipient === 'fin' ? '[FIN] ' : '';
+        const { baseUrl, token } =
+            recipient === 'fin' ? Setup.FinSync : Setup.FidmanSync;
+        if (!baseUrl) throw new Error(`${recipient.toUpperCase()}_SYNC_BASE_URL nie ustawione`);
+        if (recipient === 'fin' && !token) throw new Error('FIN_SYNC_TOKEN nie ustawione');
+
+        let payload = wirePayload;
+        // PE6: dostęp do FIN i skrót klucza agenta czytane w chwili dostawy, nie przy kolejkowaniu - ponowienie
+        // starego wiersza nie przywróci dostępu ani klucza odebranego później.
+        if (recipient === 'fin') payload = await withCurrentFinState(payload, row.RefId, conn);
+        if (row.Kind === 'contract.folders') {
+            if (!Number.isSafeInteger(row.Id) || row.Id <= 0) {
+                throw new Error('Niepoprawny folderSetVersion: Id wpisu kolejki musi być dodatnią liczbą całkowitą.');
+            }
+            // Numer należy do dostarczanego wpisu, także dla starych migawek i ponowień.
+            payload = { ...payload, folderSetVersion: row.Id } satisfies FidmanFoldersPayload;
+        }
+        const signal = AbortSignal.timeout(DELIVERY_TIMEOUT_MS);
+        const post = (p: unknown) => fetch(`${baseUrl}${PUSH_PATH}`, {
             method: 'POST',
+            signal,
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token ?? ''}`,
             },
             body: JSON.stringify({
                 kind: row.Kind,
-                payload: parsePayload(row.Payload),
+                payload: p,
             }),
         });
+        const response = await post(payload);
+        // PE6: dwie dostawy tej samej osoby mogą się wyprzedzić (stary skrót dojdzie po odebraniu). Po przyjęciu
+        // czytamy stan jeszcze raz i dosyłamy bieżący, gdy zmienił się w trakcie - FIN kończy na stanie z bazy PS.
+        for (let i = 0; recipient === 'fin' && response.status === 200 && i < 3; i++) {
+            const now = await withCurrentFinState(payload, row.RefId, conn);
+            if (now.enabled === payload.enabled && now.sbAgentKeyHash === payload.sbAgentKeyHash) break;
+            payload = now;
+            const again = await post(payload);
+            if (again.status !== 200) throw new Error(`HTTP ${again.status} przy dosłaniu bieżącego stanu klucza agenta`);
+        }
 
         if (response.status === 200) {
             const body = (await response
                 .json()
-                .catch(() => null)) as FidmanIngestResponse | null;
+                .catch((err) => {
+                    if (signal.aborted) throw err;
+                    return null;
+                })) as FidmanIngestResponse | null;
             const skip = body?.skipped?.[0];
             if (skip) {
                 await ToolsDb.executeSQL(
                     `UPDATE ${OUTBOX_TABLE}
                      SET Status = 'SKIPPED', SkipReason = ?, LastError = NULL
-                     WHERE Id = ?`,
-                    [skip.reason ?? null, row.Id]
+                     WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+                    [skip.reason ?? null, row.Id], ...(conn ? [conn] : [])
                 );
                 return 'SKIPPED';
             }
             await ToolsDb.executeSQL(
                 `UPDATE ${OUTBOX_TABLE}
                  SET Status = 'SENT', SkipReason = NULL, LastError = NULL
-                 WHERE Id = ?`,
-                [row.Id]
+                 WHERE Id = ?${row.Kind === 'contract.folders' ? " AND Status IN ('PENDING', 'FAILED')" : ''}`,
+                [row.Id], ...(conn ? [conn] : [])
             );
             // DM-L1 reverse link: persist FIDman's own contract id (PK↔PK) onto PS Contracts.
             // RefId of a contract.upsert row = PS Contracts.Id (see enqueueRow). No-clobber:
@@ -565,11 +987,11 @@ export async function deliverOutboxRow(
         const bodyText = await response.text().catch(() => '');
         await markFailed(
             row,
-            `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim()
+            `${errorPrefix}HTTP ${response.status} ${response.statusText} ${bodyText}`.trim(), conn
         );
         return 'FAILED';
     } catch (err: any) {
-        await markFailed(row, err?.message ?? String(err)).catch((dbErr) =>
+        await markFailed(row, errorPrefix + (err?.message ?? String(err)), conn).catch((dbErr) =>
             console.error('[FidmanSync] nie udało się zapisać FAILED:', dbErr)
         );
         return 'FAILED';
@@ -578,13 +1000,76 @@ export async function deliverOutboxRow(
 
 /**
  * Post-commit best-effort delivery of a freshly enqueued row.
- * MUST be awaited OUTSIDE the business transaction. Wrapped so a push failure
+ * Call OUTSIDE the business transaction. Wrapped so a push failure
  * can never bubble into the business path (L8).
  *
  * Gotcha (go-live playbook): on an Eco/idling dyno the drainer interval may not
  * fire — this post-commit attempt is the primary delivery, the drainer is the
  * backstop. Same shape as AqmSync.tryDeliverAfterCommit.
  */
+/**
+ * PE6 (FIN): skrót osobistego klucza agenta (SbAccess.AgentKeyHash) - tylko przy wpisie SB ACTIVE, inaczej null.
+ * FIN wpuszcza nim agenta pracownika tak jak PS (sbAgentKeyAuth); sam klucz zostaje na komputerze osoby.
+ */
+async function currentSbAgentKeyHash(personId: number, conn?: mysql.PoolConnection): Promise<string | null> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        "SELECT AgentKeyHash AS hash FROM SbAccess WHERE PersonId = ? AND StatusCode = 'ACTIVE'",
+        conn,
+        [personId]
+    )) as { hash: string | null }[];
+    return rows?.[0]?.hash ?? null;
+}
+
+/**
+ * Bieżący dostęp do FIN (PersonAccounts.FinEnabled przy aktywnym koncie PS - „zalogowany w PS = zalogowany w FIN”)
+ * i skrót klucza; bez konta w PS zostaje to, co we wpisie.
+ */
+async function withCurrentFinState(payload: any, personId: number, conn?: mysql.PoolConnection) {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT FinEnabled AS fin, IsActive AS active FROM PersonAccounts WHERE PersonId = ?',
+        conn,
+        [personId]
+    )) as { fin: number; active: number }[];
+    const enabled = rows?.length ? Number(rows[0].fin) === 1 && Number(rows[0].active) === 1 : payload.enabled === true;
+    return { ...payload, enabled, sbAgentKeyHash: enabled ? await currentSbAgentKeyHash(personId, conn) : null };
+}
+
+/**
+ * PE6 (FIN): zmiana w Dostępach SB (klucz agenta, blokada, odebranie, odblokowanie) dosyła do FIN konto osoby
+ * z aktualnym skrótem klucza - tylko gdy osoba ma dostęp do FIN (PersonAccounts.FinEnabled). Ta sama transakcja
+ * co zmiana SB (L8); dostawa po commicie. Dane, których FIN nie przyjmie, nie blokują zmiany SB - ślad w logu.
+ */
+export async function enqueueFinUserRefresh(
+    conn: mysql.PoolConnection,
+    personId: number,
+    loadSource: (conn: mysql.PoolConnection, personId: number) => Promise<FidmanUserSource | undefined>,
+): Promise<number | undefined> {
+    const rows = (await ToolsDb.getQueryCallbackAsync(
+        'SELECT 1 AS fin FROM PersonAccounts WHERE PersonId = ? AND FinEnabled = 1',
+        conn,
+        [personId]
+    )) as { fin: number }[];
+    if (!rows?.length) return undefined;
+    const source = await loadSource(conn, personId);
+    if (!source) return undefined;
+    if (validateFidmanUserSource(source, 'fin').length) {
+        // Odebranie klucza nie może utknąć na danych osoby (np. za długie nazwisko po zmianie w PS): przy braku
+        // aktywnego klucza wysyłamy imię i nazwisko przycięte do limitów FIN. Nowego klucza z takimi danymi nie wysyłamy.
+        const clipped = {
+            ...source,
+            name: source.name?.slice(0, FIDMAN_USER_LIMITS.name),
+            surname: source.surname?.slice(0, FIDMAN_USER_LIMITS.surname),
+        };
+        const revoking = (await currentSbAgentKeyHash(personId, conn)) === null;
+        if (!revoking || validateFidmanUserSource(clipped, 'fin').length) {
+            console.error(`[FIN] nie wysłano zmiany klucza agenta dla PersonId=${personId}: dane osoby nie spełniają kontraktu FIN.${revoking ? ' Klucz w FIN trzeba odebrać ręcznie.' : ''}`);
+            return undefined;
+        }
+        return enqueueFidmanUserPush(clipped, true, conn, 'fin');
+    }
+    return enqueueFidmanUserPush(source, true, conn, 'fin');
+}
+
 export async function tryDeliverAfterCommit(outboxId: number): Promise<void> {
     try {
         const rows = (await ToolsDb.getQueryCallbackAsync(
@@ -615,6 +1100,8 @@ export type FidmanSyncStatus = {
 /** Human-readable meaning of a FIDman SkipReason, for the "awizo braków" UI. */
 export function fidmanSkipReasonLabel(reason: string | null): string | null {
     switch (reason) {
+        case 'SUPERSEDED':
+            return 'Wpis zastąpiony nowszą migawką folderów kontraktu.';
         case 'NEEDS_DATA':
             return 'FIDman potrzebuje uzupełnienia danych kontrahenta, aby zaktualizować rekord.';
         case 'NO_NIP':
@@ -629,6 +1116,9 @@ export function fidmanSkipReasonLabel(reason: string | null): string | null {
             return 'To ostatnie włączone konto administratora FIDmana — nie zostanie wyłączone.';
         case 'GOOGLE_EMAIL_TAKEN':
             return 'Ten adres Google należy już do innego konta w FIDmanie.';
+        // LMF wariant B: FIDman ma już nowszy komplet folderów umowy — starszy nie jest stosowany.
+        case 'STALE_FOLDER_SET':
+            return 'FIDman ma już nowszy komplet folderów tej umowy — starszy nie został zastosowany.';
         default:
             return reason ? `Nieznany powód pominięcia: ${reason}` : null;
     }
@@ -683,7 +1173,7 @@ export async function getFidmanContractSyncStatus(
  * FAILED/SKIPPED `contract.upsert` outbox row for a contract using the SAME
  * `deliverOutboxRow` P1 uses (no reimplementation of the HTTP/status logic).
  *
- * Ponawia migawkę `Payload` z wiersza, a nie stan żywej umowy — i to zostaje.
+ * Ponawia migawkę umowy, ale projekt odświeża z bazy (SPR-P).
  * Przypadek „umowa nie ma czego ponawiać" obsługuje `retryOrPushFidmanContract()`
  * niżej (WYK-2, zadanie 4); ta funkcja pozostaje wąska i zwraca wtedy `NOT_FOUND`.
  *
@@ -711,6 +1201,10 @@ export async function retryFidmanContractSync(
     const row = rows?.[0];
     if (!row) return { ok: false, reason: 'NOT_FOUND' };
 
+    const project = await new ProjectRepository().findForContract(contractId);
+    const payload = typeof row.Payload === 'string' ? JSON.parse(row.Payload) : row.Payload;
+    row.Payload = { ...payload, project: buildProjectRef(project) };
+    await ToolsDb.executeSQL(`UPDATE ${OUTBOX_TABLE} SET Payload = ? WHERE Id = ?`, [JSON.stringify(row.Payload), row.Id]);
     await deliverOutboxRow(row);
     return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
 }
@@ -737,7 +1231,7 @@ export type FidmanPushOutcome =
  *     i ponowienie któregoś odtworzyłoby umowę w FIDmanie — dokładnie to, czemu ten pack
  *     zapobiega. Tamte sześć zamknięto w `WYK-3`, ale bramka nie zależy od tego sprzątania:
  *     następny nieudany wiersz powstanie tak samo;
- *  2. jest wiersz `FAILED`/`SKIPPED` -> zastane zachowanie bez zmian, ponawiamy migawkę;
+ *  2. jest wiersz `FAILED`/`SKIPPED` -> ponawiamy migawkę umowy z projektem z bazy;
  *  3. nie ma czego ponawiać (umowa nigdy nie poszła ALBO ostatnia wysyłka się udała)
  *     -> ładunek budowany od nowa z ŻYWEJ umowy przekazanej przez wywołującego.
  *
@@ -760,12 +1254,24 @@ export async function retryOrPushFidmanContract(
     const contractId = (contract as any).id as number;
 
     const retried = await retryFidmanContractSync(contractId);
-    if (retried.ok) return retried;
+    if (retried.ok) {
+        // Umowa została ponowiona; personel liczymy z bieżących ról, nie z dawnej migawki.
+        const folderIds = await ToolsDb.transaction<number[]>(async (conn) => {
+            await lockFidmanFoldersContracts([contractId], conn);
+            await enqueueFidmanPersonnelPush(contractId, conn);
+            // Ręczne dopchnięcie wymusza komplet, także gdy ostatni wpis jest SENT i identyczny.
+            return enqueueFidmanFoldersForContracts([contractId], conn, true);
+        });
+        await deliverFidmanFoldersAfterCommit(folderIds);
+        return retried;
+    }
 
+    const folderIds: number[] = [];
     const outboxId = await ToolsDb.transaction<number>(async (conn) =>
-        enqueueFidmanContractPush(contract, conn)
+        enqueueFidmanContractPush(contract, conn, folderIds, true)
     );
     await tryDeliverAfterCommit(outboxId);
+    await deliverFidmanFoldersAfterCommit(folderIds);
     return { ok: true, status: await getFidmanContractSyncStatus(contractId) };
 }
 
@@ -784,7 +1290,7 @@ export async function drainFidmanOutbox(options?: {
     processed: number;
 }> {
     const batchSize = options?.batchSize ?? 50;
-    const maxAttempts = options?.maxAttempts ?? 10;
+    const maxAttempts = options?.maxAttempts ?? FIDMAN_OUTBOX_MAX_ATTEMPTS;
 
     const summary = { sent: 0, failed: 0, skipped: 0, processed: 0 };
 
@@ -801,6 +1307,7 @@ export async function drainFidmanOutbox(options?: {
 
         for (const row of rows ?? []) {
             const result = await deliverOutboxRow(row);
+            if (result === null) continue;
             summary.processed += 1;
             if (result === 'SENT') summary.sent += 1;
             else if (result === 'SKIPPED') summary.skipped += 1;

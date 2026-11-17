@@ -1,3 +1,4 @@
+import Sharing from '../sharing/MilestoneSharingController';
 import BaseController from '../../../controllers/BaseController';
 import MilestoneTypeRepository, {
     MilestoneTypesSearchParams,
@@ -8,6 +9,7 @@ import ToolsDb from '../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import PersonsController from '../../../persons/PersonsController';
 import { UserData } from '../../../types/sessionTypes';
+import { findFidmanFoldersContractsForType, enqueueFidmanFoldersForContracts } from '../../fidmanSync/FidmanSync';
 
 /**
  * Controller dla MilestoneType - warstwa aplikacji/serwisu
@@ -21,6 +23,19 @@ export default class MilestoneTypesController extends BaseController<
     MilestoneType,
     MilestoneTypeRepository
 > {
+
+    static async edit(item: MilestoneType, auth?: OAuth2Client, user?: UserData) {
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardType(item);
+            return this.editUnsafe(item, auth, user);
+        });
+    }
+    static async delete(item: MilestoneType, auth?: OAuth2Client) {
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardType(item, true);
+            return this.deleteUnsafe(item, auth);
+        });
+    }
     private static instance: MilestoneTypesController;
 
     constructor() {
@@ -120,7 +135,7 @@ export default class MilestoneTypesController extends BaseController<
      * @param userData - Dane użytkownika z sesji (do ustawienia _editor)
      * @returns Promise<MilestoneType> - Zaktualizowany obiekt
      */
-    static async edit(
+    private static async editUnsafe(
         item: MilestoneType,
         auth?: OAuth2Client,
         userData?: UserData
@@ -174,7 +189,7 @@ export default class MilestoneTypesController extends BaseController<
      * @param auth - Opcjonalny OAuth2Client (obecnie nieużywany)
      * @returns Promise<void>
      */
-    static async delete(
+    private static async deleteUnsafe(
         item: MilestoneType,
         auth?: OAuth2Client
     ): Promise<void> {
@@ -192,11 +207,13 @@ export default class MilestoneTypesController extends BaseController<
     private async deleteItem(item: MilestoneType): Promise<void> {
         console.group('MilestoneTypesController.deleteItem()');
         try {
+            const contractIds = await findFidmanFoldersContractsForType('milestone', item.id!);
             // Transakcja DB
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 await this.repository.deleteFromDb(item, conn, true);
             });
             console.log('deleted from db');
+            await enqueueFidmanFoldersForContracts(contractIds);
         } catch (err) {
             console.error('Error deleting MilestoneType:', err);
             throw err;

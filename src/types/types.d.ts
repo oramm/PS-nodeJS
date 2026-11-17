@@ -56,6 +56,8 @@ export interface StaffMemberData extends RepositoryDataItem {
     hasCostInvoiceAccess: boolean;
     hasBankAccess: boolean;
     canLogSiteVisits: boolean;
+    canManageSbAccess: boolean;
+    /** Aktywność KONTA logowania (PersonAccounts.IsActive) - odczyt; zapis wyłącznie trasą konta (U2). */
     isActive: boolean;
     /** Dane osoby z JOIN - tylko do odczytu, nie zapisywane. */
     _personName?: string;
@@ -66,10 +68,11 @@ export interface StaffMemberData extends RepositoryDataItem {
     _systemRoleId?: number | null;
     /**
      * Konto osoby (PersonAccounts) - w tym module TYLKO do odczytu. Rolę, e-mail systemowy
-     * i flagę FIDmana zapisuje wyłącznie PUT /v2/persons/:personId/account.
+     * i flagi FIDmana oraz FIN zapisuje wyłącznie PUT /v2/persons/:personId/account.
      */
     _systemEmail?: string | null;
     _fidmanEnabled?: boolean;
+    _finEnabled?: boolean;
     /** Czy osoba ma już wiersz w StaffMembers (false = same domyślne zera). */
     _hasStaffRow?: boolean;
     /** Ostatnia wysyłka konta do FIDmana; null = nigdy nie wysyłano. Tylko do odczytu. */
@@ -80,6 +83,8 @@ export interface StaffMemberData extends RepositoryDataItem {
 export type MilestoneParentType = 'CONTRACT' | 'OFFER';
 
 export interface ProjectData extends RepositoryDataItem {
+    fundingAgreementNumber?: string | null;
+    program?: string | null;
     ourId: string;
     name: string;
     alias: string;
@@ -503,6 +508,8 @@ export interface LetterEventData extends RepositoryDataItem {
     recipientsJSON?: string | null;
     _gdFilesBasicData?: drive_v3.Schema$File[];
     gdFilesJSON?: string | null;
+    /** 1 = zdarzenie zapisał agent osoby (SBZ-1); brak = nie zapisuj kolumny (domyślnie 0). */
+    isByAgent?: 1;
 }
 
 export interface EntityData extends RepositoryDataItem {
@@ -536,6 +543,7 @@ export interface PersonData extends RepositoryDataItem {
     systemEmail?: string;
     /** GLO-P1: flaga konta (PersonAccounts), nie kolumna Persons — patrz Person.ts. */
     fidmanEnabled?: boolean;
+    finEnabled?: boolean;
 }
 
 export interface PersonAccountV2Payload {
@@ -549,6 +557,7 @@ export interface PersonAccountV2Payload {
     isActive?: boolean;
     /** GLO-P1: osoba jest użytkownikiem FIDmana (logowanie kontem Google z SystemEmail). */
     fidmanEnabled?: boolean;
+    finEnabled?: boolean;
     /**
      * Tylko w odpowiedzi PUT /v2/persons/:personId/account (D-PER-10, pack PER): zapis dotyczył
      * WŁASNEJ roli wołającego, więc serwer skasował jego sesję - kolejne żądania dostaną 401,
@@ -573,7 +582,7 @@ export interface PersonAccountEventData {
     /** Autor zmiany (osoba z sesji); null, gdy autora już nie ma w bazie. */
     editorId?: number | null;
     eventType: PersonAccountEventType;
-    /** Nazwa zmienionego pola: systemRoleId, systemEmail, isActive, fidmanEnabled, projectOurIds, isDriver, ... */
+    /** Nazwa zmienionego pola: systemRoleId, systemEmail, isActive, fidmanEnabled, finEnabled, projectOurIds, isDriver, ... */
     field: string;
     /** Wartość przed / po zmianie jako JSON (string); null = brak wartości. */
     valueBefore?: string | null;

@@ -1,5 +1,15 @@
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 import mysql from 'mysql2/promise';
 import { ProjectScope } from '../types/sessionTypes';
+
+/** Zakres kontraktów doklejany poza grupami OR klienta, tak samo jak zakres projektów. */
+export function makeContractScopeCondition(scope?: ContractScope): string {
+    if (!scope) return '1';
+    const projects = makeProjectScopeCondition('Contracts.ProjectOurId', scope);
+    const contracts = scope.contractIds.length
+        ? mysql.format('Contracts.Id IN (?)', [scope.contractIds]) : '0';
+    return `(${projects} OR ${contracts})`;
+}
 
 /**
  * Warunek SQL zawężający zapytanie do projektów przypisanych zalogowanemu.

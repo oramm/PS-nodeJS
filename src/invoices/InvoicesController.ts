@@ -1,3 +1,4 @@
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 import Invoice from './Invoice';
 import InvoiceSeriesValidator, { InvoiceSeriesPreview, InvoiceSeriesValidationError } from './InvoiceSeriesValidator';
 import InvoiceRepository, { InvoicesSearchParams } from './InvoiceRepository';
@@ -56,10 +57,11 @@ export default class InvoicesController extends BaseController<
      */
     static async find(
         searchParams: InvoicesSearchParams[] = [],
-        includeCorrections: boolean = true
+        includeCorrections: boolean = true,
+        scope?: ContractScope
     ): Promise<Invoice[]> {
         const instance = this.getInstance();
-        const invoices = await instance.repository.find(searchParams);
+        const invoices = await instance.repository.find(searchParams, scope);
 
         // Pobierz korekty dla wszystkich faktur jednym zapytaniem
         if (includeCorrections && invoices.length > 0) {
@@ -67,7 +69,7 @@ export default class InvoicesController extends BaseController<
                 .map(inv => inv.id)
                 .filter((id): id is number => id !== undefined);
             
-            const correctionsMap = await instance.repository.findCorrectionsBulk(invoiceIds);
+            const correctionsMap = await instance.repository.findCorrectionsBulk(invoiceIds, scope);
             
             // Przypisz korekty do faktur
             invoices.forEach(invoice => {

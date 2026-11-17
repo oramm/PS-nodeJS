@@ -1,3 +1,4 @@
+import SharingError from '../../contracts/milestones/sharing/MilestoneSharingError';
 import {
     MeetingArrangementCreatePayload,
     MeetingArrangementSearchParams,
@@ -16,6 +17,25 @@ const STATUS_ORDER: Record<MeetingArrangementStatus, number> = {
 };
 
 export default class MeetingArrangementValidator {
+    static selectedParents(payload: any) {
+        // Match addFromDto/editFromDto fallback and the model's actual written fields.
+        return { caseId: payload.caseId || payload._case?.id, meetingId: payload.meetingId };
+    }
+
+    static validateWriteContext(externalConn: unknown, isPartOfTransaction?: boolean): void {
+        // No active caller owns an external transaction for arrangements. Never release
+        // the lifecycle lock before an unknown caller commits or rolls back.
+        if (externalConn || isPartOfTransaction) {
+            throw new SharingError('NESTED_LIFECYCLE_WRITE');
+        }
+    }
+
+    static validateId(id: unknown): asserts id is number {
+        if (!Number.isSafeInteger(id) || Number(id) <= 0) {
+            throw new Error('id must be a positive integer');
+        }
+    }
+
     static validateFindPayload(payload: {
         orConditions?: MeetingArrangementSearchParams[];
     }): { orConditions: MeetingArrangementSearchParams[] } {

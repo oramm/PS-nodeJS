@@ -159,9 +159,7 @@ export default abstract class IncomingLetter
         files: Express.Multer.File[]
     ) {
         const newLetterGdFolder =
-            await this._letterGdController.createLetterFolder(auth, {
-                ...this,
-            });
+            await this._letterGdController.createLetterFolder(auth, this);
         if (!newLetterGdFolder.id)
             throw new EnviErrors.NoGdIdError(
                 ` - incoming letter folder not created for ${this.number}`

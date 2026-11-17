@@ -1,3 +1,4 @@
+import type { PoolConnection } from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 
 export interface TaskHoursPayload {
@@ -31,7 +32,8 @@ export interface TaskHoursResult extends TaskHoursPayload {
 export default class ScrumboardTaskHoursRepository {
     async updateHours(
         taskId: number,
-        payload: TaskHoursPayload
+        payload: TaskHoursPayload,
+        conn: PoolConnection
     ): Promise<TaskHoursResult> {
         const setClauses: string[] = [];
         const params: any[] = [];
@@ -45,18 +47,18 @@ export default class ScrumboardTaskHoursRepository {
             params.push(taskId);
             await ToolsDb.getQueryCallbackAsync(
                 `UPDATE Tasks SET ${setClauses.join(', ')} WHERE Id = ?`,
-                undefined,
+                conn,
                 params
             );
         }
-        return this.getHours(taskId);
+        return this.getHours(taskId, conn);
     }
 
-    async getHours(taskId: number): Promise<TaskHoursResult> {
+    async getHours(taskId: number, conn?: PoolConnection): Promise<TaskHoursResult> {
         const rows = (await ToolsDb.getQueryCallbackAsync(
             `SELECT Id, EstimatedHours, HoursMon, HoursTue, HoursWed, HoursThu, HoursFri
                 FROM Tasks WHERE Id = ?`,
-            undefined,
+            conn,
             [taskId]
         )) as any[];
         const row = rows[0];
@@ -83,10 +85,11 @@ export default class ScrumboardTaskHoursRepository {
     }
 
     /** Zeruje godziny dzienne (bieżący tydzień) wszystkich zadań. */
-    async resetAllDailyHours(): Promise<void> {
+    async resetAllDailyHours(conn: PoolConnection): Promise<void> {
         await ToolsDb.getQueryCallbackAsync(
             `UPDATE Tasks SET HoursMon = NULL, HoursTue = NULL, HoursWed = NULL,
-                HoursThu = NULL, HoursFri = NULL`
+                HoursThu = NULL, HoursFri = NULL`,
+            conn
         );
     }
 }

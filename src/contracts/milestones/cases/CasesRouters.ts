@@ -1,18 +1,9 @@
+import RouteIdValidator from '../../../tools/RouteIdValidator';
+import CaseValidator from './CaseValidator';
 import CasesController from './CasesController';
 import { app } from '../../../index';
-import Case from './Case';
-import Setup from '../../../setup/Setup';
 import { Request, Response } from 'express';
 import ProjectScopeGuard from '../../../persons/projectAssignments/ProjectScopeGuard';
-
-/** Waliduje wartość statusu sprawy z klienta. Zwraca komunikat błędu albo undefined. */
-function validateCaseStatus(status: unknown): string | undefined {
-    if (status === undefined) return undefined;
-    const validStatuses = Object.values(Setup.CaseStatus);
-    if (typeof status !== 'string' || !validStatuses.includes(status))
-        return `Nieprawidłowy status sprawy: ${status}. Dozwolone: ${validStatuses.join(', ')}`;
-    return undefined;
-}
 
 app.post('/cases', async (req: Request, res: Response, next) => {
     try {
@@ -32,22 +23,14 @@ app.post('/cases', async (req: Request, res: Response, next) => {
 
 app.post('/case', async (req: Request, res: Response, next) => {
     try {
-        const statusError = validateCaseStatus(req.parsedBody.status);
-        if (statusError) {
-            res.status(400).send(statusError);
-            return;
-        }
         // Nowa sprawa nie ma jeszcze id - sprawdzamy kamień milowy, pod który trafia.
         await ProjectScopeGuard.assertMilestoneInScope(
             Number(req.parsedBody._parent?.id ?? req.parsedBody.milestoneId),
             req.projectScope
         );
-        const caseItem = new Case({
-            ...req.parsedBody,
-        });
-
-        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        const result = await CasesController.add(caseItem);
+        if (req.parsedBody.parentCaseId) await ProjectScopeGuard.assertCaseInScope(
+            Number(req.parsedBody.parentCaseId), req.projectScope);
+        const result = await CasesController.addFromDto(req.parsedBody);
 
         res.send(result.caseItem);
     } catch (error) {
@@ -57,26 +40,18 @@ app.post('/case', async (req: Request, res: Response, next) => {
 
 app.put('/case/:id', async (req: Request, res: Response, next) => {
     try {
-        const statusError = validateCaseStatus(req.parsedBody.status);
-        if (statusError) {
-            res.status(400).send(statusError);
-            return;
-        }
         // Id z URL-a, nie z ciała żądania: ciało kontroluje wywołujący.
         await ProjectScopeGuard.assertCaseInScope(
-            Number(req.params.id),
+            RouteIdValidator.positiveId(req.params.id),
             req.projectScope
         );
-        const itemFromClient = req.parsedBody;
-        let item = new Case(itemFromClient);
-        if (item._wasChangedToUniquePerMilestone)
-            item.setAsUniquePerMilestone();
-
-        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        const result = await CasesController.edit(
-            item,
-            undefined,
-            req.parsedBody._fieldsToUpdate
+        const selected = CaseValidator.selectedParents(req.parsedBody, req.parsedBody._fieldsToUpdate);
+        if (selected.milestoneId !== undefined) await ProjectScopeGuard.assertMilestoneInScope(
+            Number(selected.milestoneId), req.projectScope);
+        if (selected.parentCaseId !== undefined) await ProjectScopeGuard.assertCaseInScope(
+            Number(selected.parentCaseId), req.projectScope);
+        const result = await CasesController.editFromDto(
+            {...req.parsedBody, id: RouteIdValidator.positiveId(req.params.id)}, undefined, req.parsedBody._fieldsToUpdate
         );
 
         res.send(result);
@@ -88,15 +63,11 @@ app.put('/case/:id', async (req: Request, res: Response, next) => {
 app.delete('/case/:id', async (req: Request, res: Response, next) => {
     try {
         await ProjectScopeGuard.assertCaseInScope(
-            Number(req.params.id),
+            RouteIdValidator.positiveId(req.params.id),
             req.projectScope
         );
-        let item = new Case(req.body);
-        console.log('delete');
-
-        // ✅ Bezpośrednie wywołanie Controller - withAuth zarządza OAuth wewnętrznie
-        await CasesController.delete(item);
-
+        const item = {...req.body, id: RouteIdValidator.positiveId(req.params.id)};
+        await CasesController.deleteFromDto(item);
         res.send(item);
     } catch (error) {
         next(error);

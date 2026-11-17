@@ -112,13 +112,16 @@ describe('PersonRepository - ROD-5: jedna prawda o koncie', () => {
         });
     });
 
-    it('źródło danych dla FIDmana bierze e-mail logowania tylko z konta', async () => {
-        const conn = { query: jest.fn(async () => [[]]) };
+    it('źródło danych dla FIDmana bierze e-mail i rolę z konta', async () => {
+        const conn = { query: jest.fn(async () => [[{ PersonId: 7, SystemRoleName: 'ENVI_EMPLOYEE' }]]) };
 
-        await repository.getFidmanUserSourceInConn(conn as any, 7);
+        const source = await repository.getFidmanUserSourceInConn(conn as any, 7);
 
         const sql = String((conn.query.mock.calls[0] as any[])[0]);
         for (const marker of LEGACY_MARKERS) expect(sql).not.toContain(marker);
         expect(sql).toContain('PersonAccounts.SystemEmail AS SystemEmail');
+        expect(sql).toContain('SystemRoles.Name AS SystemRoleName');
+        expect(sql).toContain('LEFT JOIN SystemRoles ON PersonAccounts.SystemRoleId = SystemRoles.Id');
+        expect(source?.systemRoleName).toBe('ENVI_EMPLOYEE');
     });
 });

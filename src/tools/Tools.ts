@@ -36,6 +36,11 @@ export default class Tools {
     static parseObjectsJSON(body: any) {
         const parsedBody: any = {};
         for (const key in body) {
+            // JSON bodies are already decoded. Parsing a singleton array coerces [123] into 123.
+            if (typeof body[key] !== 'string') {
+                parsedBody[key] = body[key];
+                continue;
+            }
             try {
                 parsedBody[key] = JSON.parse(body[key]);
             } catch (error) {

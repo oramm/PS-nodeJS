@@ -1,49 +1,22 @@
 # Production Kylos DB Migration Memory
 
-This file is the shared memory for the last known migration verification state of the production database.
+Live schema is the source of truth; this is a dated verification record.
 
-It is not the source of truth for schema status. The source of truth is the live database schema checked through `information_schema`.
+- Target: remote-kylos, NODE_ENV=production, envi-konsulting.kylos.pl/envikons_myEnvi.
+- Verified 2026-10-11 by Codex, release source c5692c4; global runner verify85 migrations/pending0/drift0 PASS.
+- Scoped live information_schema pre/post checks: SigningJobs and DocumentSignatures OfferId/ContractId, nullable LetterId, signing graphic columns, index/FK and CHECK definitions; OFFER_DOCUMENT enum.
+- Applied in order at09:17:46UTC: signing004 then005; execution605ms and369ms.
+- Raw file SHA256 (runner normalizes CRLF):004 7abb83ece25cc5fb148328d7f679fe1ec1482ddd28ab5ab2d80e36aaaf943e93;005 321e05622047450334ac63927fe1d0a3598259513bd22a982e77b0c1f233f8f8. SchemaMigrations runner receipts match normalized hashes (verify PASS).
+- Backup: C:/Users/oram/.envi/release-backups/sig-20261011/signing-pre004005.sql. Rows before: SigningJobs1, SigningJobFiles1, PersonSigningCertificates1, DocumentSignatures1, SchemaMigrations83.
+- Rollback: revert code first; retain additive schema. Down removes offer/contract signature register data, so fresh backup required after use. No other migration applied in this run.
 
-Use this file to remember what was last verified, what was missing, and what still needs manual follow-up.
+- 2026-10-11 (SPR-P, Claude): pending was exactly one: `src/projects/migrations/001_add_project_funding_fields.sql`. Applied by runner at 18:20:10 UTC; `verify` PASS, ledger 86 rows. Live information_schema: `Projects.FundingAgreementNumber` and `Projects.Program`, both `varchar(50)` NULL; Projects 84 rows, both columns empty. Raw file SHA256 1cd7c6b0ac89bef40466864affcd80b6c1659fc19e760906dceb3cc5fcbbf9b0.
+- Backup: C:/systems-dev/ps-envi/backups/pre-spr-p_20261011-2019.sql (Projects, SchemaMigrations). Rollback: revert code first; keep the nullable columns (dropping them loses entered values).
 
-## Current Target
+- 2026-10-19 (SBD, Claude, GO wlasciciela w czacie): pending bylo dokladnie 4, wszystkie `sbAccess`: 003 (Levels), 004 (klucz publiczny, token urzadzenia, SbAccessSecrets), 005 (raport zdrowia), 006 (UNIQUE DeviceTokenHash). Runner apply 14:20:54-55 UTC, `verify` PASS (repo 90, pending 0, drift 0). Live information_schema: 6 nowych kolumn SbAccess, SbAccessSecrets 0 wierszy, `uq_sbaccess_devicetokenhash` unikalny, akcje SET_LEVELS/SET_KEY/GIVE_SECRET/TAKE_SECRET/ISSUE_TOKEN/REQUEST_HEALTH. Release source 73d673c.
+- Raw SHA256: 003 ac5a88b42b545c3ad31bb76da75bfcff60e8a64e6ab6424b3b38ab8c1f3fe087; 004 18d2687a77b1beed64e98f544dc60b46003ee371827e5a27312c2ed7740c845e; 005 67b856d30be4dc8c2e9dc9890e33996888c70ceef4e346d4003087f7a9db011a; 006 a75c3e94d6e2fd536d285b8727aa0a99631c7cfad2575aaa2a004bc7495ef3af.
+- Backup: C:/systems-dev/ps-envi/backups/pre-sbd_20261019-1620.sql (SbAccess*, StaffMembers, SchemaMigrations). Rollback: revert code first; kolumny i tabela sa addytywne - zostawic; SbAccessSecrets mozna skasowac bez utraty niczego poza szyfrogramami (admin udostepnia ponownie).
 
-- Label: `remote-kylos`
-- Expected env: `production`
-- DB host: unknown until next verification
-- DB name: unknown until next verification
-
-## Last Verified Snapshot
-
-- Verified at: not verified yet
-- Verified by: not verified yet
-- Verified commit: not verified yet
-- Check mode: not verified yet
-- Result summary: baseline file created, no production verification recorded yet
-
-## Verification Scope
-
-- Scope: not verified yet
-- Incremental baseline: not verified yet
-- Forward migrations checked: not verified yet
-
-## Verified Migrations
-
-No production verification has been recorded yet.
-
-| Migration | File hash | Status | Verified at | Notes |
-| --- | --- | --- | --- | --- |
-| none | none | pending | n/a | first remote check will populate this table |
-
-## Known Gaps
-
-- No shared production migration snapshot has been recorded yet.
-
-## Manual Verification Needed
-
-- First remote-kylos read-only verification to establish baseline target (`DB_HOST`, `DB_NAME`) and verified migration set.
-
-## Notes
-
-- Update this file only after a fresh read-only verification against the production schema.
-- Keep entries concise and current so the file stays useful during future migration checks.
+- 2026-10-19 (SBZ-1, Claude, GO wlasciciela w czacie): pending bylo dokladnie 2: `src/letters/migrations/005_letter_events_by_agent.sql` (LetterEvents.IsByAgent) i `src/sbAccess/migrations/007_sb_access_agent_key.sql` (AgentKeyHash UNIQUE, AgentKeySetAt, akcja SET_AGENT_KEY). Runner apply 21:32:49 UTC, `verify` PASS (repo 92, pending 0, drift 0). Live information_schema: obie kolumny SbAccess NULL, `uq_sbaccess_agentkeyhash` unikalny, IsByAgent tinyint(1) NOT NULL DEFAULT 0 (LetterEvents 7182 wierszy, wszystkie 0), akcja SET_AGENT_KEY obecna. Release source 7a0c9a6.
+- Raw SHA256: letters 005 3a605837b4fb2b9b85428e478e175db1bf190c416c3bf066848f06113353580e; sbAccess 007 5ae0a2573ef747dbe5165b6b433b71ffd4200c5a740c0e60e12f5c806dd3d3ac.
+- Backup: C:/systems-dev/ps-envi/backups/pre-sbz1_20261019-2331.sql (SbAccess, SbAccessActions, SbAccessEvents, LetterEvents, SchemaMigrations). Rollback: revert code first; kolumny addytywne - zostawic (usuniecie IsByAgent traci znak agenta przy pismach).

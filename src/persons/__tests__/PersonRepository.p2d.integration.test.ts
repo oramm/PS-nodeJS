@@ -13,6 +13,18 @@ describe('PersonRepository P2-D idempotency hardening', () => {
         };
     });
 
+    it.each([true, false])('zapisuje obie flagi niezależnie przy istniejącym koncie=%s', async (exists) => {
+        mockConn.query.mockResolvedValue([exists ? [{ Id: 11 }] : []]);
+        mockConn.execute.mockResolvedValue([{}]);
+        await repository.upsertPersonAccountInDb({ id: 9001, fidmanEnabled: false, finEnabled: true }, mockConn, ['fidmanEnabled', 'finEnabled']);
+        const [sql, values] = mockConn.execute.mock.calls[0];
+        expect(sql).toContain('FidmanEnabled');
+        expect(sql).toContain('FinEnabled');
+        expect(values).toEqual(exists ? [0, 1, 9001] : [9001, 0, 1]);
+        expect(repository.getAccountWriteFields(['finEnabled', 'fidmanEnabled'])).toEqual([]);
+        expect(repository.getAccountWriteFields(['finEnabled'], { allowAccountRouteOnlyFields: true })).toEqual(['finEnabled']);
+    });
+
     it('returns controlled error and prevents write when SystemEmail is already used by another person', async () => {
         mockConn.query.mockResolvedValueOnce([[{ PersonId: 9002 }]]);
 

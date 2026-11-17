@@ -557,6 +557,13 @@ export default class Setup {
         };
     }
 
+    static get FinSync() {
+        return {
+            baseUrl: process.env.FIN_SYNC_BASE_URL,
+            token: process.env.FIN_SYNC_TOKEN,
+        };
+    }
+
     /**
      * Konfiguracja kontroli „czy wgrano umowę na Dysk".
      * Odczytywana lazily (getter), po loadEnv(). Bez sekretów — kontrola korzysta

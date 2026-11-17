@@ -18,6 +18,8 @@ import {
     afterEach,
 } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import Tools from '../../tools/Tools';
 import ContractEntityRepository from '../ContractEntityRepository';
 import ContractRangeContractRepository from '../contractRangesContracts/ContractRangeContractRepository';
@@ -49,6 +51,7 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
             commit: jest.fn(),
             rollback: jest.fn(),
             release: jest.fn(),
+            query: jest.fn(() => Promise.resolve([[]])),
         };
 
         // Mock ToolsDb.transaction - wywołuje callback z mockiem connection
@@ -114,6 +117,48 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
         jest.restoreAllMocks();
     });
 
+    it('usunięcie kontraktu sprząta wybrane osoby w tej samej transakcji, bez usuwania skrzynki', async () => {
+        const ContractRepository = (await import('../ContractRepository')).default;
+        const contract = { id: 123 } as any;
+        await new ContractRepository().deleteFromDb(contract);
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+            'DELETE FROM ContractSelectedPersons WHERE ContractId = ?', [123], mockConn,
+        );
+        expect(ToolsDb.deleteFromDb).toHaveBeenCalledWith('Contracts', contract, mockConn, true);
+        expect((ToolsDb.executeSQL as jest.Mock).mock.calls.every(call => !String(call[0]).includes('Mailboxes'))).toBe(true);
+    });
+
+    it.each<[(number[] | undefined)]>([[[9, 11]], [[]], [undefined]])('edycja zastępuje osoby %j razem z kontraktem; brak pola zachowuje listę', async selected => {
+        const ContractsController = (await import('../ContractsController')).default;
+        const ContractRepository = (await import('../ContractRepository')).default;
+        const ContractOther = (await import('../ContractOther')).default;
+        const contract = new ContractOther({ id: 123, alias: 'TEST', typeId: 2, fidmanSyncEnabled: false } as any);
+        const edit = jest.spyOn(ContractRepository.prototype, 'editInDb').mockResolvedValue(undefined);
+        let persons = [7, 9];
+        (ToolsDb.executeSQL as any).mockImplementation(async (sql: string, params: number[], conn: unknown) => {
+            expect(conn).toBe(mockConn);
+            if (sql.startsWith('DELETE FROM ContractSelectedPersons')) persons = [];
+            if (sql.startsWith('INSERT INTO ContractSelectedPersons')) persons.push(params[1]);
+        });
+        await ContractsController.edit(contract, undefined, ['comment'], selected);
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+        expect(edit).toHaveBeenCalledWith(contract, mockConn, true, ['comment']);
+        expect(persons).toEqual(selected ?? [7, 9]);
+        expect(ToolsDb.executeSQL).toHaveBeenCalledTimes(selected === undefined ? 0 : selected.length + 1);
+    });
+
+    it('błąd zapisu osób przerywa transakcję edycji kontraktu', async () => {
+        const ContractsController = (await import('../ContractsController')).default;
+        const ContractRepository = (await import('../ContractRepository')).default;
+        const ContractOther = (await import('../ContractOther')).default;
+        const contract = new ContractOther({ id: 123, alias: 'TEST', typeId: 2, fidmanSyncEnabled: false } as any);
+        jest.spyOn(ContractRepository.prototype, 'editInDb').mockResolvedValue(undefined);
+        (ToolsDb.executeSQL as any).mockRejectedValueOnce(new Error('DB failure'));
+        await expect(ContractsController.edit(contract, undefined, ['comment'], [])).rejects.toThrow('DB failure');
+        expect(ToolsDb.transaction).toHaveBeenCalledTimes(1);
+    });
+
     describe('TEST 1: ContractOur - Pola w tabeli Contracts', () => {
         it('powinien zapisać ContractOur z poprawnymi polami w tabeli Contracts', async () => {
             // Ten test będzie weryfikował WYWOŁANIA, nie rzeczywiste obiekty
@@ -171,7 +216,13 @@ describe('ContractsController.add() - Audyt pól DB i operacji', () => {
             Object.setPrototypeOf(mockContract, ContractOur.prototype);
 
             // Act
-            await ContractsController.add(mockContract as any);
+            await ContractsController.add(mockContract as any, undefined, undefined, { selectedPersonIds: [7, 9] });
+            expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+                'INSERT INTO ContractSelectedPersons (ContractId, PersonId) VALUES (?, ?)', [123, 7], mockConn,
+            );
+            expect(ToolsDb.executeSQL).toHaveBeenCalledWith(
+                'INSERT INTO ContractSelectedPersons (ContractId, PersonId) VALUES (?, ?)', [123, 9], mockConn,
+            );
 
             // Assert - sprawdź co zostało zapisane w tabeli Contracts
             expect(savedContractsData).not.toBeNull();

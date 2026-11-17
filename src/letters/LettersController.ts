@@ -1,4 +1,6 @@
 import ToolsDb from '../tools/ToolsDb';
+import EnviErrors from '../tools/Errors';
+import ConsolidationGuard from '../contracts/milestones/consolidation/ConsolidationWriteGuardController';
 import Letter from './Letter';
 import OurOldTypeLetter from './OurOldTypeLetter';
 import OurLetterContract from './OurLetterContract';
@@ -6,7 +8,7 @@ import IncomingLetterOffer from './IncomingLetterOffer';
 import IncomingLetterContract from './IncomingLetterContract';
 import OurLetterOffer from './OurLetterOffer';
 import LetterEvent from './letterEvent/LetterEvent';
-import { UserData } from '../types/sessionTypes';
+import { UserData, SystemRoleName } from '../types/sessionTypes';
 import LetterRepository, { LetterSearchParams } from './LetterRepository';
 import OurLetter from './OurLetter';
 import { OAuth2Client } from 'google-auth-library';
@@ -17,6 +19,7 @@ import BaseController from '../controllers/BaseController';
 import mysql from 'mysql2/promise';
 import LetterEntity from './associations/LetterEntity';
 import LetterCase from './associations/LetterCase';
+import LetterCaseRepository from './associations/LetterCaseRepository';
 import ToolsGd from '../tools/ToolsGd';
 import ToolsMail from '../tools/ToolsMail';
 import IncomingLetter from './IncomingLetter';
@@ -37,6 +40,7 @@ import { isCasesOnlyEdit, LetterDbEditContext } from './letterEditScope';
 import EntitiesController from '../entities/EntitiesController';
 import LetterCaseAssociationsController from './associations/LetterCaseAssociationsController';
 import MilestoneRepository from '../contracts/milestones/MilestoneRepository';
+import ProjectRepository from '../projects/ProjectRepository';
 import ApprovedDocsController from '../contracts/milestones/approvedDocs/ApprovedDocsController';
 import { ProjectScope } from '../types/sessionTypes';
 import {
@@ -78,13 +82,42 @@ export default class LettersController extends BaseController<
         scope?: ProjectScope
     ): Promise<Letter[]> {
         const instance = this.getInstance();
-        // Repository zwraca już pełne instancje Letter (polimorfizm)
-        return await instance.repository.find({
+        const letters = await instance.repository.find({
             orConditions,
             milestoneParentType,
             userData,
             scope,
         });
+        if (!letters.length) return letters;
+        const letterIds = letters
+            .map((letter) => letter.id)
+            .filter((id): id is number => id !== undefined);
+        const [cases, entities] = await Promise.all([
+            LetterCaseAssociationsController.find({
+                letterIds,
+                scope,
+                personId:
+                    userData.systemRoleName === SystemRoleName.EXTERNAL_USER
+                        ? userData.enviId
+                        : undefined,
+            }),
+            LetterEntityAssociationsController.getLetterEntityAssociationsList({
+                letterIds,
+                scope,
+            }),
+        ]);
+        for (const letter of letters) {
+            letter._cases = cases
+                .filter((item) => item.letterId === letter.id)
+                .map((item) => item._case);
+            letter._entitiesMain = entities
+                .filter((item) => item.letterId === letter.id && item.letterRole === 'MAIN')
+                .map((item) => item._entity);
+            letter._entitiesCc = entities
+                .filter((item) => item.letterId === letter.id && item.letterRole === 'CC')
+                .map((item) => item._entity);
+        }
+        return letters;
     }
 
     static async checkIncomingNumber(
@@ -344,10 +377,10 @@ export default class LettersController extends BaseController<
      * @param letter - instancja Letter do dodania (OurLetter lub IncomingLetter)
      * @returns letter z ustawionym ID i asocjacjami
      */
-    static async addNew(letter: Letter): Promise<Letter> {
+    static async addNew(letter: Letter, withinWorkflow = false): Promise<Letter> {
         const instance = this.getInstance();
 
-        return await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+        return await ConsolidationGuard.letterCreate(letter._cases.map(item => item.id), async (conn: mysql.PoolConnection) => {
             // 1. Dodaj główny rekord Letter do bazy
             await instance.repository.addInDb(letter, conn, true);
 
@@ -366,7 +399,7 @@ export default class LettersController extends BaseController<
             await this.addCaseAssociations(letter, conn);
 
             return letter;
-        });
+        }, withinWorkflow);
     }
 
     /**
@@ -442,7 +475,7 @@ export default class LettersController extends BaseController<
 
         // Zapis do bazy w ramach transakcji
         for (const association of caseAssociations) {
-            await LetterCaseAssociationsController.add(association, conn, true);
+            await new LetterCaseRepository().addInDb(association, conn, true);
         }
     }
 
@@ -460,7 +493,7 @@ export default class LettersController extends BaseController<
         userData: UserData,
         auth?: OAuth2Client
     ): Promise<void> {
-        return await this.withAuth<void>(
+        return await ConsolidationGuard.letterCreationWorkflow(letter._cases.map(item => item.id), () => this.withAuth<void>(
             async (
                 instance: LettersController,
                 authClient: OAuth2Client
@@ -473,7 +506,7 @@ export default class LettersController extends BaseController<
                 );
             },
             auth
-        );
+        ));
     }
 
     /**
@@ -486,6 +519,7 @@ export default class LettersController extends BaseController<
         files: Express.Multer.File[] = [],
         userData: UserData
     ): Promise<void> {
+        await LettersController.prepareNewContractLetter(letter);
         try {
             // 1. Zapis do bazy PRZED Dyskiem. Numer pisma nadaje baza, więc dopóki
             //    wiersza nie ma, nie da się nazwać ani folderu, ani dokumentu.
@@ -495,7 +529,8 @@ export default class LettersController extends BaseController<
             //    Google (~1,6 s każde) wyłącznie po to, żeby naprawić nazwy nadane
             //    chwilę wcześniej. Kolumny GdFolderId i GdDocumentId dopuszczają
             //    puste, więc wiersz może chwilę poczekać na identyfikatory z Dysku.
-            await LettersController.addNew(letter);
+            await LettersController.addNew(letter, true);
+            await LettersController.hydrateCreatedCases(letter);
 
             // Validator gwarantuje że number istnieje, addNew() ustawia number = id
             if (!letter.number || !letter.creationDate) {
@@ -513,9 +548,7 @@ export default class LettersController extends BaseController<
 
             // 2. Folder pisma — od razu pod nazwą docelową
             const gdFolder =
-                await letter._letterGdController.createLetterFolder(auth, {
-                    ...letter,
-                });
+                await letter._letterGdController.createLetterFolder(auth, letter);
             letter.gdFolderId = <string>gdFolder.id;
             letter._gdFolderUrl = ToolsGd.createGdFolderUrl(letter.gdFolderId);
 
@@ -537,21 +570,18 @@ export default class LettersController extends BaseController<
                 letter._template
             );
 
-            const postDbPromises: Promise<any>[] = [
-                ourLetterGdFile.updateTextRunsInNamedRanges(auth),
+            // Observe every started effect before cleanup or lifecycle unlock.
+            const postDbPromises = [
+                Promise.resolve().then(() => ourLetterGdFile.updateTextRunsInNamedRanges(auth)),
+                Promise.resolve().then(() => createCaseShortcuts(auth, letter)),
             ];
-
             if (files.length > 0) {
-                postDbPromises.push(
-                    letter.appendAttachmentsHandler(auth, files)
-                );
+                postDbPromises.push(Promise.resolve().then(() => letter.appendAttachmentsHandler(auth, files)));
             }
-
-            // 6. Utwórz skróty w folderach Cases
-            await createCaseShortcuts(auth, letter);
-
-            // 7. Wykonaj wszystkie operacje post-DB
-            await Promise.all(postDbPromises);
+            const results = await Promise.allSettled(postDbPromises);
+            for (const result of results) {
+                if (result.status === 'rejected') throw result.reason;
+            }
             console.log('Finished all post-DB operations including shortcuts.');
 
             // 7b. Rejestr „Dokumentacja zatwierdzona” (best-effort, po zapisie pisma)
@@ -585,7 +615,7 @@ export default class LettersController extends BaseController<
             }
             if (letter.id) {
                 try {
-                    await LettersController.delete(letter);
+                    await this.repository.deleteFromDb(letter);
                 } catch (cleanupErr) {
                     console.error(
                         `Pismo ${letter.id}: nie udało się wycofać wiersza z bazy:`,
@@ -611,7 +641,7 @@ export default class LettersController extends BaseController<
         userData: UserData,
         auth?: OAuth2Client
     ): Promise<void> {
-        return await this.withAuth<void>(
+        return await ConsolidationGuard.letterCreationWorkflow(letter._cases.map(item => item.id), () => this.withAuth<void>(
             async (
                 instance: LettersController,
                 authClient: OAuth2Client
@@ -624,7 +654,7 @@ export default class LettersController extends BaseController<
                 );
             },
             auth
-        );
+        ));
     }
 
     /**
@@ -637,6 +667,7 @@ export default class LettersController extends BaseController<
         files: Express.Multer.File[] = [],
         userData: UserData
     ): Promise<void> {
+        await LettersController.prepareNewContractLetter(letter);
         try {
             // 1. Obsłuż pliki
             letter.letterFilesCount = files.length;
@@ -652,8 +683,9 @@ export default class LettersController extends BaseController<
                 letter.setDataToSingleFileState(letterGdFile.id);
             }
 
-            // 2. Dodaj do bazy danych (z transakcją i asocjacjami)
-            await LettersController.addNew(letter);
+            // 2. Dodaj do bazy danych pod blokadą całego cyklu pisma
+            await LettersController.addNew(letter, true);
+            await LettersController.hydrateCreatedCases(letter);
 
             // 3. Utwórz skróty w folderach Cases
             await createCaseShortcuts(auth, letter);
@@ -664,14 +696,79 @@ export default class LettersController extends BaseController<
             // 4. Utwórz Letter Event
             await letter.createNewLetterEvent(userData);
         } catch (err) {
-            // Rollback w przypadku błędu - używamy LettersController.delete
-            if (letter.id) await this.delete(letter);
-            letter._letterGdController.deleteFromGd(
-                auth,
-                letter.gdFolderId || letter.gdDocumentId
-            );
+            if (letter.gdFolderId || letter.gdDocumentId) {
+                try {
+                    await letter._letterGdController.deleteFromGd(
+                        auth,
+                        letter.gdDocumentId,
+                        letter.gdFolderId
+                    );
+                } catch (cleanupErr) {
+                    console.error('Nie udało się wycofać pliku pisma:', cleanupErr);
+                }
+            }
+            if (letter.id) {
+                try {
+                    await this.repository.deleteFromDb(letter);
+                } catch (cleanupErr) {
+                    console.error('Nie udało się wycofać pisma z bazy:', cleanupErr);
+                }
+            }
             throw err;
         }
+    }
+
+    private static async prepareNewContractLetter(
+        letter: Letter
+    ): Promise<void> {
+        if (
+            !(letter instanceof OurLetterContract) &&
+            !(letter instanceof IncomingLetterContract)
+        )
+            return;
+
+        const caseIds = letter._cases.map((caseItem) => Number(caseItem.id));
+        if (caseIds.some((id) => !Number.isInteger(id) || id <= 0))
+            throw new Error('Nieprawidłowa sprawa pisma');
+        const uniqueCaseIds = [...new Set(caseIds)];
+        const assignments =
+            await this.getInstance().repository.findProjectIdsForCases(
+                uniqueCaseIds
+            );
+        if (assignments.length !== uniqueCaseIds.length)
+            throw new Error('Nie znaleziono wszystkich spraw pisma');
+        const projectIds = new Set(assignments.map((item) => item.projectId));
+        if (projectIds.size > 1)
+            throw new Error('Sprawy pisma należą do różnych projektów');
+
+        const projectId = assignments[0]?.projectId ?? letter.projectId;
+        if (!projectId)
+            throw new Error('Pismo nie ma projektu');
+        const [project] = await new ProjectRepository().find([
+            { id: projectId },
+        ]);
+        if (!project || !project.lettersGdFolderId)
+            throw new Error('Projekt pisma nie ma folderu pism');
+        letter.projectId = projectId;
+        letter._project = { ...letter._project, ...project };
+    }
+
+    private static async hydrateCreatedCases(letter: Letter): Promise<void> {
+        if (
+            !(letter instanceof OurLetterContract) &&
+            !(letter instanceof IncomingLetterContract)
+        )
+            return;
+        if (!letter.id || !letter._cases.length) return;
+        const cases =
+            await LetterCaseAssociationsController.findCasesByLetterId(
+                letter.id
+            );
+        if (
+            cases.length !== new Set(letter._cases.map((item) => item.id)).size
+        )
+            throw new Error('Nie udało się odczytać spraw zapisanego pisma');
+        letter._cases = cases;
     }
 
     /**
@@ -740,9 +837,9 @@ export default class LettersController extends BaseController<
         const instance = this.getInstance();
         console.log('Letter edit in Db Start');
 
-        await ToolsDb.transaction(async (conn) => {
-            const shouldUpdateCases =
-                !fieldsToUpdate || fieldsToUpdate.includes('_cases');
+        const shouldUpdateCases =
+            !fieldsToUpdate || fieldsToUpdate.includes('_cases');
+        const editInTransaction = async (conn: mysql.PoolConnection) => {
             const shouldUpdateEntities =
                 !fieldsToUpdate ||
                 fieldsToUpdate.includes('_entitiesMain') ||
@@ -782,7 +879,16 @@ export default class LettersController extends BaseController<
                 await this.editEntitiesAssociations(letter, conn);
             }
             console.log('associations renewed');
-        });
+        };
+        if (shouldUpdateCases) {
+            await ConsolidationGuard.letterEdit(
+                letter.id,
+                letter._cases.map(item => item.id),
+                editInTransaction
+            );
+        } else {
+            await ToolsDb.transaction(editInTransaction);
+        }
     }
 
     /**
@@ -965,12 +1071,44 @@ export default class LettersController extends BaseController<
         if (letter.id) {
             dbEditContext = await LettersController.getInstance()
                 .repository.findEditContextById(letter.id);
+            if (!dbEditContext) throw new Error('Nie znaleziono pisma do edycji');
+            if (dbEditContext.isOur !== (letter instanceof OurLetter))
+                throw new Error('Niezgodny typ pisma');
+            // Tożsamość istniejącego pliku i projektu pochodzi wyłącznie z DB.
+            letter.gdDocumentId = dbEditContext.gdDocumentId;
+            letter.gdFolderId = dbEditContext.gdFolderId;
+            if (letter instanceof OurLetterContract ||
+                letter instanceof IncomingLetterContract) {
+                if (!dbEditContext.projectId)
+                    throw new Error('Pismo nie ma projektu');
+                letter.projectId = dbEditContext.projectId;
+            }
             if (shouldUpdateCases)
                 previousCases =
                     await LetterCaseAssociationsController.findCasesByLetterId(
                         letter.id
                     );
+            else if (letter instanceof OurLetterContract ||
+                letter instanceof IncomingLetterContract)
+                letter._cases =
+                    await LetterCaseAssociationsController.findCasesByLetterId(
+                        letter.id
+                    );
         }
+
+        if (shouldUpdateCases && dbEditContext?.projectId && letter._cases.length) {
+            const caseIds = [...new Set(letter._cases.map((item) => Number(item.id)))];
+            if (caseIds.some((id) => !Number.isInteger(id) || id <= 0))
+                throw new Error('Nieprawidłowa sprawa pisma');
+            const assignments = await LettersController.getInstance()
+                .repository.findProjectIdsForCases(caseIds);
+            if (assignments.length !== caseIds.length ||
+                assignments.some((item) => item.projectId !== dbEditContext.projectId))
+                throw new Error('Sprawy pisma należą do innego projektu');
+        }
+        if (letter instanceof OurLetterContract ||
+            letter instanceof IncomingLetterContract)
+            await LettersController.prepareNewContractLetter(letter);
 
         // Zmiana samych powiązań ze sprawami nie ma prawa ruszyć dokumentu.
         // Rozstrzygane porównaniem pola po polu (baza vs żądanie), nie listą
@@ -987,6 +1125,10 @@ export default class LettersController extends BaseController<
         // 1. Edytuj w bazie danych
         await LettersController.edit(letter, fieldsToUpdate);
         console.log('Letter edited in DB');
+        if (letter instanceof OurLetterContract ||
+            letter instanceof IncomingLetterContract)
+            letter._cases =
+                await LetterCaseAssociationsController.findCasesByLetterId(letter.id!);
 
         // 2. Jeśli zmieniono więcej niż tylko pola DB, edytuj też GD.
         //
@@ -1082,7 +1224,19 @@ export default class LettersController extends BaseController<
             )
         ) {
             try {
-                await syncCaseShortcutNames(auth, letter);
+                const dbAfter = await LettersController.getInstance()
+                    .repository.findEditContextById(letter.id!);
+                const currentCases =
+                    await LetterCaseAssociationsController.findCasesByLetterId(letter.id!);
+                if (dbAfter)
+                    await syncCaseShortcutNames(auth, {
+                        ...letter,
+                        number: dbAfter.number ?? undefined,
+                        description: dbAfter.description ?? undefined,
+                        gdDocumentId: dbAfter.gdDocumentId,
+                        gdFolderId: dbAfter.gdFolderId,
+                        _cases: currentCases,
+                    });
             } catch (err) {
                 console.error('Nie udało się zsynchronizować nazw skrótów:', err);
             }
@@ -1117,9 +1271,10 @@ export default class LettersController extends BaseController<
      * @param letter - Letter do usunięcia
      */
     static async delete(letter: Letter): Promise<void> {
-        if (!letter.id) throw new Error('No letter id');
         const instance = this.getInstance();
-        await instance.repository.deleteFromDb(letter);
+        await ConsolidationGuard.letterDestruction(letter.id, async stored => {
+            await instance.repository.deleteFromDb({ id: stored.Id } as Letter);
+        });
     }
 
     /**
@@ -1181,15 +1336,27 @@ export default class LettersController extends BaseController<
         letter: OurLetter | IncomingLetter,
         auth?: OAuth2Client
     ): Promise<void> {
-        return await this.withAuth<void>(
-            async (
-                instance: LettersController,
-                authClient: OAuth2Client
-            ): Promise<void> => {
-                return await instance.deleteFromGdPrivate(authClient, letter);
-            },
-            auth
-        );
+        return ConsolidationGuard.letterDestruction(letter.id, stored =>
+            this.withAuth<void>(async (instance, authClient) => {
+                await instance.deleteFromGdPrivate(authClient, {
+                    gdDocumentId: stored.GdDocumentId,
+                    gdFolderId: stored.GdFolderId,
+                });
+            }, auth));
+    }
+
+    /** Delete the document and DB row under one guard; recovery of partial effects is separate. */
+    static async deleteFromDto(dto: any, auth?: OAuth2Client): Promise<Letter> {
+        const letter = this.createProperLetter(dto);
+        return ConsolidationGuard.letterDestruction(letter.id, async stored => {
+            letter.gdDocumentId = stored.GdDocumentId;
+            letter.gdFolderId = stored.GdFolderId;
+            await this.withAuth<void>(async (instance, authClient) => {
+                await instance.deleteFromGdPrivate(authClient, letter);
+            }, auth);
+            await this.getInstance().repository.deleteFromDb(letter);
+            return letter;
+        });
     }
 
     /**
@@ -1197,13 +1364,11 @@ export default class LettersController extends BaseController<
      */
     private async deleteFromGdPrivate(
         auth: OAuth2Client,
-        letter: OurLetter | IncomingLetter
+        letter: Pick<Letter, 'gdDocumentId' | 'gdFolderId'>
     ): Promise<void> {
-        await letter._letterGdController.deleteFromGd(
-            auth,
-            letter.gdDocumentId || null,
-            letter.gdFolderId || null
-        );
+        const targetId = letter.gdFolderId || letter.gdDocumentId;
+        if (!targetId) throw new EnviErrors.NoGdIdError('Document must have folderFdId');
+        await ToolsGd.trashFileOrFolder(auth, targetId);
     }
 
     /**
@@ -1235,6 +1400,12 @@ export default class LettersController extends BaseController<
         auth: OAuth2Client,
         letter: OurLetter
     ): Promise<void> {
+        if (!letter.id) throw new Error('Brak ID pisma');
+        const context = await this.repository.findEditContextById(letter.id);
+        if (!context || !context.isOur || !context.gdDocumentId)
+            throw new Error('Nie znaleziono dokumentu pisma wychodzącego');
+        letter.gdDocumentId = context.gdDocumentId;
+        letter.gdFolderId = context.gdFolderId;
         await letter.exportToPDF(auth);
     }
 

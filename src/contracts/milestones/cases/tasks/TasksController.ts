@@ -2,6 +2,10 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../../../../tools/ToolsDb';
 import Case from '../Case';
 import Task from './Task';
+import TaskValidator from './TaskValidator';
+import Sharing from '../../sharing/MilestoneSharingController';
+import ConsolidationGuard from '../../consolidation/ConsolidationWriteGuardController';
+import CaseRepository from '../CaseRepository';
 import Milestone from '../../Milestone';
 import ToolsGd from '../../../../tools/ToolsGd';
 import ToolsDate from '../../../../tools/ToolsDate';
@@ -68,12 +72,12 @@ export default class TasksController extends BaseController<
         taskPayload: TaskPayload,
         auth?: OAuth2Client
     ): Promise<Task> {
-        return await this.withAuth<Task>(
+        return ConsolidationGuard.cases([], [taskPayload._case?.id], () => this.withAuth<Task>(
             async (instance: TasksController, authClient: OAuth2Client) => {
                 return await instance.addTask(authClient, taskPayload);
             },
             auth
-        );
+        ));
     }
 
     /**
@@ -94,7 +98,7 @@ export default class TasksController extends BaseController<
             const task = new Task({ ...rest, _parent: _case });
 
             // 1. Dodaj do DB
-            await this.create(task);
+            await this.repository.addInDb(task);
             console.log('Task added to DB');
 
             // 2. Dodaj do Scrum Sheet
@@ -122,7 +126,7 @@ export default class TasksController extends BaseController<
         fieldsToUpdate: string[],
         auth?: OAuth2Client
     ): Promise<Task> {
-        return await this.withAuth<Task>(
+        return Sharing.runExclusive(() => this.withAuth<Task>(
             async (instance: TasksController, authClient: OAuth2Client) => {
                 return await instance.editTask(
                     authClient,
@@ -131,7 +135,7 @@ export default class TasksController extends BaseController<
                 );
             },
             auth
-        );
+        ));
     }
 
     /**
@@ -153,18 +157,35 @@ export default class TasksController extends BaseController<
             const { _case, ...rest } = taskPayload;
             const task = new Task({ ...rest, _parent: _case });
 
-            // Równoległe wykonanie DB i Scrum update
-            const dbPromise = this.repository.editInDb(
-                task,
-                undefined,
-                undefined,
-                fieldsToUpdate
-            );
-            const scrumPromise = TasksController.editInScrum(task, auth);
-            await Promise.all([dbPromise, scrumPromise]);
+            const current = await this.repository.findById(task.id!);
+            const milestoneId = current?._parent?.milestoneId;
+            if (current && milestoneId && await new CaseRepository().hasSharedMilestone(milestoneId)) {
+                TaskValidator.sharedParent(task.caseId, current.caseId!, fieldsToUpdate);
+                await this.repository.editInDb(task, undefined, undefined, fieldsToUpdate);
+                const stored = await this.repository.findById(task.id!);
+                if (!stored) throw new Error('Nie znaleziono zapisanego zadania.');
+                await TasksController.editInScrum(stored, auth);
+                return stored;
+            }
 
-            console.log(`Task ${task.name} updated`);
-            return task;
+            const update = async () => {
+                const dbPromise = this.repository.editInDb(
+                    task,
+                    undefined,
+                    undefined,
+                    fieldsToUpdate
+                );
+                const scrumPromise = TasksController.editInScrum(task, auth);
+                await TasksController.settleWrites([dbPromise, scrumPromise]);
+
+                console.log(`Task ${task.name} updated`);
+                return task;
+            };
+            const target = TaskValidator.selectedCaseId(taskPayload, fieldsToUpdate);
+            if (target !== undefined && target !== current?.caseId) {
+                return ConsolidationGuard.cases([], current ? [current.caseId, target] : [target], update);
+            }
+            return update();
         } finally {
             console.groupEnd();
         }
@@ -183,12 +204,12 @@ export default class TasksController extends BaseController<
         taskPayload: TaskPayload,
         auth?: OAuth2Client
     ): Promise<{ id: number | undefined }> {
-        return await this.withAuth<{ id: number | undefined }>(
+        return Sharing.runExclusive(() => this.withAuth<{ id: number | undefined }>(
             async (instance: TasksController, authClient: OAuth2Client) => {
                 return await instance.deleteTask(authClient, taskPayload);
             },
             auth
-        );
+        ));
     }
 
     /**
@@ -211,13 +232,19 @@ export default class TasksController extends BaseController<
             // Równoległe wykonanie DB i Scrum delete
             const dbPromise = this.repository.deleteFromDb(task);
             const scrumPromise = TasksController.deleteFromScrum(task, auth);
-            await Promise.all([dbPromise, scrumPromise]);
+            await TasksController.settleWrites([dbPromise, scrumPromise]);
 
             console.log(`Task with id ${task.id} deleted`);
             return { id: task.id };
         } finally {
             console.groupEnd();
         }
+    }
+
+    /** Do not release lifecycle serialization while another started write is still running. */
+    private static async settleWrites(writes: Promise<unknown>[]) {
+        const results = await Promise.allSettled(writes);
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
     }
 
     // ==================== DEPRECATED (dla kompatybilności wstecznej) ====================
@@ -526,7 +553,7 @@ export default class TasksController extends BaseController<
             const timesColIndex = currentSprintValues[0].indexOf(
                 Setup.ScrumSheet.CurrentSprint.timesColName
             );
-            await Promise.all([
+            await TasksController.settleWrites([
                 ToolsSheets.copyPasteRows(auth, {
                     source: {
                         sheetId: Setup.ScrumSheet.CurrentSprint.id,
@@ -782,7 +809,7 @@ export default class TasksController extends BaseController<
 
     static async deleteFromScrum(task: Task, auth: OAuth2Client) {
         if (!Setup.scrumSheetSyncEnabled) return;
-        CurrentSprint.deleteRowsByColValue(auth, {
+        await CurrentSprint.deleteRowsByColValue(auth, {
             searchColName: Setup.ScrumSheet.CurrentSprint.taskIdColName,
             valueToFind: <number>task.id,
         });

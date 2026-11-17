@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
+import { dataScopeProjectOurIds, MembershipEdge } from './projectMembership';
 
 export type AssignedProject = {
     ourId: string;
@@ -12,13 +13,49 @@ export type AssignedProject = {
  * czystym powiązaniem, bez modelu biznesowego i bez własnego CRUD-a w UI.
  */
 export default class ProjectAssignmentRepository {
-    /** OurId projektów przypisanych osobie - podstawa filtra zakresu w repozytoriach. */
+    /** OurId projektów przypisanych osobie wprost (tylko PersonProjects - formularz i dziennik zmian). */
     static async getAssignedProjectOurIds(personId: number): Promise<string[]> {
         const sql = `SELECT ProjectOurId FROM PersonProjects WHERE PersonId = ?`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             personId,
         ])) as any[];
         return rows.map((r) => r.ProjectOurId);
+    }
+
+    /**
+     * Przypisania wszystkimi drogami reguły projectMembership (kierownik, administrator, osoba
+     * dodatkowa kontraktu, PersonProjects). Filtr opcjonalny; pusta lista projektów = nic.
+     */
+    static async findMembership(filter: { projectOurIds?: string[]; personId?: number } = {}): Promise<MembershipEdge[]> {
+        if (filter.projectOurIds && !filter.projectOurIds.length) return [];
+        const where = (projectColumn: string, personColumn: string) => [
+            filter.projectOurIds ? `${projectColumn} IN (?)` : '',
+            filter.personId !== undefined ? `${personColumn} = ?` : '',
+        ].filter(Boolean).join(' AND ');
+        const params = [filter.projectOurIds, filter.personId].filter((value) => value !== undefined);
+        const contractWhere = where('c.ProjectOurId', 'a.PersonId');
+        const projectWhere = where('ProjectOurId', 'PersonId');
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT c.ProjectOurId AS projectOurId, c.Id AS contractId, a.PersonId AS personId
+            FROM (SELECT Id AS ContractId, ManagerId AS PersonId FROM OurContractsData WHERE ManagerId > 0
+                UNION SELECT Id, AdminId FROM OurContractsData WHERE AdminId > 0
+                UNION SELECT ContractId, PersonId FROM ContractSelectedPersons) a
+            JOIN Contracts c ON c.Id = a.ContractId${contractWhere ? ` WHERE ${contractWhere}` : ''}
+            UNION
+            SELECT ProjectOurId, NULL, PersonId FROM PersonProjects${projectWhere ? ` WHERE ${projectWhere}` : ''}`,
+            undefined,
+            [...params, ...params],
+        )) as any[];
+        return rows.map((r) => ({
+            projectOurId: r.projectOurId,
+            contractId: r.contractId ?? null,
+            personId: Number(r.personId),
+        }));
+    }
+
+    /** Zakres danych roli ograniczonej według reguły projectMembership (tylko przypisanie do projektu). */
+    static async getDataScopeProjectOurIds(personId: number): Promise<string[]> {
+        return dataScopeProjectOurIds(await this.findMembership({ personId }), personId);
     }
 
     /** Projekty z nazwami - do wyświetlenia w formularzu użytkownika. */

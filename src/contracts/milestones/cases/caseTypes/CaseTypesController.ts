@@ -2,6 +2,7 @@ import BaseController from '../../../../controllers/BaseController';
 import ToolsDb from '../../../../tools/ToolsDb';
 import CaseType from './CaseType';
 import CaseTypeRepository from './CaseTypeRepository';
+import { findFidmanFoldersContractsForType, enqueueFidmanFoldersForContracts } from '../../../fidmanSync/FidmanSync';
 
 export default class CaseTypesController extends BaseController<
     CaseType,
@@ -38,9 +39,11 @@ export default class CaseTypesController extends BaseController<
 
     static async delete(item: CaseType): Promise<void> {
         const instance = this.getInstance();
-        return await ToolsDb.transaction(async (conn) => {
+        const contractIds = await findFidmanFoldersContractsForType('case', item.id!);
+        await ToolsDb.transaction(async (conn) => {
             await instance.repository.deleteFromDb(item);
         });
+        await enqueueFidmanFoldersForContracts(contractIds);
     }
 
     static async find(

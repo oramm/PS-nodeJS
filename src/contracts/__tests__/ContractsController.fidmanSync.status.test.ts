@@ -22,6 +22,8 @@ jest.mock('../../setup/Sessions/IntersessionsTasksStore');
 // FidmanSync is intentionally NOT mocked here.
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import Tools from '../../tools/Tools';
 import CurrentSprintValidator from '../../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../../setup/Sessions/IntersessionsTasksStore';
@@ -52,6 +54,10 @@ describe('ContractsController.add() -> FidmanSyncOutbox status read (SYNC-P2 red
         outbox = { Status: 'PENDING', SkipReason: null, LastError: null, Attempts: 0 };
 
         mockConn = {
+            query: jest.fn<any>().mockImplementation(async (sql: string) => [
+                sql.includes('FROM Projects p') ? [{ Id: 1, OurId: 'PRJ-001', Name: 'Projekt z bazy' }] : [],
+                undefined,
+            ]),
             beginTransaction: jest.fn(),
             commit: jest.fn(),
             rollback: jest.fn(),

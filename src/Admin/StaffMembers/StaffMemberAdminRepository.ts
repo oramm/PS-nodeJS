@@ -75,13 +75,16 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 PersonAccounts.SystemRoleId AS SystemRoleId,
                 PersonAccounts.SystemEmail AS SystemEmail,
                 COALESCE(PersonAccounts.FidmanEnabled, 0) AS FidmanEnabled,
+                COALESCE(PersonAccounts.FinEnabled, 0) AS FinEnabled,
                 StaffMembers.Id AS StaffMemberId,
                 COALESCE(StaffMembers.IsDriver, 0) AS IsDriver,
                 COALESCE(StaffMembers.IsInScrum, 0) AS IsInScrum,
                 COALESCE(StaffMembers.HasCostInvoiceAccess, 0) AS HasCostInvoiceAccess,
                 COALESCE(StaffMembers.HasBankAccess, 0) AS HasBankAccess,
                 COALESCE(StaffMembers.CanLogSiteVisits, 0) AS CanLogSiteVisits,
-                COALESCE(StaffMembers.IsActive, 1) AS IsActive,
+                COALESCE(StaffMembers.CanManageSbAccess, 0) AS CanManageSbAccess,
+                /* „Aktywny” w panelu = konto logowania (U2); StaffMembers.IsActive nie jest już czytane. */
+                COALESCE(PersonAccounts.IsActive, 1) AS IsActive,
                 FidmanUserSync.Status AS FidmanSyncStatus,
                 FidmanUserSync.SkipReason AS FidmanSkipReason,
                 FidmanUserSync.LastError AS FidmanLastError,
@@ -103,6 +106,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                     SELECT RefId, MAX(Id) AS LastId
                     FROM FidmanSyncOutbox
                     WHERE Kind = 'user.upsert'
+                      AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(Payload, '$._recipient')), 'fidman') = 'fidman'
                     GROUP BY RefId
                 ) LastPush ON LastPush.LastId = Outbox.Id
             ) FidmanUserSync ON FidmanUserSync.RefId = Persons.Id
@@ -184,7 +188,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
     ): Promise<any> {
         const sql = `INSERT INTO StaffMembers
                 (PersonId, IsDriver, IsInScrum, HasCostInvoiceAccess,
-                 HasBankAccess, CanLogSiteVisits, IsActive)
+                 HasBankAccess, CanLogSiteVisits, CanManageSbAccess)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 IsDriver = VALUES(IsDriver),
@@ -192,7 +196,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 HasCostInvoiceAccess = VALUES(HasCostInvoiceAccess),
                 HasBankAccess = VALUES(HasBankAccess),
                 CanLogSiteVisits = VALUES(CanLogSiteVisits),
-                IsActive = VALUES(IsActive)`;
+                CanManageSbAccess = VALUES(CanManageSbAccess)`;
 
         return await ToolsDb.executeSQL(
             sql,
@@ -203,7 +207,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
                 entity.hasCostInvoiceAccess ? 1 : 0,
                 entity.hasBankAccess ? 1 : 0,
                 entity.canLogSiteVisits ? 1 : 0,
-                entity.isActive ? 1 : 0,
+                entity.canManageSbAccess ? 1 : 0,
             ],
             externalConn
         );
@@ -229,6 +233,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
             hasCostInvoiceAccess: !!row.HasCostInvoiceAccess,
             hasBankAccess: !!row.HasBankAccess,
             canLogSiteVisits: !!row.CanLogSiteVisits,
+            canManageSbAccess: !!row.CanManageSbAccess,
             isActive: !!row.IsActive,
             _personName: row.Name,
             _personSurname: row.Surname,
@@ -237,6 +242,7 @@ export default class StaffMemberAdminRepository extends BaseRepository<StaffMemb
             _systemRoleId: row.SystemRoleId ?? null,
             _systemEmail: row.SystemEmail ?? null,
             _fidmanEnabled: !!row.FidmanEnabled,
+            _finEnabled: !!row.FinEnabled,
             _hasStaffRow: row.StaffMemberId !== null && row.StaffMemberId !== undefined,
             _fidmanSync: this.mapFidmanSync(row),
         });

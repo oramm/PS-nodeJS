@@ -148,6 +148,7 @@ describe('ApprovedDocsController', () => {
             jest.spyOn(ToolsGd, 'setFolder').mockResolvedValue({
                 id: 'folder-04',
             } as any);
+            jest.spyOn(ToolsGd, 'findShortcutsByTarget').mockResolvedValue([]);
             jest.spyOn(ToolsGd, 'getFileMetaDataByNameAndMimeType').mockResolvedValue(
                 { id: 'sheet-1' } as any
             );
@@ -252,6 +253,44 @@ describe('ApprovedDocsController', () => {
                 } as any
             );
 
+            expect(createShortcut).not.toHaveBeenCalled();
+            expect(appendRows).not.toHaveBeenCalled();
+        });
+
+        it('ponowienie po błędzie append nie tworzy drugiego skrótu', async () => {
+            mockSheetExists();
+            jest.spyOn(ToolsSheets, 'getValues').mockResolvedValue({
+                values: [Setup.ApprovedDocumentation.header],
+            } as any);
+            const shortcuts = ToolsGd.findShortcutsByTarget as jest.Mock;
+            shortcuts.mockResolvedValueOnce([]).mockResolvedValueOnce([
+                { id: 'shortcut-1', parents: ['folder-04'] },
+            ]);
+            const createShortcut = jest.spyOn(ToolsGd, 'createShortcut').mockResolvedValue({ id: 'shortcut-1' } as any);
+            const appendRows = jest.spyOn(ToolsSheets, 'appendRowsToSpreadSheet')
+                .mockRejectedValueOnce(new Error('mock append failure'))
+                .mockResolvedValueOnce({ data: { updates: { updatedRange: 'Arkusz1!A2:G2' } } } as any);
+            jest.spyOn(ToolsSheets, 'batchUpdateSheet').mockResolvedValue({} as any);
+            const letter = { number: 123, description: 'Opis', gdDocumentId: 'doc-1', creationDate: '2026-07-22', _cases: [] } as any;
+
+            await expect(ApprovedDocsController.registerLetter(mockAuth, designSupervisionMilestone(), letter)).rejects.toThrow('mock append failure');
+            await ApprovedDocsController.registerLetter(mockAuth, designSupervisionMilestone(), letter);
+
+            expect(createShortcut).toHaveBeenCalledTimes(1);
+            expect(appendRows).toHaveBeenCalledTimes(2);
+        });
+
+        it('rozpoznaje ponowienie po linku, gdy numer pisma uległ zmianie', async () => {
+            mockSheetExists();
+            jest.spyOn(ToolsSheets, 'getValues').mockResolvedValue({ values: [
+                Setup.ApprovedDocumentation.header,
+                [1, '2026-07-22', 'pismo', 'stary', 'Opis', '', 'https://drive.google.com/open?id=doc-1'],
+            ] } as any);
+            const createShortcut = jest.spyOn(ToolsGd, 'createShortcut');
+            const appendRows = jest.spyOn(ToolsSheets, 'appendRowsToSpreadSheet');
+            await ApprovedDocsController.registerLetter(mockAuth, designSupervisionMilestone(), {
+                number: 'nowy', gdDocumentId: 'doc-1', _cases: [],
+            } as any);
             expect(createShortcut).not.toHaveBeenCalled();
             expect(appendRows).not.toHaveBeenCalled();
         });

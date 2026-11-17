@@ -10,6 +10,8 @@ import { LetterData } from '../types/types';
  */
 export type LetterDbEditContext = {
     id: number;
+    projectId: number | null;
+    isOur: boolean;
     number: string | null;
     description: string | null;
     creationDate: string | null;

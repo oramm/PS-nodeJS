@@ -1,3 +1,4 @@
+import Guard from '../../contracts/milestones/consolidation/ConsolidationWriteGuardController';
 import ScrumboardTaskHoursRepository, {
     TaskHoursPayload,
     TaskHoursResult,
@@ -14,10 +15,10 @@ export default class ScrumboardTaskHoursController {
         taskId: number,
         payload: TaskHoursPayload
     ): Promise<TaskHoursResult> {
-        return this.repository.updateHours(taskId, payload);
+        return Guard.taskHours(taskId, conn => this.repository.updateHours(taskId, payload, conn));
     }
 
     static async resetAllDailyHours(): Promise<void> {
-        return this.repository.resetAllDailyHours();
+        return Guard.allTaskHours(conn => this.repository.resetAllDailyHours(conn));
     }
 }

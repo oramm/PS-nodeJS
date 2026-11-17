@@ -23,6 +23,7 @@ describe('getPersonAccountV2 (ROD-2) — odpowiedz konta bez tokenow', () => {
                     MicrosoftRefreshToken: 'SEKRET-ms-nie-oddawac',
                     IsActive: 1,
                     FidmanEnabled: 0,
+                    FinEnabled: 1,
                 },
             ] as any);
 
@@ -38,6 +39,7 @@ describe('getPersonAccountV2 (ROD-2) — odpowiedz konta bez tokenow', () => {
             googleId: 'gid-123',
             isActive: true,
             fidmanEnabled: false,
+            finEnabled: true,
         });
 
         // Zapytanie SQL też nie powinno wybierać kolumn tokenów.

@@ -21,6 +21,7 @@ export default class StaffMember
     hasCostInvoiceAccess: boolean;
     hasBankAccess: boolean;
     canLogSiteVisits: boolean;
+    canManageSbAccess: boolean;
     isActive: boolean;
     _personName?: string;
     _personSurname?: string;
@@ -29,6 +30,7 @@ export default class StaffMember
     _systemRoleId?: number | null;
     _systemEmail?: string | null;
     _fidmanEnabled?: boolean;
+    _finEnabled?: boolean;
     _hasStaffRow?: boolean;
     _fidmanSync?: FidmanUserSyncStatus | null;
 
@@ -41,6 +43,7 @@ export default class StaffMember
         this.hasCostInvoiceAccess = initParamObject.hasCostInvoiceAccess;
         this.hasBankAccess = initParamObject.hasBankAccess;
         this.canLogSiteVisits = initParamObject.canLogSiteVisits;
+        this.canManageSbAccess = initParamObject.canManageSbAccess;
         this.isActive = initParamObject.isActive;
         this._personName = initParamObject._personName;
         this._personSurname = initParamObject._personSurname;
@@ -49,6 +52,7 @@ export default class StaffMember
         this._systemRoleId = initParamObject._systemRoleId;
         this._systemEmail = initParamObject._systemEmail;
         this._fidmanEnabled = initParamObject._fidmanEnabled;
+        this._finEnabled = initParamObject._finEnabled;
         this._hasStaffRow = initParamObject._hasStaffRow;
         this._fidmanSync = initParamObject._fidmanSync ?? null;
     }

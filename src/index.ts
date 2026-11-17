@@ -1,8 +1,10 @@
+import { pomocJson, pomocBodyError } from './pomoc/body';
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
+import { FRONT_ORIGINS } from './setup/frontOrigins';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
-import MongoStore from 'connect-mongo';
+import { createMongoSessionStore, listenAfterMongoReady } from './setup/mongoSessionStore';
 import { loadEnv } from './setup/loadEnv';
 loadEnv();
 
@@ -18,6 +20,7 @@ import agentTokenAuth, {
     reportAgentTokenConfig,
 } from './setup/Sessions/agentTokenAuth';
 import denyDestructiveForAgent from './setup/Sessions/denyDestructiveForAgent';
+import sbAgentKeyAuth from './sbAccess/sbAgentKeyAuth';
 import requireSession from './setup/Sessions/requireSession';
 import requirePrivacyAcknowledgement from './setup/Sessions/requirePrivacyAcknowledgement';
 import { resolveSessionSecrets } from './setup/Sessions/sessionSecret';
@@ -342,15 +345,7 @@ async function runBugRetention(): Promise<void> {
 }
 
 const corsOptions = {
-    origin: [
-        'http://localhost', // Port 80 (domyślny)
-        'http://localhost:9000', // Apache - MUSISZ dodać jawnie
-        'http://localhost:9010', // front dev na porcie zapasowym, gdy 9000 jest zajęty
-                                 // przez równoległą sesję (przegląd wizualny UI lokalnie)
-        'https://erp-envi.herokuapp.com',
-        'https://erp.envi.com.pl',
-        'https://ps.envi.com.pl',
-    ],
+    origin: [...FRONT_ORIGINS],
     optionsSuccessStatus: 200, // For legacy browser support
     credentials: true,
 };
@@ -358,6 +353,8 @@ app.use(cors(corsOptions));
 
 app.set('trust proxy', resolveTrustProxySetting());
 
+// Limit Pomocy przed ogólnym parserem, aby nie przyjmować 10 MB historii.
+app.use('/pomoc/ask', pomocJson, pomocBodyError);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Do NOT automatically parse multipart/form-data here — let route-level
@@ -371,28 +368,6 @@ app.use((req: any, res: any, next: any) => {
     }
     next();
 });
-
-// Przechowuje liczbę prób połączenia
-let connectAttempts = 0;
-
-async function connectWithRetry() {
-    try {
-        await client.connect();
-        console.log('Connected to MongoDB.');
-    } catch (err) {
-        connectAttempts++;
-
-        console.error(
-            `Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`,
-            err,
-        );
-
-        // Oczekuje 5 sekund przed kolejną próbą
-        setTimeout(connectWithRetry, 5000);
-    }
-}
-
-connectWithRetry();
 
 process.on('SIGTERM', async () => {
     try {
@@ -528,13 +503,11 @@ app.use((req, res, next) => {
     next();
 });
 
+const sessionStore = createMongoSessionStore(client);
+
 app.use(
     session({
-        store: MongoStore.create({
-            //clientPromise: client.connect(),
-            client: client,
-            collectionName: 'sessions',
-        }),
+        store: sessionStore,
         name: 'connect.sid',
         secret: resolveSessionSecrets(),
         resave: false,
@@ -553,6 +526,10 @@ app.use(
 // LIS-2 — headless agent entry. Must sit after session() and before the routes, so the
 // agent reaches the same controllers as the UI. Inactive without AGENT_API_TOKEN.
 app.use(agentTokenAuth);
+
+// SBZ-1 — agent pracownika jego osobistym kluczem: sesja tej osoby ze znakiem agenta.
+// Ten sam punkt co agentTokenAuth: po session(), przed denyDestructiveForAgent i trasami.
+app.use(sbAgentKeyAuth);
 
 // LIS-5 — the agent creates and edits, it never destroys. Must sit directly after the layer
 // that grants the agent identity and before every route, because the identity is what this
@@ -687,6 +664,7 @@ app.get('/admin/bug-events', async (req, res) => {
     });
 });
 
+require('./pomoc/PomocRouters');
 require('./setup/Sessions/Gauth2Routers');
 require('./persons/privacy/PrivacyRouters');
 require('./persons/PersonsRouters');
@@ -695,6 +673,7 @@ require('./persons/experiences/ExperienceRouters');
 
 require('./persons/projectRoles/RolesRouters');
 require('./persons/projectAssignments/ProjectAssignmentsRouters');
+require('./persons/accessOverview/AccessOverviewRouters');
 require('./persons/educations/EducationRouters');
 require('./persons/skills/SkillsDictionaryRouters');
 require('./persons/profileSkills/ProfileSkillRouters');
@@ -716,6 +695,8 @@ require('./contracts/ContractsRouters');
 require('./contracts/caseListSheet/CaseListSheetRouters');
 require('./contracts/aqmSync/AqmSyncRouters');
 require('./contracts/fidmanSync/FidmanSyncRouters');
+require('./contracts/chatSpaces/ChatSpacesRouters');
+require('./mailboxes/MailboxRouters');
 require('./contracts/contractDocuments/ContractDocumentsRouters');
 require('./meetings/MeetingsRouters');
 require('./meetings/meetingArrangements/MeetingArrangementsRouters');
@@ -743,6 +724,7 @@ require('./documentTemplates/DocumentTemplatesRouters');
 
 require('./letters/LettersRouters');
 require('./letters/incomingMails/IncomingMailsRouters');
+require('./signing/jobs/SigningJobsRouters');
 require('./ai/AiRouters');
 
 // ScrumSheet maintenance routes
@@ -755,6 +737,8 @@ require('./offers/OfferInvitationMails/OfferInvitationMailsRouters');
 
 // Instalator firmowego Second Brain do pobrania zza bramki sesji (D-7 packa SB).
 require('./sbInstaller/SbInstallerRouters');
+// Zarządzanie dostępem do SB (GitHub + Dysk SB.ENVI); montuje własną bramkę na /sbAccess.
+require('./sbAccess/SbAccessRouters');
 
 // Panel administracyjny. AdminPanelRouters MUSI być pierwszy - montuje bramkę
 // app.use('/admin', ...), która działa tylko na trasy zarejestrowane PO niej.
@@ -772,6 +756,7 @@ require('./bankSync/BankSyncRouter');
 app.use(
     async (err: unknown, req: Request, res: Response, next: NextFunction) => {
         err = require('./Admin/SoftwareLicenses/SoftwareLicenseHttp').sanitizeSoftwareLicenseError(err, req);
+        err = require('./sbAccess/sbSecretsHttp').sanitizeSbSecretError(err, req);
         console.error('Wystąpił błąd:', err);
 
         // Naruszenie unikalności to błąd użytkownika (409), nie awaria serwera.
@@ -842,12 +827,24 @@ app.use(
     },
 );
 
-app.listen(port, async () => {
-    console.log(`server is listenning on port: ${port}`);
-    ToolsDb.initialize();
-    console.log('Db time zone set to +00:00');
-    // LIS-2 — a misconfigured agent token must be loud, never silently inactive.
-    reportAgentTokenConfig();
+void listenAfterMongoReady(sessionStore, () => {
+    app.listen(port, async () => {
+        console.log(`server is listenning on port: ${port}`);
+        ToolsDb.initialize();
+        console.log('Db time zone set to +00:00');
+        // LIS-2 — a misconfigured agent token must be loud, never silently inactive.
+        reportAgentTokenConfig();
+    });
+}).catch(async error => {
+    console.error('Server startup aborted: MongoDB session store is unavailable.', error);
+    try {
+        await client.close();
+        await ToolsDb.pool.end();
+    } catch (closeError) {
+        console.error('Error closing database clients after startup failure:', closeError);
+    } finally {
+        process.exit(1);
+    }
 });
 
 

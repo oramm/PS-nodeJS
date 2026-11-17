@@ -1,3 +1,4 @@
+import { salesInvoiceAccess } from './salesInvoiceScope';
 import InvoicesController from './InvoicesController';
 import { KsefController } from './KSeF';
 import { app } from '../index';
@@ -8,10 +9,10 @@ import multer from 'multer';
 const upload = multer({ storage: multer.memoryStorage() });
 const uploadSingleFile = upload.single('file') as unknown as RequestHandler;
 
-app.post('/invoices', async (req: Request, res: Response, next) => {
+app.post('/invoices', salesInvoiceAccess('list'), async (req: Request, res: Response, next) => {
     try {
         const orConditions = req.parsedBody.orConditions;
-        const result = await InvoicesController.find(orConditions);
+        const result = await InvoicesController.find(orConditions, true, req.salesInvoiceScope);
         res.send(result);
     } catch (error) {
         next(error);
@@ -40,7 +41,7 @@ app.post('/invoice/nextNumber', async (req: Request, res: Response, next) => {
     }
 });
 
-app.post('/invoice', async (req: Request, res: Response, next) => {
+app.post('/invoice', salesInvoiceAccess('newInvoice'), async (req: Request, res: Response, next) => {
     try {
         const item = await InvoicesController.add(req.body);
         res.send(item);
@@ -49,7 +50,7 @@ app.post('/invoice', async (req: Request, res: Response, next) => {
     }
 });
 
-app.post('/invoiceSeries/preview', async (req: Request, res: Response, next) => {
+app.post('/invoiceSeries/preview', salesInvoiceAccess('series'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) return res.status(401).json({ error: 'Użytkownik niezalogowany' });
         res.json(await InvoicesController.previewSeries(req.body));
@@ -58,7 +59,7 @@ app.post('/invoiceSeries/preview', async (req: Request, res: Response, next) => 
     }
 });
 
-app.post('/invoiceSeries', async (req: Request, res: Response, next) => {
+app.post('/invoiceSeries', salesInvoiceAccess('series'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) return res.status(401).json({ error: 'Użytkownik niezalogowany' });
         res.json(await InvoicesController.createSeries(req.body, req.session.userData));
@@ -67,7 +68,7 @@ app.post('/invoiceSeries', async (req: Request, res: Response, next) => {
     }
 });
 
-app.post('/copyInvoice', async (req: Request, res: Response, next) => {
+app.post('/copyInvoice', salesInvoiceAccess('copyInvoice'), async (req: Request, res: Response, next) => {
     try {
         if (!req.session.userData) throw new Error('Użytkownik niezalogowany');
 
@@ -81,7 +82,7 @@ app.post('/copyInvoice', async (req: Request, res: Response, next) => {
     }
 });
 
-app.put('/invoice/:id', async (req: Request, res: Response, next) => {
+app.put('/invoice/:id', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         //nie ma validacji przy edycji bo jest zbędna - jest w edycji pozycji
         const fieldsToUpdate = req.parsedBody._fieldsToUpdate;
@@ -111,7 +112,7 @@ app.put('/invoice/:id', async (req: Request, res: Response, next) => {
 
 app.put(
     '/setAsToMakeInvoice/:id',
-    async (req: Request, res: Response, next) => {
+    salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
         try {
             const item = await InvoicesController.updateStatus(
                 req.parsedBody,
@@ -128,7 +129,7 @@ app.put(
 app.put(
     '/issueInvoice/:id',
     upload.single('file') as any,
-    async (req: Request, res: Response, next) => {
+    salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
         try {
             const invoiceFile = req.file;
 
@@ -162,7 +163,7 @@ app.put(
     }
 );
 
-app.put('/setAsSentInvoice/:id', async (req: Request, res: Response, next) => {
+app.put('/setAsSentInvoice/:id', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const item = await InvoicesController.updateStatus(
             req.parsedBody,
@@ -174,7 +175,7 @@ app.put('/setAsSentInvoice/:id', async (req: Request, res: Response, next) => {
     }
 });
 
-app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response, next) => {
+app.put('/setAsPaidInvoice/:id', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const item = await InvoicesController.updateStatus(
             req.parsedBody,
@@ -186,7 +187,7 @@ app.put('/setAsPaidInvoice/:id', async (req: Request, res: Response, next) => {
     }
 });
 
-app.delete('/invoice/:id', async (req: Request, res: Response, next) => {
+app.delete('/invoice/:id', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const result = await InvoicesController.delete(req.body, 'FETCH_TOKEN');
         res.send(result);
@@ -195,7 +196,7 @@ app.delete('/invoice/:id', async (req: Request, res: Response, next) => {
     }
 });
 
-app.patch('/invoices/:id/payment', async (req: Request, res: Response, next) => {
+app.patch('/invoices/:id/payment', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const id = parseInt(req.params.id, 10);
         if (isNaN(id)) return res.status(400).json({ error: 'Nieprawidłowe ID faktury' });
@@ -225,7 +226,7 @@ app.patch('/invoices/:id/payment', async (req: Request, res: Response, next) => 
  * 
  * Response: { invoiceId, referenceNumber, status, message }
  */
-app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => {
+app.post('/invoice/:id/ksef/send', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {
@@ -269,7 +270,7 @@ app.post('/invoice/:id/ksef/send', async (req: Request, res: Response, next) => 
  * }
  * Response: { correctionInvoice, message }
  */
-app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: Response, next) => {
+app.post('/invoice/:id/correction', uploadSingleFile, salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const originalInvoiceId = parseInt(req.params.id, 10);
         if (isNaN(originalInvoiceId)) {
@@ -366,7 +367,7 @@ app.post('/invoice/:id/correction', uploadSingleFile, async (req: Request, res: 
  * }
  * Response: { invoiceId, referenceNumber, status, originalKsefNumber, message }
  */
-app.post('/invoice/:id/ksef/correction', async (req: Request, res: Response, next) => {
+app.post('/invoice/:id/ksef/correction', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {
@@ -430,7 +431,7 @@ app.post('/invoice/:id/ksef/correction', async (req: Request, res: Response, nex
  * 
  * Response: { invoiceId, referenceNumber, ksefNumber, status, ... }
  */
-app.get('/invoice/:id/ksef/status', async (req: Request, res: Response, next) => {
+app.get('/invoice/:id/ksef/status', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {
@@ -450,7 +451,7 @@ app.get('/invoice/:id/ksef/status', async (req: Request, res: Response, next) =>
  * Pobiera UPO (Urzędowe Poświadczenie Odbioru)
  * 
  */
-app.get('/invoice/:id/ksef/upo', async (req: Request, res: Response, next) => {
+app.get('/invoice/:id/ksef/upo', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {
@@ -474,7 +475,7 @@ app.get('/invoice/:id/ksef/upo', async (req: Request, res: Response, next) => {
  * 
  * Response: XML faktury
  */
-app.get('/invoice/:id/ksef/xml', async (req: Request, res: Response, next) => {
+app.get('/invoice/:id/ksef/xml', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {
@@ -495,7 +496,7 @@ app.get('/invoice/:id/ksef/xml', async (req: Request, res: Response, next) => {
  * GET /invoice/:id/ksef/xml-preview
  * Generuje XML KSeF na podstawie bieżących danych faktury (bez wysyłki do KSeF)
  */
-app.get('/invoice/:id/ksef/xml-preview', async (req: Request, res: Response, next) => {
+app.get('/invoice/:id/ksef/xml-preview', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
         const invoiceId = parseInt(req.params.id, 10);
         if (isNaN(invoiceId)) {

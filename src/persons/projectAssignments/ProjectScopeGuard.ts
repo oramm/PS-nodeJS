@@ -34,6 +34,7 @@ export class BadRequestError extends Error {
 export default class ProjectScopeGuard {
     /** Zapytania rozwiązujące rekord do OurId projektu jego kontraktu. */
     private static readonly PROJECT_OUR_ID_SQL = {
+        project: `SELECT OurId AS ProjectOurId FROM Projects WHERE Id = ?`,
         contract: `SELECT ProjectOurId FROM Contracts WHERE Id = ?`,
         milestone: `SELECT c.ProjectOurId
             FROM Milestones m JOIN Contracts c ON c.Id = m.ContractId
@@ -102,6 +103,10 @@ export default class ProjectScopeGuard {
             throw new ForbiddenError(
                 `Brak uprawnień do tego zasobu (${label}).`
             );
+    }
+
+    static assertProjectInScope(id: number | undefined, scope?: ProjectScope) {
+        return this.assertInScope('project', id, scope, 'projekt');
     }
 
     static assertContractInScope(id: number | undefined, scope?: ProjectScope) {

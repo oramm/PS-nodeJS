@@ -21,11 +21,14 @@ function makeSession(systemRoleName: SystemRoleName, systemRoleId: number) {
 
 const CONTRACT_WORKER = makeSession(SystemRoleName.CONTRACT_WORKER, 6);
 const CLIENT = makeSession(SystemRoleName.CLIENT, 7);
+const COOPERATOR = makeSession(SystemRoleName.ENVI_COOPERATOR, 4);
+const EXTERNAL_USER = makeSession(SystemRoleName.EXTERNAL_USER, 5);
 
-/** Zrąb uprawnień jest wspólny dla obu ról zakresowych - różnice testujemy osobno. */
+/** Zrąb uprawnień jest wspólny dla ról zakresowych po projektach - różnice testujemy osobno. */
 const SCOPED_ROLES: [string, ReturnType<typeof makeSession>][] = [
     ['pracownik kontraktowy', CONTRACT_WORKER],
     ['klient', CLIENT],
+    ['współpracownik', COOPERATOR],
 ];
 
 const allowed = (role: SystemRoleName) => (method: string, path: string) =>
@@ -55,7 +58,7 @@ async function run(method: string, path: string, userData: any) {
 
 describe('projectScopedPolicy', () => {
     beforeEach(() => {
-        mockedRepository.getAssignedProjectOurIds.mockResolvedValue([
+        mockedRepository.getDataScopeProjectOurIds.mockResolvedValue([
             '2023.10',
         ]);
     });
@@ -106,9 +109,33 @@ describe('projectScopedPolicy', () => {
             ['PUT', '/milestoneDate/5'],
             ['POST', '/security'],
             ['POST', '/city'],
+            // Reakcje na ryzyka nie niosa zakresu projektow (front ich nie wola).
+            ['GET', '/risksReactions'],
+            ['GET', '/risksReaction/5'],
+            // Podpis kwalifikowany (SIG-2): karta jest osoby z ENVI; role zakresowe nie podpisuja.
+            ['GET', '/letter/5/signableFiles'],
+            ['POST', '/signingJob'],
+            ['GET', '/signingJob/5'],
+            ['POST', '/signingJob/5/cancel'],
+            ['POST', '/letter/5/signedPdf'],
+            ['GET', '/letter/5/signatures'],
+            ['POST', '/letters/signatureSummary'],
+            ['GET', '/signing/program/download'],
+            ['GET', '/signing/program/info'],
+            // Podpis plikow oferty (SIG-7): oferty nie maja modelu zakresu projektu - role zakresowe nie dostaja ich wcale.
+            ['GET', '/offer/55/signableFiles'],
+            ['GET', '/offer/55/signableFile/OFFER_FORM_ID_0001/graphicPlace'],
+            ['GET', '/offer/55/signableFile/OFFER_FORM_ID_0001/page/1'],
+            ['POST', '/offer/55/signedPdf'],
+            ['GET', '/offer/55/signatures'],
+            ['GET', '/contract/55/signableFiles'],
+            ['GET', '/contract/55/signableFile/CONTRACT_DOC_ID_001/graphicPlace'],
+            ['GET', '/contract/55/signableFile/CONTRACT_DOC_ID_001/page/1'],
+            ['POST', '/contract/55/signedPdf'],
+            ['GET', '/contract/55/signatures'],
         ];
 
-        describe.each(SCOPED_ROLES)('%s', (_label, userData) => {
+        describe.each([...SCOPED_ROLES, ['użytkownik zewnętrzny', EXTERNAL_USER] as [string, ReturnType<typeof makeSession>]])('%s', (_label, userData) => {
             it.each(BLOCKED)('odmawia %s %s', async (method, path) => {
                 const { res, next } = await run(method, path, userData);
 
@@ -191,6 +218,61 @@ describe('projectScopedPolicy', () => {
         );
     });
 
+    describe('poczta projektu - współpracownik ją ma, pracownik kontraktowy i klient nie (D7)', () => {
+        const MAIL: [string, string][] = [
+            ['GET', '/mailboxes'],
+            ['POST', '/mailboxes/5/password'],
+            ['POST', '/mailboxes/5/provision'],
+            ['POST', '/mailboxes/5/agentCopy'],
+            ['POST', '/mailboxes/5/project'],
+        ];
+
+        it.each(MAIL)('współpracownik dostaje %s %s', (method, path) => {
+            expect(allowed(SystemRoleName.ENVI_COOPERATOR)(method, path)).toBe(true);
+        });
+
+        it.each(MAIL)('pracownik kontraktowy i klient nie dostają %s %s', (method, path) => {
+            expect(workerAllows(method, path)).toBe(false);
+            expect(clientAllows(method, path)).toBe(false);
+        });
+    });
+
+    describe('użytkownik zewnętrzny - tylko pisma przypisanych kontraktów (O5)', () => {
+        const externalAllows = allowed(SystemRoleName.EXTERNAL_USER);
+
+        it.each([
+            ['POST', '/contractsLetters'],
+            ['POST', '/persons'],
+            ['POST', '/contractTypes'],
+            ['POST', '/documentTemplates'],
+            ['POST', '/contractRanges'],
+            ['GET', '/session'],
+            ['GET', '/v2/privacy/system'],
+        ])('przepuszcza %s %s bez zakresu projektów i bez pytania bazy', async (method, path) => {
+            const { req, res, next } = await run(method, path, EXTERNAL_USER);
+
+            expect(res.statusCode).toBeUndefined();
+            expect(next).toHaveBeenCalled();
+            // Pisma zawęża LetterRepository po Persons_Contracts; pusty zakres projektów odciąłby je.
+            expect(req.projectScope).toBeUndefined();
+            expect(mockedRepository.getDataScopeProjectOurIds).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['POST', '/contracts'],
+            ['POST', '/projects'],
+            ['POST', '/offersLetters'],
+            ['POST', '/letterReact'],
+            ['PUT', '/letter/12'],
+            ['GET', '/mailboxes'],
+            ['GET', '/mileage/access'],
+            ['GET', '/site-visits/access'],
+            ['POST', '/zupelnie-nowy-modul'],
+        ])('odmawia %s %s', (method, path) => {
+            expect(externalAllows(method, path)).toBe(false);
+        });
+    });
+
     describe.each(SCOPED_ROLES)('zakres projektów - %s', (_label, userData) => {
         it('domyślnie odmawia trasie, o której nic nie wie - nowy endpoint nie otwiera się sam', async () => {
             const { res, next } = await run(
@@ -211,7 +293,7 @@ describe('projectScopedPolicy', () => {
         });
 
         it('brak przypisań daje pustą listę, a nie brak filtra', async () => {
-            mockedRepository.getAssignedProjectOurIds.mockResolvedValue([]);
+            mockedRepository.getDataScopeProjectOurIds.mockResolvedValue([]);
 
             const { req } = await run('POST', '/contracts', userData);
 
@@ -224,8 +306,6 @@ describe('projectScopedPolicy', () => {
             makeSession(SystemRoleName.ADMIN, 1),
             makeSession(SystemRoleName.ENVI_MANAGER, 2),
             makeSession(SystemRoleName.ENVI_EMPLOYEE, 3),
-            makeSession(SystemRoleName.ENVI_COOPERATOR, 4),
-            makeSession(SystemRoleName.EXTERNAL_USER, 5),
         ];
 
         it('przepuszcza je bez zmian i bez zakresu - ta warstwa ich nie dotyczy', async () => {
@@ -252,7 +332,7 @@ describe('projectScopedPolicy', () => {
             await run('POST', '/invoices', makeSession(SystemRoleName.ADMIN, 1));
 
             expect(
-                mockedRepository.getAssignedProjectOurIds
+                mockedRepository.getDataScopeProjectOurIds
             ).not.toHaveBeenCalled();
         });
     });

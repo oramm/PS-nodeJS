@@ -136,4 +136,78 @@ describe('requireSession', () => {
         expect(res.statusCode).toBe(401);
         expect(next).not.toHaveBeenCalledWith(expect.any(Error));
     });
+
+    describe('trasy programu ENVI Podpis (token zamiast sesji)', () => {
+        const TOKEN = 'A1b2C3d4E5f6G7h8I9j0K-L_mN';
+
+        it('przepuszcza dokladnie cztery trasy kontraktu z programem, bez sesji', () => {
+            for (const [method, path] of [
+                ['GET', `/signing/jobs/${TOKEN}`],
+                ['POST', `/signing/jobs/${TOKEN}/certificate`],
+                ['POST', `/signing/jobs/${TOKEN}/signatures`],
+                ['POST', `/signing/jobs/${TOKEN}/cancel`],
+            ]) {
+                const { res, next } = run(method, path);
+
+                expect(next).toHaveBeenCalled();
+                expect(res.statusCode).toBeUndefined();
+            }
+        });
+
+        it('nie otwiera niczego innego pod /signing ani tras sesyjnych zlecen', () => {
+            for (const [method, path] of [
+                ['GET', '/signing/jobs/krotki'],
+                ['GET', `/signing/jobs/${TOKEN}/certificate`],
+                ['POST', `/signing/jobs/${TOKEN}`],
+                ['DELETE', `/signing/jobs/${TOKEN}`],
+                ['POST', `/signing/jobs/${TOKEN}/zupelnie-inne`],
+                ['GET', `/signing/other/${TOKEN}`],
+                ['GET', `/x/signing/jobs/${TOKEN}`],
+                ['POST', '/signingJob'],
+                ['GET', '/signingJob/12'],
+                ['GET', '/letter/5/signableFiles'],
+                ['POST', '/letter/5/signedPdf'],
+            ]) {
+                const { res, next } = run(method, path);
+
+                expect(res.statusCode).toBe(401);
+                expect(next).not.toHaveBeenCalled();
+            }
+        });
+    });
+    describe('trasy instalatora SB (token urzadzenia zamiast sesji, SBD-2)', () => {
+        it('przepuszcza bez sesji dokladnie klucz publiczny i wlasne szyfrogramy', () => {
+            for (const [method, path] of [
+                ['PUT', '/sbAccess/me/publicKey'],
+                ['GET', '/sbAccess/me/secrets'],
+                ['POST', '/sbAccess/me/health'],
+                ['GET', '/sbAccess/me/healthRequest'],
+            ]) {
+                const { res, next } = run(method, path);
+                expect(next).toHaveBeenCalled();
+                expect(res.statusCode).toBeUndefined();
+            }
+        });
+
+        it('nie otwiera reszty /sbAccess ani innej metody na tych sciezkach', () => {
+            for (const [method, path] of [
+                ['GET', '/sbAccess/me/publicKey'],
+                ['POST', '/sbAccess/me/secrets'],
+                ['GET', '/sbAccess/entries'],
+                ['PUT', '/sbAccess/5/secrets/baza-ps'],
+                ['DELETE', '/sbAccess/5/secrets/baza-ps'],
+                ['POST', '/sbAccess/me/githubAccount'],
+                ['GET', '/sbAccess/me/secrets/extra'],
+                ['GET', '/sbAccess/me/health'],
+                ['PUT', '/sbAccess/me/health'],
+                ['POST', '/sbAccess/me/healthRequest'],
+                ['POST', '/sbAccess/5/healthRequest'],
+                ['GET', '/sbAccess/5/healthReport'],
+            ]) {
+                const { res, next } = run(method, path);
+                expect(res.statusCode).toBe(401);
+                expect(next).not.toHaveBeenCalled();
+            }
+        });
+    });
 });

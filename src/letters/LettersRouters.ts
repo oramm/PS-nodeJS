@@ -9,37 +9,17 @@ import OurLetter from './OurLetter';
 import IncomingLetter from './IncomingLetter';
 import LetterValidator from './LetterValidator';
 import resolveRouteLetterId from './resolveRouteLetterId';
+import {
+    assertNewLetterInScope,
+    assertTargetCasesInScope,
+    pinEditorForPersonAgent,
+    pinProjectFromDb,
+} from './letterWriteGuards';
 import multer from 'multer';
-import ProjectScopeGuard, {
-    ForbiddenError,
-} from '../persons/projectAssignments/ProjectScopeGuard';
-import { ProjectScope } from '../types/sessionTypes';
+import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
 
 // Middleware do parsowania plików
 const uploadLetters = multer({ storage: multer.memoryStorage() });
-
-/**
- * Sprawdza zakres dla NOWEGO pisma, którego jeszcze nie ma w bazie: bierzemy kontrakt
- * z ciała żądania, a gdy go nie ma - pierwszą wskazaną sprawę. Gdy nie da się ustalić
- * ani jednego, odmawiamy: bez punktu zaczepienia nie ma jak potwierdzić uprawnienia.
- */
-async function assertNewLetterInScope(
-    payload: any,
-    scope?: ProjectScope,
-): Promise<void> {
-    if (!scope) return;
-    const contractId = Number(payload?._contract?.id);
-    if (Number.isInteger(contractId) && contractId > 0)
-        return ProjectScopeGuard.assertContractInScope(contractId, scope);
-
-    const caseId = Number(payload?._cases?.[0]?.id);
-    if (Number.isInteger(caseId) && caseId > 0)
-        return ProjectScopeGuard.assertCaseInScope(caseId, scope);
-
-    throw new ForbiddenError(
-        'Nie można ustalić kontraktu pisma - brak uprawnień.',
-    );
-}
 
 app.post('/contractsLetters', async (req: Request, res: Response, next) => {
     try {
@@ -196,6 +176,11 @@ app.post(
                 initParamsFromClient,
                 req.projectScope,
             );
+            await pinProjectFromDb(
+                initParamsFromClient._project,
+                req.projectScope,
+            );
+            pinEditorForPersonAgent(initParamsFromClient, req.session.userData);
 
             if (initParamsFromClient.isOur === false) {
                 await LettersController.prepareIncomingNumber(
@@ -263,6 +248,15 @@ app.put(
                 req.params.id,
                 initParamsFromClient.id
             );
+            await assertTargetCasesInScope(
+                initParamsFromClient._cases,
+                req.projectScope,
+            );
+            await pinProjectFromDb(
+                initParamsFromClient._project,
+                req.projectScope,
+            );
+            pinEditorForPersonAgent(initParamsFromClient, req.session.userData);
 
             const _fieldsToUpdate = initParamsFromClient._fieldsToUpdate;
 
@@ -378,15 +372,7 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
         // Id z adresu jest rozstrzygający. Ta trasa kasuje pismo razem z jego folderem
         // na Dysku, a cel brała wyłącznie z ciała żądania — adres był dekoracją.
         req.body.id = resolveRouteLetterId(req.params.id, req.body.id);
-        const item = LettersController.createProperLetter(req.body);
-
-        // 1. Usuń z Google Drive
-        if (item instanceof OurLetter || item instanceof IncomingLetter) {
-            await LettersController.deleteFromGd(item);
-        }
-
-        // 2. Usuń z bazy danych
-        await LettersController.delete(item);
+        const item = await LettersController.deleteFromDto(req.body);
 
         res.send(item);
     } catch (error) {

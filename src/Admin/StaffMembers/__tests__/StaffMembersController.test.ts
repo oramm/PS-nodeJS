@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../../tools/ToolsDb';
 import StaffMemberAdminRepository from '../StaffMemberAdminRepository';
+import PersonAccountEventRepository from '../../../persons/accountEvents/PersonAccountEventRepository';
 
 jest.mock('../StaffMemberAdminRepository');
 // ROD-3: zapis flag idzie w transakcji razem ze zdarzeniami konta - obie rzeczy udajemy,
@@ -26,7 +27,6 @@ const flags = {
     hasCostInvoiceAccess: false,
     hasBankAccess: false,
     canLogSiteVisits: false,
-    isActive: true,
 };
 
 describe('StaffMembersController.editFromDto()', () => {
@@ -44,6 +44,7 @@ describe('StaffMembersController.editFromDto()', () => {
             id: PERSON_ID,
             personId: PERSON_ID,
             ...flags,
+            canManageSbAccess: false,
             _systemRoleId: 3,
             _systemEmail: 'test@envi.com.pl',
             _fidmanEnabled: false,
@@ -60,6 +61,44 @@ describe('StaffMembersController.editFromDto()', () => {
         (StaffMembersController as any).instance = undefined;
     });
 
+    it('zapisuje flagę SB i zdarzenie STAFF_FLAGS w tej samej transakcji', async () => {
+        await StaffMembersController.editFromDto({
+            personId: PERSON_ID,
+            ...flags,
+            canManageSbAccess: true,
+        }, 42);
+
+        expect(repository.upsertInDb).toHaveBeenCalledWith(
+            expect.objectContaining({ canManageSbAccess: true }), mockConn,
+        );
+        expect(PersonAccountEventRepository.prototype.addInDb).toHaveBeenCalledTimes(1);
+        expect(PersonAccountEventRepository.prototype.addInDb).toHaveBeenCalledWith(
+            expect.objectContaining({
+                personId: PERSON_ID,
+                editorId: 42,
+                eventType: 'STAFF_FLAGS',
+                field: 'canManageSbAccess',
+                valueBefore: 'false',
+                valueAfter: 'true',
+            }), mockConn, true,
+        );
+    });
+
+    it('brak flagi SB zachowuje true i nie tworzy zdarzenia', async () => {
+        repository.find.mockResolvedValue([{
+            personId: PERSON_ID,
+            ...flags,
+            canManageSbAccess: true,
+        }]);
+
+        await StaffMembersController.editFromDto({ personId: PERSON_ID, ...flags });
+
+        expect(repository.upsertInDb).toHaveBeenCalledWith(
+            expect.objectContaining({ canManageSbAccess: true }), mockConn,
+        );
+        expect(PersonAccountEventRepository.prototype.addInDb).not.toHaveBeenCalled();
+    });
+
     it('systemRoleId w treści NIE zmienia roli - zapisuje same flagi', async () => {
         await StaffMembersController.editFromDto({
             personId: PERSON_ID,
@@ -67,12 +106,15 @@ describe('StaffMembersController.editFromDto()', () => {
             systemRoleId: 1,
             systemEmail: 'admin@envi.com.pl',
             fidmanEnabled: true,
+            // U2: „Aktywny” to konto - trasa flag go ignoruje, tak jak rolę.
+            isActive: false,
         });
 
         expect(repository.upsertInDb).toHaveBeenCalledTimes(1);
         const saved = repository.upsertInDb.mock.calls[0][0];
         expect(saved).toMatchObject({ personId: PERSON_ID, ...flags });
         expect(saved.systemRoleId).toBeUndefined();
+        expect(saved.isActive).toBeUndefined();
 
         // Jedyny ruch w bazie poza odczytami to upsert flag - żadnego UPDATE roli.
         const usedMethods = Object.keys(repository)

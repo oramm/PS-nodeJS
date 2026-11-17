@@ -9,7 +9,7 @@ export default abstract class LetterGdController {
         return `${number} ${creationDate}`;
     }
 
-    /** Tworzy folder pisma - nie zmienia letterData*/
+    /** Retain the created folder identity before awaiting permissions, so cleanup can find it. */
     async createLetterFolder(auth: OAuth2Client, letterData: LetterData) {
         const letterNumber = letterData.number?.toString() || 'NO_NUMBER_YET';
         const folderName = this.makeFolderName(
@@ -23,7 +23,8 @@ export default abstract class LetterGdController {
 
         // `driveId` znamy z odpowiedzi na utworzenie folderu — bez tego
         // createPermissions dopytywałoby o to Google osobnym zapytaniem
-        ToolsGd.createPermissions(auth, {
+        letterData.gdFolderId = <string>letterFolder.id;
+        await ToolsGd.createPermissions(auth, {
             fileId: <string>letterFolder.id,
             driveId: letterFolder.driveId ?? null,
         });
@@ -64,7 +65,7 @@ export default abstract class LetterGdController {
         files: Express.Multer.File[],
         parentGdFolderId: string
     ) {
-        const promises = files.map((file) => {
+        const promises = files.map(async (file) => {
             return ToolsGd.uploadFileMulter(
                 auth,
                 file,
@@ -72,7 +73,10 @@ export default abstract class LetterGdController {
                 parentGdFolderId
             );
         });
-        await Promise.all(promises);
+        const results = await Promise.allSettled(promises);
+        for (const result of results) {
+            if (result.status === 'rejected') throw result.reason;
+        }
     }
 
     abstract makeParentFolderGdId(letterData: LetterData): string;

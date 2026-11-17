@@ -42,6 +42,8 @@ export default class ProjectRepository extends BaseRepository<Project> {
         const sql = `SELECT  Projects.Id,
                 Projects.OurId,
                 Projects.Name,
+                Projects.FundingAgreementNumber,
+                Projects.Program,
                 Projects.Alias, 
                 Projects.StartDate, 
                 Projects.EndDate, 
@@ -82,6 +84,8 @@ export default class ProjectRepository extends BaseRepository<Project> {
             id: row.Id,
             ourId: row.OurId,
             name: ToolsDb.sqlToString(row.Name),
+            fundingAgreementNumber: row.FundingAgreementNumber,
+            program: row.Program,
             alias: row.Alias,
             startDate: row.StartDate,
             endDate: row.EndDate,
@@ -99,6 +103,24 @@ export default class ProjectRepository extends BaseRepository<Project> {
             lastUpdated: row.LastUpdated,
         });
         return project;
+    }
+
+    async findById(id: number, conn: mysql.PoolConnection): Promise<Project> {
+        const [rows] = await conn.query('SELECT * FROM Projects WHERE Id = ?', [id]);
+        const row = (rows as any[])[0];
+        if (!row) throw new Error(`Nie znaleziono projektu ${id}.`);
+        return this.mapRowToModel(row);
+    }
+
+    async findForContract(contractId: number, conn?: mysql.PoolConnection): Promise<Project> {
+        const sql = `SELECT p.* FROM Projects p
+             JOIN Contracts c ON c.ProjectOurId = p.OurId
+             WHERE c.Id = ?`;
+        const rows = (conn
+            ? (await conn.query(sql, [contractId]))[0]
+            : await ToolsDb.getQueryCallbackAsync(sql, undefined, [contractId])) as any[];
+        if (!rows[0]) throw new Error(`Nie znaleziono projektu umowy ${contractId}.`);
+        return this.mapRowToModel(rows[0]);
     }
 
     /**

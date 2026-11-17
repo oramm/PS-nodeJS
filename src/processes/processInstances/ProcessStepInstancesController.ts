@@ -2,6 +2,8 @@ import ProcessStepInstance from './ProcessStepInstance';
 import BaseController from '../../controllers/BaseController';
 import ProcessStepInstanceRepository from './ProcessStepInstanceRepository';
 import mysql from 'mysql2/promise';
+import Guard from '../../contracts/milestones/consolidation/ConsolidationWriteGuardController';
+import GuardValidator from '../../contracts/milestones/consolidation/ConsolidationWriteGuardValidator';
 
 export default class ProcessStepInstancesController extends BaseController<
     ProcessStepInstance,
@@ -30,12 +32,10 @@ export default class ProcessStepInstancesController extends BaseController<
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean
     ): Promise<ProcessStepInstance> {
-        const instance = this.getInstance();
-        await instance.repository.addInDb(
-            stepInstance,
-            externalConn,
-            isPartOfTransaction
-        );
-        return stepInstance;
+        GuardValidator.standalone(externalConn, isPartOfTransaction);
+        return Guard.processes([stepInstance.processInstanceId], [], [], async conn => {
+            await this.getInstance().repository.addInDb(stepInstance, conn, true);
+            return stepInstance;
+        });
     }
 }

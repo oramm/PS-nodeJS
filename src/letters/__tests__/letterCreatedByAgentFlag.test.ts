@@ -179,6 +179,30 @@ describe('flaga _isCreatedByAgent w rejestrze pism', () => {
         expect(letters[0]._isCreatedByAgent).toBe(false);
     });
 
+    it('SBZ-1: pismo agenta pracownika (autor = osoba, znak zdarzenia) ma flagę true', async () => {
+        (ToolsDb.getQueryCallbackAsync as jest.Mock).mockImplementation(async (sql: string) => {
+            capturedSql = sql;
+            return [
+                {
+                    ...letterRow({
+                        id: 6171,
+                        number: 6171,
+                        creationEventEditorSystemEmail: 'agnieszka@envi.com.pl',
+                        lastEventType: 'CREATED',
+                        lastEventEditorEmail: 'agnieszka@envi.com.pl',
+                    }),
+                    CreationEventIsByAgent: 1,
+                },
+                { ...HUMAN_LETTER, CreationEventIsByAgent: 0 },
+            ];
+        });
+
+        const letters = await findLetters();
+
+        expect(letters.map((l) => l._isCreatedByAgent)).toEqual([true, false]);
+        expect(capturedSql).toContain('CreationLetterEvent.IsByAgent AS CreationEventIsByAgent');
+    });
+
     it('brak zdarzenia utworzenia daje false, nie wysypuje zapytania', async () => {
         (ToolsDb.getQueryCallbackAsync as jest.Mock).mockResolvedValue([
             letterRow({

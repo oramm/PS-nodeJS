@@ -6,7 +6,12 @@ type StaffFlag =
     | 'IsDriver'
     | 'HasCostInvoiceAccess'
     | 'HasBankAccess'
-    | 'CanLogSiteVisits';
+    | 'CanLogSiteVisits'
+    | 'CanManageSbAccess';
+
+/** Flagi działają tylko przy aktywnym koncie logowania - odejście z firmy = wyłączenie konta (U2). */
+const ACTIVE_ACCOUNT_JOIN =
+    'JOIN PersonAccounts ON PersonAccounts.PersonId = StaffMembers.PersonId AND PersonAccounts.IsActive = 1';
 
 export default class StaffMemberRepository {
     /**
@@ -44,7 +49,7 @@ export default class StaffMemberRepository {
     /** Id osób z ustawioną flagą (i aktywnych). */
     private static async getPersonIdsByFlag(flag: StaffFlag): Promise<number[]> {
         // flag pochodzi z zamkniętego union typu (nie z inputu) - bezpieczne w SQL.
-        const sql = `SELECT PersonId FROM StaffMembers WHERE ${flag} = 1 AND IsActive = 1`;
+        const sql = `SELECT StaffMembers.PersonId FROM StaffMembers ${ACTIVE_ACCOUNT_JOIN} WHERE ${flag} = 1`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         return rows.map((r) => r.PersonId);
     }
@@ -67,8 +72,8 @@ export default class StaffMemberRepository {
         flag: StaffFlag
     ): Promise<boolean> {
         // flag pochodzi z zamkniętego union typu (nie z inputu) - bezpieczne w SQL.
-        const sql = `SELECT 1 FROM StaffMembers
-            WHERE PersonId = ? AND ${flag} = 1 AND IsActive = 1
+        const sql = `SELECT 1 FROM StaffMembers ${ACTIVE_ACCOUNT_JOIN}
+            WHERE StaffMembers.PersonId = ? AND ${flag} = 1
             LIMIT 1`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql, undefined, [
             personId,
@@ -79,6 +84,11 @@ export default class StaffMemberRepository {
     /** Czy dana osoba ma dostęp do rejestru wizyt na budowie (i jest aktywna). */
     static hasSiteVisitAccess(personId: number): Promise<boolean> {
         return this.hasFlag(personId, 'CanLogSiteVisits');
+    }
+
+    /** Czy dana osoba może zarządzać dostępem do SB (i jest aktywna). */
+    static hasSbAccessManagement(personId: number): Promise<boolean> {
+        return this.hasFlag(personId, 'CanManageSbAccess');
     }
 
     /** Czy dana osoba ma dostęp do kilometrówki (i jest aktywna). */

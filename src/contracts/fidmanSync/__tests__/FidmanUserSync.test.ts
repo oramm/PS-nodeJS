@@ -33,6 +33,16 @@ const source = (overrides: Partial<FidmanUserSource> = {}): FidmanUserSource => 
 });
 
 describe('buildUserUpsert — kształt payloadu', () => {
+    it.each([true, false])('przekazuje znaną rolę także dla enabled=%s', (enabled) => {
+        const payload = buildUserUpsert(source({ systemRoleName: 'ENVI_EMPLOYEE' }), enabled).payload;
+        expect(payload).toHaveProperty('systemRole', 'ENVI_EMPLOYEE');
+    });
+
+    it.each([null, 'UNKNOWN'])('wysyła pustą rolę dla nieznanej lub brakującej roli: %s', (systemRoleName) => {
+        const payload = buildUserUpsert(source({ systemRoleName }), true).payload;
+        expect(payload).toHaveProperty('systemRole', '');
+    });
+
     it('niesie klucze idempotencji i pola należące do PS', () => {
         expect(buildUserUpsert(source(), true)).toEqual({
             kind: 'user.upsert',
@@ -43,6 +53,7 @@ describe('buildUserUpsert — kształt payloadu', () => {
                 name: 'Anna',
                 surname: 'Kowalska',
                 phone: '600100200',
+                systemRole: '',
                 enabled: true,
             },
         });

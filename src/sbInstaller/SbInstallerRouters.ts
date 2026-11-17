@@ -1,29 +1,77 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { app } from '../index';
+import SbAccessController from '../sbAccess/SbAccessController';
+import { isFromFrontOrigin } from '../setup/frontOrigins';
 import {
-    INSTALLER_FILE_NAME,
     buildInstallerZip,
+    installerFileName,
+    installerAssetsDir,
 } from './SbInstallerPackage';
 
+const INSTALLER_SCRIPT_NAME = 'ENVI-SB-instalator.cmd';
+
+/** Wersja z linii `set "SB_INSTALATOR_WERSJA=..."` skryptu; brak pliku albo linii = null. */
+function readSbInstallerVersion(): string | null {
+    const script = path.join(installerAssetsDir(), INSTALLER_SCRIPT_NAME);
+    if (!fs.existsSync(script)) return null;
+    const match = /set "SB_INSTALATOR_WERSJA=([^"]+)"/.exec(fs.readFileSync(script, 'utf8'));
+    return match ? match[1] : null;
+}
+
 /**
- * Hand-out point for the company Second Brain installer (decision D-7 of the SB release pack).
- *
- * NO AUTHORISATION CODE HERE ON PURPOSE. requireSession already refuses every route that is not
- * on its explicit public list, and this route is deliberately not on it; a second, private check
- * would be a second thing to keep in step with the first.
+ * Pobieranie firmowego instalatora Second Brain.
+ * Bramka przed trasami sprawdza rejestr dostępu przy każdym żądaniu: sama sesja nie wystarcza.
  */
-app.get('/sbInstaller/paczka', (req: Request, res: Response, next) => {
+app.use('/sbInstaller', async (req, res, next) => {
     try {
+        if (!req.session?.userData) {
+            res.status(401).send({ errorMessage: 'Użytkownik niezalogowany' });
+            return;
+        }
+        if (!(await SbAccessController.canSeeSb(req.session.userData))) {
+            res.status(403).send({
+                errorMessage: 'Brak dostępu do Second Brain - poproś przełożonego o zaproszenie do SB w PS',
+            });
+            return;
+        }
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get('/sbInstaller/paczka', async (req: Request, res: Response, next) => {
+    try {
+        // Pobranie wydaje nowy token i kasuje poprzedni, a ciasteczko sesji idzie takze z obcych
+        // stron (sameSite none) - obca strona (<img src=.../paczka>) nie moze wiec uniewaznic tokenu.
+        if (!isFromFrontOrigin(req.headers)) {
+            res.status(403).send({
+                errorMessage: 'Pobierz instalator przyciskiem "Pobierz instalator" na stronie Second Brain w PS',
+            });
+            return;
+        }
         const user = req.session.userData;
-        // ponytail: the trace is a log line, not a table - a dozen downloads in the lifetime of
-        // this route do not earn a migration in the ERP. Ceiling: Heroku keeps roughly a week of
-        // logs, so this answers "who took it recently", not "who ever took it". If a lasting
-        // register is wanted, that is a table plus a screen, and it should be added then.
+        // Każde pobranie = nowy token urządzenia (SBD-2); poprzedni przestaje działać. Tokenu nie logujemy.
+        const deviceToken = await SbAccessController.issueDeviceToken(user!.enviId);
+        // Lasting trace of the download is now the ISSUE_TOKEN event in the SB history (SBD-2);
+        // this log line stays as a quick look. Never add the token to it.
         console.log(
             `[SB-instalator] pobral: ${user?.userName} <${user?.systemEmail}> enviId=${user?.enviId} ${new Date().toISOString()}`,
         );
-        res.attachment(INSTALLER_FILE_NAME);
-        res.send(buildInstallerZip());
+        res.attachment(installerFileName(readSbInstallerVersion()));
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(buildInstallerZip(deviceToken));
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get('/sbInstaller/info', (req: Request, res: Response, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.send({ version: readSbInstallerVersion() });
     } catch (error) {
         next(error);
     }

@@ -36,11 +36,13 @@ describe('PersonRepository.addInDb - pola konta nie trafiaja do INSERT na Person
                 surname: 'Nowak',
                 _entity: { id: 422 },
                 fidmanEnabled: true,
+                finEnabled: true,
             }),
         );
 
         expect(addInDbMock).toHaveBeenCalledTimes(1);
         expect(insertedRow()).not.toHaveProperty('fidmanEnabled');
+        expect(insertedRow()).not.toHaveProperty('finEnabled');
     });
 
     it('nie wysyla roli ani e-maila systemowego - konto zaklada wylacznie trasa v2', async () => {
@@ -67,6 +69,7 @@ describe('PersonRepository.addInDb - pola konta nie trafiaja do INSERT na Person
                 cellphone: '600100200',
                 _entity: { id: 422 },
                 fidmanEnabled: true,
+                finEnabled: true,
             }),
         );
 

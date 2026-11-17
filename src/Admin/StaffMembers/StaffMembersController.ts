@@ -15,7 +15,7 @@ import StaffMemberValidator from './StaffMemberValidator';
  * Controller uprawnień personelu.
  *
  * Brak add i delete - to nie słownik. Panel edytuje flagi istniejących osób,
- * nie tworzy ludzi. Odejście z firmy to isActive = false, nie usunięcie wiersza.
+ * nie tworzy ludzi. Odejście z firmy to wyłączenie konta trasą konta (U2), nie usunięcie wiersza.
  */
 export default class StaffMembersController extends BaseController<
     StaffMember,
@@ -50,7 +50,7 @@ export default class StaffMembersController extends BaseController<
     }
 
     /**
-     * Zapisuje flagi i „aktywny" osoby i zwraca odczytany stan.
+     * Zapisuje flagi osoby i zwraca odczytany stan. „Aktywny” to konto - zapisuje je trasa konta.
      *
      * Tylko flagi. Rola, e-mail systemowy i flaga FIDmana w treści są ignorowane -
      * konto ma jedną drogę zapisu, PUT /v2/persons/:personId/account, bo tylko ona
@@ -81,16 +81,28 @@ export default class StaffMembersController extends BaseController<
         if (!person)
             throw new BadRequestError('Osoba o podanym numerze nie istnieje.');
 
+        const canManageSbAccess =
+            payload.canManageSbAccess ?? person.canManageSbAccess;
+
         // ROD-3: zapis flag i ślad „kto, kiedy, co" w JEDNEJ transakcji. Porównujemy z odczytem
         // sprzed zapisu (osoba bez wiersza flag ma tam wartości domyślne), więc „zapisz bez zmian"
         // nie zostawia zdarzeń.
-        const changes = StaffMemberValidator.FLAGS.map((flag) => ({
-            field: flag,
-            before: (person as any)[flag],
-            after: (payload as any)[flag],
-        }));
+        const changes = [
+            ...StaffMemberValidator.FLAGS.map((flag) => ({
+                field: flag,
+                before: (person as any)[flag],
+                after: (payload as any)[flag],
+            })),
+            {
+                field: 'canManageSbAccess',
+                before: person.canManageSbAccess,
+                after: canManageSbAccess,
+            },
+        ];
         await ToolsDb.transaction(async (conn) => {
-            await instance.repository.upsertInDb(new StaffMember(payload), conn);
+            await instance.repository.upsertInDb(
+                new StaffMember({ ...payload, canManageSbAccess }), conn,
+            );
             await PersonAccountEventsController.recordChanges(conn, {
                 personId: payload.personId,
                 editorId: actorPersonId ?? null,

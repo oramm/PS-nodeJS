@@ -3,14 +3,20 @@ import { SystemRoleName } from '../../types/sessionTypes';
 import ProjectAssignmentRepository from '../../persons/projectAssignments/ProjectAssignmentRepository';
 
 /**
- * Warstwa autoryzacji dla ról ograniczonych do przypisanych projektów:
- * CONTRACT_WORKER (pracownik kontraktowy) i CLIENT (klient).
+ * Warstwa autoryzacji dla ról ograniczonych do przypisań (kręgi zewnętrzne):
+ * CONTRACT_WORKER (pracownik kontraktowy), CLIENT (klient), ENVI_COOPERATOR (współpracownik)
+ * i EXTERNAL_USER (użytkownik zewnętrzny).
  *
  * PO CO. requireSession odpowiada tylko na pytanie "czy jest sesja" - każdy zalogowany
- * dociera do każdej trasy. Obie te role to osoby z zewnątrz, które pracują operacyjnie
- * wyłącznie na przypisanych projektach i nie mają widzieć faktur, ofert, dotacji ani
- * zarządzania użytkownikami. Dla nich domyślna odpowiedź brzmi 403, a dostęp dają
- * wyłącznie trasy z list poniżej.
+ * dociera do każdej trasy. Te role to osoby z zewnątrz, które pracują wyłącznie na tym,
+ * do czego są przypisane, i nie mają widzieć faktur, ofert, dotacji ani zarządzania
+ * użytkownikami. Dla nich domyślna odpowiedź brzmi 403, a dostęp dają wyłącznie trasy
+ * z list poniżej.
+ *
+ * DWA PYTANIA, DWIE STAŁE. PROJECT_SCOPED_ROLES odpowiada "kto jest ograniczony do
+ * przypisań". To, kto nie dostaje poczty projektu i nie może być osobą dodatkową kontraktu,
+ * rozstrzyga osobno NO_PROJECT_MAIL_ROLES w mailboxAccessPolicy - współpracownik jest
+ * ograniczony, ale pocztę przypisanych projektów ma (plan DOSTEP, decyzja D7).
  *
  * DLACZEGO ALLOWLISTA, A NIE BLOKLISTA. Nowa trasa dodana w przyszłości ma być domyślnie
  * niedostępna dla tych ról. Blocklista milcząco otwierałaby każdy nowy endpoint.
@@ -32,6 +38,12 @@ type RoutePattern = { method: string; path: string };
  * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
 const BASE_ROUTES: RoutePattern[] = [
+    // Minimal read-only source-work guard; management payloads/mutations remain outside this list.
+    { method: 'POST', path: '/milestone-consolidations/work-targets' },
+    { method: 'POST', path: '/milestone-consolidations/history-resolution' },
+    // Pomoc nadal wymaga osobistej sesji i dostępu przez POMOC_ROLES lub POMOC_USERS.
+    { method: 'GET', path: '/pomoc/available' },
+    { method: 'POST', path: '/pomoc/ask' },
     { method: 'GET', path: '/v2/privacy/system' },
     { method: 'POST', path: '/v2/privacy/system/acknowledgements' },
     // --- Start aplikacji: repozytoria ładowane przez frontend dla każdego zalogowanego.
@@ -53,8 +65,6 @@ const BASE_ROUTES: RoutePattern[] = [
     { method: 'POST', path: '/securities' },
     { method: 'GET', path: '/risks' },
     { method: 'GET', path: '/risk/:id' },
-    { method: 'GET', path: '/risksReactions' },
-    { method: 'GET', path: '/risksReaction/:id' },
     { method: 'GET', path: '/caseEvents' },
     { method: 'GET', path: '/caseEvent/:id' },
     // Świadomie NIE ma tu /materialCards, /processes ani /contractRangesContracts:
@@ -146,13 +156,56 @@ const CLIENT_EXTRA_ROUTES: RoutePattern[] = [
 ];
 
 /**
+ * Czego współpracownik ma ponad pracownika kontraktowego: poczta przypisanych projektów
+ * (D7). Którą skrzynkę konkretnie, rozstrzyga MailboxController.assertAccess (reguła
+ * personMailboxes), a lista skrzynek (MailboxController.list) pokazuje tylko te, które daje ta sama reguła.
+ */
+const COOPERATOR_EXTRA_ROUTES: RoutePattern[] = [
+    { method: 'GET', path: '/mailboxes' },
+    { method: 'POST', path: '/mailboxes/:id/password' },
+    { method: 'POST', path: '/mailboxes/:id/provision' },
+    { method: 'POST', path: '/mailboxes/:id/agentCopy' },
+    { method: 'POST', path: '/mailboxes/:id/project' },
+];
+
+/**
+ * Użytkownik zewnętrzny: to, co obiecuje opis roli we froncie - wgląd w pisma kontraktów,
+ * do których osoba jest przypisana (Persons_Contracts; filtr w LetterRepository). Bez zapisu
+ * pism: zapisy pilnuje zakres projektów, a ta rola zakresu projektów nie ma.
+ */
+const EXTERNAL_USER_ROUTES: RoutePattern[] = [
+    // Front pyta o Pomoc przy każdym starcie; samo pytanie odpowiada "niedostępna" (POMOC_ROLES).
+    { method: 'GET', path: '/pomoc/available' },
+    { method: 'GET', path: '/v2/privacy/system' },
+    { method: 'POST', path: '/v2/privacy/system/acknowledgements' },
+    // Start aplikacji (MainControllerReact.setRepostories) - jak w BASE_ROUTES.
+    { method: 'POST', path: '/persons' },
+    { method: 'POST', path: '/contractTypes' },
+    { method: 'POST', path: '/documentTemplates' },
+    { method: 'POST', path: '/contractRanges' },
+    { method: 'POST', path: '/contractsLetters' },
+    { method: 'GET', path: '/session' },
+    { method: 'POST', path: '/logout' },
+    { method: 'POST', path: '/client-error' },
+];
+
+/**
  * Role, których dostęp opisuje ta warstwa. Rola spoza tej mapy przechodzi dalej bez zmian
  * i bez zakresu projektów.
  */
 const ROUTES_BY_ROLE: Partial<Record<SystemRoleName, RoutePattern[]>> = {
     [SystemRoleName.CONTRACT_WORKER]: BASE_ROUTES,
     [SystemRoleName.CLIENT]: [...BASE_ROUTES, ...CLIENT_EXTRA_ROUTES],
+    [SystemRoleName.ENVI_COOPERATOR]: [...BASE_ROUTES, ...COOPERATOR_EXTRA_ROUTES],
+    [SystemRoleName.EXTERNAL_USER]: EXTERNAL_USER_ROUTES,
 };
+
+/**
+ * Role z mapy, którym zakres liczy się z przypisań do kontraktów (Persons_Contracts), a nie
+ * do projektów. Pusty zakres projektów odciąłby im pisma przypisanych kontraktów, więc go
+ * nie ustawiamy; ich jedyną trasę z danymi zawęża LetterRepository.
+ */
+export const CONTRACT_ASSIGNMENT_ROLES: SystemRoleName[] = [SystemRoleName.EXTERNAL_USER];
 
 export const PROJECT_SCOPED_ROLES = Object.keys(
     ROUTES_BY_ROLE
@@ -209,6 +262,16 @@ export function isAllowedForRole(
     );
 }
 
+/**
+ * Czy rola w ogóle dociera do trasy: rola spoza tej warstwy (pracownicy ENVI) dociera
+ * wszędzie, rola z mapy tylko do tras z listy. Czyta to przegląd dostępów (DOSTEP-7),
+ * żeby ekran mówił to samo, co ta warstwa robi z żądaniem.
+ */
+export function roleReachesRoute(role: SystemRoleName | undefined, method: string, path: string): boolean {
+    if (!role) return false;
+    return !COMPILED_ROUTES_BY_ROLE.has(role) || isAllowedForRole(role, method, path);
+}
+
 export default async function projectScopedPolicy(
     req: Request,
     res: Response,
@@ -231,12 +294,15 @@ export default async function projectScopedPolicy(
         return;
     }
 
+    if (CONTRACT_ASSIGNMENT_ROLES.includes(role)) return next();
+
     try {
         // Zakres liczony raz na żądanie i czytany dalej przez repozytoria i guardy zapisu.
+        // Zakres danych daje tylko przypisanie do projektu (projectMembership.dataScopeProjectOurIds), nie rola w kontrakcie.
         // Brak przypisań daje pustą listę, którą warstwa SQL traktuje jako "nic nie widać".
         req.projectScope = {
             projectOurIds:
-                await ProjectAssignmentRepository.getAssignedProjectOurIds(
+                await ProjectAssignmentRepository.getDataScopeProjectOurIds(
                     userData.enviId
                 ),
         };

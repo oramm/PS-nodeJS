@@ -26,6 +26,8 @@ export default class Project extends BusinessObject implements ProjectData {
     _googleCalendarUrl: any;
     _ourId_Alias: string;
     financialComment?: string;
+    fundingAgreementNumber?: string | null;
+    program?: string | null;
     totalValue?: string | number;
     qualifiedValue?: string | number;
     dotationValue?: string | number;
@@ -44,6 +46,8 @@ export default class Project extends BusinessObject implements ProjectData {
         this.name = initParamObject.name;
         this.status = initParamObject.status;
         this.comment = initParamObject.comment;
+        this.fundingAgreementNumber = initParamObject.fundingAgreementNumber;
+        this.program = initParamObject.program;
         if (initParamObject.financialComment)
             this.financialComment = initParamObject.financialComment;
         if (initParamObject.investorId)

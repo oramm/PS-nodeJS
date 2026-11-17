@@ -69,16 +69,16 @@ export default class MilestoneDateMailReport {
         overdueDates: MilestoneDateData[];
         upcomingDates: MilestoneDateData[];
     } {
-        const today = new Date();
-        const sevenDaysFromNow = new Date();
-        sevenDaysFromNow.setDate(today.getDate() + 7);
+        // SQL DATE is a calendar day. Compare UTC day numbers, not local clock time.
+        const today = this.utcDay(new Date());
+        const sevenDaysFromNow = today + 7;
 
         const overdueDates: MilestoneDateData[] = [];
         const upcomingDates: MilestoneDateData[] = [];
 
         for (const milestoneDate of allDates) {
             if (!milestoneDate.endDate) continue;
-            const endDate = new Date(milestoneDate.endDate);
+            const endDate = this.utcDay(milestoneDate.endDate);
 
             // Sprawdź czy termin minął
             if (endDate < today) {
@@ -354,7 +354,7 @@ export default class MilestoneDateMailReport {
 
         try {
             const date = new Date(sqlDate);
-            return date.toLocaleDateString('pl-PL');
+            return date.toLocaleDateString('pl-PL', { timeZone: 'UTC' });
         } catch {
             return sqlDate;
         }
@@ -363,20 +363,18 @@ export default class MilestoneDateMailReport {
     /**
      * Oblicza liczbę dni opóźnienia
      */
+    private static utcDay(value: string | Date): number {
+        const date = value instanceof Date ? value : new Date(value);
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 86400000;
+    }
     private static calculateDaysOverdue(endDate: string): number {
-        const today = new Date();
-        const end = new Date(endDate);
-        const diffTime = today.getTime() - end.getTime();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return this.utcDay(new Date()) - this.utcDay(endDate);
     }
 
     /**
      * Oblicza liczbę dni pozostałych do terminu
      */
     private static calculateDaysRemaining(endDate: string): number {
-        const today = new Date();
-        const end = new Date(endDate);
-        const diffTime = end.getTime() - today.getTime();
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return this.utcDay(endDate) - this.utcDay(new Date());
     }
 }

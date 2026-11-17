@@ -19,6 +19,7 @@ import {
 export default class Milestone extends BusinessObject implements MilestoneData {
     id?: number;
     _tmpId?: string;
+    _sharingRevision?: string;
     number: number | undefined;
     name: string;
     _folderNumber?: string;
@@ -42,6 +43,7 @@ export default class Milestone extends BusinessObject implements MilestoneData {
             throw new Error('Contract or offer is not defined for Milestone');
 
         this.id = initParamObject.id;
+        this._sharingRevision = (initParamObject as any)._sharingRevision;
         this.number = initParamObject.number;
         this.name = initParamObject.name;
         this._folderNumber = initParamObject._folderNumber;

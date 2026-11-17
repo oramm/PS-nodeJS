@@ -1,6 +1,8 @@
+import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
 import ToolsDb from '../../tools/ToolsDb';
 import ProcessInstance from './ProcessInstance';
+import { milestoneVisibilitySql } from '../../contracts/milestones/sharing/milestoneVisibilitySql';
 
 export default class ProcessInstanceRepository extends BaseRepository<ProcessInstance> {
     constructor() {
@@ -33,12 +35,17 @@ export default class ProcessInstanceRepository extends BaseRepository<ProcessIns
                 : '1';
         const contractConditon =
             initParamObject && initParamObject.contractId
-                ? 'Contracts.Id="' + initParamObject.contractId + '"'
+                ? milestoneVisibilitySql({ contractId: initParamObject.contractId })
                 : '1';
         const milestoneConditon =
             initParamObject && initParamObject.milestoneId
                 ? 'Milestones.Id="' + initParamObject.milestoneId + '"'
                 : '1';
+        const caseCondition = initParamObject?.caseIds !== undefined
+            ? (initParamObject.caseIds.length
+                ? mysql.format('Cases.Id IN (?)', [initParamObject.caseIds])
+                : '0')
+            : '1';
         const sql =
             'SELECT  ProcessInstances.Id, \n \t' +
             'ProcessInstances.CaseId, \n \t' +
@@ -52,13 +59,14 @@ export default class ProcessInstanceRepository extends BaseRepository<ProcessIns
             'JOIN Processes ON ProcessInstances.ProcessId = Processes.Id \n' +
             'JOIN Cases ON Cases.Id = ProcessInstances.CaseId \n' +
             'JOIN Milestones ON Milestones.Id = Cases.MilestoneId \n' +
-            'JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
+            'LEFT JOIN Contracts ON Milestones.ContractId = Contracts.Id \n' +
             'WHERE ' +
             milestoneConditon +
             ' AND ' +
             contractConditon +
             ' AND ' +
-            projectConditon;
+            projectConditon +
+            ' AND ' + caseCondition;
 
         const rows = await this.executeQuery(sql);
         return rows.map((row) => this.mapRowToModel(row));

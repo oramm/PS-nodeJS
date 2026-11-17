@@ -1,3 +1,5 @@
+import ConsolidationGuard from './milestones/consolidation/ConsolidationWriteGuardController';
+import Sharing from './milestones/sharing/MilestoneSharingController';
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import BaseController from '../controllers/BaseController';
@@ -40,7 +42,10 @@ import {
     tryDeliverAfterCommit,
 } from './aqmSync/AqmSync';
 import {
+    lockFidmanFoldersContracts,
     enqueueFidmanContractPush,
+    deliverFidmanFoldersAfterCommit,
+    isFidmanContractType,
     isFidmanSyncEligible,
     readContractFidmanSyncEnabled,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
@@ -50,6 +55,8 @@ import ContractTemplatesTreeController, {
     ResolvedCaseType,
 } from './contractTemplatesTree/ContractTemplatesTreeController';
 import { OptionalContractFolderKey } from './contractFolders/optionalContractFolders';
+import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
+import ChatSpacesController from './chatSpaces/ChatSpacesController';
 
 /**
  * Opcje jednorazowe dla tworzenia kontraktu: co użytkownik wybrał w drzewie
@@ -59,6 +66,7 @@ import { OptionalContractFolderKey } from './contractFolders/optionalContractFol
 export type ContractCreationOptions = {
     milestonesSelection?: MilestoneSelectionItem[];
     foldersSelection?: OptionalContractFolderKey[];
+    selectedPersonIds?: number[];
 };
 
 /** Znormalizowany opis kamienia do utworzenia - wspólny dla obu ścieżek. */
@@ -102,6 +110,41 @@ export default class ContractsController extends BaseController<
     ContractOur | ContractOther,
     ContractRepository
 > {
+
+
+    static async add(contract: ContractOur | ContractOther, auth?: OAuth2Client, taskId?: string, options?: ContractCreationOptions) {
+        return Sharing.runExclusive(() => this.addUnsafe(contract, auth, taskId, options));
+    }
+
+    static async editThroughMilestoneDateFromDto(id: unknown, dto: any) {
+        return Sharing.runExclusive(async () => {
+            const sourceId = await Sharing.contractForDate(id, dto);
+            const contract = await this.createContractFromDto({ ...dto._milestone._contract, id: sourceId });
+            const updated = await this.editWithAuth(contract, dto._fieldsToUpdate);
+            return { ...dto, _milestone: { ...dto._milestone, _contract: updated } };
+        });
+    }
+
+    static async edit(contract: ContractOur | ContractOther, auth?: OAuth2Client, fields?: string[], selectedPersonIds?: number[]) {
+        return ConsolidationGuard.contractEdit(contract.id, async () => {
+            await ConsolidationGuard.structure('contract', contract.id, contract, fields, async () => undefined);
+            await Sharing.guardContract(contract);
+            return this.editUnsafe(contract, auth, fields, selectedPersonIds);
+        });
+    }
+    static async delete(contract: ContractOur | ContractOther, auth?: OAuth2Client) {
+        return ConsolidationGuard.contractDestruction(contract.id, false, async () => {
+            await Sharing.guardContract(contract, true);
+            return this.deleteUnsafe(contract, auth);
+        });
+    }
+    static async moveToProject(id: number, project: string, auth: OAuth2Client) {
+        return ConsolidationGuard.contractDestruction(id, true, async () => {
+            await Sharing.guardContract({ id }, false, true);
+            return this.moveToProjectUnsafe(id, project, auth);
+        });
+    }
+
     private static instance: ContractsController;
 
     // Repository dla asocjacji
@@ -178,7 +221,7 @@ export default class ContractsController extends BaseController<
      * opcjonalne). Brak = zachowanie sprzed wprowadzenia drzewa.
      * @returns Zaktualizowany kontrakt z ID z bazy danych
      */
-    static async add(
+    private static async addUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
         taskId?: string,
@@ -222,12 +265,24 @@ export default class ContractsController extends BaseController<
             }
 
             // Operacje bazodanowe - TRANSAKCJA
+            // Właściciel 2026-10-05 (uchyla Q-WYK-1 dla NOWYCH umów): żądanie, które o znaczniku
+            // milczy, zakłada umowę objętego typu jako włączoną — każda droga zakładania, nie tylko
+            // formularz. Jawne `false` wygrywa. Edycja tej reguły nie ma i mieć nie może: włączyłaby
+            // z powrotem wydmuszki wykluczone w sierpniu (WYK-3). Poza allowlistą typów zawsze 0
+            // (formularz allowlisty nie zna i przysyła true), żeby jej rozszerzenie nie wciągnęło
+            // po cichu umów innych typów.
+            contract.fidmanSyncEnabled =
+                isFidmanContractType(contract.typeId) &&
+                contract.fidmanSyncEnabled !== false;
             if (taskId) TaskStore.update(taskId, 'Zapisuję w bazie danych', 15);
             let aqmOutboxId: number | undefined;
             let fidmanOutboxId: number | undefined;
+            const fidmanFolderIds: number[] = [];
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 // 1. Dodaj główny rekord Contract (i OurContractsData jeśli dotyczy)
                 await instance.repository.addInDb(contract, conn, true);
+                if (options?.selectedPersonIds?.length)
+                    await ContractSelectedPersonsRepository.add(contract.id!, options.selectedPersonIds, conn);
 
                 // 2. Dodaj asocjacje Entity (CONTRACTOR, ENGINEER, EMPLOYER)
                 await ContractEntityController.addAssociations(contract, conn);
@@ -248,12 +303,12 @@ export default class ContractsController extends BaseController<
 
                 // 5. SYNC-P1 + WYK-1: wpis outbox w TEJ SAMEJ transakcji (L8), ale
                 // tylko gdy umowa ma JEDNOCZEŚNIE typ z allowlisty i włączony znacznik
-                // „Objęta synchronizacją". Nowa umowa rodzi się wykluczona, więc bez
-                // jawnego włączenia nie wychodzi tu nic — to jest cała zmiana WYK-1.
+                // „Objęta synchronizacją". Znacznik nowej umowy ustala blok przed transakcją.
                 if (isFidmanSyncEligible(contract)) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
-                        conn
+                        conn,
+                        fidmanFolderIds
                     );
                 }
             });
@@ -275,6 +330,8 @@ export default class ContractsController extends BaseController<
                     )
                 );
             }
+
+            await deliverFidmanFoldersAfterCommit(fidmanFolderIds);
 
             // Operacje Scrum (jeśli auth dostępne)
             if (auth) {
@@ -339,9 +396,11 @@ export default class ContractsController extends BaseController<
         taskId?: string,
         options?: ContractCreationOptions
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.add(contract, auth, taskId, options);
-        });
+        // Nowy kierownik, administrator i osoby dodatkowe trafiają do istniejących pokoi projektu (DOSTEP-2).
+        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+            this.withAuth(async (instance, auth) => {
+                return await this.add(contract, auth, taskId, options);
+            }));
     }
 
     /**
@@ -353,11 +412,14 @@ export default class ContractsController extends BaseController<
      * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji (jeśli undefined, wszystkie pola)
      * @returns Zaktualizowany kontrakt
      */
-    static async edit(
+    private static async editUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
+        selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
+        if (selectedPersonIds !== undefined)
+            await ContractSelectedPersonsRepository.validate(selectedPersonIds);
         const instance = this.getInstance();
 
         console.group(`Editing contract ${contract._ourIdOrNumber_Name}`);
@@ -414,7 +476,7 @@ export default class ContractsController extends BaseController<
 
             // Operacje Google Drive i Scrum (jeśli auth i NIE tylko pola DB)
             if (auth && !isOnlyDbFields) {
-                const [, wasAddedToScrum] = await Promise.all([
+                const effects = await Promise.allSettled([
                     contract
                         .editFolder(auth)
                         .then(() => console.log('Contract folder edited')),
@@ -423,6 +485,12 @@ export default class ContractsController extends BaseController<
                         return added;
                     }),
                 ]);
+
+                // Keep the lifecycle lock until both started effects have settled.
+                for (const effect of effects) {
+                    if (effect.status === 'rejected') throw effect.reason;
+                }
+                const wasAddedToScrum = effects[1].status === 'fulfilled' && effects[1].value;
 
                 // Utwórz folder „Dokumentacja zatwierdzona” w istniejących kamieniach
                 // projektowanie-nadzór kontraktu. Pomijamy przy edycji częściowej,
@@ -498,7 +566,9 @@ export default class ContractsController extends BaseController<
             // Operacje bazodanowe - TRANSAKCJA
             let aqmOutboxId: number | undefined;
             let fidmanOutboxId: number | undefined;
+            const fidmanFolderIds: number[] = [];
             await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+                await lockFidmanFoldersContracts([contract.id], conn);
                 // 1. Update tabeli Contracts (i OurContractsData jeśli dotyczy)
                 await instance.repository.editInDb(
                     contract,
@@ -506,6 +576,8 @@ export default class ContractsController extends BaseController<
                     true,
                     fieldsToUpdate
                 );
+                if (selectedPersonIds !== undefined)
+                    await ContractSelectedPersonsRepository.replace(contract.id!, selectedPersonIds, conn);
 
                 // 2. Update asocjacji Entity - ten sam warunek, który wyżej zdecydował
                 // o losie wskazania lidera. Jedno wyliczenie, żeby krok folderowy i zapis
@@ -580,7 +652,8 @@ export default class ContractsController extends BaseController<
                 ) {
                     fidmanOutboxId = await enqueueFidmanContractPush(
                         contract,
-                        conn
+                        conn,
+                        fidmanFolderIds
                     );
                 }
             });
@@ -606,6 +679,7 @@ export default class ContractsController extends BaseController<
                     )
                 );
             }
+            await deliverFidmanFoldersAfterCommit(fidmanFolderIds);
 
             console.groupEnd();
 
@@ -626,10 +700,15 @@ export default class ContractsController extends BaseController<
      */
     static async editWithAuth(
         contract: ContractOur | ContractOther,
-        fieldsToUpdate?: string[]
+        fieldsToUpdate?: string[],
+        selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.edit(contract, auth, fieldsToUpdate);
+        return ConsolidationGuard.contractEdit(contract.id, async () => {
+            await ConsolidationGuard.structure('contract', contract.id, contract, fieldsToUpdate, async () => undefined);
+            await Sharing.guardContract(contract);
+            // Synchronizacja osób w pokojach dopiero po sprawdzeniu blokad kontraktu.
+            return ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                this.withAuth((_instance, auth) => this.editUnsafe(contract, auth, fieldsToUpdate, selectedPersonIds)));
         });
     }
 
@@ -657,7 +736,7 @@ export default class ContractsController extends BaseController<
      * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
      * @returns Usunięty kontrakt
      */
-    static async delete(
+    private static async deleteUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client
     ): Promise<ContractOur | ContractOther> {
@@ -721,9 +800,9 @@ export default class ContractsController extends BaseController<
     static async deleteWithAuth(
         contract: ContractOur | ContractOther
     ): Promise<ContractOur | ContractOther> {
-        return await this.withAuth(async (instance, auth) => {
-            return await this.delete(contract, auth);
-        });
+        return ConsolidationGuard.contractDestruction(contract.id, false, () =>
+            ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                this.withAuth((_instance, auth) => this.delete(contract, auth))));
     }
 
     /**
@@ -736,7 +815,7 @@ export default class ContractsController extends BaseController<
      *
      * Na błąd DB po udanym GD: cofamy przeniesienie folderu.
      */
-    static async moveToProject(
+    private static async moveToProjectUnsafe(
         contractId: number,
         newProjectOurId: string,
         auth: OAuth2Client
@@ -778,7 +857,9 @@ export default class ContractsController extends BaseController<
         );
 
         try {
-            await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
+            // Osoby kontraktu przechodzą z pokoi starego projektu do pokoi nowego (DOSTEP-2).
+            await ChatSpacesController.withMemberSync([oldProjectOurId, newProjectOurId], () =>
+            ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                 await conn.execute(
                     `UPDATE Contracts SET ProjectOurId = ? WHERE Id = ?`,
                     [newProjectOurId, contractOur.id]
@@ -787,7 +868,7 @@ export default class ContractsController extends BaseController<
                     `UPDATE Contracts SET ProjectOurId = ? WHERE OurIdRelated = ?`,
                     [newProjectOurId, contractOur.ourId]
                 );
-            });
+            }));
         } catch (err) {
             // Rollback GD — cofnij przeniesienie folderu
             await ToolsGd.moveFileOrFolder(
@@ -821,13 +902,8 @@ export default class ContractsController extends BaseController<
         contractId: number,
         newProjectOurId: string
     ): Promise<ContractOur> {
-        return await this.withAuth(async (_instance, auth) => {
-            return await ContractsController.moveToProject(
-                contractId,
-                newProjectOurId,
-                auth
-            );
-        });
+        return ConsolidationGuard.contractDestruction(contractId, true, () =>
+            this.withAuth(async (_instance, auth) => this.moveToProject(contractId, newProjectOurId, auth)));
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {

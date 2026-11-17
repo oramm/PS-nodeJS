@@ -120,7 +120,44 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 ContractAdmins.Email AS ContractAdminEmail,
                 Milestones.Id AS MilestoneId,
                 Milestones.Name AS MilestoneName,
-                Milestones.ContractId,
+                Milestones.ContractId AS SourceContractId,
+                Contracts.ProjectOurId AS ContractProjectOurId,
+                JSON_OBJECT(
+                    'ContractId', SourceContracts.Id,
+                    'ContractAlias', SourceContracts.Alias,
+                    'ContractNumber', SourceContracts.Number,
+                    'ContractName', SourceContracts.Name,
+                    'ContractComment', SourceContracts.Comment,
+                    'ContractStartDate', SourceContracts.StartDate,
+                    'ContractEndDate', SourceContracts.EndDate,
+                    'ContractValue', SourceContracts.Value,
+                    'ContractStatus', SourceContracts.Status,
+                    'ContractGdFolderId', SourceContracts.GdFolderId,
+                    'ContractOurId', SourceOurContractsData.OurId,
+                    'RelatedId', SourceRelatedContracts.Id,
+                    'RelatedName', SourceRelatedContracts.Name,
+                    'RelatedGdFolderId', SourceRelatedContracts.GdFolderId,
+                    'RelatedOurId', SourceRelatedOurContractsData.OurId,
+                    'RelatedManagerId', SourceRelatedManagers.Id,
+                    'RelatedManagerName', SourceRelatedManagers.Name,
+                    'RelatedManagerSurname', SourceRelatedManagers.Surname,
+                    'RelatedManagerEmail', SourceRelatedManagers.Email,
+                    'RelatedAdminId', SourceRelatedAdmins.Id,
+                    'RelatedAdminName', SourceRelatedAdmins.Name,
+                    'RelatedAdminSurname', SourceRelatedAdmins.Surname,
+                    'RelatedAdminEmail', SourceRelatedAdmins.Email,
+                    'ContractTypeId', SourceContractTypes.Id,
+                    'ContractTypeName', SourceContractTypes.Name,
+                    'ContractManagerId', SourceContractManagers.Id,
+                    'ContractManagerName', SourceContractManagers.Name,
+                    'ContractManagerSurname', SourceContractManagers.Surname,
+                    'ContractManagerEmail', SourceContractManagers.Email,
+                    'ContractAdminId', SourceContractAdmins.Id,
+                    'ContractAdminName', SourceContractAdmins.Name,
+                    'ContractAdminSurname', SourceContractAdmins.Surname,
+                    'ContractAdminEmail', SourceContractAdmins.Email,
+                    'ContractProjectOurId', SourceContracts.ProjectOurId
+                ) AS SourceContract,
                 Milestones.Status AS MilestoneStatus,
                 -- uwagi kamienia; nie mylić z MilestoneDateDescription (opis terminu)
                 Milestones.Description AS MilestoneDescription,
@@ -136,6 +173,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 MilestoneTypes_ContractTypes.FolderNumber AS MilestoneTypeFolderNumber,
                 Cases.Id AS CaseId,
                 Cases.ParentCaseId AS CaseParentCaseId,
+                ParentCases.Number AS CaseParentCaseNumber,
                 Cases.Name AS CaseName,
                 Cases.Description AS CaseDescription,
                 Cases.Status AS CaseStatus,
@@ -168,8 +206,26 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             LEFT JOIN OurContractsData ON OurContractsData.Id=Contracts.Id
             LEFT JOIN Contracts AS RelatedContracts ON RelatedContracts.Id=(SELECT OurContractsData.Id FROM OurContractsData WHERE OurId=Contracts.OurIdRelated)
             LEFT JOIN OurContractsData AS RelatedOurContractsData ON RelatedOurContractsData.OurId = Contracts.OurIdRelated
-            LEFT JOIN Milestones ON Milestones.ContractId=Contracts.Id
+            LEFT JOIN Milestones ON Milestones.ContractId = Contracts.Id OR (
+                Milestones.OfferId IS NULL AND EXISTS (
+                    SELECT 1 FROM MilestoneContractLinks AS treeLink
+                    JOIN Contracts AS treeSource ON treeSource.Id = Milestones.ContractId
+                    WHERE treeLink.MilestoneId = Milestones.Id
+                        AND treeLink.ContractId = Contracts.Id
+                        AND treeSource.ProjectOurId = Contracts.ProjectOurId
+                )
+            )
+            LEFT JOIN Contracts AS SourceContracts ON SourceContracts.Id = Milestones.ContractId
+            LEFT JOIN ContractTypes AS SourceContractTypes ON SourceContractTypes.Id = SourceContracts.TypeId
+            LEFT JOIN OurContractsData AS SourceOurContractsData ON SourceOurContractsData.Id = SourceContracts.Id
+            LEFT JOIN OurContractsData AS SourceRelatedOurContractsData ON SourceRelatedOurContractsData.OurId = SourceContracts.OurIdRelated
+            LEFT JOIN Contracts AS SourceRelatedContracts ON SourceRelatedContracts.Id = SourceRelatedOurContractsData.Id
+            LEFT JOIN Persons AS SourceContractManagers ON SourceContractManagers.Id = SourceOurContractsData.ManagerId
+            LEFT JOIN Persons AS SourceContractAdmins ON SourceContractAdmins.Id = SourceOurContractsData.AdminId
+            LEFT JOIN Persons AS SourceRelatedManagers ON SourceRelatedManagers.Id = SourceRelatedOurContractsData.ManagerId
+            LEFT JOIN Persons AS SourceRelatedAdmins ON SourceRelatedAdmins.Id = SourceRelatedOurContractsData.AdminId
             LEFT JOIN Cases ON Cases.MilestoneId=Milestones.Id
+            LEFT JOIN Cases AS ParentCases ON ParentCases.Id = Cases.ParentCaseId
             -- LEFT (nie INNER): kontrakty-koszyki (np. Oferty/Sprawy ogólne) mają kamienie bez typu
             -- (MilestoneTypeId=NULL) i nie są w MilestoneTypes_ContractTypes. Dla poprawnych danych
             -- wynik jest identyczny jak przy INNER; LEFT tylko przestaje ukrywać te koszyki.
@@ -183,7 +239,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             LEFT JOIN Persons AS RelatedAdmins ON RelatedOurContractsData.AdminId = RelatedAdmins.Id
             LEFT JOIN MilestoneTypes_ContractTypes
                 ON  MilestoneTypes_ContractTypes.MilestoneTypeId=Milestones.TypeId
-                AND MilestoneTypes_ContractTypes.ContractTypeId=Contracts.TypeId
+                AND MilestoneTypes_ContractTypes.ContractTypeId=SourceContracts.TypeId
             LEFT JOIN Persons AS TasksOwners ON TasksOwners.Id = Tasks.OwnerId
             LEFT JOIN MilestoneDates ON MilestoneDates.MilestoneId = Milestones.Id
             WHERE ${conditions}
@@ -191,14 +247,12 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
 
         const rows: ContractsWithChildrenRow[] = await this.executeQuery(sql);
 
+        if (!rows.length) return [];
+        const contractIds = [...new Set(rows.flatMap(row =>
+            [row.ContractId, row.SourceContractId].filter((id): id is number => id != null)
+        ))];
         const entitiesPerProject =
-            await ContractEntityAssociationsHelper.getContractEntityAssociationsList(
-                {
-                    projectId: orConditions[0]?._project?.ourId,
-                    contractId: orConditions[0]?.contractId,
-                    isArchived: orConditions[0]?.statusType === 'archived',
-                }
-            );
+            await ContractEntityAssociationsHelper.getContractEntityAssociationsList({ contractIds });
 
         const subCaseTypeRels: any[] = await this.executeQuery(
             'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
@@ -361,103 +415,30 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
         for (const row of result) {
             let contract = contracts[row.ContractId];
             if (!contract) {
-                // Filtruj entities po rolach - analogicznie jak w ContractRepository
-                const contractors = entitiesPerProject.filter(
-                    (item: ContractEntityAssociation) =>
-                        item._contract.id === row.ContractId &&
-                        item.contractRole === 'CONTRACTOR'
-                );
-                const engineers = entitiesPerProject.filter(
-                    (item: ContractEntityAssociation) =>
-                        item._contract.id === row.ContractId &&
-                        item.contractRole === 'ENGINEER'
-                );
-                const employers = entitiesPerProject.filter(
-                    (item: ContractEntityAssociation) =>
-                        item._contract.id === row.ContractId &&
-                        item.contractRole === 'EMPLOYER'
-                );
-
-                const initParams = {
-                    id: row.ContractId,
-                    ourId: row.ContractOurId,
-                    number: row.ContractNumber,
-                    name: ToolsDb.sqlToString(row.ContractName ?? ''),
-                    comment: ToolsDb.sqlToString(row.ContractComment ?? ''),
-                    startDate: row.ContractStartDate
-                        ? ToolsDate.dateJsToSql(row.ContractStartDate)
-                        : null,
-                    endDate: row.ContractEndDate
-                        ? ToolsDate.dateJsToSql(row.ContractEndDate)
-                        : null,
-                    value: row.ContractValue,
-                    status: row.ContractStatus,
-                    gdFolderId: row.ContractGdFolderId,
-                    _gdFolderUrl: ToolsGd.createGdFolderUrl(
-                        row.ContractGdFolderId ?? ''
-                    ),
-                    alias: row.ContractAlias,
-                    _type: {
-                        id: row.ContractTypeId,
-                        name: row.ContractTypeName,
-                    },
-                    _manager: row.ContractManagerEmail
-                        ? {
-                              id: row.ContractManagerId,
-                              name: row.ContractManagerName,
-                              surname: row.ContractManagerSurname,
-                              email: row.ContractManagerEmail,
-                          }
-                        : undefined,
-                    _admin: row.ContractAdminEmail
-                        ? {
-                              id: row.ContractAdminId,
-                              name: row.ContractAdminName,
-                              surname: row.ContractAdminSurname,
-                              email: row.ContractAdminEmail,
-                          }
-                        : undefined,
-                    //kontrakt powiązany z kontraktem na roboty (tylko dla ContractOther)
-                    _ourContract: row.RelatedId
-                        ? {
-                              ourId: row.RelatedOurId,
-                              id: row.RelatedId,
-                              name: ToolsDb.sqlToString(row.RelatedName || ''),
-                              gdFolderId: row.RelatedGdFolderId,
-                              _admin: row.RelatedAdminEmail
-                                  ? {
-                                        id: row.RelatedAdminId,
-                                        name: row.RelatedAdminName,
-                                        surname: row.RelatedAdminSurname,
-                                        email: row.RelatedAdminEmail,
-                                    }
-                                  : undefined,
-                              _manager: row.RelatedManagerEmail
-                                  ? {
-                                        id: row.RelatedManagerId,
-                                        name: row.RelatedManagerName,
-                                        surname: row.RelatedManagerSurname,
-                                        email: row.RelatedManagerEmail,
-                                    }
-                                  : undefined,
-                          }
-                        : undefined,
-                    _contractors: contractors.map((item) => item._entity),
-                    // Kolejność wykonawców ustawia model (lider na początek) - tak samo
-                    // jak w ContractRepository. Tutaj tylko przekazujemy, kto nim jest.
-                    _leaderEntityId:
-                        ContractEntityAssociationsHelper.findLeaderEntityId(
-                            contractors
-                        ),
-                    _engineers: engineers.map((item) => item._entity),
-                    _employers: employers.map((item) => item._entity),
-                };
-
-                contract = row.ContractOurId
-                    ? new ContractOur(initParams)
-                    : new ContractOther(initParams);
+                contract = this.makeContract(row, entitiesPerProject);
                 contracts[row.ContractId] = contract;
             }
+
+            // Znajdujemy kontrakt w contractsWitchChildren lub tworzymy nowy, jeśli go nie ma
+            let contractWithChildren = contractsWithChildren.find(
+                (c) => c.contract.id === contract.id
+            );
+            if (!contractWithChildren) {
+                contractWithChildren = {
+                    id: contract.id as number,
+                    contract: contract,
+                    milestonesWithCases: [],
+                };
+                contractsWithChildren.push(contractWithChildren);
+            }
+
+            if (!row.MilestoneId) continue;
+            const sourceRow = typeof row.SourceContract === 'string'
+                ? JSON.parse(row.SourceContract) as ContractsWithChildrenRow
+                : row.SourceContract;
+            const sourceId = row.SourceContractId ?? row.ContractId;
+            const sourceContract = contracts[sourceId] ??
+                (contracts[sourceId] = this.makeContract(sourceRow ?? row, entitiesPerProject));
 
             if (!milestonesById[row.MilestoneId])
                 milestonesById[row.MilestoneId] = new Milestone({
@@ -476,7 +457,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                             row.MilestoneTypeFolderNumber?.toString(),
                         isUniquePerContract: Boolean(row.IsUniquePerContract),
                     },
-                    _contract: contract,
+                    _contract: sourceContract,
                 });
 
             const uniqueMilestone = milestonesById[row.MilestoneId];
@@ -506,9 +487,9 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 id: row.CaseId ?? undefined,
                 parentCaseId: row.CaseParentCaseId ?? undefined,
                 _parentCaseNumber:
-                    row.CaseParentCaseId != null
+                    row.CaseParentCaseNumber ?? (row.CaseParentCaseId != null
                         ? caseNumberById.get(row.CaseParentCaseId)
-                        : undefined,
+                        : undefined),
                 name: ToolsDb.sqlToString(row.CaseName ?? ''),
                 description: ToolsDb.sqlToString(row.CaseDescription ?? ''),
                 status: row.CaseStatus ?? undefined,
@@ -555,19 +536,6 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 _parent: caseItem,
             });
 
-            // Znajdujemy kontrakt w contractsWitchChildren lub tworzymy nowy, jeśli go nie ma
-            let contractWithChildren = contractsWithChildren.find(
-                (c) => c.contract.id === contract.id
-            );
-            if (!contractWithChildren) {
-                contractWithChildren = {
-                    id: contract.id as number,
-                    contract: contract,
-                    milestonesWithCases: [],
-                };
-                contractsWithChildren.push(contractWithChildren);
-            }
-
             // Znajdujemy kamień milowy w kontrakcie lub tworzymy nowy, jeśli go nie ma
             let milestoneWithCases =
                 contractWithChildren.milestonesWithCases.find(
@@ -576,6 +544,8 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
             if (!milestoneWithCases) {
                 milestoneWithCases = {
                     milestone: uniqueMilestone,
+                    _displayContractId: row.ContractId,
+                    _occurrenceId: `contract:${row.ContractId}/milestone:${uniqueMilestone.id}`,
                     casesWithTasks: [],
                 };
                 contractWithChildren.milestonesWithCases.push(
@@ -591,6 +561,7 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                 if (!caseWithTasks) {
                     caseWithTasks = {
                         caseItem: caseItem,
+                        _occurrenceId: `contract:${row.ContractId}/case:${caseItem.id}`,
                         tasks: [],
                         subCasesWithTasks: [],
                     };
@@ -624,12 +595,11 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
                     if (parentId) {
                         const parent = casesById.get(parentId);
                         if (parent) {
-                            parent.subCasesWithTasks.push({
-                                caseItem: caseWithTasks.caseItem,
-                                tasks: caseWithTasks.tasks,
-                            });
+                            parent.subCasesWithTasks.push(caseWithTasks);
+                        } else {
+                            // A task/case filter may omit the parent. Keep the matching child.
+                            topLevelCases.push(caseWithTasks);
                         }
-                        // parentId istnieje, ale rodzic nie — nie powinno się zdarzyć przy ON DELETE CASCADE
                     } else {
                         topLevelCases.push(caseWithTasks);
                     }
@@ -640,6 +610,108 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
         }
 
         return contractsWithChildren;
+    }
+
+    private makeContract(
+        row: ContractsWithChildrenRow,
+        entitiesPerProject: ContractEntityAssociation[]
+    ): ContractOur | ContractOther {
+        // Filtruj entities po rolach - analogicznie jak w ContractRepository
+        const contractors = entitiesPerProject.filter(
+            (item: ContractEntityAssociation) =>
+                item._contract.id === row.ContractId &&
+                item.contractRole === 'CONTRACTOR'
+        );
+        const engineers = entitiesPerProject.filter(
+            (item: ContractEntityAssociation) =>
+                item._contract.id === row.ContractId &&
+                item.contractRole === 'ENGINEER'
+        );
+        const employers = entitiesPerProject.filter(
+            (item: ContractEntityAssociation) =>
+                item._contract.id === row.ContractId &&
+                item.contractRole === 'EMPLOYER'
+        );
+
+        const initParams = {
+            id: row.ContractId,
+            _project: { ourId: row.ContractProjectOurId },
+            ourId: row.ContractOurId,
+            number: row.ContractNumber,
+            name: ToolsDb.sqlToString(row.ContractName ?? ''),
+            comment: ToolsDb.sqlToString(row.ContractComment ?? ''),
+            startDate: row.ContractStartDate
+                ? ToolsDate.dateJsToSql(row.ContractStartDate)
+                : null,
+            endDate: row.ContractEndDate
+                ? ToolsDate.dateJsToSql(row.ContractEndDate)
+                : null,
+            value: row.ContractValue,
+            status: row.ContractStatus,
+            gdFolderId: row.ContractGdFolderId,
+            _gdFolderUrl: ToolsGd.createGdFolderUrl(
+                row.ContractGdFolderId ?? ''
+            ),
+            alias: row.ContractAlias,
+            _type: {
+                id: row.ContractTypeId,
+                name: row.ContractTypeName,
+            },
+            _manager: row.ContractManagerEmail
+                ? {
+                      id: row.ContractManagerId,
+                      name: row.ContractManagerName,
+                      surname: row.ContractManagerSurname,
+                      email: row.ContractManagerEmail,
+                  }
+                : undefined,
+            _admin: row.ContractAdminEmail
+                ? {
+                      id: row.ContractAdminId,
+                      name: row.ContractAdminName,
+                      surname: row.ContractAdminSurname,
+                      email: row.ContractAdminEmail,
+                  }
+                : undefined,
+            //kontrakt powiązany z kontraktem na roboty (tylko dla ContractOther)
+            _ourContract: row.RelatedId
+                ? {
+                      ourId: row.RelatedOurId,
+                      id: row.RelatedId,
+                      name: ToolsDb.sqlToString(row.RelatedName || ''),
+                      gdFolderId: row.RelatedGdFolderId,
+                      _admin: row.RelatedAdminEmail
+                          ? {
+                                id: row.RelatedAdminId,
+                                name: row.RelatedAdminName,
+                                surname: row.RelatedAdminSurname,
+                                email: row.RelatedAdminEmail,
+                            }
+                          : undefined,
+                      _manager: row.RelatedManagerEmail
+                          ? {
+                                id: row.RelatedManagerId,
+                                name: row.RelatedManagerName,
+                                surname: row.RelatedManagerSurname,
+                                email: row.RelatedManagerEmail,
+                            }
+                          : undefined,
+                  }
+                : undefined,
+            _contractors: contractors.map((item) => item._entity),
+            // Kolejność wykonawców ustawia model (lider na początek) - tak samo
+            // jak w ContractRepository. Tutaj tylko przekazujemy, kto nim jest.
+            _leaderEntityId:
+                ContractEntityAssociationsHelper.findLeaderEntityId(
+                    contractors
+                ),
+            _engineers: engineers.map((item) => item._entity),
+            _employers: employers.map((item) => item._entity),
+        };
+
+        return row.ContractOurId
+            ? new ContractOur(initParams)
+            : new ContractOther(initParams);
     }
 
     /**
@@ -659,6 +731,10 @@ export default class ContractsWithChildrenRepository extends BaseRepository<Cont
  * Reprezentuje płaską strukturę danych z JOIN wielu tabel
  */
 type ContractsWithChildrenRow = {
+    SourceContractId?: number;
+    SourceContract?: ContractsWithChildrenRow | string;
+    ContractProjectOurId?: string;
+    CaseParentCaseNumber?: number;
     // Task fields
     Id: number;
     TaskName: string | null;

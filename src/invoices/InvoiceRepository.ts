@@ -1,3 +1,5 @@
+import type { ContractScope } from '../persons/projectAssignments/projectMembership';
+import { makeContractScopeCondition } from '../tools/ProjectScope';
 import BaseRepository from '../repositories/BaseRepository';
 import Invoice from './Invoice';
 import Contract from '../contracts/Contract';
@@ -218,7 +220,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         });
     }
 
-    async find(orConditions: InvoicesSearchParams[] = []) {
+    async find(orConditions: InvoicesSearchParams[] = [], scope?: ContractScope) {
         const conditions =
             orConditions.length > 0
                 ? this.makeOrGroupsConditions(
@@ -296,7 +298,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         LEFT JOIN Persons AS Owners ON Owners.Id=Invoices.OwnerId
         LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
         LEFT JOIN Cities ON Cities.Id = OurContractsData.CityId
-        WHERE ${conditions}
+        WHERE (${conditions}) AND ${makeContractScopeCondition(scope)}
         GROUP BY Invoices.Id
         ORDER BY Invoices.IssueDate ASC`;
 
@@ -614,7 +616,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
      * @param invoiceIds - Lista ID faktur
      * @returns Mapa: invoiceId -> lista korekt
      */
-    async findCorrectionsBulk(invoiceIds: number[]): Promise<Map<number, CorrectionInvoiceSummary[]>> {
+    async findCorrectionsBulk(invoiceIds: number[], scope?: ContractScope): Promise<Map<number, CorrectionInvoiceSummary[]>> {
         if (invoiceIds.length === 0) return new Map();
 
         const sql = mysql.format(`
@@ -628,6 +630,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             FROM Invoices
             LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = Invoices.Id
             WHERE Invoices.CorrectedInvoiceId IN (?)
+            AND ${scope ? `Invoices.ContractId IN (SELECT Contracts.Id FROM Contracts WHERE ${makeContractScopeCondition(scope)})` : '1'}
             GROUP BY Invoices.Id
             ORDER BY Invoices.IssueDate DESC`, [invoiceIds]);
 

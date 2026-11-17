@@ -1,3 +1,4 @@
+import RouteIdValidator from '../../tools/RouteIdValidator';
 import { Request, Response } from 'express';
 import { app } from '../../index';
 import ToolsGapi from '../../setup/Sessions/ToolsGapi';
@@ -42,7 +43,7 @@ app.post('/security', async (req: Request, res: Response, next) => {
 
 app.put('/security/:id', async (req: Request, res: Response, next) => {
     try {
-        const itemFromClient = req.parsedBody;
+        const itemFromClient = { ...req.parsedBody, id: RouteIdValidator.positiveId(req.params.id) };
         if (!itemFromClient.id) throw new Error(`Próba edycji ZNWU bez Id`);
 
         const result = await ToolsGapi.gapiReguestHandler(
@@ -60,11 +61,12 @@ app.put('/security/:id', async (req: Request, res: Response, next) => {
 
 app.delete('/security/:id', async (req: Request, res: Response, next) => {
     try {
+        const dto = { ...req.parsedBody, id: RouteIdValidator.positiveId(req.params.id) };
         const result = await ToolsGapi.gapiReguestHandler(
             req,
             res,
             async (auth) =>
-                await SecuritiesController.deleteFromDto(req.parsedBody, auth)
+                await SecuritiesController.deleteFromDto(dto, auth)
         );
 
         res.send(result);

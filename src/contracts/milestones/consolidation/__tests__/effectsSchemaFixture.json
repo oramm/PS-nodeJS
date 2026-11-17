@@ -1,0 +1,1640 @@
+{
+  "indexes": [
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "ContractId",
+      "NON_UNIQUE": 1,
+      "SEQ_IN_INDEX": 1,
+      "COLUMN_NAME": "MilestoneId"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "PRIMARY",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 1,
+      "COLUMN_NAME": "Id"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "TypeId",
+      "NON_UNIQUE": 1,
+      "SEQ_IN_INDEX": 1,
+      "COLUMN_NAME": "TypeId"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "Unique Name per CaseType",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 1,
+      "COLUMN_NAME": "Name"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "Unique Name per CaseType",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 2,
+      "COLUMN_NAME": "TypeId"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "Unique Name per CaseType",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 3,
+      "COLUMN_NAME": "MilestoneId"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "Unique Name per CaseType",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 4,
+      "COLUMN_NAME": "ParentCaseIdForUnique"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "uq_cases_parent_sub_case_number",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 1,
+      "COLUMN_NAME": "ParentCaseId"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "INDEX_NAME": "uq_cases_parent_sub_case_number",
+      "NON_UNIQUE": 0,
+      "SEQ_IN_INDEX": 2,
+      "COLUMN_NAME": "SubCaseNumber"
+    }
+  ],
+  "foreignKeys": [
+    {
+      "TABLE_NAME": "achievementsexternal",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "AchievementsExternal_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "applicationcalls",
+      "COLUMN_NAME": "FocusAreaId",
+      "REFERENCED_TABLE_NAME": "focusareas",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ApplicationCalls_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "bankstatements",
+      "COLUMN_NAME": "ImportedBy",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_BankStatements_Persons",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "banktransfers",
+      "COLUMN_NAME": "BankStatementId",
+      "REFERENCED_TABLE_NAME": "bankstatements",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_BankTransfers_Statement",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "MilestoneId",
+      "REFERENCED_TABLE_NAME": "milestones",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Cases_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "TypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Cases_ibfk_3",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "ParentCaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_Cases_ParentCaseId",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "casetemplates",
+      "COLUMN_NAME": "CaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CasesTemplates_CaseType_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "casetypes",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CaseTypes_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "casetypes",
+      "COLUMN_NAME": "MilestoneTypeId",
+      "REFERENCED_TABLE_NAME": "milestonetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CaseTypes_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "casetype_subcasetypes",
+      "COLUMN_NAME": "ParentCaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_CSTSubTypes_Parent",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "casetype_subcasetypes",
+      "COLUMN_NAME": "SubCaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_CSTSubTypes_Sub",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contractmeetingnotes",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_contractmeetingnotes_contract",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contractmeetingnotes",
+      "COLUMN_NAME": "CreatedByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_contractmeetingnotes_createdbyperson",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contractmeetingnotes",
+      "COLUMN_NAME": "MeetingId",
+      "REFERENCED_TABLE_NAME": "meetings",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_contractmeetingnotes_meeting",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contractrangescontracts",
+      "COLUMN_NAME": "ContractRangeId",
+      "REFERENCED_TABLE_NAME": "contractranges",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ContractRangesContracts_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contractrangescontracts",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ContractRangesContracts_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts",
+      "COLUMN_NAME": "OurIdRelated",
+      "REFERENCED_TABLE_NAME": "ourcontractsdata",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "Contracts_OurContractRelated_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts",
+      "COLUMN_NAME": "ProjectOurId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "Contracts_Project_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts",
+      "COLUMN_NAME": "TypeId",
+      "REFERENCED_TABLE_NAME": "contracttypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contracts_Type_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts_entities",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contracts_Entities_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts_entities",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contracts_Entities_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts_roles",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contract_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "contracts_roles",
+      "COLUMN_NAME": "RoleId",
+      "REFERENCED_TABLE_NAME": "roles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Role_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "costcategories",
+      "COLUMN_NAME": "ParentId",
+      "REFERENCED_TABLE_NAME": "costcategories",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CostCategories_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "costinvoiceitems",
+      "COLUMN_NAME": "CostInvoiceId",
+      "REFERENCED_TABLE_NAME": "costinvoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CostInvoiceItems_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "costinvoiceitems",
+      "COLUMN_NAME": "CategoryId",
+      "REFERENCED_TABLE_NAME": "costcategories",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CostInvoiceItems_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "costinvoices",
+      "COLUMN_NAME": "SyncId",
+      "REFERENCED_TABLE_NAME": "costinvoicesyncs",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CostInvoices_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "costinvoices",
+      "COLUMN_NAME": "CategoryId",
+      "REFERENCED_TABLE_NAME": "costcategories",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CostInvoices_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "documenttemplatescontents",
+      "COLUMN_NAME": "CaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "CaseType_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "documenttemplatescontents",
+      "COLUMN_NAME": "TemplateId",
+      "REFERENCED_TABLE_NAME": "documenttemplates",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "DocumentTemplate_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "focusareas",
+      "COLUMN_NAME": "FinancialAidProgrammeId",
+      "REFERENCED_TABLE_NAME": "financialaidprogrammes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FocusAreas_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "incomingmails",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "IncomingMails_Person_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "inventoryevents",
+      "COLUMN_NAME": "InventoryItemId",
+      "REFERENCED_TABLE_NAME": "inventory",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "InventoryEvents_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "inventoryevents",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "InventoryEvents_owner_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoiceitems",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Editor_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoiceitems",
+      "COLUMN_NAME": "ParentId",
+      "REFERENCED_TABLE_NAME": "invoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Invoice_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoiceksefmetadata",
+      "COLUMN_NAME": "InvoiceId",
+      "REFERENCED_TABLE_NAME": "invoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "InvoiceKsefMetadata_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoices",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contract-Invoice_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoices",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Editor_Invoice_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoices",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Entity_Invoice_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoices",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Owner_Invoice_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoicethirdparties",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_invoice_third_parties_entity",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "invoicethirdparties",
+      "COLUMN_NAME": "InvoiceId",
+      "REFERENCED_TABLE_NAME": "invoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_invoice_third_parties_invoice",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "issues",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Issues_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "issues",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Issues_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "LetterId",
+      "REFERENCED_TABLE_NAME": "letters",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_letter_events_letter_id",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_letter_events_person_id",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters",
+      "COLUMN_NAME": "IncomingMailId",
+      "REFERENCED_TABLE_NAME": "incomingmails",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_IncomingMail_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters",
+      "COLUMN_NAME": "OfferId",
+      "REFERENCED_TABLE_NAME": "offers",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Offer_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Person_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters",
+      "COLUMN_NAME": "ProjectId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Project_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters_cases",
+      "COLUMN_NAME": "LetterId",
+      "REFERENCED_TABLE_NAME": "letters",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Cases_ifbk1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters_cases",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Cases_ifbk2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters_entities",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Entities_ifbk1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "letters_entities",
+      "COLUMN_NAME": "LetterId",
+      "REFERENCED_TABLE_NAME": "letters",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Letters_Entities_ifbk2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "mailscans",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MailScans_Person_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "materialcards",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MaterialCards_Contract_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "materialcards",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MaterialCards_Editor_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "materialcards",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MaterialCards_Owner_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "materialcardversions",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MaterialCardVersion_Owner_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "meetingarrangements",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MeetingArrangements_Case_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "meetingarrangements",
+      "COLUMN_NAME": "MeetingId",
+      "REFERENCED_TABLE_NAME": "meetings",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MeetingArrangements_Meeting_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "meetingarrangements",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MeetingArrangements_Owner_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonecontractlinks",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_MilestoneContractLinks_Contract",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonecontractlinks",
+      "COLUMN_NAME": "MilestoneId",
+      "REFERENCED_TABLE_NAME": "milestones",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_MilestoneContractLinks_Milestone",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonedates",
+      "COLUMN_NAME": "MilestoneId",
+      "REFERENCED_TABLE_NAME": "milestones",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MilestoneDates_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestones",
+      "COLUMN_NAME": "OfferId",
+      "REFERENCED_TABLE_NAME": "offers",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Milestones_Offer_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestones",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Milestones_Parent_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestones",
+      "COLUMN_NAME": "TypeId",
+      "REFERENCED_TABLE_NAME": "milestonetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Milestones_Type_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonetemplates",
+      "COLUMN_NAME": "MilestoneTypeId",
+      "REFERENCED_TABLE_NAME": "milestonetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MilestonesTemplates_MilestoneType_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonetypes_contracttypes",
+      "COLUMN_NAME": "ContractTypeId",
+      "REFERENCED_TABLE_NAME": "contracttypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MilestoneTypes_ContractType_ibfk1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonetypes_contracttypes",
+      "COLUMN_NAME": "MilestoneTypeId",
+      "REFERENCED_TABLE_NAME": "milestonetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MilestoneTypes_ContractType_ibfk2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "milestonetypes_offers",
+      "COLUMN_NAME": "MilestoneTypeId",
+      "REFERENCED_TABLE_NAME": "milestonetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "MilestoneTypes_Offers_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "needs",
+      "COLUMN_NAME": "ApplicationCallId",
+      "REFERENCED_TABLE_NAME": "applicationcalls",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_needs_applicationcalls",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "needs",
+      "COLUMN_NAME": "ClientId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Needs_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "needs",
+      "COLUMN_NAME": "FocusAreaId",
+      "REFERENCED_TABLE_NAME": "focusareas",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Needs_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "needs_focusareas",
+      "COLUMN_NAME": "NeedId",
+      "REFERENCED_TABLE_NAME": "needs",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Needs_FocusAreas_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "needs_focusareas",
+      "COLUMN_NAME": "FocusAreaId",
+      "REFERENCED_TABLE_NAME": "focusareas",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Needs_FocusAreas_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offerbonds",
+      "COLUMN_NAME": "OfferId",
+      "REFERENCED_TABLE_NAME": "offers",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "OfferBonds_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offerevents",
+      "COLUMN_NAME": "OfferId",
+      "REFERENCED_TABLE_NAME": "offers",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_offer_events_offer_id",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offerevents",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_offer_events_person_id",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offerinvitationmails",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_offerinvitationmails_editorid",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offers",
+      "COLUMN_NAME": "CityId",
+      "REFERENCED_TABLE_NAME": "cities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_offers_cityid",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offers",
+      "COLUMN_NAME": "InvitationMailId",
+      "REFERENCED_TABLE_NAME": "offerinvitationmails",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_offers_mailid",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offers",
+      "COLUMN_NAME": "TypeId",
+      "REFERENCED_TABLE_NAME": "contracttypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Offers_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "offers",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Offers_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "ourcontractsdata",
+      "COLUMN_NAME": "CityId",
+      "REFERENCED_TABLE_NAME": "cities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_cityid",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "ourcontractsdata",
+      "COLUMN_NAME": "InvoiceBuyerEntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_OurContractsData_InvoiceBuyerEntityId",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "ourcontractsdata",
+      "COLUMN_NAME": "Id",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "OurContractsData_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "ourcontractsdata",
+      "COLUMN_NAME": "ManagerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "OurContractsData_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "ourcontractsdata",
+      "COLUMN_NAME": "AdminId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "OurContractsData_ibfk_3",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "paymentallocations",
+      "COLUMN_NAME": "CostInvoiceId",
+      "REFERENCED_TABLE_NAME": "costinvoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_PaymentAllocations_CostInvoice",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "paymentallocations",
+      "COLUMN_NAME": "InvoiceId",
+      "REFERENCED_TABLE_NAME": "invoices",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_PaymentAllocations_Invoice",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "paymentallocations",
+      "COLUMN_NAME": "CreatedBy",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_PaymentAllocations_Persons",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "paymentallocations",
+      "COLUMN_NAME": "BankTransferId",
+      "REFERENCED_TABLE_NAME": "banktransfers",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_PaymentAllocations_Transfer",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personaccountevents",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personaccountevents_editor",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personaccountevents",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personaccountevents_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personaccounts",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personaccounts_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personaccounts",
+      "COLUMN_NAME": "SystemRoleId",
+      "REFERENCED_TABLE_NAME": "systemroles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personaccounts_systemrole",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprivacyacknowledgements",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_privacy_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprivacyacknowledgements",
+      "COLUMN_NAME": "Scope",
+      "REFERENCED_TABLE_NAME": "privacynoticesnapshots",
+      "REFERENCED_COLUMN_NAME": "Scope",
+      "CONSTRAINT_NAME": "fk_privacy_snapshot",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprivacyacknowledgements",
+      "COLUMN_NAME": "Version",
+      "REFERENCED_TABLE_NAME": "privacynoticesnapshots",
+      "REFERENCED_COLUMN_NAME": "Version",
+      "CONSTRAINT_NAME": "fk_privacy_snapshot",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "personprivacyacknowledgements",
+      "COLUMN_NAME": "Revision",
+      "REFERENCED_TABLE_NAME": "privacynoticesnapshots",
+      "REFERENCED_COLUMN_NAME": "Revision",
+      "CONSTRAINT_NAME": "fk_privacy_snapshot",
+      "ORDINAL_POSITION": 3
+    },
+    {
+      "TABLE_NAME": "personprofileeducations",
+      "COLUMN_NAME": "PersonProfileId",
+      "REFERENCED_TABLE_NAME": "personprofiles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personprofileeducations_profile",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprofileexperiences",
+      "COLUMN_NAME": "PersonProfileId",
+      "REFERENCED_TABLE_NAME": "personprofiles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personprofileexperiences_profile",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprofiles",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personprofiles_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprofileskills",
+      "COLUMN_NAME": "PersonProfileId",
+      "REFERENCED_TABLE_NAME": "personprofiles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personprofileskills_profile",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprofileskills",
+      "COLUMN_NAME": "SkillId",
+      "REFERENCED_TABLE_NAME": "skillsdictionary",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_personprofileskills_skill",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprojects",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_PersonProjects_Person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "personprojects",
+      "COLUMN_NAME": "ProjectOurId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "FK_PersonProjects_Project",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "persons",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Persons_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "persons",
+      "COLUMN_NAME": "SystemRoleId",
+      "REFERENCED_TABLE_NAME": "systemroles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Persons_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "persons_contracts",
+      "COLUMN_NAME": "ContractID",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Persons_Contracts_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "persons_contracts",
+      "COLUMN_NAME": "PersonID",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Persons_Contracts_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processes",
+      "COLUMN_NAME": "CaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Processes_CasesType_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processes",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Processes_Editor_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processessteps",
+      "COLUMN_NAME": "DocumentTemplateContentsId",
+      "REFERENCED_TABLE_NAME": "documenttemplatescontents",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "DocumentTemplateContents_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processessteps",
+      "COLUMN_NAME": "ProcessId",
+      "REFERENCED_TABLE_NAME": "processes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessStep_Process_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessesStepsIntance_Editor_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "OurLetterId",
+      "REFERENCED_TABLE_NAME": "letters",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessesStepsIntance_OurLetter_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "ProcessStepId",
+      "REFERENCED_TABLE_NAME": "processessteps",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessesStepsIntance_ProcessStep_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "ProcessInstanceId",
+      "REFERENCED_TABLE_NAME": "processinstances",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessStepIntance_ProcessInstance_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "ProcessId",
+      "REFERENCED_TABLE_NAME": "processes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessInstances_Process_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "TaskId",
+      "REFERENCED_TABLE_NAME": "tasks",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessInstances_Task_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessInstance_Case_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessInstance_Editors_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processnextsteps",
+      "COLUMN_NAME": "NextStepId",
+      "REFERENCED_TABLE_NAME": "processessteps",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessNextStep_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "processnextsteps",
+      "COLUMN_NAME": "StepId",
+      "REFERENCED_TABLE_NAME": "processessteps",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "ProcessStep_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "projects_entities",
+      "COLUMN_NAME": "ProjectId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Projects_Entities_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "projects_entities",
+      "COLUMN_NAME": "EntityId",
+      "REFERENCED_TABLE_NAME": "entities",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Projects_Entities_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "projects_inwestors",
+      "COLUMN_NAME": "ProjectId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "Projects_Inwestors_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionitems",
+      "COLUMN_NAME": "ReviewedByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionitems_reviewed_by",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionitems",
+      "COLUMN_NAME": "SubmissionId",
+      "REFERENCED_TABLE_NAME": "publicprofilesubmissions",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionitems_submission",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionlinks",
+      "COLUMN_NAME": "CreatedByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionlinks_created_by",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionlinks",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionlinks_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissions",
+      "COLUMN_NAME": "LastLinkEventByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissions_last_link_event_by",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissions",
+      "COLUMN_NAME": "LinkId",
+      "REFERENCED_TABLE_NAME": "publicprofilesubmissionlinks",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissions_link",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissions",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissions_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionsessions",
+      "COLUMN_NAME": "SubmissionId",
+      "REFERENCED_TABLE_NAME": "publicprofilesubmissions",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionsessions_submission",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "publicprofilesubmissionverifychallenges",
+      "COLUMN_NAME": "SubmissionId",
+      "REFERENCED_TABLE_NAME": "publicprofilesubmissions",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_publicprofilesubmissionverify_submission",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "risks",
+      "COLUMN_NAME": "ProjectOurId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "Projects_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "risks",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Risks_Case_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "roles",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Contract_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "roles",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Person_ifbk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "roles",
+      "COLUMN_NAME": "ProjectOurId",
+      "REFERENCED_TABLE_NAME": "projects",
+      "REFERENCED_COLUMN_NAME": "OurId",
+      "CONSTRAINT_NAME": "Project_fk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardabsences",
+      "COLUMN_NAME": "CreatedByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumabsences_creator",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardabsences",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumabsences_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardabsences",
+      "COLUMN_NAME": "TypeId",
+      "REFERENCED_TABLE_NAME": "scrumboardabsencetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumabsences_type",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardcontractstatuses",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumcontractstatuses_contract",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardcontractstatuses",
+      "COLUMN_NAME": "DiscussedByPersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumcontractstatuses_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardplanningentries",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumplanningentries_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "scrumboardvacationentitlements",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_scrumvacationentitlements_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "securities",
+      "COLUMN_NAME": "EditorId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "FK_Securities_EditorId",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "securities",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Securities_Case_FK",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "securities",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "ourcontractsdata",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Securities_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "sitevisitphotos",
+      "COLUMN_NAME": "SiteVisitId",
+      "REFERENCED_TABLE_NAME": "sitevisits",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_sitevisitphotos_visit",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "sitevisits",
+      "COLUMN_NAME": "ContractId",
+      "REFERENCED_TABLE_NAME": "contracts",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_sitevisits_contract",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "sitevisits",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "fk_sitevisits_person",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "staffmembers",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "staffmembers_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "systemroles_systemprivileges",
+      "COLUMN_NAME": "SystemPrivilegeId",
+      "REFERENCED_TABLE_NAME": "systemprivileges",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "SystemPrivilege_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "systemroles_systemprivileges",
+      "COLUMN_NAME": "SystemRoleId",
+      "REFERENCED_TABLE_NAME": "systemroles",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "SystemRole_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasks",
+      "COLUMN_NAME": "CaseId",
+      "REFERENCED_TABLE_NAME": "cases",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Tasks_Case_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasks",
+      "COLUMN_NAME": "OwnerId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Tasks_Owner_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasks_watchers",
+      "COLUMN_NAME": "PersonId",
+      "REFERENCED_TABLE_NAME": "persons",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Tasks_Watchers_ibfk_1",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasks_watchers",
+      "COLUMN_NAME": "TaskId",
+      "REFERENCED_TABLE_NAME": "tasks",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "Tasks_Watchers_ibfk_2",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasktemplates",
+      "COLUMN_NAME": "CaseTemplateId",
+      "REFERENCED_TABLE_NAME": "casetemplates",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "TasksTemplates_CaseTemplate_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasktemplatesforprocesses",
+      "COLUMN_NAME": "CaseTypeId",
+      "REFERENCED_TABLE_NAME": "casetypes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "TasksTemplatesForProcesses_CaseType_ibfk",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "tasktemplatesforprocesses",
+      "COLUMN_NAME": "ProcessId",
+      "REFERENCED_TABLE_NAME": "processes",
+      "REFERENCED_COLUMN_NAME": "Id",
+      "CONSTRAINT_NAME": "TasksTemplatesForProcesses_Process_ibfk",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "caseTriggers": [
+    {
+      "TRIGGER_NAME": "NewCaseHandler",
+      "EVENT_MANIPULATION": "INSERT",
+      "ACTION_TIMING": "BEFORE",
+      "ACTION_STATEMENT": "BEGIN\n    \n    DECLARE msg char(250);\n    DECLARE isUnique boolean;\n    DECLARE maxNumber INT;\n    DECLARE caseTypeName char(100);\n    SET isUnique = (SELECT IsUniquePerMilestone FROM CaseTypes WHERE Id=NEW.TypeId);\n    SET caseTypeName = (SELECT Name FROM CaseTypes WHERE Id=new.TypeId);\n    IF isUnique AND new.name != '' THEN\n        SET msg = CONCAT('NewCaseHandler Trigger -> uniqueCaseTypeHandlerError: \\nSprawa typu ', caseTypeName, ' nie może mieć nazwy \" ',new.name, '\"\\nZostaw pole nazwy sprawy puste i spróbuj ponownie.');\n        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;\n    END IF;\n    \n    \n\tIF NOT isUnique THEN\n\t    SET maxNumber = (SELECT MAX(Number) FROM Cases WHERE MilestoneId=new.MilestoneId AND TypeId=new.TypeId);\n        IF maxNumber IS NULL THEN\n        \tSET maxNumber = 0;\n        END IF;\n    \tSET NEW.Number = (SELECT maxNumber + 1);\n\tEND IF;\nEND"
+    },
+    {
+      "TRIGGER_NAME": "uniqueCaseTypeHandler",
+      "EVENT_MANIPULATION": "UPDATE",
+      "ACTION_TIMING": "BEFORE",
+      "ACTION_STATEMENT": "BEGIN\n    DECLARE msg char(250);\n    DECLARE isUnique boolean;\n    SET isUnique = (SELECT IsUniquePerMilestone FROM CaseTypes WHERE Id=NEW.TypeId);\n    IF isUnique AND new.name != '' THEN\n        SET msg = 'Trigger -> uniqueCaseTypeHandlerError: \\nSprawa nie może mieć nazwy.\\nZostaw pole nazwy sprawy puste i spróbuj ponownie.';\n        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;\n    END IF;\nEND"
+    }
+  ],
+  "columns": [
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "Name",
+      "COLUMN_TYPE": "varchar(200)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": "utf8mb3_polish_ci"
+    },
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "MilestoneId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "cases",
+      "COLUMN_NAME": "ParentCaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "casetypefolders",
+      "COLUMN_NAME": "MilestoneId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "Id",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "LetterId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "EditorId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "EventType",
+      "COLUMN_TYPE": "varchar(50)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": "utf8mb3_polish_ci"
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "Comment",
+      "COLUMN_TYPE": "varchar(500)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": "utf8mb3_polish_ci"
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "AdditionalMessage",
+      "COLUMN_TYPE": "varchar(1000)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": "utf8mb3_polish_ci"
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "VersionNumber",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "LastUpdated",
+      "COLUMN_TYPE": "timestamp",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "GdFilesJSON",
+      "COLUMN_TYPE": "longtext",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": "utf8mb4_bin"
+    },
+    {
+      "TABLE_NAME": "letterevents",
+      "COLUMN_NAME": "RecipientsJSON",
+      "COLUMN_TYPE": "longtext",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": "utf8mb4_bin"
+    },
+    {
+      "TABLE_NAME": "letters_cases",
+      "COLUMN_NAME": "LetterId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letters_cases",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "letters_entities",
+      "COLUMN_NAME": "LetterId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "meetingarrangements",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "milestonecontractlinks",
+      "COLUMN_NAME": "MilestoneId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "milestonedates",
+      "COLUMN_NAME": "MilestoneId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "milestonesharingstate",
+      "COLUMN_NAME": "MilestoneId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "ProcessInstanceId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "processesstepsinstances",
+      "COLUMN_NAME": "OurLetterId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "processinstances",
+      "COLUMN_NAME": "TaskId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "YES",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "risks",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "securities",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "tasks",
+      "COLUMN_NAME": "CaseId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    },
+    {
+      "TABLE_NAME": "tasks_watchers",
+      "COLUMN_NAME": "TaskId",
+      "COLUMN_TYPE": "int(11)",
+      "IS_NULLABLE": "NO",
+      "COLLATION_NAME": null
+    }
+  ]
+}

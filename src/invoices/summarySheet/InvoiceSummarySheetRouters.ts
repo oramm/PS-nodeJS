@@ -1,3 +1,4 @@
+import { salesInvoiceAccess } from '../salesInvoiceScope';
 import { Request, Response } from 'express';
 import { app } from '../../index';
 import InvoiceSummarySheetController from './InvoiceSummarySheetController';
@@ -5,6 +6,7 @@ import InvoiceSummarySheetController from './InvoiceSummarySheetController';
 /** Generowanie „Podsumowania faktur" kontraktu jako arkusza Google. */
 app.post(
     '/contractInvoiceSummarySheet',
+    salesInvoiceAccess('summary'),
     async (req: Request, res: Response, next) => {
         try {
             if (!req.session.userData)

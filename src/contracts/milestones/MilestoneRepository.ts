@@ -7,6 +7,7 @@ import ContractOur from '../ContractOur';
 import ContractOther from '../ContractOther';
 import { makeProjectScopeCondition } from '../../tools/ProjectScope';
 import { ProjectScope } from '../../types/sessionTypes';
+import { milestoneVisibilitySql } from './sharing/milestoneVisibilitySql';
 
 export type MilestonesSearchParams = {
     projectId?: string;
@@ -213,9 +214,7 @@ export default class MilestoneRepository extends BaseRepository<Milestone> {
               ])
             : '1';
         const contractCondition = searchParams.contractId
-            ? mysql.format('Milestones.ContractId = ?', [
-                  searchParams.contractId,
-              ])
+            ? milestoneVisibilitySql({ contractId: searchParams.contractId })
             : '1';
 
         const offerCondition = searchParams.offerId

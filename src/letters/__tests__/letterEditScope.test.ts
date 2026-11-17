@@ -5,6 +5,8 @@ const dbContext = (
     extra: Partial<LetterDbEditContext> = {}
 ): LetterDbEditContext => ({
     id: 6119,
+    projectId: 1,
+    isOur: true,
     number: '6119',
     description: 'Opis pisma',
     creationDate: '2026-07-30',

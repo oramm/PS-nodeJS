@@ -38,16 +38,44 @@ import { AGENT_SYSTEM_EMAIL } from './agentTokenAuth';
 /** The only destructive verb the agent can reach today. Widen here, not in the routers. */
 const DENIED_METHODS_FOR_AGENT = new Set(['DELETE']);
 
+/**
+ * SBZ-1 — agent pracownika (sesja osoby ze znakiem isPersonAgent, src/sbAccess/sbAgentKeyAuth.ts)
+ * dostaje te same reguły i dodatkowo:
+ * - nie zakłada kontraktów: założenie odpala arkusz Scrum, pokój Google Chat i kolejkę FIDman
+ *   (domyślna odpowiedź na pytanie 3 planu SBZ, do potwierdzenia przez właściciela);
+ *   edycja kontraktu (PUT /contract/:id) i rejestracja pism zostają otwarte,
+ * - nie sięga /sbAccess: agent nie zmienia własnych kluczy, poziomów ani cudzych dostępów.
+ * Ścieżki jak w Expressie: bez wielkości liter, końcowy ukośnik bez znaczenia.
+ */
+function isDeniedForPersonAgent(method: string, path: string): boolean {
+    const normalized = path.toLowerCase().replace(/\/+$/, '');
+    if (normalized === '/sbaccess' || normalized.startsWith('/sbaccess/')) return true;
+    return method === 'POST' && normalized === '/contractreact';
+}
+
 export default function denyDestructiveForAgent(
     req: Request,
     res: Response,
     next: NextFunction,
 ): void {
-    const isAgentRequest =
-        req.session?.userData?.systemEmail === AGENT_SYSTEM_EMAIL;
+    const userData = req.session?.userData;
+    const isPersonAgent = userData?.isPersonAgent === true;
+    const isAgentRequest = userData?.systemEmail === AGENT_SYSTEM_EMAIL || isPersonAgent;
     if (!isAgentRequest) return next();
 
-    if (!DENIED_METHODS_FOR_AGENT.has(req.method.toUpperCase())) return next();
+    const method = req.method.toUpperCase();
+    if (isPersonAgent && isDeniedForPersonAgent(method, req.path)) {
+        console.warn(
+            `[AgentPolicy] Request refused for a person's agent:: method: ${req.method} path: ${req.path} enviId: ${userData!.enviId}`,
+        );
+        res.status(403).send({
+            errorMessage:
+                'Agent pracownika nie zakłada kontraktów i nie zmienia dostępów SB. Zrób to w aplikacji.',
+        });
+        return;
+    }
+
+    if (!DENIED_METHODS_FOR_AGENT.has(method)) return next();
 
     console.warn(
         `[AgentPolicy] Destructive request refused for the agent identity:: ` +

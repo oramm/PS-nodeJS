@@ -1,3 +1,4 @@
+import RouteIdValidator from '../tools/RouteIdValidator';
 import { Request, Response } from 'express';
 import { app } from '../index';
 import ContractMeetingNotesController from './ContractMeetingNotesController';
@@ -23,6 +24,7 @@ app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
             Number(payload?.contractId),
             req.projectScope,
         );
+        if (payload.meetingId) await ProjectScopeGuard.assertMeetingInScope(Number(payload.meetingId), req.projectScope);
         const item = await ContractMeetingNotesController.addFromDto(
             payload,
             fallbackCreatedByPersonId,
@@ -37,12 +39,15 @@ app.post('/contractMeetingNote', async (req: Request, res: Response, next) => {
 app.put('/contractMeetingNote/:id', async (req: Request, res: Response, next) => {
     try {
         await ProjectScopeGuard.assertContractMeetingNoteInScope(
-            Number(req.params.id),
+            RouteIdValidator.positiveId(req.params.id),
             req.projectScope,
         );
+        const payload = req.parsedBody ?? req.body;
+        await ProjectScopeGuard.assertContractInScope(Number(payload.contractId ?? 0), req.projectScope);
+        if (payload.meetingId) await ProjectScopeGuard.assertMeetingInScope(Number(payload.meetingId), req.projectScope);
         const item = await ContractMeetingNotesController.editFromDto({
             ...(req.parsedBody ?? req.body),
-            id: parseInt(req.params.id, 10),
+            id: RouteIdValidator.positiveId(req.params.id),
         });
         res.send(item);
     } catch (error) {
@@ -53,11 +58,11 @@ app.put('/contractMeetingNote/:id', async (req: Request, res: Response, next) =>
 app.delete('/contractMeetingNote/:id', async (req: Request, res: Response, next) => {
     try {
         await ProjectScopeGuard.assertContractMeetingNoteInScope(
-            Number(req.params.id),
+            RouteIdValidator.positiveId(req.params.id),
             req.projectScope,
         );
         await ContractMeetingNotesController.deleteById(
-            parseInt(req.params.id, 10),
+            RouteIdValidator.positiveId(req.params.id), req.projectScope,
         );
         res.send({ status: 'ok' });
     } catch (error) {

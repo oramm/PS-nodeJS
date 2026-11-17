@@ -2,6 +2,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import ToolsDb from '../../../tools/ToolsDb';
 import StaffMemberAdminRepository from '../StaffMemberAdminRepository';
+import StaffMember from '../StaffMember';
 
 /**
  * Warunki WHERE listy okna „Personel i uprawnienia" (pack PER, checkpoint PER-3).
@@ -191,5 +192,54 @@ describe('StaffMemberAdminRepository - ROD-5: rola i e-mail logowania tylko z ko
         expect(sql).not.toContain('Persons.SystemRoleId');
         expect(sql).not.toContain('Persons.SystemEmail');
         expect(sql).not.toContain('COALESCE(PersonAccounts.System');
+        expect(sql).toContain('COALESCE(StaffMembers.CanManageSbAccess, 0) AS CanManageSbAccess');
+        querySpy.mockRestore();
     });
+});
+
+describe('StaffMemberAdminRepository - uprawnienie do zarządzania dostępem SB', () => {
+    it.each([0, 1, null])('mapuje wartość %p na boolean', (value) => {
+        const model = (repository as any).mapRowToModel({ PersonId: 7, CanManageSbAccess: value });
+        expect(model.canManageSbAccess).toBe(!!value);
+    });
+
+    it.each([true, false])('upsert zapisuje flagę SB: %p na właściwej pozycji', async (value) => {
+        const executeSpy = jest.spyOn(ToolsDb, 'executeSQL').mockResolvedValue(undefined as any);
+        const conn = { threadId: 7 } as any;
+        try {
+            await repository.upsertInDb(new StaffMember({
+                personId: 7,
+                isDriver: true,
+                isInScrum: false,
+                hasCostInvoiceAccess: true,
+                hasBankAccess: false,
+                canLogSiteVisits: true,
+                canManageSbAccess: value,
+                isActive: true,
+            }), conn);
+
+            expect(executeSpy).toHaveBeenCalledWith(
+                expect.stringContaining('HasBankAccess, CanLogSiteVisits, CanManageSbAccess)'),
+                [7, 1, 0, 1, 0, 1, value ? 1 : 0],
+                conn,
+            );
+            const sql = String(executeSpy.mock.calls[0][0]);
+            expect(sql).toContain('VALUES (?, ?, ?, ?, ?, ?, ?)');
+            expect(sql).toContain('CanManageSbAccess = VALUES(CanManageSbAccess)');
+            // U2: „Aktywny” to konto logowania - panel flag go nie zapisuje.
+            expect(sql).not.toContain('IsActive');
+        } finally {
+            executeSpy.mockRestore();
+        }
+    });
+});
+
+
+it('lista uprawnień czyta flagę FIN, a plakietka FIDmana wyklucza FIN przed MAX(Id)', async () => {
+    const query = jest.spyOn(ToolsDb, 'getQueryCallbackAsync').mockResolvedValue([]);
+    await repository.find([{}]);
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain('COALESCE(PersonAccounts.FinEnabled, 0) AS FinEnabled');
+    expect(sql).toMatch(/WHERE Kind = 'user.upsert'\s+AND COALESCE\(JSON_UNQUOTE\(JSON_EXTRACT\(Payload, '\$\._recipient'\)\), 'fidman'\) = 'fidman'\s+GROUP BY RefId/);
+    expect((repository as any).mapRowToModel({ PersonId: 7, FinEnabled: 1 })._finEnabled).toBe(true);
 });

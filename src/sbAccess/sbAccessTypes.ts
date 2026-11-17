@@ -1,0 +1,167 @@
+export const SB_ACCESS_STATUSES = [
+    'INVITED',
+    'ACTIVE',
+    'BLOCKED',
+    'REVOKED',
+] as const;
+export const SB_ACCESS_ACTIONS = [
+    'SEED',
+    'INVITE',
+    'ACTIVATE',
+    'BLOCK',
+    'UNBLOCK',
+    'REVOKE',
+    'LINK_GITHUB',
+    'SET_LEVELS',
+    'SET_KEY',
+    'GIVE_SECRET',
+    'TAKE_SECRET',
+    'ISSUE_TOKEN',
+    'REQUEST_HEALTH',
+    'SET_AGENT_KEY',
+] as const;
+export const SB_ACCESS_RESULTS = ['OK', 'PARTIAL', 'FAILED'] as const;
+
+export const SB_REPO_LEVELS = ['none', 'read', 'write'] as const;
+export const SB_PS_DB_LEVELS = ['none', 'ro', 'rw'] as const;
+export const SB_DRIVE_LEVELS = ['none', 'connector'] as const;
+export const SB_MAILBOX_PATTERN = /^[a-z0-9-]{1,40}$/;
+export const SB_MAX_MAILBOXES = 20;
+
+export interface SbAccessLevels {
+    repos: (typeof SB_REPO_LEVELS)[number];
+    psDb: (typeof SB_PS_DB_LEVELS)[number];
+    drive: (typeof SB_DRIVE_LEVELS)[number];
+    /** Kody skrzynek poczty (np. faktury, marek); bez haseł. */
+    mail: string[];
+}
+
+export type SbAccessStatus = (typeof SB_ACCESS_STATUSES)[number];
+export type SbAccessAction = (typeof SB_ACCESS_ACTIONS)[number];
+export type SbAccessResult = (typeof SB_ACCESS_RESULTS)[number];
+
+export interface SbOwnAccessView {
+    status: 'INVITED' | 'ACTIVE';
+    githubState: 'PENDING' | 'LINKED' | 'UNLINKED';
+    githubLogin: string | null;
+    driveState: 'READY' | 'MISSING';
+    isGrantedManually: boolean;
+}
+
+export interface SbAccessStateInput {
+    statusCode: SbAccessStatus;
+    githubLogin?: string | null;
+    githubInvitationId?: number | null;
+    drivePermissionId?: string | null;
+    isGrantedManually?: boolean;
+}
+
+export interface SbAccessRecord {
+    id: number;
+    personId: number;
+    statusCode: SbAccessStatus;
+    githubLogin: string | null;
+    githubInvitationId: number | null;
+    drivePermissionId: string | null;
+    isGrantedManually: boolean;
+    /** Poziomy dostępu; brak wpisu w bazie = wszystko 'none' / []. */
+    levels: SbAccessLevels;
+    /** Klucz publiczny komputera osoby (JWK RSA: kty, n, e); null = instalator go nie zarejestrował. */
+    publicKeyJwk?: SbPublicKeyJwk | null;
+    publicKeySetAt?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    name?: string;
+    surname?: string;
+    systemEmail?: string | null;
+    /** Tylko w liście rejestru: znacznik StaffMembers.CanManageSbAccess (administrator SB). */
+    canManageSb?: boolean;
+    /** Tylko w liście rejestru: odcisk klucza (RFC 7638 hex i skrót "a3f9 1c07") i nazwy haseł, bez szyfrogramów. */
+    keyThumbprint?: string | null;
+    keyFingerprint?: string | null;
+    secretsExpected?: string[];
+    secretsGiven?: string[];
+    /** Tylko w liście rejestru: podsumowanie ostatniego raportu instalatora (SBD-4a); null = nie było raportu. */
+    health?: SbHealthSummary | null;
+}
+
+/** Raport instalatora po białej liście (patrz sbHealthPolicy.ts); to jedyne, co trafia do bazy. */
+export interface SbHealthTool {
+    name: string;
+    ok: boolean;
+    /** Krótki opis błędu, tylko gdy ok = false. */
+    error?: string;
+}
+export interface SbHealthReport {
+    sbVersion: string | null;
+    installerVersion: string | null;
+    tools: SbHealthTool[];
+    events: string[];
+}
+export interface SbHealthSummary extends SbHealthReport {
+    reportedAt: Date;
+    /** ok = wszystkie narzędzia działają; fail = którekolwiek nie. */
+    state: 'ok' | 'fail';
+    /** Raport starszy niż SB_HEALTH_STALE_DAYS - na ekranie szary "brak raportu". */
+    stale: boolean;
+    /** Admin poprosił o świeży raport i instalator jeszcze go nie przysłał. */
+    refreshRequested: boolean;
+}
+
+/** Klucz publiczny RSA w postaci JWK; zapisujemy tylko pola kanoniczne (RFC 7638). */
+export interface SbPublicKeyJwk {
+    kty: 'RSA';
+    n: string;
+    e: 'AQAB';
+}
+
+/** Hasło udostępnione osobie: tylko nazwa i szyfrogram; jawnej wartości PS nie zna. */
+export interface SbSecretRecord {
+    name: string;
+    ciphertext: string;
+    sharedByPersonId: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface SbAccessEventInput {
+    personId: number;
+    actionCode: SbAccessAction;
+    requestedByPersonId?: number | null;
+    resultCode: SbAccessResult;
+    /** Uwaga lub wynik operacji; wołający nie może przekazywać tokenów ani sekretów. */
+    note?: string | null;
+}
+
+export interface SbAccessEventRecord extends SbAccessEventInput {
+    id: number;
+    requestedByPersonId: number | null;
+    note: string | null;
+    createdAt: Date;
+    requestedByName: string | null;
+    requestedBySurname: string | null;
+    actionName: string;
+}
+
+export interface SbAccessTransitionInput extends SbAccessEventInput {
+    state?: SbAccessStateInput;
+}
+
+/** Konto osoby w PS widziane przez moduł SB (adres logowania, rola systemowa). */
+export interface SbPersonAccount {
+    personId: number;
+    name: string;
+    surname: string;
+    systemEmail: string | null;
+    isActive: boolean;
+    systemRoleName: string | null;
+    /** Tylko na liście kandydatów: obecny stan w rejestrze (null albo REVOKED). */
+    statusCode?: SbAccessStatus | null;
+}
+
+/** Wynik operacji zapisany w historii i oddany klientowi. */
+export interface SbAccessOperationOutcome {
+    result: SbAccessResult;
+    note: string;
+    state: SbAccessRecord | null;
+}

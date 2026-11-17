@@ -20,6 +20,7 @@ jest.mock('../ProjectEntitiesController');
 // FidmanSync celowo NIEZAMOCKOWANY — o jego zapytanie w tym pliku chodzi.
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../../contracts/milestones/sharing/testing/unsharedLifecycleFixture';
 import ProjectEntitiesController from '../ProjectEntitiesController';
 import ProjectsController from '../ProjectsController';
 
@@ -37,6 +38,7 @@ describe('ProjectsController.edit() — WYK-1: zakres projektu ze znacznika przy
 
     beforeEach(() => {
         jest.clearAllMocks();
+        installUnsharedLifecyclePool(ToolsDb);
         outboxInserts = [];
         process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS = '3,4';
 
@@ -48,6 +50,7 @@ describe('ProjectsController.edit() — WYK-1: zakres projektu ze znacznika przy
             // Atrapa tabeli Contracts dla zapytania bramkującego z projectHasSyncedContract().
             query: jest.fn(async (sql: any, params: any) => {
                 const text = String(sql);
+                if (text.includes('SELECT * FROM Projects')) return [[{ Id: 5, OurId: 'PRJ-001', Name: 'Projekt' }], undefined];
                 const [projectOurId, ...typeIds] = params as any[];
                 const pytaOZnacznik = /FidmanSyncEnabled\s*=\s*1/.test(text);
                 const rows = contractsTable.filter(

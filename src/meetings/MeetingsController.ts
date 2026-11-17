@@ -1,3 +1,4 @@
+import ConsolidationGuard from '../contracts/milestones/consolidation/ConsolidationWriteGuardController';
 import MeetingRepository, { MeetingSearchParams } from './MeetingRepository';
 import Meeting from './Meeting';
 import MeetingValidator from './MeetingValidator';
@@ -78,6 +79,6 @@ export default class MeetingsController extends BaseController<
         }
         const instance = this.getInstance();
         const meeting = new Meeting({ id, name: '', description: '' });
-        await instance.repository.deleteFromDb(meeting);
+        await ConsolidationGuard.meetingDestruction(id, () => instance.repository.deleteFromDb(meeting));
     }
 }

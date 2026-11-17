@@ -25,6 +25,7 @@ import {
     buildEntityUpsert,
     buildProjectUpsert,
     enqueueFidmanContractPush,
+    enqueueFidmanProjectPush,
     deliverOutboxRow,
     drainFidmanOutbox,
     entityHasSyncedContract,
@@ -125,6 +126,48 @@ describe('isFidmanSyncEligible (typ + znacznik)', () => {
 });
 
 describe('buildContractPayload (contract.upsert)', () => {
+    it.each([
+        ['1_project-folder_123', '1_project-folder_123'],
+        [null, null],
+        [undefined, null],
+        ['', null],
+        ['   ', null],
+        [' \t1_project-folder_123\r\n', '1_project-folder_123'],
+    ])(
+        'oba buildery normalizują gdFolderId=%s do %s',
+        (gdFolderId, expected) => {
+            const project = { id: 88, ourId: 'P1', name: 'Projekt', gdFolderId };
+            const standalone = buildProjectUpsert(project as any);
+            const contract = buildContractPayload(baseContract({ _project: project }) as any);
+            expect(standalone.kind).toBe('project.upsert');
+            expect(contract.kind).toBe('contract.upsert');
+            for (const payload of [standalone.payload, (contract.payload as any).project]) {
+                expect(JSON.parse(JSON.stringify(payload))).toHaveProperty('gdFolderId', expected);
+            }
+        }
+    );
+
+    it('oba buildery niosą dane dofinansowania i pomijają wartości puste', () => {
+        for (const fields of [
+            { fundingAgreementNumber: 'UD/1', program: 'FEnIKS' },
+            { fundingAgreementNumber: '', program: '  ' },
+            { fundingAgreementNumber: null, program: null },
+            {},
+        ]) {
+            const project = { id: 88, ourId: 'P1', name: 'Projekt', ...fields };
+            const payloads = [
+                buildProjectUpsert(project as any).payload,
+                (buildContractPayload(baseContract({ _project: project }) as any).payload as any).project,
+            ];
+            for (const payload of payloads) {
+                if (fields.program === 'FEnIKS') expect(payload).toMatchObject(fields);
+                else {
+                    expect(payload).not.toHaveProperty('fundingAgreementNumber');
+                    expect(payload).not.toHaveProperty('program');
+                }
+            }
+        }
+    });
     it('builds contract + inline project ref + entities-with-roles', () => {
         const env = buildContractPayload(baseContract() as any);
         expect(env.kind).toBe('contract.upsert');
@@ -143,6 +186,7 @@ describe('buildContractPayload (contract.upsert)', () => {
             legacyProjectId: 88,
             ourId: 'PRJ-001',
             name: 'Projekt',
+            gdFolderId: null,
         });
         expect(p.entities).toEqual([
             {
@@ -210,20 +254,26 @@ describe('buildEntityUpsert / buildProjectUpsert', () => {
             ourId: 'PRJ-9',
             name: 'Nowy',
             comment: 'komentarz',
+            gdFolderId: null,
         });
     });
 });
 
 describe('enqueueFidmanContractPush (same tx conn)', () => {
     it('inserts a PENDING row via the provided connection and returns insertId', async () => {
+        (ToolsDb.sqlToString as any).mockImplementation((value: any) => value);
         const conn: any = {
+            query: jest.fn<any>().mockImplementation(async (sql: string) => [
+                sql.includes('FROM Projects p') ? [{ Id: 88, OurId: 'PRJ-001', Name: 'Z bazy', FundingAgreementNumber: 'UD/1', Program: 'FEnIKS' }] : [],
+                undefined,
+            ]),
             execute: jest
                 .fn<any>()
                 .mockResolvedValue([{ insertId: 999 }, undefined]),
         };
-        const id = await enqueueFidmanContractPush(baseContract() as any, conn);
+        const id = await enqueueFidmanContractPush(baseContract({ _project: { id: 999, ourId: 'STARY', name: 'Nieświeży projekt' } }) as any, conn);
         expect(id).toBe(999);
-        expect(conn.execute).toHaveBeenCalledTimes(1);
+        expect(conn.execute).toHaveBeenCalledTimes(2);
         const [sql, params] = conn.execute.mock.calls[0];
         expect(sql).toContain('INSERT INTO FidmanSyncOutbox');
         expect(sql).toContain("'PENDING'");
@@ -232,6 +282,21 @@ describe('enqueueFidmanContractPush (same tx conn)', () => {
         const parsed = JSON.parse(params[2]);
         expect(parsed.entities[0].taxNumber).toBe('7471917575');
         expect(parsed.project.ourId).toBe('PRJ-001');
+        expect(parsed.project).toMatchObject({ name: 'Z bazy', fundingAgreementNumber: 'UD/1', program: 'FEnIKS' });
+        expect(conn.query.mock.calls[0][1]).toEqual([4567]);
+    });
+});
+
+describe('SPR-P project.upsert ze starego formularza', () => {
+    it('wysyła zachowane pola z bazy na połączeniu zapisu', async () => {
+        (ToolsDb.sqlToString as any).mockImplementation((value: any) => value);
+        const conn: any = {
+            query: jest.fn<any>().mockResolvedValue([[{ Id: 5, OurId: 'P1', Name: 'Z bazy', FundingAgreementNumber: 'UD/4', Program: 'FEnIKS' }]]),
+            execute: jest.fn<any>().mockResolvedValue([{ insertId: 900 }]),
+        };
+        await enqueueFidmanProjectPush({ id: 5, ourId: 'P1' } as any, conn);
+        expect(conn.query.mock.calls[0][1]).toEqual([5]);
+        expect(JSON.parse(conn.execute.mock.calls[0][1][2])).toMatchObject({ fundingAgreementNumber: 'UD/4', program: 'FEnIKS' });
     });
 });
 

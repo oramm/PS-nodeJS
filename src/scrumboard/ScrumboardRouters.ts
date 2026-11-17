@@ -10,6 +10,7 @@ import ScrumboardSummaryController from './summary/ScrumboardSummaryController';
 import ScrumboardReportController from './report/ScrumboardReportController';
 import ScrumboardVacationsController from './vacations/ScrumboardVacationsController';
 import TasksController from '../contracts/milestones/cases/tasks/TasksController';
+import ProjectScopeGuard from '../persons/projectAssignments/ProjectScopeGuard';
 import { getScrumboardPersons } from './ScrumboardPersons';
 
 /** Wymaga aktywnej sesji (routery domenowe nie mają guardów — tu dodajemy jawnie). */
@@ -107,6 +108,7 @@ app.put(
         try {
             const taskId = ScrumboardValidator.parseId(req.params.id, 'taskId');
             const payload = ScrumboardValidator.parseTaskHours(req.parsedBody);
+            await ProjectScopeGuard.assertTaskInScope(taskId, req.projectScope);
             const result = await ScrumboardTaskHoursController.updateHours(
                 taskId,
                 payload
@@ -149,8 +151,13 @@ app.put(
     requireSession,
     async (req: Request, res: Response, next) => {
         try {
+            const taskId = ScrumboardValidator.parseId(req.params.id, 'taskId');
             ScrumboardValidator.parseTaskStatus(req.parsedBody);
-            const task = await TasksController.edit(req.parsedBody, ['status']);
+            await ProjectScopeGuard.assertTaskInScope(taskId, req.projectScope);
+            const task = await TasksController.edit(
+                { ...req.parsedBody, id: taskId },
+                ['status']
+            );
             ScrumboardEvents.broadcast('task-status-changed', {
                 taskId: task.id,
                 status: task.status,

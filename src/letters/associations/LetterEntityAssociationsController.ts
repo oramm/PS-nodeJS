@@ -1,4 +1,5 @@
 import BaseController from '../../controllers/BaseController';
+import { ProjectScope } from '../../types/sessionTypes';
 import LetterEntity from './LetterEntity';
 import LetterEntityRepository, {
     LetterEntitySearchParams as RepoSearchParams,
@@ -8,6 +9,8 @@ export type LetterEntitySearchParams = {
     projectId?: string;
     contractId?: number;
     milestoneId?: number;
+    letterIds?: number[];
+    scope?: ProjectScope;
 };
 
 /**
@@ -69,6 +72,8 @@ export default class LetterEntityAssociationsController extends BaseController<
             projectId: initParamObject?.projectId,
             contractId: initParamObject?.contractId,
             milestoneId: initParamObject?.milestoneId,
+            letterIds: initParamObject?.letterIds,
+            scope: initParamObject?.scope,
         };
 
         return await instance.repository.find(repoSearchParams);

@@ -1,3 +1,4 @@
+import { milestoneVisibilitySql } from '../../sharing/milestoneVisibilitySql';
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../../../repositories/BaseRepository';
 import ToolsDb from '../../../../tools/ToolsDb';
@@ -183,42 +184,17 @@ export default class MilestoneDateRepository extends BaseRepository<MilestoneDat
             );
         }
 
-        if (contractId) {
-            conditions.push(
-                mysql.format('Milestones.ContractId = ?', [contractId])
-            );
-        }
-
-        if (adminId) {
-            conditions.push(
-                mysql.format(
-                    'OurContractsData.AdminId = ? OR RelatedContractAdmins.Id = ?',
-                    [adminId, adminId]
-                )
-            );
-        }
+        conditions.push(milestoneVisibilitySql({
+            contractId,
+            statuses: searchParams.contractStatuses,
+            typeId: searchParams._contractType?.id,
+            adminId,
+        }));
 
         if (searchParams.offerId) {
             conditions.push(
                 mysql.format('Milestones.OfferId = ?', [searchParams.offerId])
             );
-        }
-
-        if (searchParams._contractType?.id) {
-            conditions.push(
-                mysql.format('ContractTypes.Id = ?', [
-                    searchParams._contractType.id,
-                ])
-            );
-        }
-
-        if (searchParams.contractStatuses?.length) {
-            const statusCondition = ToolsDb.makeOrConditionFromValueOrArray(
-                searchParams.contractStatuses,
-                'MainContracts',
-                'Status'
-            );
-            conditions.push(statusCondition);
         }
 
         if (searchParams.milestoneStatuses?.length) {

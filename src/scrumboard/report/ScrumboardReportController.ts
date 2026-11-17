@@ -5,6 +5,8 @@ import Setup from '../../setup/Setup';
 import ToolsSheets from '../../tools/ToolsSheets';
 import ToolsDate from '../../tools/ToolsDate';
 import ContractsWithChildrenController from '../../contracts/ContractsWithChildrenController';
+import type { ContractsWithChildren } from '../../contracts/ContractTypes';
+import type { ContractData } from '../../types/types';
 import ScrumboardContractStatus from '../contractStatuses/ScrumboardContractStatus';
 import ScrumboardContractStatusRepository from '../contractStatuses/ScrumboardContractStatusRepository';
 import ScrumboardContractStatusesController from '../contractStatuses/ScrumboardContractStatusesController';
@@ -78,14 +80,8 @@ export default class ScrumboardReportController extends BaseController<
         const discussedByContractId = new Map(
             statuses.map((s) => [s.contractId, s.discussed])
         );
-        const enviContracts = contractsWithChildren.filter(
-            (cwc) =>
-                (cwc.contract as any).ourId &&
-                cwc.contract.status === Setup.ContractStatus.IN_PROGRESS
-        );
-
         const task = ScrumboardReportController.buildTaskMatrix(
-            enviContracts,
+            contractsWithChildren,
             discussedByContractId
         );
         const summaryValues =
@@ -145,13 +141,46 @@ export default class ScrumboardReportController extends BaseController<
 
     /** Tabela zadań (lewa strona). Zwraca wartości, indeksy wierszy-nagłówków i liczbę kolumn. */
     private static buildTaskMatrix(
-        enviContracts: any[],
+        visibleContracts: ContractsWithChildren[],
         discussedByContractId: Map<number, boolean>
     ): { values: any[][]; headerRowIndices: number[]; colCount: number } {
         const rows: any[][] = [];
         const headerRowIndices: number[] = [];
 
-        for (const cwc of enviContracts) {
+        // D-MC-11: tree occurrences grant visibility, never accounting ownership.
+        const accountingContracts = new Map<number, {
+            contract: ContractData;
+            milestonesWithCases: ContractsWithChildren['milestonesWithCases'];
+        }>();
+        const seenMilestones = new Set<number>();
+        for (const cwc of visibleContracts) {
+            if ('ourId' in cwc.contract && cwc.contract.ourId &&
+                cwc.contract.status === Setup.ContractStatus.IN_PROGRESS)
+                accountingContracts.set(cwc.id, { ...cwc, milestonesWithCases: [] });
+        }
+        for (const cwc of visibleContracts) {
+            for (const mwc of cwc.milestonesWithCases) {
+                const source = mwc.milestone._contract;
+                if (!source || !('ourId' in source) || !source.ourId) continue;
+                // Keep the existing in-progress scope for ordinary work. A linked
+                // active occurrence also exposes shared work of an inactive owner.
+                if (source.status !== Setup.ContractStatus.IN_PROGRESS &&
+                    (source.id === cwc.contract.id ||
+                        ![Setup.ContractStatus.IN_PROGRESS, Setup.ContractStatus.NOT_STARTED]
+                            .includes(cwc.contract.status!))) continue;
+                const id = mwc.milestone.id!;
+                if (seenMilestones.has(id)) continue;
+                seenMilestones.add(id);
+                let group = accountingContracts.get(source.id!);
+                if (!group) {
+                    group = { contract: source, milestonesWithCases: [] };
+                    accountingContracts.set(source.id!, group);
+                }
+                group.milestonesWithCases.push(mwc);
+            }
+        }
+        const seenTasks = new Set<number>();
+        for (const cwc of accountingContracts.values()) {
             const contract: any = cwc.contract;
             const coordinator = contract._manager
                 ? `${contract._manager.name ?? ''} ${
@@ -188,13 +217,15 @@ export default class ScrumboardReportController extends BaseController<
                     ScrumboardReportController.pushCaseTaskRows(
                         rows,
                         milestoneLabel,
-                        cwt
+                        cwt,
+                        seenTasks
                     );
                     for (const subCwt of cwt.subCasesWithTasks ?? [])
                         ScrumboardReportController.pushCaseTaskRows(
                             rows,
                             milestoneLabel,
-                            subCwt
+                            subCwt,
+                            seenTasks
                         );
                 }
             }
@@ -378,7 +409,8 @@ export default class ScrumboardReportController extends BaseController<
     private static pushCaseTaskRows(
         rows: any[][],
         milestoneName: string,
-        caseWithTasks: any
+        caseWithTasks: any,
+        seenTasks: Set<number>
     ): void {
         // Nazwa sprawy jak w drzewie: typ + numer + własna nazwa (często sama .name jest pusta)
         const c: any = caseWithTasks.caseItem;
@@ -388,7 +420,8 @@ export default class ScrumboardReportController extends BaseController<
             .trim();
         for (const task of caseWithTasks.tasks ?? []) {
             // te same statusy co w dawnym scrumboardzie (pomijamy Backlog)
-            if (task.status === Setup.TaskStatus.BACKLOG) continue;
+            if (task.status === Setup.TaskStatus.BACKLOG || seenTasks.has(task.id)) continue;
+            seenTasks.add(task.id);
             const owner = task._owner
                 ? `${task._owner.name ?? ''} ${task._owner.surname ?? ''}`.trim()
                 : '';

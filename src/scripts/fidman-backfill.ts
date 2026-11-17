@@ -27,6 +27,7 @@ loadEnv();
 import Setup from '../setup/Setup';
 import ToolsDb from '../tools/ToolsDb';
 import ContractsController from '../contracts/ContractsController';
+import ProjectRepository from '../projects/ProjectRepository';
 import {
     buildContractPayload,
     enqueueFidmanContractPush,
@@ -160,7 +161,7 @@ async function main() {
     if (sample) {
         console.log(
             `[FidmanBackfill] sample payload (contract ${sample.id}):`,
-            JSON.stringify(buildContractPayload(sample))
+            JSON.stringify(buildContractPayload(sample, await new ProjectRepository().findForContract(sample.id!)))
         );
     }
 }

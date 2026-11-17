@@ -1,3 +1,4 @@
+import RouteIdValidator from '../tools/RouteIdValidator';
 import { Request, Response } from 'express';
 import ContractsController, {
     ContractCreationOptions,
@@ -5,6 +6,7 @@ import ContractsController, {
 import ContractTemplatesTreeController from './contractTemplatesTree/ContractTemplatesTreeController';
 import { parseOptionalFoldersSelection } from './contractFolders/optionalContractFolders';
 import { app } from '../index';
+import resolveRouteLetterId from '../letters/resolveRouteLetterId';
 import ContractOur from './ContractOur';
 import ContractOther from './ContractOther';
 import ScrumSheet from '../ScrumSheet/ScrumSheet';
@@ -15,6 +17,12 @@ import crypto from 'crypto'; // u góry pliku
 import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 import ToolsMail from '../tools/ToolsMail';
+import ChatSpacesController from './chatSpaces/ChatSpacesController';
+import ContractSharedCreationController from './milestones/sharing/ContractSharedCreationController';
+import SharingError from './milestones/sharing/MilestoneSharingError';
+import MailboxController from '../mailboxes/MailboxController';
+import { parseContractSelectedPersonIds } from './contractAssignees';
+import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
 
 function getAsyncTaskErrorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -74,17 +82,28 @@ app.post(
 
 app.post('/contractReact', async (req: Request, res: Response, next) => {
     try {
+        const chatSpaceSelection = ChatSpacesController.parseSelection(req.parsedBody._chatSpaceSelection);
+        const requestedPersonIds = req.body?._selectedPersonIds ?? req.parsedBody._selectedPersonIds;
+        const rawSelectedPersonIds = requestedPersonIds
+            ?? (chatSpaceSelection.mode === 'new' ? chatSpaceSelection.personIds : undefined);
+        // Na etapie tworzenia wybór obsługuje również zaproszenia do Chatu.
+        const selectedPersonIds = rawSelectedPersonIds === undefined
+            ? undefined : parseContractSelectedPersonIds(rawSelectedPersonIds);
+        const sharedDto = requestedPersonIds === undefined
+            ? req.parsedBody : { ...req.parsedBody, _selectedPersonIds: requestedPersonIds };
+        const sharedCreation = await ContractSharedCreationController.prepare(
+            sharedDto, req.session?.userData, req.projectScope, selectedPersonIds);
         console.log('req.session', req.session);
 
         // Tworzenie odpowiedniej instancji Contract
-        const contract = await ContractsController.createContractFromDto(
+        const contract = sharedCreation?.contract || await ContractsController.createContractFromDto(
             req.parsedBody,
             true,
         );
 
         // Wybór z drzewa struktury - czytany z DTO wprost, bo jest jednorazową
         // instrukcją tworzenia, a nie stanem umowy (nie przechodzi przez model)
-        const creationOptions: ContractCreationOptions = {
+        const creationOptions: ContractCreationOptions = sharedCreation ? {} : {
             milestonesSelection: ContractTemplatesTreeController.parseSelection(
                 req.parsedBody._milestonesSelection,
             ),
@@ -92,6 +111,12 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                 req.parsedBody._contractFoldersSelection,
             ),
         };
+
+        // Pokój Google Chat (CHT-3): jednorazowa instrukcja jak drzewo struktury, obsługiwana
+        // PO commicie kontraktu. Brak pola = none.
+        creationOptions.selectedPersonIds = selectedPersonIds;
+        const mailboxSelection = MailboxController.parseSelection(req.parsedBody._mailboxSelection);
+        await MailboxController.validateContractSelection(mailboxSelection, contract.projectOurId!, (contract as ContractOur).ourId);
 
         // Inicjalizacja task tracking
         const taskId = crypto.randomUUID();
@@ -109,20 +134,52 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         setImmediate(async () => {
             try {
                 // REFAKTORING: Użycie ContractsController.addWithAuth() zamiast ToolsGapi.gapiReguestHandler
-                await ContractsController.addWithAuth(
-                    contract,
-                    taskId,
-                    creationOptions,
-                );
+                const sharedResult = sharedCreation
+                    ? await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                        ContractSharedCreationController.addWithAuth(sharedCreation, taskId))
+                    : undefined;
+                if (!sharedCreation) await ContractsController.addWithAuth(contract, taskId, creationOptions);
+                Object.assign(contract, await MailboxController.afterContract(contract.id!, mailboxSelection, req.session?.userData?.enviId ?? null));
+                // Chat nigdy nie wywraca tworzenia kontraktu: błąd = log + zgłoszenie,
+                // kontrakt zostaje (provision... nie rzuca).
+                if (chatSpaceSelection.mode !== 'none' && contract.id) {
+                    const chat =
+                        await ChatSpacesController.provisionAfterContractCreation(
+                            contract.id,
+                            chatSpaceSelection,
+                            req.session?.userData?.enviId,
+                        );
+                    if (chat.chatSpaceId) contract.chatSpaceId = chat.chatSpaceId;
+                    if (chat.error) {
+                        console.error(
+                            'Błąd pokoju Google Chat przy tworzeniu kontraktu (kontrakt zostaje):',
+                            chat.error,
+                        );
+                        try {
+                            await ToolsMail.sendServerErrorReport(
+                                chat.error,
+                                req,
+                            );
+                        } catch (mailError) {
+                            console.error(
+                                'Nie udało się wysłać zgłoszenia o błędzie Chatu:',
+                                mailError,
+                            );
+                        }
+                    }
+                }
                 TaskStore.complete(
                     taskId,
                     contract,
-                    'Kontrakt pomyślnie zarejestrowany',
+                    sharedCreation ? (sharedResult?.shortcutStatus === 'READY'
+                        ? 'Kontrakt zapisany. Skrót i folder wspólnych dokumentów zweryfikowane przez serwer; uprawnienia użytkowników Google są odrębne.'
+                        : 'Kontrakt zapisany. Gotowość wspólnych dokumentów nie jest potwierdzona; sprawdź widok Przypięcia.')
+                        : 'Kontrakt pomyślnie zarejestrowany',
                 );
             } catch (err) {
                 console.error('Błąd podczas tworzenia kontraktu:', err);
                 try {
-                    await ToolsMail.sendServerErrorReport(err, req);
+                    if (!(err instanceof SharingError)) await ToolsMail.sendServerErrorReport(err, req);
                 } catch (mailError) {
                     console.error(
                         'Nie udało się wysłać maila o błędzie kontraktu:',
@@ -134,6 +191,11 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             }
         });
     } catch (error) {
+        if (error instanceof SharingError) {
+            res.status(error.status).send({ error: { code: error.code, message: error.message,
+                operationId: null, retryable: error.status === 503 } });
+            return;
+        }
         next(error);
     }
 });
@@ -174,7 +236,7 @@ async function simulateTaskProgress(
 
 app.put('/contract/:id/move', async (req: Request, res: Response, next) => {
     try {
-        const contractId = parseInt(req.params.id);
+        const contractId = RouteIdValidator.positiveId(req.params.id);
         const { newProjectOurId } = req.parsedBody;
         if (!contractId || !newProjectOurId)
             throw new Error(
@@ -190,13 +252,30 @@ app.put('/contract/:id/move', async (req: Request, res: Response, next) => {
     }
 });
 
+app.get('/contract/:id/selectedPersons', async (req: Request, res: Response, next) => {
+    try {
+        const id = resolveRouteLetterId(req.params.id, undefined, 'kontraktu');
+        const contracts = await ContractsController.find([{ id }], req.projectScope);
+        if (!contracts.length) throw Object.assign(new Error('Nie znaleziono kontraktu.'), { status: 404 });
+        res.send(await ContractSelectedPersonsRepository.find(id));
+    } catch (error) { next(error); }
+});
+
 app.put('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
             req.parsedBody._fieldsToUpdate;
-        const itemFromClient = req.parsedBody;
-        if (!itemFromClient || !itemFromClient.id)
-            throw new Error(`Próba edycji kontraktu bez Id`);
+        const itemFromClient = { ...req.parsedBody };
+        const rawSelectedPersonIds = req.body?._selectedPersonIds;
+        const selectedPersonIds = rawSelectedPersonIds === undefined
+            ? undefined : parseContractSelectedPersonIds(rawSelectedPersonIds);
+        // SBZ-3: edytowany był kontrakt o id z CIAŁA, nie z adresu. Adres rozstrzyga,
+        // niezgodne id w ciele to 400 — ta sama reguła co dla pism.
+        itemFromClient.id = resolveRouteLetterId(
+            req.params.id,
+            itemFromClient.id,
+            'kontraktu',
+        );
 
         // Stwórz instancję odpowiedniej klasy
         const contractInstance =
@@ -209,6 +288,7 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
         const updatedContract = await ContractsController.editWithAuth(
             contractInstance,
             _fieldsToUpdate,
+            selectedPersonIds,
         );
 
         res.send(updatedContract);
@@ -220,7 +300,7 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
 app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const item = await ContractsController.createContractFromDto(
-            req.body,
+            { ...req.body, id: RouteIdValidator.positiveId(req.params.id) },
             false,
         );
 

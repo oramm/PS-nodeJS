@@ -1,0 +1,359 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { readProgramFileVersion, registerSigningRoutes } from '../SigningRoutes';
+import { SigningJobError } from '../SigningJobError';
+
+type Handler = (req: any, res: any, next: any) => Promise<void> | void;
+
+/** Zbiera trasy zarejestrowane na "aplikacji"; ostatni handler trasy to wlasciwa logika. */
+function collect(controller: any, options?: { programExePath?: string }) {
+    const routes: Record<string, Handler[]> = {};
+    const app = {
+        get: (path: string, ...handlers: Handler[]) => void (routes[`GET ${path}`] = handlers),
+        post: (path: string, ...handlers: Handler[]) => void (routes[`POST ${path}`] = handlers),
+    };
+    registerSigningRoutes(app, controller, options);
+    return routes;
+}
+
+function makeRes(locals: any = {}) {
+    const res: any = { locals, headers: {} as Record<string, string>, body: undefined };
+    res.setHeader = (k: string, v: string) => void (res.headers[k] = v);
+    res.send = (b: any) => {
+        res.body = b;
+        return res;
+    };
+    return res;
+}
+
+async function call(handlers: Handler[], req: any, res: any) {
+    const next = jest.fn();
+    await handlers[handlers.length - 1](req, res, next);
+    return next;
+}
+
+const PERSON = { enviId: 125, userName: 'Marek', systemRoleName: 'ENVI_EMPLOYEE' };
+
+/** Minimalny bufor z VS_FIXEDFILEINFO o wersji a.b.c.d (MS = a.b, LS = c.d). */
+function versionedExe(a: number, b: number, c: number, d: number): Buffer {
+    const buf = Buffer.alloc(64, 0x20);
+    const at = 20;
+    buf.writeUInt32LE(0xfeef04bd, at);
+    buf.writeUInt32LE(0x00010000, at + 4);
+    buf.writeUInt32LE(((a << 16) | b) >>> 0, at + 8);
+    buf.writeUInt32LE(((c << 16) | d) >>> 0, at + 12);
+    return buf;
+}
+
+describe('SigningRoutes', () => {
+    let controller: any;
+    let routes: Record<string, Handler[]>;
+
+    beforeEach(() => {
+        controller = {
+            listSignableFiles: jest.fn().mockResolvedValue({ files: [] }),
+            createJob: jest.fn().mockResolvedValue({ jobId: 1 }),
+            getJobStatus: jest.fn().mockResolvedValue({ status: 'created' }),
+            getPreview: jest.fn().mockResolvedValue({ bytes: Buffer.from('%PDF-x'), fileName: 'Żółć.pdf' }),
+            cancelOwnJob: jest.fn().mockResolvedValue({ status: 'cancelled' }),
+            uploadSigned: jest.fn().mockResolvedValue({ signedName: 'x' }),
+            listLetterSignatures: jest.fn().mockResolvedValue({ letterId: 7, signatures: [] }),
+            summarizeLetterSignatures: jest.fn().mockResolvedValue({ summary: {} }),
+            getJobForProgram: jest.fn().mockResolvedValue({ status: 'created' }),
+            submitCertificate: jest.fn().mockResolvedValue({ files: [] }),
+            submitSignatures: jest.fn().mockResolvedValue({ status: 'done' }),
+            cancelByProgram: jest.fn().mockResolvedValue({ status: 'cancelled' }),
+            listOfferSignableFiles: jest.fn().mockResolvedValue({ offerId: 55, files: [] }),
+            locateOfferGraphicPlace: jest.fn().mockResolvedValue({ pages: [], candidates: [] }),
+            renderOfferFilePage: jest.fn().mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+            uploadSignedToOffer: jest.fn().mockResolvedValue({ signedName: 'y' }),
+            listOfferSignatures: jest.fn().mockResolvedValue({ offerId: 55, signatures: [] }),
+            listContractSignableFiles: jest.fn().mockResolvedValue({ contractId: 55, files: [] }),
+            locateContractGraphicPlace: jest.fn().mockResolvedValue({ pages: [], candidates: [] }),
+            renderContractFilePage: jest.fn().mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+            uploadSignedToContract: jest.fn().mockResolvedValue({ signedName: 'y' }),
+            listContractSignatures: jest.fn().mockResolvedValue({ contractId: 55, signatures: [] }),
+        };
+        routes = collect(controller);
+    });
+
+    const SESSION_ROUTES = [
+        'GET /letter/:id/signableFiles',
+        'POST /signingJob',
+        'GET /signingJob/:id',
+        'GET /signingJob/:id/file/:index/preview',
+        'POST /signingJob/:id/cancel',
+        'POST /letter/:id/signedPdf',
+        'GET /letter/:id/signatures',
+        'POST /letters/signatureSummary',
+        'GET /offer/:id/signableFiles',
+        'GET /offer/:id/signableFile/:gdFileId/graphicPlace',
+        'GET /offer/:id/signableFile/:gdFileId/page/:page',
+        'POST /offer/:id/signedPdf',
+        'GET /offer/:id/signatures',
+        'GET /contract/:id/signableFiles',
+        'GET /contract/:id/signableFile/:gdFileId/graphicPlace',
+        'GET /contract/:id/signableFile/:gdFileId/page/:page',
+        'POST /contract/:id/signedPdf',
+        'GET /contract/:id/signatures',
+        'GET /signing/program/download',
+        'GET /signing/program/info',
+    ];
+    const PROGRAM_ROUTES = [
+        'GET /signing/jobs/:token',
+        'POST /signing/jobs/:token/certificate',
+        'POST /signing/jobs/:token/signatures',
+        'POST /signing/jobs/:token/cancel',
+    ];
+
+    it('rejestruje dokladnie komplet tras sesyjnych (w tym po 5 tras oferty i umowy) i cztery trasy programu', () => {
+        expect(Object.keys(routes).sort()).toEqual([...SESSION_ROUTES, ...PROGRAM_ROUTES].sort());
+    });
+
+    it.each(SESSION_ROUTES)('%s: bez sesji 401, z tozsamoscia maszynowa (agent) 403, kontroler nietkniety', async (key) => {
+        const params = { id: '5', index: '0' };
+
+        const anonymous = await call(routes[key], { params, body: {}, session: {} }, makeRes());
+        const machine = await call(
+            routes[key],
+            { params, body: {}, session: { userData: PERSON } },
+            makeRes({ authenticatedMachine: true })
+        );
+
+        expect(anonymous.mock.calls[0][0]).toBeInstanceOf(SigningJobError);
+        expect(anonymous.mock.calls[0][0].status).toBe(401);
+        expect(machine.mock.calls[0][0].status).toBe(403);
+        for (const fn of Object.values(controller) as jest.Mock[]) expect(fn).not.toHaveBeenCalled();
+    });
+
+    it.each(['ENVI_COOPERATOR', 'EXTERNAL_USER', 'CONTRACT_WORKER', 'CLIENT', undefined])(
+        'rola %s nie dochodzi do zadnej trasy sesyjnej (podpisuja tylko pracownicy ENVI)',
+        async (systemRoleName) => {
+            for (const key of SESSION_ROUTES) {
+                const handlers = routes[key];
+                const next = jest.fn();
+                // Trasy z plikiem maja straznika przed multerem: wolamy pierwszy handler.
+                await handlers[0](
+                    { params: { id: '7', index: '0', gdFileId: 'abcdefghijklmnopqrstuvwxyz', page: '1' }, body: {}, session: { userData: { ...PERSON, systemRoleName } } },
+                    makeRes(),
+                    next
+                );
+                expect(next.mock.calls[0]?.[0]).toMatchObject({ status: 403 });
+            }
+            for (const fn of Object.values(controller)) expect(fn).not.toHaveBeenCalled();
+        }
+    );
+
+    it('trasa sesyjna przekazuje osobe z sesji, zakres projektow i id z adresu', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const res = makeRes();
+
+        await call(routes['POST /signingJob'], { body: { letterId: 7 }, session: { userData: PERSON }, projectScope: scope }, res);
+        await call(routes['GET /letter/:id/signableFiles'], { params: { id: '7' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+
+        expect(controller.createJob).toHaveBeenCalledWith(125, { letterId: 7 }, scope);
+        expect(controller.listSignableFiles).toHaveBeenCalledWith(7, scope);
+    });
+
+    it('trasy oferty dostaja osobe, zakres, id, numer strony i gdFileId z adresu', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const gdFileId = 'OFFER_FORM_ID_0001';
+
+        await call(routes['GET /offer/:id/signableFiles'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /offer/:id/signableFile/:gdFileId/graphicPlace'], { params: { id: '55', gdFileId }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /offer/:id/signatures'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+
+        expect(controller.listOfferSignableFiles).toHaveBeenCalledWith(55, scope);
+        expect(controller.locateOfferGraphicPlace).toHaveBeenCalledWith(55, gdFileId, scope);
+        expect(controller.listOfferSignatures).toHaveBeenCalledWith(55, scope);
+    });
+
+    it('obraz strony oferty to PNG (Content-Type image/png) bez cache, z numerem strony z adresu', async () => {
+        const res = makeRes();
+
+        await call(
+            routes['GET /offer/:id/signableFile/:gdFileId/page/:page'],
+            { params: { id: '55', gdFileId: 'OFFER_FORM_ID_0001', page: '2' }, session: { userData: PERSON } },
+            res
+        );
+
+        expect(controller.renderOfferFilePage).toHaveBeenCalledWith(55, 'OFFER_FORM_ID_0001', 2, undefined);
+        expect(res.headers['Content-Type']).toBe('image/png');
+        expect(res.headers['Cache-Control']).toBe('no-store');
+        expect(res.body.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
+    it('"Wgraj podpisany" dla oferty przekazuje req.file do uploadSignedToOffer razem z osoba i zakresem', async () => {
+        const file = { buffer: Buffer.from('%PDF-1.4'), originalname: 'Formularz-sig.pdf', size: 8 };
+        const scope = { projectOurIds: ['A'] };
+
+        await call(
+            routes['POST /offer/:id/signedPdf'],
+            { params: { id: '55' }, session: { userData: PERSON }, file, projectScope: scope },
+            makeRes()
+        );
+
+        expect(controller.uploadSignedToOffer).toHaveBeenCalledWith(125, 55, file, scope);
+    });
+
+    it('trasy umowy dostaja osobe, zakres, id, numer strony i gdFileId z adresu', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const gdFileId = 'CONTRACT_DOC_ID_001';
+
+        await call(routes['GET /contract/:id/signableFiles'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /contract/:id/signableFile/:gdFileId/graphicPlace'], { params: { id: '55', gdFileId }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+        await call(routes['GET /contract/:id/signatures'], { params: { id: '55' }, session: { userData: PERSON }, projectScope: scope }, makeRes());
+
+        expect(controller.listContractSignableFiles).toHaveBeenCalledWith(55, scope);
+        expect(controller.locateContractGraphicPlace).toHaveBeenCalledWith(55, gdFileId, scope);
+        expect(controller.listContractSignatures).toHaveBeenCalledWith(55, scope);
+    });
+
+    it('obraz strony umowy to PNG (Content-Type image/png) bez cache, z numerem strony z adresu', async () => {
+        const res = makeRes();
+
+        await call(
+            routes['GET /contract/:id/signableFile/:gdFileId/page/:page'],
+            { params: { id: '55', gdFileId: 'CONTRACT_DOC_ID_001', page: '2' }, session: { userData: PERSON } },
+            res
+        );
+
+        expect(controller.renderContractFilePage).toHaveBeenCalledWith(55, 'CONTRACT_DOC_ID_001', 2, undefined);
+        expect(res.headers['Content-Type']).toBe('image/png');
+        expect(res.headers['Cache-Control']).toBe('no-store');
+        expect(res.body.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+
+    it('"Wgraj podpisany" dla umowy przekazuje req.file do uploadSignedToContract razem z osoba i zakresem', async () => {
+        const file = { buffer: Buffer.from('%PDF-1.4'), originalname: 'Formularz-sig.pdf', size: 8 };
+        const scope = { projectOurIds: ['A'] };
+
+        await call(
+            routes['POST /contract/:id/signedPdf'],
+            { params: { id: '55' }, session: { userData: PERSON }, file, projectScope: scope },
+            makeRes()
+        );
+
+        expect(controller.uploadSignedToContract).toHaveBeenCalledWith(125, 55, file, scope);
+    });
+
+    it('lista podpisow pisma i zbiorcze plakietki dostaja osobe, zakres i dane z zadania', async () => {
+        const scope = { projectOurIds: ['A'] };
+        const one = makeRes();
+        const many = makeRes();
+
+        await call(routes['GET /letter/:id/signatures'], { params: { id: '7' }, session: { userData: PERSON }, projectScope: scope }, one);
+        await call(routes['POST /letters/signatureSummary'], { body: { letterIds: [7, 8] }, session: { userData: PERSON }, projectScope: scope }, many);
+
+        expect(controller.listLetterSignatures).toHaveBeenCalledWith(7, scope);
+        expect(controller.summarizeLetterSignatures).toHaveBeenCalledWith({ letterIds: [7, 8] }, scope);
+        expect(one.body).toEqual({ letterId: 7, signatures: [] });
+        expect(many.body).toEqual({ summary: {} });
+    });
+
+    describe('pobranie instalatora ENVI Podpis', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'envi-podpis-test-'));
+        afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+        it('oddaje plik jako zalacznik EnviPodpis.exe, bez cache`owania posredniego', async () => {
+            const exe = path.join(dir, 'EnviPodpis.exe');
+            fs.writeFileSync(exe, Buffer.from('MZ-test-exe'));
+            const withFile = collect(controller, { programExePath: exe });
+            const res = makeRes();
+
+            await call(withFile['GET /signing/program/download'], { params: {}, session: { userData: PERSON } }, res);
+
+            expect(res.headers['Content-Disposition']).toBe('attachment; filename="EnviPodpis.exe"');
+            expect(res.headers['Content-Type']).toBe('application/octet-stream');
+            expect(res.headers['Cache-Control']).toBe('no-cache');
+            expect(res.body.toString()).toBe('MZ-test-exe');
+        });
+
+        it('brak pliku na serwerze to czytelne 404, a nie awaria', async () => {
+            const missing = collect(controller, { programExePath: path.join(dir, 'nie-ma.exe') });
+
+            const next = await call(missing['GET /signing/program/download'], { params: {}, session: { userData: PERSON } }, makeRes());
+
+            expect(next.mock.calls[0][0]).toBeInstanceOf(SigningJobError);
+            expect(next.mock.calls[0][0].status).toBe(404);
+            expect(next.mock.calls[0][0].message).toMatch(/Instalator programu ENVI Podpis/);
+        });
+
+        it('produkcyjna sciezka domyslna wskazuje plik, ktory naprawde lezy w repozytorium', () => {
+            expect(fs.existsSync(path.resolve(process.cwd(), 'assets', 'signing', 'EnviPodpis.exe'))).toBe(true);
+        });
+
+        it('info: brak pliku -> available false, version null, bez cache`owania', async () => {
+            const missing = collect(controller, { programExePath: path.join(dir, 'nie-ma.exe') });
+            const res = makeRes();
+
+            await call(missing['GET /signing/program/info'], { params: {}, session: { userData: PERSON } }, res);
+
+            expect(res.body).toEqual({ available: false, version: null });
+            expect(res.headers['Cache-Control']).toBe('no-cache');
+        });
+
+        it('info: plik z sygnatura -> available true i wersja z zasobu pliku', async () => {
+            const exe = path.join(dir, 'versioned.exe');
+            fs.writeFileSync(exe, versionedExe(1, 0, 0, 0));
+            const withFile = collect(controller, { programExePath: exe });
+            const res = makeRes();
+
+            await call(withFile['GET /signing/program/info'], { params: {}, session: { userData: PERSON } }, res);
+
+            expect(res.body).toEqual({ available: true, version: '1.0.0' });
+        });
+    });
+
+    describe('readProgramFileVersion', () => {
+        it('instalator z repozytorium ma aktualna wersje wydania 1.3.1', () => {
+            const exe = fs.readFileSync(path.resolve(process.cwd(), 'assets', 'signing', 'EnviPodpis.exe'));
+            expect(readProgramFileVersion(exe)).toBe('1.3.1');
+        });
+
+        it('bez sygnatury VS_FIXEDFILEINFO wersja jest nieznana (null)', () => {
+            expect(readProgramFileVersion(Buffer.from('MZ-bez-zasobu-wersji'))).toBeNull();
+        });
+
+        it('czyta dwie pierwsze czesci z MS i dwie z LS, czwarta pomija', () => {
+            expect(readProgramFileVersion(versionedExe(1, 2, 3, 4))).toBe('1.2.3');
+        });
+    });
+
+    it('podglad zwraca PDF inline bez cache', async () => {
+        const res = makeRes();
+
+        await call(routes['GET /signingJob/:id/file/:index/preview'], { params: { id: '3', index: '1' }, session: { userData: PERSON } }, res);
+
+        expect(controller.getPreview).toHaveBeenCalledWith(3, 125, 1);
+        expect(res.headers['Content-Type']).toBe('application/pdf');
+        expect(res.headers['Cache-Control']).toBe('no-store');
+        expect(res.headers['Content-Disposition']).toBe("inline; filename*=UTF-8''%C5%BB%C3%B3%C5%82%C4%87.pdf");
+        expect(res.body.subarray(0, 5).toString()).toBe('%PDF-');
+    });
+
+    it('trasy programu dzialaja bez sesji, na samym tokenie, i nie cache`uja odpowiedzi', async () => {
+        const token = 'A1b2C3d4E5f6G7h8I9j0K-L_mN';
+        const res = makeRes();
+
+        await call(routes['GET /signing/jobs/:token'], { params: { token }, session: {} }, res);
+        await call(routes['POST /signing/jobs/:token/certificate'], { params: { token }, body: { chain: ['x'] }, session: {} }, makeRes());
+        await call(routes['POST /signing/jobs/:token/signatures'], { params: { token }, body: { signatures: [] }, session: {} }, makeRes());
+        await call(routes['POST /signing/jobs/:token/cancel'], { params: { token }, body: { reason: 'r' }, session: {} }, makeRes());
+
+        expect(controller.getJobForProgram).toHaveBeenCalledWith(token);
+        expect(controller.submitCertificate).toHaveBeenCalledWith(token, { chain: ['x'] });
+        expect(controller.submitSignatures).toHaveBeenCalledWith(token, { signatures: [] });
+        expect(controller.cancelByProgram).toHaveBeenCalledWith(token, { reason: 'r' });
+        expect(res.headers['Cache-Control']).toBe('no-store');
+    });
+
+    it('blad kontrolera trafia do next (globalny handler mapuje status 4xx bez raportu awarii)', async () => {
+        controller.getJobForProgram.mockRejectedValue(new SigningJobError('NOT_FOUND', 'Nie znaleziono', 404));
+
+        const next = await call(routes['GET /signing/jobs/:token'], { params: { token: 'x' }, session: {} }, makeRes());
+
+        expect(next.mock.calls[0][0].status).toBe(404);
+    });
+});

@@ -7,8 +7,17 @@ trasy: zamkniecie zakletego kregu "zeby zainstalowac SB, musisz juz miec dostep 
 SB konfiguruje").
 
 - Zrodlo: `envi-konsulting/ENVI.SB.Rdzen`, `bootstrap/`
-- Commit, z ktorego pochodzi ta kopia: `f9df25a1e8a0e38e2983ee8a7b3c5dbc09601adb`
-- Skopiowano: 2026-09-23 (dostawa instalatora dla wydania rdzenia 0.14.6)
+- Commit, z ktorego pochodzi ta kopia: `4defcbd3c8cab30d90d54b4cf27403aa460f8c5a`
+- Zlozono: 2026-10-28, wersja w naglowku pliku 0.18.1
+
+**`ENVI-SB-instalator.cmd` nie jest plikiem z repo - jest skladany.** Funkcja `New-InstalatorCmd`
+z `bootstrap/build-instalator.ps1` skleja naglowek wsadowy z `bootstrap.ps1` i README bajt w bajt.
+Odswiezenie tej kopii (w repo rdzenia, PowerShell):
+
+    . .\bootstrap\build-instalator.ps1
+    New-InstalatorCmd -Wersja <numer wydania> -Cel <PS-nodeJS>\assets\sb-installer\ENVI-SB-instalator.cmd
+
+Recznie skopiowany albo edytowany plik straznik uzna za rozjechany.
 
 **Uwaga z 2026-08-27.** Ta kopia stala rozjechana od 2026-08-21 (`bootstrap.ps1` mniejszy
 o 8,6 kB). Skutek byl gorszy niz sama nieaktualnosc: straznik ponizej rzuca wyjatkiem, wyjatek
@@ -16,5 +25,6 @@ konczy caly przebieg, wiec **przez szesc dni nie wykonywaly sie takze sprawdzian
 i nikt tego nie zauwazyl. Jesli widzisz tu czerwien - odswiez kopie, nie omijaj sprawdzianu.
 
 **Nie edytuj tych plikow tutaj.** Zmiane robi sie w repo rdzenia i dopiero stamtad odswieza sie
-te kopie. Rozjazd wykrywa `bootstrap/test-bootstrap-units.ps1` w repo rdzenia - sprawdza te kopie
-za kazdym razem, gdy repozytorium PS ENVI jest obecne na tej samej maszynie.
+te kopie. Rozjazd wykrywa `bootstrap/test-bootstrap-units.ps1` w repo rdzenia (TEST 5) - sklada
+plik od nowa ze zrodel z wersja odczytana z naglowka tej kopii i porownuje sume, za kazdym razem,
+gdy repozytorium PS ENVI jest obecne na tej samej maszynie.

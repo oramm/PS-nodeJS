@@ -1,3 +1,5 @@
+import { BadRequestError } from '../persons/projectAssignments/ProjectScopeGuard';
+
 /**
  * Reconciles the letter id taken from the route path with the one carried in the
  * request body.
@@ -14,12 +16,14 @@
  */
 export default function resolveRouteLetterId(
     idFromUrl: unknown,
-    idFromBody: unknown
+    idFromBody: unknown,
+    // SBZ-3: ta sama reguła chroni PUT /contract/:id — stąd nazwa rekordu w komunikacie.
+    recordName = 'pisma'
 ): number {
     const urlId = parseStrictPositiveInt(idFromUrl);
     if (urlId === undefined)
-        throw new Error(
-            `Nieprawidłowy identyfikator pisma w adresie: ${String(idFromUrl)}`
+        throw new BadRequestError(
+            `Nieprawidłowy identyfikator ${recordName} w adresie: ${String(idFromUrl)}`
         );
 
     // No id in the body is the normal case for a caller that trusts the address.
@@ -28,8 +32,8 @@ export default function resolveRouteLetterId(
 
     const bodyId = parseStrictPositiveInt(idFromBody);
     if (bodyId === undefined || bodyId !== urlId)
-        throw new Error(
-            `Niezgodny identyfikator pisma: adres wskazuje ${urlId}, ` +
+        throw new BadRequestError(
+            `Niezgodny identyfikator ${recordName}: adres wskazuje ${urlId}, ` +
                 `a treść żądania ${String(idFromBody)}. ` +
                 `Rozstrzygający jest adres — popraw treść żądania.`
         );

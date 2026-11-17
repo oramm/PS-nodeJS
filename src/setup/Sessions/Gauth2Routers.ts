@@ -1,3 +1,4 @@
+import { canReadPomocTask } from '../../pomoc/service';
 import express, { Request, Response } from 'express';
 import ToolsGd from '../../tools/ToolsGd';
 import ToolsGapi, { oAuthClient } from './ToolsGapi';
@@ -38,7 +39,11 @@ app.get('/sessionTaskStatus/:taskId', (req: Request, res: Response) => {
     const taskId = req.params.taskId;
     const task = TaskStore.get(taskId);
     if (!task) return res.status(404).send({ error: 'Nie znaleziono taska' });
-    const { timeout, ...taskWithoutTimeout } = task;
+    if (task.pomocOwnerId !== undefined) res.setHeader('Cache-Control', 'no-store');
+    if (!canReadPomocTask(req, task)) {
+        return res.status(403).send({ errorMessage: 'Brak dostępu do wyniku Pomocy.' });
+    }
+    const { timeout, pomocOwnerId, ...taskWithoutTimeout } = task;
     res.send(taskWithoutTimeout);
 
     // usuń po odebraniu, jeśli zakończony
