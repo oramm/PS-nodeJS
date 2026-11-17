@@ -182,6 +182,16 @@ export default class SbAccessRepository {
         return { ...agent, psDb: SbAccessValidator.levelsFromDb(levels).psDb };
     }
 
+    /** L2 (pułapka 12): czy skrót klucza należy do wpisu SB, który wciąż czeka na "To moje konto". */
+    async isInvitedAgentKeyHash(hash: string): Promise<boolean> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT 1 AS invited FROM SbAccess WHERE AgentKeyHash = ? AND StatusCode = 'INVITED'`,
+            undefined,
+            [hash],
+        )) as any[];
+        return rows.length === 1;
+    }
+
     async setPublicKey(
         conn: mysql.PoolConnection,
         personId: number,

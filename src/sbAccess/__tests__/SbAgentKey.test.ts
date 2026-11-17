@@ -59,6 +59,7 @@ const HUMAN = {
 
 // jest.config: restoreMocks = true, więc szpieg powstaje na nowo przed każdym testem.
 let getAgent: any;
+let isInvited: any;
 
 function request(method: string, path: string, params: { key?: string; userData?: any } = {}) {
     const req: any = {
@@ -90,6 +91,9 @@ beforeEach(() => {
     getAgent = jest
         .spyOn(SbAccessRepository.prototype, 'getAgentByKeyHash')
         .mockResolvedValue({ ...AGNIESZKA, psDb: 'rw' } as any);
+    isInvited = jest
+        .spyOn(SbAccessRepository.prototype, 'isInvitedAgentKeyHash')
+        .mockResolvedValue(false);
 });
 
 describe('SBZ-1: migracje (bez bazy)', () => {
@@ -138,7 +142,29 @@ describe('SBZ-1: wejście kluczem osoby (warstwy jak w index.ts)', () => {
 
     it('blokada (wpis nie ACTIVE albo skrót skasowany) = 401', async () => {
         getAgent.mockResolvedValue(null);
-        expect((await chain('POST', '/letterReact', { key: KEY })).status).toBe(401);
+        const result = await chain('POST', '/letterReact', { key: KEY });
+        expect(result.status).toBe(401);
+        expect(result.res.body).toEqual({ errorMessage: 'Użytkownik niezalogowany' });
+        expect(isInvited).toHaveBeenCalledWith(KEY_HASH);
+    });
+
+    it('L2: klucz zaproszonego dostępu = 401 z osobnym kodem, bez tożsamości i bez danych', async () => {
+        getAgent.mockResolvedValue(null);
+        isInvited.mockResolvedValue(true);
+        const result = await chain('GET', '/session', { key: KEY });
+        expect(result.reachedRoute).toBe(false);
+        expect(result.status).toBe(401);
+        expect(result.res.body).toEqual({
+            errorMessage: 'Dostęp SB tej osoby czeka na potwierdzenie "To moje konto" na stronie SB w PS.',
+            errorCode: 'SB_ACCESS_NOT_LINKED',
+        });
+        expect(result.req.session.userData).toBeUndefined();
+        expect(result.res.locals.authenticatedMachine).toBeUndefined();
+    });
+
+    it('L2: klucz aktywnego dostępu nie pyta o zaproszenie', async () => {
+        expect((await chain('GET', '/session', { key: KEY })).reachedRoute).toBe(true);
+        expect(isInvited).not.toHaveBeenCalled();
     });
 
     it('klucz w złym formacie nie pyta bazy i daje 401', async () => {
@@ -198,6 +224,15 @@ describe('SBZ-1: tożsamość z bazy', () => {
         expect(params).toEqual([KEY_HASH]);
         query.mockResolvedValue([] as any);
         expect(await new SbAccessRepository().getAgentByKeyHash(KEY_HASH)).toBeNull();
+        isInvited.mockRestore();
+        query.mockClear();
+        query.mockResolvedValue([{ invited: 1 }] as any);
+        expect(await new SbAccessRepository().isInvitedAgentKeyHash(KEY_HASH)).toBe(true);
+        const [invitedSql, , invitedParams] = query.mock.calls[0] as any[];
+        expect(invitedSql).toContain("StatusCode = 'INVITED'");
+        expect(invitedParams).toEqual([KEY_HASH]);
+        query.mockResolvedValue([] as any);
+        expect(await new SbAccessRepository().isInvitedAgentKeyHash(KEY_HASH)).toBe(false);
         query.mockRestore();
     });
 });

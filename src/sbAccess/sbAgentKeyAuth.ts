@@ -19,10 +19,13 @@ import { SB_AGENT_KEY_HEADER, deviceTokenHash } from './sbSecretsPolicy';
  * - sesja agenta osoby bez ważnego klucza traci tożsamość (ciasteczko nie jest poświadczeniem,
  *   powód w agentTokenAuth: `rolling: true` odświeża je w nieskończoność),
  * - żywa sesja człowieka nigdy nie jest nadpisywana,
- * - zły klucz = zachowanie jak bez nagłówka (requireSession odpowie 401), ślad tylko w logu.
+ * - zły klucz = zachowanie jak bez nagłówka (requireSession odpowie 401), ślad tylko w logu,
+ * - klucz wpisu INVITED = 401 z kodem SB_ACCESS_NOT_LINKED (osoba ma kliknąć "To moje konto").
  */
 
 const AGENT_SESSION_MAX_AGE_MS = 60 * 1000;
+/** Kod czyta serwer envi-ps rdzenia SB (mcp/envi-ps/start.py --sprawdz). */
+export const SB_ACCESS_NOT_LINKED = 'SB_ACCESS_NOT_LINKED';
 const repository = new SbAccessRepository();
 
 async function resolve(rawKey: unknown): Promise<UserData | 'READ_ONLY' | undefined> {
@@ -65,6 +68,17 @@ export default async function sbAgentKeyAuth(
         }
         if (!agentUser) {
             if (sessionUser) delete (<any>req.session).userData;
+            // L2 (pułapka 12): klucz zaproszonego dostępu = osoba nie kliknęła "To moje konto".
+            // 401 jak dziś (stary rdzeń mapuje 403 na "brak prawa zapisu"), tylko z kodem, bez danych.
+            const hash = rawKey ? deviceTokenHash(String(rawKey).trim()) : undefined;
+            if (hash && (await repository.isInvitedAgentKeyHash(hash))) {
+                res.status(401).send({
+                    errorMessage:
+                        'Dostęp SB tej osoby czeka na potwierdzenie "To moje konto" na stronie SB w PS.',
+                    errorCode: SB_ACCESS_NOT_LINKED,
+                });
+                return;
+            }
             console.warn(
                 `[SbAgentKey] Agent key missing, invalid or not allowed (ACTIVE + baza PS: zapis):: path: ${req.path} ip: ${req.ip}`,
             );
