@@ -23,6 +23,8 @@ import {
     afterEach,
 } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import ToolsGd from '../../tools/ToolsGd';
 import ContractEntityAssociationsHelper from '../ContractEntityAssociationsHelper';
 import ContractOther from '../ContractOther';

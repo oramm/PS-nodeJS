@@ -1,3 +1,5 @@
+import ConsolidationGuard from './milestones/consolidation/ConsolidationWriteGuardController';
+import Sharing from './milestones/sharing/MilestoneSharingController';
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import BaseController from '../controllers/BaseController';
@@ -108,6 +110,41 @@ export default class ContractsController extends BaseController<
     ContractOur | ContractOther,
     ContractRepository
 > {
+
+
+    static async add(contract: ContractOur | ContractOther, auth?: OAuth2Client, taskId?: string, options?: ContractCreationOptions) {
+        return Sharing.runExclusive(() => this.addUnsafe(contract, auth, taskId, options));
+    }
+
+    static async editThroughMilestoneDateFromDto(id: unknown, dto: any) {
+        return Sharing.runExclusive(async () => {
+            const sourceId = await Sharing.contractForDate(id, dto);
+            const contract = await this.createContractFromDto({ ...dto._milestone._contract, id: sourceId });
+            const updated = await this.editWithAuth(contract, dto._fieldsToUpdate);
+            return { ...dto, _milestone: { ...dto._milestone, _contract: updated } };
+        });
+    }
+
+    static async edit(contract: ContractOur | ContractOther, auth?: OAuth2Client, fields?: string[], selectedPersonIds?: number[]) {
+        return ConsolidationGuard.contractEdit(contract.id, async () => {
+            await ConsolidationGuard.structure('contract', contract.id, contract, fields, async () => undefined);
+            await Sharing.guardContract(contract);
+            return this.editUnsafe(contract, auth, fields, selectedPersonIds);
+        });
+    }
+    static async delete(contract: ContractOur | ContractOther, auth?: OAuth2Client) {
+        return ConsolidationGuard.contractDestruction(contract.id, false, async () => {
+            await Sharing.guardContract(contract, true);
+            return this.deleteUnsafe(contract, auth);
+        });
+    }
+    static async moveToProject(id: number, project: string, auth: OAuth2Client) {
+        return ConsolidationGuard.contractDestruction(id, true, async () => {
+            await Sharing.guardContract({ id }, false, true);
+            return this.moveToProjectUnsafe(id, project, auth);
+        });
+    }
+
     private static instance: ContractsController;
 
     // Repository dla asocjacji
@@ -184,7 +221,7 @@ export default class ContractsController extends BaseController<
      * opcjonalne). Brak = zachowanie sprzed wprowadzenia drzewa.
      * @returns Zaktualizowany kontrakt z ID z bazy danych
      */
-    static async add(
+    private static async addUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
         taskId?: string,
@@ -375,7 +412,7 @@ export default class ContractsController extends BaseController<
      * @param fieldsToUpdate - opcjonalna lista pól do aktualizacji (jeśli undefined, wszystkie pola)
      * @returns Zaktualizowany kontrakt
      */
-    static async edit(
+    private static async editUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client,
         fieldsToUpdate?: string[],
@@ -439,7 +476,7 @@ export default class ContractsController extends BaseController<
 
             // Operacje Google Drive i Scrum (jeśli auth i NIE tylko pola DB)
             if (auth && !isOnlyDbFields) {
-                const [, wasAddedToScrum] = await Promise.all([
+                const effects = await Promise.allSettled([
                     contract
                         .editFolder(auth)
                         .then(() => console.log('Contract folder edited')),
@@ -448,6 +485,12 @@ export default class ContractsController extends BaseController<
                         return added;
                     }),
                 ]);
+
+                // Keep the lifecycle lock until both started effects have settled.
+                for (const effect of effects) {
+                    if (effect.status === 'rejected') throw effect.reason;
+                }
+                const wasAddedToScrum = effects[1].status === 'fulfilled' && effects[1].value;
 
                 // Utwórz folder „Dokumentacja zatwierdzona” w istniejących kamieniach
                 // projektowanie-nadzór kontraktu. Pomijamy przy edycji częściowej,
@@ -660,11 +703,13 @@ export default class ContractsController extends BaseController<
         fieldsToUpdate?: string[],
         selectedPersonIds?: number[]
     ): Promise<ContractOur | ContractOther> {
-        // Zmiana kierownika, administratora albo osób dodatkowych wyrównuje pokoje projektu (DOSTEP-2).
-        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
-            this.withAuth(async (instance, auth) => {
-                return await this.edit(contract, auth, fieldsToUpdate, selectedPersonIds);
-            }));
+        return ConsolidationGuard.contractEdit(contract.id, async () => {
+            await ConsolidationGuard.structure('contract', contract.id, contract, fieldsToUpdate, async () => undefined);
+            await Sharing.guardContract(contract);
+            // Synchronizacja osób w pokojach dopiero po sprawdzeniu blokad kontraktu.
+            return ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                this.withAuth((_instance, auth) => this.editUnsafe(contract, auth, fieldsToUpdate, selectedPersonIds)));
+        });
     }
 
     private static ensureAliasPresent(
@@ -691,7 +736,7 @@ export default class ContractsController extends BaseController<
      * @param auth - OAuth2Client (opcjonalny - jeśli null, operacje GD/Scrum będą pominięte)
      * @returns Usunięty kontrakt
      */
-    static async delete(
+    private static async deleteUnsafe(
         contract: ContractOur | ContractOther,
         auth?: OAuth2Client
     ): Promise<ContractOur | ContractOther> {
@@ -755,11 +800,9 @@ export default class ContractsController extends BaseController<
     static async deleteWithAuth(
         contract: ContractOur | ContractOther
     ): Promise<ContractOur | ContractOther> {
-        // Osoby usuwanego kontraktu wychodzą z pokoi projektu i z pokoju kontraktu (DOSTEP-2).
-        return await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
-            this.withAuth(async (instance, auth) => {
-                return await this.delete(contract, auth);
-            }));
+        return ConsolidationGuard.contractDestruction(contract.id, false, () =>
+            ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                this.withAuth((_instance, auth) => this.delete(contract, auth))));
     }
 
     /**
@@ -772,7 +815,7 @@ export default class ContractsController extends BaseController<
      *
      * Na błąd DB po udanym GD: cofamy przeniesienie folderu.
      */
-    static async moveToProject(
+    private static async moveToProjectUnsafe(
         contractId: number,
         newProjectOurId: string,
         auth: OAuth2Client
@@ -859,13 +902,8 @@ export default class ContractsController extends BaseController<
         contractId: number,
         newProjectOurId: string
     ): Promise<ContractOur> {
-        return await this.withAuth(async (_instance, auth) => {
-            return await ContractsController.moveToProject(
-                contractId,
-                newProjectOurId,
-                auth
-            );
-        });
+        return ConsolidationGuard.contractDestruction(contractId, true, () =>
+            this.withAuth(async (_instance, auth) => this.moveToProject(contractId, newProjectOurId, auth)));
     }
 
     static makeSearchTextCondition(searchText: string | undefined) {

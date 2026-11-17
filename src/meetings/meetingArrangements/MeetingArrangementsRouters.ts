@@ -1,3 +1,5 @@
+import RouteIdValidator from '../../tools/RouteIdValidator';
+import MeetingArrangementValidator from './MeetingArrangementValidator';
 import { Request, Response } from 'express';
 import { app } from '../../index';
 import MeetingArrangementsController from './MeetingArrangementsController';
@@ -25,9 +27,10 @@ app.post(
         try {
             const payload = req.parsedBody ?? req.body;
             await ProjectScopeGuard.assertCaseInScope(
-                Number(payload?.caseId ?? payload?._case?.id),
+                Number(MeetingArrangementValidator.selectedParents(payload).caseId),
                 req.projectScope,
             );
+            await ProjectScopeGuard.assertMeetingInScope(Number(payload.meetingId), req.projectScope);
             const item = await MeetingArrangementsController.addFromDto(payload);
             res.send(item);
         } catch (error) {
@@ -41,12 +44,15 @@ app.put(
     async (req: Request, res: Response, next) => {
         try {
             await ProjectScopeGuard.assertMeetingArrangementInScope(
-                Number(req.params.id),
+                RouteIdValidator.positiveId(req.params.id),
                 req.projectScope,
             );
+            const selected = MeetingArrangementValidator.selectedParents(req.parsedBody ?? req.body);
+            if (selected.caseId) await ProjectScopeGuard.assertCaseInScope(Number(selected.caseId), req.projectScope);
+            if (selected.meetingId) await ProjectScopeGuard.assertMeetingInScope(Number(selected.meetingId), req.projectScope);
             const item = await MeetingArrangementsController.editFromDto({
                 ...(req.parsedBody ?? req.body),
-                id: parseInt(req.params.id, 10),
+                id: RouteIdValidator.positiveId(req.params.id),
             });
             res.send(item);
         } catch (error) {
@@ -60,12 +66,12 @@ app.put(
     async (req: Request, res: Response, next) => {
         try {
             await ProjectScopeGuard.assertMeetingArrangementInScope(
-                Number(req.params.id),
+                RouteIdValidator.positiveId(req.params.id),
                 req.projectScope,
             );
             const { status } = req.parsedBody ?? req.body;
             const item = await MeetingArrangementsController.updateStatus(
-                parseInt(req.params.id, 10),
+                RouteIdValidator.positiveId(req.params.id),
                 status,
             );
             res.send(item);
@@ -80,11 +86,11 @@ app.delete(
     async (req: Request, res: Response, next) => {
         try {
             await ProjectScopeGuard.assertMeetingArrangementInScope(
-                Number(req.params.id),
+                RouteIdValidator.positiveId(req.params.id),
                 req.projectScope,
             );
             await MeetingArrangementsController.deleteById(
-                parseInt(req.params.id, 10),
+                RouteIdValidator.positiveId(req.params.id),
             );
             res.send({ status: 'ok' });
         } catch (error) {

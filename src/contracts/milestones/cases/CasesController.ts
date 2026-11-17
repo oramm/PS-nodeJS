@@ -1,4 +1,8 @@
+import ProcessesController from '../../../processes/ProcesesController';
+import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
 import Case from './Case';
+import CaseValidator from './CaseValidator';
+import CaseTypesController from './caseTypes/CaseTypesController';
 import CaseRepository, { CasesSearchParams } from './CaseRepository';
 import { ProjectScope } from '../../../types/sessionTypes';
 import { OAuth2Client } from 'google-auth-library';
@@ -6,6 +10,8 @@ import ToolsDb from '../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import ProcessInstance from '../../../processes/processInstances/ProcessInstance';
 import Task from './tasks/Task';
+import TaskRepository from './tasks/TaskRepository';
+import ProcessInstanceRepository from '../../../processes/processInstances/ProcessInstanceRepository';
 import TasksController from './tasks/TasksController';
 import TaskTemplatesController from './tasks/taskTemplates/TaskTemplatesController';
 import TasksTemplatesForProcessesController from './tasks/taskTemplates/TasksTemplatesForProcessesController';
@@ -24,6 +30,7 @@ import {
     enqueueFidmanFoldersForContracts,
     deliverFidmanFoldersAfterCommit,
 } from '../../fidmanSync/FidmanSync';
+import ConsolidationWriteGuard from '../consolidation/ConsolidationWriteGuardController';
 
 export default class CasesController extends BaseController<
     Case,
@@ -41,6 +48,19 @@ export default class CasesController extends BaseController<
             this.instance = new CasesController();
         }
         return this.instance;
+    }
+
+    static async addFromDto(dto: import('../../../types/types').CaseData, auth?: OAuth2Client) {
+        CaseValidator.status(dto.status);
+        return this.add(new Case(dto), auth);
+    }
+
+    static async editFromDto(dto: import('../../../types/types').CaseData, auth?: OAuth2Client, fields?: string[]) {
+        return this.edit(new Case(dto), auth, fields);
+    }
+
+    static async deleteFromDto(dto: import('../../../types/types').CaseData, auth?: OAuth2Client) {
+        return this.delete(new Case(dto), auth);
     }
 
     private static async ensureParentFromDb(
@@ -180,7 +200,17 @@ export default class CasesController extends BaseController<
         scope?: ProjectScope
     ): Promise<Case[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions, scope);
+        const cases = await instance.repository.find(orConditions, scope);
+        if (!cases.length) return cases;
+        const [processes, instances] = await Promise.all([
+            ProcessesController.find({}),
+            ProcessInstancesController.find({ caseIds: cases.map(item => item.id) }),
+        ]);
+        for (const item of cases) {
+            item._type._processes = processes.filter(process => process._caseType.id === item._type.id);
+            item._processesInstances = instances.filter(process => process._case.id === item.id);
+        }
+        return cases;
     }
 
     /**
@@ -205,7 +235,11 @@ export default class CasesController extends BaseController<
      * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      * @returns Obiekt z caseItem, processInstances i defaultTasksInDb
      */
-    static async add(
+    static async add(...args: Parameters<typeof CasesController.addUnlocked>) {
+        return ConsolidationWriteGuard.cases([args[0].milestoneId ?? args[0]._parent?.id], [], () => this.addUnlocked(...args));
+    }
+
+    private static async addUnlocked(
         caseItem: Case,
         auth?: OAuth2Client
     ): Promise<{
@@ -253,8 +287,15 @@ export default class CasesController extends BaseController<
         defaultTasksInDb: Task[];
     }> {
         console.group('CasesController.addCase()');
+        let folderCreated = false;
+        let databaseSaved = false;
 
         try {
+            CaseValidator.status(caseItem.status);
+            const type = (await CaseTypesController.find([{milestoneId: caseItem.milestoneId}]))
+                .find(type => type.id === caseItem.typeId);
+            if (!type) throw new Error('Nie znaleziono typu sprawy w tym kamieniu.');
+            caseItem._type = type;
             if (caseItem._type.isUniquePerMilestone && !caseItem.parentCaseId) {
                 const milestoneId = caseItem.milestoneId ?? caseItem._parent?.id;
                 const typeId = caseItem.typeId ?? caseItem._type?.id;
@@ -270,6 +311,7 @@ export default class CasesController extends BaseController<
             await CasesController.ensureParentFromDb(caseItem);
 
             if (caseItem.parentCaseId) {
+                CaseValidator.parent(caseItem, (await this.repository.find([{caseId: caseItem.parentCaseId}]))[0]);
                 const parentGdFolderId =
                     await this.repository.findGdFolderById(caseItem.parentCaseId);
                 if (!parentGdFolderId)
@@ -285,6 +327,7 @@ export default class CasesController extends BaseController<
 
             // 1. Utwórz folder w Google Drive (logika domenowa - Model)
             await caseItem.createFolder(auth);
+            folderCreated = true;
             console.log('folder created');
             await CasesController.persistCaseTypeFolder(caseItem);
 
@@ -327,6 +370,7 @@ export default class CasesController extends BaseController<
                 folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
+            databaseSaved = true;
             void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
                 console.error('[FidmanSync] folder delivery error:', err)
             );
@@ -358,7 +402,7 @@ export default class CasesController extends BaseController<
                 caseItem,
             });
             // Rollback GD: usuń folder jeśli transakcja DB się nie powiodła
-            await CasesController.deleteFolderIfUnusedInDb(
+            if (folderCreated && !databaseSaved) await CasesController.deleteFolderIfUnusedInDb(
                 caseItem,
                 auth,
                 this.repository
@@ -513,7 +557,17 @@ export default class CasesController extends BaseController<
      * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji (np. ['status'])
      * @returns Zaktualizowany Case
      */
-    static async edit(
+    static async edit(...args: Parameters<typeof CasesController.editUnlocked>) {
+        const [item, , fields] = args;
+        const target = item.milestoneId ?? item._parent?.id;
+        const targets = (!fields || fields.includes('milestoneId')) && target !== undefined ? [target] : [];
+        return ConsolidationWriteGuard.cases(targets, [item.id], async () => {
+            await ConsolidationWriteGuard.structure('case', item.id, item, fields, async () => undefined);
+            return this.editUnlocked(...args);
+        });
+    }
+
+    private static async editUnlocked(
         caseItem: Case,
         auth?: OAuth2Client,
         fieldsToUpdate?: string[]
@@ -559,6 +613,17 @@ export default class CasesController extends BaseController<
         console.group('CasesController.editCase()');
 
         try {
+            CaseValidator.id(caseItem.id);
+            const stored = (await this.repository.find([{caseId: caseItem.id}]))[0];
+            if (!stored) throw new Error('Nie znaleziono sprawy.');
+            const shared = await this.repository.hasSharedMilestone(stored.milestoneId!) ||
+                (caseItem.milestoneId !== undefined && caseItem.milestoneId !== stored.milestoneId &&
+                    await this.repository.hasSharedMilestone(caseItem.milestoneId));
+            CaseValidator.sharedParent(caseItem, stored, shared, fieldsToUpdate);
+            if (!fieldsToUpdate || fieldsToUpdate.includes('status')) CaseValidator.status(caseItem.status);
+            if (fieldsToUpdate?.length === 0) throw new Error('No fields to update!');
+            const typeChanges = (!fieldsToUpdate || fieldsToUpdate.includes('typeId')) &&
+                caseItem.typeId !== undefined && caseItem.typeId !== stored.typeId;
             // Edycja tylko pól DB (np. szybka zmiana statusu) - pomija GD/Scrum
             // i reset ProcessInstances (analogicznie do MilestonesController.edit)
             const onlyDbFields = ['status', 'description'];
@@ -569,10 +634,16 @@ export default class CasesController extends BaseController<
 
             // Sprawdź czy trzeba zresetować ProcessInstances
             const shouldResetProcessInstances =
-                !isOnlyDbFields &&
-                caseItem._processesInstances !== undefined &&
-                caseItem._processesInstances.length > 0;
+                typeChanges && !isOnlyDbFields;
 
+            if (typeChanges) {
+                const type = (await CaseTypesController.find([{milestoneId: stored.milestoneId}]))
+                    .find(type => type.id === caseItem.typeId);
+                if (!type) throw new Error('Nie znaleziono typu sprawy w tym kamieniu.');
+                caseItem._type = type;
+                if (type.isUniquePerMilestone && (!fieldsToUpdate || fieldsToUpdate.includes('name')))
+                    caseItem.setAsUniquePerMilestone();
+            }
             let newProcessInstances: ProcessInstance[] = [];
             let folderIds: number[] = [];
 
@@ -591,37 +662,53 @@ export default class CasesController extends BaseController<
                 }
 
                 // Edytuj Case + opcjonalnie ProcessInstances
-                await this.repository.editWithRelated(
-                    caseItem,
-                    shouldResetProcessInstances,
-                    newProcessInstances,
-                    conn,
-                    fieldsToUpdate
-                );
+                await this.repository.editInDb(caseItem, conn, true, fieldsToUpdate);
+                if (shouldResetProcessInstances) {
+                    await this.repository.deleteProcessInstances(caseItem.id!, conn);
+                    for (const process of newProcessInstances) {
+                        if (process._task && !process._task.id) {
+                            process._task.caseId = caseItem.id;
+                            await new TaskRepository().addInDb(process._task, conn, true);
+                        }
+                        process.taskId = process._task?.id;
+                        process.caseId = caseItem.id!;
+                        await new ProcessInstanceRepository().addInDb(process, conn, true);
+                    }
+                }
                 folderIds = await enqueueFidmanFoldersForContracts(contractIds, conn);
             });
 
             void deliverFidmanFoldersAfterCommit(folderIds).catch((err) =>
                 console.error('[FidmanSync] folder delivery error:', err)
             );
+
+
+            const saved = (await CasesController.find([{caseId: caseItem.id}]))[0];
+            if (!saved) throw new Error('Nie znaleziono zapisanej sprawy.');
+            if (!isOnlyDbFields) await CasesController.ensureParentFromDb(saved);
+            if (!isOnlyDbFields && saved.parentCaseId) {
+                const parent = (await this.repository.find([{caseId: saved.parentCaseId}]))[0];
+                CaseValidator.parent(saved, parent);
+                saved._parentCaseGdFolderId = parent.gdFolderId;
+            }
             console.log('edited in db');
 
             // Operacje post-DB: GD i Scrum (równolegle) - zbędne przy edycji tylko pól DB
             if (!isOnlyDbFields) {
                 await Promise.all([
-                    caseItem
+                    saved
                         .editFolder(auth)
                         .then(() => console.log('folder updated'))
-                        .then(() => CasesController.persistCaseTypeFolder(caseItem))
+                        .then(() => CasesController.persistCaseTypeFolder(saved))
                         .catch((err) => console.log(err)),
-                    caseItem
+                    saved
                         .editInScrum(auth)
                         .then(() => console.log('updated in scrum'))
                         .catch((err) => console.log(err)),
                 ]);
             }
 
-            return caseItem;
+            return saved;
         } catch (err) {
             throw err;
         } finally {
@@ -637,6 +724,13 @@ export default class CasesController extends BaseController<
      * @param auth - Opcjonalny OAuth2Client (jeśli nie przekazany, withAuth pobierze token)
      */
     static async delete(caseItem: Case, auth?: OAuth2Client): Promise<void> {
+        return ConsolidationWriteGuard.cases([], [caseItem.id], async () => {
+            await ConsolidationWriteGuard.structure('case', caseItem.id, undefined, undefined, async () => undefined);
+            return this.deleteUnlocked(caseItem, auth);
+        });
+    }
+
+    private static async deleteUnlocked(caseItem: Case, auth?: OAuth2Client): Promise<void> {
         return await this.withAuth<void>(
             async (instance: CasesController, authClient: OAuth2Client) => {
                 return await instance.deleteCase(authClient, caseItem);
@@ -660,7 +754,11 @@ export default class CasesController extends BaseController<
      * @param options - Opcje: isPartOfBatch dla Scrum
      * @returns Dane o dodanych Cases z Tasks i ProcessInstances
      */
-    static async addBulkWithDefaultTasks(
+    static async addBulkWithDefaultTasks(...args: Parameters<typeof CasesController.addBulkUnlocked>) {
+        return ConsolidationWriteGuard.cases(args[0].map(item => item.milestoneId ?? item._parent?.id), [], () => this.addBulkUnlocked(...args));
+    }
+
+    private static async addBulkUnlocked(
         caseItems: Case[],
         auth: OAuth2Client,
         options?: { isPartOfBatch?: boolean }
@@ -862,6 +960,10 @@ export default class CasesController extends BaseController<
         console.group('CasesController.deleteCase()');
 
         try {
+            CaseValidator.id(caseItem.id);
+            const stored = (await this.repository.find([{caseId: caseItem.id}]))[0];
+            if (!stored) return;
+            caseItem = stored;
             // Pobierz podsprawy PRZED usunięciem — CASCADE usunie je z DB
             const subCaseIds = caseItem.id
                 ? await this.repository.findSubCaseIds(caseItem.id)

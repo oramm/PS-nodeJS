@@ -33,6 +33,13 @@ jest.mock('../../tools/ToolsDb', () => ({
     },
 }));
 
+// Ten test izoluje etap Drive; bramkę transakcji powiązań pisma testuje
+// ConsolidationLetterGuard.test.ts.
+jest.mock('../../contracts/milestones/consolidation/ConsolidationWriteGuardController', () => ({
+    __esModule: true,
+    default: { letterEdit: async (_id: unknown, _cases: unknown[], action: (conn: unknown) => Promise<unknown>) => action({}) },
+}));
+
 jest.mock('../LetterRepository', () => ({
     __esModule: true,
     default: class {
@@ -48,6 +55,10 @@ jest.mock('../associations/LetterCaseAssociationsController', () => ({
         findCasesByLetterId: (...args: unknown[]) =>
             findCasesByLetterId(...args),
     },
+}));
+
+jest.mock('../associations/LetterCaseRepository', () => ({
+    __esModule: true, default: class { addInDb = jest.fn(); },
 }));
 
 jest.mock('../associations/LetterEntityAssociationsController', () => ({
@@ -87,6 +98,8 @@ const makeLetter = (editLetterGdElements: jest.Mock) =>
 
 const dbContext = {
     id: 6163,
+    projectId: null,
+    isOur: false,
     number: '6163',
     description: 'Opis przed zmianą',
     creationDate: '2026-07-30',

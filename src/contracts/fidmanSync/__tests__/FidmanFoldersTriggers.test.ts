@@ -1,3 +1,24 @@
+// These tests exercise FIDman folder transactions. PS-MC access/locking is
+// exercised with its real guard in consolidation/sharing suites in the same run.
+jest.mock('../../milestones/consolidation/ConsolidationWriteGuardController', () => ({
+    __esModule: true, default: {
+        contractEdit: async (_id: unknown, action: () => Promise<unknown>) => action(),
+        cases: async (_milestones: unknown, _cases: unknown, action: () => Promise<unknown>) => action(),
+        structure: async (_kind: unknown, _id: unknown, _dto: unknown, _fields: unknown, action: () => Promise<unknown>) => action(),
+    },
+}));
+jest.mock('../../milestones/sharing/MilestoneSharingController', () => ({
+    __esModule: true, default: {
+        runExclusive: async (action: () => Promise<unknown>) => action(),
+        guardCreate: async () => undefined,
+        guardType: async () => undefined,
+        guardContract: async () => undefined,
+        guardMilestone: async () => ({ links: [] }),
+        decorate: async () => undefined,
+        touch: jest.fn(async () => undefined),
+    },
+}));
+import Sharing from '../../milestones/sharing/MilestoneSharingController';
 jest.mock('../../../tools/ToolsDb');
 
 import ToolsDb from '../../../tools/ToolsDb';
@@ -122,7 +143,12 @@ beforeEach(() => {
         operations.push('save:case'); cases.set(item.id, item); return item;
     };
     jest.spyOn(CaseRepository.prototype, 'addWithRelated').mockImplementation(saveCase);
-    jest.spyOn(CaseRepository.prototype, 'editWithRelated').mockImplementation(saveCase);
+    jest.spyOn(CaseRepository.prototype, 'editInDb').mockImplementation(saveCase);
+    jest.spyOn(CaseRepository.prototype, 'hasSharedMilestone').mockResolvedValue(false);
+    jest.spyOn(CaseRepository.prototype, 'find').mockImplementation(async (criteria: any[] = []) =>
+        [...cases.values()].filter(c => criteria.some(q => q.caseId === c.id || q.milestoneId === c.milestoneId)));
+    jest.spyOn(CaseTypesController, 'find').mockResolvedValue([{ id: 75, isUniquePerMilestone: false }] as any);
+    (Sharing.touch as jest.Mock).mockImplementation(async (_id, tx) => { expect(tx).toBe(conn); expect(committed).toBe(false); });
     jest.spyOn(CaseRepository.prototype, 'deleteFromDb').mockImplementation(async (item: any, tx: any) => {
         expect(tx).toBe(conn); operations.push('save:case'); cases.delete(item.id);
     });
@@ -139,6 +165,9 @@ beforeEach(() => {
 });
 
 const folderWrites = () => writes.filter((w) => w.kind === 'contract.folders');
+// Fresh PS-MC hydration also reads metadata after save; count only delivery lookups.
+const deliveryReads = () => (ToolsDb.getQueryCallbackAsync as jest.Mock).mock.calls
+    .filter(([sql]) => /FROM\s+FidmanSyncOutbox\b/i.test(String(sql)));
 
 it('F3 przeniesienie sprawy podczas oczekiwania odświeża ponownie odczytanego właściciela', async () => {
     contracts.set(44, { ...contracts.get(42) });
@@ -251,7 +280,7 @@ describe.each(scopes)('LMF-3 umowa %s', (_label, TypeId, FidmanSyncEnabled, coun
         await ToolsDb.transaction(async (tx) => enqueueFidmanContractPush({ id: 42 } as any, tx, ids));
         await deliverFidmanFoldersAfterCommit(ids);
         expect(folderWrites()).toHaveLength(count);
-        expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledTimes(count);
+        expect(deliveryReads()).toHaveLength(count);
     });
 });
 
@@ -264,9 +293,10 @@ describe.each(scopes)('LMF-3 kamień umowy %s', (_label, TypeId, FidmanSyncEnabl
         else if (route === 'addBulkWithDatesAndCases') await MilestonesController.addBulkWithDatesAndCases([item], auth);
         else if (route === 'edit') await MilestonesController.edit(item, auth, undefined, ['status']);
         else await (MilestonesController[route] as any)(item, auth);
+        if (route === 'edit') expect(Sharing.touch).toHaveBeenCalledWith(item.id, conn);
         expect(folderWrites()).toHaveLength(count);
         if (count && route === 'delete') expect(folderWrites()[0].payload.cases).toEqual([]);
-        expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledTimes(count);
+        expect(deliveryReads()).toHaveLength(count);
     });
 });
 
@@ -279,7 +309,7 @@ describe.each(scopes)('LMF-3 sprawa umowy %s', (_label, TypeId, FidmanSyncEnable
         else if (route === 'edit') await CasesController.edit(item, auth, ['status']);
         else await CasesController[route](item, auth);
         expect(folderWrites()).toHaveLength(count);
-        expect(ToolsDb.getQueryCallbackAsync).toHaveBeenCalledTimes(count);
+        expect(deliveryReads()).toHaveLength(count);
     });
 });
 

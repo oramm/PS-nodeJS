@@ -21,6 +21,8 @@ jest.mock('../../setup/Sessions/IntersessionsTasksStore');
 jest.mock('../aqmSync/AqmSync');
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import Tools from '../../tools/Tools';
 import CurrentSprintValidator from '../../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../../setup/Sessions/IntersessionsTasksStore';

@@ -38,6 +38,9 @@ type RoutePattern = { method: string; path: string };
  * dodatków per rola = 403. `:param` dopasowuje jeden segment ścieżki.
  */
 const BASE_ROUTES: RoutePattern[] = [
+    // Minimal read-only source-work guard; management payloads/mutations remain outside this list.
+    { method: 'POST', path: '/milestone-consolidations/work-targets' },
+    { method: 'POST', path: '/milestone-consolidations/history-resolution' },
     // Pomoc nadal wymaga osobistej sesji i dostępu przez POMOC_ROLES lub POMOC_USERS.
     { method: 'GET', path: '/pomoc/available' },
     { method: 'POST', path: '/pomoc/ask' },

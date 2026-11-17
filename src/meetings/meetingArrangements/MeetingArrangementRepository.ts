@@ -1,3 +1,4 @@
+import { milestoneVisibilitySql } from '../../contracts/milestones/sharing/milestoneVisibilitySql';
 import mysql from 'mysql2/promise';
 import BaseRepository from '../../repositories/BaseRepository';
 import ToolsDb from '../../tools/ToolsDb';
@@ -26,7 +27,7 @@ export default class MeetingArrangementRepository extends BaseRepository<Meeting
             ? `Contracts.ProjectOurId="${params.projectOurId}"`
             : '1';
         const contractCondition = params?.contractId
-            ? `Contracts.Id=${params.contractId}`
+            ? milestoneVisibilitySql({ contractId: params.contractId })
             : '1';
         const meetingCondition = params?.meetingId
             ? `MeetingArrangements.MeetingId=${params.meetingId}`

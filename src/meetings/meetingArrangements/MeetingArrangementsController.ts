@@ -1,3 +1,5 @@
+import Sharing from '../../contracts/milestones/sharing/MilestoneSharingController';
+import ConsolidationGuard from '../../contracts/milestones/consolidation/ConsolidationWriteGuardController';
 import mysql from 'mysql2/promise';
 import { ProjectScope } from '../../types/sessionTypes';
 import MeetingArrangement from './MeetingArrangement';
@@ -49,13 +51,12 @@ export default class MeetingArrangementsController {
             const items = await this.find(condition, scope);
             results.push(...items);
         }
-        return results;
+        return [...new Map(results.map(item => [item.id, item])).values()];
     }
 
     static async addFromDto(
         payload: MeetingArrangementCreatePayload,
     ): Promise<MeetingArrangement> {
-        const instance = this.getInstance();
         // UI sends _case object; extract caseId and derive name from case label
         const uiCase = (payload as any)._case;
         if (!payload.caseId && uiCase?.id) {
@@ -80,14 +81,12 @@ export default class MeetingArrangementsController {
                 ? { id: validated.ownerId }
                 : undefined,
         });
-        await instance.repository.addInDb(item);
-        return item;
+        return this.add(item);
     }
 
     static async editFromDto(
         payload: Partial<MeetingArrangementCreatePayload> & { id: number },
     ): Promise<MeetingArrangement> {
-        const instance = this.getInstance();
         if (!payload.caseId && (payload as any)._case?.id) {
             payload.caseId = (payload as any)._case.id;
         }
@@ -107,39 +106,28 @@ export default class MeetingArrangementsController {
                 ? { id: payload.ownerId }
                 : undefined,
         });
-        await instance.repository.editInDb(item);
-        return item;
+        return this.edit(item);
     }
 
     static async updateStatus(
         id: number,
         newStatus: MeetingArrangementStatus,
     ): Promise<MeetingArrangement> {
-        const instance = this.getInstance();
-        const items = await instance.repository.find({ id });
-        if (items.length === 0) {
-            throw new Error(`MeetingArrangement with id=${id} not found`);
-        }
-        const current = items[0];
-        MeetingArrangementValidator.validateStatusTransition(
-            current.status,
-            newStatus,
-        );
-        current.status = newStatus;
-        await instance.repository.editInDb(current, undefined, false, [
-            'status',
-        ]);
-        return current;
+        return this.withCurrent(id, async current => {
+            return ConsolidationGuard.cases([], [current.caseId], async () => {
+                MeetingArrangementValidator.validateStatusTransition(current.status, newStatus);
+                current.status = newStatus;
+                await this.getInstance().repository.editInDb(current, undefined, false, ['status']);
+                return current;
+            });
+        });
     }
 
     static async deleteById(id: number): Promise<void> {
         if (!Number.isInteger(id) || id <= 0) {
             throw new Error('id must be a positive integer');
         }
-        const instance = this.getInstance();
-        const item = new MeetingArrangement({ id });
-        item._dbTableName = 'MeetingArrangements';
-        await instance.repository.deleteFromDb(item);
+        await this.delete(new MeetingArrangement({ id }));
     }
 
     static async add(
@@ -147,13 +135,11 @@ export default class MeetingArrangementsController {
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
     ): Promise<MeetingArrangement> {
-        const instance = this.getInstance();
-        await instance.repository.addInDb(
-            item,
-            externalConn,
-            isPartOfTransaction,
-        );
-        return item;
+        MeetingArrangementValidator.validateWriteContext(externalConn, isPartOfTransaction);
+        return ConsolidationGuard.cases([], [item.caseId], async () => {
+            await this.getInstance().repository.addInDb(item);
+            return item;
+        });
     }
 
     static async edit(
@@ -162,14 +148,17 @@ export default class MeetingArrangementsController {
         isPartOfTransaction?: boolean,
         fieldsToUpdate?: string[],
     ): Promise<MeetingArrangement> {
-        const instance = this.getInstance();
-        await instance.repository.editInDb(
-            item,
-            externalConn,
-            isPartOfTransaction,
-            fieldsToUpdate,
-        );
-        return item;
+        MeetingArrangementValidator.validateWriteContext(externalConn, isPartOfTransaction);
+        return this.withCurrent(item.id, async current => {
+            const caseIds = [current.caseId];
+            if (item.caseId !== undefined && (!fieldsToUpdate || fieldsToUpdate.includes('caseId'))) {
+                caseIds.push(item.caseId);
+            }
+            return ConsolidationGuard.cases([], caseIds, async () => {
+                await this.getInstance().repository.editInDb(item, undefined, false, fieldsToUpdate);
+                return item;
+            });
+        });
     }
 
     static async delete(
@@ -177,11 +166,18 @@ export default class MeetingArrangementsController {
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction?: boolean,
     ): Promise<void> {
-        const instance = this.getInstance();
-        await instance.repository.deleteFromDb(
-            item,
-            externalConn,
-            isPartOfTransaction,
+        MeetingArrangementValidator.validateWriteContext(externalConn, isPartOfTransaction);
+        await this.withCurrent(item.id, current =>
+            ConsolidationGuard.cases([], [current.caseId], () => this.getInstance().repository.deleteFromDb(item)),
         );
+    }
+
+    private static async withCurrent<T>(id: unknown, action: (current: MeetingArrangement) => Promise<T>): Promise<T> {
+        MeetingArrangementValidator.validateId(id);
+        return Sharing.runExclusive(async () => {
+            const [current] = await this.getInstance().repository.find({ id });
+            if (!current) throw new Error(`MeetingArrangement with id=${id} not found`);
+            return action(current);
+        });
     }
 }

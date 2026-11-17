@@ -33,7 +33,7 @@ export async function createCaseShortcuts(
     const targetId = letter.gdFolderId || letter.gdDocumentId;
     if (!targetId || isOfferLetter(letter)) return;
 
-    await Promise.all(
+    const results = await Promise.allSettled(
         (letter._cases || []).map(async (caseItem) => {
             if (!caseItem.gdFolderId) return;
             const parentId = await resolveShortcutParentId(auth, caseItem);
@@ -45,6 +45,9 @@ export async function createCaseShortcuts(
             });
         })
     );
+    for (const result of results) {
+        if (result.status === 'rejected') throw result.reason;
+    }
 }
 
 /**

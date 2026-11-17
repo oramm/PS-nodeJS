@@ -1,3 +1,4 @@
+import ConsolidationGuard from '../contracts/milestones/consolidation/ConsolidationWriteGuardController';
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import BaseController from '../controllers/BaseController';
@@ -146,6 +147,9 @@ export default class ProjectsController extends BaseController<
      * @returns Zaktualizowany Project
      */
     static async edit(project: Project, auth?: OAuth2Client): Promise<Project> {
+        return ConsolidationGuard.structure('project', project.id, project, undefined, () => this.editUnlocked(project, auth));
+    }
+    private static async editUnlocked(project: Project, auth?: OAuth2Client): Promise<Project> {
         return await this.withAuth<Project>(
             async (instance: ProjectsController, authClient: OAuth2Client) => {
                 return await instance.editProject(authClient, project);
@@ -175,7 +179,7 @@ export default class ProjectsController extends BaseController<
             let fidmanOutboxId: number | undefined;
 
             // Równolegle: DB i GD
-            await Promise.all([
+            const effects = await Promise.allSettled([
                 // 1. Transakcja DB
                 ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
                     // 1a. Edytuj główny rekord
@@ -197,6 +201,8 @@ export default class ProjectsController extends BaseController<
                 project.editProjectFolder(auth),
             ]);
 
+            const failed = effects.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+            if (failed) throw failed.reason;
             console.log('Project edited');
 
             // SYNC-P1: push STRICTLY post-commit; awaria nigdy nie rolbackuje
@@ -222,6 +228,9 @@ export default class ProjectsController extends BaseController<
      * @param auth - OAuth2Client dla operacji GD
      */
     static async delete(project: Project, auth?: OAuth2Client): Promise<void> {
+        return ConsolidationGuard.structure('project', project.id, undefined, undefined, () => this.deleteUnlocked(project, auth));
+    }
+    private static async deleteUnlocked(project: Project, auth?: OAuth2Client): Promise<void> {
         return await this.withAuth<void>(
             async (instance: ProjectsController, authClient: OAuth2Client) => {
                 return await instance.deleteProject(authClient, project);

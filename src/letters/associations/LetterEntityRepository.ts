@@ -3,11 +3,17 @@ import LetterEntity from './LetterEntity';
 import Entity from '../../entities/Entity';
 import ToolsDb from '../../tools/ToolsDb';
 import { LetterData } from '../../types/types';
+import mysql from 'mysql2/promise';
+import { ProjectScope } from '../../types/sessionTypes';
+import { makeProjectScopeCondition } from '../../tools/ProjectScope';
+import { milestoneVisibilitySql } from '../../contracts/milestones/sharing/milestoneVisibilitySql';
 
 export type LetterEntitySearchParams = {
     projectId?: string;
     contractId?: number;
     milestoneId?: number;
+    letterIds?: number[];
+    scope?: ProjectScope;
 };
 
 export default class LetterEntityRepository extends BaseRepository<LetterEntity> {
@@ -42,21 +48,7 @@ export default class LetterEntityRepository extends BaseRepository<LetterEntity>
     async find(
         searchParams: LetterEntitySearchParams = {}
     ): Promise<LetterEntity[]> {
-        const projectId = searchParams.projectId;
-        const contractId = searchParams.contractId;
-        const milestoneId = searchParams.milestoneId;
-
-        const projectCondition = projectId
-            ? `Projects.OurId="${projectId}"`
-            : '1';
-
-        const contractCondition = contractId
-            ? `Contracts.Id="${contractId}"`
-            : '1';
-
-        const milestoneCondition = milestoneId
-            ? `Milestones.Id="${milestoneId}"`
-            : '1';
+        const conditions = this.makeAndConditions(searchParams);
 
         const sql = `SELECT  Letters_Entities.LetterId,
                 Letters_Entities.EntityId,
@@ -70,18 +62,38 @@ export default class LetterEntityRepository extends BaseRepository<LetterEntity>
             FROM Letters_Entities
             JOIN Letters ON Letters_Entities.LetterId = Letters.Id
             LEFT JOIN Projects ON Letters.ProjectId = Projects.Id
-            LEFT JOIN Contracts ON Projects.OurId = Contracts.ProjectOurId
-            LEFT JOIN Milestones ON Milestones.ContractId = Contracts.Id
-            LEFT JOIN Offers ON Offers.Id = Letters.OfferId
             JOIN Entities ON Letters_Entities.EntityId=Entities.Id
-            WHERE ${projectCondition} 
-              AND ${contractCondition} 
-              AND ${milestoneCondition}
-            GROUP BY LetterId, EntityId
+            WHERE ${conditions}
             ORDER BY Letters_Entities.LetterRole, EntityName`;
 
         const result: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
         return result.map((row) => this.mapRowToModel(row));
+    }
+
+    private makeAndConditions(searchParams: LetterEntitySearchParams): string {
+        const clauses: string[] = [
+            makeProjectScopeCondition('Projects.OurId', searchParams.scope),
+        ];
+        if (searchParams.projectId)
+            clauses.push(mysql.format('Projects.OurId = ?', [searchParams.projectId]));
+        if (searchParams.letterIds !== undefined)
+            clauses.push(
+                searchParams.letterIds.length
+                    ? mysql.format('Letters.Id IN (?)', [searchParams.letterIds])
+                    : '0'
+            );
+        if (searchParams.contractId || searchParams.milestoneId) {
+            const caseClauses = [
+                milestoneVisibilitySql({ contractId: searchParams.contractId }),
+            ];
+            if (searchParams.milestoneId)
+                caseClauses.push(mysql.format('Milestones.Id = ?', [searchParams.milestoneId]));
+            clauses.push(`EXISTS (SELECT 1 FROM Letters_Cases
+                JOIN Cases ON Cases.Id = Letters_Cases.CaseId
+                JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+                WHERE Letters_Cases.LetterId = Letters.Id AND ${caseClauses.join(' AND ')})`);
+        }
+        return clauses.join(' AND ');
     }
 }

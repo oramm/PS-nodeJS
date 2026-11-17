@@ -22,6 +22,8 @@ jest.mock('../../setup/Sessions/IntersessionsTasksStore');
 // FidmanSync is intentionally NOT mocked here.
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import Tools from '../../tools/Tools';
 import CurrentSprintValidator from '../../ScrumSheet/CurrentSprintValidator';
 import TaskStore from '../../setup/Sessions/IntersessionsTasksStore';

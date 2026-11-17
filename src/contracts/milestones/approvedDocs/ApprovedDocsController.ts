@@ -116,9 +116,14 @@ export default class ApprovedDocsController {
         });
         const rows = (existing.values ?? []) as any[][];
         const letterNo = String(letter.number ?? '').trim();
+        const docUrl = letter.gdDocumentId
+            ? ToolsGd.createDocumentOpenUrl(letter.gdDocumentId)
+            : ToolsGd.createGdFolderUrl(letter.gdFolderId as string);
         if (
-            letterNo &&
-            rows.some((row) => String(row?.[COL.NR] ?? '').trim() === letterNo)
+            rows.some((row) =>
+                (letterNo && String(row?.[COL.NR] ?? '').trim() === letterNo) ||
+                String(row?.[COL.LINK] ?? '').trim() === docUrl
+            )
         ) {
             console.log(
                 `ApprovedDocs: pismo ${letter.number} już jest w rejestrze — pomijam`
@@ -126,18 +131,18 @@ export default class ApprovedDocsController {
             return;
         }
 
-        await ToolsGd.createShortcut(auth, {
-            targetId,
-            parentId: folderId,
-            name: `${letter.number} ${letter.description ?? ''}`.trim(),
-        });
+        const shortcuts = await ToolsGd.findShortcutsByTarget(auth, targetId);
+        if (!shortcuts.some((item) => item.parents?.includes(folderId))) {
+            await ToolsGd.createShortcut(auth, {
+                targetId,
+                parentId: folderId,
+                name: `${letter.number} ${letter.description ?? ''}`.trim(),
+            });
+        }
 
         // Wiersz: Lp | Data | Rodzaj | Nr pisma | Dotyczy | Sprawa | Link
         const lp = rows.length; // nagłówek + istniejące wiersze → kolejne Lp
         const date = (letter.creationDate ?? '').toString().slice(0, 10);
-        const docUrl = letter.gdDocumentId
-            ? ToolsGd.createDocumentOpenUrl(letter.gdDocumentId)
-            : ToolsGd.createGdFolderUrl(letter.gdFolderId as string);
         const { text: sprawaText, runs } = buildSprawaRichText(letter._cases);
 
         const appendRes = await ToolsSheets.appendRowsToSpreadSheet(auth, {

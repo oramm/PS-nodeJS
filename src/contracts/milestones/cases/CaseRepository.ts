@@ -2,8 +2,6 @@ import BaseRepository from '../../../repositories/BaseRepository';
 import Case from './Case';
 import ToolsDb from '../../../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import ProcessesController from '../../../processes/ProcesesController';
-import ProcessInstancesController from '../../../processes/processInstances/ProcessInstancesController';
 import Risk from './risks/Risk';
 import Milestone from '../Milestone';
 import { makeProjectScopeCondition } from '../../../tools/ProjectScope';
@@ -12,6 +10,7 @@ import ContractOur from '../../ContractOur';
 import ContractOther from '../../ContractOther';
 import { OfferData } from '../../../types/types';
 import TaskRepository from './tasks/TaskRepository';
+import { milestoneVisibilitySql } from '../sharing/milestoneVisibilitySql';
 
 export type CasesSearchParams = {
     projectId?: string;
@@ -77,14 +76,10 @@ export default class CaseRepository extends BaseRepository<Case> {
         orConditions: CasesSearchParams[] = [],
         scope?: ProjectScope
     ): Promise<Case[]> {
-        const milestoneParentTypeCondition =
-            orConditions[0]._contract?.id || orConditions[0].contractId
-                ? 'Milestones.ContractId IS NOT NULL'
-                : 'Milestones.OfferId IS NOT NULL';
-
         const sql = `SELECT
             Cases.Id,
             Cases.ParentCaseId,
+            ParentCases.Number AS ParentCaseNumber,
             CaseTypes.Id AS CaseTypeId,
             CaseTypes.Name AS CaseTypeName,
             CaseTypes.IsDefault,
@@ -125,6 +120,7 @@ export default class CaseRepository extends BaseRepository<Case> {
             Risks.Probability AS RiskProbability,
             Risks.OverallImpact AS RiskOverallImpact
         FROM Cases
+        LEFT JOIN Cases AS ParentCases ON ParentCases.Id = Cases.ParentCaseId
         LEFT JOIN CaseTypes ON Cases.TypeId=CaseTypes.Id
         JOIN Milestones ON Milestones.Id=Cases.MilestoneId
         JOIN MilestoneTypes ON Milestones.TypeId=MilestoneTypes.Id
@@ -142,27 +138,14 @@ export default class CaseRepository extends BaseRepository<Case> {
             orConditions,
             this.makeAndConditions.bind(this)
         )})
-            AND ${milestoneParentTypeCondition}
             AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
         ORDER BY Contracts.Id, Milestones.Id, CaseTypes.FolderNumber`;
 
         const result: any[] = await this.executeQuery(sql);
 
-        const [processes, processesInstances, subCaseTypeRels] = await Promise.all([
-            ProcessesController.find({
-                projectId: orConditions[0]?.projectId,
-                contractId: orConditions[0]?.contractId,
-                milestoneId: orConditions[0]?.milestoneId,
-            }),
-            ProcessInstancesController.find({
-                projectId: orConditions[0]?.projectId,
-                contractId: orConditions[0]?.contractId,
-                milestoneId: orConditions[0]?.milestoneId,
-            }),
-            this.executeQuery(
-                'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
-            ),
-        ]);
+        const subCaseTypeRels = await this.executeQuery(
+            'SELECT ParentCaseTypeId, SubCaseTypeId FROM CaseType_SubCaseTypes'
+        );
 
         const subCaseTypeIdsMap = new Map<number, number[]>();
         for (const rel of subCaseTypeRels) {
@@ -172,29 +155,11 @@ export default class CaseRepository extends BaseRepository<Case> {
             subCaseTypeIdsMap.get(rel.ParentCaseTypeId)!.push(rel.SubCaseTypeId);
         }
 
-        const caseNumberById = new Map<number, number>();
-        for (const row of result) {
-            if (row.Id != null && row.Number != null)
-                caseNumberById.set(row.Id, row.Number);
-        }
-
-        const cases: Case[] = [];
-        for (const row of result) {
+        const cases = result.map((row) => {
             row._allowedSubCaseTypeIds = subCaseTypeIdsMap.get(row.CaseTypeId) ?? [];
-            row._parentCaseNumber = row.ParentCaseId != null
-                ? caseNumberById.get(row.ParentCaseId)
-                : undefined;
-            const caseItem = this.mapRowToModel(
-                row,
-                processes,
-                processesInstances
-            );
-
-            // Sprawdź dodatkowe kryteria
-            if (this.checkCriteria(caseItem, orConditions[0])) {
-                cases.push(caseItem);
-            }
-        }
+            row._parentCaseNumber = row.ParentCaseNumber ?? undefined;
+            return this.mapRowToModel(row);
+        });
 
         return cases;
     }
@@ -203,15 +168,9 @@ export default class CaseRepository extends BaseRepository<Case> {
      * Mapuje wiersz z bazy danych na instancję Case
      *
      * @param row - Wiersz z bazy danych
-     * @param processes - Lista procesów (dla filtrowania)
-     * @param processesInstances - Lista instancji procesów
      * @returns Case - Zmapowana instancja
      */
-    protected mapRowToModel(
-        row: any,
-        processes?: any[],
-        processesInstances?: any[]
-    ): Case {
+    protected mapRowToModel(row: any): Case {
         const _contract = this.makeContractObject(row);
         const _offer = this.makeOfferObject(row);
 
@@ -228,10 +187,7 @@ export default class CaseRepository extends BaseRepository<Case> {
                 _allowsSubCases: (row._allowedSubCaseTypeIds ?? []).length > 0,
                 milestoneTypeId: row.MilestoneTypeId,
                 folderNumber: row.CaseTypeFolderNumber,
-                _processes:
-                    processes?.filter(
-                        (item: any) => item._caseType.id == row.CaseTypeId
-                    ) || [],
+                _processes: [],
             },
             name: ToolsDb.sqlToString(row.Name),
             number: row.Number,
@@ -259,10 +215,7 @@ export default class CaseRepository extends BaseRepository<Case> {
                 probability: row.RiskProbability,
                 overallImpact: row.RiskOverallImpact,
             }),
-            _processesInstances:
-                processesInstances?.filter(
-                    (item: any) => item._case.id == row.Id
-                ) || [],
+            _processesInstances: [],
         });
     }
 
@@ -279,7 +232,7 @@ export default class CaseRepository extends BaseRepository<Case> {
         const contractId =
             searchParams.contractId || searchParams._contract?.id;
         const contractCondition = contractId
-            ? mysql.format('Contracts.Id = ?', [contractId])
+            ? milestoneVisibilitySql({ contractId })
             : '1';
 
         const offerId = searchParams.offerId || searchParams._offer?.id;
@@ -321,6 +274,12 @@ export default class CaseRepository extends BaseRepository<Case> {
             searchParams.searchText
         );
 
+        const processCondition = searchParams.hasProcesses === undefined
+            ? '1'
+            : `${searchParams.hasProcesses === 'true' ? '' : 'NOT '}EXISTS (
+                SELECT 1 FROM ProcessInstances WHERE ProcessInstances.CaseId = Cases.Id
+            )`;
+
         return `${projectCondition}
             AND ${contractCondition}
             AND ${offerCondition}
@@ -330,7 +289,8 @@ export default class CaseRepository extends BaseRepository<Case> {
             AND ${searchTextCondition}
             AND ${typeIdCondition}
             AND ${milestoneTypeCondition}
-            AND ${statusCondition}`;
+            AND ${statusCondition}
+            AND ${processCondition}`;
     }
 
     /**
@@ -362,22 +322,6 @@ export default class CaseRepository extends BaseRepository<Case> {
         );
 
         return conditions.join(' AND ');
-    }
-
-    /**
-     * Sprawdza dodatkowe kryteria filtrowania
-     */
-    private checkCriteria(
-        caseItem: Case,
-        criteria: CasesSearchParams
-    ): boolean {
-        if (criteria.hasProcesses === undefined) return true;
-
-        const hasProcesses: boolean = criteria.hasProcesses === 'true';
-        return !!(
-            caseItem._processesInstances &&
-            hasProcesses === caseItem._processesInstances.length > 0
-        );
     }
 
     /**
@@ -435,6 +379,12 @@ export default class CaseRepository extends BaseRepository<Case> {
             },
         };
         return offerInitParam;
+    }
+
+    async hasSharedMilestone(milestoneId: number): Promise<boolean> {
+        const rows = await this.executeQuery(mysql.format(
+            'SELECT 1 FROM MilestoneContractLinks WHERE MilestoneId = ? LIMIT 1', [milestoneId]));
+        return rows.length > 0;
     }
 
     async findGdFolderById(caseId: number): Promise<string | null> {
@@ -640,44 +590,9 @@ export default class CaseRepository extends BaseRepository<Case> {
      *
      * @param caseId - ID Case
      */
-    async deleteProcessInstances(caseId: number): Promise<void> {
+    async deleteProcessInstances(caseId: number, conn?: mysql.PoolConnection): Promise<void> {
         const sql = `DELETE FROM ProcessInstances WHERE CaseId = ?`;
-        await ToolsDb.executePreparedStmt(sql, [caseId], { id: caseId });
+        await ToolsDb.executeSQL(sql, [caseId], conn);
     }
 
-    /**
-     * Edytuje Case w bazie wraz z opcjonalną resetowaniem ProcessInstances
-     *
-     * ZGODNIE Z WYTYCZNYMI: Repository tylko operacje DB, bez orkiestracji
-     * Controller zarządza transakcją i wywołuje tę metodę
-     *
-     * @param caseItem - Case do edycji
-     * @param shouldResetProcessInstances - Czy zresetować ProcessInstances (przy zmianie typu)
-     * @param newProcessInstances - Nowe ProcessInstances (jeśli reset)
-     * @param conn - Połączenie DB (wymagane - część transakcji Controller)
-     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji (np. ['status'])
-     * @returns Zaktualizowany Case
-     */
-    async editWithRelated(
-        caseItem: Case,
-        shouldResetProcessInstances: boolean,
-        newProcessInstances: any[],
-        conn: mysql.PoolConnection,
-        fieldsToUpdate?: string[]
-    ): Promise<Case> {
-        // 1. Edytuj Case
-        await this.editInDb(caseItem, conn, true, fieldsToUpdate);
-
-        // 2. Jeśli trzeba, zresetuj ProcessInstances
-        if (shouldResetProcessInstances) {
-            await this.deleteProcessInstances(caseItem.id!);
-
-            // Dodaj nowe ProcessInstances
-            for (const processInstance of newProcessInstances) {
-                await processInstance.addInDb(conn, true);
-            }
-        }
-
-        return caseItem;
-    }
 }

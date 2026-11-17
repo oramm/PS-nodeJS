@@ -18,6 +18,8 @@ import {
     afterEach,
 } from '@jest/globals';
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../milestones/sharing/testing/unsharedLifecycleFixture';
+beforeEach(() => installUnsharedLifecyclePool(ToolsDb));
 import Tools from '../../tools/Tools';
 import ContractEntityRepository from '../ContractEntityRepository';
 import ContractRangeContractRepository from '../contractRangesContracts/ContractRangeContractRepository';

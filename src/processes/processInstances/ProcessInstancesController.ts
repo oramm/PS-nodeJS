@@ -4,8 +4,9 @@ import BaseController from '../../controllers/BaseController';
 import mysql from 'mysql2/promise';
 import ProcessStepsController from '../ProcessStepsController';
 import ProcessStepInstance from './ProcessStepInstance';
-import ProcessStepInstancesController from './ProcessStepInstancesController';
-import ToolsDb from '../../tools/ToolsDb';
+import ProcessStepInstanceRepository from './ProcessStepInstanceRepository';
+import Guard from '../../contracts/milestones/consolidation/ConsolidationWriteGuardController';
+import GuardValidator from '../../contracts/milestones/consolidation/ConsolidationWriteGuardValidator';
 
 export type ProcessInstanceDto = {
     id?: number;
@@ -57,28 +58,11 @@ export default class ProcessInstancesController extends BaseController<
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false
     ): Promise<ProcessInstance> {
-        const instance = this.getInstance();
-
-        if (!externalConn && isPartOfTransaction) {
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        }
-
-        if (externalConn) {
-            await instance.repository.addInDb(
-                processInstance,
-                externalConn,
-                isPartOfTransaction
-            );
+        GuardValidator.standalone(externalConn, isPartOfTransaction);
+        return Guard.processes([], [processInstance.caseId], processInstance.taskId == null ? [] : [processInstance.taskId], async conn => {
+            await this.getInstance().repository.addInDb(processInstance, conn, true);
             return processInstance;
-        }
-
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await instance.repository.addInDb(processInstance, conn, true);
         });
-
-        return processInstance;
     }
 
     static async editFromDto(
@@ -102,34 +86,15 @@ export default class ProcessInstancesController extends BaseController<
         isPartOfTransaction: boolean = false,
         fieldsToUpdate?: string[]
     ): Promise<ProcessInstance> {
-        const instance = this.getInstance();
-
-        if (!externalConn && isPartOfTransaction) {
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        }
-
-        if (externalConn) {
-            await instance.repository.editInDb(
-                processInstance,
-                externalConn,
-                isPartOfTransaction,
-                fieldsToUpdate
-            );
+        GuardValidator.standalone(externalConn, isPartOfTransaction);
+        const caseIds = processInstance.caseId !== undefined && (!fieldsToUpdate?.length || fieldsToUpdate.includes('caseId'))
+            ? [processInstance.caseId] : [];
+        const taskIds = processInstance.taskId != null && (!fieldsToUpdate?.length || fieldsToUpdate.includes('taskId'))
+            ? [processInstance.taskId] : [];
+        return Guard.processes([processInstance.id], caseIds, taskIds, async conn => {
+            await this.getInstance().repository.editInDb(processInstance, conn, true, fieldsToUpdate);
             return processInstance;
-        }
-
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await instance.repository.editInDb(
-                processInstance,
-                conn,
-                true,
-                fieldsToUpdate
-            );
         });
-
-        return processInstance;
     }
 
     static async delete(
@@ -137,85 +102,41 @@ export default class ProcessInstancesController extends BaseController<
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false
     ): Promise<void> {
-        const instance = this.getInstance();
-
-        if (!externalConn && isPartOfTransaction) {
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        }
-
-        if (externalConn) {
-            await instance.repository.deleteFromDb(
-                processInstance,
-                externalConn,
-                isPartOfTransaction
-            );
-            return;
-        }
-
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await instance.repository.deleteFromDb(processInstance, conn, true);
-        });
+        GuardValidator.standalone(externalConn, isPartOfTransaction);
+        await Guard.processes([processInstance.id], [], [], conn =>
+            this.getInstance().repository.deleteFromDb(processInstance, conn, true));
     }
 
     /**
-     * Tworzy ProcessInstance oraz domyślne ProcessStepInstances dla procesu.
+     * Creates a process instance and its default step instances.
      *
-     * - Jeśli przekazano `externalConn` + `isPartOfTransaction=true` → używa istniejącej transakcji.
-     * - Jeśli nie przekazano `externalConn` → startuje własną transakcję.
+     * Owns the lifecycle lock and DB-only transaction for the process and all steps.
+     * External transactions require a separate ownership-aware integration.
      */
     static async addNewProcessStepsInstances(
         processInstance: ProcessInstance,
         externalConn?: mysql.PoolConnection,
         isPartOfTransaction: boolean = false
     ): Promise<ProcessInstance> {
-        const instance = this.getInstance();
-
-        if (!externalConn && isPartOfTransaction) {
-            throw new Error(
-                'Transaction is not possible without external connection'
-            );
-        }
-
-        const createAll = async (conn: mysql.PoolConnection): Promise<void> => {
-            await instance.repository.addInDb(processInstance, conn, true);
-
-            const processSteps = await ProcessStepsController.find({
-                processId: processInstance.processId,
-            });
-
+        GuardValidator.standalone(externalConn, isPartOfTransaction);
+        const steps = await Guard.processes([], [processInstance.caseId], processInstance.taskId == null ? [] : [processInstance.taskId], async conn => {
+            await this.getInstance().repository.addInDb(processInstance, conn, true);
+            const processSteps = await ProcessStepsController.find({ processId: processInstance.processId });
+            const created: ProcessStepInstance[] = [];
+            const stepRepository = new ProcessStepInstanceRepository();
             for (const processStep of processSteps) {
                 const stepInstance = new ProcessStepInstance({
                     processInstanceId: processInstance.id,
-                    processStepId: processStep.id,
-                    _processStep: {
-                        id: processStep.id,
-                        name: processStep.name,
-                        description: processStep.description,
-                    },
+                    _processStep: { id: processStep.id, name: processStep.name, description: processStep.description },
                     _case: processInstance._case,
                     editorId: processInstance.editorId,
                 });
-
-                await ProcessStepInstancesController.add(
-                    stepInstance,
-                    conn,
-                    true
-                );
-                processInstance._stepsInstances.push(stepInstance);
+                await stepRepository.addInDb(stepInstance, conn, true);
+                created.push(stepInstance);
             }
-        };
-
-        if (externalConn) {
-            await createAll(externalConn);
-            return processInstance;
-        }
-
-        await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
-            await createAll(conn);
+            return created;
         });
-
+        processInstance._stepsInstances.push(...steps);
         return processInstance;
     }
 }

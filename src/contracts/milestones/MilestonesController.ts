@@ -1,3 +1,7 @@
+import ConsolidationGuard from './consolidation/ConsolidationWriteGuardController';
+import SharingError from './sharing/MilestoneSharingError';
+import Sharing from './sharing/MilestoneSharingController';
+import SharingValidator from './sharing/MilestoneSharingValidator';
 import { OAuth2Client } from 'google-auth-library';
 import mysql from 'mysql2/promise';
 import BaseController from '../../controllers/BaseController';
@@ -39,6 +43,90 @@ export default class MilestonesController extends BaseController<
     Milestone,
     MilestoneRepository
 > {
+
+    static async addFromDto(dto: any, userData?: UserData) {
+        return this.add(new Milestone(dto), undefined, userData);
+    }
+
+    static async editFromDto(id: unknown, dto: any, userData?: UserData) {
+        const resolvedId = SharingValidator.id(id);
+        if (dto.id != null && dto.id !== resolvedId) throw new SharingError('INVALID_REQUEST', 400);
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardMilestone({ ...dto, id: resolvedId });
+            const current = await this.getInstance().repository.findById(resolvedId);
+            if (!current) throw new SharingError('OBJECT_NOT_FOUND', 404);
+            const item = new Milestone({ ...dto, id: resolvedId, _contract: current._contract, _offer: current._offer });
+            item._sharingRevision = dto._sharingRevision;
+            return this.edit(item, undefined, userData, dto._fieldsToUpdate);
+        });
+    }
+
+    static async editThroughDateFromDto(id: unknown, dto: any, userData?: UserData) {
+        return Sharing.runExclusive(async () => {
+            const row = await Sharing.resolveDate(id, dto);
+            const milestone = await this.editFromDto(row.MilestoneId,
+                { ...dto._milestone, _fieldsToUpdate: dto._fieldsToUpdate }, userData);
+            return { ...dto, _milestone: milestone };
+        });
+    }
+
+    static async deleteFromDto(id: unknown, dto: any) {
+        const resolvedId = SharingValidator.id(id);
+        if (dto.id != null && dto.id !== resolvedId) throw new SharingError('INVALID_REQUEST', 400);
+        return Sharing.runExclusive(async () => {
+            const current = await this.getInstance().repository.findById(resolvedId);
+            if (!current) throw new SharingError('OBJECT_NOT_FOUND', 404);
+            await this.delete(current);
+            return current;
+        });
+    }
+
+    static async add(milestone: Milestone, auth?: OAuth2Client, userData?: UserData): Promise<Milestone> {
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardCreate([milestone]);
+            return this.addUnsafe(milestone, auth, userData);
+        });
+    }
+
+    static async edit(milestone: Milestone, auth?: OAuth2Client, userData?: UserData, fields?: string[]): Promise<Milestone> {
+        return ConsolidationGuard.cases([milestone.id], [], async () => {
+            await ConsolidationGuard.structure('milestone', milestone.id, milestone, fields, async () => undefined);
+            const snapshot = await Sharing.guardMilestone(milestone);
+            if (snapshot.links.length) {
+                const current = await this.getInstance().repository.findById(milestone.id!);
+                milestone._contract = current!._contract;
+                milestone._type = current!._type;
+                milestone.setFolderName();
+            }
+            const result = await this.editUnsafe(milestone, auth, userData, fields);
+            await Sharing.decorate([result]);
+            return result;
+        });
+    }
+
+    static async delete(milestone: Milestone, auth?: OAuth2Client): Promise<void> {
+        return ConsolidationGuard.cases([milestone.id], [], async () => {
+            await ConsolidationGuard.structure('milestone', milestone.id, undefined, undefined, async () => undefined);
+            await Sharing.guardMilestone(milestone, true);
+            return this.deleteUnsafe(milestone, auth);
+        });
+    }
+
+    static async addBulkWithDates(milestones: Milestone[], conn?: mysql.PoolConnection): Promise<Milestone[]> {
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardCreate(milestones);
+            return this.addBulkWithDatesUnsafe(milestones, conn);
+        });
+    }
+
+    static async addBulkWithDatesAndCases(milestones: Milestone[], auth: OAuth2Client,
+        options?: { isPartOfBatch?: boolean; caseTypesByMilestone?: Map<Milestone, ResolvedCaseType[]> }): Promise<Milestone[]> {
+        return Sharing.runExclusive(async () => {
+            await Sharing.guardCreate(milestones);
+            return this.addBulkWithDatesAndCasesUnsafe(milestones, auth, options);
+        });
+    }
+
     private static instance: MilestonesController;
 
     constructor() {
@@ -69,7 +157,11 @@ export default class MilestonesController extends BaseController<
         scope?: ProjectScope
     ): Promise<Milestone[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions, parentType, scope);
+        return Sharing.runExclusive(async () => {
+            const items = await instance.repository.find(orConditions, parentType, scope);
+            await Sharing.decorate(items);
+            return items;
+        });
     }
 
     /**
@@ -86,7 +178,7 @@ export default class MilestonesController extends BaseController<
      * await MilestonesController.addBulkWithDatesAndCases(milestones, auth);
      * ```
      */
-    static async addBulkWithDates(
+    private static async addBulkWithDatesUnsafe(
         milestones: Milestone[],
         externalConn?: mysql.PoolConnection
     ): Promise<Milestone[]> {
@@ -119,7 +211,7 @@ export default class MilestonesController extends BaseController<
      * mogą mieć ten sam typ). Kamień nieobecny w mapie dostaje sprawy domyślne.
      * @returns Promise<Milestone[]> - Dodane Milestones
      */
-    static async addBulkWithDatesAndCases(
+    private static async addBulkWithDatesAndCasesUnsafe(
         milestones: Milestone[],
         auth: OAuth2Client,
         options?: {
@@ -162,7 +254,7 @@ export default class MilestonesController extends BaseController<
      * @param userData - Dane użytkownika z sesji
      * @returns Dodany Milestone
      */
-    static async add(
+    private static async addUnsafe(
         milestone: Milestone,
         auth?: OAuth2Client,
         userData?: UserData
@@ -266,7 +358,7 @@ export default class MilestonesController extends BaseController<
      * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji
      * @returns Zaktualizowany Milestone
      */
-    static async edit(
+    private static async editUnsafe(
         milestone: Milestone,
         auth?: OAuth2Client,
         userData?: UserData,
@@ -312,6 +404,7 @@ export default class MilestonesController extends BaseController<
                         await instance.repository.editMilestoneWithDates(
                             milestone, conn, true, fieldsToUpdate
                         );
+                        await Sharing.touch(milestone.id!, conn);
                         return enqueueFidmanFoldersForContracts(contractIds, conn);
                     });
                     void deliverFidmanFoldersAfterCommit(ids).catch((err) =>
@@ -332,10 +425,11 @@ export default class MilestonesController extends BaseController<
                                 milestone.setFolderName();
                             }
                         }
-                        await Promise.all([
+                        const effects = await Promise.allSettled([
                             instance.editMilestoneFolder(authClient, milestone),
                             milestone.editInScrum(authClient),
                         ]);
+                        for (const effect of effects) if (effect.status === 'rejected') throw effect.reason;
                         console.log('Milestone folder edited in GD');
                         console.log('Milestone edited in Scrum');
                     }
@@ -421,7 +515,7 @@ export default class MilestonesController extends BaseController<
      * @param milestone - Milestone do usunięcia
      * @param auth - OAuth2Client dla operacji GD
      */
-    static async delete(
+    private static async deleteUnsafe(
         milestone: Milestone,
         auth?: OAuth2Client
     ): Promise<void> {
@@ -567,6 +661,7 @@ export default class MilestonesController extends BaseController<
         ]);
 
         for (const milestone of milestones) {
+            if (milestone.contractId !== contract.id) continue;
             if (!milestone.gdFolderId) continue;
             try {
                 await ApprovedDocsController.ensureFolderAndSheet(

@@ -1,3 +1,9 @@
+## 2026-11-17 — PS-MC: scalenie kamieni, przygotowanie wydania
+
+- Kod wprowadza współdzielenie i łączenie kamieni wraz z historią operacji. Zakres schematu: migracje 002–010 w katalogu kamieni milowych.
+- Przed wdrożeniem sprawdź rejestr oraz schemat bazy docelowej, przygotuj kopię i plan zastosowania wyłącznie brakujących migracji. Wydanie Heroku sprawdza rejestr przez `migrate:verify`.
+- Sprawdź pełny przebieg na zgodnych wersjach backendu i frontendu w środowisku testowym. Przy wycofaniu kodu wstrzymaj zapisy i zachowaj dane oraz historię wykonanych łączeń.
+
 # Post Change Checklist
 
 Use this file for every change that impacts DB, environment variables, or deployment.

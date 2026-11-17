@@ -1,3 +1,4 @@
+import RouteIdValidator from '../tools/RouteIdValidator';
 import { Request, Response } from 'express';
 import ContractsController, {
     ContractCreationOptions,
@@ -17,6 +18,8 @@ import TaskStore from '../setup/Sessions/IntersessionsTasksStore';
 import { SessionTask } from '../types/sessionTypes';
 import ToolsMail from '../tools/ToolsMail';
 import ChatSpacesController from './chatSpaces/ChatSpacesController';
+import ContractSharedCreationController from './milestones/sharing/ContractSharedCreationController';
+import SharingError from './milestones/sharing/MilestoneSharingError';
 import MailboxController from '../mailboxes/MailboxController';
 import { parseContractSelectedPersonIds } from './contractAssignees';
 import ContractSelectedPersonsRepository from './ContractSelectedPersonsRepository';
@@ -79,17 +82,28 @@ app.post(
 
 app.post('/contractReact', async (req: Request, res: Response, next) => {
     try {
+        const chatSpaceSelection = ChatSpacesController.parseSelection(req.parsedBody._chatSpaceSelection);
+        const requestedPersonIds = req.body?._selectedPersonIds ?? req.parsedBody._selectedPersonIds;
+        const rawSelectedPersonIds = requestedPersonIds
+            ?? (chatSpaceSelection.mode === 'new' ? chatSpaceSelection.personIds : undefined);
+        // Na etapie tworzenia wybór obsługuje również zaproszenia do Chatu.
+        const selectedPersonIds = rawSelectedPersonIds === undefined
+            ? undefined : parseContractSelectedPersonIds(rawSelectedPersonIds);
+        const sharedDto = requestedPersonIds === undefined
+            ? req.parsedBody : { ...req.parsedBody, _selectedPersonIds: requestedPersonIds };
+        const sharedCreation = await ContractSharedCreationController.prepare(
+            sharedDto, req.session?.userData, req.projectScope, selectedPersonIds);
         console.log('req.session', req.session);
 
         // Tworzenie odpowiedniej instancji Contract
-        const contract = await ContractsController.createContractFromDto(
+        const contract = sharedCreation?.contract || await ContractsController.createContractFromDto(
             req.parsedBody,
             true,
         );
 
         // Wybór z drzewa struktury - czytany z DTO wprost, bo jest jednorazową
         // instrukcją tworzenia, a nie stanem umowy (nie przechodzi przez model)
-        const creationOptions: ContractCreationOptions = {
+        const creationOptions: ContractCreationOptions = sharedCreation ? {} : {
             milestonesSelection: ContractTemplatesTreeController.parseSelection(
                 req.parsedBody._milestonesSelection,
             ),
@@ -100,14 +114,7 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
 
         // Pokój Google Chat (CHT-3): jednorazowa instrukcja jak drzewo struktury, obsługiwana
         // PO commicie kontraktu. Brak pola = none.
-        const chatSpaceSelection = ChatSpacesController.parseSelection(
-            req.parsedBody._chatSpaceSelection,
-        );
-        const selectedPersonIds = req.body?._selectedPersonIds ?? req.parsedBody._selectedPersonIds
-            ?? (chatSpaceSelection.mode === 'new' ? chatSpaceSelection.personIds : undefined);
-        // Przy rejestracji lista sluzy tez zaproszeniom do Chatu, wiec osob zewnetrznych nie odrzucamy: skrzynki im nie daje regula personMailboxes.
-        if (selectedPersonIds !== undefined)
-            creationOptions.selectedPersonIds = parseContractSelectedPersonIds(selectedPersonIds);
+        creationOptions.selectedPersonIds = selectedPersonIds;
         const mailboxSelection = MailboxController.parseSelection(req.parsedBody._mailboxSelection);
         await MailboxController.validateContractSelection(mailboxSelection, contract.projectOurId!, (contract as ContractOur).ourId);
 
@@ -127,11 +134,11 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
         setImmediate(async () => {
             try {
                 // REFAKTORING: Użycie ContractsController.addWithAuth() zamiast ToolsGapi.gapiReguestHandler
-                await ContractsController.addWithAuth(
-                    contract,
-                    taskId,
-                    creationOptions,
-                );
+                const sharedResult = sharedCreation
+                    ? await ChatSpacesController.withMemberSync([contract.projectOurId], () =>
+                        ContractSharedCreationController.addWithAuth(sharedCreation, taskId))
+                    : undefined;
+                if (!sharedCreation) await ContractsController.addWithAuth(contract, taskId, creationOptions);
                 Object.assign(contract, await MailboxController.afterContract(contract.id!, mailboxSelection, req.session?.userData?.enviId ?? null));
                 // Chat nigdy nie wywraca tworzenia kontraktu: błąd = log + zgłoszenie,
                 // kontrakt zostaje (provision... nie rzuca).
@@ -164,12 +171,15 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
                 TaskStore.complete(
                     taskId,
                     contract,
-                    'Kontrakt pomyślnie zarejestrowany',
+                    sharedCreation ? (sharedResult?.shortcutStatus === 'READY'
+                        ? 'Kontrakt zapisany. Skrót i folder wspólnych dokumentów zweryfikowane przez serwer; uprawnienia użytkowników Google są odrębne.'
+                        : 'Kontrakt zapisany. Gotowość wspólnych dokumentów nie jest potwierdzona; sprawdź widok Przypięcia.')
+                        : 'Kontrakt pomyślnie zarejestrowany',
                 );
             } catch (err) {
                 console.error('Błąd podczas tworzenia kontraktu:', err);
                 try {
-                    await ToolsMail.sendServerErrorReport(err, req);
+                    if (!(err instanceof SharingError)) await ToolsMail.sendServerErrorReport(err, req);
                 } catch (mailError) {
                     console.error(
                         'Nie udało się wysłać maila o błędzie kontraktu:',
@@ -181,6 +191,11 @@ app.post('/contractReact', async (req: Request, res: Response, next) => {
             }
         });
     } catch (error) {
+        if (error instanceof SharingError) {
+            res.status(error.status).send({ error: { code: error.code, message: error.message,
+                operationId: null, retryable: error.status === 503 } });
+            return;
+        }
         next(error);
     }
 });
@@ -221,7 +236,7 @@ async function simulateTaskProgress(
 
 app.put('/contract/:id/move', async (req: Request, res: Response, next) => {
     try {
-        const contractId = parseInt(req.params.id);
+        const contractId = RouteIdValidator.positiveId(req.params.id);
         const { newProjectOurId } = req.parsedBody;
         if (!contractId || !newProjectOurId)
             throw new Error(
@@ -250,7 +265,7 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const _fieldsToUpdate: string[] | undefined =
             req.parsedBody._fieldsToUpdate;
-        const itemFromClient = req.parsedBody;
+        const itemFromClient = { ...req.parsedBody };
         const rawSelectedPersonIds = req.body?._selectedPersonIds;
         const selectedPersonIds = rawSelectedPersonIds === undefined
             ? undefined : parseContractSelectedPersonIds(rawSelectedPersonIds);
@@ -285,7 +300,7 @@ app.put('/contract/:id', async (req: Request, res: Response, next) => {
 app.delete('/contract/:id', async (req: Request, res: Response, next) => {
     try {
         const item = await ContractsController.createContractFromDto(
-            req.body,
+            { ...req.body, id: RouteIdValidator.positiveId(req.params.id) },
             false,
         );
 

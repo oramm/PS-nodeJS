@@ -1,4 +1,8 @@
+import ConsolidationGuard from '../../contracts/milestones/consolidation/ConsolidationWriteGuardController';
+import GuardValidator from '../../contracts/milestones/consolidation/ConsolidationWriteGuardValidator';
+import type { PoolConnection } from 'mysql2/promise';
 import BaseController from '../../controllers/BaseController';
+import { ProjectScope } from '../../types/sessionTypes';
 import {
     CaseData,
     ContractData,
@@ -18,6 +22,9 @@ export type LetterCaseSearchParams = {
     offerId?: number;
     _offer?: OfferData;
     letterId?: number;
+    letterIds?: number[];
+    scope?: ProjectScope;
+    personId?: number;
 };
 
 /**
@@ -44,25 +51,19 @@ export default class LetterCaseAssociationsController extends BaseController<
         return LetterCaseAssociationsController.instance;
     }
 
-    /**
-     * Dodaje nową asocjację Letter-Case do bazy danych
-     *
-     * @param association - asocjacja Letter-Case do dodania
-     * @param conn - połączenie do bazy (dla transakcji)
-     * @param isPartOfTransaction - czy operacja jest częścią większej transakcji
-     */
+    /** Standalone writer; internal letter transactions use the repository directly. */
     static async add(
         association: LetterCase,
-        conn: any,
-        isPartOfTransaction: boolean = true
+        conn?: PoolConnection,
+        isPartOfTransaction: boolean = false
     ): Promise<LetterCase> {
+        GuardValidator.standalone(conn, isPartOfTransaction);
         const instance = this.getInstance();
-        await instance.repository.addInDb(
-            association,
-            conn,
-            isPartOfTransaction
-        );
-        return association;
+        const pending = { ...association } as LetterCase;
+        return ConsolidationGuard.letterEdit(pending.letterId, [pending.caseId], async connection => {
+            await instance.repository.addInDb(pending, connection, true);
+            return association;
+        });
     }
 
     /**
@@ -79,6 +80,9 @@ export default class LetterCaseAssociationsController extends BaseController<
             contractId: searchParams._contract?.id || searchParams.contractId,
             offerId: searchParams._offer?.id || searchParams.offerId,
             letterId: searchParams.letterId,
+            letterIds: searchParams.letterIds,
+            scope: searchParams.scope,
+            personId: searchParams.personId,
         };
 
         return await instance.repository.find(repoSearchParams);

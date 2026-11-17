@@ -20,6 +20,7 @@ jest.mock('../ProjectEntitiesController');
 // FidmanSync celowo NIEZAMOCKOWANY — o jego zapytanie w tym pliku chodzi.
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../../contracts/milestones/sharing/testing/unsharedLifecycleFixture';
 import ProjectEntitiesController from '../ProjectEntitiesController';
 import ProjectsController from '../ProjectsController';
 
@@ -37,6 +38,7 @@ describe('ProjectsController.edit() — WYK-1: zakres projektu ze znacznika przy
 
     beforeEach(() => {
         jest.clearAllMocks();
+        installUnsharedLifecyclePool(ToolsDb);
         outboxInserts = [];
         process.env.FIDMAN_SYNC_CONTRACT_TYPE_IDS = '3,4';
 

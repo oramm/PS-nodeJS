@@ -8,6 +8,17 @@ describe('MeetingArrangementsController', () => {
         jest.restoreAllMocks();
         (MeetingArrangementsController as any)._instance = undefined;
 
+        // Real lifecycle policy; only the SQL transport is synthetic.
+        Object.defineProperty(ToolsDb, 'pool', { configurable: true, value: {
+            getConnection: async () => ({
+                query: async (sql: string) => {
+                    if (sql.includes('GET_LOCK') || sql.includes('RELEASE_LOCK')) return [[{ ok: 1 }]];
+                    if (sql.includes('FROM Cases')) return [[{ Id: 20, MilestoneId: 30 }]];
+                    if (sql.includes('FROM MilestoneConsolidationOperations')) return [[]];
+                    throw new Error('Unexpected SQL');
+                }, release() {}, destroy() {},
+            }),
+        } });
         jest.spyOn(ToolsDb, 'getQueryCallbackAsync').mockResolvedValue(
             [] as any,
         );

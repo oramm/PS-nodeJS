@@ -1,4 +1,4 @@
-import ToolsDb from '../../tools/ToolsDb';
+import ScrumboardSummaryRepository from './ScrumboardSummaryRepository';
 import Setup from '../../setup/Setup';
 import { getScrumboardPersons } from '../ScrumboardPersons';
 import ScrumboardPlanningController from '../planning/ScrumboardPlanningController';
@@ -18,17 +18,6 @@ export interface ScrumboardPersonSummary {
     total: number;
     remaining: number;
 }
-
-type TaskHoursRow = {
-    OwnerId: number;
-    Status: string;
-    EstimatedHours: number | string | null;
-    HoursMon: number | string | null;
-    HoursTue: number | string | null;
-    HoursWed: number | string | null;
-    HoursThu: number | string | null;
-    HoursFri: number | string | null;
-};
 
 /**
  * Podsumowanie godzin — serwerowy odpowiednik tabeli "Times summary" z arkusza.
@@ -50,27 +39,7 @@ export default class ScrumboardSummaryController {
             planningEntries.map((entry) => [entry.personId, entry])
         );
 
-        // Zadania scrumboardowe (nie-Backlog) osób z podsumowania,
-        // z pominięciem zadań z kontraktów zakończonych/archiwalnych
-        const placeholders = personIds.map(() => '?').join(', ');
-        const rows: TaskHoursRow[] = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT Tasks.OwnerId, Tasks.Status, Tasks.EstimatedHours,
-                    Tasks.HoursMon, Tasks.HoursTue, Tasks.HoursWed, Tasks.HoursThu, Tasks.HoursFri
-                FROM Tasks
-                JOIN Cases ON Cases.Id = Tasks.CaseId
-                JOIN Milestones ON Milestones.Id = Cases.MilestoneId
-                JOIN Contracts ON Contracts.Id = Milestones.ContractId
-                WHERE Tasks.OwnerId IN (${placeholders})
-                    AND Tasks.Status <> ?
-                    AND Contracts.Status NOT IN (?, ?)`,
-            undefined,
-            [
-                ...personIds,
-                Setup.TaskStatus.BACKLOG,
-                Setup.ContractStatus.FINISHED,
-                Setup.ContractStatus.ARCHIVAL,
-            ]
-        )) as any[];
+        const rows = await new ScrumboardSummaryRepository().findTaskHours(personIds);
 
         const reportedOnlyStatuses = new Set([
             Setup.TaskStatus.DONE,

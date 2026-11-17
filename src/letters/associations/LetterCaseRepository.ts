@@ -6,12 +6,18 @@ import ContractOther from '../../contracts/ContractOther';
 import ToolsDb from '../../tools/ToolsDb';
 import { EntityData, OfferData } from '../../types/types';
 import mysql from 'mysql2/promise';
+import { ProjectScope } from '../../types/sessionTypes';
+import { makeProjectScopeCondition } from '../../tools/ProjectScope';
+import { milestoneVisibilitySql } from '../../contracts/milestones/sharing/milestoneVisibilitySql';
 
 export type LetterCaseSearchParams = {
     projectId?: string;
     contractId?: number;
     offerId?: number;
     letterId?: number;
+    letterIds?: number[];
+    scope?: ProjectScope;
+    personId?: number;
 };
 
 export default class LetterCaseRepository extends BaseRepository<LetterCase> {
@@ -55,6 +61,7 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
                 },
                 _parent: {
                     id: row.MilestoneId,
+                    contractId: row.ContractId,
                     name: row.MilestoneName,
                     _type: {
                         id: row.MilestoneTypeId,
@@ -163,7 +170,22 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
      * Buduje warunki WHERE (AND) dla zapytań
      */
     private makeAndConditions(searchParams: LetterCaseSearchParams): string {
-        const whereClauses: string[] = [];
+        const whereClauses: string[] = [
+            makeProjectScopeCondition('Contracts.ProjectOurId', searchParams.scope),
+        ];
+        if (searchParams.letterIds !== undefined)
+            whereClauses.push(
+                searchParams.letterIds.length
+                    ? mysql.format('Letters_Cases.LetterId IN (?)', [searchParams.letterIds])
+                    : '0'
+            );
+        if (searchParams.personId !== undefined)
+            whereClauses.push(
+                mysql.format(
+                    'EXISTS (SELECT 1 FROM Persons_Contracts pc WHERE pc.ContractId = Contracts.Id AND pc.PersonId = ?)',
+                    [searchParams.personId]
+                )
+            );
 
         if (searchParams.projectId) {
             whereClauses.push(
@@ -175,7 +197,7 @@ export default class LetterCaseRepository extends BaseRepository<LetterCase> {
 
         if (searchParams.contractId) {
             whereClauses.push(
-                mysql.format('Contracts.Id = ?', [searchParams.contractId])
+                milestoneVisibilitySql({ contractId: searchParams.contractId })
             );
         }
 

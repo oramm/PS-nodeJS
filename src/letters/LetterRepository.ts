@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { milestoneVisibilitySql } from '../contracts/milestones/sharing/milestoneVisibilitySql';
 import ToolsDate from '../tools/ToolsDate';
 import ToolsDb from '../tools/ToolsDb';
 import { ProjectScope, UserData } from '../types/sessionTypes';
@@ -13,10 +14,6 @@ import IncomingLetterContract from './IncomingLetterContract';
 import IncomingLetterOffer from './IncomingLetterOffer';
 import OurOldTypeLetter from './OurOldTypeLetter';
 import LetterEvent from './letterEvent/LetterEvent';
-import LetterCaseAssociationsController, {
-    LetterCaseSearchParams,
-} from './associations/LetterCaseAssociationsController';
-import LetterEntityAssociationsController from './associations/LetterEntityAssociationsController';
 import LetterCase from './associations/LetterCase';
 import LetterEntity from './associations/LetterEntity';
 import { LetterDbEditContext } from './letterEditScope';
@@ -159,7 +156,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
         letterId: number
     ): Promise<LetterDbEditContext | undefined> {
         const letterSql = mysql.format(
-            `SELECT Id, Number, Description, CreationDate, RegistrationDate,
+            `SELECT Id, ProjectId, IsOur, Number, Description, CreationDate, RegistrationDate,
                     GdDocumentId, GdFolderId
              FROM Letters WHERE Id = ?`,
             [letterId]
@@ -180,6 +177,8 @@ export default class LetterRepository extends BaseRepository<Letter> {
 
         return {
             id: row.Id,
+            projectId: row.ProjectId,
+            isOur: !!row.IsOur,
             number: row.Number,
             description: ToolsDb.sqlToString(row.Description),
             creationDate: row.CreationDate,
@@ -190,6 +189,26 @@ export default class LetterRepository extends BaseRepository<Letter> {
                 .map((entity) => `${entity.LetterRole}:${entity.EntityId}`)
                 .sort(),
         };
+    }
+
+    async findProjectIdsForCases(
+        caseIds: number[]
+    ): Promise<{ caseId: number; projectId: number }[]> {
+        if (!caseIds.length) return [];
+        const sql = mysql.format(
+            `SELECT Cases.Id AS CaseId, Projects.Id AS ProjectId
+             FROM Cases
+             JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+             JOIN Contracts ON Contracts.Id = Milestones.ContractId
+             JOIN Projects ON Projects.OurId = Contracts.ProjectOurId
+             WHERE Cases.Id IN (?)`,
+            [caseIds]
+        );
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+        return rows.map((row) => ({
+            caseId: Number(row.CaseId),
+            projectId: Number(row.ProjectId),
+        }));
     }
 
     /**
@@ -294,30 +313,14 @@ export default class LetterRepository extends BaseRepository<Letter> {
             )})
             AND ${milestoneParentTypeCondition}
             AND ${makeProjectScopeCondition('Contracts.ProjectOurId', scope)}
+            AND ${makeProjectScopeCondition('Projects.OurId', scope)}
             GROUP BY Letters.Id
             ORDER BY Letters.RegistrationDate DESC, Letters.CreationDate DESC;`;
 
         const rows: any[] = <any[]>await ToolsDb.getQueryCallbackAsync(sql);
 
-        // Pobierz asocjacje dla wszystkich letterów
-        const [_casesAssociationsPerProject, _letterEntitiesPerProject] =
-            await Promise.all([
-                LetterCaseAssociationsController.find(
-                    orConditions[0] as LetterCaseSearchParams
-                ),
-                LetterEntityAssociationsController.getLetterEntityAssociationsList(
-                    orConditions[0] as LetterCaseSearchParams
-                ),
-            ]);
-
-        // Mapuj każdy wiersz na odpowiednią instancję Letter
-        return rows.map((row) =>
-            this.mapRowToModelWithContext(
-                row,
-                _casesAssociationsPerProject,
-                _letterEntitiesPerProject
-            )
-        );
+        // Association hydration belongs to LettersController, after scoped selection.
+        return rows.map((row) => this.mapRowToModel(row));
     }
 
     /**
@@ -362,12 +365,10 @@ export default class LetterRepository extends BaseRepository<Letter> {
     }
 
     /**
-     * Implementacja abstrakcyjnej metody z BaseRepository (nie używana bezpośrednio)
+     * Mapowanie pól pisma; powiązania dołącza LettersController.find.
      */
     protected mapRowToModel(row: any): Letter {
-        // Ta metoda nie jest używana w LetterRepository, bo potrzebujemy dodatkowego kontekstu
-        // Używamy zamiast tego mapRowToModelWithContext
-        throw new Error('Use mapRowToModelWithContext instead');
+        return this.mapRowToModelWithContext(row, [], []);
     }
 
     /**
@@ -685,7 +686,7 @@ export default class LetterRepository extends BaseRepository<Letter> {
             : '1';
 
         const contractCondition = contractId
-            ? mysql.format(`Contracts.Id = ? `, [contractId])
+            ? milestoneVisibilitySql({ contractId })
             : '1';
 
         const offerCondition = offerId

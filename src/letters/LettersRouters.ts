@@ -372,15 +372,7 @@ app.delete('/letter/:id', async (req: Request, res: Response, next) => {
         // Id z adresu jest rozstrzygający. Ta trasa kasuje pismo razem z jego folderem
         // na Dysku, a cel brała wyłącznie z ciała żądania — adres był dekoracją.
         req.body.id = resolveRouteLetterId(req.params.id, req.body.id);
-        const item = LettersController.createProperLetter(req.body);
-
-        // 1. Usuń z Google Drive
-        if (item instanceof OurLetter || item instanceof IncomingLetter) {
-            await LettersController.deleteFromGd(item);
-        }
-
-        // 2. Usuń z bazy danych
-        await LettersController.delete(item);
+        const item = await LettersController.deleteFromDto(req.body);
 
         res.send(item);
     } catch (error) {

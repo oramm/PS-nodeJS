@@ -12,6 +12,7 @@ import {
 import Milestone from '../../Milestone';
 import Case from '../Case';
 import Person from '../../../../persons/Person';
+import { milestoneVisibilitySql } from '../../sharing/milestoneVisibilitySql';
 
 export interface TasksSearchParams {
     _project?: Project;
@@ -53,14 +54,41 @@ export default class TaskRepository extends BaseRepository<Task> {
             hoursThu: TaskRepository.decimalToNumber(row.HoursThu),
             hoursFri: TaskRepository.decimalToNumber(row.HoursFri),
             ownerId: row.OwnerId,
-            _owner: {
+            _owner: row.OwnerId ? {
                 id: row.OwnerId,
                 name: row.OwnerName,
                 surname: row.OwnerSurname,
                 email: row.OwnerEmail,
+            } : undefined,
+            _parent: {
+                id: row.CaseId,
+                milestoneId: row.MilestoneId,
+                _parent: {
+                    id: row.MilestoneId,
+                    contractId: row.ContractId,
+                    offerId: row.OfferId,
+                    gdFolderId: row.MilestoneGdFolderId,
+                    _contract: row.ContractId ? {
+                        id: row.ContractId,
+                        number: row.ContractNumber,
+                        gdFolderId: row.ContractGdFolderId,
+                    } : undefined,
+                },
             },
-            _parent: { id: row.CaseId },
         });
+    }
+
+    async findById(id: number): Promise<Task | undefined> {
+        const rows = await this.executeQuery(mysql.format(
+            `SELECT Tasks.*, Tasks.DeadLine AS Deadline, Cases.MilestoneId, Milestones.ContractId, Milestones.OfferId,
+                Milestones.GdFolderId AS MilestoneGdFolderId, Contracts.Number AS ContractNumber,
+                Contracts.GdFolderId AS ContractGdFolderId,
+                Persons.Name AS OwnerName, Persons.Surname AS OwnerSurname, Persons.Email AS OwnerEmail
+                FROM Tasks LEFT JOIN Cases ON Cases.Id = Tasks.CaseId
+                LEFT JOIN Milestones ON Milestones.Id = Cases.MilestoneId
+                LEFT JOIN Contracts ON Contracts.Id = Milestones.ContractId
+                LEFT JOIN Persons ON Persons.Id = Tasks.OwnerId WHERE Tasks.Id = ?`, [id]));
+        return rows[0] ? this.mapRowToModel(rows[0]) : undefined;
     }
 
     async find(
@@ -84,10 +112,10 @@ export default class TaskRepository extends BaseRepository<Task> {
 
             const sql = `SELECT  
                     Tasks.Id,
-                    Tasks.Name AS TaskName,
-                    Tasks.Description AS TaskDescription,
-                    Tasks.Deadline AS TaskDeadline,
-                    Tasks.Status AS TaskStatus,
+                    Tasks.Name,
+                    Tasks.Description,
+                    Tasks.Deadline,
+                    Tasks.Status,
                     Tasks.EstimatedHours,
                     Tasks.HoursMon,
                     Tasks.HoursTue,
@@ -197,22 +225,15 @@ export default class TaskRepository extends BaseRepository<Task> {
 
         const contractId =
             searchParams.contractId || searchParams._contract?.id;
-        if (contractId) {
-            conditions.push(mysql.format('Contracts.Id = ?', [contractId]));
-        }
+        conditions.push(milestoneVisibilitySql({
+            contractId,
+            statusPattern: searchParams.contractStatusCondition,
+        }));
 
         const milestoneId =
             searchParams._milestone?.id || searchParams.milestoneId;
         if (milestoneId) {
             conditions.push(mysql.format('Milestones.Id = ?', [milestoneId]));
-        }
-
-        if (searchParams.contractStatusCondition) {
-            conditions.push(
-                mysql.format('Contracts.Status REGEXP ?', [
-                    searchParams.contractStatusCondition,
-                ])
-            );
         }
 
         if (searchParams._owner?.email) {

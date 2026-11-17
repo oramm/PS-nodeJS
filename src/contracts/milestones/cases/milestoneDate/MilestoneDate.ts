@@ -7,6 +7,7 @@ export default class MilestoneDate
     implements MilestoneDateData
 {
     id?: number;
+    _sharingRevision?: string;
     milestoneId: number;
     _milestone?: MilestoneData | undefined; //podawać tylko do selecta
     startDate: string;
@@ -20,6 +21,7 @@ export default class MilestoneDate
             throw new Error('Milestone not defined for dates');
 
         this.id = initParamObject.id;
+        this._sharingRevision = (initParamObject as any)._sharingRevision;
         this.milestoneId = initParamObject.milestoneId;
         this._milestone = initParamObject._milestone;
         this.description = initParamObject.description;

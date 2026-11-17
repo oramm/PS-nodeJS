@@ -23,6 +23,7 @@ jest.mock('../ProjectEntitiesController');
 jest.mock('../../contracts/fidmanSync/FidmanSync');
 
 import ToolsDb from '../../tools/ToolsDb';
+import { installUnsharedLifecyclePool } from '../../contracts/milestones/sharing/testing/unsharedLifecycleFixture';
 import ProjectEntitiesController from '../ProjectEntitiesController';
 import * as FidmanSync from '../../contracts/fidmanSync/FidmanSync';
 import ProjectsController from '../ProjectsController';
@@ -34,6 +35,7 @@ describe('ProjectsController.editProject() — SYNC-P1 FIDman standalone sync', 
 
     beforeEach(() => {
         jest.clearAllMocks();
+        installUnsharedLifecyclePool(ToolsDb);
         enqueueCalledWithConn = undefined;
 
         mockConn = {

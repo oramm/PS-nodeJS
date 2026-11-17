@@ -5,6 +5,9 @@ import ContractsController from '../ContractsController';
 import TaskStore from '../../setup/Sessions/IntersessionsTasksStore';
 import ToolsMail from '../../tools/ToolsMail';
 import ChatSpacesController from '../chatSpaces/ChatSpacesController';
+import MailboxController from '../../mailboxes/MailboxController';
+import ContractSharedCreationController from '../milestones/sharing/ContractSharedCreationController';
+import SharingError from '../milestones/sharing/MilestoneSharingError';
 
 jest.mock('../../index', () => ({
     app: {
@@ -31,6 +34,7 @@ jest.mock('../chatSpaces/ChatSpacesController', () => ({
     default: {
         parseSelection: jest.fn(() => ({ mode: 'none' })),
         provisionAfterContractCreation: jest.fn(),
+        withMemberSync: jest.fn(async (_projects: Array<string | undefined>, work: () => Promise<unknown>) => work()),
     },
 }));
 
@@ -78,8 +82,14 @@ jest.mock('../../tools/ToolsMail', () => ({
     },
 }));
 
+jest.mock('../milestones/sharing/ContractSharedCreationController', () => ({
+    __esModule: true,
+    default: { prepare: jest.fn(), addWithAuth: jest.fn() },
+}));
+
 describe('ContractsRouters', () => {
     let createHandler: any;
+    let editHandler: any;
 
     beforeAll(() => {
         require('../ContractsRouters');
@@ -89,10 +99,90 @@ describe('ContractsRouters', () => {
         );
 
         createHandler = contractReactCall?.[1];
+        editHandler = (app.put as jest.Mock).mock.calls.find((call: any[]) => call[0] === '/contract/:id')?.[1];
     });
 
     beforeEach(() => {
         jest.clearAllMocks();
+        (ContractSharedCreationController.prepare as any).mockReset().mockResolvedValue(undefined);
+    });
+
+    it('routes shared creation through its resumable writer', async () => {
+        const contract = { id: undefined };
+        (ContractSharedCreationController.prepare as any).mockResolvedValue({ contract });
+        (ContractSharedCreationController.addWithAuth as any).mockResolvedValue({ contract, shortcutStatus: 'READY' });
+        const request = { parsedBody: { _milestonesSelection: [
+            { mode: 'shared', milestoneTypeId: 5, milestoneId: 4889, expectedRevision: 'a'.repeat(64) },
+        ] } } as any;
+        const response = { status: jest.fn().mockReturnThis(), send: jest.fn() } as any;
+        const next = jest.fn();
+        let backgroundPromise: Promise<unknown> | undefined;
+        const immediate = jest.spyOn(global, 'setImmediate').mockImplementation(((callback: any) => {
+            backgroundPromise = Promise.resolve().then(callback);
+            return 0 as any;
+        }) as typeof setImmediate);
+        try {
+            await createHandler(request, response, next);
+            await backgroundPromise;
+        } finally { immediate.mockRestore(); }
+        expect(response.status).toHaveBeenCalledWith(202);
+        expect(ContractSharedCreationController.addWithAuth).toHaveBeenCalled();
+        expect(ContractsController.createContractFromDto).not.toHaveBeenCalled();
+        expect(ContractsController.addWithAuth).not.toHaveBeenCalled();
+        expect(TaskStore.complete).toHaveBeenCalledWith(expect.any(String), contract,
+            expect.stringContaining('zweryfikowane przez serwer'));
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it('preserves shared creation and provisions the selected Chat after it completes', async () => {
+        const contract: any = { id: 77, projectOurId: 'TEST-PROJECT' };
+        const selection = { mode: 'new', scope: 'contract' } as any;
+        (ContractSharedCreationController.prepare as any).mockResolvedValue({ contract });
+        (ContractSharedCreationController.addWithAuth as any).mockResolvedValue({ contract, shortcutStatus: 'READY' });
+        (ChatSpacesController.parseSelection as any).mockReturnValue(selection);
+        (ChatSpacesController.provisionAfterContractCreation as any).mockResolvedValue({ chatSpaceId: 'spaces/synthetic' });
+        const req: any = { parsedBody: { _chatSpaceSelection: selection, _selectedPersonIds: [12] }, session: { userData: { enviId: 42 } } };
+        const res: any = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+        let background: Promise<unknown> | undefined;
+        const immediate = jest.spyOn(global, 'setImmediate').mockImplementation(((callback: any) => {
+            background = Promise.resolve().then(callback); return 0 as any;
+        }) as any);
+        try { await createHandler(req, res, jest.fn()); await background; }
+        finally { immediate.mockRestore(); (ChatSpacesController.parseSelection as any).mockReturnValue({ mode: 'none' }); }
+        expect(ContractSharedCreationController.addWithAuth).toHaveBeenCalledTimes(1);
+        expect(ContractsController.addWithAuth).not.toHaveBeenCalled();
+        expect(ContractSharedCreationController.prepare).toHaveBeenCalledWith(req.parsedBody, req.session.userData, undefined, [12]);
+        expect(ChatSpacesController.withMemberSync).toHaveBeenCalledWith(['TEST-PROJECT'], expect.any(Function));
+        expect(MailboxController.afterContract).toHaveBeenCalledWith(77, { mode: 'none' }, 42);
+        expect(ChatSpacesController.provisionAfterContractCreation).toHaveBeenCalledWith(77, selection, 42);
+        expect(contract.chatSpaceId).toBe('spaces/synthetic');
+        expect(TaskStore.complete).toHaveBeenCalledWith(expect.any(String), contract, expect.stringContaining('zweryfikowane przez serwer'));
+        expect(TaskStore.fail).not.toHaveBeenCalled();
+    });
+
+    it('rejects a contract body ID different from the URL before creating or editing a model', async () => {
+        const next = jest.fn();
+        await editHandler({ params: { id: '77' }, parsedBody: { id: 88 } }, {}, next);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+        expect(ContractsController.createContractFromDto).not.toHaveBeenCalled();
+        expect(ContractsController.editWithAuth).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed shared creation before contract setup', async () => {
+        (ContractSharedCreationController.prepare as any).mockRejectedValue(new SharingError('INVALID_REQUEST', 400));
+        const request = { parsedBody: { _milestonesSelection: [
+            { mode: 'shared', milestoneTypeId: 5, milestoneId: 4889, expectedRevision: 'invalid' },
+        ] } } as any;
+        const response = { status: jest.fn().mockReturnThis(), send: jest.fn() } as any;
+        const next = jest.fn();
+        await createHandler(request, response, next);
+        expect(response.status).toHaveBeenCalledWith(400);
+        expect(response.send).toHaveBeenCalledWith(expect.objectContaining({
+            error: expect.objectContaining({ code: 'INVALID_REQUEST' }),
+        }));
+        expect(ContractsController.createContractFromDto).not.toHaveBeenCalled();
+        expect(TaskStore.create).not.toHaveBeenCalled();
+        expect(next).not.toHaveBeenCalled();
     });
 
     it('sends a server error mail when background contract creation fails', async () => {

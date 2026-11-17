@@ -1,3 +1,5 @@
+import Lifecycle from '../milestones/sharing/MilestoneLifecycleController';
+import ConsolidationGuard from '../milestones/consolidation/ConsolidationWriteGuardController';
 import { OAuth2Client } from 'google-auth-library';
 import BaseController from '../../controllers/BaseController';
 import Setup from '../../setup/Setup';
@@ -42,7 +44,7 @@ export default class SecuritiesController extends BaseController<
 
     static async add(item: Security, auth?: OAuth2Client): Promise<Security> {
         const instance = this.getInstance();
-        return await ToolsDb.transaction(async (conn) => {
+        return Lifecycle.run(() => ToolsDb.transaction(async (conn) => {
             // 1. Create Case
             const caseItem = await this.createCaseForSecurity(item, auth);
             item.caseId = caseItem.id;
@@ -53,7 +55,7 @@ export default class SecuritiesController extends BaseController<
 
             item.setGdFolderUrl();
             return item;
-        });
+        }));
     }
 
     static async editFromDto(dto: any, auth?: OAuth2Client): Promise<Security> {
@@ -63,8 +65,10 @@ export default class SecuritiesController extends BaseController<
 
     static async edit(item: Security, auth?: OAuth2Client): Promise<Security> {
         const instance = this.getInstance();
-        await instance.repository.editInDb(item);
-        return item;
+        return ConsolidationGuard.securityEdit(item.id, item.caseId, async conn => {
+            await instance.repository.editInDb(item, conn, true);
+            return item;
+        });
     }
 
     static async deleteFromDto(
@@ -78,10 +82,11 @@ export default class SecuritiesController extends BaseController<
 
     static async delete(item: Security, auth?: OAuth2Client): Promise<void> {
         const instance = this.getInstance();
-        await instance.repository.deleteFromDb(item);
-        if (item._case) {
-            await CasesController.delete(item._case, auth);
-        }
+        await ConsolidationGuard.securityDestruction(item.id, async caseId => {
+            await instance.repository.deleteFromDb(item);
+            // Cases.delete re-reads the persisted case; client context cannot select another case.
+            await CasesController.delete(new Case({ id: caseId, _type: {} as any, _parent: {} as any }), auth);
+        });
     }
 
     private static async createCaseForSecurity(

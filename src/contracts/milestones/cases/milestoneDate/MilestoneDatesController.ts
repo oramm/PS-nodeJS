@@ -1,3 +1,8 @@
+import RouteIdValidator from '../../../../tools/RouteIdValidator';
+import { MilestoneDateData } from '../../../../types/types';
+import ConsolidationGuard from '../../consolidation/ConsolidationWriteGuardController';
+import ToolsDb from '../../../../tools/ToolsDb';
+import Sharing from '../../sharing/MilestoneSharingController';
 import BaseController from '../../../../controllers/BaseController';
 import { UserData } from '../../../../types/sessionTypes';
 import { MilestoneParentType } from '../../../../types/types';
@@ -19,6 +24,43 @@ export default class MilestoneDatesController extends BaseController<
     MilestoneDate,
     MilestoneDateRepository
 > {
+
+    static async editFromDto(routeId: unknown, dto: MilestoneDateData, user?: UserData) {
+        const item = new MilestoneDate({ ...dto, id: RouteIdValidator.positiveId(routeId) });
+        if (!user) throw new Error('User data not available in session');
+        return this.edit(item, user, (dto as any)._fieldsToUpdate);
+    }
+    static async deleteFromDto(routeId: unknown, dto: MilestoneDateData, user?: UserData) {
+        const item = new MilestoneDate({ ...dto, id: RouteIdValidator.positiveId(routeId) });
+        if (!user) throw new Error('User data not available in session');
+        await this.delete(item, user);
+        return item;
+    }
+    static async edit(item: MilestoneDate, user?: UserData, fields?: string[]) {
+        return Sharing.runExclusive(async () => {
+            const id = await Sharing.guardDate(item);
+            return ConsolidationGuard.cases([id], [], async () => {
+                const result = await ToolsDb.transaction(async conn => {
+                    await this.getInstance().repository.editInDb(item, conn, true, fields);
+                    await Sharing.touch(id, conn);
+                    return item;
+                });
+                await Sharing.decorate([result]);
+                return result;
+            });
+        });
+    }
+    static async delete(item: MilestoneDate, user?: UserData) {
+        return Sharing.runExclusive(async () => {
+            const id = await Sharing.guardDate(item);
+            return ConsolidationGuard.cases([id], [], async () => {
+                await ToolsDb.transaction(async conn => {
+                    await this.getInstance().repository.deleteFromDb(item, conn, true);
+                    await Sharing.touch(id, conn);
+                });
+            });
+        });
+    }
     private static instance: MilestoneDatesController;
 
     constructor() {
@@ -46,43 +88,11 @@ export default class MilestoneDatesController extends BaseController<
         scope?: ProjectScope
     ): Promise<MilestoneDate[]> {
         const instance = this.getInstance();
-        return await instance.repository.find(orConditions, parentType, scope);
+        return Sharing.runExclusive(async () => {
+            const items = await instance.repository.find(orConditions, parentType, scope);
+            await Sharing.decorate(items);
+            return items;
+        });
     }
 
-    /**
-     * API PUBLICZNE - Edytuje MilestoneDate
-     *
-     * @param milestoneDate - MilestoneDate do edycji
-     * @param userData - Dane użytkownika z sesji
-     * @param fieldsToUpdate - Opcjonalna lista pól do aktualizacji
-     * @returns Zaktualizowany MilestoneDate
-     */
-    static async edit(
-        milestoneDate: MilestoneDate,
-        userData?: UserData,
-        fieldsToUpdate?: string[]
-    ): Promise<MilestoneDate> {
-        const instance = this.getInstance();
-        await instance.repository.editInDb(
-            milestoneDate,
-            undefined,
-            false,
-            fieldsToUpdate
-        );
-        return milestoneDate;
-    }
-
-    /**
-     * API PUBLICZNE - Usuwa MilestoneDate
-     *
-     * @param milestoneDate - MilestoneDate do usunięcia
-     * @param userData - Dane użytkownika z sesji
-     */
-    static async delete(
-        milestoneDate: MilestoneDate,
-        userData?: UserData
-    ): Promise<void> {
-        const instance = this.getInstance();
-        await instance.repository.deleteFromDb(milestoneDate);
-    }
 }
