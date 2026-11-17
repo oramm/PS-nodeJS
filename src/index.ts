@@ -4,7 +4,7 @@ import cors from 'cors';
 import { FRONT_ORIGINS } from './setup/frontOrigins';
 import session from 'express-session';
 import { MongoClient } from 'mongodb';
-import MongoStore from 'connect-mongo';
+import { createMongoSessionStore, listenAfterMongoReady } from './setup/mongoSessionStore';
 import { loadEnv } from './setup/loadEnv';
 loadEnv();
 
@@ -369,28 +369,6 @@ app.use((req: any, res: any, next: any) => {
     next();
 });
 
-// Przechowuje liczbę prób połączenia
-let connectAttempts = 0;
-
-async function connectWithRetry() {
-    try {
-        await client.connect();
-        console.log('Connected to MongoDB.');
-    } catch (err) {
-        connectAttempts++;
-
-        console.error(
-            `Failed to connect to MongoDB on attempt ${connectAttempts}. Retrying...`,
-            err,
-        );
-
-        // Oczekuje 5 sekund przed kolejną próbą
-        setTimeout(connectWithRetry, 5000);
-    }
-}
-
-connectWithRetry();
-
 process.on('SIGTERM', async () => {
     try {
         console.log('SIGTERM signal received. Closing MongoDB connection...');
@@ -525,13 +503,11 @@ app.use((req, res, next) => {
     next();
 });
 
+const sessionStore = createMongoSessionStore(client);
+
 app.use(
     session({
-        store: MongoStore.create({
-            //clientPromise: client.connect(),
-            client: client,
-            collectionName: 'sessions',
-        }),
+        store: sessionStore,
         name: 'connect.sid',
         secret: resolveSessionSecrets(),
         resave: false,
@@ -851,12 +827,24 @@ app.use(
     },
 );
 
-app.listen(port, async () => {
-    console.log(`server is listenning on port: ${port}`);
-    ToolsDb.initialize();
-    console.log('Db time zone set to +00:00');
-    // LIS-2 — a misconfigured agent token must be loud, never silently inactive.
-    reportAgentTokenConfig();
+void listenAfterMongoReady(sessionStore, () => {
+    app.listen(port, async () => {
+        console.log(`server is listenning on port: ${port}`);
+        ToolsDb.initialize();
+        console.log('Db time zone set to +00:00');
+        // LIS-2 — a misconfigured agent token must be loud, never silently inactive.
+        reportAgentTokenConfig();
+    });
+}).catch(async error => {
+    console.error('Server startup aborted: MongoDB session store is unavailable.', error);
+    try {
+        await client.close();
+        await ToolsDb.pool.end();
+    } catch (closeError) {
+        console.error('Error closing database clients after startup failure:', closeError);
+    } finally {
+        process.exit(1);
+    }
 });
 
 

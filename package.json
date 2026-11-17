@@ -4,7 +4,7 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "start": "cross-env NODE_ENV=development nodemon --exec ts-node src/index.ts",
+        "start": "cross-env NODE_ENV=development nodemon --exec \"ts-node --transpile-only\" src/index.ts",
         "start:prod": "nodemon --exec ts-node src/index.ts",
         "dev:up": "powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1",
         "dev:down": "powershell -ExecutionPolicy Bypass -File scripts/dev-down.ps1",
@@ -12,7 +12,9 @@
         "dev:logs": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1",
         "dev:logs:follow": "powershell -ExecutionPolicy Bypass -File scripts/dev-logs.ps1 -Follow",
         "build": "node scripts/pomoc-snapshot.mjs && tsc",
-        "debug": "cross-env NODE_ENV=development nodemon --inspect-brk ts-node src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "typecheck:watch": "tsc --noEmit --watch",
+        "debug": "cross-env NODE_ENV=development nodemon --exec \"node --inspect-brk -r ts-node/register/transpile-only\" src/index.ts",
         "migrate:list": "yarn build && yarn node build/scripts/migrate.js list",
         "migrate:verify": "yarn build && yarn node build/scripts/migrate.js verify",
         "migrate:apply": "yarn build && yarn node build/scripts/migrate.js apply",
@@ -53,6 +55,11 @@
         "test:offers": "jest src/offers",
         "kill": "powershell -Command \"Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000 -State Listen).OwningProcess -Force\"",
         "gd:projects-ownership": "cross-env NODE_ENV=development ts-node src/scripts/gd-projects-ownership.ts"
+    },
+    "nodemonConfig": {
+        "watch": ["src"],
+        "ext": "ts,json",
+        "ignore": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.spec.ts"]
     },
     "keywords": [],
     "author": "Marek Gazda",
