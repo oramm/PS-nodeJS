@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { app } from '../index';
 import MileageController from './MileageController';
+import { MileageYearError } from './MileageYear';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
 import { ForbiddenError } from '../persons/projectAssignments/ProjectScopeGuard';
 import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
@@ -34,6 +35,10 @@ app.get(
         try {
             res.send({ hasAccess: await hasModuleAccess(req) });
         } catch (error) {
+            if (error instanceof MileageYearError) {
+                res.status(error.code === 'INVALID_TRIP' || error.code === 'INVALID_YEAR' ? 400 : 409).send({ code: error.code, message: error.message });
+                return;
+            }
             next(error);
         }
     }
@@ -44,8 +49,12 @@ app.get(
     async (req: Request, res: Response, next: any) => {
         try {
             await requireAccess(req);
-            res.send(await MileageController.getVehicles());
+            res.send(await MileageController.getVehicles(req.query.date));
         } catch (error) {
+            if (error instanceof MileageYearError) {
+                res.status(error.code === 'INVALID_TRIP' || error.code === 'INVALID_YEAR' ? 400 : 409).send({ code: error.code, message: error.message });
+                return;
+            }
             next(error);
         }
     }
@@ -58,6 +67,7 @@ app.get('/mileage/drivers', async (req: Request, res: Response, next: any) => {
             await MileageController.getDrivers(req.session.userData!.enviId)
         );
     } catch (error) {
+        if (error instanceof MileageYearError) { res.status(error.code === 'INVALID_TRIP' || error.code === 'INVALID_YEAR' ? 400 : 409).send({ code: error.code, message: error.message }); return; }
         next(error);
     }
 });
@@ -67,13 +77,10 @@ app.post('/mileage/trip', async (req: Request, res: Response, next: any) => {
         await requireAccess(req);
         if (!req.session.userData?.userName)
             throw new Error('Musisz być zalogowany, aby dodać wpis.');
-        // Kierowca z formularza (edytowalny), a jak pusty - zalogowany użytkownik.
-        const driver =
-            (req.parsedBody.driver ?? '').trim() ||
-            req.session.userData.userName;
-        const trip = await MileageController.addTrip(req.parsedBody, driver);
+        const trip = await MileageController.addTripFromDto(req.parsedBody, req.session.userData.userName);
         res.send(trip);
     } catch (error) {
+        if (error instanceof MileageYearError) { res.status(error.code === 'INVALID_TRIP' || error.code === 'INVALID_YEAR' ? 400 : 409).send({ code: error.code, message: error.message }); return; }
         next(error);
     }
 });

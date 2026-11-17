@@ -171,12 +171,12 @@ describe('PostalRegisterWriter — umiejscowienie bloku', () => {
         expect(rowsInserted(4)).toBe(6);
     });
 
-    it('odmawia, gdy faktura ma już blok w rejestrze', () => {
+    it('blokuje ten sam numer faktury z inną treścią', () => {
         const plan = PostalRegisterWriter.plan(
             dispatchEntry(1, 'F00014G082600999273P'),
             makeSnapshot()
         );
-        expect(plan).toMatchObject({ action: 'skip', existingRow: 6 });
+        expect(plan).toMatchObject({ action: 'blocked' });
     });
 
     it('odmawia dla wpisu, który nie jest wysyłką pocztową', () => {

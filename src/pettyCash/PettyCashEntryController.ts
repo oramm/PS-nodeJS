@@ -1,3 +1,5 @@
+import ToolsSheets from '../tools/ToolsSheets';
+import AnnualSheetStructureError from './sheets/AnnualSheetStructureError';
 import { OAuth2Client } from 'google-auth-library';
 import Setup from '../setup/Setup';
 import PettyCashEntry from './PettyCashEntry';
@@ -16,6 +18,16 @@ export class PettyCashError extends Error {
     }
 }
 
+export type PostalOutcome = { register: 'complete' | 'absent' | 'conflict' | 'unknown'; cash: 'complete' | 'absent' | 'conflict' | 'unknown' };
+export class PostalCommitError extends PettyCashError {
+    readonly code = 'POSTAL_COMMIT_INCOMPLETE';
+    constructor(readonly outcome: PostalOutcome) {
+        const labels = { complete: 'zapis potwierdzony', absent: 'brak wpisu', conflict: 'inna lub niepełna treść', unknown: 'stan niepotwierdzony' };
+        super(409, `Poczta: ${labels[outcome.register]}. Zaliczki: ${labels[outcome.cash]}. ` +
+            (Object.values(outcome).includes('conflict') ? 'Sprawdź wpisy w arkuszach.' : 'Ponów ten sam wpis, aby sprawdzić i uzupełnić zapis.'));
+    }
+}
+
 export type CommitResult = {
     register: RegisterPlan | null;
     cash: WritePlan;
@@ -27,11 +39,8 @@ export type CommitResult = {
  * Nie dziedziczy po `BaseController`, bo ta klasa wymaga repozytorium, a modul nie ma
  * bazy danych - zrodlem prawdy sa arkusze.
  *
- * Kolejnosc zapisu: najpierw rejestr listow, potem wiersz w zaliczkach. Google nie daje
- * transakcji miedzy plikami, wiec zapis moze urwac sie w polowie; rejestr idzie pierwszy,
- * bo to on ma wieksza szanse odmowic, wiec w typowym bledzie arkusze zostaja nietkniete.
- * Gdy mimo to blok powstanie, a wiersz nie - blad mowi o tym wprost i wiersz dopisuje sie
- * recznie w arkuszu.
+ * Pocztowy zapis uzgadnia dwa pliki pod blokadą writera. Ponowienie sprawdza treść
+ * istniejących wpisów; po błędzie transportu stan potwierdza odczyt.
  */
 export default class PettyCashEntryController {
     private static config() {
@@ -62,42 +71,50 @@ export default class PettyCashEntryController {
             this.config();
         const client = await getSheetsAuth(auth);
 
-        let register: RegisterPlan | null = null;
-
         if (entry.requiresPostalDispatch) {
-            if (!registerSpreadsheetId)
-                throw new PettyCashError(
-                    500,
-                    'Brak POSTAL_REGISTER_SPREADSHEET_ID - nie wiadomo, gdzie zapisac liste listow.'
-                );
+            if (!registerSpreadsheetId) throw new PettyCashError(500, 'Brak konfiguracji arkusza poczty.');
+            return PettyCashWriter.withWriteLock(spreadsheetId, async () => {
+                const year = Number(entry.entryDate.slice(0, 4));
+                // Provisioning contains no business rows. Both destinations must validate first.
+                const postalSnapshot = await PostalRegisterWriter.ensureDestination(client, registerSpreadsheetId, year);
+                const cashSnapshot = await PettyCashWriter.ensureDestination(client, entry, spreadsheetId);
+                let register = PostalRegisterWriter.plan(entry, postalSnapshot, trackingUrlTemplate);
+                const cashExisting = PettyCashWriter.inspectPostalEntry(entry, cashSnapshot);
+                const cashPlan = cashExisting ?? PettyCashWriter.plan(entry, cashSnapshot);
+                if (register.action === 'blocked' || cashPlan.action === 'blocked') {
+                    throw new PostalCommitError({
+                        register: register.action === 'skip' ? 'complete' : register.action === 'blocked' ? 'conflict' : 'absent',
+                        cash: cashPlan.action === 'skip' ? 'complete' : cashPlan.action === 'blocked' ? 'conflict' : 'absent',
+                    });
+                }
+                try {
+                    if (register.action === 'write') await ToolsSheets.batchUpdateSheet(client, register.requests, registerSpreadsheetId);
+                    const cash = cashExisting ?? await PettyCashWriter.writeLocked(client, entry, { spreadsheetId });
+                    if (cash.action === 'blocked') throw new Error('Cash destination changed');
+                    return { register, cash };
+                } catch {
+                    // A rejected transport may have committed. Never infer absence from rejection.
+                    const classify = (plan: RegisterPlan | WritePlan | null): PostalOutcome['cash'] =>
+                        plan === null ? 'absent' : plan.action === 'skip' ? 'complete' : 'conflict';
+                    let registerState: PostalOutcome['register'] = 'unknown', cashState: PostalOutcome['cash'] = 'unknown';
+                    let confirmedRegister: RegisterPlan | null = null, confirmedCash: WritePlan | null = null;
+                    try { confirmedRegister = PostalRegisterWriter.inspectEntry(entry, await PostalRegisterWriter.loadSnapshot(client, registerSpreadsheetId, year)); registerState = classify(confirmedRegister); } catch {}
+                    try { confirmedCash = PettyCashWriter.inspectPostalEntry(entry, await PettyCashWriter.loadSnapshot(client, spreadsheetId, year)); cashState = classify(confirmedCash); } catch {}
+                    if (registerState === 'complete' && cashState === 'complete') {
+                        return { register, cash: cashPlan.action === 'write' && confirmedCash?.action === 'skip'
+                            ? { ...cashPlan, targetRow: confirmedCash.existingRow } : cashPlan };
 
-            register = await PostalRegisterWriter.write(client, entry, {
-                spreadsheetId: registerSpreadsheetId,
-                trackingUrlTemplate,
+                    }
+                    throw new PostalCommitError({ register: registerState, cash: cashState });
+                }
             });
-
-            if (register.action === 'blocked')
-                throw new PettyCashError(
-                    409,
-                    `Rejestr listow odmowil zapisu: ${register.reason}`
-                );
         }
-
         const cash = await PettyCashWriter.write(client, entry, { spreadsheetId });
-
         if (cash.action === 'blocked') {
-            const orphan =
-                register?.action === 'write'
-                    ? ` Uwaga: blok ${register.blockNumber} w rejestrze listow zostal juz zapisany ` +
-                      `(wiersz ${register.headerRow}) - wiersz w zaliczkach dopisz recznie.`
-                    : '';
-            throw new PettyCashError(
-                409,
-                `Arkusz zaliczek odmowil zapisu: ${cash.reason}.${orphan}`
-            );
+            if (cash.code) throw new AnnualSheetStructureError(cash.code, 'cash', Number(entry.entryDate.slice(0, 4)), cash.reason);
+            throw new PettyCashError(409, cash.reason);
         }
-
-        return { register, cash };
+        return { register: null, cash };
     }
 }
 

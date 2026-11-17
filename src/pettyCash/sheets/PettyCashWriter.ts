@@ -1,3 +1,5 @@
+import CashSheetStructure from './CashSheetStructure';
+import AnnualSheetStructureError from './AnnualSheetStructureError';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../../tools/ToolsSheets';
 import PettyCashEntry from '../PettyCashEntry';
@@ -28,7 +30,7 @@ export type SheetSnapshot = { tab: TabRef; rows: string[][] };
 export type WritePlan =
     | { action: 'write'; targetRow: number; formatSourceRow: number | null; requests: any[] }
     | { action: 'skip'; reason: string; existingRow: number }
-    | { action: 'blocked'; reason: string };
+    | { action: 'blocked'; reason: string; code?: 'ANNUAL_SHEET_INCOMPLETE' };
 
 /**
  * Wstawia jeden wiersz wpisu do arkusza zaliczek.
@@ -37,7 +39,7 @@ export type WritePlan =
  *  - piszemy w pierwszy WOLNY wiersz wewnatrz zakresu sumy biezacego miesiaca;
  *    nie wstawiamy wiersza, dopoki jest tam miejsce, wiec nic sie nie przesuwa,
  *  - zakres miesiaca czytamy z formuly =SUM(...), nie z arytmetyki na numerach,
- *  - nigdy nie zakladamy wiersza zbiorczego miesiaca - robi to wlasciciel recznie,
+ *  - przed planowaniem uzgadniamy roczna i miesieczna strukture,
  *  - piszemy formuly (=G<r>, =E<r>+F<r>), nie gole liczby, zeby wiersz byl taki
  *    sam jak wpisany przez czlowieka,
  *  - formatowanie kopiujemy z najblizszego kanonicznego wiersza danych, bo puste
@@ -55,8 +57,9 @@ export default class PettyCashWriter {
             title,
             key: title.trim().toLowerCase().replace(/\s+/g, ' '),
         }));
-        const exact = normalized.find((t) => t.key === `zaliczki ${wanted}`);
-        if (exact) return exact.title;
+        const exact = normalized.filter((t) => t.key === `zaliczki ${wanted}`);
+        if (exact.length > 1) return null;
+        if (exact.length === 1) return exact[0].title;
         const containing = normalized.filter((t) => t.key.includes(wanted));
         return containing.length === 1 ? containing[0].title : null;
     }
@@ -71,8 +74,11 @@ export default class PettyCashWriter {
         const titles = sheets.map((s) => s.properties?.title ?? '');
         const title = this.matchTabTitle(titles, year);
         if (!title)
-            throw new Error(
-                `Arkusz zaliczek nie ma zakladki dla roku ${year}. Zakladki: ${titles.join(', ')}`
+            throw new AnnualSheetStructureError(
+                'ANNUAL_SHEET_MISSING',
+                'cash',
+                year,
+                `Nie znaleziono jednoznacznej zakładki zaliczek dla roku ${year}. Sprawdź zakładkę tego roku w arkuszu lub skontaktuj się z administratorem.`
             );
         const sheetId =
             sheets.find((s) => s.properties?.title === title)?.properties?.sheetId ?? 0;
@@ -139,7 +145,7 @@ export default class PettyCashWriter {
                 monthKey,
                 aggregateRow: row,
                 firstDataRow: Number(match[1]),
-                lastDataRow: Number(match[2]),
+                lastDataRow: Number(match[2] ?? match[1]),
             });
         }
         return blocks;
@@ -196,6 +202,33 @@ export default class PettyCashWriter {
                     };
         }
         return null;
+    }
+
+    /** Postal retry must prove contents, including manually entered document rows. */
+    static inspectPostalEntry(entry: PettyCashEntry, snapshot: SheetSnapshot): WritePlan | null {
+        const key = entry.documentNumber?.trim().toLowerCase();
+        const matches = snapshot.rows.flatMap((row, i) =>
+            row[13]?.trim() === entry.sheetMarker() || (key && row[7]?.trim().toLowerCase() === key) ? [i + 1] : []);
+        if (!matches.length) return null;
+        const conflict = (): WritePlan => ({ action: 'blocked', reason: 'Dokument w zaliczkach ma inną lub niepełną treść. Sprawdź arkusz.' });
+        if (matches.length !== 1) return conflict();
+        const row = matches[0], actual = snapshot.rows[row - 1];
+        const block = this.parseMonthBlocks(snapshot.rows).find(b => b.monthKey === entry.entryDate.slice(0, 7));
+        if (!block || row < block.firstDataRow || row > block.lastDataRow) return conflict();
+        const expected = this.buildRowCells(entry, row);
+        for (let c = 0; c < PETTY_CASH_WIDTH; c++) {
+            const cell = expected[c].userEnteredValue ?? {};
+            const value = actual[c]?.trim() ?? '';
+            if (c === PETTY_CASH_COL.marker && !value) continue; // manual entry
+            if (cell.numberValue !== undefined) {
+                if (!value || Number(value) !== cell.numberValue) return conflict();
+            } else if (cell.formulaValue !== undefined) {
+                if (value.replace(/\s|\$/g, '').toUpperCase() !== cell.formulaValue.toUpperCase()) return conflict();
+            } else if (c === PETTY_CASH_COL.documentNumber) {
+                if (value.toLowerCase() !== String(cell.stringValue ?? '').toLowerCase()) return conflict();
+            } else if (value !== (cell.stringValue ?? '')) return conflict();
+        }
+        return { action: 'skip', existingRow: row, reason: 'Wpis zaliczek już istnieje i ma zgodną treść.' };
     }
 
     // ------------------------------------------------------------ budowa zadan
@@ -339,6 +372,7 @@ export default class PettyCashWriter {
         if (!block)
             return {
                 action: 'blocked',
+                code: 'ANNUAL_SHEET_INCOMPLETE',
                 reason:
                     `W zakladce "${snapshot.tab.title}" nie ma jeszcze wiersza zbiorczego dla ` +
                     `miesiaca ${monthKey}. Zaloz go recznie - system tego nie robi.`,
@@ -372,6 +406,24 @@ export default class PettyCashWriter {
         };
     }
 
+    /** Serializes all cash reads/provisioning/writes for one file in this process.
+     * Multi-process writers require an external shared lock before deployment. */
+    private static pending = new Map<string, Promise<unknown>>();
+
+    static async withWriteLock<T>(spreadsheetId: string, work: () => Promise<T>): Promise<T> {
+        const previous = this.pending.get(spreadsheetId) ?? Promise.resolve();
+        const current = previous.catch(() => undefined).then(work);
+        this.pending.set(spreadsheetId, current);
+        try { return await current; }
+        finally { if (this.pending.get(spreadsheetId) === current) this.pending.delete(spreadsheetId); }
+    }
+
+    /** Call under withWriteLock when coordinating a multi-file operation. */
+    static async ensureDestination(auth: OAuth2Client, entry: PettyCashEntry, spreadsheetId: string): Promise<SheetSnapshot> {
+        return CashSheetStructure.ensure(auth, spreadsheetId,
+            Number(entry.entryDate.slice(0, 4)), Number(entry.entryDate.slice(5, 7)));
+    }
+
     // ---------------------------------------------------------------- zapis
 
     static async write(
@@ -379,17 +431,37 @@ export default class PettyCashWriter {
         entry: PettyCashEntry,
         options: { spreadsheetId: string }
     ): Promise<WritePlan> {
-        const year = Number(entry.entryDate.slice(0, 4));
-        const snapshot = await this.loadSnapshot(auth, options.spreadsheetId, year);
-        const plan = this.plan(entry, snapshot);
+        const errors = entry.consistencyErrors();
+        if (errors.length) return { action: 'blocked', reason: `Wpis niespojny: ${errors.join(' ')}` };
+        return this.withWriteLock(options.spreadsheetId, () => this.writeLocked(auth, entry, options));
+    }
 
-        if (plan.action === 'write')
-            await ToolsSheets.batchUpdateSheet(
-                auth,
-                plan.requests,
-                options.spreadsheetId
-            );
+    /** Caller owns the cash-file lock, including multi-file preflight. */
+    static async writeLocked(auth: OAuth2Client, entry: PettyCashEntry,
+        options: { spreadsheetId: string }): Promise<WritePlan> {
 
-        return plan;
+            let snapshot = await this.ensureDestination(auth, entry, options.spreadsheetId);
+            if (entry.requiresPostalDispatch) {
+                const existing = this.inspectPostalEntry(entry, snapshot);
+                if (existing) return existing;
+            }
+            const block = this.parseMonthBlocks(snapshot.rows).find(b => b.monthKey === entry.entryDate.slice(0, 7))!;
+            if (!this.findExistingRow(snapshot.rows, entry, block) && this.findFreeRow(snapshot.rows, block) === null) {
+                const requests: any[] = [this.buildRangeExpansion(snapshot.tab.sheetId, block)];
+                if (block.firstDataRow === block.lastDataRow) {
+                    // Inserting before the only cell moves rather than expands SUM.
+                    for (const column of ['B', 'D', 'E', 'F', 'G']) requests.push({ updateCells: {
+                        start: { sheetId: snapshot.tab.sheetId, rowIndex: block.aggregateRow - 1, columnIndex: column.charCodeAt(0) - 65 },
+                        rows: [{ values: [{ userEnteredValue: { formulaValue: `=SUM(${column}${block.firstDataRow}:${column}${block.lastDataRow + 1})` } }] }],
+                        fields: 'userEnteredValue',
+                    } });
+                }
+                await ToolsSheets.batchUpdateSheet(auth, requests, options.spreadsheetId);
+                snapshot = await this.ensureDestination(auth, entry, options.spreadsheetId);
+            }
+            const plan = this.plan(entry, snapshot);
+            if (plan.action === 'write')
+                await ToolsSheets.batchUpdateSheet(auth, plan.requests, options.spreadsheetId);
+            return plan;
     }
 }

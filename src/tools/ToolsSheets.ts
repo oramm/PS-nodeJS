@@ -56,27 +56,40 @@ export default class ToolsSheets {
         }
     ) {
         try {
-            const sheets = google.sheets({ version: 'v4', auth });
-            const resource = {
-                values: parameters.values,
-                majorDimension: parameters.majorDimension
-                    ? parameters.majorDimension
-                    : 'ROWS',
-            };
-            const res = await sheets.spreadsheets.values.update({
-                requestBody: resource,
-                spreadsheetId: parameters.spreadsheetId,
-                auth,
-                range: parameters.rangeA1,
-                valueInputOption: 'USER_ENTERED', //'RAW'
-            });
-            return res;
+            return await this.updateValuesStrict(auth, parameters);
         } catch (err) {
             console.log(parameters.rangeA1);
             console.log(parameters.values);
             console.log(parameters.majorDimension);
             console.error(err);
         }
+    }
+
+    /** Propagates API failures. Use when a successful response confirms a business write. */
+    static async updateValuesStrict(
+        auth: OAuth2Client,
+        parameters: {
+            spreadsheetId: string;
+            rangeA1: string;
+            values: any[][] | any[];
+            majorDimension?: 'ROWS' | 'COLUMNS';
+        }
+    ) {
+        const sheets = google.sheets({ version: 'v4', auth });
+        const resource = {
+            values: parameters.values,
+            majorDimension: parameters.majorDimension
+                ? parameters.majorDimension
+                : 'ROWS',
+        };
+        const res = await sheets.spreadsheets.values.update({
+            requestBody: resource,
+            spreadsheetId: parameters.spreadsheetId,
+            auth,
+            range: parameters.rangeA1,
+            valueInputOption: 'USER_ENTERED', //'RAW'
+        });
+        return res;
     }
 
     /**edytuj wiersze zawierające szukaną wartość w danej kolumnie */

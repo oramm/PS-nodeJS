@@ -28,7 +28,7 @@ export const PETTY_CASH_WIDTH = PETTY_CASH_COL.marker + 1;
  * Zakres danych miesiaca bierzemy wprost z tej formuly, nigdy z arytmetyki
  * na numerach wierszy - inaczej wpis wyladowalby poza suma miesiaca.
  */
-export const MONTH_SUM_PATTERN = /^=SUM\(B(\d+):B(\d+)\)$/i;
+export const MONTH_SUM_PATTERN = /^=SUM\(B(\d+)(?::B(\d+))?\)$/i;
 
 /** Kanoniczny wiersz danych ma w kolumnie wydatku wlasnie taka formule. */
 export const EXPENSE_FORMULA_PATTERN = /^=E(\d+)\+F(\d+)$/i;

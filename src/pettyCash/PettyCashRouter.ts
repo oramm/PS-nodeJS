@@ -1,3 +1,4 @@
+import AnnualSheetStructureError from './sheets/AnnualSheetStructureError';
 import { NextFunction, Request, Response } from 'express';
 import { app, upload } from '../index';
 import Setup from '../setup/Setup';
@@ -5,6 +6,7 @@ import ReceiptAnalyzer from './documents/ReceiptAnalyzer';
 import { SystemRoleName } from '../types/sessionTypes';
 import PettyCashEntryController, {
     PettyCashError,
+    PostalCommitError,
 } from './PettyCashEntryController';
 import { PettyCashValidationError } from './PettyCashEntryValidator';
 
@@ -43,8 +45,21 @@ app.use('/pettyCash', (req: Request, res: Response, next: NextFunction) => {
 });
 
 function handle(error: unknown, res: Response, next: NextFunction) {
+    if (error instanceof AnnualSheetStructureError) {
+        res.status(error.status).json({
+            error: error.message,
+            code: error.code,
+            module: error.module,
+            year: error.year,
+        });
+        return;
+    }
     if (error instanceof PettyCashValidationError) {
         res.status(error.status).json({ error: error.message, errors: error.errors });
+        return;
+    }
+    if (error instanceof PostalCommitError) {
+        res.status(error.status).json({ error: error.message, code: error.code, outcome: error.outcome });
         return;
     }
     if (error instanceof PettyCashError) {

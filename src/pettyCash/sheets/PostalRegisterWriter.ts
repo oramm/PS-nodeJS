@@ -1,3 +1,5 @@
+import { randomInt } from 'crypto';
+import AnnualSheetStructureError from './AnnualSheetStructureError';
 import { OAuth2Client } from 'google-auth-library';
 import ToolsSheets from '../../tools/ToolsSheets';
 import PettyCashEntry from '../PettyCashEntry';
@@ -32,7 +34,7 @@ export type RegisterPlan =
           requests: any[];
       }
     | { action: 'skip'; reason: string; existingRow: number }
-    | { action: 'blocked'; reason: string };
+    | { action: 'blocked'; reason: string; code?: 'ANNUAL_SHEET_INCOMPLETE' };
 
 /**
  * Dopisuje blok wysylki do rejestru listow.
@@ -58,8 +60,9 @@ export default class PostalRegisterWriter {
             title,
             key: title.trim().toLowerCase().replace(/\s+/g, ' '),
         }));
-        const exact = normalized.find((t) => t.key === `poczta wych. ${wanted}`);
-        if (exact) return exact.title;
+        const exact = normalized.filter((t) => t.key === `poczta wych. ${wanted}`);
+        if (exact.length > 1) return null;
+        if (exact.length === 1) return exact[0].title;
         const containing = normalized.filter(
             (t) => t.key.includes('poczta') && t.key.includes(wanted)
         );
@@ -76,8 +79,11 @@ export default class PostalRegisterWriter {
         const titles = sheets.map((s) => s.properties?.title ?? '');
         const title = this.matchTabTitle(titles, year);
         if (!title)
-            throw new Error(
-                `Rejestr listow nie ma zakladki dla roku ${year}. Zakladki: ${titles.join(', ')}`
+            throw new AnnualSheetStructureError(
+                'ANNUAL_SHEET_MISSING',
+                'postal',
+                year,
+                `Nie znaleziono jednoznacznej zakładki poczty dla roku ${year}. Sprawdź zakładkę tego roku w arkuszu lub skontaktuj się z administratorem.`
             );
         const sheetId =
             sheets.find((s) => s.properties?.title === title)?.properties?.sheetId ?? 0;
@@ -425,42 +431,134 @@ export default class PostalRegisterWriter {
 
         const dispatch = entry._dispatch!;
 
-        const existing = this.findExistingBlock(snapshot.rows, dispatch.invoiceNumber);
-        if (existing)
-            return { action: 'skip', reason: existing.reason, existingRow: existing.row };
+        const existing = this.inspectEntry(entry, snapshot);
+        if (existing) return existing;
 
         const previous = this.findLastBlock(snapshot.rows);
-        if (!previous)
-            return {
-                action: 'blocked',
-                reason:
-                    `W zakladce "${snapshot.tab.title}" nie znaleziono zadnego kompletnego bloku. ` +
-                    'Bez niego nie ma skad wziac numeracji ani formatowania.',
-            };
-
-        const headerRow = previous.sumRow + 2;
+        const empty = this.isPreparedEmpty(snapshot);
+        if (!previous && !empty)
+            return { action: 'blocked', code: 'ANNUAL_SHEET_INCOMPLETE', reason: 'Brak kompletnego bloku lub przygotowanej struktury poczty.' };
+        const source = previous ?? { blockNumber: 0, headerRow: 5, firstItemRow: 6, lastItemRow: 6, sumRow: 7 };
+        const headerRow = previous ? previous.sumRow + 2 : 5;
         const sumRow = headerRow + dispatch.items.length + 1;
 
         // Nie sprawdzamy juz, czy wiersze docelowe sa puste: blok wstawia sobie wiersze,
         // wiec sa puste z definicji, a wszystko ponizej - lacznie z ksiazka adresowa -
         // przesuwa sie w dol zamiast zostac nadpisane.
 
+        const requests = this.buildRequests(entry, snapshot.tab.sheetId, source.blockNumber + 1,
+            headerRow, source, this.readHeaderLabels(snapshot.rows, source.headerRow), trackingUrlTemplate);
+        if (!previous) {
+            requests.shift();
+            // Preserve the sum format before filling rows that can overlap its template cell.
+            const formats = requests.filter(r => r.copyPaste);
+            requests.splice(0, requests.length, ...formats.reverse(), ...requests.filter(r => !r.copyPaste));
+        }
         return {
             action: 'write',
-            blockNumber: previous.blockNumber + 1,
+            blockNumber: source.blockNumber + 1,
             headerRow,
             firstItemRow: headerRow + 1,
             sumRow,
-            requests: this.buildRequests(
-                entry,
-                snapshot.tab.sheetId,
-                previous.blockNumber + 1,
-                headerRow,
-                previous,
-                this.readHeaderLabels(snapshot.rows, previous.headerRow),
-                trackingUrlTemplate
-            ),
+            requests,
         };
+    }
+
+    static inspectEntry(entry: PettyCashEntry, snapshot: RegisterSnapshot): RegisterPlan | null {
+        const dispatch = entry._dispatch!;
+        const key = dispatch.invoiceNumber.trim().toLowerCase();
+        const matches = snapshot.rows.flatMap((row, i) =>
+            row[1]?.trim().toLowerCase() === key || row[8]?.trim() === dispatch.sheetMarker() ? [i + 1] : []);
+        if (!matches.length) return null;
+        const conflict = (): RegisterPlan => ({ action: 'blocked', reason: 'Ta faktura jest już w rejestrze z inną lub niepełną treścią. Sprawdź arkusz.' });
+        if (matches.length !== 1) return conflict();
+        const header = matches[0], sum = this.findSumRow(snapshot.rows, header);
+        if (!sum || sum !== header + dispatch.items.length + 1 || !/^\d+$/.test(this.cell(snapshot.rows, header, 0))) return conflict();
+        const marker = this.cell(snapshot.rows, header, 8);
+        if (marker && marker !== dispatch.sheetMarker()) return conflict();
+        if (this.cell(snapshot.rows, header, 1).toLowerCase() !== key) return conflict();
+        if (this.cell(snapshot.rows, sum, 6).replace(/\s|\$/g, '').toUpperCase() !== this.buildSumFormula(header + 1, sum - 1)) return conflict();
+        if (this.cell(snapshot.rows, sum, 7) !== entry.sheetPayerLabel) return conflict();
+        for (let i = 0; i < dispatch.items.length; i++) {
+            const row = header + 1 + i, item = dispatch.items[i];
+            if (this.cell(snapshot.rows, row, 1) !== String(i + 1) ||
+                this.cell(snapshot.rows, row, 2) !== item.addressee ||
+                this.cell(snapshot.rows, row, 3) !== (item.contentsDescription ?? '') ||
+                PostalDispatchItem.normalizeTrackingNumber(this.readTrackingCell(snapshot.rows, row)) !== item.trackingNumber ||
+                this.cell(snapshot.rows, row, 6) === '' || Number(this.cell(snapshot.rows, row, 6)) !== item.amount ||
+                (i === 0 ? Number(this.cell(snapshot.rows, row, 5)) !== dateToSerial(entry.entryDate) : this.cell(snapshot.rows, row, 5) !== '')) return conflict();
+        }
+        return { action: 'skip', existingRow: header, reason: 'Wpis poczty już istnieje i ma zgodną treść.' };
+    }
+
+    static isPreparedEmpty(snapshot: RegisterSnapshot): boolean {
+        if (snapshot.rows[0]?.[8] !== 'office-postal:v1') return false;
+        if (this.readHeaderLabels(snapshot.rows, 5).tracking.trim() !== 'nr listu' ||
+            this.readHeaderLabels(snapshot.rows, 5).date.trim() !== 'data' ||
+            this.readHeaderLabels(snapshot.rows, 5).amount.trim() !== 'kwota') return false;
+        return snapshot.rows.every((row, index) => row.every((value, col) =>
+            !value || (index === 0 && col === 8) || ((index === 1 || index === 2) && (col === 0 || col === 2)) ||
+            (index === 4 && [4, 5, 6].includes(col))));
+    }
+
+    static async ensureDestination(auth: OAuth2Client, spreadsheetId: string, year: number): Promise<RegisterSnapshot> {
+        const meta = (await ToolsSheets.getSpreadSheet(auth, spreadsheetId)).data;
+        const candidates = (meta.sheets ?? []).filter(s => (s.properties?.title ?? '').toLowerCase().includes('poczta') && (s.properties?.title ?? '').includes(String(year)));
+        const fail = (message: string): never => { throw new AnnualSheetStructureError('ANNUAL_SHEET_INCOMPLETE', 'postal', year, message); };
+        if (candidates.length > 1) fail('Niejednoznaczna zakładka poczty. Sprawdź arkusz.');
+        if (!candidates.length) {
+            let source: RegisterSnapshot;
+            try { source = await this.loadSnapshot(auth, spreadsheetId, year - 1); }
+            catch (error) {
+                if (error instanceof AnnualSheetStructureError) throw new AnnualSheetStructureError(error.code, 'postal', year, `Brak zakładki poczty ${year - 1} ze wzorem struktury.`);
+                throw error;
+            }
+            const sum = this.findSumRow(source.rows, 5);
+            const labels = this.readHeaderLabels(source.rows, 5);
+            if (this.cell(source.rows, 5, 0) !== '1' || !sum || sum < 7 ||
+                this.cell(source.rows, sum, 6).replace(/\s|\$/g, '').toUpperCase() !== this.buildSumFormula(6, sum - 1) ||
+                labels.tracking.trim() !== 'nr listu' || labels.date.trim() !== 'data' || labels.amount.trim() !== 'kwota' ||
+                this.cell(source.rows, 2, 0) !== 'rozlicz zaliczkę' || this.cell(source.rows, 3, 0) !== 'ZMIEŃ status fv') fail('Nieprawidłowy wzór pierwszego bloku poczty. Sprawdź poprzedni rok.');
+            const sheetId = randomInt(1, 2147483647);
+            const range = (id: number, first: number, last: number) => ({ sheetId: id, startRowIndex: first - 1, endRowIndex: last, startColumnIndex: 0, endColumnIndex: 8 });
+            const requests: any[] = [{ addSheet: { properties: { sheetId, title: `poczta wych. ${year}`, gridProperties: { rowCount: 1000, columnCount: 9 } } } }];
+            for (const [sourceRow, targetRow, span] of [[1, 1, 4], [5, 5, 1], [6, 6, 1], [sum!, 7, 1]]) requests.push({ copyPaste: {
+                source: range(source.tab.sheetId, sourceRow, sourceRow + span - 1), destination: range(sheetId, targetRow, targetRow + span - 1), pasteType: 'PASTE_FORMAT' } });
+            requests.push({ unmergeCells: { range: range(sheetId, 1, 7) } });
+            const sourceMeta = (meta.sheets ?? []).find(s => s.properties?.sheetId === source.tab.sheetId);
+            for (const merge of sourceMeta?.merges ?? []) {
+                if ((merge.endRowIndex ?? 0) <= 4 && (merge.endColumnIndex ?? 0) <= POSTAL_VISIBLE_WIDTH)
+                    requests.push({ mergeCells: { range: { ...merge, sheetId }, mergeType: 'MERGE_ALL' } });
+            }
+            const rows = Array.from({ length: 5 }, () => this.blankRow());
+            rows[0][8] = this.text('office-postal:v1');
+            for (const r of [1, 2]) for (const c of [0, 2]) {
+                const value = source.rows[r]?.[c] ?? '';
+                if (value.startsWith('=')) fail('Nieoczekiwana formuła w statycznym nagłówku poczty.');
+                rows[r][c] = this.text(value);
+            }
+            rows[4][4] = this.text(labels.tracking); rows[4][5] = this.text(labels.date); rows[4][6] = this.text(labels.amount);
+            requests.push({ updateCells: { start: { sheetId, rowIndex: 0, columnIndex: 0 }, rows: rows.map(values => ({ values })), fields: 'userEnteredValue' } },
+                { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 8, endIndex: 9 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
+            await ToolsSheets.batchUpdateSheet(auth, requests, spreadsheetId);
+        }
+        const snapshot = await this.loadSnapshot(auth, spreadsheetId, year);
+        const last = this.findLastBlock(snapshot.rows);
+        if (!last && !this.isPreparedEmpty(snapshot)) fail('Zakładka poczty jest pusta lub niekompletna. Sprawdź arkusz.');
+        if (last) {
+            let previousNumber = 0, previousSum = 0;
+            for (let r = 1; r <= snapshot.rows.length; r++) {
+                if (!/^\d+$/.test(this.cell(snapshot.rows, r, 0))) continue;
+                const number = Number(this.cell(snapshot.rows, r, 0)), sum = this.findSumRow(snapshot.rows, r);
+                const labels = this.readHeaderLabels(snapshot.rows, r);
+                if (number <= previousNumber || r <= previousSum || !sum || sum <= r + 1 ||
+                    this.cell(snapshot.rows, sum, 6).replace(/\s|\$/g, '').toUpperCase() !== this.buildSumFormula(r + 1, sum - 1) ||
+                    !this.cell(snapshot.rows, r, 1) || labels.tracking.trim() !== 'nr listu' || labels.date.trim() !== 'data' || labels.amount.trim() !== 'kwota')
+                    fail('Bloki poczty są niekompletne lub niejednoznaczne. Sprawdź numerację, nagłówki i sumy.');
+                previousNumber = number; previousSum = sum!;
+            }
+        }
+        return snapshot;
     }
 
     // ---------------------------------------------------------------- zapis
@@ -474,7 +572,7 @@ export default class PostalRegisterWriter {
         }
     ): Promise<RegisterPlan> {
         const year = Number(entry.entryDate.slice(0, 4));
-        const snapshot = await this.loadSnapshot(auth, options.spreadsheetId, year);
+        const snapshot = await this.ensureDestination(auth, options.spreadsheetId, year);
         const plan = this.plan(entry, snapshot, options.trackingUrlTemplate ?? '');
 
         if (plan.action === 'write')
