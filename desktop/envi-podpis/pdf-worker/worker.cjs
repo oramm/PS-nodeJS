@@ -69,7 +69,12 @@ async function dispatch(request) {
             if (prepared || finished) fail('INVALID_STATE', 'Uruchom nowy proces dla kolejnego PDF.');
             if (!Array.isArray(request.chain) || request.chain.length < 1 || request.chain.length > 8) fail('INVALID_REQUEST', 'Nieprawidlowy lancuch certyfikatow.');
             const certificates = request.chain.map((cert) => bytes(cert, 64 * 1024));
-            const result = await core.prepare(bytes(request.pdf, MAX_PDF), certificates, placement(request.placement));
+            const pdf = bytes(request.pdf, MAX_PDF);
+            const target = placement(request.placement);
+            if (core.validate(pdf).signatures.some((signature) => !signature.valid)) {
+                fail('INVALID_EXISTING_SIGNATURE', 'Wczesniejszy podpis nie przeszedl kontroli kryptograficznej.');
+            }
+            const result = await core.prepare(pdf, certificates, target);
             if (result.preparedPdf.length > MAX_PDF) fail('PDF_TOO_LARGE', 'Przygotowany PDF przekracza limit 32 MiB.');
             prepared = result;
             chain = certificates;

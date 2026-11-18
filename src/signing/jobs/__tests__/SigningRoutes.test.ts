@@ -307,9 +307,9 @@ describe('SigningRoutes', () => {
     });
 
     describe('readProgramFileVersion', () => {
-        it('instalator z repozytorium ma aktualna wersje wydania 1.3.1', () => {
+        it('instalator z repozytorium ma aktualna wersje wydania 1.4.4', () => {
             const exe = fs.readFileSync(path.resolve(process.cwd(), 'assets', 'signing', 'EnviPodpis.exe'));
-            expect(readProgramFileVersion(exe)).toBe('1.3.1');
+            expect(readProgramFileVersion(exe)).toBe('1.4.4');
         });
 
         it('bez sygnatury VS_FIXEDFILEINFO wersja jest nieznana (null)', () => {

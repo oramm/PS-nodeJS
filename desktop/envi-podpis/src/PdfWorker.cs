@@ -77,6 +77,7 @@ namespace EnviPodpis
                 case "ENCRYPTED_PDF": return "PDF jest zaszyfrowany. Dodaj niezabezpieczoną kopię dokumentu.";
                 case "SIGNATURE_WIDGET_OVERLAP": return "Grafika nachodzi na pole formularza lub podpis. Wskaż inne miejsce.";
                 case "PDF_LOCKED": return "Dokument blokuje dodawanie podpisów. Uzyskaj kopię dopuszczającą kolejny podpis.";
+                case "INVALID_EXISTING_SIGNATURE": return "Co najmniej jeden wcześniejszy podpis PDF nie przeszedł kontroli kryptograficznej. Sprawdź podpisy w pliku źródłowym.";
                 case "INVALID_SIGNATURE": return "Kontrola kryptograficzna nie powiodła się. Kopii nie zapisano.";
                 default: return "Nie można przetworzyć PDF (" + code + "). Sprawdź plik i przygotuj podgląd ponownie.";
             }

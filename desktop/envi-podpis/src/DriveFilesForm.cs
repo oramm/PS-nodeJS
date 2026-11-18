@@ -15,7 +15,7 @@ namespace EnviPodpis
         private readonly ComboBox location = new ComboBox();
         private readonly TextBox search = new TextBox();
         private readonly CheckBox everywhere = new CheckBox { Text = "Szukaj na całym Dysku", Checked = true, AutoSize = true };
-        private readonly ListView list = new ListView();
+        private readonly FileListView list = new FileListView();
         private readonly Label status = new Label();
         private readonly Label breadcrumb = new Label();
         private readonly Button find = new Button(), more = new Button(), up = new Button(), choose = new Button(), account = new Button();
@@ -50,7 +50,7 @@ namespace EnviPodpis
             toolbar.Controls.Add(new Label { Text = "Nazwa folderu / pliku lub link folderu", AutoSize = true }, 1, 1);
             toolbar.Controls.Add(everywhere, 0, 1);
             FlowLayoutPanel path = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill }; up.Text = "↑ W górę"; breadcrumb.AutoSize = true; breadcrumb.Padding = new Padding(4, 8, 0, 0); path.Controls.Add(up); path.Controls.Add(breadcrumb); root.Controls.Add(path, 0, 2);
-            list.Dock = DockStyle.Fill; list.View = View.Details; list.FullRowSelect = true; list.MultiSelect = !selectFolder; list.HideSelection = false; list.AccessibleName = "Dokumenty i foldery Google Drive"; list.Columns.Add("Nazwa", 510); list.Columns.Add("Rodzaj", 120); root.Controls.Add(list, 0, 3);
+            list.MultiSelect = !selectFolder; list.AccessibleName = "Dokumenty i foldery Google Drive"; root.Controls.Add(list, 0, 3);
             status.AutoSize = true; status.MaximumSize = new Size(1000, 0); status.Dock = DockStyle.Fill; status.Padding = new Padding(0, 10, 0, 10); root.Controls.Add(status, 0, 4);
             FlowLayoutPanel actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true }; choose.Text = "Otwórz dokument"; more.Text = "Pokaż kolejne";
             Button cancel = new Button { Text = "Anuluj", DialogResult = DialogResult.Cancel };
@@ -64,6 +64,7 @@ namespace EnviPodpis
             everywhere.CheckedChanged += delegate { next = null; RefreshButtons(); };
             up.Click += async delegate { await GoUp(); };
             list.SelectedIndexChanged += delegate { RefreshButtons(); if (!busy) status.Text = SelectionHint(); };
+            list.CreationColumnClick += async delegate { if (list.Items.Count > 0 || next != null) await LoadPage(false, list.NewestFirst != true); };
             list.ItemActivate += async delegate { await OpenSelected(); };
             choose.Click += async delegate { if (selectFolder && folder != null && queryFolder == folder) { SelectedFile = folder; Remember(folder); DialogResult = DialogResult.OK; Close(); } else await OpenSelected(); };
             account.Click += async delegate { using (DriveLoginForm login = new DriveLoginForm(auth)) login.ShowDialog(this); folder = null; history.Clear(); await Initialize(); };
@@ -127,14 +128,14 @@ namespace EnviPodpis
             finally { busy = false; if (!IsDisposed) RefreshButtons(); }
             await LoadPage(false);
         }
-        private async Task LoadPage(bool append)
+        private async Task LoadPage(bool append, bool? newOrder = null)
         {
             if (busy) return;
             busy = true; RefreshButtons(); status.Text = "Pobieranie dokumentów…";
-            if (!append) { next = null; queryFolder = null; query = search.Text; list.Items.Clear(); }
+            if (!append && !newOrder.HasValue) { next = null; queryFolder = null; query = search.Text; list.Items.Clear(); }
             try
             {
-                if (!append)
+                if (!append && !newOrder.HasValue)
                 {
                     if (query.TrimStart().StartsWith("https:", StringComparison.OrdinalIgnoreCase) || query.TrimStart().StartsWith("http:", StringComparison.OrdinalIgnoreCase))
                     {
@@ -143,23 +144,39 @@ namespace EnviPodpis
                     }
                     queryFolder = everywhere.Checked && !string.IsNullOrWhiteSpace(query) ? null : folder;
                 }
-                DriveFilePage page = await files.List(query, queryFolder == null ? null : queryFolder.Id, queryFolder == null ? null : queryFolder.DriveId, append ? next : null, lifetime.Token);
+                DriveFilePage page = await files.List(query, queryFolder == null ? null : queryFolder.Id, queryFolder == null ? null : queryFolder.DriveId, append ? next : null, lifetime.Token, newOrder ?? list.NewestFirst);
                 if (IsDisposed) return;
+                HashSet<string> selected = null;
+                if (newOrder.HasValue)
+                {
+                    selected = new HashSet<string>(list.SelectedItems.Cast<ListViewItem>().Select(item => ((DriveFile)item.Tag).Id));
+                    list.Items.Clear();
+                    list.NewestFirst = newOrder;
+                }
                 foreach (DriveFile file in page.Files)
-                { ListViewItem item = new ListViewItem(file.Name); item.SubItems.Add(file.IsFolder ? "Folder" : file.MimeType == "application/pdf" ? "PDF" : "Dokument Google"); item.Tag = file; list.Items.Add(item); }
+                {
+                    ListViewItem item = FileListView.Entry(file.Name, file.IsFolder ? "Folder" : file.MimeType == "application/pdf" ? "PDF" : "Dokument Google", file.IsFolder, file.CreatedAt, file);
+                    list.Items.Add(item);
+                    if (selected != null && selected.Contains(file.Id)) item.Selected = true;
+                }
                 next = page.NextPageToken;
-                breadcrumb.Text = queryFolder == null ? string.IsNullOrWhiteSpace(query) ? "Ostatnio zmieniane pliki i foldery" : "Wyniki na całym Dysku — foldery i pliki" : queryFolder.Name;
+                breadcrumb.Text = queryFolder != null ? queryFolder.Name : !string.IsNullOrWhiteSpace(query) ? "Wyniki na całym Dysku — foldery i pliki" :
+                    list.NewestFirst.HasValue ? "Pliki i foldery na Dysku" : "Ostatnio zmieniane pliki i foldery";
                 status.Text = page.Incomplete ? "Wyniki są niepełne. Wybierz konkretny Dysk lub folder, wyłącz „Szukaj na całym Dysku” i ponów wyszukiwanie." :
                     list.Items.Count == 0 ? "Brak wyników. Zmień nazwę, wybierz inny Dysk lub wklej link folderu." : SelectionHint();
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                if (!append) queryFolder = null;
+                if (!append && !newOrder.HasValue) queryFolder = null;
                 if (!IsDisposed)
                 {
-                    if (!append) breadcrumb.Text = "Nie wczytano wybranego miejsca";
-                    status.Text = ex.Message + " Użyj „Szukaj”, aby ponowić, lub „Konto Google…”.";
+                    if (!append && !newOrder.HasValue)
+                    {
+                        breadcrumb.Text = "Nie wczytano wybranego miejsca";
+                        list.NewestFirst = null;
+                    }
+                    status.Text = ex.Message + (newOrder.HasValue ? " Kliknij „Utworzono”, aby ponowić sortowanie." : " Użyj „Szukaj”, aby ponowić, lub „Konto Google…”.");
                 }
             }
             finally { busy = false; if (!IsDisposed) RefreshButtons(); }

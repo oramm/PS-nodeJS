@@ -25,6 +25,11 @@ namespace EnviPodpis
             LocalFilesForm.Pin(sub, true); Directory.Delete(sub, true); LocalFilesForm.Pin(sub, false);
             check(!LocalFilesForm.FavoritePaths().Contains(sub), "local folders: disconnected pin can be removed");
             Directory.CreateDirectory(sub); File.WriteAllText(Path.Combine(sub, "nested.pdf"), "%PDF-fixture");
+            DateTime creation = new DateTime(2025, 2, 15, 12, 0, 0, DateTimeKind.Utc);
+            Directory.SetCreationTimeUtc(sub, creation.AddDays(1));
+            File.SetCreationTimeUtc(Path.Combine(root, "A.pdf"), creation);
+            File.SetCreationTimeUtc(Path.Combine(root, "B.PDF"), creation.AddDays(2));
+            File.SetLastWriteTimeUtc(Path.Combine(root, "A.pdf"), creation.AddYears(1));
             using (LocalFilesForm form = new LocalFilesForm())
             {
                 form.LoadFolder(root); form.ClientSize = new Size(740, 480);
@@ -32,6 +37,19 @@ namespace EnviPodpis
                 check(list.Items.Count == 3 && !list.Items.Cast<ListViewItem>().Any(i => i.Text == "nested.pdf" || i.Text == "ignore.txt"), "local folders: direct PDFs and folders only, no recursive scan");
                 form.Shown += delegate {
                     Application.DoEvents();
+                    Button favoriteButton = (Button)typeof(LocalFilesForm).GetField("favoriteButton", Private).GetValue(form);
+                    check(favoriteButton.Text.StartsWith("★"), "local folders: current favorite shown as pinned");
+                    favoriteButton.PerformClick();
+                    check(favoriteButton.Text.StartsWith("☆") && !LocalFilesForm.FavoritePaths().Any(p => string.Equals(p, root, StringComparison.OrdinalIgnoreCase)) && Directory.Exists(root), "local folders: removing the favorite only removes the shortcut");
+                    favoriteButton.PerformClick();
+                    check(favoriteButton.Text.StartsWith("★"), "local folders: adding the open folder immediately updates the favorite state");
+                    check(list.Items[0].Text == "Podfolder" && list.Items[0].ImageIndex != list.Items[1].ImageIndex &&
+                        list.Items.Cast<ListViewItem>().All(i => i.SubItems[FileListView.CreatedColumn].Text != "—"), "local folders: distinct icons and creation dates for files and folders");
+                    MethodInfo clickColumn = typeof(FileListView).GetMethod("OnColumnClick", Private);
+                    clickColumn.Invoke(list, new object[] { new ColumnClickEventArgs(FileListView.CreatedColumn) });
+                    check(list.Items.Cast<ListViewItem>().Select(i => i.Text).SequenceEqual(new[] { "B.PDF", "Podfolder", "A.pdf" }), "local folders: newest creation first across files and folders, ignoring modification time");
+                    clickColumn.Invoke(list, new object[] { new ColumnClickEventArgs(FileListView.CreatedColumn) });
+                    check(list.Items.Cast<ListViewItem>().Select(i => i.Text).SequenceEqual(new[] { "A.pdf", "Podfolder", "B.PDF" }), "local folders: second click sorts oldest first");
                     foreach (ListViewItem item in list.Items) item.Checked = true;
                     check(list.CheckedItems.Count == 2, "local folders: folders cannot be selected for signing");
                     list.Items.Cast<ListViewItem>().Single(i => i.Text == "B.PDF").Checked = false;

@@ -1,3 +1,10 @@
+## 2026-11-18 - ENVI Podpis 1.4.4 w PS ENVI
+
+- W Narzędziach PS ENVI udostępniono kompletny instalator w `assets/signing/EnviPodpis.exe`. SHA-256 `982D4B6F4A0FAF37DD96FE000454B4E2C29B0FE44726017141ECE3B3579BC69E`. Wydanie obejmuje lokalnie odebraną poprawkę kontroli wcześniejszych podpisów z 1.4.3.
+- Konfiguracja Heroku, schemat bazy i minimalna wersja klienta pozostają bez zmian. Przed wydaniem porównano 106 migracji z produkcyjnym rejestrem, bez rozbieżności. Push na aktualne `main` uruchamia wdrożenie Heroku wraz z kontrolą `migrate verify`.
+- Pakiet zawiera 3552 zweryfikowane pliki. Sprawdzono lokalną aktualizację 1.4.3 → 1.4.4 i zachowanie kopii 1.4.3. Cofnięcie dystrybucji w PS wymaga przywrócenia poprzedniego instalatora w odrębnym wydaniu.
+
+
 ## 2026-11-17 — PS-MC: scalenie kamieni, przygotowanie wydania
 
 - Kod wprowadza współdzielenie i łączenie kamieni wraz z historią operacji. Zakres schematu: migracje 002–010 w katalogu kamieni milowych.

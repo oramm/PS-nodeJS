@@ -31,7 +31,8 @@ namespace EnviPodpis
         }
         internal static void RunPicker(string directory, Action<bool, string> check)
         {
-            string lastQuery = null, lastFolderRequest = null;
+            string lastQuery = null, lastFolderRequest = null, lastOrder = null, lastPageToken = null;
+            bool rejectSort = false;
             Transport transport = new Transport();
             transport.Handle = delegate(HttpRequestMessage request) {
                 string path = request.RequestUri.AbsolutePath;
@@ -39,8 +40,12 @@ namespace EnviPodpis
                 if (path.EndsWith("/drives")) return Task.FromResult(Response("{\"drives\":[]}"));
                 if (path.EndsWith("/files/root")) { lastFolderRequest = "root"; return Task.FromResult(Response("{\"id\":\"root\",\"name\":\"Mój Dysk\",\"mimeType\":\"application/vnd.google-apps.folder\"}")); }
                 if (path.EndsWith("/files/folder")) { lastFolderRequest = "folder"; return Task.FromResult(Response("{\"id\":\"folder\",\"name\":\"Folder testowy\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"]}")); }
-                lastQuery = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["q"];
-                return Task.FromResult(Response("{\"files\":[{\"id\":\"folder\",\"name\":\"Folder testowy\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"]},{\"id\":\"one\",\"name\":\"Pierwszy.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"]},{\"id\":\"two\",\"name\":\"Drugi.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"]}]}"));
+                var parameters = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+                lastQuery = parameters["q"]; lastOrder = parameters["orderBy"]; lastPageToken = parameters["pageToken"];
+                if (rejectSort) return Task.FromResult(Response("{}", HttpStatusCode.ServiceUnavailable));
+                if (lastPageToken == "sorted-page") return Task.FromResult(Response("{\"files\":[]}"));
+                string nextPage = lastOrder == "createdTime desc,name" ? "\"nextPageToken\":\"sorted-page\"," : "";
+                return Task.FromResult(Response("{" + nextPage + "\"files\":[{\"id\":\"folder\",\"name\":\"Folder testowy\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"root\"],\"createdTime\":\"2025-02-15T12:00:00.000Z\"},{\"id\":\"one\",\"name\":\"Pierwszy.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"],\"createdTime\":\"2024-03-16T08:00:00+01:00\"},{\"id\":\"two\",\"name\":\"Drugi.pdf\",\"mimeType\":\"application/pdf\",\"parents\":[\"folder\"]}]}"));
             };
             using (DriveFilesForm form = new DriveFilesForm(new DriveAuth(), new DriveFiles(delegate { return Task.FromResult("offline-test"); }, transport)))
             {
@@ -51,25 +56,44 @@ namespace EnviPodpis
                 typeof(DriveFilesForm).GetField("folder", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(form,
                     new DriveFile { Id = "unrelated", Name = "Inny folder", MimeType = "application/vnd.google-apps.folder" });
                 search.Text = "https://drive.google.com/drive/folders/folder";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 check(lastQuery.Contains("'folder' in parents") && search.Text == "", "Drive picker: pasted link opens folder rather than searching link text");
                 Wait((Task)typeof(DriveFilesForm).GetMethod("GoUp", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
                 check(lastFolderRequest == "root" && Field<DriveFile>(form, "folder").Id == "root", "Drive picker: up from pasted link opens actual parent, not previous unrelated folder");
                 search.Text = "https://drive.google.com/drive/folders/folder";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 search.Text = "Folder";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 check(lastQuery.Contains("name contains 'Folder'") && !lastQuery.Contains(" in parents"), "Drive picker: default name search reaches folders outside current folder");
                 list.Items[0].Selected = true;
                 Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
                 Wait((Task)typeof(DriveFilesForm).GetMethod("GoUp", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
                 check(lastFolderRequest == "root" && Field<DriveFile>(form, "folder").Id == "root", "Drive picker: up from global folder result opens actual parent");
                 search.Text = "https://drive.google.com/drive/folders/folder";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 search.Text = "Folder";
                 Field<CheckBox>(form, "everywhere").Checked = false;
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 check(lastQuery.Contains("'folder' in parents"), "Drive picker: user can restrict name search to current folder");
+                check(list.Items[0].ImageIndex != list.Items[1].ImageIndex &&
+                    list.Items[0].SubItems[FileListView.CreatedColumn].Text.StartsWith("15.02.2025") &&
+                    ((DriveFile)list.Items[1].Tag).CreatedAt == new DateTimeOffset(2024, 3, 16, 7, 0, 0, TimeSpan.Zero) &&
+                    list.Items[2].SubItems[FileListView.CreatedColumn].Text == "—", "Drive picker: icons, creation timestamps including offsets, and missing-date display");
+                search.Text = "Niewysłane wyszukiwanie";
+                list.Items[1].Selected = true;
+                MethodInfo clickColumn = typeof(FileListView).GetMethod("OnColumnClick", BindingFlags.NonPublic | BindingFlags.Instance);
+                object[] dateColumn = { new ColumnClickEventArgs(FileListView.CreatedColumn) };
+                rejectSort = true;
+                clickColumn.Invoke(list, dateColumn); Application.DoEvents();
+                check(list.Items.Count == 3 && list.SelectedItems.Count == 1 && !((FileListView)list).NewestFirst.HasValue, "Drive picker: failed sort preserves results, selection and displayed sort state");
+                rejectSort = false;
+                clickColumn.Invoke(list, dateColumn); Application.DoEvents();
+                check(lastQuery.Contains("name contains 'Folder'") && lastOrder == "createdTime desc,name" && lastPageToken == null &&
+                    list.SelectedItems.Count == 1 && list.Columns[FileListView.CreatedColumn].Text.EndsWith("↓"), "Drive picker: creation sort restarts active results and keeps selected visible file");
+                Field<Button>(form, "more").PerformClick(); Application.DoEvents();
+                check(lastOrder == "createdTime desc,name" && lastPageToken == "sorted-page", "Drive picker: pagination repeats creation sort");
+                clickColumn.Invoke(list, dateColumn); Application.DoEvents();
+                check(lastOrder == "createdTime,name" && lastPageToken == null && list.Columns[FileListView.CreatedColumn].Text.EndsWith("↑"), "Drive picker: second click sorts oldest first");
                 list.Items[0].Selected = true; list.Items[1].Selected = true;
                 Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
                 check(form.SelectedFiles == null && !form.IsDisposed, "Drive picker: mixed folder and document selection does not sign a folder");
@@ -89,10 +113,10 @@ namespace EnviPodpis
                 form.Show(); Application.DoEvents();
                 TextBox search = Field<TextBox>(form, "search");
                 search.Text = "https://drive.google.com/file/d/document/view";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 check(!Field<Button>(form, "choose").Enabled, "Drive picker: invalid pasted link cannot confirm stale destination folder");
                 search.Text = "Folder";
-                Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false }));
+                Load(form);
                 check(!Field<Button>(form, "choose").Enabled, "Drive picker: destination mode cannot choose unrelated previous folder from global results");
                 ListView list = Field<ListView>(form, "list"); list.Items[0].Selected = true;
                 Wait((Task)typeof(DriveFilesForm).GetMethod("OpenSelected", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, null));
@@ -109,6 +133,8 @@ namespace EnviPodpis
         }
         private static T Field<T>(object value, string name)
         { return (T)value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(value); }
+        private static void Load(DriveFilesForm form)
+        { Wait((Task)typeof(DriveFilesForm).GetMethod("LoadPage", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { false, null })); }
         private static void Wait(Task task)
         {
             DateTime deadline = DateTime.UtcNow.AddSeconds(10);

@@ -136,7 +136,10 @@ async function main() {
 
         const second = client();
         assert.equal((await second.ready()).ready, true);
-        const revision = await second.request({ op: 'prepare', pdf: b64(signed), chain: identity.chainDer.map(b64), placement: 'none' });
+        const prepareNext = (input) => second.request({ op: 'prepare', pdf: b64(input), chain: identity.chainDer.map(b64), placement: 'none' });
+        assert.equal((await prepareNext(tampered)).code, 'INVALID_EXISTING_SIGNATURE');
+        assert.equal((await second.request({ op: 'finalize', signature: b64(signature) })).code, 'INVALID_STATE');
+        const revision = await prepareNext(signed);
         assert.equal(revision.ok, true, JSON.stringify(revision));
         const secondResult = await second.request({ op: 'finalize', signature: b64(softwareCardSign(Buffer.from(revision.result.hash, 'base64'), identity.privateKey)) });
         assert.equal(secondResult.ok, true);
