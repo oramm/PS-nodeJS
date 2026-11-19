@@ -32,12 +32,20 @@ function expressRoutes(): Set<string> {
         routes.add(`${m[1].toUpperCase()} ${m[2]}`);
 
     const { app } = jest.requireMock('../../../index') as any;
-    for (const layer of app._router.stack) {
-        if (layer.handle?.stack)
-            throw new Error(`Podrouter w Expressie (${layer.regexp}) - test i tabela tras muszą dostać prefiks`);
-        if (!layer.route) continue;
-        for (const method of Object.keys(layer.route.methods)) routes.add(`${method.toUpperCase()} ${layer.route.path}`);
-    }
+    const collect = (stack: any[]) => {
+        for (const layer of stack) {
+            if (layer.handle?.stack) {
+                // Router podpięty pod "/" ma pełne ścieżki - liczymy go jak trasy aplikacji; inny prefiks wymaga sklejania.
+                if (!layer.regexp?.fast_slash)
+                    throw new Error(`Podrouter w Expressie (${layer.regexp}) - test i tabela tras muszą dostać prefiks`);
+                collect(layer.handle.stack);
+                continue;
+            }
+            if (!layer.route) continue;
+            for (const method of Object.keys(layer.route.methods)) routes.add(`${method.toUpperCase()} ${layer.route.path}`);
+        }
+    };
+    collect(app._router.stack);
     return routes;
 }
 
