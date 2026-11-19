@@ -39,6 +39,11 @@ describe('Poziomy dostępu SB', () => {
         expect(SbAccessValidator.parseLevels({ ...valid, mail: undefined }).mail).toEqual([]);
     });
 
+    it('brak pola drive (nowy ekran) = none; zła wartość drive dalej odrzucana', () => {
+        const { drive, ...withoutDrive } = valid;
+        expect(SbAccessValidator.parseLevels(withoutDrive).drive).toBe('none');
+    });
+
     it.each([
         [{ ...valid, repos: 'admin' }],
         [{ ...valid, psDb: 'write' }],
@@ -103,7 +108,7 @@ describe('Poziomy dostępu SB', () => {
             actionCode: 'SET_LEVELS',
             resultCode: 'OK',
             requestedByPersonId: 1,
-            note: 'repozytoria: zapis; baza PS: odczyt; Dysk: brak; poczta: faktury',
+            note: 'repozytoria: zapis; baza PS: odczyt; poczta: faktury',
         });
     });
 

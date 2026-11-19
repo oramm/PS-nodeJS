@@ -27,6 +27,12 @@ jest.mock('../../staff/StaffMemberRepository', () => ({
     },
 }));
 
+const mockQuery = jest.fn<(...args: any[]) => any>();
+jest.mock('../../tools/ToolsDb', () => ({
+    __esModule: true,
+    default: { getQueryCallbackAsync: (...args: any[]) => mockQuery(...args) },
+}));
+
 function makeRes() {
     const res: any = {};
     res.status = jest.fn().mockReturnValue(res);
@@ -39,6 +45,8 @@ function reqWith(userData: any) {
 }
 
 const ADMIN = { systemRoleName: 'ADMIN', enviId: 1 };
+const MANAGER = { systemRoleName: 'ENVI_MANAGER', enviId: 3 };
+const COOPERATOR = { systemRoleName: 'ENVI_COOPERATOR', enviId: 9 };
 const EMPLOYEE = { systemRoleName: 'ENVI_EMPLOYEE', enviId: 7 };
 
 describe('CostInvoicesRouter - bramka dostępu do modułu', () => {
@@ -68,6 +76,7 @@ describe('CostInvoicesRouter - bramka dostępu do modułu', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        mockQuery.mockResolvedValue([] as never);
     });
 
     it('rejestruje bramkę na całym prefiksie /cost-invoices', () => {
@@ -113,6 +122,40 @@ describe('CostInvoicesRouter - bramka dostępu do modułu', () => {
         await guard(reqWith(ADMIN), res, next);
         expect(next).toHaveBeenCalled();
         expect(mockHasCostInvoiceAccess).not.toHaveBeenCalled();
+    });
+
+    it('ENVI_MANAGER bez znacznika -> dostęp (decyzja AGD K2)', async () => {
+        mockHasCostInvoiceAccess.mockResolvedValue(false as never);
+        const next = jest.fn();
+        await guard(reqWith(MANAGER), makeRes(), next);
+        expect(next).toHaveBeenCalled();
+    });
+
+    it('ENVI_EMPLOYEE będący opiekunem kontraktu, bez znacznika -> dostęp', async () => {
+        mockHasCostInvoiceAccess.mockResolvedValue(false as never);
+        mockQuery.mockResolvedValue([{ 1: 1 }] as never);
+        const next = jest.fn();
+        await guard(reqWith(EMPLOYEE), makeRes(), next);
+        expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('OurContractsData'), undefined, [7]);
+        expect(next).toHaveBeenCalled();
+    });
+
+    it('ENVI_EMPLOYEE bez znacznika i bez kontraktu -> 403', async () => {
+        mockHasCostInvoiceAccess.mockResolvedValue(false as never);
+        const res = makeRes();
+        const next = jest.fn();
+        await guard(reqWith(EMPLOYEE), res, next);
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    it('rola zakresowa będąca opiekunem kontraktu, bez znacznika -> 403 (dane poufne)', async () => {
+        mockHasCostInvoiceAccess.mockResolvedValue(false as never);
+        mockQuery.mockResolvedValue([{ 1: 1 }] as never);
+        const res = makeRes();
+        await guard(reqWith(COOPERATOR), res, jest.fn());
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(mockQuery).not.toHaveBeenCalled();
     });
 
     it('/cost-invoices/access zwraca stan flagi zamiast 403', async () => {

@@ -3,6 +3,7 @@ import ToolsMail from '../tools/ToolsMail';
 import PersonRepository from '../persons/PersonRepository';
 import { enqueueFinUserRefresh, tryDeliverAfterCommit } from '../contracts/fidmanSync/FidmanSync';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
+import { hasCostInvoiceModuleAccess } from '../costInvoices/costInvoiceAccess';
 import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import { UserData } from '../types/sessionTypes';
 import SbAccessRepository, { TOKEN_CLEARING_STATUSES } from './SbAccessRepository';
@@ -134,11 +135,13 @@ export default class SbAccessController {
     /** Mapa "co ma agent osoby" (AGD-2): osoba z sesji/tokenu albo wskazana przez admina Dostępów SB. */
     static async agentAccess(record: SbAccessRecord): Promise<AgentAccessMap> {
         const persons = new PersonRepository();
+        const accountPromise = this.repository.getPersonAccount(record.personId);
         const [account, psAccount, agentKeyHash, hasCostInvoiceAccess, health, givers, { mailboxes }] = await Promise.all([
-            this.repository.getPersonAccount(record.personId),
+            accountPromise,
             persons.getPersonAccountV2(record.personId),
             this.repository.getAgentKeyHash(record.personId),
-            StaffMemberRepository.hasCostInvoiceAccess(record.personId),
+            // Ta sama reguła co bramka modułu faktur kosztowych (rola, opiekun kontraktu albo znacznik).
+            accountPromise.then((a) => hasCostInvoiceModuleAccess(record.personId, a?.isActive ? a.systemRoleName : null)),
             this.repository.getHealth(record.personId),
             this.repository.listActiveInRoles([...new Set([...SB_MANAGER_ROLES, ...ADMIN_PANEL_ROLES])]),
             this.listPersonMailboxes(record),
@@ -249,9 +252,8 @@ export default class SbAccessController {
     static describeLevels(levels: SbAccessLevels): string {
         const repos = { none: 'brak', read: 'odczyt', write: 'zapis' }[levels.repos];
         const psDb = { none: 'brak', ro: 'odczyt', rw: 'zapis' }[levels.psDb];
-        const drive = { none: 'brak', connector: 'konektor' }[levels.drive];
         const mail = levels.mail.length ? levels.mail.join(', ') : 'brak';
-        return `repozytoria: ${repos}; baza PS: ${psDb}; Dysk: ${drive}; poczta: ${mail}`;
+        return `repozytoria: ${repos}; baza PS: ${psDb}; poczta: ${mail}`;
     }
 
     /** Zmiana poziomów osoby z wpisem w rejestrze; poziomy i zdarzenie w jednej transakcji. */
@@ -259,6 +261,8 @@ export default class SbAccessController {
         personId: number,
         levels: SbAccessLevels,
         requestedByPersonId: number,
+        /** Żądanie bez pola `drive` (poziom wycofany z ekranu, AGD K2): zostaje zapisana wartość. */
+        keepDrive = false,
     ): Promise<SbAccessRecord> {
         if (levels.mail.length) {
             const known = new Set((await this.mailboxes.find()).map((mailbox) => mailbox.code));
@@ -270,8 +274,10 @@ export default class SbAccessController {
         // liczymy pod blokadą wiersza osoby (jak giveSecret), żeby równoległe udostępnienie
         // według starych poziomów nie zostawiło hasła spoza nowych uprawnień.
         await ToolsDb.transaction<void>(async (conn) => {
-            if (!(await this.repository.getByPersonId(personId, conn, true)))
+            const current = await this.repository.getByPersonId(personId, conn, true);
+            if (!current)
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            if (keepDrive && current.levels) levels = { ...levels, drive: current.levels.drive };
             const expected = await this.expectedSecrets(personId, levels);
             const stale = (await this.secrets.listByPersonId(personId, conn))
                 .map((secret) => secret.name)

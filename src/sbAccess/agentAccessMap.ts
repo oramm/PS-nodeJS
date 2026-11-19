@@ -139,10 +139,10 @@ export function agentAccessMap(input: AgentAccessInput): AgentAccessMap {
                         { mailboxes: input.mailboxes.map(({ code, address, source }) => ({ code, address, source })) })
                     : entry('mail', 'poczta', 'nie ma', `Agent nie ma żadnej skrzynki poczty. Skrzynki dają przypisania do projektów w PS albo ekran Dostępy SB. ${ask(sbAsk)}`, sbAsk, { mailboxes: [] }),
             !input.hasCostInvoiceAccess
-                ? entry('costInvoices', 'faktury kosztowe', 'nie ma', `Nie masz znacznika „Faktury kosztowe” (Personel i uprawnienia), więc agent ich nie czyta. ${ask(accountAsk, 'Personel i uprawnienia')}`, accountAsk)
+                ? entry('costInvoices', 'faktury kosztowe', 'nie ma', `Faktury kosztowe widzą kierownicy, administratorzy i koordynatorzy kontraktów; inni - na prośbę, więc agent ich nie czyta. ${ask(accountAsk, 'Personel i uprawnienia')}`, accountAsk)
                 : psWorks
-                    ? entry('costInvoices', 'faktury kosztowe', 'ma', 'Agent czyta faktury kosztowe przez PS (znacznik „Faktury kosztowe”).')
-                    : entry('costInvoices', 'faktury kosztowe', 'nie ma', `Masz znacznik „Faktury kosztowe”, ale agent nie wchodzi do PS: ${psBlocker}. ${ask(sbAsk)}`, sbAsk),
+                    ? entry('costInvoices', 'faktury kosztowe', 'ma', 'Agent czyta faktury kosztowe przez PS (rola, opieka nad kontraktem albo znacznik „Faktury kosztowe”).')
+                    : entry('costInvoices', 'faktury kosztowe', 'nie ma', `Masz dostęp do faktur kosztowych, ale agent nie wchodzi do PS: ${psBlocker}. ${ask(sbAsk)}`, sbAsk),
             !input.finEnabled
                 ? entry('fin', 'FIN', 'nie ma', `Nie masz znacznika „Użytkownik FIN” (Personel i uprawnienia), więc agent nie pracuje w FIN. ${ask(accountAsk, 'Personel i uprawnienia')}`, accountAsk)
                 : sbBlocker || !input.hasAgentKey

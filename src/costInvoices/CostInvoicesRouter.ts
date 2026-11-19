@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { app } from '../index';
 import CostInvoiceController from './CostInvoiceController';
 import { SystemRoleName } from '../types/sessionTypes';
-import StaffMemberRepository from '../staff/StaffMemberRepository';
+import { hasCostInvoiceModuleAccess } from './costInvoiceAccess';
 import { VALID_PAYMENT_STATUSES } from './CostInvoiceValidator';
 import { PaymentMethodFilterValues } from './costInvoicePaymentMethodFilters';
 
@@ -75,22 +75,15 @@ function parseReparseIds(raw: any, res: Response): number[] | null {
 // =====================================================
 
 /**
- * Dostęp do faktur kosztowych wynika z flagi StaffMembers.HasCostInvoiceAccess,
- * nie z roli systemowej. Seed migracji nadał ją rolom 1 i 2, więc dla dotychczasowych
- * użytkowników nic się nie zmienia; nadanie jej komuś spoza tych ról (np. księgowej
- * z rolą 3) nie wymaga już podnoszenia roli, a odebranie - obniżania jej.
- *
- * ADMIN wchodzi zawsze, niezależnie od flagi: flagi ustawia się dziś wprost w bazie,
- * więc pomyłkowe wyzerowanie kolumny nie może odciąć wszystkim ścieżki naprawy.
- *
- * Rolom zakresowym (CONTRACT_WORKER, CLIENT) sama flaga nie wystarczy - ich żądania
- * odsiewa wcześniej allowlista tras w projectScopedPolicy, która nie zna /cost-invoices.
+ * Dostęp: ADMIN, ENVI_MANAGER, opiekun kontraktu ENVI albo osoba ze znacznikiem
+ * StaffMembers.HasCostInvoiceAccess (decyzja właściciela 2026-11-19, AGD K2; reguła
+ * w costInvoiceAccess.ts, ta sama co w mapie dostępów agenta). Rolom zakresowym
+ * (CONTRACT_WORKER, CLIENT) i tak nie otwiera tras allowlista projectScopedPolicy.
  */
 async function hasModuleAccess(req: Request): Promise<boolean> {
     const userData = req.session?.userData;
     if (!userData?.enviId) return false;
-    if (userData.systemRoleName === SystemRoleName.ADMIN) return true;
-    return StaffMemberRepository.hasCostInvoiceAccess(userData.enviId);
+    return hasCostInvoiceModuleAccess(userData.enviId, userData.systemRoleName);
 }
 
 // Czy zalogowany widzi moduł (do warunkowego menu po stronie klienta).

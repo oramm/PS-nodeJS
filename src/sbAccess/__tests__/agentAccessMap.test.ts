@@ -7,6 +7,11 @@ jest.mock('../../index', () => ({
 }));
 const mockHasFlag = jest.fn<(...args: any[]) => any>();
 const mockCostFlag = jest.fn<(...args: any[]) => any>();
+const mockCostQuery = jest.fn<(...args: any[]) => any>();
+jest.mock('../../tools/ToolsDb', () => ({
+    __esModule: true,
+    default: { getQueryCallbackAsync: (...args: any[]) => mockCostQuery(...args) },
+}));
 jest.mock('../../staff/StaffMemberRepository', () => ({
     __esModule: true,
     default: {
@@ -217,6 +222,7 @@ describe('AGD-2: trasy mapy dostępów', () => {
         resetDriveMembersCache();
         mockHasFlag.mockReset();
         mockCostFlag.mockReset().mockResolvedValue(false);
+        mockCostQuery.mockReset().mockResolvedValue([]);
         const record = {
             id: 1, personId: 152, statusCode: 'ACTIVE', githubLogin: null, githubInvitationId: null,
             drivePermissionId: 'perm-1', isGrantedManually: false, levels: { ...NO_LEVELS, mail: [] },
@@ -290,6 +296,28 @@ describe('AGD-2: trasy mapy dostępów', () => {
         const json = JSON.stringify(map);
         for (const secret of Object.values(SECRETS)) expect(json).not.toContain(secret);
         expect(json).not.toContain('perm-1');
+    });
+
+    it('faktury kosztowe: mapa liczy to samo co bramka modułu (rola, opiekun kontraktu, znacznik)', async () => {
+        // W tym teście PS agenta nie działa, więc "ma dostęp" poznajemy po zdaniu "Masz dostęp ... ale agent nie wchodzi do PS".
+        const hasAccess = async () => !system(await SbAccessController.agentAccess({ personId: 152, levels: NO_LEVELS } as any), 'costInvoices').sentence.includes('kierownicy');
+        const asRole = (systemRoleName: string) => jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({
+            personId: 152, name: 'Monika', surname: 'Tymczyszyn', systemEmail: null, isActive: true, systemRoleName,
+        });
+        asRole('ENVI_MANAGER');
+        expect(await hasAccess()).toBe(true);
+        asRole('ENVI_EMPLOYEE');
+        expect(await hasAccess()).toBe(false);
+        mockCostQuery.mockResolvedValue([{ 1: 1 }]);
+        expect(await hasAccess()).toBe(true);
+        expect(mockCostQuery).toHaveBeenCalledWith(expect.stringContaining('OurContractsData'), undefined, [152]);
+        mockCostQuery.mockResolvedValue([]);
+        mockCostFlag.mockResolvedValue(true);
+        expect(await hasAccess()).toBe(true);
+        mockCostFlag.mockResolvedValue(false);
+        const without = system(await SbAccessController.agentAccess({ personId: 152, levels: NO_LEVELS } as any), 'costInvoices');
+        expect(without.state).toBe('nie ma');
+        expect(without.sentence).toContain('kierownicy, administratorzy i koordynatorzy kontraktów');
     });
 
     it('podgląd osoby w Dostępach SB: ta sama mapa; osoba bez wpisu -> 404', async () => {
