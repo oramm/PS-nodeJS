@@ -153,6 +153,29 @@ describe('DirectAdminGateway (wyłącznie atrapa sieci)', () => {
             .toEqual({ action: 'modify', domain: 'envi.com.pl', user: 'projekt.ik.01', email: `${existing},sb-agent@envi.com.pl` });
     });
 
+    it('zdjęcie kopii: jedyny odbiorca = usunięcie przekierowania; obce adresy zostają; brak kopii = bez zapisu (SKO-2)', async () => {
+        fetchMock.mockResolvedValueOnce({ ok: true, text: async () => new URLSearchParams({ 'projekt.ik.01': 'SB-agent@envi.com.pl' }).toString() });
+        await DirectAdminGateway.removeAgentCopy(address);
+        expect(fetchMock.mock.calls[1][0].pathname).toBe('/CMD_API_EMAIL_FORWARDERS');
+        expect(Object.fromEntries(new URLSearchParams(fetchMock.mock.calls[1][1].body)))
+            .toEqual({ action: 'delete', domain: 'envi.com.pl', select0: 'projekt.ik.01' });
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({ ok: true, text: async () => new URLSearchParams({ 'projekt.ik.01': 'one@example.test,sb-agent@envi.com.pl,two@example.test' }).toString() });
+        await DirectAdminGateway.removeAgentCopy(address);
+        expect(Object.fromEntries(new URLSearchParams(fetchMock.mock.calls[1][1].body)))
+            .toEqual({ action: 'modify', domain: 'envi.com.pl', user: 'projekt.ik.01', email: 'one@example.test,two@example.test' });
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({ ok: true, text: async () => new URLSearchParams({ 'projekt.ik.01': 'one@example.test' }).toString() });
+        await DirectAdminGateway.removeAgentCopy(address);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({ ok: true, text: async () => '' });
+        await DirectAdminGateway.removeAgentCopy(address);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     it.each([undefined, '', 'wrong@other.test', 'not-an-address', 'a..b@envi.com.pl'])('brak lub błędny adres kopii (%s) nie wywołuje sieci', async copy => {
         if (copy === undefined) delete process.env.DIRECTADMIN_AGENT_COPY_ADDRESS;
         else process.env.DIRECTADMIN_AGENT_COPY_ADDRESS = copy;

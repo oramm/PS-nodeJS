@@ -106,14 +106,16 @@ export function personAccess(input: PersonAccessInput): AreaAccess[] {
         if (!boxes.length && !created.length) return no('mail', NO_PROJECT_MAIL_ROLES.includes(role)
             ? 'Ta rola nie dostaje poczty z przypisania; skrzynkę może dostać tylko ręcznie w „Dostępie do Second Brain”.'
             : 'Nie jest przypisana do projektu ani kontraktu, który ma skrzynkę.');
-        const assigned = boxes.filter((b) => b.source !== 'manual');
+        const assigned = boxes.filter((b) => b.source === 'assignment' || b.source === 'both');
+        const byRole = boxes.filter((b) => b.source === 'role');
         const manual = boxes.filter((b) => b.source === 'manual');
         const why = [
+            byRole.length ? `Z roli (pracownik ENVI ma każdą skrzynkę projektu i kontraktu oraz ogólnofirmowe dla wszystkich): ${byRole.map((b) => b.address).join(', ')}.` : '',
             assigned.length ? `Z przypisania: ${assigned.map((b) => b.address).join(', ')}.` : '',
             manual.length ? `Dodane ręcznie w „Dostępie do Second Brain”: ${manual.map((b) => b.address).join(', ')}.` : '',
             created.length ? `Założyła skrzynkę: ${created.map((m) => m.address).join(', ')}.` : '',
         ].filter(Boolean).join(' ');
-        return yes('mail', count(boxes.length + created.length), assigned.length ? 'przypisanie' : 'wyjątek', why);
+        return yes('mail', count(boxes.length + created.length), byRole.length ? 'rola' : assigned.length ? 'przypisanie' : 'wyjątek', why);
     };
 
     const chatArea = (): AreaAccess => {

@@ -17,6 +17,7 @@ import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
 import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
 import { MailboxAssigneeRow, PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
+import MailboxPasswordService from '../mailboxes/MailboxPasswordService';
 import { DRIVE_TOOL_NAME, healthReportFileName, parseHealthReport } from './sbHealthPolicy';
 import { AgentAccessMap, agentAccessMap, driveMembership } from './agentAccessMap';
 import { ADMIN_PANEL_ROLES } from '../Admin/adminPanelGuard';
@@ -26,6 +27,7 @@ import {
     displayFingerprint,
     expectedSecretNames,
     keyThumbprint,
+    mailboxSecretName,
     newDeviceToken,
 } from './sbSecretsPolicy';
 import {
@@ -88,6 +90,9 @@ function isAlreadyMemberError(error: unknown): boolean {
 /** Szyfrogramu już pobranego nie da się cofnąć - jedyną ochroną jest zmiana hasła u źródła. */
 const CHANGE_SOURCE_PASSWORD =
     'Zmień hasło źródłowe: szyfrogram mógł już zostać pobrany na komputer pracownika.';
+/** Hasło skrzynki zarządzanej: odebranie szyfrogramu nie odbiera prawa, a hasło zmienia PS po utracie prawa (uzgodnienie). */
+const MANAGED_MAILBOX_TAKEN =
+    'PS wyda je ponownie przy następnym pobraniu, dopóki osoba ma prawo do skrzynki; gdy je straci (przypisanie, rola, blokada), PS sam zmieni hasło skrzynki.';
 
 function errorText(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -180,9 +185,7 @@ export default class SbAccessController {
     private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[], registry?: MailboxRecord[]): Promise<string[]> {
         const account = await this.repository.getPersonAccount(personId);
         const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail, account?.systemRoleName);
-        const ownedCodes = new Set((registry ?? (levels.mail.length ? await this.mailboxes.find() : []))
-            .filter(mailbox => mailbox.projectId != null || mailbox.contractId != null).map(mailbox => mailbox.code));
-        return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'), ownedCodes);
+        return expectedSecretNames(levels, mailboxes, registry ?? (levels.mail.length || mailboxes.length ? await this.mailboxes.find() : []));
     }
 
     static async recordTransition(
@@ -235,6 +238,15 @@ export default class SbAccessController {
             }
         });
         await this.deliverFinRefresh(finOutboxId);
+        this.reconcileMailboxPasswords();
+    }
+
+    /**
+     * SKO-2: zmiana haseł skrzynek po utracie dostępu, w tle poza ścieżką żądania (jedna wisząca skrzynka nie blokuje
+     * odpowiedzi ani kolejnych skrzynek); niepowodzenia skrzynek zgłasza reconcile, błąd całego przebiegu idzie do logu.
+     */
+    private static reconcileMailboxPasswords(): void {
+        void MailboxPasswordService.reconcile().catch((error) => console.error('[SKO] uzgodnienie haseł skrzynek:', error?.message));
     }
 
     private static enqueueFinRefresh(conn: Parameters<typeof enqueueFinUserRefresh>[0], personId: number) {
@@ -301,6 +313,7 @@ export default class SbAccessController {
                     note: `Odebrane razem z uprawnieniem: ${removed.map(describeSecretName).join(', ')}. ${CHANGE_SOURCE_PASSWORD}`,
                 });
         });
+        this.reconcileMailboxPasswords();
         const record = (await this.repository.getByPersonId(personId))!;
         try {
             await this.syncProjectsTeam(record);
@@ -330,6 +343,7 @@ export default class SbAccessController {
 
     /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
     static async list(): Promise<SbAccessRecord[]> {
+        this.reconcileMailboxPasswords();
         const [records, names, rows, registry] = await Promise.all([
             this.repository.list(),
             this.secrets.listNames(),
@@ -441,6 +455,9 @@ export default class SbAccessController {
 
     /** Własne szyfrogramy (tylko te, które wynikają z bieżących uprawnień). */
     static async listOwnSecrets(record: SbAccessRecord) {
+        this.reconcileMailboxPasswords();
+        // Wydaje bieżącą wersję; hasło zmienione przez uzgodnienie w tle dojdzie przy następnym pobraniu.
+        await MailboxPasswordService.issue(record).catch((error) => console.error('[SKO] wydanie haseł skrzynek:', error?.message));
         const expected = await this.expectedSecrets(record.personId, record.levels);
         const secrets = record.publicKeyJwk
             ? (await this.secrets.listByPersonId(record.personId)).filter((secret) =>
@@ -479,6 +496,8 @@ export default class SbAccessController {
                 throw new SbAccessError(409, 'Klucz komputera pracownika zmienił się. Odśwież stronę i udostępnij hasło ponownie.');
             if (!(await this.expectedSecrets(record.personId, record.levels)).includes(name))
                 throw new SbAccessError(409, 'Uprawnienia tej osoby nie obejmują tego hasła.');
+            if (await this.isManagedMailboxSecret(name))
+                throw new SbAccessError(409, 'Hasło tej skrzynki PS wydaje komputerowi sam - nie udostępnia się go ręcznie.');
             await this.secrets.upsert(conn, personId, name, ciphertext, requestedByPersonId);
             await this.events.append(conn, {
                 personId,
@@ -496,6 +515,7 @@ export default class SbAccessController {
         name: string,
         requestedByPersonId: number,
     ): Promise<{ name: string; given: false }> {
+        const managed = await this.isManagedMailboxSecret(name);
         await ToolsDb.transaction<void>(async (conn) => {
             const removed = await this.secrets.remove(conn, personId, [name]);
             if (!removed.length)
@@ -505,10 +525,15 @@ export default class SbAccessController {
                 actionCode: 'TAKE_SECRET',
                 resultCode: 'OK',
                 requestedByPersonId,
-                note: `Hasło: ${describeSecretName(name)}. ${CHANGE_SOURCE_PASSWORD}`,
+                note: `Hasło: ${describeSecretName(name)}. ${managed ? MANAGED_MAILBOX_TAKEN : CHANGE_SOURCE_PASSWORD}`,
             });
         });
         return { name, given: false };
+    }
+
+    /** Hasło skrzynki, które PS wylicza i wydaje sam (SKO-2). */
+    private static async isManagedMailboxSecret(name: string): Promise<boolean> {
+        return (await this.mailboxes.find()).some((m) => m.passwordVersion != null && mailboxSecretName(m.code) === name);
     }
 
     // ------------------------------------------------ raport zdrowia komputera (SBD-4a)

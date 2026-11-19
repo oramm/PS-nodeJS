@@ -9,6 +9,7 @@ import MailboxRepository, { MailboxRecord } from './MailboxRepository';
 import DirectAdminGateway, { DirectAdminRejectionError, DirectAdminUnknownResultError } from './directAdminGateway';
 import { NO_PROJECT_MAIL_ROLES, personMailboxes } from './mailboxAccessPolicy';
 import { PROJECT_SCOPED_ROLES } from '../setup/Sessions/projectScopedPolicy';
+import MailboxPasswordService, { mailboxPassword, passwordsManaged } from './MailboxPasswordService';
 
 export class MailboxError extends Error {
     constructor(message: string, readonly status: number) { super(message); }
@@ -126,8 +127,10 @@ export default class MailboxController {
                 if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
                 if (mailbox.statusCode !== 'PENDING') throw new MailboxError('Ta skrzynka jest już założona.', 409);
                 current = mailbox;
+                // Z sekretem serwera PS skrzynka od razu ma hasło wersji 1 (SKO-2), bez kopii dla agenta.
+                const managed = passwordsManaged();
                 try {
-                    await DirectAdminGateway.create(mailbox.address, crypto.randomBytes(24).toString('hex'));
+                    await DirectAdminGateway.create(mailbox.address, managed ? mailboxPassword(mailbox.code, 1) : crypto.randomBytes(24).toString('hex'));
                 } catch (error) {
                     // Brama zwraca wyłącznie własne komunikaty, nigdy żądanie ani hasło.
                     let lastError = error instanceof Error ? error.message : 'Nie udało się połączyć z serwerem poczty.';
@@ -151,7 +154,10 @@ export default class MailboxController {
                 }
                 createdAddress = mailbox.address;
                 await this.repository.setState(id, 'ACTIVE', null, conn);
-                return { ...mailbox, statusCode: 'ACTIVE', lastError: null };
+                if (!managed) return { ...mailbox, statusCode: 'ACTIVE', lastError: null };
+                await this.repository.setPasswordVersion(id, 1, conn);
+                await this.repository.setAgentCopyState(id, 'NONE', null, conn);
+                return { ...mailbox, statusCode: 'ACTIVE', lastError: null, passwordVersion: 1, agentCopyStatus: 'NONE', agentCopyLastError: null };
             });
         } catch (error) {
             if (createdAddress) {
@@ -162,14 +168,19 @@ export default class MailboxController {
             throw error;
         }
         // Stan ACTIVE jest już zapisany: niepowodzenie kopii nie cofa założenia skrzynki.
-        return provisioned.statusCode === 'ACTIVE' ? this.agentCopy(id) : provisioned;
+        return provisioned.statusCode === 'ACTIVE' && provisioned.passwordVersion == null ? this.agentCopy(id) : provisioned;
     }
 
     static async agentCopy(id: number): Promise<MailboxRecord> {
+        // Skrzynka zarządzana z kopią, której nie udało się zdjąć po zmianie hasła: ponowienie zdjęcia (własna transakcja).
+        const managed = await this.repository.get(id);
+        if (managed?.passwordVersion != null && managed.agentCopyStatus === 'SET') return MailboxPasswordService.dropAgentCopy(managed);
         return ToolsDb.transaction(async (conn) => {
             const mailbox = await this.repository.get(id, conn, true);
             if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
             if (mailbox.statusCode !== 'ACTIVE') throw new MailboxError('Najpierw załóż skrzynkę przyciskiem „Ponów”.', 409);
+            if (mailbox.passwordVersion != null || mailbox.agentCopyStatus === 'NONE')
+                throw new MailboxError('Agent loguje się do tej skrzynki wprost, bez kopii poczty.', 409);
             if (mailbox.agentCopyStatus === 'SET') return mailbox;
             let agentCopyLastError: string | null = null;
             try { await DirectAdminGateway.setAgentCopy(mailbox.address); }
@@ -183,7 +194,8 @@ export default class MailboxController {
         });
     }
 
-    private static async report(message: string): Promise<void> {
+    /** Log i zgłoszenie błędu skrzynki; `message` bez haseł. */
+    static async report(message: string): Promise<void> {
         console.error(message);
         try { await ToolsMail.sendServerErrorReport(new Error(message)); }
         catch { console.error('Nie udało się wysłać zgłoszenia o błędzie skrzynki.'); }
@@ -211,16 +223,46 @@ export default class MailboxController {
         return new Set(personMailboxes(personId, rows, record?.levels.mail ?? [], systemRoleName).map(m => m.code));
     }
 
-    /** Jedyne API, które otrzymuje hasło; nie zapisujemy go nawet na czas zadania. */
-    static async password(id: number): Promise<{ password: string }> {
-        return ToolsDb.transaction(async (conn) => {
+    /**
+     * Jedyne API, które otrzymuje hasło; nie zapisujemy go nawet na czas zadania.
+     * Skrzynka zarządzana przez PS: zmiana hasła bez hasła w odpowiedzi (K4), komputery dostaną nowe przy pobraniu haseł.
+     */
+    static async password(id: number): Promise<{ password: string } | MailboxRecord> {
+        const plain = await ToolsDb.transaction<{ password: string } | null>(async (conn) => {
             const mailbox = await this.repository.get(id, conn, true);
             if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
+            // Pod blokadą: równoległe przejęcie przez PS nie dostanie po swojej zmianie losowego hasła.
+            if (mailbox.passwordVersion != null) return null;
             if (mailbox.statusCode !== 'ACTIVE') throw new MailboxError('Najpierw załóż skrzynkę przyciskiem „Ponów”.', 409);
             const password = crypto.randomBytes(24).toString('hex');
             await DirectAdminGateway.changePassword(mailbox.address, password);
             return { password };
         });
+        // rotate bierze własną blokadę wiersza, więc dopiero po zamknięciu transakcji wyżej.
+        return plain ?? MailboxPasswordService.rotate(id);
+    }
+
+    /** Dopisanie istniejącej skrzynki ogólnofirmowej (SKO): PS sprawdza ją na serwerze poczty i niczego tam nie zakłada. */
+    static async addGeneral(rawAddress: unknown, createdByPersonId: number | null): Promise<MailboxRecord> {
+        const { address, code } = validateMailboxAddress(rawAddress);
+        await this.checkAddress(address);
+        if (!await DirectAdminGateway.accountExists(address))
+            throw new MailboxError(`Na serwerze poczty nie ma skrzynki ${address}. PS dopisuje tylko istniejące skrzynki.`, 409);
+        try { return await this.repository.addGeneral(address, code, createdByPersonId); }
+        catch (error) {
+            if ((error as any)?.code === 'ER_DUP_ENTRY') throw new MailboxError('Ten adres lub jego oznaczenie jest już zajęte w PS.', 409);
+            throw error;
+        }
+    }
+
+    static async setAllEmployees(id: number, allEmployees: unknown): Promise<MailboxRecord> {
+        if (typeof allEmployees !== 'boolean') throw new MailboxError('Wybierz: wszyscy pracownicy albo wskazane osoby.', 400);
+        const mailbox = await this.repository.get(id);
+        if (!mailbox) throw new MailboxError('Nie znaleziono skrzynki.', 404);
+        if (mailbox.projectId != null || mailbox.contractId != null)
+            throw new MailboxError('Zakres ustawia się tylko skrzynce ogólnofirmowej; skrzynkę projektu mają wszyscy pracownicy z reguły.', 409);
+        await this.repository.setAllEmployees(id, allEmployees);
+        return { ...mailbox, allEmployees };
     }
 
     static async moveToProject(id: number): Promise<MailboxRecord> {

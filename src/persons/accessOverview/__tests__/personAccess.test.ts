@@ -19,8 +19,8 @@ const base = (personId: number, role: SystemRoleName, edges: MembershipEdge[], e
     role,
     edges,
     letterContracts: [],
-    // skrzynka projektu A; kto do niej należy, liczy reguła z krawędzi (jak po zapisie formularza)
-    mailboxes: [{ code: 'a', address: 'a@envi.com.pl', projectOurId: 'A', contractId: null, createdByPersonId: null }],
+    // skrzynka projektu A z hasłem od PS (SKO K1); kto do niej należy, liczy reguła z krawędzi (jak po zapisie formularza)
+    mailboxes: [{ code: 'a', address: 'a@envi.com.pl', projectOurId: 'A', contractId: null, createdByPersonId: null, passwordVersion: 1 }],
     manualMailCodes: [],
     managesSb: false,
     spaceRows: [{ spaceId: 1, googleName: 'spaces/x', spaceProjectOurId: 'A', createdByPersonId: null, contractId: null, contractProjectOurId: null }],
@@ -29,12 +29,12 @@ const base = (personId: number, role: SystemRoleName, edges: MembershipEdge[], e
 const area = (input: PersonAccessInput, key: AccessArea) => personAccess(input).find((a) => a.area === key)!;
 
 describe('personAccess', () => {
-    it('pracownik ENVI widzi wszystkie projekty, oferty i faktury z roli; poczta tylko z przypisania', () => {
+    it('pracownik ENVI widzi wszystkie projekty, oferty, faktury i skrzynki projektów z roli (SKO K1)', () => {
         const input = base(1, SystemRoleName.ENVI_EMPLOYEE, []);
         expect(area(input, 'projects')).toMatchObject({ sees: true, value: 'wszystkie', source: 'rola' });
         expect(area(input, 'offers')).toMatchObject({ sees: true, source: 'rola' });
         expect(area(input, 'salesInvoices')).toMatchObject({ sees: true, source: 'rola' });
-        expect(area(input, 'mail').sees).toBe(false);
+        expect(area(input, 'mail')).toMatchObject({ sees: true, value: '1 skrzynka', source: 'rola' });
         expect(area(base(1, SystemRoleName.ENVI_EMPLOYEE, [edge('A', 11, 1)]), 'mail')).toMatchObject({ sees: true, source: 'przypisanie' });
     });
 
@@ -95,7 +95,7 @@ describe('personAccess', () => {
 
     it('zarządzający dostępem SB ma każdą skrzynkę, zakładający ma swoją', () => {
         expect(area(base(9, SystemRoleName.ENVI_MANAGER, [], { managesSb: true }), 'mail')).toMatchObject({ sees: true, source: 'wyjątek' });
-        const creator = base(9, SystemRoleName.ENVI_EMPLOYEE, [], {
+        const creator = base(9, SystemRoleName.ENVI_COOPERATOR, [], {
             mailboxes: [{ code: 'a', address: 'a@envi.com.pl', projectOurId: 'A', contractId: null, createdByPersonId: 9 }],
         });
         expect(area(creator, 'mail')).toMatchObject({ sees: true, value: '1 skrzynka', source: 'wyjątek' });

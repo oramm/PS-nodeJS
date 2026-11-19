@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { constants, createHash, createPublicKey, JsonWebKey, publicEncrypt, randomBytes } from 'crypto';
 import { SbAccessError } from './sbAccessPolicy';
 import { SbAccessLevels, SbPublicKeyJwk } from './sbAccessTypes';
 
@@ -15,17 +15,42 @@ export const SB_SECRET_PS_DB = 'baza-ps';
 export const SB_SECRET_AGENT_MAIL = 'poczta-sb-agent';
 const MAIL_PREFIX = 'poczta-';
 
+export const mailboxSecretName = (code: string) => MAIL_PREFIX + code;
+
+/** Skrzynka ze spisu w zakresie potrzebnym regule haseł. */
+export interface MailboxSecretInfo {
+    code: string;
+    projectId: number | null;
+    contractId: number | null;
+    passwordVersion?: number | null;
+}
+
 /**
- * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": konto techniczne dla skrzynek projektów i kontraktów, własne hasła dla pozostałych skrzynek
- * i jedno na bazę PS, gdy poziom bazy jest inny niż brak. Hasła spoza tej listy nie da się
- * udostępnić, a przy zmianie poziomów wypadają z bazy.
+ * JEDYNE miejsce reguły "jakie hasła wynikają z uprawnień": skrzynka z hasłem od PS (SKO-2) i każda skrzynka bez projektu
+ * i kontraktu - własne hasło `poczta-<kod>`; pozostałe skrzynki projektów i kontraktów - konto techniczne; jedno hasło na bazę PS,
+ * gdy poziom bazy jest inny niż brak. `mailboxes` = wynik personMailboxes, `registry` = spis skrzynek.
+ * Hasła spoza tej listy nie da się udostępnić, a przy zmianie poziomów wypadają z bazy.
  */
-export function expectedSecretNames(levels: SbAccessLevels, hasAssignedMailbox = false, ownedCodes: ReadonlySet<string> = new Set()): string[] {
+export function expectedSecretNames(levels: SbAccessLevels, mailboxes: { code: string }[] = [], registry: MailboxSecretInfo[] = []): string[] {
+    const byCode = new Map(registry.map((mailbox) => [mailbox.code, mailbox]));
+    const viaAgent = (code: string) => {
+        const mailbox = byCode.get(code);
+        return !!mailbox && mailbox.passwordVersion == null && (mailbox.projectId != null || mailbox.contractId != null);
+    };
+    const codes = [...new Set([...levels.mail, ...mailboxes.map((mailbox) => mailbox.code)])];
     return [
-        ...levels.mail.filter(code => !ownedCodes.has(code)).map((code) => MAIL_PREFIX + code),
-        ...(hasAssignedMailbox || levels.mail.some(code => ownedCodes.has(code)) ? [SB_SECRET_AGENT_MAIL] : []),
+        ...codes.filter((code) => !viaAgent(code)).map(mailboxSecretName),
+        ...(codes.some(viaAgent) ? [SB_SECRET_AGENT_MAIL] : []),
         ...(levels.psDb !== 'none' ? [SB_SECRET_PS_DB] : []),
     ];
+}
+
+/** Szyfrowanie tak jak w przeglądarce admina (RSA-OAEP SHA-256, base64): wynik przechodzi parseCiphertext. */
+export function encryptForComputer(jwk: SbPublicKeyJwk, plaintext: string): string {
+    return publicEncrypt(
+        { key: createPublicKey({ key: jwk as JsonWebKey, format: 'jwk' }), padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' },
+        Buffer.from(plaintext, 'utf8'),
+    ).toString('base64');
 }
 
 /** Nazwa po ludzku do historii i na ekran. */
