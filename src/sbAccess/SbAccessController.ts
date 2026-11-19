@@ -124,11 +124,16 @@ export default class SbAccessController {
         return this.mailboxes.find();
     }
 
-    /** Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina. */
-    static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: PersonMailbox[] }> {
+    /**
+     * Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina.
+     * `managed` = hasło wydaje PS (SKO-2); komputer loguje się nim wprost, nie kontem technicznym.
+     */
+    static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: (PersonMailbox & { managed: boolean })[] }> {
         const rows = await this.mailboxes.findWithAssignees();
         const account = await this.repository.getPersonAccount(record.personId);
-        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail, account?.systemRoleName) };
+        const managed = new Set(rows.filter((row) => row.passwordVersion != null).map((row) => row.code));
+        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail, account?.systemRoleName)
+            .map((mailbox) => ({ ...mailbox, managed: managed.has(mailbox.code) })) };
     }
 
     static async listMailboxesOfPerson(personId: number): Promise<{ mailboxes: PersonMailbox[] }> {

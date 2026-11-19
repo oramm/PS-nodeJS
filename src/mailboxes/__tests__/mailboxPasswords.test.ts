@@ -202,6 +202,16 @@ describe('SKO-2 hasła skrzynek zarządzanych', () => {
             expect(holders).toEqual([{ mailboxId: 1, personId: 5, version: 1 }]);
             expect((await SbAccessController.listPersonMailboxes(person(5, 'ENVI_EMPLOYEE'))).mailboxes.map((m) => m.code)).toEqual(['proj']);
         });
+
+        it('spis skrzynek osoby mówi, które hasło wydaje PS (managed), a które jest ręczne', async () => {
+            mailboxes = [mailbox(1, 'proj'), mailbox(2, 'faktury', { projectId: null, passwordVersion: null })];
+            rows = mailboxes.map((m) => row(m));
+            const out = await SbAccessController.listPersonMailboxes(person(5, 'ENVI_EMPLOYEE', { mail: ['faktury'] }));
+            expect(out.mailboxes).toEqual([
+                { code: 'faktury', address: 'faktury@envi.com.pl', source: 'manual', managed: false },
+                { code: 'proj', address: 'proj@envi.com.pl', source: 'role', managed: true },
+            ]);
+        });
     });
 
     describe('zakładanie skrzynki', () => {

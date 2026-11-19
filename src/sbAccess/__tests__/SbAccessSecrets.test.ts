@@ -352,7 +352,7 @@ describe('Hasła SB - kontroler', () => {
         // Skrzynka projektu ma przypisanie przez kierownika jednego z jego kontraktów.
         rows[0].personId = 131;
         expect((await SbAccessController.listPersonMailboxes(person)).mailboxes)
-            .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment' }]);
+            .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment', managed: false }]);
         assignees.mockClear();
         const listed = await SbAccessController.list();
         expect(assignees).toHaveBeenCalledTimes(1); // wszystkie osoby, bez N zapytań
