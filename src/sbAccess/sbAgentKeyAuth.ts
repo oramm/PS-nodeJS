@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { SystemRoleName, UserData } from '../types/sessionTypes';
 import SbAccessRepository from './SbAccessRepository';
+import { agentRefusal } from '../setup/Sessions/agentRouteTable';
 import { SB_AGENT_KEY_HEADER, deviceTokenHash } from './sbSecretsPolicy';
 
 /**
@@ -13,7 +14,8 @@ import { SB_AGENT_KEY_HEADER, deviceTokenHash } from './sbSecretsPolicy';
  *
  * Reguły:
  * - klucz działa tylko przy wpisie SB ACTIVE i aktywnym koncie PS (inaczej jak bez nagłówka:
- *   401 z requireSession) oraz poziomie "baza PS: zapis" (inaczej 403 wprost); sprawdzane
+ *   401 z requireSession) oraz poziomie "baza PS" odczyt albo zapis (przy "brak" 403 wprost;
+ *   przy odczycie zapis odmawia tabela tras, AGD-1); sprawdzane
  *   w bazie przy KAŻDYM żądaniu, bez pamięci podręcznej, więc blokada albo zmiana poziomu
  *   działa od razu. Blokada i odebranie kasują też skrót klucza (SbAccessRepository),
  * - sesja agenta osoby bez ważnego klucza traci tożsamość (ciasteczko nie jest poświadczeniem,
@@ -28,12 +30,12 @@ const AGENT_SESSION_MAX_AGE_MS = 60 * 1000;
 export const SB_ACCESS_NOT_LINKED = 'SB_ACCESS_NOT_LINKED';
 const repository = new SbAccessRepository();
 
-async function resolve(rawKey: unknown): Promise<UserData | 'READ_ONLY' | undefined> {
+async function resolve(rawKey: unknown): Promise<UserData | 'NO_PS_DB' | undefined> {
     const hash = deviceTokenHash(rawKey);
     if (!hash) return undefined;
     const agent = await repository.getAgentByKeyHash(hash);
     if (!agent) return undefined;
-    if (agent.psDb !== 'rw') return 'READ_ONLY';
+    if (agent.psDb === 'none') return 'NO_PS_DB';
     return {
         enviId: agent.personId,
         systemEmail: agent.systemEmail,
@@ -42,6 +44,7 @@ async function resolve(rawKey: unknown): Promise<UserData | 'READ_ONLY' | undefi
         systemRoleName: <SystemRoleName>agent.systemRoleName,
         systemRoleId: agent.systemRoleId,
         isPersonAgent: true,
+        personAgentPsDb: agent.psDb,
     };
 }
 
@@ -58,11 +61,10 @@ export default async function sbAgentKeyAuth(
         if (!sessionUser && !rawKey) return next();
 
         const agentUser = rawKey ? await resolve(String(rawKey).trim()) : undefined;
-        if (agentUser === 'READ_ONLY') {
+        if (agentUser === 'NO_PS_DB') {
             if (sessionUser) delete (<any>req.session).userData;
             res.status(403).send({
-                errorMessage:
-                    'Agent tej osoby nie ma prawa zapisu w PS (Dostępy SB: "baza PS" inna niż zapis).',
+                errorMessage: agentRefusal('agent tej osoby nie ma dostępu do PS (Dostępy SB: "baza PS: brak")'),
             });
             return;
         }
@@ -80,7 +82,7 @@ export default async function sbAgentKeyAuth(
                 return;
             }
             console.warn(
-                `[SbAgentKey] Agent key missing, invalid or not allowed (ACTIVE + baza PS: zapis):: path: ${req.path} ip: ${req.ip}`,
+                `[SbAgentKey] Agent key missing, invalid or not allowed (ACTIVE + baza PS: odczyt albo zapis):: path: ${req.path} ip: ${req.ip}`,
             );
             return next();
         }

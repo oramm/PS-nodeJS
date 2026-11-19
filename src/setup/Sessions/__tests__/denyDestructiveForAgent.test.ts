@@ -28,10 +28,10 @@ const HUMAN_SESSION = {
     systemRoleId: 3,
 };
 
-function run(method: string, userData?: any) {
+function run(method: string, userData?: any, path = '/letter/6163') {
     const req: any = {
         method,
-        path: '/letter/6163',
+        path,
         ip: '::1',
         session: { userData },
     };
@@ -81,6 +81,15 @@ describe('denyDestructiveForAgent', () => {
     it('przepuszcza agentowi rejestrację i edycję — blokada dotyczy tylko niszczenia', () => {
         for (const method of ['POST', 'PUT', 'GET', 'PATCH']) {
             const { res, next } = run(method, AGENT_SESSION);
+
+            expect(next).toHaveBeenCalled();
+            expect(res.statusCode).toBeUndefined();
+        }
+    });
+
+    it('AGD-1: agenta rejestracyjnego właściciela tabela tras nie dotyczy - zamknięty ma tylko DELETE', () => {
+        for (const path of ['/autoApproveOurLetters', '/nieMaTakiejTrasy', '/sbAccess/140/levels']) {
+            const { res, next } = run('GET', AGENT_SESSION, path);
 
             expect(next).toHaveBeenCalled();
             expect(res.statusCode).toBeUndefined();

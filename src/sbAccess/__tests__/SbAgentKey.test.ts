@@ -61,10 +61,15 @@ const HUMAN = {
 let getAgent: any;
 let isInvited: any;
 
-function request(method: string, path: string, params: { key?: string; userData?: any } = {}) {
+type Params = { key?: string; userData?: any; contentType?: string };
+
+function request(method: string, path: string, params: Params = {}) {
     const req: any = {
         method, path, ip: '::1',
-        headers: params.key ? { 'x-envi-sb-agent-key': params.key } : {},
+        headers: {
+            ...(params.key && { 'x-envi-sb-agent-key': params.key }),
+            ...(params.contentType && { 'content-type': params.contentType }),
+        },
         session: { userData: params.userData, cookie: { maxAge: 1 } },
     };
     const res: any = { locals: {}, statusCode: 200, body: undefined };
@@ -74,7 +79,7 @@ function request(method: string, path: string, params: { key?: string; userData?
 }
 
 /** Kolejność jak w src/index.ts: klucz osoby -> zakaz kasowania -> wymóg sesji -> trasa. */
-async function chain(method: string, path: string, params: { key?: string; userData?: any } = {}) {
+async function chain(method: string, path: string, params: Params = {}) {
     const { req, res } = request(method, path, params);
     let reachedRoute = false;
     await sbAgentKeyAuth(req, res, () => {
@@ -85,6 +90,16 @@ async function chain(method: string, path: string, params: { key?: string; userD
         });
     });
     return { reachedRoute, status: reachedRoute ? 200 : res.statusCode, req, res };
+}
+
+const ADMIN_SENTENCE = 'zgłoś się do administratora: Marek Gazda.';
+
+function expectRefused(result: { reachedRoute: boolean; status: number; res: any }, reason: string) {
+    expect(result.reachedRoute).toBe(false);
+    expect(result.status).toBe(403);
+    expect(result.res.body.errorMessage).toMatch(/^Agent nie może tego zrobić: /);
+    expect(result.res.body.errorMessage).toContain(reason);
+    expect(result.res.body.errorMessage).toContain(ADMIN_SENTENCE);
 }
 
 beforeEach(() => {
@@ -125,6 +140,7 @@ describe('SBZ-1: wejście kluczem osoby (warstwy jak w index.ts)', () => {
             enviId: 140,
             systemEmail: 'a.brodziak@envi.com.pl',
             isPersonAgent: true,
+            personAgentPsDb: 'rw',
         });
         expect(result.res.locals.authenticatedMachine).toBe(true);
     });
@@ -133,10 +149,12 @@ describe('SBZ-1: wejście kluczem osoby (warstwy jak w index.ts)', () => {
         expect((await chain('PUT', '/contract/77', { key: KEY })).reachedRoute).toBe(true);
     });
 
-    it('poziom "baza PS: odczyt" = 403, bez tożsamości', async () => {
-        getAgent.mockResolvedValue({ ...AGNIESZKA, psDb: 'ro' });
-        const result = await chain('POST', '/letterReact', { key: KEY });
+    it('poziom "baza PS: brak" = 403 ze zdaniem odmowy, bez tożsamości', async () => {
+        getAgent.mockResolvedValue({ ...AGNIESZKA, psDb: 'none' });
+        const result = await chain('GET', '/session', { key: KEY });
         expect(result.status).toBe(403);
+        expect(result.res.body.errorMessage).toContain('"baza PS: brak"');
+        expect(result.res.body.errorMessage).toContain(ADMIN_SENTENCE);
         expect(result.req.session.userData).toBeUndefined();
     });
 
@@ -173,17 +191,18 @@ describe('SBZ-1: wejście kluczem osoby (warstwy jak w index.ts)', () => {
     });
 
     it('DELETE = 403 (ta sama blokada co dla agenta właściciela)', async () => {
-        expect((await chain('DELETE', '/letter/6163', { key: KEY })).status).toBe(403);
+        expectRefused(await chain('DELETE', '/letter/6163', { key: KEY }), 'agent nie kasuje danych');
     });
 
-    it('POST /contractReact = 403 (na start bez zakładania kontraktów)', async () => {
-        expect((await chain('POST', '/contractReact', { key: KEY })).status).toBe(403);
-        expect((await chain('POST', '/ContractReact/', { key: KEY })).status).toBe(403);
+    it('POST /contractReact przechodzi (AGD K1: agent osoby zakłada kontrakt jak osoba)', async () => {
+        expect((await chain('POST', '/contractReact', { key: KEY })).reachedRoute).toBe(true);
+        expect((await chain('POST', '/ContractReact/', { key: KEY })).reachedRoute).toBe(true);
     });
 
     it('agent nie sięga /sbAccess (własne klucze, poziomy)', async () => {
-        expect((await chain('PUT', '/sbAccess/me/agentKey', { key: KEY })).status).toBe(403);
-        expect((await chain('PUT', '/sbAccess/140/levels', { key: KEY })).status).toBe(403);
+        expectRefused(await chain('PUT', '/sbAccess/me/agentKey', { key: KEY }), 'ustawia osobisty klucz');
+        expectRefused(await chain('PUT', '/sbAccess/140/levels', { key: KEY }), 'zmienia poziomy dostępu');
+        expectRefused(await chain('POST', '/sbAccess/140/invite', { key: KEY }), 'zaprasza osobę');
     });
 
     it('człowiek w przeglądarce: warstwa nic nie robi, może zakładać kontrakty', async () => {
@@ -206,6 +225,70 @@ describe('SBZ-1: wejście kluczem osoby (warstwy jak w index.ts)', () => {
         const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
         expect((await chain('POST', '/letterReact', { key: KEY })).status).toBe(401);
         errorLog.mockRestore();
+    });
+});
+
+describe('AGD-1: tabela tras dla agenta osoby (warstwy jak w index.ts)', () => {
+    // Wszystko, co woła envi-ps 0.4.0 (rdzeń SB, mcp/envi-ps/server.py), przy poziomie "baza PS: zapis".
+    const ENVI_PS_040: [string, string][] = [
+        ['GET', '/session'],
+        ['GET', '/cost-invoices'],
+        ['GET', '/cost-invoices/12'],
+        ['POST', '/contracts'],
+        ['POST', '/entities'],
+        ['POST', '/letterReact'],
+        ['PUT', '/letter/6163'],
+        ['PUT', '/contract/77'],
+        ['POST', '/case'],
+        ['POST', '/offer'],
+        ['GET', '/sessionTaskStatus/0f8fad5b-d9cb-469f-a165-70867728950e'],
+    ];
+
+    it.each(ENVI_PS_040)('envi-ps 0.4.0: %s %s przechodzi przy poziomie zapis', async (method, path) => {
+        expect((await chain(method, path, { key: KEY })).reachedRoute).toBe(true);
+    });
+
+    it('GET /autoApproveOurLetters: agent osoby 403 z powodem, człowiek przechodzi', async () => {
+        expectRefused(await chain('GET', '/autoApproveOurLetters', { key: KEY }), 'zatwierdza naraz wszystkie nasze pisma');
+        expect((await chain('GET', '/autoApproveOurLetters', { userData: HUMAN })).reachedRoute).toBe(true);
+    });
+
+    it('poziom "baza PS: odczyt": tożsamość powstaje, wyszukiwarka ofert przechodzi, założenie oferty 403', async () => {
+        getAgent.mockResolvedValue({ ...AGNIESZKA, psDb: 'ro' });
+        const search = await chain('POST', '/offers', { key: KEY });
+        expect(search.reachedRoute).toBe(true);
+        expect(search.req.session.userData).toMatchObject({ isPersonAgent: true, personAgentPsDb: 'ro' });
+        expectRefused(await chain('POST', '/offer', { key: KEY }), 'ma w PS tylko odczyt');
+        expect((await chain('GET', '/session', { key: KEY })).reachedRoute).toBe(true);
+    });
+
+    it('sesja agenta osoby bez poziomu liczy się jak odczyt', async () => {
+        const userData = { ...HUMAN, isPersonAgent: true };
+        const { req, res } = request('POST', '/offer', { userData });
+        let passed = false;
+        denyDestructiveForAgent(req, res, () => (passed = true));
+        expect(passed).toBe(false);
+        expect(res.body.errorMessage).toContain('tylko odczyt');
+    });
+
+    it('trasa nieopisana w tabeli = 403', async () => {
+        expectRefused(await chain('GET', '/nieMaTakiejTrasy', { key: KEY }), 'tej trasy nie opisano dla agenta');
+    });
+
+    it('PUT /letter/:id z plikami (multipart) 403, bez plików przechodzi', async () => {
+        expectRefused(
+            await chain('PUT', '/letter/6163', { key: KEY, contentType: 'multipart/form-data; boundary=x' }),
+            'kasuje poprzednie pliki na Dysku',
+        );
+        expect((await chain('PUT', '/letter/6163', { key: KEY, contentType: 'application/json' })).reachedRoute).toBe(true);
+        // Rejestracja pisma z plikami zostaje otwarta: nowe pismo niczego nie kasuje.
+        expect((await chain('POST', '/letterReact', { key: KEY, contentType: 'multipart/form-data; boundary=x' })).reachedRoute).toBe(true);
+    });
+
+    it('człowiek w przeglądarce: tabela go nie dotyczy', async () => {
+        for (const [method, path] of [['GET', '/nieMaTakiejTrasy'], ['POST', '/bank-transfers'], ['DELETE', '/letter/6163']]) {
+            expect((await chain(method, path, { userData: HUMAN })).reachedRoute).toBe(true);
+        }
     });
 });
 

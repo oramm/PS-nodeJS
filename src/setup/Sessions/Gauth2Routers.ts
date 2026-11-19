@@ -5,6 +5,7 @@ import ToolsGapi, { oAuthClient } from './ToolsGapi';
 import { app } from '../..';
 import '../../types/sessionTypes';
 import TaskStore from './IntersessionsTasksStore';
+import { AGENT_ADMINISTRATOR, agentRoutesFor } from './agentRouteTable';
 import ToolsMail from '../../tools/ToolsMail';
 
 app.post('/login', async (req: Request, res: Response, next) => {
@@ -33,6 +34,15 @@ app.get('/session', (req: Request, res: Response) => {
     } else {
         res.status(401).send({ errorMessage: 'Brak aktywnej sesji' });
     }
+});
+
+/** AGD-1: agent osoby dostaje tabelę tras z tym, co wolno właśnie jemu, zamiast zgadywać adresy. */
+app.get('/agentRoutes', (req: Request, res: Response) => {
+    const userData = req.session?.userData;
+    if (!userData?.isPersonAgent)
+        return res.status(403).send({ errorMessage: 'Lista tras jest dla agenta pracownika.' });
+    const psDb = userData.personAgentPsDb === 'rw' ? 'rw' : 'ro';
+    res.send({ psDb, administrator: AGENT_ADMINISTRATOR, routes: agentRoutesFor(psDb) });
 });
 
 app.get('/sessionTaskStatus/:taskId', (req: Request, res: Response) => {
