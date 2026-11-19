@@ -91,6 +91,8 @@ export interface SbHealthTool {
     ok: boolean;
     /** Krótki opis błędu, tylko gdy ok = false. */
     error?: string;
+    /** Tylko pozycja dysk-google: adres konta Google skryptu agenta (bez tokenu), AGD-2. */
+    account?: string;
 }
 export interface SbHealthReport {
     sbVersion: string | null;

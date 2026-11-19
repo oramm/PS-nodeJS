@@ -16,7 +16,9 @@ import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
 import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
 import { MailboxAssigneeRow, PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
-import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
+import { DRIVE_TOOL_NAME, healthReportFileName, parseHealthReport } from './sbHealthPolicy';
+import { AgentAccessMap, agentAccessMap, driveMembership } from './agentAccessMap';
+import { ADMIN_PANEL_ROLES } from '../Admin/adminPanelGuard';
 import {
     describeSecretName,
     deviceTokenHash,
@@ -127,6 +129,48 @@ export default class SbAccessController {
         const record = await this.repository.getByPersonId(personId);
         if (!record) throw new SbAccessError(404, 'Osoba nie ma wpisu w Dostępach SB.');
         return this.listPersonMailboxes(record);
+    }
+
+    /** Mapa "co ma agent osoby" (AGD-2): osoba z sesji/tokenu albo wskazana przez admina Dostępów SB. */
+    static async agentAccess(record: SbAccessRecord): Promise<AgentAccessMap> {
+        const persons = new PersonRepository();
+        const [account, psAccount, agentKeyHash, hasCostInvoiceAccess, health, givers, { mailboxes }] = await Promise.all([
+            this.repository.getPersonAccount(record.personId),
+            persons.getPersonAccountV2(record.personId),
+            this.repository.getAgentKeyHash(record.personId),
+            StaffMemberRepository.hasCostInvoiceAccess(record.personId),
+            this.repository.getHealth(record.personId),
+            this.repository.listActiveInRoles([...new Set([...SB_MANAGER_ROLES, ...ADMIN_PANEL_ROLES])]),
+            this.listPersonMailboxes(record),
+        ]);
+        const names = (rows: typeof givers) => [...new Set(rows.map((g) => `${g.name} ${g.surname}`))];
+        const sbManagerRoles = new Set<string>(SB_MANAGER_ROLES);
+        const driveTool = health?.report?.tools.find((tool) => tool.name === DRIVE_TOOL_NAME) ?? null;
+        const googleAccount = driveTool?.account ?? account?.systemEmail?.trim().toLowerCase() ?? null;
+        return agentAccessMap({
+            personId: record.personId,
+            person: account ? `${account.name} ${account.surname}` : '',
+            statusCode: record.statusCode,
+            levels: record.levels,
+            githubLinked: !!record.githubLogin,
+            hasAgentKey: agentKeyHash !== null,
+            hasCostInvoiceAccess,
+            finEnabled: !!psAccount?.finEnabled,
+            fidmanEnabled: !!psAccount?.fidmanEnabled,
+            mailboxes,
+            // Ta sama reguła co canManage: rola kierownicza i znacznik (role liczone z bazy, nie z sesji).
+            sbManagers: names(givers.filter((g) => g.canManageSb && sbManagerRoles.has(g.systemRoleName))),
+            accountManagers: names(givers.filter((g) => (ADMIN_PANEL_ROLES as string[]).includes(g.systemRoleName))),
+            driveTool,
+            googleAccount,
+            drive: googleAccount ? await driveMembership(googleAccount) : null,
+        });
+    }
+
+    static async agentAccessOfPerson(personId: number): Promise<AgentAccessMap> {
+        const record = await this.repository.getByPersonId(personId);
+        if (!record) throw new SbAccessError(404, 'Osoba nie ma wpisu w Dostępach SB.');
+        return this.agentAccess(record);
     }
 
     private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[], registry?: MailboxRecord[]): Promise<string[]> {

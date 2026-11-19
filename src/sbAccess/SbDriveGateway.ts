@@ -118,6 +118,26 @@ export default class SbDriveGateway {
         return null;
     }
 
+    /** Adresy kont osób z uprawnieniem do dysku albo folderu (także dziedziczonym), małymi literami. Tylko odczyt. */
+    static async listUserEmails(fileId: string): Promise<Set<string>> {
+        const client = await drive();
+        const emails = new Set<string>();
+        let pageToken: string | undefined;
+        do {
+            const { data } = await client.permissions.list({
+                fileId,
+                supportsAllDrives: true,
+                pageSize: 100,
+                pageToken,
+                fields: 'nextPageToken,permissions(type,emailAddress)',
+            });
+            for (const p of data.permissions ?? [])
+                if (p.type === 'user' && p.emailAddress) emails.add(p.emailAddress.toLowerCase());
+            pageToken = data.nextPageToken ?? undefined;
+        } while (pageToken);
+        return emails;
+    }
+
     /** Nadaje czytelnika; zwraca identyfikator uprawnienia. Google wysyła osobie powiadomienie. */
     static async grantReader(email: string): Promise<string> {
         const { data } = await (await drive()).permissions.create({

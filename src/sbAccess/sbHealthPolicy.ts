@@ -19,6 +19,9 @@ export const SB_HEALTH_MAX_EVENTS = 20;
 export const SB_HEALTH_MAX_LINE = 200;
 const MAX_VERSION = 30;
 const TOOL_NAME = /^[a-z0-9-]{1,40}$/;
+/** Pozycja raportu ze skryptem Google agenta (AGD-3); jedyna, która niesie adres konta. */
+export const DRIVE_TOOL_NAME = 'dysk-google';
+const GOOGLE_ACCOUNT = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/;
 /** Surowy tekst przycinamy przed maskowaniem, żeby wyrażenia regularne nie pracowały na megabajtach. */
 const RAW_LIMIT = 1000;
 
@@ -50,10 +53,13 @@ function parseTool(raw: any): SbHealthTool | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     if (typeof raw.name !== 'string' || !TOOL_NAME.test(raw.name)) return null;
     if (typeof raw.ok !== 'boolean') return null;
-    if (raw.ok) return { name: raw.name, ok: true };
+    // Konto Google skryptu agenta porównuje mapa dostępów z członkami dysków (AGD-2); tylko adres.
+    const account = raw.name === DRIVE_TOOL_NAME && typeof raw.account === 'string' && GOOGLE_ACCOUNT.test(raw.account)
+        ? { account: raw.account.toLowerCase() } : {};
+    if (raw.ok) return { name: raw.name, ok: true, ...account };
     // Błąd bez opisu też jest błędem: ekran pokaże narzędzie jako niedziałające.
     const error = sanitizeHealthText(raw.error, SB_HEALTH_MAX_LINE);
-    return error ? { name: raw.name, ok: false, error } : { name: raw.name, ok: false };
+    return error ? { name: raw.name, ok: false, error, ...account } : { name: raw.name, ok: false, ...account };
 }
 
 /**

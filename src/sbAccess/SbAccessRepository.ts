@@ -320,6 +320,24 @@ export default class SbAccessRepository {
         return { ...rows[0], isActive: !!rows[0].isActive };
     }
 
+    /** Osoby z aktywnym kontem w podanych rolach i ich znacznik zarządzania SB (mapa dostępów: "kogo poprosić"). */
+    async listActiveInRoles(roles: string[]): Promise<{ name: string; surname: string; systemRoleName: string; canManageSb: boolean }[]> {
+        if (!roles.length) return [];
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT p.Name AS name, p.Surname AS surname, sr.Name AS systemRoleName,
+                COALESCE(sm.CanManageSbAccess, 0) AS canManageSb
+             FROM Persons p
+             JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
+             JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
+             LEFT JOIN StaffMembers sm ON sm.PersonId = p.Id
+             WHERE sr.Name IN (${roles.map(() => '?').join(', ')})
+             ORDER BY p.Surname, p.Name, p.Id`,
+            undefined,
+            roles,
+        )) as { name: string; surname: string; systemRoleName: string; canManageSb: number }[];
+        return rows.map((row) => ({ ...row, canManageSb: !!row.canManageSb }));
+    }
+
     /** Osoby z aktywnym kontem w podanych rolach, bez wpisu albo z dostępem odebranym. */
     async listInviteCandidates(roles: string[]): Promise<SbPersonAccount[]> {
         if (!roles.length) return [];
