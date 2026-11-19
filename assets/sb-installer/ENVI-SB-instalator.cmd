@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.23.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.24.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.23.0"
+set "SB_INSTALATOR_WERSJA=0.24.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 if defined CODEX_THREAD_ID goto :agent
@@ -67,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 184490
+#SB-PLIK bootstrap.ps1 187336
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -2404,18 +2404,15 @@ Dyski wspoldzielone wymagaja supportsAllDrives; skrypt dodaje ten parametr.
 Po kazdej zmianie potwierdz wynik ponownym odczytem (api); po wgraniu odczytaj drive/v3/files/<id>.
 <!-- SB-GOOGLE:END -->
 '@
+  # Zapis bloku mieszka w poczta-lib.ps1 rdzenia (wola go tez zadanie raportu zdrowia dla SB-DOSTEPY).
+  $lib = Join-Path (Split-Path $SyncEnginePath -Parent) 'poczta-lib.ps1'
+  if (-not (Test-Path -LiteralPath $lib -PathType Leaf)) { Add-N5Todo 'Instrukcje Google' 'brak rdzenia SB z Dysku Google (poczta-lib.ps1) - instrukcji nie ma jak zapisac'; return }
+  . $lib
   foreach ($relative in @('.claude\CLAUDE.md', '.codex\AGENTS.md')) {
     $file = Join-Path $env:USERPROFILE $relative
     try {
       if (-not $PSCmdlet.ShouldProcess($file, 'odswiez instrukcje Google miedzy znacznikami SB-GOOGLE')) { continue }
-      $text = if (Test-Path -LiteralPath $file) { [IO.File]::ReadAllText($file) } else { '' }
-      $pattern = '(?s)<!-- SB-GOOGLE:START -->.*?<!-- SB-GOOGLE:END -->'
-      if ($text -match $pattern) {
-        # MatchEvaluator zachowuje doslowne $env:USERPROFILE i tresci poza blokiem.
-        $text = [regex]::Replace($text, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $block })
-      } else { $text += $(if ($text -and -not $text.EndsWith("`n")) { "`n" }) + "`n" + $block + "`n" }
-      $null = New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) -ErrorAction Stop
-      [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($false)))
+      Set-BlokWPliku -Plik $file -Znacznik 'SB-GOOGLE' -Blok $block
     } catch { Add-N5Todo "Instrukcje Google ($relative)" $_.Exception.Message }
   }
 }
@@ -3176,7 +3173,7 @@ if ($env:SB_INSTALATOR_KONIEC) {
   catch { Log "Nie udalo sie zapisac znacznika konca '$env:SB_INSTALATOR_KONIEC' ($($_.Exception.Message)) - okno instalatora powie, ze przebieg sie urwal, choc doszedl do konca." }
 }
 
-#SB-PLIK README-onboarding.md 9811
+#SB-PLIK README-onboarding.md 9892
 # Second Brain ENVI: pierwsze uruchomienie na Twoim komputerze
 
 Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Nie zakładasz żadnych kont i niczego nikomu nie wysyłasz: do wszystkiego używasz **jednego konta Google, którym logujesz się do PS ENVI**. Tym samym kontem logujesz się do Dysku Google i do GitHuba.
@@ -3259,7 +3256,7 @@ W obu przypadkach instalator wyświetli, co dokładnie zrobić. Dokończ brakuj�
 
 Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
 
-#SB-PLIK sb-google.py 12794
+#SB-PLIK sb-google.py 13298
 """Google Drive, Docs i Sheets dla agenta pracownika (token szyfrowany DPAPI).
 
 login [--force] - zgoda Google w przegladarce; dzialajacy token pomija login
@@ -3365,6 +3362,9 @@ def api_url(path, method="GET"):
             query.append(("supportsAllDrives", "true"))
         if parts.path.rstrip("/") == "/drive/v3/files" and method.upper() == "GET" and "includeItemsFromAllDrives" not in keys:
             query.append(("includeItemsFromAllDrives", "true"))
+            # Bez corpora Drive szuka tylko w "Moim dysku"; dyski wspolne (tresc pism i ofert) wymagaja allDrives.
+            if "corpora" not in keys and "driveId" not in keys:
+                query.append(("corpora", "allDrives"))
         url = urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
     return url
 
