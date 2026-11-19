@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.24.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.25.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.24.0"
+set "SB_INSTALATOR_WERSJA=0.25.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 if defined CODEX_THREAD_ID goto :agent
@@ -67,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 187336
+#SB-PLIK bootstrap.ps1 184777
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -1747,7 +1747,7 @@ function Install-RdzenZDysku {
   # skrzynek poczty (menu ikony z M3) - ta sama lista, co $PlikiRdzenia/$RdzenPliki,
   # zeby swiezy install mial poczte OD RAZU, a nie dopiero po pierwszej samoaktualizacji.
   $enviDir = Split-Path $SyncEnginePath -Parent
-  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-usun-skrzynke.ps1', 'sb-konflikty-okno.ps1')) {
+  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-haslo-do-schowka.ps1', 'poczta-usun-skrzynke.ps1', 'sb-konflikty-okno.ps1')) {
     $zrodlo = Join-Path $rozpakowane $plik
     if (-not (Test-Path -LiteralPath $zrodlo)) {
       Log "[N3b] ERROR: paczka $($manifest.paczka) nie zawiera pliku $plik - rdzen jest niekompletny, zglos to wlascicielowi"
@@ -2836,9 +2836,14 @@ function Invoke-N5Sekrety {
     $hasloAgentaLokalnie = $false
     try { $hasloAgentaLokalnie = (Test-Path -LiteralPath $cfgAgenta -PathType Leaf) -and (Test-Path -LiteralPath ([string](Get-Content -LiteralPath $cfgAgenta -Raw -Encoding UTF8 | ConvertFrom-Json).secret_file) -PathType Leaf) } catch { }
     if (-not $hasloAgentaLokalnie -and -not @(@($lista.secrets) | Where-Object { [string]$_.name -eq 'poczta-sb-agent' }).Count) {
-      $skrzynkiPs = @()
-      try { $skrzynkiPs = @((Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/mailboxes' -Token $token).mailboxes | Where-Object { $_ }) }
-      catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
+      $skrzynkiPs = @($sekrety.skrzynki | Where-Object { $_ })
+      if ($null -eq $sekrety.skrzynki) {
+        try { $skrzynkiPs = @((Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/mailboxes' -Token $token).mailboxes | Where-Object { $_ }) }
+        catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
+      }
+      # Konto techniczne czyta tylko skrzynki bez hasla od PS (managed) i bez wlasnego hasla na komputerze (SKO-2).
+      $wlasne = @(@($lista.secrets) | Where-Object { $_ } | ForEach-Object { [string]$_.name })
+      $skrzynkiPs = @($skrzynkiPs | Where-Object { $_.managed -ne $true -and $wlasne -notcontains "poczta-$($_.code)" -and -not (Test-Path -LiteralPath (Get-SciezkaKonfigu ([string]$_.code)) -PathType Leaf) })
       if ($skrzynkiPs.Count) {
         Log "[SBD] PS przypisal tej osobie skrzynki projektow ($($skrzynkiPs.Count)), a hasla konta technicznego sb-agent nie udostepniono temu komputerowi"
         $script:SekretyTodo += "Poczta projektow ($($skrzynkiPs.Count) w PS): administrator jeszcze nie udostepnil temu komputerowi hasla konta technicznego sb-agent, wiec agent nie przeczyta tych skrzynek. Popros administratora SB o udostepnienie go na ekranie Dostepy SB (znak klucza tego komputera: $znak); dojedzie samo w ciagu godziny albo po Synchronizuj teraz."
@@ -3173,7 +3178,7 @@ if ($env:SB_INSTALATOR_KONIEC) {
   catch { Log "Nie udalo sie zapisac znacznika konca '$env:SB_INSTALATOR_KONIEC' ($($_.Exception.Message)) - okno instalatora powie, ze przebieg sie urwal, choc doszedl do konca." }
 }
 
-#SB-PLIK README-onboarding.md 9892
+#SB-PLIK README-onboarding.md 9811
 # Second Brain ENVI: pierwsze uruchomienie na Twoim komputerze
 
 Ten dokument prowadzi Cię przez pierwsze uruchomienie firmowego Second Brain na nowym komputerze. Nie zakładasz żadnych kont i niczego nikomu nie wysyłasz: do wszystkiego używasz **jednego konta Google, którym logujesz się do PS ENVI**. Tym samym kontem logujesz się do Dysku Google i do GitHuba.
@@ -3256,7 +3261,7 @@ W obu przypadkach instalator wyświetli, co dokładnie zrobić. Dokończ brakuj�
 
 Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
 
-#SB-PLIK sb-google.py 13298
+#SB-PLIK sb-google.py 13028
 """Google Drive, Docs i Sheets dla agenta pracownika (token szyfrowany DPAPI).
 
 login [--force] - zgoda Google w przegladarce; dzialajacy token pomija login
