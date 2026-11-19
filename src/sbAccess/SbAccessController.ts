@@ -143,7 +143,8 @@ export default class SbAccessController {
             this.repository.listActiveInRoles([...new Set([...SB_MANAGER_ROLES, ...ADMIN_PANEL_ROLES])]),
             this.listPersonMailboxes(record),
         ]);
-        const names = (rows: typeof givers) => [...new Set(rows.map((g) => `${g.name} ${g.surname}`))];
+        // Osoba nie jest swoim własnym "kogo poprosić".
+        const names = (rows: typeof givers) => [...new Set(rows.filter((g) => g.personId !== record.personId).map((g) => `${g.name} ${g.surname}`))];
         const sbManagerRoles = new Set<string>(SB_MANAGER_ROLES);
         const driveTool = health?.report?.tools.find((tool) => tool.name === DRIVE_TOOL_NAME) ?? null;
         const googleAccount = driveTool?.account ?? account?.systemEmail?.trim().toLowerCase() ?? null;

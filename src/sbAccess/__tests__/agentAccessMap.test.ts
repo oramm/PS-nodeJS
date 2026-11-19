@@ -93,6 +93,30 @@ describe('AGD-2: mapa dostępów agenta osoby', () => {
         expect(invited.psRoutes.allowed).toBe(0);
     });
 
+    it('administrator sam jest osobą: zdanie bez prośby do siebie, askWhom puste', () => {
+        const map = agentAccessMap(input({ person: 'Marek Gazda', sbManagers: [], accountManagers: [] }));
+        expect(system(map, 'psRead').askWhom).toEqual([]);
+        expect(system(map, 'psRead').sentence).toContain('Możesz to nadać sam');
+        expect(system(map, 'psRead').sentence).not.toContain('Kogo poprosić');
+        expect(system(map, 'tar').askWhom).toEqual([]);
+        expect(system(map, 'tar').sentence).not.toContain('Zgłoś się do administratora');
+        // Inna osoba bez nikogo do poproszenia trafia do administratora.
+        expect(system(agentAccessMap(input({ sbManagers: [] })), 'psRead').askWhom).toEqual(['Marek Gazda']);
+    });
+
+    it('poczta: liczba i najwyżej 3 adresy, pełna lista w details; zablokowany wpis = "nie ma"', () => {
+        const mailboxes = ['a', 'b', 'c', 'd', 'e'].map((x) => ({ code: x, address: `${x}@e.pl`, source: 'projekt' })) as any;
+        const mail = system(agentAccessMap(input({ mailboxes })), 'mail');
+        expect(mail.state).toBe('ma');
+        expect(mail.sentence).toBe('Agent ma 5 skrzynek poczty: a@e.pl, b@e.pl, c@e.pl i 2 innych.');
+        expect((mail.details as any).mailboxes).toHaveLength(5);
+        for (const statusCode of ['BLOCKED', 'INVITED'] as const) {
+            const m = system(agentAccessMap(input({ mailboxes, statusCode })), 'mail');
+            expect(m.state).toBe('nie ma');
+            expect(m.sentence).toContain(statusCode === 'INVITED' ? 'To moje konto' : 'zablokowany');
+        }
+    });
+
     it('Dysk z członkostwem i bez raportu o skrypcie: "ma", członek PS.ENVI i Biura, stan skryptu nieznany', () => {
         const drive = system(agentAccessMap(input()), 'drive');
         expect(drive.state).toBe('ma');
@@ -210,10 +234,12 @@ describe('AGD-2: trasy mapy dostępów', () => {
             reportedAt: new Date(), refreshRequestedAt: null,
         });
         jest.spyOn(SbAccessRepository.prototype, 'listActiveInRoles').mockResolvedValue([
-            { name: 'Agnieszka', surname: 'Brodziak', systemRoleName: 'ENVI_MANAGER', canManageSb: false },
-            { name: 'Marek', surname: 'Gazda', systemRoleName: 'ENVI_MANAGER', canManageSb: true },
-            { name: 'Marek', surname: 'Gazda', systemRoleName: 'ENVI_MANAGER', canManageSb: false },
-            { name: 'Michał', surname: 'Kotala', systemRoleName: 'ENVI_MANAGER', canManageSb: true },
+            { personId: 10, name: 'Agnieszka', surname: 'Brodziak', systemRoleName: 'ENVI_MANAGER', canManageSb: false },
+            { personId: 125, name: 'Marek', surname: 'Gazda', systemRoleName: 'ENVI_MANAGER', canManageSb: true },
+            { personId: 125, name: 'Marek', surname: 'Gazda', systemRoleName: 'ENVI_MANAGER', canManageSb: false },
+            { personId: 11, name: 'Michał', surname: 'Kotala', systemRoleName: 'ENVI_MANAGER', canManageSb: true },
+            // Sama osoba (152) nie trafia na własną listę "kogo poprosić".
+            { personId: 152, name: 'Monika', surname: 'Tymczyszyn', systemRoleName: 'ENVI_MANAGER', canManageSb: true },
         ]);
         jest.spyOn(PersonRepository.prototype, 'getPersonAccountV2').mockResolvedValue({
             personId: 152, isActive: true, finEnabled: false, fidmanEnabled: true,

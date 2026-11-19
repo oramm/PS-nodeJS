@@ -82,12 +82,19 @@ export interface AgentAccessInput {
     now?: Date;
 }
 
-const ask = (names: string[]) => `Kogo poprosić: ${names.join(', ')}.`;
-const askAdmin = `Zgłoś się do administratora: ${AGENT_ADMINISTRATOR}.`;
+// Pusta lista = nie ma kogo prosić (osoba sama nadaje): zdanie bez prośby do siebie.
+const ask = (names: string[], where = 'na ekranie Dostępy SB') =>
+    names.length ? `Kogo poprosić: ${names.join(', ')}.` : `Możesz to nadać sam (${where}).`;
+const MAIL_SHOWN = 3;
+// Administrator, który sam jest osobą z mapy, nie prosi samego siebie.
+const adminOf = (person: string) => person === AGENT_ADMINISTRATOR
+    ? { admin: [] as string[], askAdmin: 'Jesteś administratorem, więc ustalasz to sam.' }
+    : { admin: [AGENT_ADMINISTRATOR], askAdmin: `Zgłoś się do administratora: ${AGENT_ADMINISTRATOR}.` };
 
 export function agentAccessMap(input: AgentAccessInput): AgentAccessMap {
-    const sbAsk = input.sbManagers.length ? input.sbManagers : [AGENT_ADMINISTRATOR];
-    const accountAsk = input.accountManagers.length ? input.accountManagers : [AGENT_ADMINISTRATOR];
+    const { admin, askAdmin } = adminOf(input.person);
+    const sbAsk = input.sbManagers.length ? input.sbManagers : admin;
+    const accountAsk = input.accountManagers.length ? input.accountManagers : admin;
     const psDb = input.levels.psDb;
     const entry = (system: AgentAccessSystem, label: string, state: AgentAccessState, sentence: string, askWhom: string[] = [], details?: Record<string, unknown>): AgentAccessEntry =>
         ({ system, label, state, sentence, askWhom, ...(details && { details }) });
@@ -125,33 +132,41 @@ export function agentAccessMap(input: AgentAccessInput): AgentAccessMap {
             psRead,
             psWrite,
             driveEntry(input),
-            input.mailboxes.length
-                ? entry('mail', 'poczta', 'ma', `Agent ma skrzynki: ${input.mailboxes.map((m) => m.address).join(', ')}.`, [],
-                    { mailboxes: input.mailboxes.map(({ code, address, source }) => ({ code, address, source })) })
-                : entry('mail', 'poczta', 'nie ma', `Agent nie ma żadnej skrzynki poczty. Skrzynki dają przypisania do projektów w PS albo ekran Dostępy SB. ${ask(sbAsk)}`, sbAsk, { mailboxes: [] }),
+            sbBlocker
+                ? entry('mail', 'poczta', 'nie ma', `Agent nie ma dostępu do poczty: ${sbBlocker}. ${ask(sbAsk)}`, sbAsk, { mailboxes: [] })
+                : input.mailboxes.length
+                    ? entry('mail', 'poczta', 'ma', mailSentence(input.mailboxes), [],
+                        { mailboxes: input.mailboxes.map(({ code, address, source }) => ({ code, address, source })) })
+                    : entry('mail', 'poczta', 'nie ma', `Agent nie ma żadnej skrzynki poczty. Skrzynki dają przypisania do projektów w PS albo ekran Dostępy SB. ${ask(sbAsk)}`, sbAsk, { mailboxes: [] }),
             !input.hasCostInvoiceAccess
-                ? entry('costInvoices', 'faktury kosztowe', 'nie ma', `Nie masz znacznika „Faktury kosztowe” (Personel i uprawnienia), więc agent ich nie czyta. ${ask(accountAsk)}`, accountAsk)
+                ? entry('costInvoices', 'faktury kosztowe', 'nie ma', `Nie masz znacznika „Faktury kosztowe” (Personel i uprawnienia), więc agent ich nie czyta. ${ask(accountAsk, 'Personel i uprawnienia')}`, accountAsk)
                 : psWorks
                     ? entry('costInvoices', 'faktury kosztowe', 'ma', 'Agent czyta faktury kosztowe przez PS (znacznik „Faktury kosztowe”).')
                     : entry('costInvoices', 'faktury kosztowe', 'nie ma', `Masz znacznik „Faktury kosztowe”, ale agent nie wchodzi do PS: ${psBlocker}. ${ask(sbAsk)}`, sbAsk),
             !input.finEnabled
-                ? entry('fin', 'FIN', 'nie ma', `Nie masz znacznika „Użytkownik FIN” (Personel i uprawnienia), więc agent nie pracuje w FIN. ${ask(accountAsk)}`, accountAsk)
+                ? entry('fin', 'FIN', 'nie ma', `Nie masz znacznika „Użytkownik FIN” (Personel i uprawnienia), więc agent nie pracuje w FIN. ${ask(accountAsk, 'Personel i uprawnienia')}`, accountAsk)
                 : sbBlocker || !input.hasAgentKey
                     ? entry('fin', 'FIN', 'nie ma', `Masz konto FIN, ale klucz agenta nie działa: ${sbBlocker ?? 'komputer nie zarejestrował jeszcze klucza agenta (uruchom ponownie instalator Second Brain)'}. ${ask(sbAsk)}`, sbAsk)
                     : entry('fin', 'FIN', 'ma', 'Agent pracuje w FIN tym samym kluczem co w PS (znacznik „Użytkownik FIN”).'),
             entry('fidman', 'FIDman', 'agent tego nie robi',
                 'Agent nie ma narzędzia do FIDmana i nie zrobi tam nic za Ciebie; pracujesz w aplikacji FIDman. '
-                + (input.fidmanEnabled ? 'Masz konto FIDmana nadane z PS.' : `Nie masz konta FIDmana nadanego z PS (znacznik „Użytkownik FIDmana”, Personel i uprawnienia). ${ask(accountAsk)}`),
+                + (input.fidmanEnabled ? 'Masz konto FIDmana nadane z PS.' : `Nie masz konta FIDmana nadanego z PS (znacznik „Użytkownik FIDmana”, Personel i uprawnienia). ${ask(accountAsk, 'Personel i uprawnienia')}`),
                 input.fidmanEnabled ? [] : accountAsk, { hasAccount: input.fidmanEnabled }),
             // Kanon dostępów: kto nadaje dostęp do TAR i konta ENVI w AQM - nie ustalono.
             entry('tar', 'aplikacja taryfowa (TAR)', 'agent tego nie robi',
-                `Agent nie ma narzędzia do aplikacji taryfowej i nie zrobi tam nic za Ciebie; pracujesz w samej aplikacji. Kto nadaje do niej dostęp, nie ustalono. ${askAdmin}`, [AGENT_ADMINISTRATOR]),
+                `Agent nie ma narzędzia do aplikacji taryfowej i nie zrobi tam nic za Ciebie; pracujesz w samej aplikacji. Kto nadaje do niej dostęp, nie ustalono. ${askAdmin}`, admin),
             entry('aqm', 'e-Aquamatic (AQM)', 'agent tego nie robi',
-                `Agent nie ma narzędzia do e-Aquamatic i nie zrobi tam nic za Ciebie; pracujesz w samej aplikacji. Kto prowadzi konta ENVI w AQM, nie ustalono. ${askAdmin}`, [AGENT_ADMINISTRATOR]),
+                `Agent nie ma narzędzia do e-Aquamatic i nie zrobi tam nic za Ciebie; pracujesz w samej aplikacji. Kto prowadzi konta ENVI w AQM, nie ustalono. ${askAdmin}`, admin),
             reposEntry(input, sbBlocker, sbAsk),
         ],
         psRoutes: { level: psDb, counts, allowed, routes },
     };
+}
+
+function mailSentence(mailboxes: PersonMailbox[]): string {
+    const shown = mailboxes.slice(0, MAIL_SHOWN).map((m) => m.address).join(', ');
+    const more = mailboxes.length - MAIL_SHOWN;
+    return `Agent ma ${mailboxes.length} skrzynek poczty: ${shown}${more > 0 ? ` i ${more} innych` : ''}.`;
 }
 
 function reposEntry(input: AgentAccessInput, sbBlocker: string | null, sbAsk: string[]): AgentAccessEntry {
@@ -175,6 +190,7 @@ function reposEntry(input: AgentAccessInput, sbBlocker: string | null, sbAsk: st
  */
 function driveEntry(input: AgentAccessInput): AgentAccessEntry {
     const base = { system: 'drive' as const, label: 'Dysk Google' };
+    const { admin, askAdmin } = adminOf(input.person);
     const script = !input.driveTool ? 'nieznany' : input.driveTool.ok ? 'dziala' : 'blad';
     const details = {
         account: input.googleAccount,
@@ -184,13 +200,13 @@ function driveEntry(input: AgentAccessInput): AgentAccessEntry {
         script,
     };
     if (script === 'blad')
-        return { ...base, state: 'nie ma', details, askWhom: [AGENT_ADMINISTRATOR],
+        return { ...base, state: 'nie ma', details, askWhom: admin,
             sentence: `Skrypt Google agenta na Twoim komputerze zgłosił błąd${input.driveTool!.error ? ` (${input.driveTool!.error})` : ''}. Zaloguj go ponownie (instalator Second Brain); jeśli to nie pomoże: ${askAdmin}` };
     if (!input.googleAccount)
-        return { ...base, state: 'nie ma', details, askWhom: [AGENT_ADMINISTRATOR],
+        return { ...base, state: 'nie ma', details, askWhom: admin,
             sentence: `PS nie zna Twojego konta Google, więc nie wie, czy agent dojdzie do Dysku. ${askAdmin}` };
     if (input.drive && !input.drive.drives.length)
-        return { ...base, state: 'nie ma', details, askWhom: [AGENT_ADMINISTRATOR],
+        return { ...base, state: 'nie ma', details, askWhom: admin,
             sentence: `Konto Google ${input.googleAccount} nie jest członkiem dysków z pismami, projektami i ofertami (${AGENT_DRIVES.map((d) => d.label).join(', ')}). Członkostwo dysków prowadzi właściciel. ${askAdmin}` };
     const where = input.drive
         ? `członek ${input.drive.drives.join(', ')}; procedury i wzory ENVI-MG: ${input.drive.envMgFolders.length} z ${ENVI_MG_FOLDERS.length} folderów`

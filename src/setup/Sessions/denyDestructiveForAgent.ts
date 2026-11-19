@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { AGENT_SYSTEM_EMAIL } from './agentTokenAuth';
-import { PersonAgentPsDb, agentRefusal, agentRefusalReason } from './agentRouteTable';
+import { PersonAgentPsDb, agentRefusal, agentRefusalReason, findAgentRoute } from './agentRouteTable';
 
 /**
  * LIS-5 — the registration agent may create and edit, never destroy.
@@ -45,11 +45,13 @@ const DENIED_METHODS_FOR_AGENT = new Set(['DELETE']);
  * poziomem: lista dozwolonych w serwerze agenta rozjeżdżała się z PS i każde poszerzenie wymagało wydania
  * rdzenia (decyzja AGD K1 z 2026-11-19; uchyla też zakaz zakładania kontraktów z SBZ).
  */
-function personAgentRefusalReason(req: Request, level: PersonAgentPsDb): string | undefined {
+function personAgentRefusalReason(req: Request, level: PersonAgentPsDb, readTool = false): string | undefined {
     const method = req.method.toUpperCase();
     if (DENIED_METHODS_FOR_AGENT.has(method)) return 'agent nie kasuje danych, to decyzja człowieka w aplikacji';
     const reason = agentRefusalReason(level, method, req.path);
-    if (reason) return reason;
+    if (reason) return readTool && level === 'ro' && findAgentRoute(method, req.path)?.access === 'zapis'
+        ? 'narzędzie odczytu nie zapisuje - użyj narzędzia zapisu'
+        : reason;
     // Z nowymi plikami PUT /letter/:id kasuje poprzednie pliki pisma na Dysku (notatka AGD-0, sekcja 2).
     const isMultipart = String(req.headers?.['content-type'] || '').toLowerCase().startsWith('multipart/');
     if (isMultipart && method === 'PUT' && /^\/letter\/[^/]+\/?$/i.test(req.path))
@@ -65,7 +67,9 @@ export default function denyDestructiveForAgent(
     const userData = req.session?.userData;
     if (userData?.isPersonAgent === true) {
         // Brak poziomu w sesji = tylko odczyt: przy wątpliwości agent ma mniej, nie więcej.
-        const reason = personAgentRefusalReason(req, userData.personAgentPsDb === 'rw' ? 'rw' : 'ro');
+        // Narzędzie odczytu serwera agenta oznacza żądania nagłówkiem: zapis tą drogą liczy się jak poziom "ro".
+        const readTool = String(req.headers?.['x-envi-agent-read'] ?? '') === '1';
+        const reason = personAgentRefusalReason(req, userData.personAgentPsDb === 'rw' && !readTool ? 'rw' : 'ro', readTool);
         if (!reason) return next();
         console.warn(
             `[AgentPolicy] Request refused for a person's agent:: method: ${req.method} path: ${req.path} enviId: ${userData.enviId}`,

@@ -321,10 +321,10 @@ export default class SbAccessRepository {
     }
 
     /** Osoby z aktywnym kontem w podanych rolach i ich znacznik zarządzania SB (mapa dostępów: "kogo poprosić"). */
-    async listActiveInRoles(roles: string[]): Promise<{ name: string; surname: string; systemRoleName: string; canManageSb: boolean }[]> {
+    async listActiveInRoles(roles: string[]): Promise<{ personId: number; name: string; surname: string; systemRoleName: string; canManageSb: boolean }[]> {
         if (!roles.length) return [];
         const rows = (await ToolsDb.getQueryCallbackAsync(
-            `SELECT p.Name AS name, p.Surname AS surname, sr.Name AS systemRoleName,
+            `SELECT p.Id AS personId, p.Name AS name, p.Surname AS surname, sr.Name AS systemRoleName,
                 COALESCE(sm.CanManageSbAccess, 0) AS canManageSb
              FROM Persons p
              JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
@@ -334,7 +334,7 @@ export default class SbAccessRepository {
              ORDER BY p.Surname, p.Name, p.Id`,
             undefined,
             roles,
-        )) as { name: string; surname: string; systemRoleName: string; canManageSb: number }[];
+        )) as { personId: number; name: string; surname: string; systemRoleName: string; canManageSb: number }[];
         return rows.map((row) => ({ ...row, canManageSb: !!row.canManageSb }));
     }
 
