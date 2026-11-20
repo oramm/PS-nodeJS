@@ -130,6 +130,29 @@ describe('Poziomy dostępu SB', () => {
         expect(find).not.toHaveBeenCalled();
     });
 
+    it('kontroler: ekran widział inne poziomy niż w bazie -> 409, nic nie zapisane (cudza zmiana zostaje)', async () => {
+        const inDb = { repos: 'write', psDb: 'rw', drive: 'connector', mail: ['faktury', 'marek'] } as const;
+        jest.spyOn(ToolsDb, 'transaction').mockImplementation(async (fn: any) => fn({}));
+        jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue({ personId: 5, levels: inDb } as any);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue([{ code: 'faktury' }, { code: 'marek' }] as any);
+        const set = jest.spyOn(SbAccessRepository.prototype, 'setLevels').mockResolvedValue(true);
+        const append = jest.spyOn(SbAccessEventRepository.prototype, 'append').mockResolvedValue(undefined);
+        const wanted = { repos: 'none', psDb: 'rw', drive: 'none', mail: [] } as any;
+        const stale = { repos: 'none', psDb: 'rw', drive: 'connector', mail: ['faktury', 'marek'] } as any;
+        await expect(SbAccessController.setLevels(5, wanted, 1, true, stale)).rejects.toMatchObject({
+            status: 409,
+            message: expect.stringContaining('Ktoś zmienił te uprawnienia'),
+        });
+        expect(set).not.toHaveBeenCalled();
+        expect(append).not.toHaveBeenCalled();
+        // ten sam stan (inna kolejność skrzynek; Dysk pominięty, bo zapis go nie nadpisuje) przechodzi
+        jest.spyOn(SbAccessController as any, 'expectedSecrets').mockResolvedValue([]);
+        jest.spyOn(SbAccessController as any, 'syncProjectsTeam').mockResolvedValue(undefined);
+        jest.spyOn(SbAccessController as any, 'reconcileMailboxPasswords').mockImplementation(() => undefined);
+        await SbAccessController.setLevels(5, wanted, 1, true, { ...inDb, drive: 'none', mail: ['marek', 'faktury'] } as any);
+        expect(set).toHaveBeenCalledTimes(1);
+    });
+
     it('kontroler: osoba bez wpisu -> 404 i brak zdarzenia', async () => {
         jest.spyOn(ToolsDb, 'transaction').mockImplementation(async (fn: any) => fn({}));
         jest.spyOn(SbAccessRepository.prototype, 'getByPersonId').mockResolvedValue(null);

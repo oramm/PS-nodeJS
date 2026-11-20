@@ -113,6 +113,12 @@ function sameText(a?: string | null, b?: string | null): boolean {
  *
  * Brak tokenu GitHub przerywa operację PRZED jakimkolwiek wywołaniem zewnętrznym i bez zapisu.
  */
+/** Te same poziomy niezależnie od kolejności skrzynek; Dysk tylko, gdy zapis go nadpisuje. */
+function sameLevels(a: SbAccessLevels, b: SbAccessLevels, withDrive: boolean): boolean {
+    return a.repos === b.repos && a.psDb === b.psDb && (!withDrive || a.drive === b.drive)
+        && JSON.stringify([...a.mail].sort()) === JSON.stringify([...b.mail].sort());
+}
+
 export default class SbAccessController {
     private static repository = new SbAccessRepository();
     private static events = new SbAccessEventRepository();
@@ -280,6 +286,8 @@ export default class SbAccessController {
         requestedByPersonId: number,
         /** Żądanie bez pola `drive` (poziom wycofany z ekranu, AGD K2): zostaje zapisana wartość. */
         keepDrive = false,
+        /** Poziomy, które widział ekran przed zmianą; inne niż w bazie = ktoś zmienił w międzyczasie (409). */
+        expectedLevels?: SbAccessLevels,
     ): Promise<SbAccessRecord> {
         if (levels.mail.length) {
             const known = new Set((await this.mailboxes.find()).map((mailbox) => mailbox.code));
@@ -294,6 +302,11 @@ export default class SbAccessController {
             const current = await this.repository.getByPersonId(personId, conn, true);
             if (!current)
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            if (expectedLevels && !sameLevels(expectedLevels, current.levels, !keepDrive))
+                throw new SbAccessError(
+                    409,
+                    `Ktoś zmienił te uprawnienia, gdy ekran był otwarty (teraz: ${this.describeLevels(current.levels)}). Nic nie zapisano. Wybierz osobę ponownie i ustaw uprawnienia jeszcze raz.`,
+                );
             if (keepDrive && current.levels) levels = { ...levels, drive: current.levels.drive };
             const expected = await this.expectedSecrets(personId, levels);
             const stale = (await this.secrets.listByPersonId(personId, conn))

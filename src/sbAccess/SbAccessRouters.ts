@@ -302,7 +302,10 @@ app.put('/sbAccess/:personId/levels', async (req, res, next) => {
     try {
         const personId = SbAccessValidator.requirePersonId(req.params.personId);
         const levels = SbAccessValidator.parseLevels(req.parsedBody);
-        res.send(await SbAccessController.setLevels(personId, levels, requesterId(req), (req.parsedBody as any)?.drive === undefined));
+        const body = req.parsedBody as any;
+        // `expected` = poziomy, które widział ekran; bez pola (agent, stary ekran) zapis jak dotąd.
+        const expected = body?.expected === undefined ? undefined : SbAccessValidator.parseLevels(body.expected);
+        res.send(await SbAccessController.setLevels(personId, levels, requesterId(req), body?.drive === undefined, expected));
     } catch (error) {
         handleError(error, res, next);
     }
