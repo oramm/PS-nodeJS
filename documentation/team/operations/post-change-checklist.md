@@ -19,6 +19,12 @@ This file is the active operational index, not a full rollout log.
 
 Keep only recent entries here. Move older entries to quarterly archive files under `documentation/team/operations/post-change-checklist-archive/`.
 
+## 2026-11-17 - ENVI Podpis 1.4.3, aktualizacja lokalna
+
+- Instalator `desktop/envi-podpis/bin/installer-pm53Qv/EnviPodpisSetup.exe`, SHA256 `1C3CE88A412BDFC050C7245DCAED1BA96C4E0E9F9329731F6763F3294CCECE9E`. Aktywna wersja 1.4.3.0. Wersja 1.4.2.0 zachowana w `%LOCALAPPDATA%/ENVI/Podpis.previous`. Porównano po 3552 pozycje manifestu, bez rozbieżności. Skrót i protokół PS wskazują nowy EXE.
+- Przegląd ograniczonego diffu APPROVE, jedna iteracja. Weryfikacja PASS: 91 testów podpisu, test paczki PDF, 11 kontroli obiegu Windows, 3 kontroli ekstrakcji i 33 kontrole instalatora. Zainstalowany silnik dodał trzeci podpis testowy do protokołu z Nowego Targu, zachował oba wcześniejsze podpisy i odrzucił celowo zmienione dane przed podpisaniem.
+- Cofnięcie lokalne przez `EnviPodpisSetup.exe /rollback`. Test kluczem programowym. Publikacja i próba kartą poza tą aktualizacją lokalną.
+
 ## 2026-11-02 - ENVI Podpis 1.4.0: lokalna instalacja
 
 - Owner jawnie zatwierdzil konkretny build 1.4.0 / installer-s3nxr4 z zachowaniem obecnej 1.3.1 do cofniecia. Instalator SHA256 B1390971C44ED63961064568EB5D3774E2B5C48880EBFAAE96E27901A7759A25, /silent exit 0.

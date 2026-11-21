@@ -149,7 +149,8 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
 
     let signedData: pkijs.SignedData;
     try {
-        const parsed = asn1js.fromBER(toArrayBuffer(cmsDer));
+        // Revocation data bundled in valid external signatures can exceed the default 10,000 nodes.
+        const parsed = asn1js.fromBER(toArrayBuffer(cmsDer), { maxNodes: 50_000 });
         if (parsed.offset === -1) throw new Error('not DER');
         const contentInfo = new pkijs.ContentInfo({ schema: parsed.result });
         if (contentInfo.contentType !== '1.2.840.113549.1.7.2') throw new Error('not SignedData');
