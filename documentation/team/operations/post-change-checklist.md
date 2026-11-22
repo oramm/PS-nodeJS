@@ -4,6 +4,11 @@
 - Push `main` uruchamia wdrożenie Heroku i `migrate verify`. Porównanie odczytowe z bazą produkcyjną potwierdziło zgodność nazw i sum wszystkich 107 migracji. Wydanie nie wymaga zmian schematu, ustawień Heroku, zmiennych środowiskowych, minimalnej wersji klienta ani publikacji frontendu.
 - Cofnięcie dystrybucji: przywrócenie poprzedniego commita lub zweryfikowanego instalatora 1.4.4 w kolejnym wydaniu. Test aneksu wykonano lokalnie kluczem programowym, z zachowaniem obu wcześniejszych podpisów i bajtów źródła.
 
+## 2026-11-22 – BNK B1, rozliczenie faktur sprzedaży
+
+- Migracja `src/invoices/migrations/012_derive_sales_invoice_payment.sql` (kolumny `PaidManually` 0/1/2 i `StatusBeforePayment`, znacznik 1 dla oryginałów „Zapłacona”). Lokalnie na odświeżonej `envikons_local`: 2945 oryginałów „Zapłacona” = 2945 znaczników = 2945 `PAID`, `verify` przeszło.
+- Migracja nie ma skryptu cofającego: przed zastosowaniem na produkcji kopia tabel `Invoices`, `BankTransfers`, `PaymentAllocations`; cofnięcie = odtworzenie kopii. Kolejność: kopia -> `migrate apply` -> push kodu.
+
 ## 2026-11-22 – BNK B0
 
 - Opcjonalne `BANK_OWN_ACCOUNTS` zastępuje listę domyślną. Przy zmianie wartości porównaj ją z rachunkami z wyciągu.

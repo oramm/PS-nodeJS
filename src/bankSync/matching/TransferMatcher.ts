@@ -120,8 +120,8 @@ export class TransferMatcher {
                 ci.SupplierBankAccount AS EntityBankAccount,
                 ci.SupplierName AS EntityName
             FROM CostInvoices ci
-            WHERE ci.PaymentStatus IN ('UNPAID','PARTIALLY_PAID')
-            `) : [],
+            WHERE ci.PaymentStatus IN (?, ?)
+            `, undefined, [Setup.InvoicePaymentStatus.UNPAID, Setup.InvoicePaymentStatus.PARTIALLY_PAID]) : [],
         ]);
         return { invoices, costInvoices: costInvoices as any[] };
     }

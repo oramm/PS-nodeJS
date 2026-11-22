@@ -177,10 +177,7 @@ app.put('/setAsSentInvoice/:id', salesInvoiceAccess('invoice'), async (req: Requ
 
 app.put('/setAsPaidInvoice/:id', salesInvoiceAccess('invoice'), async (req: Request, res: Response, next) => {
     try {
-        const item = await InvoicesController.updateStatus(
-            req.parsedBody,
-            'Zapłacona'
-        );
+        const item = await InvoicesController.markAsPaid(Number(req.params.id));
         res.send(item);
     } catch (error) {
         next(error);
@@ -207,7 +204,7 @@ app.patch('/invoices/:id/payment', salesInvoiceAccess('invoice'), async (req: Re
         const result = await InvoicesController.updatePayment(id, {
             paymentStatus,
             paidAmount: paidAmount !== undefined ? Number(paidAmount) : undefined,
-            paymentDate: paymentDate ?? null,
+            paymentDate,
         });
         res.json(result);
     } catch (error: any) {

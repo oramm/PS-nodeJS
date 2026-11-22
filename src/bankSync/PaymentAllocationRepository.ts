@@ -68,16 +68,27 @@ export default class PaymentAllocationRepository {
         }
     }
 
-    /** Sum of allocated amounts for a given Invoice */
-    async sumAllocatedForInvoice(invoiceId: number, conn?: mysql.PoolConnection): Promise<number> {
-        const sql = mysql.format(
-            `SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE InvoiceId = ?${conn ? ' FOR UPDATE' : ''}`,
+    async getInvoicePayment(invoiceId: number, conn: mysql.PoolConnection): Promise<{
+        paidAmount: number;
+        paymentDate: string | null;
+    }> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            `SELECT COALESCE(SUM(pa.AllocatedAmount), 0) AS PaidAmount,
+                    DATE_FORMAT(MAX(bt.ExecDate), '%Y-%m-%d') AS PaymentDate
+             FROM PaymentAllocations pa
+             JOIN BankTransfers bt ON bt.Id = pa.BankTransferId
+             WHERE pa.InvoiceId = ? FOR UPDATE`,
             [invoiceId],
         );
-        const rows = conn
-            ? (await conn.query(sql))[0] as any[]
-            : (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
-        return Number((rows as any)[0]?.Total ?? 0);
+        return { paidAmount: Number(rows[0].PaidAmount), paymentDate: rows[0].PaymentDate };
+    }
+
+    async sumAllocatedForTransfer(transferId: number, conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            'SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE BankTransferId = ? FOR UPDATE',
+            [transferId],
+        );
+        return Number(rows[0].Total);
     }
 
     /** Sum of allocated amounts for a given CostInvoice */

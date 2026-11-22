@@ -1,7 +1,7 @@
 import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 import { makeContractScopeCondition } from '../tools/ProjectScope';
 import BaseRepository from '../repositories/BaseRepository';
-import Invoice from './Invoice';
+import Invoice, { InvoicePaymentStatus } from './Invoice';
 import Contract from '../contracts/Contract';
 import Project from '../projects/Project';
 import Person from '../persons/Person';
@@ -12,18 +12,31 @@ import Setup from '../setup/Setup';
 import { CorrectionInvoiceSummary, InvoiceThirdPartyData } from '../types/types';
 
 const INVOICE_GROSS_SQL = 'ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2)';
-const ISSUED_INVOICE_STATUSES = [Setup.InvoiceStatus.SENT, Setup.InvoiceStatus.SENT_TO_KSEF, Setup.InvoiceStatus.CORRECTED];
 const PAYMENT_CANDIDATE_STATUS_SQL = mysql.format(
     '(i.Status IN (?) OR (i.Status = ? AND i.IssueDate >= ?))',
     [
-        ISSUED_INVOICE_STATUSES,
+        Setup.InvoicePayableStatuses,
         Setup.InvoiceStatus.PAID,
         Setup.Bank.paidInvoiceCandidatesFrom,
     ],
 );
 const ISSUED_CORRECTION_STATUS_SQL = mysql.format('i.Status IN (?)', [
-    [...ISSUED_INVOICE_STATUSES, Setup.InvoiceStatus.PAID],
+    [...Setup.InvoicePayableStatuses, Setup.InvoiceStatus.PAID],
 ]);
+const INVOICE_ANCESTORS_SQL = `ancestors(Id, CorrectedInvoiceId) AS (
+            SELECT Id, CorrectedInvoiceId FROM Invoices WHERE Id = ?
+            UNION ALL
+            SELECT i.Id, i.CorrectedInvoiceId FROM Invoices i JOIN ancestors a ON i.Id = a.CorrectedInvoiceId
+        )`;
+
+type InvoicePaidMarker = (typeof Setup.InvoicePaidMarker)[keyof typeof Setup.InvoicePaidMarker];
+
+interface PaymentInvoiceRow extends mysql.RowDataPacket {
+    Status: string;
+    CorrectedInvoiceId: number | null;
+    PaidManually: InvoicePaidMarker;
+    StatusBeforePayment: string | null;
+}
 
 export interface SalesPaymentCandidate {
     Id: number;
@@ -762,11 +775,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
 
     private static familyDueSql(singleInvoice = false): string {
         return `WITH RECURSIVE
-        ${singleInvoice ? `ancestors(Id, CorrectedInvoiceId) AS (
-            SELECT Id, CorrectedInvoiceId FROM Invoices WHERE Id = ?
-            UNION ALL
-            SELECT i.Id, i.CorrectedInvoiceId FROM Invoices i JOIN ancestors a ON i.Id = a.CorrectedInvoiceId
-        ),` : ''}
+        ${singleInvoice ? `${INVOICE_ANCESTORS_SQL},` : ''}
         family(RootId, Id) AS (
             SELECT Id, Id FROM Invoices WHERE CorrectedInvoiceId IS NULL
             ${singleInvoice ? 'AND Id IN (SELECT Id FROM ancestors)' : ''}
@@ -795,6 +804,15 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return rows.length ? Number(rows[0].Due) : null;
     }
 
+    async findOriginalInvoiceId(id: number, conn: mysql.PoolConnection): Promise<number | null> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            `WITH RECURSIVE ${INVOICE_ANCESTORS_SQL}
+            SELECT Id FROM ancestors WHERE CorrectedInvoiceId IS NULL`,
+            [id],
+        );
+        return rows[0]?.Id ?? null;
+    }
+
     async lockPaymentCandidate(id: number, conn: mysql.PoolConnection): Promise<boolean> {
         const [rows] = await conn.query<mysql.RowDataPacket[]>(
             `SELECT i.Id FROM Invoices i
@@ -803,6 +821,14 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             [id],
         );
         return rows.length > 0;
+    }
+
+    async lockPaymentInvoice(id: number, conn: mysql.PoolConnection): Promise<PaymentInvoiceRow | null> {
+        const [rows] = await conn.query<PaymentInvoiceRow[]>(
+            'SELECT Status, CorrectedInvoiceId, PaidManually, StatusBeforePayment FROM Invoices WHERE Id = ? FOR UPDATE',
+            [id],
+        );
+        return rows[0] ?? null;
     }
 
     async findPaymentCandidates(): Promise<SalesPaymentCandidate[]> {
@@ -830,20 +856,20 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
     async updatePayment(
         id: number,
         data: {
-            paymentStatus: string;
+            paymentStatus: InvoicePaymentStatus;
             paidAmount: number;
-            paymentDate?: string | null;
+            paymentDate: string | null;
+            status: string;
+            statusBeforePayment: string | null;
+            paidMarker: InvoicePaidMarker;
         },
-        conn?: mysql.PoolConnection,
+        conn: mysql.PoolConnection,
     ): Promise<void> {
-        const sql = mysql.format(
-            `UPDATE Invoices SET PaymentStatus=?, PaidAmount=?, PaymentDate=? WHERE Id=?`,
-            [data.paymentStatus, data.paidAmount, data.paymentDate ?? null, id],
+        await conn.query(
+            `UPDATE Invoices SET PaymentStatus = ?, PaidAmount = ?, PaymentDate = ?,
+                Status = ?, StatusBeforePayment = ?, PaidManually = ? WHERE Id = ?`,
+            [data.paymentStatus, data.paidAmount, data.paymentDate, data.status,
+                data.statusBeforePayment, data.paidMarker, id],
         );
-        if (conn) {
-            await conn.query(sql);
-        } else {
-            await this.executeQuery(sql);
-        }
     }
 }

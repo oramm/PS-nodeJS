@@ -21,9 +21,9 @@ export default class BankTransferRepository {
         return this.mapRow(rows[0]);
     }
 
-    async findById(id: number): Promise<BankTransfer | null> {
-        const sql = mysql.format('SELECT * FROM BankTransfers WHERE Id = ? LIMIT 1', [id]);
-        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+    async findById(id: number, conn?: mysql.PoolConnection): Promise<BankTransfer | null> {
+        const sql = mysql.format(`SELECT * FROM BankTransfers WHERE Id = ? LIMIT 1${conn ? ' FOR UPDATE' : ''}`, [id]);
+        const rows = (await ToolsDb.getQueryCallbackAsync(sql, conn)) as any[];
         if (!rows || rows.length === 0) return null;
         return this.mapRow(rows[0]);
     }

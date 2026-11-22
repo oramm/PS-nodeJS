@@ -17,14 +17,22 @@ import ToolsMail from '../tools/ToolsMail';
 import InvoiceValidator from './InvoiceValidator';
 import { drive_v3 } from 'googleapis';
 import KsefController from './KSeF/KsefController';
+import PaymentAllocationRepository from '../bankSync/PaymentAllocationRepository';
 
 export type { InvoicesSearchParams };
+
+interface PaymentUpdate {
+    paymentStatus: string;
+    paidAmount?: number;
+    paymentDate?: string | null;
+}
 
 export default class InvoicesController extends BaseController<
     Invoice,
     InvoiceRepository
 > {
     private static instance: InvoicesController;
+    private readonly allocationRepository = new PaymentAllocationRepository();
 
     /** Adresat powiadomienia o fakturze oznaczonej jako "Do zrobienia". */
     private static readonly INVOICE_TODO_NOTIFY_RECIPIENT =
@@ -324,15 +332,19 @@ export default class InvoicesController extends BaseController<
                 !!originalInvoice.ksefNumber ||
                 originalInvoice.status === Setup.InvoiceStatus.SENT_TO_KSEF;
 
-            if (wasSentToKsef) {
-                originalInvoice.status = Setup.InvoiceStatus.CORRECTED;
-                await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
-                console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako skorygowana`);
-            } else if (correctionType === 'zero') {
-                originalInvoice.status = Setup.InvoiceStatus.WITHDRAWN;
-                await instance.repository.editInDb(originalInvoice, undefined, undefined, ['status']);
-                console.log(`Oryginalna faktura ${originalInvoiceId} oznaczona jako wycofana`);
-            }
+            const statusAfterCorrection = wasSentToKsef ? Setup.InvoiceStatus.CORRECTED
+                : correctionType === 'zero' ? Setup.InvoiceStatus.WITHDRAWN : undefined;
+            await ToolsDb.transaction(async (conn) => {
+                if (statusAfterCorrection) {
+                    originalInvoice.status = statusAfterCorrection;
+                    await instance.repository.editInDb(originalInvoice, conn, true, ['status']);
+                }
+                const paymentInvoiceId = originalInvoice.correctedInvoiceId
+                    ? await instance.repository.findOriginalInvoiceId(originalInvoiceId, conn)
+                    : originalInvoiceId;
+                if (paymentInvoiceId === null) throw new Error(`Brak oryginału dla faktury ${originalInvoiceId}`);
+                await instance.syncPayment(paymentInvoiceId, conn);
+            });
 
             // 9. Upload pliku do Google Drive (jeśli załączono)
             if (invoiceFile) {
@@ -436,12 +448,10 @@ export default class InvoicesController extends BaseController<
             }
 
             await ToolsDb.transaction(async (conn) => {
-                await this.repository.editInDb(
-                    invoice,
-                    conn,
-                    true,
-                    fieldsToUpdate,
+                const fields = (fieldsToUpdate ?? Object.keys(invoice)).filter((field) =>
+                    !['paymentStatus', 'paidAmount', 'paymentDate'].includes(field),
                 );
+                if (fields.length > 0) await this.repository.editInDb(invoice, conn, true, fields);
                 if (!invoice.id) {
                     throw new Error('Invoice id missing for third-party update');
                 }
@@ -604,6 +614,7 @@ export default class InvoicesController extends BaseController<
         newStatus: string,
         userData?: UserData
     ): Promise<Invoice> {
+        if (newStatus === Setup.InvoiceStatus.PAID) return this.markAsPaid(Number(invoiceData.id));
         const instance = this.getInstance();
         return await instance.updateInvoiceStatus(
             invoiceData,
@@ -985,7 +996,7 @@ export default class InvoicesController extends BaseController<
                 number: null,
                 sentDate: null,
                 paymentDeadline: null,
-                paymentStatus: 'UNPAID',
+                paymentStatus: Setup.InvoicePaymentStatus.UNPAID,
                 paidAmount: 0,
                 paymentDate: null,
                 ksefNumber: null,
@@ -1111,49 +1122,62 @@ export default class InvoicesController extends BaseController<
     }
 
     // ==================== PAYMENT ====================
-    /**
-     * Aktualizuje status płatności faktury przychodowej.
-     * Walidacja przez InvoiceValidator.validatePaymentUpdate.
-     */
-    static async updatePayment(
-        id: number,
-        data: {
-            paymentStatus: string;
-            paidAmount?: number;
-            paymentDate?: string | null;
-        },
-    ): Promise<Invoice> {
+    static async markAsPaid(id: number): Promise<Invoice> {
+        return this.updatePayment(id, { paymentStatus: Setup.InvoicePaymentStatus.PAID });
+    }
+
+    static async updatePayment(id: number, request: PaymentUpdate): Promise<Invoice> {
         const instance = this.getInstance();
-        const invoice = await instance.repository.findById(id);
+        await ToolsDb.transaction(async (conn) => {
+            await instance.syncPayment(id, conn, request);
+        });
+        return (await instance.repository.findById(id))!;
+    }
+
+    static async recalculatePayment(id: number, conn: mysql.PoolConnection) {
+        return this.getInstance().syncPayment(id, conn);
+    }
+
+    private async syncPayment(id: number, conn: mysql.PoolConnection, request?: PaymentUpdate) {
+        const invoice = await this.repository.lockPaymentInvoice(id, conn);
         if (!invoice) throw new Error(`Faktura ${id} nie istnieje`);
-        if (invoice.correctedInvoiceId) throw new Error('Wpłatę przypisz do faktury oryginalnej');
+        if (invoice.CorrectedInvoiceId) throw new Error('Wpłatę przypisz do faktury oryginalnej');
 
-        const grossAmount = await instance.repository.findDueAmount(id);
-        if (grossAmount === null) throw new Error(`Faktura ${id} nie istnieje`);
+        const paymentStatuses = Setup.InvoicePaymentStatus;
+        const markers = Setup.InvoicePaidMarker;
+        const paidStatus = Setup.InvoiceStatus.PAID;
+        const isPayable = Setup.InvoicePayableStatuses.includes(invoice.Status);
+        const markManually = request?.paymentStatus === paymentStatuses.PAID;
+        if (markManually && !isPayable && invoice.Status !== paidStatus) {
+            throw new Error('Płatność można oznaczyć tylko dla wystawionej faktury');
+        }
+        // Ponowienie żądania po automacie nie może zablokować cofnięcia statusu.
+        const paidMarker = invoice.PaidManually === markers.NONE && markManually && isPayable
+            ? markers.BUTTON : invoice.PaidManually;
+        const dueAmount = await this.repository.findDueAmount(id, conn);
+        if (dueAmount === null) throw new Error(`Faktura ${id} nie istnieje`);
+        const { paidAmount, paymentDate } = await this.allocationRepository.getInvoicePayment(id, conn);
+        const coversDue = dueAmount > 0
+            ? Math.round(paidAmount * 100) >= Math.round(dueAmount * 100) - 1
+            : paidAmount > 0;
+        const isPaid = paidMarker !== markers.NONE || coversDue;
+        const paymentStatus = isPaid ? paymentStatuses.PAID
+            : paidAmount > 0 ? paymentStatuses.PARTIALLY_PAID : paymentStatuses.UNPAID;
 
-        const error = InvoiceValidator.validatePaymentUpdate(
-            { paymentStatus: data.paymentStatus, paidAmount: data.paidAmount },
-            grossAmount,
-        );
-        if (error) throw new Error(error);
-
-        const status = data.paymentStatus as 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
-        let paidAmount: number;
-        if (status === 'UNPAID' || status === 'NOT_APPLICABLE') {
-            paidAmount = 0;
-        } else if (status === 'PAID') {
-            paidAmount = grossAmount;
-        } else {
-            paidAmount = data.paidAmount!;
+        let status = invoice.Status;
+        let statusBeforePayment = status === paidStatus ? invoice.StatusBeforePayment : null;
+        if (isPaid && isPayable) {
+            statusBeforePayment = status;
+            status = paidStatus;
+        } else if (!isPaid && status === paidStatus && statusBeforePayment) {
+            status = statusBeforePayment;
+            statusBeforePayment = null;
         }
 
-        await instance.repository.updatePayment(id, {
-            paymentStatus: status,
-            paidAmount,
-            paymentDate: data.paymentDate ?? null,
-        });
-
-        const updated = await instance.repository.findById(id);
-        return updated!;
+        const derived = { paymentStatus, paidAmount, paymentDate };
+        const requestError = request && InvoiceValidator.validatePaymentUpdate(request, derived);
+        if (requestError) throw new Error(requestError);
+        await this.repository.updatePayment(id, { ...derived, status, statusBeforePayment, paidMarker }, conn);
+        return derived;
     }
 }

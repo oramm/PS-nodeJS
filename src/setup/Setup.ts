@@ -263,6 +263,25 @@ export default class Setup {
         CORRECTED: 'Skorygowana',
     };
 
+    static readonly InvoicePaymentStatus = {
+        UNPAID: 'UNPAID',
+        PARTIALLY_PAID: 'PARTIALLY_PAID',
+        PAID: 'PAID',
+        NOT_APPLICABLE: 'NOT_APPLICABLE',
+    } as const;
+
+    static readonly InvoicePaidMarker = {
+        NONE: 0,
+        BEFORE_SYSTEM: 1,
+        BUTTON: 2,
+    } as const;
+
+    static readonly InvoicePayableStatuses = [
+        Setup.InvoiceStatus.SENT,
+        Setup.InvoiceStatus.SENT_TO_KSEF,
+        Setup.InvoiceStatus.CORRECTED,
+    ];
+
     /**
      * Kanoniczne grupy statusów faktur używane do liczenia wartości
      * rozliczenia kontraktu. Jedno źródło prawdy dla:

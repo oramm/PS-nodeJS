@@ -11,9 +11,8 @@ import PaymentAllocationRepository from './PaymentAllocationRepository';
 import { TransferMatcher, MatchProposal } from './matching/TransferMatcher';
 import { matchesSalesAmount } from './matching/signals';
 import InvoiceRepository from '../invoices/InvoiceRepository';
+import InvoicesController from '../invoices/InvoicesController';
 import CostInvoiceRepository from '../costInvoices/CostInvoiceRepository';
-import InvoiceValidator from '../invoices/InvoiceValidator';
-import { CostInvoiceValidator } from '../costInvoices/CostInvoiceValidator';
 import { BankSyncValidator } from './BankSyncValidator';
 import { extractInvoiceNumbers } from './parsers/pkoBpDescriptionHelpers';
 import OfferBondRepository from '../offers/OfferBond/OfferBondRepository';
@@ -241,28 +240,40 @@ export default class BankSyncController {
         const proposed = await this.transferRepo.findByStatementIdAndStatus(statementId, 'PROPOSED');
 
         let committed = 0;
-        for (const transfer of proposed) {
-            if (!transfer.matchingCandidates?.length) continue;
+        for (const proposal of proposed) {
+            const didCommit = await ToolsDb.transaction<boolean>(async (conn) => {
+                const transfer = await this.transferRepo.findById(proposal.id!, conn);
+                if (!transfer || transfer.matchingStatus !== 'PROPOSED') return false;
+                const [best, ...otherCandidates] = transfer.matchingCandidates ?? [];
+                if (!best) return false;
+                const confidence = Math.round(best.score * 100);
 
-            const best = transfer.matchingCandidates[0];
+                if (best.invoiceId) {
+                    if (otherCandidates.some((candidate) => candidate.score >= best.score)) return false;
+                    const result = await this.allocateSalesPayment(transfer, best.invoiceId, {
+                        amount: transfer.amount, source: 'MANUAL', createdBy: userId, confidence,
+                    }, conn);
+                    if (!result) return false;
+                    await this.transferRepo.updateMatchingStatus(transfer.id!, 'CONFIRMED', transfer.matchingScore, null, conn);
+                    return true;
+                }
 
-            await ToolsDb.transaction(async (conn) => {
+                if (!best.costInvoiceId) return false;
                 const alloc = new PaymentAllocation({
                     bankTransferId: transfer.id!,
-                    invoiceId: best.invoiceId ?? null,
-                    costInvoiceId: best.costInvoiceId ?? null,
+                    costInvoiceId: best.costInvoiceId,
                     allocatedAmount: best.remainingAmount ?? transfer.amount,
                     allocatedPercentage: 100,
                     source: 'MANUAL',
-                    confidence: best.score ? Math.round(best.score * 100) : null,
+                    confidence: best.score ? confidence : null,
                     createdBy: userId ?? null,
                 });
                 await this.allocationRepo.insert(alloc, conn);
                 await this.transferRepo.updateMatchingStatus(transfer.id!, 'CONFIRMED', transfer.matchingScore, null, conn);
-                if (best.invoiceId) await this.updateInvoicePaymentStatus(best.invoiceId, conn);
-                if (best.costInvoiceId) await this.updateCostInvoicePaymentStatus(best.costInvoiceId, conn);
+                await this.updateCostInvoicePaymentStatus(best.costInvoiceId, conn);
+                return true;
             });
-            committed++;
+            if (didCommit) committed++;
         }
 
         return { committed };
@@ -361,31 +372,35 @@ export default class BankSyncController {
         const validationError = BankSyncValidator.validateAllocationRequest(body);
         if (validationError) throw new BankSyncError(400, validationError);
 
-        const transfer = await this.transferRepo.findById(transferId);
-        if (!transfer) throw new BankSyncError(404, `BankTransfer #${transferId} nie istnieje`);
-
         const invoiceId = body.invoiceId ? Number(body.invoiceId) : null;
         const costInvoiceId = body.costInvoiceId ? Number(body.costInvoiceId) : null;
         const amount = Number(body.amount);
 
-        let grossAmount = 0;
-        let alreadyPaid = 0;
-
         if (invoiceId) {
-            const inv = await this.invoiceRepo.findById(invoiceId);
-            if (!inv) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
-            if (inv.correctedInvoiceId) throw new BankSyncError(400, 'Wpłatę przypisz do faktury oryginalnej');
-            const due = await this.invoiceRepo.findDueAmount(invoiceId);
-            if (due === null) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
-            grossAmount = due;
-            alreadyPaid = inv.paidAmount ?? 0;
-        } else if (costInvoiceId) {
-            const ci = await this.costInvoiceRepo.findById(costInvoiceId);
-            if (!ci) throw new BankSyncError(404, `Faktura kosztowa #${costInvoiceId} nie istnieje`);
-            grossAmount = ci.grossAmount;
-            alreadyPaid = ci.paidAmount;
+            return ToolsDb.transaction<AllocationResult>(async (conn) => {
+                const transfer = await this.transferRepo.findById(transferId, conn);
+                if (!transfer) throw new BankSyncError(404, `BankTransfer #${transferId} nie istnieje`);
+                const result = await this.allocateSalesPayment(transfer, invoiceId, {
+                    amount, source: 'MANUAL', createdBy: userId,
+                }, conn);
+                if (!result) {
+                    const invoice = await this.invoiceRepo.lockPaymentInvoice(invoiceId, conn);
+                    if (!invoice) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
+                    if (invoice.CorrectedInvoiceId) {
+                        throw new BankSyncError(400, 'Wpłatę przypisz do faktury oryginalnej');
+                    }
+                    throw new BankSyncError(400, 'Przelew lub faktura nie mają kwoty dostępnej do przypisania');
+                }
+                await this.transferRepo.updateMatchingStatus(transferId, 'CONFIRMED', null, null, conn);
+                return result;
+            });
         }
 
+        const transfer = await this.transferRepo.findById(transferId);
+        if (!transfer) throw new BankSyncError(404, `BankTransfer #${transferId} nie istnieje`);
+        const costInvoice = await this.costInvoiceRepo.findById(costInvoiceId!);
+        if (!costInvoice) throw new BankSyncError(404, `Faktura kosztowa #${costInvoiceId} nie istnieje`);
+        const { grossAmount, paidAmount: alreadyPaid } = costInvoice;
         const remaining = Math.max(0, grossAmount - alreadyPaid);
         if (amount > remaining + 0.01) {
             throw new BankSyncError(400, `Kwota alokacji (${amount}) przekracza pozostałą kwotę faktury (${remaining})`);
@@ -393,43 +408,28 @@ export default class BankSyncController {
 
         const percentage = grossAmount > 0 ? Math.round((amount / grossAmount) * 10000) / 100 : 100;
 
-        let allocId!: number;
-        let newPaidAmount = 0;
-        let newStatus = 'UNPAID';
-
-        await ToolsDb.transaction(async (conn) => {
+        return ToolsDb.transaction<AllocationResult>(async (conn) => {
             const alloc = new PaymentAllocation({
                 bankTransferId: transferId,
-                invoiceId,
                 costInvoiceId,
                 allocatedAmount: amount,
                 allocatedPercentage: percentage,
                 source: 'MANUAL',
                 createdBy: userId ?? null,
             });
-            allocId = await this.allocationRepo.insert(alloc, conn);
+            const allocationId = await this.allocationRepo.insert(alloc, conn);
             await this.transferRepo.updateMatchingStatus(transferId, 'CONFIRMED', null, null, conn);
 
-            if (invoiceId) {
-                const result = await this.updateInvoicePaymentStatus(invoiceId, conn);
-                newPaidAmount = result.paidAmount;
-                newStatus = result.paymentStatus;
-            } else if (costInvoiceId) {
-                const result = await this.updateCostInvoicePaymentStatus(costInvoiceId, conn);
-                newPaidAmount = result.paidAmount;
-                newStatus = result.paymentStatus;
-            }
+            const state = await this.updateCostInvoicePaymentStatus(costInvoiceId!, conn);
+            return {
+                allocationId,
+                costInvoiceId: costInvoiceId!,
+                allocatedAmount: amount,
+                allocatedPercentage: percentage,
+                newPaymentStatus: state.paymentStatus,
+                newPaidAmount: state.paidAmount,
+            };
         });
-
-        return {
-            allocationId: allocId,
-            invoiceId: invoiceId ?? undefined,
-            costInvoiceId: costInvoiceId ?? undefined,
-            allocatedAmount: amount,
-            allocatedPercentage: percentage,
-            newPaymentStatus: newStatus,
-            newPaidAmount,
-        };
     }
 
     async deleteAllocation(allocId: number): Promise<{ invoiceId?: number; costInvoiceId?: number }> {
@@ -439,10 +439,14 @@ export default class BankSyncController {
         const { invoiceId, costInvoiceId, bankTransferId } = alloc;
 
         await ToolsDb.transaction(async (conn) => {
+            if (invoiceId) await this.transferRepo.findById(bankTransferId, conn);
+            const invoice = invoiceId ? await this.invoiceRepo.lockPaymentInvoice(invoiceId, conn) : null;
             await this.allocationRepo.delete(allocId, conn);
 
             // Recalculate payment status
-            if (invoiceId) await this.updateInvoicePaymentStatus(invoiceId, conn);
+            if (invoiceId && invoice && !invoice.CorrectedInvoiceId) {
+                await InvoicesController.recalculatePayment(invoiceId, conn);
+            }
             if (costInvoiceId) await this.updateCostInvoicePaymentStatus(costInvoiceId, conn);
 
             // If no more allocations, reset transfer to UNMATCHED
@@ -467,20 +471,18 @@ export default class BankSyncController {
         proposal: MatchProposal,
         conn: mysql.PoolConnection,
     ): Promise<boolean> {
-        let { allocatedAmount } = proposal;
+        const { allocatedAmount } = proposal;
         if (!allocatedAmount) return false;
         const invoiceId = proposal.invoiceId ?? null;
         const costInvoiceId = proposal.costInvoiceId ?? null;
 
         if (invoiceId) {
-            // Pula jest migawką sprzed zapisu, a wcześniejszy przelew mógł już pokryć należność.
-            if (!(await this.invoiceRepo.lockPaymentCandidate(invoiceId, conn))) return false;
-            const due = await this.invoiceRepo.findDueAmount(invoiceId, conn);
-            if (due === null) return false;
-            const paid = await this.allocationRepo.sumAllocatedForInvoice(invoiceId, conn);
-            const remaining = Math.round((due - paid) * 100) / 100;
-            if (!matchesSalesAmount(transfer.amount, remaining)) return false;
-            allocatedAmount = Math.min(transfer.amount, remaining);
+            const result = await this.allocateSalesPayment(transfer, invoiceId, {
+                amount: transfer.amount,
+                source: 'AUTO',
+                confidence: Math.round(proposal.score * 100),
+            }, conn);
+            return result !== null;
         }
 
         const alloc = new PaymentAllocation({
@@ -494,27 +496,53 @@ export default class BankSyncController {
         });
         await this.allocationRepo.insert(alloc, conn);
 
-        if (invoiceId) await this.updateInvoicePaymentStatus(invoiceId, conn);
         if (costInvoiceId) await this.updateCostInvoicePaymentStatus(costInvoiceId, conn);
         return true;
     }
 
-    /** Recalculate Invoice payment status from allocations and update DB. */
-    private async updateInvoicePaymentStatus(
+    private async allocateSalesPayment(
+        transfer: BankTransfer,
         invoiceId: number,
+        request: {
+            amount: number;
+            source: PaymentAllocation['source'];
+            createdBy?: number | null;
+            confidence?: number;
+        },
         conn: mysql.PoolConnection,
-    ): Promise<{ paymentStatus: string; paidAmount: number }> {
-        const grossAmount = await this.invoiceRepo.findDueAmount(invoiceId, conn);
-        if (grossAmount === null) throw new Error(`Invoice #${invoiceId} not found`);
-        const paidAmount = await this.allocationRepo.sumAllocatedForInvoice(invoiceId, conn);
+    ): Promise<AllocationResult | null> {
+        if (transfer.direction !== 'IN' || !(await this.invoiceRepo.lockPaymentCandidate(invoiceId, conn))) return null;
+        const due = await this.invoiceRepo.findDueAmount(invoiceId, conn);
+        if (due === null || due <= 0) return null;
 
-        let paymentStatus: string;
-        if (paidAmount <= 0) paymentStatus = 'UNPAID';
-        else if (matchesSalesAmount(paidAmount, grossAmount)) paymentStatus = 'PAID';
-        else paymentStatus = 'PARTIALLY_PAID';
+        const { paidAmount } = await this.allocationRepo.getInvoicePayment(invoiceId, conn);
+        const transferAllocated = await this.allocationRepo.sumAllocatedForTransfer(transfer.id!, conn);
+        const invoiceRemaining = Math.round((due - paidAmount) * 100);
+        const transferRemaining = Math.round((transfer.amount - transferAllocated) * 100);
+        if (request.source === 'AUTO' && !matchesSalesAmount(transferRemaining / 100, invoiceRemaining / 100)) return null;
 
-        await this.invoiceRepo.updatePayment(invoiceId, { paymentStatus, paidAmount }, conn);
-        return { paymentStatus, paidAmount };
+        const allocatedCents = Math.min(Math.round(request.amount * 100), invoiceRemaining, transferRemaining);
+        if (allocatedCents <= 0) return null;
+        const allocatedAmount = allocatedCents / 100;
+        const allocatedPercentage = Math.round((allocatedAmount / due) * 10000) / 100;
+        const allocationId = await this.allocationRepo.insert(new PaymentAllocation({
+            bankTransferId: transfer.id!,
+            invoiceId,
+            allocatedAmount,
+            allocatedPercentage,
+            source: request.source,
+            confidence: request.confidence,
+            createdBy: request.createdBy,
+        }), conn);
+        const state = await InvoicesController.recalculatePayment(invoiceId, conn);
+        return {
+            allocationId,
+            invoiceId,
+            allocatedAmount,
+            allocatedPercentage,
+            newPaymentStatus: state.paymentStatus,
+            newPaidAmount: state.paidAmount,
+        };
     }
 
     /** Recalculate CostInvoice payment status from allocations and update DB. */
@@ -529,9 +557,9 @@ export default class BankSyncController {
         const paidAmount = await this.allocationRepo.sumAllocatedForCostInvoice(costInvoiceId, conn);
 
         let paymentStatus: string;
-        if (paidAmount <= 0) paymentStatus = 'UNPAID';
-        else if (Math.abs(paidAmount - grossAmount) <= 0.01) paymentStatus = 'PAID';
-        else paymentStatus = 'PARTIALLY_PAID';
+        if (paidAmount <= 0) paymentStatus = Setup.InvoicePaymentStatus.UNPAID;
+        else if (Math.abs(paidAmount - grossAmount) <= 0.01) paymentStatus = Setup.InvoicePaymentStatus.PAID;
+        else paymentStatus = Setup.InvoicePaymentStatus.PARTIALLY_PAID;
 
         await this.costInvoiceRepo.updatePayment(costInvoiceId, { paymentStatus, paidAmount }, conn);
         return { paymentStatus, paidAmount };
