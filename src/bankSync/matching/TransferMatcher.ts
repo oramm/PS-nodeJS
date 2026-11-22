@@ -22,6 +22,7 @@ export interface MatchInput {
     counterpartyName: string | null;
     counterpartyNip: string | null;
     invoiceNumbers: string[];
+    reviewAsPayment?: boolean;
 }
 
 export interface MatchProposal {
@@ -87,6 +88,8 @@ function scoreInvoice(
     const s_amount = amountSignal(input.amount, remaining);
     const s_date = dateWindowSignal(input.execDate, inv.issueDate, inv.paymentDeadline);
 
+    if (s_invoiceNum === 1) flags.push('INVOICE_NUMBER');
+    if (matchesSalesAmount(input.amount, remaining)) flags.push('EQUAL_AMOUNT');
     if (input.amount > remaining + 0.01) flags.push('OVERPAYMENT');
 
     const total =
@@ -134,7 +137,7 @@ export class TransferMatcher {
 
         const { ownAccounts } = Setup.Bank;
         const account = input.counterpartyAccount?.replace(/\s/g, '');
-        if (account && ownAccounts.includes(account)) {
+        if (!input.reviewAsPayment && account && ownAccounts.includes(account)) {
             return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['OWN_TRANSFER'] };
         }
         return input.direction === 'IN'
@@ -147,12 +150,14 @@ export class TransferMatcher {
             invoiceId: row.Id,
             invoiceNumber: row.InvoiceNumber,
             grossAmount: Number(row.DueAmount),
+            originalAmount: row.OriginalAmount === undefined ? undefined : Number(row.OriginalAmount),
             alreadyPaid: Number(row.AllocatedAmount),
             entityTaxNumber: row.EntityTaxNumber,
             entityBankAccount: row.EntityBankAccount,
             entityName: row.EntityName,
             issueDate: row.IssueDate,
             paymentDeadline: row.PaymentDeadline,
+            contractNumber: row.ContractNumber,
         }), 'invoice');
     }
 
@@ -179,12 +184,14 @@ export class TransferMatcher {
             costInvoiceId?: number;
             invoiceNumber: string;
             grossAmount: number;
+            originalAmount?: number;
             alreadyPaid: number;
             entityTaxNumber: string | null;
             entityBankAccount: string | null;
             entityName: string | null;
             issueDate: string | null;
             paymentDeadline: string | null;
+            contractNumber?: string | null;
         },
         type: 'invoice' | 'costInvoice',
     ): MatchProposal {
@@ -220,13 +227,20 @@ export class TransferMatcher {
         }
 
         const ranked = auto ? [auto, ...scored.filter((candidate) => candidate !== auto)] : scored;
-        const candidates: MatchingCandidate[] = ranked.slice(0, TOP_N).map(({ mapped, score, flags }) => ({
+        const options = exactSales.length > 1 ? exactSales : ranked.filter((candidate, index) =>
+            index < TOP_N || Math.round(candidate.score * 100) === Math.round(best.score * 100) && best.score >= cfg.proposeThreshold,
+        );
+        const candidates: MatchingCandidate[] = options.map(({ mapped, score, flags }) => ({
             invoiceId: mapped.invoiceId,
             costInvoiceId: mapped.costInvoiceId,
             score: Math.round(score * 100) / 100,
             invoiceNumber: mapped.invoiceNumber,
             grossAmount: mapped.grossAmount,
+            originalAmount: mapped.originalAmount,
             remainingAmount: Math.max(0, mapped.grossAmount - mapped.alreadyPaid),
+            entityName: mapped.entityName,
+            paymentDeadline: mapped.paymentDeadline,
+            contractNumber: mapped.contractNumber,
             flags,
         }));
 

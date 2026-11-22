@@ -1,8 +1,56 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import BankStatement from './BankStatement';
+import { pendingIncomingTransfersSql } from './BankTransferRepository';
+
+export interface BankStatementListItem {
+    id: number;
+    fileName: string;
+    accountNumber: string;
+    periodFrom: string;
+    periodTo: string;
+    importedAt: string;
+    importedByName: string | null;
+    newOperations: number;
+    pendingTransfers: number;
+}
 
 export default class BankStatementRepository {
+    async find(): Promise<BankStatementListItem[]> {
+        const rows = await ToolsDb.getQueryCallbackAsync(`
+            SELECT s.Id AS id, s.FileName AS fileName, s.OurAccountNumber AS accountNumber,
+                DATE_FORMAT(s.PeriodFrom, '%Y-%m-%d') AS periodFrom,
+                DATE_FORMAT(s.PeriodTo, '%Y-%m-%d') AS periodTo,
+                DATE_FORMAT(s.ImportedAt, '%Y-%m-%d') AS importedAt,
+                NULLIF(TRIM(CONCAT_WS(' ', p.Name, p.Surname)), '') AS importedByName,
+                COALESCE(operations.Total, 0) AS newOperations,
+                COALESCE(pending.Total, 0) AS pendingTransfers
+            FROM BankStatements s
+            LEFT JOIN Persons p ON p.Id = s.ImportedBy
+            LEFT JOIN (
+                SELECT BankStatementId, COUNT(*) AS Total FROM BankTransfers GROUP BY BankStatementId
+            ) operations ON operations.BankStatementId = s.Id
+            LEFT JOIN (
+                SELECT BankStatementId, COUNT(*) AS Total
+                FROM (${pendingIncomingTransfersSql}) queue GROUP BY BankStatementId
+            ) pending ON pending.BankStatementId = s.Id
+            ORDER BY s.PeriodTo DESC, s.PeriodFrom DESC, s.Id DESC
+        `) as BankStatementListItem[];
+        return rows.map(row => ({
+            ...row, newOperations: Number(row.newOperations), pendingTransfers: Number(row.pendingTransfers),
+        }));
+    }
+
+    async findPeriods(conn: mysql.PoolConnection, accountNumber: string): Promise<Array<Pick<BankStatementListItem, 'periodFrom' | 'periodTo'>>> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            SELECT DATE_FORMAT(PeriodFrom, '%Y-%m-%d') AS periodFrom,
+                DATE_FORMAT(PeriodTo, '%Y-%m-%d') AS periodTo
+            FROM BankStatements
+            WHERE OurAccountNumber = ?
+        `, [accountNumber]);
+        return rows.map(row => ({ periodFrom: row.periodFrom, periodTo: row.periodTo }));
+    }
+
     async findByChecksum(checksum: string): Promise<BankStatement | null> {
         const sql = mysql.format(
             'SELECT * FROM BankStatements WHERE RawChecksum = ? LIMIT 1',

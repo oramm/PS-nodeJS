@@ -1138,7 +1138,19 @@ export default class InvoicesController extends BaseController<
         return this.getInstance().syncPayment(id, conn);
     }
 
-    private async syncPayment(id: number, conn: mysql.PoolConnection, request?: PaymentUpdate) {
+    static async undoManualPayment(id: number): Promise<Invoice | null> {
+        const instance = this.getInstance();
+        const undone = await ToolsDb.transaction(async conn => {
+            const invoice = await instance.repository.lockPaymentInvoice(id, conn);
+            if (!invoice || invoice.CorrectedInvoiceId ||
+                invoice.PaidManually !== Setup.InvoicePaidMarker.BUTTON) return false;
+            await instance.syncPayment(id, conn, undefined, true);
+            return true;
+        });
+        return undone ? await instance.repository.findById(id) : null;
+    }
+
+    private async syncPayment(id: number, conn: mysql.PoolConnection, request?: PaymentUpdate, clearButton = false) {
         const invoice = await this.repository.lockPaymentInvoice(id, conn);
         if (!invoice) throw new Error(`Faktura ${id} nie istnieje`);
         if (invoice.CorrectedInvoiceId) throw new Error('Wpłatę przypisz do faktury oryginalnej');
@@ -1151,15 +1163,15 @@ export default class InvoicesController extends BaseController<
         if (markManually && !isPayable && invoice.Status !== paidStatus) {
             throw new Error('Płatność można oznaczyć tylko dla wystawionej faktury');
         }
-        // Ponowienie żądania po automacie nie może zablokować cofnięcia statusu.
-        const paidMarker = invoice.PaidManually === markers.NONE && markManually && isPayable
-            ? markers.BUTTON : invoice.PaidManually;
         const dueAmount = await this.repository.findDueAmount(id, conn);
         if (dueAmount === null) throw new Error(`Faktura ${id} nie istnieje`);
         const { paidAmount, paymentDate } = await this.allocationRepository.getInvoicePayment(id, conn);
-        const coversDue = dueAmount > 0
-            ? Math.round(paidAmount * 100) >= Math.round(dueAmount * 100) - 1
-            : paidAmount > 0;
+        const coversDue = paidAmount > 0 && (dueAmount <= 0 ||
+            Math.round(paidAmount * 100) >= Math.round(dueAmount * 100) - 1);
+        // Pełna wpłata z banku zastępuje oznaczenie przyciskiem, historia pozostaje.
+        let paidMarker = invoice.PaidManually;
+        if (paidMarker === markers.BUTTON && (clearButton || coversDue)) paidMarker = markers.NONE;
+        else if (paidMarker === markers.NONE && markManually && isPayable && !coversDue) paidMarker = markers.BUTTON;
         const isPaid = paidMarker !== markers.NONE || coversDue;
         const paymentStatus = isPaid ? paymentStatuses.PAID
             : paidAmount > 0 ? paymentStatuses.PARTIALLY_PAID : paymentStatuses.UNPAID;

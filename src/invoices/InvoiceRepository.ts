@@ -44,10 +44,12 @@ export interface SalesPaymentCandidate {
     IssueDate: string | null;
     PaymentDeadline: string | null;
     DueAmount: string | number;
+    OriginalAmount?: string | number;
     AllocatedAmount: string | number;
     EntityTaxNumber: string | null;
     EntityBankAccount: string | null;
     EntityName: string | null;
+    ContractNumber?: string | null;
 }
 
 export interface InvoicesSearchParams {
@@ -324,7 +326,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Owners.Email AS OwnerEmail,
             Invoices.PaymentStatus,
             Invoices.PaidAmount,
-            Invoices.PaymentDate,
+            DATE_FORMAT(Invoices.PaymentDate, '%Y-%m-%d') AS PaymentDate,
             ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue,
             ${INVOICE_GROSS_SQL} AS TotalGrossValue
         FROM Invoices
@@ -721,7 +723,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Invoices.ContractId,
             Invoices.PaymentStatus,
             Invoices.PaidAmount,
-            Invoices.PaymentDate,
+            DATE_FORMAT(Invoices.PaymentDate, '%Y-%m-%d') AS PaymentDate,
             Entities.Id AS EntityId,
             Entities.Name AS EntityName,
             Entities.Address AS EntityAddress,
@@ -783,7 +785,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             SELECT f.RootId, i.Id FROM Invoices i JOIN family f ON i.CorrectedInvoiceId = f.Id
         ),
         document_gross AS (
-            SELECT f.RootId, ${INVOICE_GROSS_SQL} AS Gross
+            SELECT f.RootId, f.Id, ${INVOICE_GROSS_SQL} AS Gross
             FROM family f
             JOIN Invoices i ON i.Id = f.Id
             LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = f.Id
@@ -834,18 +836,29 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return rows[0] ?? null;
     }
 
+    async findPaymentMarker(id: number): Promise<InvoicePaidMarker | null> {
+        const rows = await ToolsDb.getQueryCallbackAsync(
+            'SELECT PaidManually FROM Invoices WHERE Id = ? AND CorrectedInvoiceId IS NULL',
+            undefined, [id],
+        ) as Pick<PaymentInvoiceRow, 'PaidManually'>[];
+        return rows[0]?.PaidManually ?? null;
+    }
+
     async findPaymentCandidates(conn?: mysql.PoolConnection): Promise<SalesPaymentCandidate[]> {
         return ToolsDb.getQueryCallbackAsync(
             `${InvoiceRepository.familyDueSql()}
                 SELECT i.Id, i.Number AS InvoiceNumber,
                     DATE_FORMAT(i.IssueDate, '%Y-%m-%d') AS IssueDate,
                     DATE_FORMAT(i.PaymentDeadline, '%Y-%m-%d') AS PaymentDeadline,
-                    d.Due AS DueAmount,
+                    d.Due AS DueAmount, original.Gross AS OriginalAmount,
                     COALESCE(pa.Paid, 0) AS AllocatedAmount,
-                    e.TaxNumber AS EntityTaxNumber, e.BankAccountNumber AS EntityBankAccount, e.Name AS EntityName
+                    e.TaxNumber AS EntityTaxNumber, e.BankAccountNumber AS EntityBankAccount, e.Name AS EntityName,
+                    c.OurId AS ContractNumber
                 FROM family_due d
+                JOIN document_gross original ON original.RootId = d.RootId AND original.Id = d.RootId
                 JOIN Invoices i ON i.Id = d.RootId
                 JOIN Entities e ON e.Id = i.EntityId
+                LEFT JOIN OurContractsData c ON c.Id = i.ContractId
                 LEFT JOIN (
                     SELECT InvoiceId, SUM(AllocatedAmount) AS Paid FROM PaymentAllocations
                     WHERE InvoiceId IS NOT NULL GROUP BY InvoiceId

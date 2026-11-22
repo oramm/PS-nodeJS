@@ -9,6 +9,7 @@ export default class PaymentAllocation {
     confidence?: number | null;
     createdBy?: number | null;
     createdAt?: Date;
+    invoiceNumber?: string | null;
 
     constructor(data: Partial<PaymentAllocation> & { bankTransferId: number; allocatedAmount: number; allocatedPercentage: number; source: 'AUTO' | 'MANUAL' }) {
         this.id = data.id;
@@ -21,5 +22,6 @@ export default class PaymentAllocation {
         this.confidence = data.confidence ?? null;
         this.createdBy = data.createdBy ?? null;
         this.createdAt = data.createdAt;
+        this.invoiceNumber = data.invoiceNumber;
     }
 }

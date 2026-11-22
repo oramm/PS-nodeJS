@@ -1,9 +1,10 @@
 import { createHash } from 'crypto';
+import { setImmediate } from 'node:timers/promises';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import { PkoBpXmlParser } from './parsers/PkoBpXmlParser';
 import BankStatement from './BankStatement';
-import BankTransfer, { MatchingCandidate, MatchingStatus } from './BankTransfer';
+import BankTransfer, { FEE_TYPES, isExactInvoiceCandidate, MatchingCandidate, MatchingStatus, supportsInvoiceQueue } from './BankTransfer';
 import PaymentAllocation from './PaymentAllocation';
 import BankStatementRepository from './BankStatementRepository';
 import BankTransferRepository from './BankTransferRepository';
@@ -17,12 +18,12 @@ import { BankSyncValidator } from './BankSyncValidator';
 import { extractInvoiceNumbers } from './parsers/pkoBpDescriptionHelpers';
 import OfferBondRepository from '../offers/OfferBond/OfferBondRepository';
 import Setup from '../setup/Setup';
+import { statementCoverage } from './statementCoverage';
 
-const FEE_TYPES = new Set(['Opłata', 'Opłata za użytkowanie karty']);
 const SAMPLE_SEED = 'bnk-b2-v1';
 
 type MatchableTransfer = Pick<BankTransfer, 'direction' | 'amount' | 'currency' | 'execDate' |
-    'counterpartyAccount' | 'counterpartyName' | 'counterpartyNip' | 'description' | 'title' | 'operationType'>;
+    'counterpartyAccount' | 'counterpartyName' | 'counterpartyNip' | 'description' | 'title' | 'operationType' | 'reviewAsPayment'>;
 
 function compareTransferOrder(a: Pick<BankTransfer, 'execDate' | 'operationHash'>, b: typeof a): number {
     return a.execDate.localeCompare(b.execDate) || a.operationHash.localeCompare(b.operationHash);
@@ -45,6 +46,14 @@ export interface UploadPreview {
     unmatched: number;
     fees: number;
     foreignCurrency: number;
+    periodFrom: string;
+    periodTo: string;
+    gaps: ReturnType<typeof statementCoverage>['gaps'];
+    incomeMatched: number;
+    incomePending: number;
+    ownTransfers: number;
+    expenses: number;
+    otherIncoming: number;
 }
 
 export interface AllocationResult {
@@ -55,6 +64,7 @@ export interface AllocationResult {
     allocatedPercentage: number;
     newPaymentStatus: string;
     newPaidAmount: number;
+    transferRemaining?: number;
 }
 
 export interface DuplicateGroup {
@@ -93,6 +103,31 @@ export default class BankSyncController {
     private costInvoiceRepo = new CostInvoiceRepository();
     private offerBondRepo = new OfferBondRepository();
 
+    private today() {
+        return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw' }).format(new Date());
+    }
+
+    async listStatements() {
+        const statements = await this.statementRepo.find();
+        const byAccount = new Map<string, typeof statements>();
+        for (const statement of statements) {
+            const account = byAccount.get(statement.accountNumber) ?? [];
+            account.push(statement);
+            byAccount.set(statement.accountNumber, account);
+        }
+        const today = this.today();
+        return Array.from(byAccount, ([accountNumber, statements]) => ({
+            accountNumber, statements, ...statementCoverage(statements, today),
+        }));
+    }
+
+    async getInvoicePayments(id: number) {
+        const paidManually = await this.invoiceRepo.findPaymentMarker(id);
+        const dueAmount = paidManually === null ? null : await this.invoiceRepo.findDueAmount(id);
+        if (dueAmount === null) throw new BankSyncError(404, 'Nie znaleziono faktury oryginalnej');
+        return { paidManually, dueAmount, payments: await this.allocationRepo.findInvoicePayments(id) };
+    }
+
     // =====================================================
     // UPLOAD (parse → persist transfers → run matcher → return preview)
     // =====================================================
@@ -107,7 +142,7 @@ export default class BankSyncController {
         // Idempotency: reject duplicate files
         const existing = await this.statementRepo.findByChecksum(rawChecksum);
         if (existing) {
-            throw new BankSyncError(409, `Plik już został zaimportowany (BankStatement #${existing.id})`);
+            throw new BankSyncError(409, 'Ten plik został już wgrany');
         }
 
         const parsed = PkoBpXmlParser.parse(buffer);
@@ -121,6 +156,14 @@ export default class BankSyncController {
             unmatched: 0,
             fees: 0,
             foreignCurrency: 0,
+            periodFrom: parsed.periodFrom,
+            periodTo: parsed.periodTo,
+            gaps: [],
+            incomeMatched: 0,
+            incomePending: 0,
+            ownTransfers: 0,
+            expenses: 0,
+            otherIncoming: 0,
         };
 
         // Determine closing balance (last endingBalance in file)
@@ -184,23 +227,35 @@ export default class BankSyncController {
                 preview.total++;
                 if (FEE_TYPES.has(op.operationType)) preview.fees++;
                 if (op.currency !== 'PLN') preview.foreignCurrency++;
+                let status = matching.status;
 
                 if (matching.status === 'CONFIRMED' && proposal) {
                     const allocated = await this.persistAutoAllocation(transfer, proposal, conn);
                     if (allocated) {
                         preview.autoMatched++;
+                        if ((allocated.sale?.allocation.transferRemaining ?? 0) > 0) status = 'PROPOSED';
                     } else {
                         await this.transferRepo.updateMatchingStatus(
                             transferId, 'PROPOSED', matching.score, matching.candidates, conn,
                         );
                         preview.proposed++;
+                        status = 'PROPOSED';
                     }
                 } else if (matching.status === 'PROPOSED') {
                     preview.proposed++;
                 } else if (matching.status === 'UNMATCHED') {
                     preview.unmatched++;
                 }
+
+                if (FEE_TYPES.has(op.operationType)) continue;
+                if (proposal?.flags?.includes('OWN_TRANSFER')) preview.ownTransfers++;
+                else if (op.direction === 'OUT') preview.expenses++;
+                else if (status === 'CONFIRMED') preview.incomeMatched++;
+                else if (status === 'MANUAL') preview.otherIncoming++;
+                else preview.incomePending++;
             }
+            const periods = await this.statementRepo.findPeriods(conn, parsed.ourAccount);
+            preview.gaps = statementCoverage(periods, this.today()).gaps;
         });
 
         return preview;
@@ -323,7 +378,10 @@ export default class BankSyncController {
                 const confidence = Math.round(best.score * 100);
 
                 if (best.invoiceId) {
-                    if (otherCandidates.some((candidate) => candidate.score >= best.score)) return false;
+                    const exact = isExactInvoiceCandidate(best);
+                    if (otherCandidates.some(candidate =>
+                        candidate.score >= best.score || (exact && isExactInvoiceCandidate(candidate)),
+                    )) return false;
                     const result = await this.allocateSalesPayment(transfer, best.invoiceId, {
                         amount: transfer.amount, source: 'MANUAL', createdBy: userId, confidence,
                     }, conn);
@@ -435,7 +493,72 @@ export default class BankSyncController {
     // =====================================================
 
     async getPendingTransfers() {
-        return this.transferRepo.findPending();
+        const transfers = await this.transferRepo.findPending();
+        if (!transfers.length) return [];
+        const pool = await this.matcher.loadCandidates(new Set(['IN']));
+        const prepare = (rows: typeof transfers) => rows.flatMap(transfer => {
+            const proposal = this.proposeTransfer({ ...transfer, amount: transfer.remainingAmount }, pool);
+            if (!proposal || proposal.flags?.includes('OWN_TRANSFER')) return [];
+            const [best] = proposal.candidates;
+            const exact = proposal.candidates.filter(isExactInvoiceCandidate);
+            const proposed = proposal.status !== 'UNMATCHED' && !!best;
+            return [{
+                ...transfer,
+                matchingStatus: (proposed ? 'PROPOSED' : 'UNMATCHED') as MatchingStatus,
+                matchingCandidates: proposed
+                    ? exact.length ? exact : proposal.candidates.filter(c => c.score === best.score)
+                    : best && best.score > 0 ? [best] : [],
+            }];
+        });
+        const result: ReturnType<typeof prepare> = [];
+        for (let start = 0; start < transfers.length; start += 25) {
+            if (start > 0) await setImmediate();
+            result.push(...prepare(transfers.slice(start, start + 25)));
+        }
+        return result;
+    }
+
+    async dismissIncomingTransfer(id: number, expectedRemaining: number) {
+        await ToolsDb.transaction(async conn => {
+            const transfer = await this.transferRepo.findById(id, conn);
+            if (!transfer) throw new BankSyncError(404, 'Nie znaleziono przelewu');
+            if (!supportsInvoiceQueue(transfer)) {
+                throw new BankSyncError(400, 'Przelew nie należy do kolejki decyzji');
+            }
+            const allocated = await this.allocationRepo.sumAllocatedForTransfer(id, conn);
+            if (transfer.matchingStatus === 'MANUAL' || expectedRemaining <= 0 ||
+                Math.round((transfer.amount - allocated) * 100) !== Math.round(expectedRemaining * 100)) {
+                throw new BankSyncError(409, 'Przelew się zmienił. Odśwież kolejkę.');
+            }
+            // Pusta lista odróżnia decyzję użytkownika od opłat i przelewów własnych.
+            await this.transferRepo.updateMatchingStatus(id, 'MANUAL', null, [], conn);
+        });
+    }
+
+    async restoreIncomingTransfer(id: number) {
+        await ToolsDb.transaction(async conn => {
+            const transfer = await this.transferRepo.findById(id, conn);
+            if (!transfer) throw new BankSyncError(404, 'Nie znaleziono przelewu');
+            if (!supportsInvoiceQueue(transfer) || transfer.matchingStatus !== 'MANUAL') {
+                throw new BankSyncError(409, 'Tego przelewu nie można przywrócić do kolejki.');
+            }
+            if ((await this.allocationRepo.findByTransferId(id, conn)).length > 0) {
+                throw new BankSyncError(409, 'Najpierw odepnij wpłaty przypisane do tego przelewu.');
+            }
+            await this.transferRepo.updateMatchingStatus(id, 'UNMATCHED', null, null, conn, true);
+        });
+    }
+
+    private async lockAssignableTransfer(id: number, conn: mysql.PoolConnection) {
+        const transfer = await this.transferRepo.findById(id, conn);
+        if (!transfer) throw new BankSyncError(404, 'Nie znaleziono przelewu');
+        if (transfer.matchingStatus === 'MANUAL' && supportsInvoiceQueue(transfer)) {
+            throw new BankSyncError(409, 'Najpierw wybierz „Przywróć do kolejki” na zakładce „Wszystkie przelewy”.');
+        }
+        if (transfer.matchingStatus === 'MANUAL' || transfer.currency !== 'PLN') {
+            throw new BankSyncError(409, 'Tego przelewu nie można przypisać do faktury');
+        }
+        return transfer;
     }
 
     async createAllocation(
@@ -452,14 +575,14 @@ export default class BankSyncController {
 
         if (invoiceId) {
             return ToolsDb.transaction<AllocationResult>(async (conn) => {
-                const transfer = await this.transferRepo.findById(transferId, conn);
-                if (!transfer) throw new BankSyncError(404, `BankTransfer #${transferId} nie istnieje`);
+                const transfer = await this.lockAssignableTransfer(transferId, conn);
                 const result = await this.allocateSalesPayment(transfer, invoiceId, {
                     amount, source: 'MANUAL', createdBy: userId,
+                    expectedRemaining: body.expectedRemaining === undefined ? undefined : Number(body.expectedRemaining),
                 }, conn);
                 if (!result) {
                     const invoice = await this.invoiceRepo.lockPaymentInvoice(invoiceId, conn);
-                    if (!invoice) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
+                    if (!invoice) throw new BankSyncError(404, 'Nie znaleziono faktury');
                     if (invoice.CorrectedInvoiceId) {
                         throw new BankSyncError(400, 'Wpłatę przypisz do faktury oryginalnej');
                     }
@@ -470,19 +593,18 @@ export default class BankSyncController {
             });
         }
 
-        const transfer = await this.transferRepo.findById(transferId);
-        if (!transfer) throw new BankSyncError(404, `BankTransfer #${transferId} nie istnieje`);
         const costInvoice = await this.costInvoiceRepo.findById(costInvoiceId!);
-        if (!costInvoice) throw new BankSyncError(404, `Faktura kosztowa #${costInvoiceId} nie istnieje`);
+        if (!costInvoice) throw new BankSyncError(404, 'Nie znaleziono faktury kosztowej');
         const { grossAmount, paidAmount: alreadyPaid } = costInvoice;
         const remaining = Math.max(0, grossAmount - alreadyPaid);
         if (amount > remaining + 0.01) {
-            throw new BankSyncError(400, `Kwota alokacji (${amount}) przekracza pozostałą kwotę faktury (${remaining})`);
+            throw new BankSyncError(400, 'Kwota do przypisania przekracza pozostałą należność faktury kosztowej');
         }
 
         const percentage = grossAmount > 0 ? Math.round((amount / grossAmount) * 10000) / 100 : 100;
 
         return ToolsDb.transaction<AllocationResult>(async (conn) => {
+            await this.lockAssignableTransfer(transferId, conn);
             const alloc = new PaymentAllocation({
                 bankTransferId: transferId,
                 costInvoiceId,
@@ -506,14 +628,15 @@ export default class BankSyncController {
         });
     }
 
-    async deleteAllocation(allocId: number): Promise<{ invoiceId?: number; costInvoiceId?: number }> {
+    async deleteAllocation(allocId: number, transferId?: number): Promise<{ invoiceId?: number; costInvoiceId?: number }> {
         const alloc = await this.allocationRepo.findById(allocId);
-        if (!alloc) throw new BankSyncError(404, `PaymentAllocation #${allocId} nie istnieje`);
+        if (!alloc || (transferId !== undefined && alloc.bankTransferId !== transferId))
+            throw new BankSyncError(404, 'Nie znaleziono przypisanej wpłaty');
 
         const { invoiceId, costInvoiceId, bankTransferId } = alloc;
 
         await ToolsDb.transaction(async (conn) => {
-            if (invoiceId) await this.transferRepo.findById(bankTransferId, conn);
+            const transfer = await this.transferRepo.findById(bankTransferId, conn);
             const invoice = invoiceId ? await this.invoiceRepo.lockPaymentInvoice(invoiceId, conn) : null;
             await this.allocationRepo.delete(allocId, conn);
 
@@ -525,7 +648,7 @@ export default class BankSyncController {
 
             // If no more allocations, reset transfer to UNMATCHED
             const remaining = await this.allocationRepo.findByTransferId(bankTransferId, conn);
-            if (remaining.length === 0) {
+            if (remaining.length === 0 && transfer?.matchingStatus !== 'MANUAL') {
                 await this.transferRepo.updateMatchingStatus(bankTransferId, 'UNMATCHED', null, null, conn);
             }
         });
@@ -556,6 +679,7 @@ export default class BankSyncController {
             counterpartyName: transfer.counterpartyName ?? null,
             counterpartyNip: transfer.counterpartyNip ?? null,
             invoiceNumbers: this.transferInvoiceNumbers(transfer),
+            reviewAsPayment: transfer.reviewAsPayment,
         }, pool);
     }
 
@@ -610,6 +734,7 @@ export default class BankSyncController {
             source: PaymentAllocation['source'];
             createdBy?: number | null;
             confidence?: number;
+            expectedRemaining?: number;
         },
         conn: mysql.PoolConnection,
     ): Promise<SalesAllocation | null> {
@@ -623,6 +748,10 @@ export default class BankSyncController {
         const transferAllocated = await this.allocationRepo.sumAllocatedForTransfer(transfer.id!, conn);
         const invoiceRemaining = Math.round((due - paidAmount) * 100);
         const transferRemaining = Math.round((transfer.amount - transferAllocated) * 100);
+        if (request.expectedRemaining !== undefined &&
+            transferRemaining !== Math.round(request.expectedRemaining * 100)) {
+            throw new BankSyncError(409, 'Kwota do przypisania się zmieniła. Odśwież przelew.');
+        }
         if (request.source === 'AUTO' && !matchesSalesAmount(transferRemaining / 100, invoiceRemaining / 100)) return null;
 
         const allocatedCents = Math.min(Math.round(request.amount * 100), invoiceRemaining, transferRemaining);
@@ -643,6 +772,7 @@ export default class BankSyncController {
             allocation: {
                 allocationId, invoiceId, allocatedAmount, allocatedPercentage,
                 newPaymentStatus: state.paymentStatus, newPaidAmount: state.paidAmount,
+                transferRemaining: (transferRemaining - allocatedCents) / 100,
             },
             invoiceNumber: invoice.Number,
             previousStatus: invoice.Status,

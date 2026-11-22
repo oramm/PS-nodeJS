@@ -167,6 +167,39 @@ describe('InvoicesController payment', () => {
         expect(storedState()).toMatchObject({ paymentStatus: payment.UNPAID, status: status.SENT, paymentDate: null });
     });
 
+    test.each([
+        [0, payment.UNPAID],
+        [1000, payment.PARTIALLY_PAID],
+        [6150, payment.PAID],
+    ])('undoes the button marking and recalculates with %s from bank transfers', async (paidAmount, paymentStatus) => {
+        await InvoicesController.markAsPaid(1);
+        const paymentDate = paidAmount ? '2026-11-18' : null;
+        allocations.getInvoicePayment.mockResolvedValue({ paidAmount, paymentDate });
+        repository.findById.mockResolvedValue({ id: 1 } as Invoice);
+
+        await expect(InvoicesController.undoManualPayment(1)).resolves.toMatchObject({ id: 1 });
+        expect(storedState()).toMatchObject({
+            paidMarker: marker.NONE, paidAmount, paymentDate, paymentStatus,
+            status: paidAmount === 6150 ? status.PAID : status.SENT_TO_KSEF,
+            statusBeforePayment: paidAmount === 6150 ? status.SENT_TO_KSEF : null,
+        });
+    });
+
+    test.each([marker.NONE, marker.BEFORE_SYSTEM])('cannot undo the manual marker %s', async paidMarker => {
+        invoice.PaidManually = paidMarker;
+        await expect(InvoicesController.undoManualPayment(1)).resolves.toBeNull();
+        expect(repository.updatePayment).not.toHaveBeenCalled();
+    });
+
+    test('a full payment replaces the button marker and detaching it restores the previous status', async () => {
+        await InvoicesController.markAsPaid(1);
+        allocations.getInvoicePayment.mockResolvedValueOnce({ paidAmount: 6150, paymentDate: '2026-11-18' });
+        await InvoicesController.recalculatePayment(1, conn);
+        expect(storedState()).toMatchObject({ paidMarker: marker.NONE, status: status.PAID });
+        await InvoicesController.recalculatePayment(1, conn);
+        expect(storedState()).toMatchObject({ paidMarker: marker.NONE, status: status.SENT_TO_KSEF });
+    });
+
     test('does not mark a correction document as paid through the paid button', async () => {
         invoice.CorrectedInvoiceId = 1;
         await expect(InvoicesController.markAsPaid(2)).rejects.toThrow('faktury oryginalnej');

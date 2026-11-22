@@ -5,6 +5,8 @@ import { BankTransferFilters } from './BankTransferRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
 import { hasBankModuleAccess } from './bankAccess';
+import { salesInvoiceAccess } from '../invoices/salesInvoiceScope';
+import InvoicesController from '../invoices/InvoicesController';
 
 const controller = new BankSyncController();
 const transferRepo = new BankTransferRepository();
@@ -75,6 +77,74 @@ async function moduleGuard(
 
 app.use('/bank-statements', moduleGuard);
 app.use('/bank-transfers', moduleGuard);
+
+app.get('/bank-statements', async (_req, res, next) => {
+    try {
+        res.json(await controller.listStatements());
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.get('/bank-transfers/invoices/:id/payments', salesInvoiceAccess('invoice'), async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowa faktura' });
+            return;
+        }
+        res.json(await controller.getInvoicePayments(id));
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.delete('/bank-transfers/invoices/:id/payments/manual', salesInvoiceAccess('invoice'), async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowa faktura' });
+            return;
+        }
+        const invoice = await InvoicesController.undoManualPayment(id);
+        if (!invoice) {
+            res.status(409).json({ error: 'Faktura nie ma oznaczenia zapłaty przyciskiem' });
+            return;
+        }
+        res.json(invoice);
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.patch('/bank-transfers/:id/dismiss', async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        const expectedRemaining = Number(req.body?.expectedRemaining);
+        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(expectedRemaining) || expectedRemaining <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowy przelew lub kwota' });
+            return;
+        }
+        await controller.dismissIncomingTransfer(id, expectedRemaining);
+        res.json({ dismissed: true });
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.patch('/bank-transfers/:id/restore', async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowy przelew' });
+            return;
+        }
+        await controller.restoreIncomingTransfer(id);
+        res.json({ restored: true });
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
 
 /**
  * POST /bank-statements
@@ -236,7 +306,7 @@ app.delete(
             const allocId = parseInt(req.params.allocId, 10);
             if (isNaN(allocId)) return res.status(400).json({ error: 'Nieprawidłowe ID alokacji' });
 
-            const result = await controller.deleteAllocation(allocId);
+            const result = await controller.deleteAllocation(allocId, Number(req.params.id));
             res.json(result);
         } catch (err) {
             handleBankSyncError(err, res, next);

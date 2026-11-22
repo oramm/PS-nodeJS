@@ -77,6 +77,7 @@ describe('BankSyncController.upload', () => {
         });
         mockTransferRepo.insert = jest.fn().mockResolvedValue(1);
         mockStatementRepo.insert = jest.fn().mockResolvedValue(1);
+        mockStatementRepo.findPeriods.mockResolvedValue([]);
     });
 
     test('rejects duplicate file with 409', async () => {
@@ -112,6 +113,30 @@ describe('BankSyncController.upload', () => {
         const preview = await controller.upload(Buffer.from(SAMPLE_XML, 'utf8'), 'test2.xml', null);
         expect(preview).toMatchObject({ total: 0, alreadyKnown: 1, autoMatched: 0, proposed: 0, unmatched: 0 });
         expect((controller as any).allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('reports the uncovered period after the statement has been inserted', async () => {
+        mockStatementRepo.findPeriods.mockResolvedValue([
+            { periodFrom: '2025-01-01', periodTo: '2026-02-28' },
+            { periodFrom: '2026-04-01', periodTo: '2099-04-30' },
+        ]);
+        await expect(controller.upload(Buffer.from(SAMPLE_XML), 'test.xml')).resolves.toMatchObject({
+            expenses: 1, incomePending: 0,
+            gaps: [{ periodFrom: '2026-03-01', periodTo: '2026-03-31' }],
+        });
+    });
+
+    test('a statement for another account does not fill a gap', async () => {
+        jest.spyOn(controller as any, 'today').mockReturnValue('2026-08-14');
+        const statement = { fileName: 'test.xml', importedAt: '', importedByName: null, newOperations: 0, pendingTransfers: 0 };
+        mockStatementRepo.find.mockResolvedValue([
+            { ...statement, id: 1, accountNumber: 'A', periodFrom: '2026-06-01', periodTo: '2026-06-30' },
+            { ...statement, id: 2, accountNumber: 'B', periodFrom: '2026-07-01', periodTo: '2026-07-31' },
+            { ...statement, id: 3, accountNumber: 'A', periodFrom: '2026-08-01', periodTo: '2026-08-14' },
+        ]);
+        const accounts = await controller.listStatements();
+        expect(accounts.find(account => account.accountNumber === 'A')?.gaps)
+            .toEqual([{ periodFrom: '2026-07-01', periodTo: '2026-07-31' }]);
     });
 
     test('counts twins once each and only new transfers in overlapping exports', async () => {
@@ -285,12 +310,100 @@ describe('BankSyncController manual sales allocations', () => {
         const first = await controller.createAllocation(1, { invoiceId: 10, amount: 120 });
         const second = await controller.createAllocation(1, { invoiceId: 11, amount: 80 });
 
-        expect(first).toMatchObject({ allocatedAmount: 100, newPaymentStatus: paymentStatuses.PAID });
-        expect(second).toMatchObject({ allocatedAmount: 50, newPaymentStatus: paymentStatuses.PARTIALLY_PAID });
+        expect(first).toMatchObject({ allocatedAmount: 100, transferRemaining: 50, newPaymentStatus: paymentStatuses.PAID });
+        expect(second).toMatchObject({ allocatedAmount: 50, transferRemaining: 0, newPaymentStatus: paymentStatuses.PARTIALLY_PAID });
         await expect(controller.createAllocation(1, { invoiceId: 12, amount: 1 }))
             .rejects.toMatchObject({ statusCode: 400 });
         expect(invoiceRepo.lockPaymentCandidate).toHaveBeenCalledWith(10, expect.anything());
         expect(allocationRepo.insert).toHaveBeenCalledTimes(2);
+    });
+
+    test('rejects a second decision made against the same initial transfer amount', async () => {
+        await controller.createAllocation(1, { invoiceId: 10, amount: 150, expectedRemaining: 150 });
+        await expect(controller.createAllocation(1, { invoiceId: 11, amount: 150, expectedRemaining: 150 }))
+            .rejects.toMatchObject({ statusCode: 409 });
+        expect(allocationRepo.insert).toHaveBeenCalledTimes(1);
+    });
+
+    test('restores an incoming transfer classified as own without assigning a payment', async () => {
+        transfer.matchingStatus = 'MANUAL';
+        transfer.counterpartyAccount = Setup.Bank.ownAccounts[0];
+        allocationRepo.findByTransferId.mockResolvedValue([]);
+        await controller.restoreIncomingTransfer(1);
+
+        expect(transferRepo.updateMatchingStatus).toHaveBeenCalledWith(
+            1, 'UNMATCHED', null, null, expect.anything(), true,
+        );
+        expect(allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('refuses to restore a transfer with any allocation, even an old zero-amount row', async () => {
+        transfer.matchingStatus = 'MANUAL';
+        allocationRepo.findByTransferId.mockResolvedValue([new PaymentAllocation({
+            bankTransferId: 1, invoiceId: 10, allocatedAmount: 0, allocatedPercentage: 0, source: 'MANUAL',
+        })]);
+
+        await expect(controller.restoreIncomingTransfer(1)).rejects.toMatchObject({ statusCode: 409 });
+        expect(transferRepo.updateMatchingStatus).not.toHaveBeenCalled();
+    });
+
+    test('asks the user to restore a manual transfer before assigning it', async () => {
+        transfer.matchingStatus = 'MANUAL';
+        await expect(controller.createAllocation(1, { invoiceId: 10, amount: 150 }))
+            .rejects.toThrow('Przywróć do kolejki');
+        expect(allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('shows fresh proposals for a restored own transfer without assigning it', async () => {
+        const matcher = (controller as any).matcher as TransferMatcher;
+        const { TransferMatcher: RealTransferMatcher } = jest.requireActual<typeof import('../matching/TransferMatcher')>(
+            '../matching/TransferMatcher',
+        );
+        const realMatcher = new RealTransferMatcher();
+        jest.mocked(matcher.propose).mockImplementation(realMatcher.propose.bind(realMatcher));
+        jest.mocked(matcher.loadCandidates).mockResolvedValue({
+            invoices: [{
+                Id: 10, InvoiceNumber: '10/2026', IssueDate: '2026-11-01', PaymentDeadline: '2026-11-25',
+                DueAmount: 150, AllocatedAmount: 0, EntityTaxNumber: null, EntityBankAccount: null, EntityName: null,
+            }],
+            costInvoices: [],
+        });
+        Object.assign(transfer, {
+            title: 'FV 10/2026', counterpartyAccount: Setup.Bank.ownAccounts[0],
+            matchingStatus: 'UNMATCHED', reviewAsPayment: true, remainingAmount: 150,
+        });
+        transferRepo.findPending.mockResolvedValue([transfer as BankTransfer & { remainingAmount: number }]);
+        await expect(controller.getPendingTransfers()).resolves.toMatchObject([{
+            id: 1, matchingStatus: 'PROPOSED', matchingCandidates: [{ invoiceId: 10 }],
+        }]);
+        expect(allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('returns the stored button marker with the original invoice payment details', async () => {
+        invoiceRepo.findPaymentMarker.mockResolvedValue(Setup.InvoicePaidMarker.BUTTON);
+        allocationRepo.findInvoicePayments.mockResolvedValue([]);
+        await expect(controller.getInvoicePayments(10)).resolves.toEqual({ dueAmount: 100, paidManually: 2, payments: [] });
+    });
+
+    test('does not return an original invoice amount for a correction document', async () => {
+        invoiceRepo.findPaymentMarker.mockResolvedValue(null);
+        await expect(controller.getInvoicePayments(11)).rejects.toMatchObject({ statusCode: 404 });
+        expect(allocationRepo.findInvoicePayments).not.toHaveBeenCalled();
+    });
+
+    test('shows the remainder of an old transfer with freshly computed candidates', async () => {
+        const matcher = (controller as any).matcher as jest.Mocked<TransferMatcher>;
+        transfer.matchingStatus = 'CONFIRMED';
+        transfer.matchingCandidates = null;
+        transferRepo.findPending.mockResolvedValue([Object.assign(transfer, { remainingAmount: 50 })]);
+        matcher.propose.mockReturnValue({ status: 'PROPOSED', score: 0.7, candidates: [
+            { invoiceId: 11, score: 0.7 }, { invoiceId: 12, score: 0.7 }, { invoiceId: 13, score: 0.5 },
+        ] });
+        await expect(controller.getPendingTransfers()).resolves.toMatchObject([{
+            id: 1, amount: 150, remainingAmount: 50, matchingStatus: 'PROPOSED',
+            matchingCandidates: [{ invoiceId: 11 }, { invoiceId: 12 }],
+        }]);
+        expect(matcher.propose).toHaveBeenCalledWith(expect.objectContaining({ amount: 50 }), undefined);
     });
 
     test.each([
@@ -427,6 +540,14 @@ describe('BankSyncController.deleteAllocation', () => {
         await controller.deleteAllocation(10);
 
         expect(mockAllocationRepo.delete).toHaveBeenCalledWith(10, expect.anything());
+        expect(mockTransferRepo.updateMatchingStatus).not.toHaveBeenCalled();
+    });
+
+    test('keeps a dismissed transfer outside the queue after detaching its last allocation', async () => {
+        mockAllocationRepo.findById.mockResolvedValue(makeAlloc());
+        mockAllocationRepo.findByTransferId.mockResolvedValue([]);
+        mockTransferRepo.findById.mockResolvedValue({ matchingStatus: 'MANUAL' } as BankTransfer);
+        await controller.deleteAllocation(10);
         expect(mockTransferRepo.updateMatchingStatus).not.toHaveBeenCalled();
     });
 });

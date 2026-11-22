@@ -49,6 +49,13 @@ function reqWith(userData: any) {
 
 const ADMIN = { systemRoleName: 'ADMIN', enviId: 1 };
 const EMPLOYEE = { systemRoleName: 'ENVI_EMPLOYEE', enviId: 7 };
+const newRoutes = [
+    ['get', '/bank-statements', '/bank-statements'],
+    ['get', '/bank-transfers/invoices/:id/payments', '/bank-transfers'],
+    ['delete', '/bank-transfers/invoices/:id/payments/manual', '/bank-transfers'],
+    ['patch', '/bank-transfers/:id/dismiss', '/bank-transfers'],
+    ['patch', '/bank-transfers/:id/restore', '/bank-transfers'],
+] as const;
 
 describe('BankSyncRouter - bramka dostępu do modułu', () => {
     let guard: any;
@@ -58,6 +65,7 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
     // czyści mock.calls przed każdym testem, więc w samym teście już jej nie ma.
     let guardOrder: number | undefined;
     let accessOrder: number | undefined;
+    const registered = new Map<string, { guard: any; order: number; guardOrder: number }>();
 
     beforeAll(() => {
         require('../BankSyncRouter');
@@ -75,6 +83,16 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
         );
         accessHandler = getMock.mock.calls[accessIndex]?.[1];
         accessOrder = getMock.mock.invocationCallOrder[accessIndex];
+        for (const [method, path, prefix] of newRoutes) {
+            const methodMock = app[method] as unknown as jest.Mock;
+            const routeIndex = methodMock.mock.calls.findIndex((c: any) => c[0] === path);
+            const middlewareIndex = useMock.mock.calls.findIndex((c: any) => c[0] === prefix);
+            registered.set(path, {
+                guard: useMock.mock.calls[middlewareIndex]?.[1],
+                guardOrder: useMock.mock.invocationCallOrder[middlewareIndex],
+                order: methodMock.mock.invocationCallOrder[routeIndex],
+            });
+        }
     });
 
     beforeEach(() => {
@@ -127,6 +145,17 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
         await guard(reqWith(ADMIN), res, next);
         expect(next).toHaveBeenCalled();
         expect(mockHasBankAccess).not.toHaveBeenCalled();
+    });
+
+    it.each(newRoutes)('%s %s daje 403 przed obsługą trasy bez flagi bankowej', async (_method, path, _prefix) => {
+        const route = registered.get(path)!;
+        expect(route.guardOrder).toBeLessThan(route.order);
+        mockHasBankAccess.mockResolvedValue(false as never);
+        const res = makeRes();
+        const next = jest.fn();
+        await route.guard(reqWith(EMPLOYEE), res, next);
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(next).not.toHaveBeenCalled();
     });
 
     it('/bank-transfers/access zwraca stan flagi zamiast 403', async () => {

@@ -3,9 +3,30 @@ import mysql from 'mysql2/promise';
 import PaymentAllocation from './PaymentAllocation';
 
 export default class PaymentAllocationRepository {
+    async findInvoicePayments(invoiceId: number) {
+        const rows = await ToolsDb.getQueryCallbackAsync(`
+            SELECT pa.Id AS id, pa.BankTransferId AS bankTransferId, pa.AllocatedAmount AS amount,
+                DATE_FORMAT(bt.ExecDate, '%Y-%m-%d') AS date, bt.Currency AS currency,
+                bt.CounterpartyName AS sender, bt.Title AS title
+            FROM PaymentAllocations pa
+            JOIN BankTransfers bt ON bt.Id = pa.BankTransferId
+            WHERE pa.InvoiceId = ?
+            ORDER BY bt.ExecDate, pa.Id
+        `, undefined, [invoiceId]) as mysql.RowDataPacket[];
+        return rows.map(row => ({
+            id: Number(row.id), bankTransferId: Number(row.bankTransferId), amount: Number(row.amount),
+            date: row.date as string, currency: row.currency as string,
+            sender: row.sender as string | null, title: row.title as string | null,
+        }));
+    }
+
     async findByTransferId(transferId: number, conn?: mysql.PoolConnection): Promise<PaymentAllocation[]> {
         const sql = mysql.format(
-            'SELECT * FROM PaymentAllocations WHERE BankTransferId = ? ORDER BY Id',
+            `SELECT pa.*, COALESCE(i.Number, ci.InvoiceNumber) AS InvoiceNumber
+                FROM PaymentAllocations pa
+                LEFT JOIN Invoices i ON i.Id = pa.InvoiceId
+                LEFT JOIN CostInvoices ci ON ci.Id = pa.CostInvoiceId
+                WHERE pa.BankTransferId = ? ORDER BY pa.Id`,
             [transferId],
         );
         const rows = conn
@@ -126,6 +147,7 @@ export default class PaymentAllocationRepository {
             confidence: row.Confidence ?? null,
             createdBy: row.CreatedBy ?? null,
             createdAt: row.CreatedAt,
+            invoiceNumber: row.InvoiceNumber,
         });
     }
 }

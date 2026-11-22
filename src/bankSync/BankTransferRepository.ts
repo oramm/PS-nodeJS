@@ -1,6 +1,19 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
-import BankTransfer, { MatchingCandidate, MatchingStatus } from './BankTransfer';
+import BankTransfer, { MatchingCandidate, MatchingStatus, supportsInvoiceQueue } from './BankTransfer';
+
+const reviewAsPaymentSql = "COALESCE(JSON_EXTRACT(MatchingCandidates, '$.reviewAsPayment'), 0) = 1";
+
+export const pendingIncomingTransfersSql = `
+    SELECT bt.*, bt.Amount - COALESCE(allocated.Total, 0) AS RemainingAmount
+    FROM BankTransfers bt
+    LEFT JOIN (
+        SELECT BankTransferId, SUM(AllocatedAmount) AS Total
+        FROM PaymentAllocations GROUP BY BankTransferId
+    ) allocated ON allocated.BankTransferId = bt.Id
+    WHERE bt.Direction = 'IN' AND bt.Currency = 'PLN' AND bt.MatchingStatus <> 'MANUAL'
+      AND bt.Amount > COALESCE(allocated.Total, 0)
+`;
 
 export interface BankTransferFilters {
     searchText?: string;
@@ -28,14 +41,14 @@ export default class BankTransferRepository {
         return this.mapRow(rows[0]);
     }
 
-    async find(filters: BankTransferFilters = {}): Promise<BankTransfer[]> {
+    async find(filters: BankTransferFilters = {}): Promise<Array<BankTransfer & { canRestoreToQueue: boolean }>> {
         const conditions: string[] = ['1=1'];
         const params: any[] = [];
 
         if (filters.searchText) {
             const like = `%${filters.searchText.trim()}%`;
-            conditions.push('(CounterpartyName LIKE ? OR CounterpartyAccount LIKE ? OR Description LIKE ?)');
-            params.push(like, like, like);
+            conditions.push('(CounterpartyName LIKE ? OR CounterpartyAccount LIKE ? OR Title LIKE ? OR Description LIKE ?)');
+            params.push(like, like, like, like);
         }
         if (filters.matchingStatus) {
             conditions.push('MatchingStatus = ?');
@@ -55,15 +68,26 @@ export default class BankTransferRepository {
         }
 
         const sql = mysql.format(
-            `SELECT * FROM BankTransfers WHERE ${conditions.join(' AND ')} ORDER BY ExecDate DESC`,
+            `SELECT bt.*, EXISTS (
+                SELECT 1 FROM PaymentAllocations pa WHERE pa.BankTransferId = bt.Id
+             ) AS HasAllocations
+             FROM BankTransfers bt WHERE ${conditions.join(' AND ')} ORDER BY ExecDate DESC`,
             params,
         );
         const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
-        return (rows || []).map((r: any) => this.mapRow(r));
+        return (rows || []).map(row => {
+            const transfer = this.mapRow(row);
+            return Object.assign(transfer, {
+                canRestoreToQueue: transfer.matchingStatus === 'MANUAL' &&
+                    supportsInvoiceQueue(transfer) && Number(row.HasAllocations) === 0,
+            });
+        });
     }
 
     async findForDuplicateCheck(): Promise<BankTransfer[]> {
-        const sql = `SELECT * FROM BankTransfers WHERE MatchingStatus <> 'MANUAL' ORDER BY Amount DESC, ExecDate ASC`;
+        const sql = `SELECT * FROM BankTransfers
+            WHERE MatchingStatus <> 'MANUAL' OR MatchingCandidates IS NOT NULL
+            ORDER BY Amount DESC, ExecDate ASC`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         return (rows || []).map((r: any) => this.mapRow(r));
     }
@@ -86,16 +110,20 @@ export default class BankTransferRepository {
         return (rows || []).map((r: any) => this.mapRow(r));
     }
 
-    async findPending(): Promise<BankTransfer[]> {
-        const sql = `SELECT * FROM BankTransfers WHERE MatchingStatus IN ('UNMATCHED','PROPOSED') ORDER BY ExecDate DESC`;
-        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
-        return (rows || []).map((r: any) => this.mapRow(r));
+    async findPending(): Promise<Array<BankTransfer & { remainingAmount: number }>> {
+        const rows = await ToolsDb.getQueryCallbackAsync(
+            `${pendingIncomingTransfersSql} ORDER BY bt.ExecDate DESC, bt.Id DESC`,
+        ) as mysql.RowDataPacket[];
+        return rows.map(row => Object.assign(this.mapRow(row), {
+            remainingAmount: Number(row.RemainingAmount),
+        }));
     }
 
     async lockUnallocatedIncoming(conn: mysql.PoolConnection): Promise<BankTransfer[]> {
         const [rows] = await conn.query<mysql.RowDataPacket[]>(`
             SELECT bt.* FROM BankTransfers bt
             WHERE bt.Direction = 'IN' AND bt.MatchingStatus IN ('UNMATCHED','PROPOSED')
+              AND NOT (${reviewAsPaymentSql})
               AND NOT EXISTS (SELECT 1 FROM PaymentAllocations pa WHERE pa.BankTransferId = bt.Id)
             ORDER BY bt.ExecDate, bt.OperationHash
             FOR UPDATE
@@ -139,10 +167,17 @@ export default class BankTransferRepository {
         score?: number | null,
         candidates?: MatchingCandidate[] | null,
         conn?: mysql.PoolConnection,
+        reviewAsPayment = false,
     ): Promise<void> {
+        const candidatesJson = candidates ? JSON.stringify(candidates) : null;
+        // Keep a restored transfer in manual review across assignments and their removal.
         const sql = mysql.format(
-            `UPDATE BankTransfers SET MatchingStatus=?, MatchingScore=?, MatchingCandidates=? WHERE Id=?`,
-            [status, score ?? null, candidates ? JSON.stringify(candidates) : null, id],
+            `UPDATE BankTransfers SET MatchingStatus=?, MatchingScore=?, MatchingCandidates=
+                CASE WHEN ? OR (${reviewAsPaymentSql})
+                    THEN JSON_OBJECT('reviewAsPayment', 1, 'candidates', JSON_EXTRACT(?, '$'))
+                    ELSE ?
+                END WHERE Id=?`,
+            [status, score ?? null, reviewAsPayment, candidatesJson, candidatesJson, id],
         );
         if (conn) {
             await conn.query(sql);
@@ -163,11 +198,17 @@ export default class BankTransferRepository {
 
     private mapRow(row: any): BankTransfer {
         let candidates: MatchingCandidate[] | null = null;
+        let reviewAsPayment: boolean | undefined;
         if (row.MatchingCandidates) {
             try {
-                candidates = typeof row.MatchingCandidates === 'string'
+                const data = typeof row.MatchingCandidates === 'string'
                     ? JSON.parse(row.MatchingCandidates)
                     : row.MatchingCandidates;
+                if (Array.isArray(data)) candidates = data;
+                else if (data?.reviewAsPayment === 1) {
+                    reviewAsPayment = true;
+                    if (Array.isArray(data.candidates)) candidates = data.candidates;
+                }
             } catch {
                 candidates = null;
             }
@@ -190,6 +231,7 @@ export default class BankTransferRepository {
             matchingStatus: row.MatchingStatus,
             matchingScore: row.MatchingScore ?? null,
             matchingCandidates: candidates,
+            reviewAsPayment,
         });
     }
 }
