@@ -102,13 +102,50 @@ describe('BankSyncController.upload', () => {
         expect(mockStatementRepo.insert).toHaveBeenCalledTimes(1);
     });
 
-    test('duplicate hash (overlapping export) does not throw', async () => {
+    test('counts a known operation without allocating it', async () => {
         mockStatementRepo.findByChecksum = jest.fn().mockResolvedValue(null);
-        // Simulate INSERT IGNORE returning insertId=0 (no insert)
-        mockTransferRepo.insert = jest.fn().mockResolvedValue(0);
+        mockTransferRepo.insert.mockResolvedValue(0);
+        mockMatcher.propose.mockReturnValue({
+            status: 'CONFIRMED', score: 1, candidates: [], costInvoiceId: 1, allocatedAmount: 984,
+        });
 
         const preview = await controller.upload(Buffer.from(SAMPLE_XML, 'utf8'), 'test2.xml', null);
-        expect(preview.total).toBe(1);
+        expect(preview).toMatchObject({ total: 0, alreadyKnown: 1, autoMatched: 0, proposed: 0, unmatched: 0 });
+        expect((controller as any).allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('counts twins once each and only new transfers in overlapping exports', async () => {
+        const knownHashes = new Set<string>();
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.insert.mockImplementation(async ({ operationHash }) => {
+            if (knownHashes.has(operationHash)) return 0;
+            knownHashes.add(operationHash);
+            return knownHashes.size;
+        });
+
+        const transfer = SAMPLE_XML.match(/<operation>[\s\S]+?<\/operation>/)![0];
+        const fee = transfer
+            .replace('Przelew z rachunku', 'Opłata')
+            .replace(/<description>.*<\/description>/, '<description>Opłata za prowadzenie rachunku</description>')
+            .replace('-984.00', '-5.00');
+        const twin = fee.replace('+1000.00', '+995.00');
+        const foreign = transfer.replace('curr="PLN">-984.00', 'curr="EUR">-984.00');
+        const nextDay = transfer.replace(/2026-04-29/g, '2026-04-30');
+        const first = SAMPLE_XML.replace(transfer, [transfer, fee, twin, foreign].join(''));
+        const second = SAMPLE_XML
+            .replace('since="2026-04-22" to="2026-04-29"', 'since="2026-04-29" to="2026-04-30"')
+            .replace(transfer, [nextDay, foreign, twin, fee, transfer].join(''))
+            .replace(/<ending-balance[^>]*>[^<]*<\/ending-balance>/g, '');
+
+        await expect(controller.upload(Buffer.from(first), 'first.xml')).resolves.toMatchObject({
+            total: 4, alreadyKnown: 0, fees: 2, foreignCurrency: 1, unmatched: 1,
+        });
+        await expect(controller.upload(Buffer.from(second), 'second.xml')).resolves.toMatchObject({
+            total: 1, alreadyKnown: 4, fees: 0, foreignCurrency: 0, unmatched: 1,
+        });
+        await expect(controller.upload(Buffer.from(second + '\n'), 'reexport.xml')).resolves.toMatchObject({
+            total: 0, alreadyKnown: 5, fees: 0, foreignCurrency: 0, unmatched: 0,
+        });
     });
 
     test('saves own transfers outside the pending queue', async () => {

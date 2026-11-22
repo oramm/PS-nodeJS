@@ -44,8 +44,7 @@ function safeString(raw: unknown): string {
     return String(raw).trim();
 }
 
-function computeHash(execDate: string, amount: number, currency: string, description: string): string {
-    const payload = `${execDate}|${amount}|${currency}|${description}`;
+function computeHash(payload: string): string {
     return createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
@@ -75,7 +74,7 @@ export class PkoBpXmlParser {
         const rawOps: any[] = root.operations?.operation || [];
         const ops = Array.isArray(rawOps) ? rawOps : [rawOps];
 
-        let lastEndingBalance: number | null = null;
+        const occurrences = new Map<string, number>();
 
         const operations: PkoBpOperation[] = ops.flatMap((op): PkoBpOperation[] => {
             const orderDateRaw = safeString(op['order-date']);
@@ -92,7 +91,6 @@ export class PkoBpXmlParser {
 
             const endingBalanceRaw = op['ending-balance']?.['#text'] ?? op['ending-balance'];
             const endingBalance = endingBalanceRaw !== undefined ? parseAmount(endingBalanceRaw) : null;
-            if (endingBalance !== null) lastEndingBalance = endingBalance;
 
             const counterpartyAccount = extractCounterpartyAccount(description);
             const counterpartyName = extractCounterpartyName(description);
@@ -101,7 +99,12 @@ export class PkoBpXmlParser {
             const title = extractTitle(description);
             const invoiceNumbers = extractInvoiceNumbers(description);
 
-            const operationHash = computeHash(execDate, absAmount, String(currency), description);
+            // PKO also exports full days without balances. Number twins within their group across both formats.
+            const legacyHash = computeHash(`${execDate}|${absAmount}|${currency}|${description}`);
+            const operationKey = `${ourAccount}|${direction}|${legacyHash}|${orderDateRaw}|${operationType}`;
+            const occurrence = (occurrences.get(operationKey) ?? 0) + 1;
+            occurrences.set(operationKey, occurrence);
+            const operationHash = computeHash(`${occurrence}|${operationKey}`);
 
             return [{
                 orderDate: orderDateRaw || null,

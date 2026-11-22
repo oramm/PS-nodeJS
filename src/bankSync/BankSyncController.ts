@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
-import { PkoBpXmlParser, PkoBpOperation } from './parsers/PkoBpXmlParser';
+import { PkoBpXmlParser } from './parsers/PkoBpXmlParser';
 import BankStatement from './BankStatement';
 import BankTransfer, { MatchingCandidate, MatchingStatus } from './BankTransfer';
 import PaymentAllocation from './PaymentAllocation';
@@ -39,6 +39,7 @@ interface SalesAllocation {
 export interface UploadPreview {
     statementId: number;
     total: number;
+    alreadyKnown: number;
     autoMatched: number;
     proposed: number;
     unmatched: number;
@@ -111,11 +112,16 @@ export default class BankSyncController {
 
         const parsed = PkoBpXmlParser.parse(buffer);
 
-        let autoMatched = 0;
-        let proposed = 0;
-        let unmatched = 0;
-        let fees = 0;
-        let foreignCurrency = 0;
+        const preview: UploadPreview = {
+            statementId: 0,
+            total: 0,
+            alreadyKnown: 0,
+            autoMatched: 0,
+            proposed: 0,
+            unmatched: 0,
+            fees: 0,
+            foreignCurrency: 0,
+        };
 
         // Determine closing balance (last endingBalance in file)
         let closingBalance: number | null = null;
@@ -124,34 +130,13 @@ export default class BankSyncController {
         }
 
         // Collect per-operation proposals before DB transaction
-        type OpWithProposal = { op: PkoBpOperation; proposal: MatchProposal | null; isManual: boolean };
-        const ops: OpWithProposal[] = [];
-
         const operations = [...parsed.operations].sort(compareTransferOrder);
         const directions = new Set(operations
             .filter((op) => op.currency === 'PLN' && !FEE_TYPES.has(op.operationType))
             .map((op) => op.direction));
         const pool = await this.matcher.loadCandidates(directions);
 
-        for (const op of operations) {
-            const proposal = this.proposeTransfer(op, pool);
-            if (!proposal) {
-                if (FEE_TYPES.has(op.operationType)) fees++;
-                if (op.currency !== 'PLN') foreignCurrency++;
-                ops.push({ op, proposal: null, isManual: true });
-                continue;
-            }
-
-            const isManual = proposal.flags?.includes('OWN_TRANSFER') ?? false;
-            ops.push({ op, proposal, isManual });
-
-            if (isManual) continue;
-            if (proposal.status === 'CONFIRMED') autoMatched++;
-            else if (proposal.status === 'PROPOSED') proposed++;
-            else unmatched++;
-        }
-
-        let statementId!: number;
+        const ops = operations.map((op) => ({ op, proposal: this.proposeTransfer(op, pool) }));
 
         await ToolsDb.transaction(async (conn) => {
             // Insert BankStatement
@@ -164,13 +149,13 @@ export default class BankSyncController {
                 importedBy: userId ?? null,
                 rawChecksum,
             });
-            statementId = await this.statementRepo.insert(statement, conn);
+            preview.statementId = await this.statementRepo.insert(statement, conn);
 
-            for (const { op, proposal, isManual } of ops) {
-                const matching = this.matchingFields(isManual ? null : proposal);
+            for (const { op, proposal } of ops) {
+                const matching = this.matchingFields(proposal);
 
                 const transfer = new BankTransfer({
-                    bankStatementId: statementId,
+                    bankStatementId: preview.statementId,
                     orderDate: op.orderDate,
                     execDate: op.execDate,
                     operationType: op.operationType,
@@ -190,32 +175,35 @@ export default class BankSyncController {
 
                 // INSERT IGNORE — duplicate hash is silently skipped
                 const transferId = await this.transferRepo.insert(transfer, conn);
-                if (!transferId) continue; // already existed (duplicate across overlapping exports)
+                if (!transferId) {
+                    preview.alreadyKnown++;
+                    continue;
+                }
 
                 transfer.id = transferId;
+                preview.total++;
+                if (FEE_TYPES.has(op.operationType)) preview.fees++;
+                if (op.currency !== 'PLN') preview.foreignCurrency++;
 
-                if (proposal?.status === 'CONFIRMED') {
+                if (matching.status === 'CONFIRMED' && proposal) {
                     const allocated = await this.persistAutoAllocation(transfer, proposal, conn);
-                    if (!allocated) {
+                    if (allocated) {
+                        preview.autoMatched++;
+                    } else {
                         await this.transferRepo.updateMatchingStatus(
                             transferId, 'PROPOSED', matching.score, matching.candidates, conn,
                         );
-                        autoMatched--;
-                        proposed++;
+                        preview.proposed++;
                     }
+                } else if (matching.status === 'PROPOSED') {
+                    preview.proposed++;
+                } else if (matching.status === 'UNMATCHED') {
+                    preview.unmatched++;
                 }
             }
         });
 
-        return {
-            statementId,
-            total: parsed.operations.length,
-            autoMatched,
-            proposed,
-            unmatched,
-            fees,
-            foreignCurrency,
-        };
+        return preview;
     }
 
     /** Runs inside the transaction owned by the command. */

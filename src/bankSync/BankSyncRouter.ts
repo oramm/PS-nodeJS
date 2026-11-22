@@ -91,7 +91,7 @@ app.use('/bank-transfers', moduleGuard);
 /**
  * POST /bank-statements
  * Upload PKO XML file (multipart/form-data, field: file)
- * Returns upload preview: { statementId, total, autoMatched, proposed, unmatched, fees }
+ * Returns the import preview with counts for new operations and a separate alreadyKnown count.
  */
 app.post(
     '/bank-statements',
