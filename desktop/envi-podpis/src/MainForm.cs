@@ -68,11 +68,12 @@ namespace EnviPodpis
             TableLayoutPanel root = new TableLayoutPanel();
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
-            root.RowCount = 4;
+            root.RowCount = 5;
             root.Padding = new Padding(20, 16, 20, 16);
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
@@ -149,6 +150,7 @@ namespace EnviPodpis
             root.Controls.Add(lblBody, 0, 1);
             root.Controls.Add(content, 0, 2);
             root.Controls.Add(buttons, 0, 3);
+            root.Controls.Add(new Label { Text = "Wersja " + Config.VersionText, AutoSize = true, Anchor = AnchorStyles.Right }, 0, 4);
             Controls.Add(root);
             AcceptButton = btnPrimary;
 

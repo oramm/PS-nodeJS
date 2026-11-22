@@ -1,3 +1,9 @@
+## 2026-11-22 - wydanie ENVI Podpis 1.4.5
+
+- Instalator w `assets/signing/EnviPodpis.exe`, SHA-256 `84974A679166F2CBC35BD9B14A97E88D3CBDAD73BD2C18FDC7605E83E6117D85`. Odczyt osadzonej paczki potwierdził 3552 pliki oraz wersję 1.4.5 aplikacji. Aktualizacja użytkownika odbywa się przez instalator z Narzędzi PS ENVI.
+- Push `main` uruchamia wdrożenie Heroku i `migrate verify`. Porównanie odczytowe z bazą produkcyjną potwierdziło zgodność nazw i sum wszystkich 107 migracji. Wydanie nie wymaga zmian schematu, ustawień Heroku, zmiennych środowiskowych, minimalnej wersji klienta ani publikacji frontendu.
+- Cofnięcie dystrybucji: przywrócenie poprzedniego commita lub zweryfikowanego instalatora 1.4.4 w kolejnym wydaniu. Test aneksu wykonano lokalnie kluczem programowym, z zachowaniem obu wcześniejszych podpisów i bajtów źródła.
+
 ## 2026-11-18 - ENVI Podpis 1.4.4 w PS ENVI
 
 - W Narzędziach PS ENVI udostępniono kompletny instalator w `assets/signing/EnviPodpis.exe`. SHA-256 `982D4B6F4A0FAF37DD96FE000454B4E2C29B0FE44726017141ECE3B3579BC69E`. Wydanie obejmuje lokalnie odebraną poprawkę kontroli wcześniejszych podpisów z 1.4.3.

@@ -7,7 +7,6 @@ import {
     issuerName,
     serialHex,
     subjectName,
-    toArrayBuffer,
 } from './CmsSigning';
 import { ByteRange, readByteRanges, signedBytes } from './PdfSignatureLayout';
 import { ValidationResult } from './SigningTypes';
@@ -29,28 +28,15 @@ interface SignatureCheck {
     certDers: Buffer[];
 }
 
-/** Hex string of `/Contents <...>` trimmed to the real DER length (the rest is zero padding). */
-function readContentsDer(pdf: Buffer, range: ByteRange): Buffer | undefined {
+/** Decode the PDF hex string; the CMS parser finds the end of the object. */
+function readContents(pdf: Buffer, range: ByteRange): Buffer | undefined {
     const raw = pdf.subarray(range.contentsStart, range.contentsEnd).toString('latin1');
     if (raw.length < 4 || raw[0] !== '<' || raw[raw.length - 1] !== '>') {
         return undefined;
     }
     const hex = raw.slice(1, -1).replace(/\s+/g, '');
     if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) return undefined;
-    const bytes = Buffer.from(hex, 'hex');
-    // DER header: tag, then the length (short or long form) gives the real size.
-    if (bytes.length < 2 || bytes[0] !== 0x30) return undefined;
-    let length = bytes[1];
-    let header = 2;
-    if (length & 0x80) {
-        const count = length & 0x7f;
-        if (count < 1 || count > 4 || bytes.length < 2 + count) return undefined;
-        length = 0;
-        for (let i = 0; i < count; i++) length = length * 256 + bytes[2 + i];
-        header = 2 + count;
-    }
-    if (header + length > bytes.length) return undefined;
-    return bytes.subarray(0, header + length);
+    return Buffer.from(hex, 'hex');
 }
 
 function sameBytes(a: ArrayBuffer | Uint8Array, b: Buffer): boolean {
@@ -144,14 +130,18 @@ function checkOneSignature(pdf: Buffer, range: ByteRange): SignatureCheck {
     ) {
         return fail('The /ByteRange of the signature is malformed.');
     }
-    const cmsDer = readContentsDer(pdf, range);
-    if (!cmsDer) return fail('The signature contents are not a readable CMS structure.');
+    const cmsBytes = readContents(pdf, range);
+    if (!cmsBytes) return fail('The signature contents are not a readable CMS structure.');
 
     let signedData: pkijs.SignedData;
     try {
-        // Revocation data bundled in valid external signatures can exceed the default 10,000 nodes.
-        const parsed = asn1js.fromBER(toArrayBuffer(cmsDer), { maxNodes: 50_000 });
-        if (parsed.offset === -1) throw new Error('not DER');
+        // CMS allows indefinite-length BER, and bundled revocation data can exceed the default node limit.
+        const parsed = asn1js.fromBER(cmsBytes, { maxNodes: 50_000 });
+        if (parsed.offset === -1 || !(parsed.result instanceof asn1js.Sequence) ||
+            parsed.result.valueBlock.warnings.includes('No EndOfContent block encoded') ||
+            cmsBytes.subarray(parsed.offset).some((byte) => byte !== 0)) {
+            throw new Error('expected one complete CMS sequence followed by zero padding');
+        }
         const contentInfo = new pkijs.ContentInfo({ schema: parsed.result });
         if (contentInfo.contentType !== '1.2.840.113549.1.7.2') throw new Error('not SignedData');
         signedData = new pkijs.SignedData({ schema: contentInfo.content });

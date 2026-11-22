@@ -875,6 +875,34 @@ describe('further PDF signatures', () => {
     }
 
     describe('per-signature validator', () => {
+        it('validates and preserves an earlier CMS signature encoded with indefinite BER length', async () => {
+            const signed = await signedFixture();
+            const [range] = readByteRanges(signed);
+            const start = range.contentsStart + 1;
+            const contents = Buffer.from(signed.toString('latin1', start, range.contentsEnd - 1), 'hex');
+            const { result } = asn1js.fromBER(contents);
+            const sequence = result as asn1js.Sequence;
+            sequence.lenBlock.isIndefiniteForm = true;
+            const ber = Buffer.from(sequence.toBER());
+            expect(ber.subarray(0, 2)).toEqual(Buffer.from([0x30, 0x80]));
+            const hex = ber.toString('hex');
+            const external = Buffer.from(signed);
+            external.write(hex.padEnd(contents.length * 2, '0'), start, 'latin1');
+
+            expect(validate(external).reasons).toEqual([]);
+            const two = (await sign(external, second)).signed;
+            expect(validate(two).signatures.map((signature) => signature.valid)).toEqual([true, true]);
+
+            const tampered = Buffer.from(external);
+            const signer = tampered.indexOf('Signer One');
+            expect(signer).toBeGreaterThan(0);
+            tampered[signer] = 0x58;
+            expect(validate(tampered).reasons.join(' ')).toMatch(/file was changed after signing/);
+
+            external.write('01', start + hex.length, 'latin1');
+            expect(validate(external).valid).toBe(false);
+        });
+
         it('validates a genuine ECDSA signature and preserves it when appending RSA', async () => {
             const one = await signedFixture();
             const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
