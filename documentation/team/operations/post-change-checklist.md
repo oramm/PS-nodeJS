@@ -1,3 +1,9 @@
+## 2026-11-22 - wydanie ENVI Podpis 1.4.6
+
+- Po przekroczeniu limitu czasu odpowiedzi serwer może dokończyć zapis. W 1.4.6 program po niejednoznacznej odpowiedzi odczytuje stan tego samego zlecenia przez maksymalnie 2 minuty. Jeśli PS w tym czasie nie potwierdzi wyniku, program kieruje użytkownika do wyniku zlecenia w PS.
+- Instalator `assets/signing/EnviPodpis.exe`, SHA-256 `6F0F6C0A9910CA5822BDEBB6F629775575A58C5A5804C40861A3E27A0024AD9B`. Użytkownicy aktualizują go z Narzędzi PS ENVI. Cofnięcie dystrybucji przez ponowne wydanie poprzedniego instalatora 1.4.5. Instalator zachowuje dotychczasową wersję lokalną do cofnięcia.
+- Push na `main` uruchamia Heroku i `migrate verify`. Porównanie odczytowe z rejestrem produkcyjnym potwierdziło zgodność nazw i sum 109 migracji. Wydanie wykorzystuje obecne ustawienia Heroku, schemat bazy, minimalną wersję klienta i wersję frontendu.
+
 ## 2026-11-22 - wydanie ENVI Podpis 1.4.5
 
 - Instalator w `assets/signing/EnviPodpis.exe`, SHA-256 `84974A679166F2CBC35BD9B14A97E88D3CBDAD73BD2C18FDC7605E83E6117D85`. Odczyt osadzonej paczki potwierdził 3552 pliki oraz wersję 1.4.5 aplikacji. Aktualizacja użytkownika odbywa się przez instalator z Narzędzi PS ENVI.

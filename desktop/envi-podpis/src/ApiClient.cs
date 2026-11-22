@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 
 namespace EnviPodpis
 {
@@ -12,6 +14,12 @@ namespace EnviPodpis
         public bool NoConnection;
         public bool TimedOut;
         public string ServerMessage;
+        public bool SubmissionUnconfirmed;
+
+        public bool IsUncertainResponse
+        {
+            get { return Status == 0 || Status == 408 || Status >= 500 || (Status >= 200 && Status < 300); }
+        }
 
         public ApiException(string message) : base(message) { }
     }
@@ -135,9 +143,52 @@ namespace EnviPodpis
             }
             Dictionary<string, object> body = new Dictionary<string, object>();
             body["signatures"] = items;
-            // PS zapisuje pliki na Dysku Google, wiec ta odpowiedz moze potrwac.
-            object r = Send("POST", "/signing/jobs/" + token + "/signatures", body, 180000);
-            return Json.GetString(r, "status");
+            string jobPath = "/signing/jobs/" + token;
+            int submissionStatus = 0;
+            try
+            {
+                object r = Send("POST", jobPath + "/signatures", body, 180000);
+                string status = Json.GetString(r, "status");
+                if (IsFinalSignatureStatus(status)) return status;
+            }
+            catch (ApiException ex)
+            {
+                if (!ex.IsUncertainResponse && ex.Status != 409) throw;
+                submissionStatus = ex.Status;
+            }
+
+            // Heroku może przerwać odpowiedź, gdy PS nadal zapisuje pliki. Sprawdzamy stan bez ponownego POST.
+            const int waitMs = 120000;
+            Stopwatch elapsed = Stopwatch.StartNew();
+            while (elapsed.ElapsedMilliseconds < waitMs)
+            {
+                int remaining = waitMs - (int)elapsed.ElapsedMilliseconds;
+                if (remaining <= 0) break;
+                try
+                {
+                    object r = Send("GET", jobPath, null, Math.Min(8000, remaining));
+                    string status = Json.GetString(r, "status");
+                    if (IsFinalSignatureStatus(status)) return status;
+                    if (status != "prepared" && status != "finalizing") break;
+                }
+                catch (ApiException ex)
+                {
+                    if (!ex.IsUncertainResponse && ex.Status != 429) break;
+                }
+                remaining = waitMs - (int)elapsed.ElapsedMilliseconds;
+                if (remaining > 0) Thread.Sleep(Math.Min(2000, remaining));
+            }
+
+            throw new ApiException("PS nie potwierdził wyniku zapisu podpisów.")
+            {
+                Status = submissionStatus,
+                SubmissionUnconfirmed = true
+            };
+        }
+
+        private static bool IsFinalSignatureStatus(string status)
+        {
+            return status == "done" || status == "failed" || status == "cancelled" || status == "expired";
         }
 
         public void Cancel(string token, string reason)

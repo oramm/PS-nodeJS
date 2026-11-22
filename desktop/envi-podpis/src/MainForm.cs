@@ -354,10 +354,10 @@ namespace EnviPodpis
         public void ShowSending()
         {
             Reset(Step.Sending, "Wysyłam podpisy do PS…",
-                "PS składa podpisane pliki i zapisuje je w folderze pisma. To może potrwać kilkanaście sekund. Nie zamykaj okna.");
+                "PS zapisuje podpisane pliki w folderze pisma. Przy większej partii może to potrwać kilka minut.");
             bar.Style = ProgressBarStyle.Marquee;
             bar.Visible = true;
-            SetNote("Co dalej: gdy skończę, zobaczysz tu „Gotowe”.");
+            SetNote("Poczekaj na potwierdzenie zapisu.");
         }
 
         public void ShowDone()
@@ -575,13 +575,12 @@ namespace EnviPodpis
             if (IsDisposed) return;
             if (sendErr != null) { Fail(Messages.SendFailed(sendErr), false); return; }
 
-            string s = (status ?? "").ToLowerInvariant();
-            if (s == "failed" || s == "cancelled" || s == "canceled" || s == "expired")
+            if (status != "done")
             {
                 ErrorInfo e = new ErrorInfo();
-                e.Title = "PS nie zapisał podpisów";
-                e.Message = "Podpisy zostały złożone, ale PS ich nie przyjął (status: " + s + ").";
-                e.NextStep = "Wróć do PS i kliknij „Podpisz” jeszcze raz.";
+                e.Title = "PS nie zakończył zapisu podpisów";
+                e.Message = "Podpisy zostały złożone, ale zlecenie w PS nie zakończyło się powodzeniem.";
+                e.NextStep = "Sprawdź komunikat przy zleceniu w PS.";
                 Fail(e, false);
                 return;
             }

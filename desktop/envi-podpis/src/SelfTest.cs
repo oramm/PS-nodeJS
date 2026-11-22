@@ -106,6 +106,11 @@ namespace EnviPodpis
             Check(ApiClient.NormalizeCode("a0a1-a2a3") == "A0A1A2A3", "kod kontrolny: normalizacja");
 
             Check(Messages.FromApi(MakeApi(404)).Title.StartsWith("Zlecenie wygas"), "blad 404 -> zlecenie wygaslo");
+            ApiException pending = MakeApi(503);
+            pending.SubmissionUnconfirmed = true;
+            ErrorInfo pendingMessage = Messages.SendFailed(pending);
+            Check(pendingMessage.Title == "PS jeszcze nie potwierdził zapisu" && pendingMessage.CancelReason == null,
+                "brak potwierdzenia zapisu nie oznacza bledu zlecenia ani anulowania");
             Check(SignatureBatch.Classify(new CryptographicException(unchecked((int)0x8010006B)), 0).Kind == SigningFailure.WrongPin, "blad karty: zly PIN");
             Check(SignatureBatch.Classify(new CryptographicException(unchecked((int)0x80100069)), 0).Kind == SigningFailure.NoCard, "blad karty: brak karty");
             Check(SignatureBatch.Classify(new CryptographicException(unchecked((int)0x8010006C)), 0).Kind == SigningFailure.PinBlocked, "blad karty: PIN zablokowany");

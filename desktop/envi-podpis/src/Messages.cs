@@ -224,18 +224,18 @@ namespace EnviPodpis
 
         public static ErrorInfo SendFailed(ApiException ex)
         {
-            ErrorInfo e = FromApi(ex);
-            e.CancelReason = null; // podpisy mogly dojsc do PS - nie anulujemy
-            if (ex.NoConnection || ex.TimedOut)
+            ErrorInfo e = new ErrorInfo();
+            e.Technical = ex.Status > 0 ? "HTTP " + ex.Status : null;
+            if (ex.SubmissionUnconfirmed)
             {
-                e.Title = "Nie wiem, czy PS dostał podpisy";
-                e.Message = "Podpisy zostały złożone, ale nie dostałem potwierdzenia z PS.";
-                e.NextStep = "Najpierw sprawdź w PS, czy podpisane pliki są już w folderze pisma. Nie podpisuj ponownie, dopóki tego nie sprawdzisz.";
+                e.Title = "PS jeszcze nie potwierdził zapisu";
+                e.Message = "Podpisy zostały złożone. PS może nadal zapisywać pliki.";
+                e.NextStep = "Sprawdź wynik zlecenia w PS przed ponownym podpisaniem.";
+                return e;
             }
-            else
-            {
-                e.Message = e.Message + " Podpisy zostały złożone, ale PS ich nie zapisał.";
-            }
+            e.Title = "PS odrzucił zapis podpisów";
+            e.Message = "Podpisy zostały złożone, ale PS odrzucił żądanie zapisu" + Suffix(ex.ServerMessage);
+            e.NextStep = "Sprawdź komunikat przy zleceniu w PS.";
             return e;
         }
 
