@@ -91,6 +91,17 @@ export default class PaymentAllocationRepository {
         return Number(rows[0].Total);
     }
 
+    async countOverallocatedTransfers(conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            SELECT COUNT(*) AS Total FROM (
+                SELECT bt.Id FROM BankTransfers bt
+                JOIN PaymentAllocations pa ON pa.BankTransferId = bt.Id
+                GROUP BY bt.Id, bt.Amount HAVING SUM(pa.AllocatedAmount) > bt.Amount
+            ) overallocated
+        `);
+        return Number(rows[0].Total);
+    }
+
     /** Sum of allocated amounts for a given CostInvoice */
     async sumAllocatedForCostInvoice(costInvoiceId: number, conn?: mysql.PoolConnection): Promise<number> {
         const sql = mysql.format(

@@ -1,4 +1,5 @@
 import ToolsDb from '../../tools/ToolsDb';
+import type { PoolConnection } from 'mysql2/promise';
 import Setup from '../../setup/Setup';
 import { MatchingCandidate } from '../BankTransfer';
 import InvoiceRepository, { SalesPaymentCandidate } from '../../invoices/InvoiceRepository';
@@ -104,9 +105,9 @@ function scoreInvoice(
 export class TransferMatcher {
     private invoiceRepo = new InvoiceRepository();
 
-    async loadCandidates(directions: ReadonlySet<MatchInput['direction']>): Promise<CandidatePool> {
+    async loadCandidates(directions: ReadonlySet<MatchInput['direction']>, conn?: PoolConnection): Promise<CandidatePool> {
         const [invoices, costInvoices] = await Promise.all([
-            directions.has('IN') ? this.invoiceRepo.findPaymentCandidates() : [],
+            directions.has('IN') ? this.invoiceRepo.findPaymentCandidates(conn) : [],
             directions.has('OUT') ? ToolsDb.getQueryCallbackAsync(`
             SELECT
                 ci.Id,
@@ -121,7 +122,7 @@ export class TransferMatcher {
                 ci.SupplierName AS EntityName
             FROM CostInvoices ci
             WHERE ci.PaymentStatus IN (?, ?)
-            `, undefined, [Setup.InvoicePaymentStatus.UNPAID, Setup.InvoicePaymentStatus.PARTIALLY_PAID]) : [],
+            `, conn, [Setup.InvoicePaymentStatus.UNPAID, Setup.InvoicePaymentStatus.PARTIALLY_PAID]) : [],
         ]);
         return { invoices, costInvoices: costInvoices as any[] };
     }

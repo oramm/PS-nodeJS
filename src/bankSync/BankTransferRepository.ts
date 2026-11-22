@@ -92,6 +92,17 @@ export default class BankTransferRepository {
         return (rows || []).map((r: any) => this.mapRow(r));
     }
 
+    async lockUnallocatedIncoming(conn: mysql.PoolConnection): Promise<BankTransfer[]> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            SELECT bt.* FROM BankTransfers bt
+            WHERE bt.Direction = 'IN' AND bt.MatchingStatus IN ('UNMATCHED','PROPOSED')
+              AND NOT EXISTS (SELECT 1 FROM PaymentAllocations pa WHERE pa.BankTransferId = bt.Id)
+            ORDER BY bt.ExecDate, bt.OperationHash
+            FOR UPDATE
+        `);
+        return rows.map((row) => this.mapRow(row));
+    }
+
     async insert(transfer: BankTransfer, conn: mysql.PoolConnection): Promise<number> {
         const sql = mysql.format(
             `INSERT IGNORE INTO BankTransfers

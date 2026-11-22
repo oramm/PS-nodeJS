@@ -3,13 +3,13 @@ import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
 import { PkoBpXmlParser, PkoBpOperation } from './parsers/PkoBpXmlParser';
 import BankStatement from './BankStatement';
-import BankTransfer from './BankTransfer';
+import BankTransfer, { MatchingCandidate, MatchingStatus } from './BankTransfer';
 import PaymentAllocation from './PaymentAllocation';
 import BankStatementRepository from './BankStatementRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
-import { TransferMatcher, MatchProposal } from './matching/TransferMatcher';
-import { matchesSalesAmount } from './matching/signals';
+import { TransferMatcher, CandidatePool, MatchProposal } from './matching/TransferMatcher';
+import { invoiceNumberSignal, matchesSalesAmount } from './matching/signals';
 import InvoiceRepository from '../invoices/InvoiceRepository';
 import InvoicesController from '../invoices/InvoicesController';
 import CostInvoiceRepository from '../costInvoices/CostInvoiceRepository';
@@ -19,6 +19,22 @@ import OfferBondRepository from '../offers/OfferBond/OfferBondRepository';
 import Setup from '../setup/Setup';
 
 const FEE_TYPES = new Set(['Opłata', 'Opłata za użytkowanie karty']);
+const SAMPLE_SEED = 'bnk-b2-v1';
+
+type MatchableTransfer = Pick<BankTransfer, 'direction' | 'amount' | 'currency' | 'execDate' |
+    'counterpartyAccount' | 'counterpartyName' | 'counterpartyNip' | 'description' | 'title' | 'operationType'>;
+
+function compareTransferOrder(a: Pick<BankTransfer, 'execDate' | 'operationHash'>, b: typeof a): number {
+    return a.execDate.localeCompare(b.execDate) || a.operationHash.localeCompare(b.operationHash);
+}
+
+interface SalesAllocation {
+    allocation: AllocationResult & { invoiceId: number };
+    invoiceNumber: string | null;
+    dueAmount: number;
+    previousStatus: string;
+    status: string;
+}
 
 export interface UploadPreview {
     statementId: number;
@@ -111,40 +127,20 @@ export default class BankSyncController {
         type OpWithProposal = { op: PkoBpOperation; proposal: MatchProposal | null; isManual: boolean };
         const ops: OpWithProposal[] = [];
 
-        const operations = [...parsed.operations].sort((a, b) =>
-            a.execDate.localeCompare(b.execDate) || a.operationHash.localeCompare(b.operationHash),
-        );
+        const operations = [...parsed.operations].sort(compareTransferOrder);
         const directions = new Set(operations
             .filter((op) => op.currency === 'PLN' && !FEE_TYPES.has(op.operationType))
             .map((op) => op.direction));
         const pool = await this.matcher.loadCandidates(directions);
 
         for (const op of operations) {
-            const isFee = FEE_TYPES.has(op.operationType);
-            const isForeign = op.currency !== 'PLN';
-
-            if (isFee || isForeign) {
-                if (isFee) fees++;
-                if (isForeign) foreignCurrency++;
+            const proposal = this.proposeTransfer(op, pool);
+            if (!proposal) {
+                if (FEE_TYPES.has(op.operationType)) fees++;
+                if (op.currency !== 'PLN') foreignCurrency++;
                 ops.push({ op, proposal: null, isManual: true });
                 continue;
             }
-
-            const proposal = this.matcher.propose(
-                {
-                    direction: op.direction,
-                    amount: op.amount,
-                    currency: op.currency,
-                    execDate: op.execDate,
-                    counterpartyAccount: op.counterpartyAccount,
-                    counterpartyName: op.counterpartyName,
-                    counterpartyNip: op.counterpartyNip,
-                    invoiceNumbers: op.direction === 'IN'
-                        ? extractInvoiceNumbers(op.description, false)
-                        : op.invoiceNumbers,
-                },
-                pool,
-            );
 
             const isManual = proposal.flags?.includes('OWN_TRANSFER') ?? false;
             ops.push({ op, proposal, isManual });
@@ -171,17 +167,7 @@ export default class BankSyncController {
             statementId = await this.statementRepo.insert(statement, conn);
 
             for (const { op, proposal, isManual } of ops) {
-                let matchingStatus: BankTransfer['matchingStatus'] = 'UNMATCHED';
-                let matchingScore: number | null = null;
-                let matchingCandidates = null;
-
-                if (isManual) {
-                    matchingStatus = 'MANUAL';
-                } else if (proposal) {
-                    matchingStatus = proposal.status;
-                    matchingScore = Math.round(proposal.score * 100);
-                    matchingCandidates = proposal.candidates;
-                }
+                const matching = this.matchingFields(isManual ? null : proposal);
 
                 const transfer = new BankTransfer({
                     bankStatementId: statementId,
@@ -197,9 +183,9 @@ export default class BankSyncController {
                     title: op.title,
                     description: op.description,
                     operationHash: op.operationHash,
-                    matchingStatus,
-                    matchingScore,
-                    matchingCandidates,
+                    matchingStatus: matching.status,
+                    matchingScore: matching.score,
+                    matchingCandidates: matching.candidates,
                 });
 
                 // INSERT IGNORE — duplicate hash is silently skipped
@@ -212,7 +198,7 @@ export default class BankSyncController {
                     const allocated = await this.persistAutoAllocation(transfer, proposal, conn);
                     if (!allocated) {
                         await this.transferRepo.updateMatchingStatus(
-                            transferId, 'PROPOSED', matchingScore, proposal.candidates, conn,
+                            transferId, 'PROPOSED', matching.score, matching.candidates, conn,
                         );
                         autoMatched--;
                         proposed++;
@@ -229,6 +215,106 @@ export default class BankSyncController {
             unmatched,
             fees,
             foreignCurrency,
+        };
+    }
+
+    /** Runs inside the transaction owned by the command. */
+    async recalculateIncoming(conn: mysql.PoolConnection) {
+        const transfers = (await this.transferRepo.lockUnallocatedIncoming(conn)).sort(compareTransferOrder);
+        const pool = await this.matcher.loadCandidates(new Set(['IN']), conn);
+        const eligibleIds = new Set(pool.invoices.map((invoice) => invoice.Id));
+        const statuses = Setup.InvoiceStatus;
+        const counts = {
+            analyzed: transfers.length,
+            automatic: 0,
+            attachedToAlreadyPaid: 0,
+            newlyPaid: 0,
+            partial: 0,
+            partialProposals: 0,
+            proposals: 0,
+            withoutCandidate: 0,
+            ownTransfers: 0,
+            otherManual: 0,
+            rejectedByAllocationGuard: 0,
+        };
+        const newlyPaidByPreviousStatus: Record<string, number> = Object.fromEntries(
+            Setup.InvoicePayableStatuses.map((status) => [status, 0]),
+        );
+        const byStatement: Record<number, { analyzed: number; automatic: number; rejectedByAllocationGuard: number }> = {};
+        const statusChanges: Array<{
+            invoiceNumber: string | null; previousStatus: string; dueAmount: number; allocatedAmount: number; date: string;
+        }> = [];
+        const sample: Array<{
+            rank: string; invoiceNumber: string | null; title: string | null;
+            titleSource: 'title' | 'bank-reference' | null; amount: number; date: string;
+        }> = [];
+        let allocationsOutsidePool = 0;
+
+        for (const transfer of transfers) {
+            const statement = byStatement[transfer.bankStatementId] ??= {
+                analyzed: 0, automatic: 0, rejectedByAllocationGuard: 0,
+            };
+            statement.analyzed++;
+            const proposal = this.proposeTransfer(transfer, pool);
+            const matching = this.matchingFields(proposal);
+            const result = proposal?.status === 'CONFIRMED'
+                ? await this.persistAutoAllocation(transfer, proposal, conn)
+                : null;
+
+            if (result?.sale) {
+                const { allocation, invoiceNumber, previousStatus, status, dueAmount } = result.sale;
+                const { invoiceId, allocatedAmount, newPaymentStatus } = allocation;
+                counts.automatic++;
+                statement.automatic++;
+                if (!eligibleIds.has(invoiceId)) allocationsOutsidePool++;
+                if (newPaymentStatus === Setup.InvoicePaymentStatus.PARTIALLY_PAID) counts.partial++;
+                if (previousStatus === statuses.PAID) counts.attachedToAlreadyPaid++;
+                else if (status === statuses.PAID) {
+                    counts.newlyPaid++;
+                    newlyPaidByPreviousStatus[previousStatus]++;
+                    statusChanges.push({ invoiceNumber, previousStatus, dueAmount, allocatedAmount, date: transfer.execDate });
+                }
+                const title = transfer.title?.trim();
+                const bankReference = title ? null : this.transferInvoiceNumbers(transfer)[0];
+                sample.push({
+                    rank: createHash('sha256').update(`${SAMPLE_SEED}:${transfer.operationHash}`).digest('hex'),
+                    invoiceNumber,
+                    title: (title || bankReference)?.replace(/\s+/g, ' ').slice(0, 100) ?? null,
+                    titleSource: title ? 'title' : bankReference ? 'bank-reference' : null,
+                    amount: transfer.amount, date: transfer.execDate,
+                });
+            } else if (matching.status === 'MANUAL') {
+                if (proposal?.flags?.includes('OWN_TRANSFER')) counts.ownTransfers++;
+                else counts.otherManual++;
+            } else if (matching.status === 'CONFIRMED') {
+                matching.status = 'PROPOSED';
+                counts.rejectedByAllocationGuard++;
+                statement.rejectedByAllocationGuard++;
+                counts.proposals++;
+            } else if (matching.status === 'PROPOSED') {
+                counts.proposals++;
+                const invoiceNumbers = this.transferInvoiceNumbers(transfer);
+                if (matching.candidates?.some((candidate) =>
+                    invoiceNumberSignal(invoiceNumbers, candidate.invoiceNumber) === 1 &&
+                    (candidate.remainingAmount ?? 0) - transfer.amount > 0.01,
+                )) counts.partialProposals++;
+            } else {
+                counts.withoutCandidate++;
+            }
+
+            await this.transferRepo.updateMatchingStatus(
+                transfer.id!, matching.status, matching.score, matching.candidates, conn,
+            );
+        }
+
+        const overallocatedInvoices = await this.invoiceRepo.countOverallocatedInvoices(conn);
+        const overallocatedTransfers = await this.allocationRepo.countOverallocatedTransfers(conn);
+        return {
+            counts, newlyPaidByPreviousStatus, byStatement, statusChanges,
+            sampleSeed: SAMPLE_SEED,
+            automaticSample: sample.sort((a, b) => a.rank.localeCompare(b.rank)).slice(0, 20)
+                .map(({ rank, ...entry }) => entry),
+            invariants: { allocationsOutsidePool, overallocatedInvoices, overallocatedTransfers },
         };
     }
 
@@ -392,7 +478,7 @@ export default class BankSyncController {
                     throw new BankSyncError(400, 'Przelew lub faktura nie mają kwoty dostępnej do przypisania');
                 }
                 await this.transferRepo.updateMatchingStatus(transferId, 'CONFIRMED', null, null, conn);
-                return result;
+                return result.allocation;
             });
         }
 
@@ -466,13 +552,41 @@ export default class BankSyncController {
     // PRIVATE HELPERS
     // =====================================================
 
+    private transferInvoiceNumbers(transfer: MatchableTransfer): string[] {
+        const description = transfer.description || (transfer.title ? `Tytuł : ${transfer.title}` : '');
+        return extractInvoiceNumbers(description, transfer.direction === 'OUT');
+    }
+
+    private proposeTransfer(transfer: MatchableTransfer, pool: CandidatePool): MatchProposal | null {
+        if (transfer.currency !== 'PLN' || FEE_TYPES.has(transfer.operationType)) return null;
+        return this.matcher.propose({
+            direction: transfer.direction,
+            amount: transfer.amount,
+            currency: transfer.currency,
+            execDate: transfer.execDate,
+            counterpartyAccount: transfer.counterpartyAccount ?? null,
+            counterpartyName: transfer.counterpartyName ?? null,
+            counterpartyNip: transfer.counterpartyNip ?? null,
+            invoiceNumbers: this.transferInvoiceNumbers(transfer),
+        }, pool);
+    }
+
+    private matchingFields(proposal: MatchProposal | null): {
+        status: MatchingStatus; score: number | null; candidates: MatchingCandidate[] | null;
+    } {
+        if (!proposal || proposal.flags?.includes('OWN_TRANSFER')) {
+            return { status: 'MANUAL', score: null, candidates: null };
+        }
+        return { status: proposal.status, score: Math.round(proposal.score * 100), candidates: proposal.candidates };
+    }
+
     private async persistAutoAllocation(
         transfer: BankTransfer,
         proposal: MatchProposal,
         conn: mysql.PoolConnection,
-    ): Promise<boolean> {
+    ): Promise<{ sale?: SalesAllocation } | null> {
         const { allocatedAmount } = proposal;
-        if (!allocatedAmount) return false;
+        if (!allocatedAmount) return null;
         const invoiceId = proposal.invoiceId ?? null;
         const costInvoiceId = proposal.costInvoiceId ?? null;
 
@@ -482,7 +596,7 @@ export default class BankSyncController {
                 source: 'AUTO',
                 confidence: Math.round(proposal.score * 100),
             }, conn);
-            return result !== null;
+            return result ? { sale: result } : null;
         }
 
         const alloc = new PaymentAllocation({
@@ -497,7 +611,7 @@ export default class BankSyncController {
         await this.allocationRepo.insert(alloc, conn);
 
         if (costInvoiceId) await this.updateCostInvoicePaymentStatus(costInvoiceId, conn);
-        return true;
+        return {};
     }
 
     private async allocateSalesPayment(
@@ -510,8 +624,10 @@ export default class BankSyncController {
             confidence?: number;
         },
         conn: mysql.PoolConnection,
-    ): Promise<AllocationResult | null> {
-        if (transfer.direction !== 'IN' || !(await this.invoiceRepo.lockPaymentCandidate(invoiceId, conn))) return null;
+    ): Promise<SalesAllocation | null> {
+        if (transfer.direction !== 'IN') return null;
+        const invoice = await this.invoiceRepo.lockPaymentCandidate(invoiceId, conn);
+        if (!invoice) return null;
         const due = await this.invoiceRepo.findDueAmount(invoiceId, conn);
         if (due === null || due <= 0) return null;
 
@@ -536,12 +652,14 @@ export default class BankSyncController {
         }), conn);
         const state = await InvoicesController.recalculatePayment(invoiceId, conn);
         return {
-            allocationId,
-            invoiceId,
-            allocatedAmount,
-            allocatedPercentage,
-            newPaymentStatus: state.paymentStatus,
-            newPaidAmount: state.paidAmount,
+            allocation: {
+                allocationId, invoiceId, allocatedAmount, allocatedPercentage,
+                newPaymentStatus: state.paymentStatus, newPaidAmount: state.paidAmount,
+            },
+            invoiceNumber: invoice.Number,
+            previousStatus: invoice.Status,
+            status: state.status,
+            dueAmount: due,
         };
     }
 

@@ -147,7 +147,7 @@ describe('BankSyncController.upload', () => {
 
         const invoiceRepo = (controller as any).invoiceRepo as jest.Mocked<InvoiceRepository>;
         const allocationRepo = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
-        invoiceRepo.lockPaymentCandidate.mockResolvedValue(true);
+        invoiceRepo.lockPaymentCandidate.mockResolvedValue({ Number: '3/2026', Status: Setup.InvoiceStatus.SENT });
         invoiceRepo.findDueAmount.mockResolvedValue(553.50);
         allocationRepo.insert.mockClear();
         allocationRepo.getInvoicePayment.mockImplementation(async () => ({
@@ -156,7 +156,7 @@ describe('BankSyncController.upload', () => {
         }));
         allocationRepo.sumAllocatedForTransfer.mockResolvedValue(0);
         recalculatePayment.mockResolvedValue({
-            paymentStatus: paymentStatuses.PAID, paidAmount: 553.50, paymentDate: '2026-01-23',
+            paymentStatus: paymentStatuses.PAID, paidAmount: 553.50, paymentDate: '2026-01-23', status: Setup.InvoiceStatus.PAID,
         });
         return { allocationRepo, candidates };
     }
@@ -218,7 +218,7 @@ describe('BankSyncController manual sales allocations', () => {
         statementRepo.findById.mockResolvedValue({ id: 1 } as any);
         transferRepo.findById.mockResolvedValue(transfer);
         transferRepo.findByStatementIdAndStatus.mockResolvedValue([transfer]);
-        invoiceRepo.lockPaymentCandidate.mockResolvedValue(true);
+        invoiceRepo.lockPaymentCandidate.mockResolvedValue({ Number: '10/2026', Status: Setup.InvoiceStatus.SENT });
         invoiceRepo.lockPaymentInvoice.mockResolvedValue({
             Status: Setup.InvoiceStatus.SENT, CorrectedInvoiceId: null, PaidManually: 0, StatusBeforePayment: null,
         } as NonNullable<Awaited<ReturnType<InvoiceRepository['lockPaymentInvoice']>>>);
@@ -239,6 +239,7 @@ describe('BankSyncController manual sales allocations', () => {
             return {
                 paymentStatus: paidAmount === 100 ? paymentStatuses.PAID : paymentStatuses.PARTIALLY_PAID,
                 paidAmount, paymentDate: transfer.execDate,
+                status: paidAmount === 100 ? Setup.InvoiceStatus.PAID : Setup.InvoiceStatus.SENT,
             };
         });
     });
@@ -279,6 +280,61 @@ describe('BankSyncController manual sales allocations', () => {
         await expect(controller.commit(1)).resolves.toEqual({ committed: 0 });
         expect(allocationRepo.insert).not.toHaveBeenCalled();
     });
+});
+
+test('replay report and sample are identical regardless of the order of rows returned', async () => {
+    const makeTransfer = (id: number, date: string) => new BankTransfer({
+        id, bankStatementId: 1, execDate: date, orderDate: date, operationHash: String(id), amount: 100,
+        direction: 'IN', currency: 'PLN', operationType: 'Przelew', title: 'FV 10/2026',
+        description: 'Tytuł : FV 10/2026', matchingStatus: 'PROPOSED',
+    });
+    const first = makeTransfer(1, '2026-01-20');
+    const second = makeTransfer(2, '2026-01-25');
+    const run = async (rows: BankTransfer[]) => {
+        const controller = new BankSyncController();
+        const transfers = (controller as any).transferRepo as jest.Mocked<BankTransferRepository>;
+        const invoices = (controller as any).invoiceRepo as jest.Mocked<InvoiceRepository>;
+        const allocations = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
+        const matcher = (controller as any).matcher as jest.Mocked<TransferMatcher>;
+        const conn = {} as Parameters<BankSyncController['recalculateIncoming']>[0];
+        transfers.lockUnallocatedIncoming.mockResolvedValue(rows);
+        invoices.lockPaymentCandidate.mockResolvedValue({ Number: '10/2026', Status: Setup.InvoiceStatus.SENT });
+        invoices.findDueAmount.mockResolvedValue(100);
+        invoices.countOverallocatedInvoices.mockResolvedValue(0);
+        allocations.countOverallocatedTransfers.mockResolvedValue(0);
+        allocations.sumAllocatedForTransfer.mockResolvedValue(0);
+        allocations.insert.mockResolvedValue(999);
+        allocations.getInvoicePayment.mockImplementation(async () => ({
+            paidAmount: allocations.insert.mock.calls.length ? 100 : 0, paymentDate: null,
+        }));
+        matcher.loadCandidates.mockResolvedValue({
+            invoices: [{
+                Id: 10, InvoiceNumber: '10/2026', IssueDate: null, PaymentDeadline: null,
+                DueAmount: 100, AllocatedAmount: 0, EntityTaxNumber: null, EntityName: null, EntityBankAccount: null,
+            }],
+            costInvoices: [],
+        });
+        matcher.propose.mockReturnValue({
+            status: 'CONFIRMED', score: 0.7, invoiceId: 10, allocatedAmount: 100,
+            candidates: [{ invoiceId: 10, invoiceNumber: '10/2026', score: 0.7, remainingAmount: 100 }],
+        });
+        recalculatePayment.mockResolvedValue({
+            paidAmount: 100, paymentDate: first.execDate, paymentStatus: paymentStatuses.PAID, status: Setup.InvoiceStatus.PAID,
+        });
+        const report = await controller.recalculateIncoming(conn);
+        expect(matcher.loadCandidates).toHaveBeenCalledTimes(1);
+        expect(transfers.updateMatchingStatus).toHaveBeenNthCalledWith(
+            2, 2, 'PROPOSED', 70, expect.any(Array), conn,
+        );
+        return report;
+    };
+
+    const report = await run([second, first]);
+    expect(JSON.stringify(await run([first, second]))).toBe(JSON.stringify(report));
+    expect(report.counts).toMatchObject({ automatic: 1, newlyPaid: 1, proposals: 1, rejectedByAllocationGuard: 1 });
+    expect(report.automaticSample).toEqual([{
+        invoiceNumber: '10/2026', title: 'FV 10/2026', titleSource: 'title', amount: 100, date: first.execDate,
+    }]);
 });
 
 describe('BankSyncController.deleteAllocation', () => {

@@ -1178,6 +1178,6 @@ export default class InvoicesController extends BaseController<
         const requestError = request && InvoiceValidator.validatePaymentUpdate(request, derived);
         if (requestError) throw new Error(requestError);
         await this.repository.updatePayment(id, { ...derived, status, statusBeforePayment, paidMarker }, conn);
-        return derived;
+        return { ...derived, status };
     }
 }

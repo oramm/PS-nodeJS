@@ -813,14 +813,17 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return rows[0]?.Id ?? null;
     }
 
-    async lockPaymentCandidate(id: number, conn: mysql.PoolConnection): Promise<boolean> {
+    async lockPaymentCandidate(id: number, conn: mysql.PoolConnection): Promise<{
+        Number: string | null;
+        Status: string;
+    } | null> {
         const [rows] = await conn.query<mysql.RowDataPacket[]>(
-            `SELECT i.Id FROM Invoices i
+            `SELECT i.Number, i.Status FROM Invoices i
              WHERE i.Id = ? AND i.CorrectedInvoiceId IS NULL AND ${PAYMENT_CANDIDATE_STATUS_SQL}
              FOR UPDATE`,
             [id],
         );
-        return rows.length > 0;
+        return rows[0] ? { Number: rows[0].Number, Status: rows[0].Status } : null;
     }
 
     async lockPaymentInvoice(id: number, conn: mysql.PoolConnection): Promise<PaymentInvoiceRow | null> {
@@ -831,8 +834,8 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return rows[0] ?? null;
     }
 
-    async findPaymentCandidates(): Promise<SalesPaymentCandidate[]> {
-        return this.executeQuery(
+    async findPaymentCandidates(conn?: mysql.PoolConnection): Promise<SalesPaymentCandidate[]> {
+        return ToolsDb.getQueryCallbackAsync(
             `${InvoiceRepository.familyDueSql()}
                 SELECT i.Id, i.Number AS InvoiceNumber,
                     DATE_FORMAT(i.IssueDate, '%Y-%m-%d') AS IssueDate,
@@ -850,7 +853,22 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                 WHERE d.Due > COALESCE(pa.Paid, 0)
                   AND ${PAYMENT_CANDIDATE_STATUS_SQL}
                 ORDER BY i.Id`,
-        );
+            conn,
+        ) as Promise<SalesPaymentCandidate[]>;
+    }
+
+    async countOverallocatedInvoices(conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            ${InvoiceRepository.familyDueSql()}
+            SELECT COUNT(*) AS Total FROM (
+                SELECT pa.InvoiceId FROM PaymentAllocations pa
+                LEFT JOIN family_due d ON d.RootId = pa.InvoiceId
+                WHERE pa.InvoiceId IS NOT NULL
+                GROUP BY pa.InvoiceId, d.Due
+                HAVING SUM(pa.AllocatedAmount) > COALESCE(d.Due, 0) + 0.01
+            ) overallocated
+        `);
+        return Number(rows[0].Total);
     }
 
     async updatePayment(
