@@ -4,8 +4,7 @@ import BankSyncController, { BankSyncError } from './BankSyncController';
 import { BankTransferFilters } from './BankTransferRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
-import StaffMemberRepository from '../staff/StaffMemberRepository';
-import { SystemRoleName } from '../types/sessionTypes';
+import { hasBankModuleAccess } from './bankAccess';
 
 const controller = new BankSyncController();
 const transferRepo = new BankTransferRepository();
@@ -27,20 +26,9 @@ function requireAuth(req: Request, res: Response): boolean {
     return true;
 }
 
-/**
- * Dostęp do wyciągów bankowych wynika z flagi StaffMembers.HasBankAccess, nie z roli
- * systemowej. Seed migracji nadał ją rolom 1 i 2, więc dla dotychczasowych użytkowników
- * nic się nie zmienia; nadanie jej komuś spoza tych ról nie wymaga podnoszenia roli,
- * a odebranie - obniżania jej.
- *
- * ADMIN wchodzi zawsze, niezależnie od flagi: flagi ustawia się dziś wprost w bazie,
- * więc pomyłkowe wyzerowanie kolumny nie może odciąć wszystkim ścieżki naprawy.
- */
-async function hasModuleAccess(req: Request): Promise<boolean> {
-    const userData = req.session?.userData;
-    if (!userData?.enviId) return false;
-    if (userData.systemRoleName === SystemRoleName.ADMIN) return true;
-    return StaffMemberRepository.hasBankAccess(userData.enviId);
+// Reguła dostępu (flaga HasBankAccess, ADMIN zawsze) jest wspólna z ukrywaniem wpłat w fakturach.
+function hasModuleAccess(req: Request): Promise<boolean> {
+    return hasBankModuleAccess(req.session?.userData);
 }
 
 // Czy zalogowany widzi moduł (do warunkowego menu po stronie klienta).

@@ -1,5 +1,6 @@
-import { RequestHandler } from 'express';
+import { RequestHandler, Response } from 'express';
 import { SystemRoleName } from '../types/sessionTypes';
+import { hasBankModuleAccess } from '../bankSync/bankAccess';
 import ProjectAssignmentRepository from '../persons/projectAssignments/ProjectAssignmentRepository';
 import { ContractScope, personContractScope } from '../persons/projectAssignments/projectMembership';
 import { ForbiddenError } from '../persons/projectAssignments/ProjectScopeGuard';
@@ -32,10 +33,28 @@ async function assertRecord(kind: keyof typeof records, value: unknown, scope: C
 
 type Operation = 'list' | 'itemsList' | 'invoice' | 'newInvoice' | 'copyInvoice' | 'series' | 'item' | 'newItem' | 'summary';
 
+const PAYMENT_FIELDS = new Set(['paymentStatus', 'paidAmount', 'paymentDate', 'paidManually', 'statusBeforePayment']);
+
+/**
+ * Kwoty i daty wpłat (z wyciągów) widzi tylko osoba z dostępem do banku - decyzja ownera BNK-B4.
+ * Filtr na res.json obejmuje każdą odpowiedź JSON trasy, na dowolnej głębokości (także korekty),
+ * więc nowa trasa za tą bramką jest domyślnie zakryta. Status faktury zostaje; stan płatności też jest ukryty ("częściowo" zdradza wpływ).
+ */
+function hidePaymentFields(res: Response): void {
+    const json = res.json.bind(res);
+    res.json = (body?: any) => json(body === undefined ? body
+        : JSON.parse(JSON.stringify(body, (key, value) => (PAYMENT_FIELDS.has(key) ? undefined : value))));
+}
+
 /** Wspólna bramka tras: rzeczywisty rekord z bazy oraz docelowy kontrakt/rodzic z żądania. */
 export function salesInvoiceAccess(operation: Operation): RequestHandler {
     return async (req, res, next) => {
         const user = req.session?.userData;
+        try {
+            if (!(await hasBankModuleAccess(user))) hidePaymentFields(res);
+        } catch (error) {
+            return next(error);
+        }
         if (!user || !salesInvoicesScopedForRole(user.systemRoleName)) return next();
         try {
             const scope = req.salesInvoiceScope = personContractScope(
