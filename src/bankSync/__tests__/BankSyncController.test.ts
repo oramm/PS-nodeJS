@@ -16,13 +16,19 @@ jest.mock('../../tools/ToolsDb', () => ({
 }));
 
 jest.mock('../BankStatementRepository');
-jest.mock('../BankTransferRepository');
+jest.mock('../BankTransferRepository', () => ({
+    ...jest.createMockFromModule<typeof import('../BankTransferRepository')>('../BankTransferRepository'),
+    BankTransferInsertWarning: jest.requireActual<typeof import('../BankTransferRepository')>('../BankTransferRepository').BankTransferInsertWarning,
+}));
 jest.mock('../PaymentAllocationRepository');
 jest.mock('../matching/TransferMatcher');
 jest.mock('../../invoices/InvoiceRepository');
 jest.mock('../../invoices/InvoicesController');
 jest.mock('../../costInvoices/CostInvoiceRepository');
 
+import { setImmediate } from 'node:timers/promises';
+import type { Pool } from 'mysql2/promise';
+import ToolsDb from '../../tools/ToolsDb';
 import BankSyncController, { BankSyncError } from '../BankSyncController';
 import BankStatementRepository from '../BankStatementRepository';
 import BankTransferRepository from '../BankTransferRepository';
@@ -60,6 +66,15 @@ describe('BankSyncController.upload', () => {
     let mockStatementRepo: jest.Mocked<BankStatementRepository>;
     let mockTransferRepo: jest.Mocked<BankTransferRepository>;
     let mockMatcher: jest.Mocked<TransferMatcher>;
+
+    async function finishedJob(jobId: string) {
+        let job = controller.getImportStatus(jobId);
+        while (job.status === 'running') {
+            await setImmediate();
+            job = controller.getImportStatus(jobId);
+        }
+        return job;
+    }
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -101,6 +116,128 @@ describe('BankSyncController.upload', () => {
             fees: 0,
         });
         expect(mockStatementRepo.insert).toHaveBeenCalledTimes(1);
+    });
+
+    test('background import returns the same result as synchronous import', async () => {
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        const file = Buffer.from(SAMPLE_XML);
+        const expected = await controller.upload(file, 'test.xml', 1);
+        const { jobId } = await controller.startUpload(file, 'test.xml', 1);
+        expect(controller.getImportStatus(jobId)).toEqual({ status: 'running' });
+        expect(mockStatementRepo.insert).toHaveBeenCalledTimes(1);
+        expect(await finishedJob(jobId)).toEqual({ status: 'done', result: expected });
+        expect(mockStatementRepo.insert).toHaveBeenCalledTimes(2);
+    });
+
+    test('rejects another upload during validation and during import', async () => {
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        const file = Buffer.from(SAMPLE_XML);
+        const next = () => controller.startUpload(file, 'second.xml');
+        const first = controller.startUpload(file, 'first.xml');
+        const busy = { statusCode: 409, message: expect.stringContaining('Trwa wgrywanie') };
+        await expect(next()).rejects.toMatchObject(busy);
+        const { jobId } = await first;
+        await expect(next()).rejects.toMatchObject(busy);
+        await finishedJob(jobId);
+        expect(mockStatementRepo.insert).toHaveBeenCalledTimes(1);
+    });
+
+    test('expires a 10-minute import and keeps the newer import locked when the old one finishes', async () => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+        try {
+            mockStatementRepo.findByChecksum.mockResolvedValue(null);
+            let finishFirst!: (id: number) => void;
+            let finishSecond!: (id: number) => void;
+            const firstWrite = new Promise<number>(resolve => { finishFirst = resolve; });
+            const secondWrite = new Promise<number>(resolve => { finishSecond = resolve; });
+            mockTransferRepo.insert.mockImplementationOnce(() => firstWrite).mockImplementationOnce(() => secondWrite);
+
+            const file = Buffer.from(SAMPLE_XML);
+            const first = await controller.startUpload(file, 'first.xml');
+            await setImmediate();
+            expect(mockTransferRepo.insert).toHaveBeenCalledTimes(1);
+            jest.advanceTimersByTime(10 * 60 * 1000 - 1);
+            expect(controller.getImportStatus(first.jobId)).toEqual({ status: 'running' });
+            await expect(controller.startUpload(file, 'second.xml')).rejects.toMatchObject({ statusCode: 409 });
+            jest.advanceTimersByTime(1);
+            const expired = controller.getImportStatus(first.jobId);
+            expect(expired).toMatchObject({ status: 'failed', error: expect.stringContaining('limit czasu') });
+
+            const second = await controller.startUpload(file, 'second.xml');
+            await setImmediate();
+            expect(mockTransferRepo.insert).toHaveBeenCalledTimes(2);
+            finishFirst(1);
+            await setImmediate();
+            expect(controller.getImportStatus(first.jobId)).toEqual(expired);
+            expect(controller.getImportStatus(second.jobId)).toEqual({ status: 'running' });
+            await expect(controller.startUpload(file, 'third.xml')).rejects.toMatchObject({ statusCode: 409 });
+
+            finishSecond(2);
+            expect(await finishedJob(second.jobId)).toMatchObject({ status: 'done' });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('rejects a duplicate or invalid XML before scheduling a job and permits a corrected upload', async () => {
+        const file = Buffer.from(SAMPLE_XML);
+        mockStatementRepo.findByChecksum = jest.fn().mockResolvedValueOnce({ id: 42 }).mockResolvedValue(null);
+        await expect(controller.startUpload(file, 'duplicate.xml')).rejects.toMatchObject({ statusCode: 409 });
+        await expect(controller.startUpload(Buffer.from(SAMPLE_XML.replace('</operation>', '')), 'invalid.xml'))
+            .rejects.toMatchObject({ statusCode: 400 });
+        expect(mockStatementRepo.insert).not.toHaveBeenCalled();
+        const { jobId } = await controller.startUpload(file, 'valid.xml');
+        expect(await finishedJob(jobId)).toMatchObject({ status: 'done' });
+    });
+
+    test('logs sanitized database warnings with the original operation number and rolls back the whole import', async () => {
+        const { default: actualDb } = jest.requireActual<typeof import('../../tools/ToolsDb')>('../../tools/ToolsDb');
+        const { default: ActualTransferRepository } = jest.requireActual<typeof import('../BankTransferRepository')>('../BankTransferRepository');
+        const query = jest.fn()
+            .mockResolvedValueOnce([{ insertId: 1, warningStatus: 0 }])
+            .mockResolvedValueOnce([{ insertId: 2, warningStatus: 2 }])
+            .mockResolvedValueOnce([[
+                { Code: 1265, Message: "Testowa dana osobowa, data truncated for column 'OperationType' at row 1" },
+                { Code: 1292, Message: "Testowa dana osobowa, incorrect value for column 'NieznanePole' at row 1" },
+            ]]);
+        const conn = { beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(), query };
+        const pool = jest.spyOn(actualDb, 'pool', 'get').mockReturnValue({
+            getConnection: jest.fn().mockResolvedValue(conn),
+        } as unknown as Pool);
+        const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+        try {
+            jest.mocked(ToolsDb.transaction).mockImplementationOnce(actualDb.transaction.bind(actualDb));
+            mockStatementRepo.findByChecksum.mockResolvedValue(null);
+            const repo = new ActualTransferRepository();
+            mockTransferRepo.insert.mockImplementationOnce(repo.insert.bind(repo)).mockImplementationOnce(repo.insert.bind(repo));
+            const file = statementWithIncomingDates('2026-04-29', '', '2026-04-28');
+            const { jobId } = await controller.startUpload(file, 'test.xml');
+            expect(await finishedJob(jobId)).toEqual({
+                status: 'failed', error: 'Operacja z pliku ma pole dłuższe, niż przyjmuje system - import wycofany, nic nie zapisano.',
+            });
+            expect(mockStatementRepo.insert).toHaveBeenCalledWith(expect.anything(), conn);
+            expect(mockTransferRepo.insert).toHaveBeenCalledTimes(2);
+            expect(mockTransferRepo.insert).toHaveBeenNthCalledWith(1, expect.objectContaining({ execDate: '2026-04-28' }), conn, 3);
+            expect(mockTransferRepo.insert).toHaveBeenNthCalledWith(2, expect.objectContaining({ execDate: '2026-04-29' }), conn, 1);
+            expect(query).toHaveBeenNthCalledWith(3, 'SHOW WARNINGS');
+            expect(warn.mock.calls).toEqual([
+                [expect.any(String), { code: 1265, column: 'OperationType', fileOperationNumber: 1 }],
+                [expect.any(String), { code: 1292, column: null, fileOperationNumber: 1 }],
+            ]);
+            expect(conn.beginTransaction).toHaveBeenCalledTimes(1);
+            expect(conn.rollback).toHaveBeenCalledTimes(1);
+            expect(conn.commit).not.toHaveBeenCalled();
+            expect(conn.release).toHaveBeenCalledTimes(1);
+
+            const retry = await controller.startUpload(file, 'test.xml');
+            expect(await finishedJob(retry.jobId)).toMatchObject({ status: 'done' });
+        } finally {
+            pool.mockRestore();
+            log.mockRestore();
+            warn.mockRestore();
+        }
     });
 
     test('counts a known operation without allocating it', async () => {
@@ -184,6 +321,7 @@ describe('BankSyncController.upload', () => {
         expect(mockTransferRepo.insert).toHaveBeenCalledWith(
             expect.objectContaining({ matchingStatus: 'MANUAL', matchingCandidates: null }),
             expect.anything(),
+            1,
         );
         expect(preview).toMatchObject({ autoMatched: 0, proposed: 0, unmatched: 0 });
     });

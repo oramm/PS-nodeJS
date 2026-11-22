@@ -3,6 +3,13 @@ import mysql from 'mysql2/promise';
 import BankTransfer, { MatchingCandidate, MatchingStatus, supportsInvoiceQueue } from './BankTransfer';
 
 const reviewAsPaymentSql = "COALESCE(JSON_EXTRACT(MatchingCandidates, '$.reviewAsPayment'), 0) = 1";
+const transferInsertColumns = [
+    'BankStatementId', 'OrderDate', 'ExecDate', 'OperationType', 'Direction', 'Amount', 'Currency',
+    'CounterpartyAccount', 'CounterpartyName', 'CounterpartyNip', 'Title', 'Description',
+    'OperationHash', 'MatchingStatus', 'MatchingScore', 'MatchingCandidates',
+];
+
+export class BankTransferInsertWarning extends Error {}
 
 export const pendingIncomingTransfersSql = `
     SELECT bt.*, bt.Amount - COALESCE(allocated.Total, 0) AS RemainingAmount
@@ -131,12 +138,10 @@ export default class BankTransferRepository {
         return rows.map((row) => this.mapRow(row));
     }
 
-    async insert(transfer: BankTransfer, conn: mysql.PoolConnection): Promise<number> {
+    async insert(transfer: BankTransfer, conn: mysql.PoolConnection, fileOperationNumber: number): Promise<number> {
         const sql = mysql.format(
-            `INSERT IGNORE INTO BankTransfers
-                (BankStatementId, OrderDate, ExecDate, OperationType, Direction, Amount, Currency,
-                 CounterpartyAccount, CounterpartyName, CounterpartyNip, Title, Description,
-                 OperationHash, MatchingStatus, MatchingScore, MatchingCandidates)
+            `INSERT INTO BankTransfers
+                (${transferInsertColumns.join(', ')})
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [
                 transfer.bankStatementId,
@@ -157,8 +162,29 @@ export default class BankTransferRepository {
                 transfer.matchingCandidates ? JSON.stringify(transfer.matchingCandidates) : null,
             ],
         );
-        const [result] = await conn.query(sql);
-        return (result as any).insertId;
+        try {
+            const [result] = await conn.query<mysql.ResultSetHeader>(sql);
+            if (result.warningStatus > 0) {
+                try {
+                    const [warnings] = await conn.query<mysql.RowDataPacket[]>('SHOW WARNINGS');
+                    for (const warning of warnings) {
+                        // Message może zawierać wartość pola. Z zapisu DB pobieramy wyłącznie znaną nazwę kolumny.
+                        const columnName = /\bcolumn ['\x60]([A-Za-z]+)['\x60] at row \d+\s*$/i.exec(warning.Message)?.[1];
+                        const column = transferInsertColumns.find(name => name.toLowerCase() === columnName?.toLowerCase());
+                        console.warn('[BankSync] Ostrzeżenie zapisu operacji wyciągu', {
+                            code: Number(warning.Code), column: column ?? null, fileOperationNumber,
+                        });
+                    }
+                } finally {
+                    throw new BankTransferInsertWarning();
+                }
+            }
+            return result.insertId;
+        } catch (error) {
+            // Tylko istniejący odcisk jest do pominięcia. Inny błąd wycofuje cały import.
+            if (error instanceof Error && 'code' in error && error.code === 'ER_DUP_ENTRY') return 0;
+            throw error;
+        }
     }
 
     async updateMatchingStatus(

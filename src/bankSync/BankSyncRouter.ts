@@ -146,28 +146,38 @@ app.patch('/bank-transfers/:id/restore', async (req, res, next) => {
     }
 });
 
-/**
- * POST /bank-statements
- * Upload PKO XML file (multipart/form-data, field: file)
- * Returns the import preview with counts for new operations and a separate alreadyKnown count.
- */
 app.post(
     '/bank-statements',
+    (_req: Request, res: Response, next: NextFunction) => {
+        try {
+            controller.assertImportAvailable();
+            next();
+        } catch (err) {
+            handleBankSyncError(err, res, next);
+        }
+    },
     upload.single('file') as any,
     async (req: Request, res: Response, next: NextFunction) => {
-        if (!requireAuth(req, res)) return;
         try {
             if (!req.file) {
-                return res.status(400).json({ error: 'Brak pliku (field: file)' });
+                return res.status(400).json({ error: 'Wybierz plik XML z PKO BP.' });
             }
-            const userId = (req.session as any)?.userData?.enviId ?? null;
-            const preview = await controller.upload(req.file.buffer, req.file.originalname, userId);
-            res.status(201).json(preview);
+            const job = await controller.startUpload(req.file.buffer, req.file.originalname, req.session.userData?.enviId);
+            res.status(202).location(`/bank-statements/imports/${job.jobId}`).json(job);
         } catch (err) {
             handleBankSyncError(err, res, next);
         }
     },
 );
+
+app.get('/bank-statements/imports/:jobId', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        res.json(controller.getImportStatus(req.params.jobId));
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
 
 /**
  * POST /bank-statements/:id/commit

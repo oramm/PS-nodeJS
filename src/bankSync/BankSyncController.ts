@@ -1,13 +1,13 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { setImmediate } from 'node:timers/promises';
 import mysql from 'mysql2/promise';
 import ToolsDb from '../tools/ToolsDb';
-import { PkoBpXmlParser } from './parsers/PkoBpXmlParser';
+import { PkoBpXmlParser, type PkoBpOperation } from './parsers/PkoBpXmlParser';
 import BankStatement from './BankStatement';
 import BankTransfer, { FEE_TYPES, isExactInvoiceCandidate, MatchingCandidate, MatchingStatus, supportsInvoiceQueue } from './BankTransfer';
 import PaymentAllocation from './PaymentAllocation';
 import BankStatementRepository from './BankStatementRepository';
-import BankTransferRepository from './BankTransferRepository';
+import BankTransferRepository, { BankTransferInsertWarning } from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
 import { TransferMatcher, CandidatePool, MatchProposal } from './matching/TransferMatcher';
 import { invoiceNumberSignal, matchesSalesAmount } from './matching/signals';
@@ -21,6 +21,8 @@ import Setup from '../setup/Setup';
 import { statementCoverage } from './statementCoverage';
 
 const SAMPLE_SEED = 'bnk-b2-v1';
+const IMPORT_RESULT_TTL_MS = 60 * 60 * 1000;
+const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
 
 type MatchableTransfer = Pick<BankTransfer, 'direction' | 'amount' | 'currency' | 'execDate' |
     'counterpartyAccount' | 'counterpartyName' | 'counterpartyNip' | 'description' | 'title' | 'operationType' | 'reviewAsPayment'>;
@@ -54,6 +56,15 @@ export interface UploadPreview {
     ownTransfers: number;
     expenses: number;
     otherIncoming: number;
+}
+
+type ImportResult = { status: 'done'; result: UploadPreview }
+    | { status: 'failed'; error: string };
+type ImportJob = { status: 'running' } | ImportResult;
+
+interface PreparedUpload {
+    rawChecksum: string;
+    document: ReturnType<typeof PkoBpXmlParser.readDocument>;
 }
 
 export interface AllocationResult {
@@ -102,6 +113,9 @@ export default class BankSyncController {
     private invoiceRepo = new InvoiceRepository();
     private costInvoiceRepo = new CostInvoiceRepository();
     private offerBondRepo = new OfferBondRepository();
+    // shortcut: stan importu jest w pamięci jednego procesu, użyj wspólnej kolejki przy wielu dynach web.
+    private importJobs = new Map<string, ImportJob>();
+    private activeImportId?: string;
 
     private today() {
         return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw' }).format(new Date());
@@ -132,11 +146,76 @@ export default class BankSyncController {
     // UPLOAD (parse → persist transfers → run matcher → return preview)
     // =====================================================
 
-    async upload(
-        buffer: Buffer,
-        fileName: string,
-        userId?: number | null,
-    ): Promise<UploadPreview> {
+    assertImportAvailable(): void {
+        if (this.activeImportId) {
+            throw new BankSyncError(409, 'Trwa wgrywanie innego wyciągu. Zaczekaj na jego zakończenie.');
+        }
+    }
+
+    async startUpload(buffer: Buffer, fileName: string, userId?: number | null): Promise<{ jobId: string }> {
+        this.assertImportAvailable();
+        const jobId = randomUUID();
+        this.activeImportId = jobId;
+        try {
+            const prepared = await this.prepareUpload(buffer);
+            this.importJobs.set(jobId, { status: 'running' });
+            void this.runImport(jobId, prepared, fileName, userId);
+            return { jobId };
+        } catch (error) {
+            this.activeImportId = undefined;
+            throw error;
+        }
+    }
+
+    getImportStatus(jobId: string): ImportJob {
+        const job = this.importJobs.get(jobId);
+        if (!job) {
+            throw new BankSyncError(404, 'Nie można odczytać wyniku wgrywania. Sprawdź listę wyciągów. Jeśli wyciągu tam nie ma, wgraj plik ponownie.');
+        }
+        return job;
+    }
+
+    private async runImport(jobId: string, prepared: PreparedUpload, fileName: string, userId?: number | null) {
+        const timeout = setTimeout(() => {
+            // Limit zwalnia blokadę przyjmowania plików. Trwająca transakcja nadal zatwierdzi cały import
+            // albo go wycofa przy błędzie. Jej spóźniony wynik nie nadpisze stanu ani blokady kolejnego zadania.
+            this.finishImport(jobId, {
+                status: 'failed',
+                error: 'Wgrywanie przekroczyło limit czasu. Sprawdź zakładkę Wyciągi, zanim wgrasz plik ponownie.',
+            });
+        }, IMPORT_TIMEOUT_MS).unref();
+
+        try {
+            await setImmediate();
+            const result = await this.persistUpload(prepared, fileName, userId);
+            this.finishImport(jobId, { status: 'done', result });
+        } catch (error) {
+            // Sterownik bazy dołącza do błędu zapytanie z danymi wyciągu.
+            const code = error instanceof Error && 'code' in error ? error.code : undefined;
+            console.error(`[BankSync] Wgrywanie wyciągu ${jobId} nie powiodło się`,
+                code ?? (error instanceof Error ? error.name : undefined));
+            const message = error instanceof BankTransferInsertWarning
+                ? 'Operacja z pliku ma pole dłuższe, niż przyjmuje system - import wycofany, nic nie zapisano.'
+                : error instanceof BankSyncError ? error.message :
+                    'Nie udało się wgrać wyciągu. Sprawdź listę wyciągów i spróbuj ponownie.';
+            this.finishImport(jobId, { status: 'failed', error: message });
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    private finishImport(jobId: string, result: ImportResult): void {
+        if (this.importJobs.get(jobId)?.status !== 'running') return;
+        this.importJobs.set(jobId, result);
+        if (this.activeImportId === jobId) this.activeImportId = undefined;
+        setTimeout(() => this.importJobs.delete(jobId), IMPORT_RESULT_TTL_MS).unref();
+    }
+
+    async upload(buffer: Buffer, fileName: string, userId?: number | null): Promise<UploadPreview> {
+        return this.persistUpload(await this.prepareUpload(buffer), fileName, userId);
+    }
+
+    private async prepareUpload(buffer: Buffer): Promise<PreparedUpload> {
         const rawChecksum = createHash('sha256').update(buffer).digest('hex');
 
         // Idempotency: reject duplicate files
@@ -145,7 +224,15 @@ export default class BankSyncController {
             throw new BankSyncError(409, 'Ten plik został już wgrany');
         }
 
-        const parsed = PkoBpXmlParser.parse(buffer);
+        try {
+            return { rawChecksum, document: PkoBpXmlParser.readDocument(buffer) };
+        } catch {
+            throw new BankSyncError(400, 'Wybierz prawidłowy plik XML z historią rachunku PKO BP.');
+        }
+    }
+
+    private async persistUpload({ rawChecksum, document }: PreparedUpload, fileName: string, userId?: number | null): Promise<UploadPreview> {
+        const parsed = PkoBpXmlParser.parseOperations(document);
 
         const preview: UploadPreview = {
             statementId: 0,
@@ -172,14 +259,18 @@ export default class BankSyncController {
             if (op.endingBalance !== null) closingBalance = op.endingBalance;
         }
 
-        // Collect per-operation proposals before DB transaction
         const operations = [...parsed.operations].sort(compareTransferOrder);
         const directions = new Set(operations
             .filter((op) => op.currency === 'PLN' && !FEE_TYPES.has(op.operationType))
             .map((op) => op.direction));
+        // Wstępny odczyt kandydatów nie otwiera migawki transakcji zapisującej wpłaty.
         const pool = await this.matcher.loadCandidates(directions);
-
-        const ops = operations.map((op) => ({ op, proposal: this.proposeTransfer(op, pool) }));
+        const ops: { op: PkoBpOperation; proposal: MatchProposal | null }[] = [];
+        for (const [index, op] of operations.entries()) {
+            // Pozwól serwerowi obsłużyć inne żądania w trakcie obliczania propozycji.
+            if (index > 0 && index % 25 === 0) await setImmediate();
+            ops.push({ op, proposal: this.proposeTransfer(op, pool) });
+        }
 
         await ToolsDb.transaction(async (conn) => {
             // Insert BankStatement
@@ -216,8 +307,7 @@ export default class BankSyncController {
                     matchingCandidates: matching.candidates,
                 });
 
-                // INSERT IGNORE — duplicate hash is silently skipped
-                const transferId = await this.transferRepo.insert(transfer, conn);
+                const transferId = await this.transferRepo.insert(transfer, conn, op.fileOperationNumber);
                 if (!transferId) {
                     preview.alreadyKnown++;
                     continue;
@@ -786,7 +876,7 @@ export default class BankSyncController {
         costInvoiceId: number,
         conn: mysql.PoolConnection,
     ): Promise<{ paymentStatus: string; paidAmount: number }> {
-        const ci = await this.costInvoiceRepo.findById(costInvoiceId);
+        const ci = await this.costInvoiceRepo.findById(costInvoiceId, conn);
         if (!ci) throw new Error(`CostInvoice #${costInvoiceId} not found`);
 
         const grossAmount = ci.grossAmount;

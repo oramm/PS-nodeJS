@@ -1,4 +1,4 @@
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { createHash } from 'crypto';
 import {
     extractCounterpartyAccount,
@@ -9,6 +9,7 @@ import {
 } from './pkoBpDescriptionHelpers';
 
 export interface PkoBpOperation {
+    fileOperationNumber: number;
     orderDate: string | null;
     execDate: string;
     operationType: string;
@@ -32,6 +33,10 @@ export interface PkoBpStatement {
     operations: PkoBpOperation[];
 }
 
+interface PkoBpDocument extends Omit<PkoBpStatement, 'operations'> {
+    rawOperations: any[];
+}
+
 function parseAmount(raw: unknown): number {
     if (raw === null || raw === undefined) return 0;
     const str = String(raw).replace('+', '').trim();
@@ -50,6 +55,10 @@ function computeHash(payload: string): string {
 
 export class PkoBpXmlParser {
     static parse(xmlBuffer: Buffer): PkoBpStatement {
+        return this.parseOperations(this.readDocument(xmlBuffer));
+    }
+
+    static readDocument(xmlBuffer: Buffer): PkoBpDocument {
         const parser = new XMLParser({
             ignoreAttributes: false,
             attributeNamePrefix: '@_',
@@ -58,7 +67,9 @@ export class PkoBpXmlParser {
             isArray: (name) => name === 'operation',
         });
 
-        const doc = parser.parse(xmlBuffer.toString('utf8'));
+        const xml = xmlBuffer.toString('utf8');
+        if (XMLValidator.validate(xml) !== true) throw new Error('Nieprawidłowy XML');
+        const doc = parser.parse(xml);
         const root = doc['account-history'];
 
         if (!root) {
@@ -68,15 +79,21 @@ export class PkoBpXmlParser {
         const search = root.search || {};
         const ourAccount = safeString(search.account);
 
-        const dateSince = search.date?.['@_since'] || '';
-        const dateTo = search.date?.['@_to'] || '';
+        const periodFrom = safeString(search.date?.['@_since']);
+        const periodTo = safeString(search.date?.['@_to']);
+        const validDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+            new Date(date).toJSON()?.slice(0, 10) === date;
+        if (!/^\d{26}$/.test(ourAccount) || !validDate(periodFrom) || !validDate(periodTo) || periodFrom > periodTo) {
+            throw new Error('Nieprawidłowy rachunek lub okres wyciągu PKO BP');
+        }
 
-        const rawOps: any[] = root.operations?.operation || [];
-        const ops = Array.isArray(rawOps) ? rawOps : [rawOps];
+        return { ourAccount, periodFrom, periodTo, rawOperations: root.operations?.operation ?? [] };
+    }
 
+    static parseOperations({ ourAccount, periodFrom, periodTo, rawOperations }: PkoBpDocument): PkoBpStatement {
         const occurrences = new Map<string, number>();
 
-        const operations: PkoBpOperation[] = ops.flatMap((op): PkoBpOperation[] => {
+        const operations = rawOperations.flatMap((op, index): PkoBpOperation[] => {
             const orderDateRaw = safeString(op['order-date']);
             const execDate = safeString(op['exec-date']);
             if (!execDate) return []; // skip malformed operations without execution date
@@ -107,6 +124,7 @@ export class PkoBpXmlParser {
             const operationHash = computeHash(`${occurrence}|${operationKey}`);
 
             return [{
+                fileOperationNumber: index + 1,
                 orderDate: orderDateRaw || null,
                 execDate,
                 operationType,
@@ -126,8 +144,8 @@ export class PkoBpXmlParser {
 
         return {
             ourAccount,
-            periodFrom: dateSince,
-            periodTo: dateTo,
+            periodFrom,
+            periodTo,
             operations,
         };
     }

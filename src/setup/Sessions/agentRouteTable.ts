@@ -472,6 +472,7 @@ export const AGENT_ROUTE_TABLE: readonly AgentRouteRow[] = [
     ['DELETE', '/contractRange/:id', 'zamkniete', 'Usuwa zakres kontraktu.'],
     ['GET', '/bank-transfers/access', 'odczyt', 'Sprawdza tylko, czy zalogowany widzi moduł bankowy.'],
     ['GET', '/bank-statements', 'zamkniete', 'Wyświetla wgrane wyciągi i brakujące okresy.'],
+    ['GET', '/bank-statements/imports/:jobId', 'zamkniete', 'Sprawdza stan wgrywania wyciągu bankowego.'],
     ['GET', '/bank-transfers/invoices/:id/payments', 'zamkniete', 'Wyświetla wpłaty na fakturę sprzedaży.'],
     ['DELETE', '/bank-transfers/invoices/:id/payments/manual', 'zamkniete', 'Cofa oznaczenie zapłaty przyciskiem.'],
     ['PATCH', '/bank-transfers/:id/dismiss', 'zamkniete', 'Usuwa wpływ z kolejki decyzji.'],

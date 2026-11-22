@@ -1,6 +1,8 @@
 /// <reference types="jest" />
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { app } from '../../index';
+import denyDestructiveForAgent from '../../setup/Sessions/denyDestructiveForAgent';
+import { findAgentRoute } from '../../setup/Sessions/agentRouteTable';
 
 jest.mock('../../index', () => ({
     app: {
@@ -40,6 +42,7 @@ function makeRes() {
     const res: any = {};
     res.status = jest.fn().mockReturnValue(res);
     res.json = jest.fn().mockReturnValue(res);
+    res.send = jest.fn().mockReturnValue(res);
     return res;
 }
 
@@ -51,6 +54,8 @@ const ADMIN = { systemRoleName: 'ADMIN', enviId: 1 };
 const EMPLOYEE = { systemRoleName: 'ENVI_EMPLOYEE', enviId: 7 };
 const newRoutes = [
     ['get', '/bank-statements', '/bank-statements'],
+    ['post', '/bank-statements', '/bank-statements'],
+    ['get', '/bank-statements/imports/:jobId', '/bank-statements'],
     ['get', '/bank-transfers/invoices/:id/payments', '/bank-transfers'],
     ['delete', '/bank-transfers/invoices/:id/payments/manual', '/bank-transfers'],
     ['patch', '/bank-transfers/:id/dismiss', '/bank-transfers'],
@@ -87,7 +92,7 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
             const methodMock = app[method] as unknown as jest.Mock;
             const routeIndex = methodMock.mock.calls.findIndex((c: any) => c[0] === path);
             const middlewareIndex = useMock.mock.calls.findIndex((c: any) => c[0] === prefix);
-            registered.set(path, {
+            registered.set(`${method} ${path}`, {
                 guard: useMock.mock.calls[middlewareIndex]?.[1],
                 guardOrder: useMock.mock.invocationCallOrder[middlewareIndex],
                 order: methodMock.mock.invocationCallOrder[routeIndex],
@@ -147,8 +152,8 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
         expect(mockHasBankAccess).not.toHaveBeenCalled();
     });
 
-    it.each(newRoutes)('%s %s daje 403 przed obsługą trasy bez flagi bankowej', async (_method, path, _prefix) => {
-        const route = registered.get(path)!;
+    it.each(newRoutes)('%s %s daje 403 przed obsługą trasy bez flagi bankowej', async (method, path, _prefix) => {
+        const route = registered.get(`${method} ${path}`)!;
         expect(route.guardOrder).toBeLessThan(route.order);
         mockHasBankAccess.mockResolvedValue(false as never);
         const res = makeRes();
@@ -165,4 +170,21 @@ describe('BankSyncRouter - bramka dostępu do modułu', () => {
         expect(res.json).toHaveBeenCalledWith({ hasAccess: false });
         expect(res.status).not.toHaveBeenCalled();
     });
+
+    it.each([['GET', '/bank-statements'], ['GET', '/bank-statements/imports/job-id'], ['POST', '/bank-statements']])(
+        '%s %s daje 403 agentowi z zapisem, nawet gdy użytkownik jest ADMIN', (method, path) => {
+            expect(findAgentRoute(method, path)?.access).toBe('zamkniete');
+            const req = { ...reqWith({ ...ADMIN, isPersonAgent: true, personAgentPsDb: 'rw' }), method, path };
+            const res = makeRes();
+            const next = jest.fn();
+            const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            try {
+                denyDestructiveForAgent(req, res, next);
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(next).not.toHaveBeenCalled();
+            } finally {
+                warn.mockRestore();
+            }
+        },
+    );
 });

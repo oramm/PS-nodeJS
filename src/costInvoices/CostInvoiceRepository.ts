@@ -1,5 +1,6 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2';
+import type { PoolConnection } from 'mysql2/promise';
 import CostInvoice, { CostInvoiceItem, CostInvoiceSync } from './CostInvoice';
 import { toPaymentStatus } from './CostInvoiceValidator';
 import { buildPaymentMethodFilterSql } from './costInvoicePaymentMethodFilters';
@@ -30,14 +31,14 @@ export default class CostInvoiceRepository {
     /**
      * Znajdź fakturę po ID
      */
-    async findById(id: number): Promise<CostInvoice | null> {
+    async findById(id: number, conn?: PoolConnection): Promise<CostInvoice | null> {
         const sql = mysql.format(`
             SELECT ci.*
             FROM CostInvoices ci
             WHERE ci.Id = ?
         `, [id]);
         
-        const result = await ToolsDb.getQueryCallbackAsync(sql) as any[];
+        const result = await ToolsDb.getQueryCallbackAsync(sql, conn) as any[];
         if (result.length === 0) return null;
         return this.mapRowToInvoice(result[0]);
     }

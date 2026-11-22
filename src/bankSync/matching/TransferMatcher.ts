@@ -63,6 +63,7 @@ const WEIGHTS_OUT = {
 };
 
 type WeightMap = typeof WEIGHTS_IN;
+type BankSettings = typeof Setup.Bank;
 
 function scoreInvoice(
     input: MatchInput,
@@ -77,6 +78,7 @@ function scoreInvoice(
         alreadyPaid: number;
     },
     weights: WeightMap,
+    settings: BankSettings,
 ): { score: number; flags: string[] } {
     const remaining = Math.max(0, inv.grossAmount - inv.alreadyPaid);
     const flags: string[] = [];
@@ -85,11 +87,12 @@ function scoreInvoice(
     const s_nip = input.direction === 'OUT' ? nipSignal(input.counterpartyNip, inv.entityTaxNumber) : 0;
     const s_account = accountSignal(input.counterpartyAccount, inv.entityBankAccount);
     const s_name = nameSimilarity(input.counterpartyName, inv.entityName);
-    const s_amount = amountSignal(input.amount, remaining);
-    const s_date = dateWindowSignal(input.execDate, inv.issueDate, inv.paymentDeadline);
+    const toleranceGrosze = settings.matching.amountToleranceGrosze;
+    const s_amount = amountSignal(input.amount, remaining, toleranceGrosze);
+    const s_date = dateWindowSignal(input.execDate, inv.issueDate, inv.paymentDeadline, settings.dateWindowDays);
 
     if (s_invoiceNum === 1) flags.push('INVOICE_NUMBER');
-    if (matchesSalesAmount(input.amount, remaining)) flags.push('EQUAL_AMOUNT');
+    if (matchesSalesAmount(input.amount, remaining, toleranceGrosze)) flags.push('EQUAL_AMOUNT');
     if (input.amount > remaining + 0.01) flags.push('OVERPAYMENT');
 
     const total =
@@ -135,17 +138,17 @@ export class TransferMatcher {
             return { status: 'UNMATCHED', score: 0, candidates: [] };
         }
 
-        const { ownAccounts } = Setup.Bank;
+        const settings = Setup.Bank;
         const account = input.counterpartyAccount?.replace(/\s/g, '');
-        if (!input.reviewAsPayment && account && ownAccounts.includes(account)) {
+        if (!input.reviewAsPayment && account && settings.ownAccounts.includes(account)) {
             return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['OWN_TRANSFER'] };
         }
         return input.direction === 'IN'
-            ? this.matchIncoming(input, pool.invoices)
-            : this.matchOutgoing(input, pool.costInvoices);
+            ? this.matchIncoming(input, pool.invoices, settings)
+            : this.matchOutgoing(input, pool.costInvoices, settings);
     }
 
-    private matchIncoming(input: MatchInput, rows: SalesPaymentCandidate[]): MatchProposal {
+    private matchIncoming(input: MatchInput, rows: SalesPaymentCandidate[], settings: BankSettings): MatchProposal {
         return this.buildProposal(input, rows, WEIGHTS_IN, (row) => ({
             invoiceId: row.Id,
             invoiceNumber: row.InvoiceNumber,
@@ -158,10 +161,10 @@ export class TransferMatcher {
             issueDate: row.IssueDate,
             paymentDeadline: row.PaymentDeadline,
             contractNumber: row.ContractNumber,
-        }), 'invoice');
+        }), 'invoice', settings);
     }
 
-    private matchOutgoing(input: MatchInput, rows: any[]): MatchProposal {
+    private matchOutgoing(input: MatchInput, rows: any[], settings: BankSettings): MatchProposal {
         return this.buildProposal(input, rows, WEIGHTS_OUT, (row) => ({
             costInvoiceId: row.Id,
             invoiceNumber: row.InvoiceNumber,
@@ -172,7 +175,7 @@ export class TransferMatcher {
             entityName: row.EntityName,
             issueDate: row.IssueDate ? String(row.IssueDate).slice(0, 10) : null,
             paymentDeadline: row.PaymentDeadline ? String(row.PaymentDeadline).slice(0, 10) : null,
-        }), 'costInvoice');
+        }), 'costInvoice', settings);
     }
 
     private buildProposal(
@@ -194,14 +197,15 @@ export class TransferMatcher {
             contractNumber?: string | null;
         },
         type: 'invoice' | 'costInvoice',
+        settings: BankSettings,
     ): MatchProposal {
-        const cfg = Setup.Bank.matching;
+        const cfg = settings.matching;
         const scored: Array<{ mapped: ReturnType<typeof mapRow>; score: number; flags: string[] }> = [];
 
         for (const row of rows) {
             const mapped = mapRow(row);
             if (type === 'invoice' && mapped.grossAmount <= mapped.alreadyPaid) continue;
-            const { score, flags } = scoreInvoice(input, mapped, weights);
+            const { score, flags } = scoreInvoice(input, mapped, weights, settings);
             scored.push({ mapped, score, flags });
         }
 
@@ -214,9 +218,8 @@ export class TransferMatcher {
                 - (b.mapped.invoiceId ?? b.mapped.costInvoiceId ?? 0));
         const best = scored[0];
         // Numery faktur bywają powtórzone, więc automat wymaga jednej zgodnej pary numer–kwota.
-        const exactSales = type === 'invoice' ? scored.filter(({ mapped }) =>
-            invoiceNumberSignal(input.invoiceNumbers, mapped.invoiceNumber) === 1
-            && matchesSalesAmount(input.amount, mapped.grossAmount - mapped.alreadyPaid)
+        const exactSales = type === 'invoice' ? scored.filter(({ flags }) =>
+            flags.includes('INVOICE_NUMBER') && flags.includes('EQUAL_AMOUNT')
         ) : [];
         let auto = exactSales.length === 1 ? exactSales[0] : undefined;
         if (type === 'costInvoice' && best.score >= cfg.autoThreshold && !best.flags.includes('OVERPAYMENT')) {
