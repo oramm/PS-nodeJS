@@ -4,6 +4,12 @@
 
 import Setup from '../../setup/Setup';
 
+export function matchesSalesAmount(amount: number, remaining: number): boolean {
+    return amount > 0 && remaining > 0
+        && Math.abs(Math.round(amount * 100) - Math.round(remaining * 100))
+            <= Setup.Bank.matching.amountToleranceGrosze;
+}
+
 /** Normalizes a string for fuzzy comparison: lowercase, collapse whitespace. */
 function normalize(s: string): string {
     return s.toLowerCase().replace(/\s+/g, ' ').trim();

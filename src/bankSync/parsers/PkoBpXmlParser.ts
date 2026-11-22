@@ -96,7 +96,8 @@ export class PkoBpXmlParser {
 
             const counterpartyAccount = extractCounterpartyAccount(description);
             const counterpartyName = extractCounterpartyName(description);
-            const counterpartyNip = extractNip(description);
+            // Przy wpływie identyfikator odbiorcy opisuje naszą firmę.
+            const counterpartyNip = extractNip(description, direction === 'IN' ? 'nadawcy' : undefined);
             const title = extractTitle(description);
             const invoiceNumbers = extractInvoiceNumbers(description);
 

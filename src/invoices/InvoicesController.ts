@@ -1126,8 +1126,10 @@ export default class InvoicesController extends BaseController<
         const instance = this.getInstance();
         const invoice = await instance.repository.findById(id);
         if (!invoice) throw new Error(`Faktura ${id} nie istnieje`);
+        if (invoice.correctedInvoiceId) throw new Error('Wpłatę przypisz do faktury oryginalnej');
 
-        const grossAmount = invoice._totalNetValue ?? 0;
+        const grossAmount = await instance.repository.findDueAmount(id);
+        if (grossAmount === null) throw new Error(`Faktura ${id} nie istnieje`);
 
         const error = InvoiceValidator.validatePaymentUpdate(
             { paymentStatus: data.paymentStatus, paidAmount: data.paidAmount },

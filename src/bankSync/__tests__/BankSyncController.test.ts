@@ -28,6 +28,7 @@ import BankTransferRepository from '../BankTransferRepository';
 import PaymentAllocationRepository from '../PaymentAllocationRepository';
 import { TransferMatcher } from '../matching/TransferMatcher';
 import PaymentAllocation from '../PaymentAllocation';
+import InvoiceRepository from '../../invoices/InvoiceRepository';
 
 const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <account-history>
@@ -61,7 +62,8 @@ describe('BankSyncController.upload', () => {
         mockTransferRepo = (controller as any).transferRepo;
         mockMatcher = (controller as any).matcher;
 
-        mockMatcher.propose = jest.fn().mockResolvedValue({
+        mockMatcher.loadCandidates = jest.fn().mockResolvedValue({ invoices: [], costInvoices: [] });
+        mockMatcher.propose = jest.fn().mockReturnValue({
             status: 'UNMATCHED',
             score: 0,
             candidates: [],
@@ -100,6 +102,86 @@ describe('BankSyncController.upload', () => {
 
         const preview = await controller.upload(Buffer.from(SAMPLE_XML, 'utf8'), 'test2.xml', null);
         expect(preview.total).toBe(1);
+    });
+
+    test('saves own transfers outside the pending queue', async () => {
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockMatcher.propose.mockReturnValue({
+            status: 'UNMATCHED', score: 0, candidates: [], flags: ['OWN_TRANSFER'],
+        });
+
+        const preview = await controller.upload(Buffer.from(SAMPLE_XML), 'test.xml', null);
+
+        expect(mockTransferRepo.insert).toHaveBeenCalledWith(
+            expect.objectContaining({ matchingStatus: 'MANUAL', matchingCandidates: null }),
+            expect.anything(),
+        );
+        expect(preview).toMatchObject({ autoMatched: 0, proposed: 0, unmatched: 0 });
+    });
+
+    const statementWithIncomingDates = (...dates: string[]) => {
+        const sampleOperation = SAMPLE_XML.match(/<operation>[\s\S]+?<\/operation>/)![0];
+        const incomingOperation = sampleOperation
+            .replace('FV 1/2026', 'FV 3/2026')
+            .replace('-984.00', '+553.50');
+        return Buffer.from(SAMPLE_XML.replace(
+            sampleOperation,
+            dates.map((date) => incomingOperation.replace(/2026-04-29/g, date)).join(''),
+        ));
+    };
+
+    function prepareDuplicateSalesPayment() {
+        const candidates = [{ invoiceId: 1, invoiceNumber: '3/2026', score: 0.6, remainingAmount: 553.50 }];
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.insert.mockReset().mockResolvedValueOnce(1).mockResolvedValueOnce(2);
+        mockMatcher.propose.mockReturnValue({
+            status: 'CONFIRMED', score: 0.6, candidates, invoiceId: 1, allocatedAmount: 553.50,
+        });
+
+        const invoiceRepo = (controller as any).invoiceRepo as jest.Mocked<InvoiceRepository>;
+        const allocationRepo = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
+        invoiceRepo.lockPaymentCandidate.mockResolvedValue(true);
+        invoiceRepo.findDueAmount.mockResolvedValue(553.50);
+        allocationRepo.insert.mockClear();
+        allocationRepo.sumAllocatedForInvoice.mockImplementation(async () =>
+            allocationRepo.insert.mock.calls.length ? 553.50 : 0,
+        );
+        return { allocationRepo, invoiceRepo, candidates };
+    }
+
+    test('allocates the earlier payment in either file order', async () => {
+        const run = async (...dates: string[]) => {
+            const { allocationRepo } = prepareDuplicateSalesPayment();
+            const preview = await controller.upload(statementWithIncomingDates(...dates), 'test.xml', null);
+            return {
+                preview,
+                dates: mockTransferRepo.insert.mock.calls.map(([transfer]) => transfer.execDate),
+                allocations: allocationRepo.insert.mock.calls.map(([allocation]) => allocation.bankTransferId),
+            };
+        };
+        const first = await run('2026-01-29', '2026-01-23');
+        const second = await run('2026-01-23', '2026-01-29');
+
+        expect(first).toEqual(second);
+        expect(first.dates).toEqual(['2026-01-23', '2026-01-29']);
+        expect(first.allocations).toEqual([1]);
+    });
+
+    test('keeps the candidates when the first transfer already covered the invoice', async () => {
+        const { allocationRepo, invoiceRepo, candidates } = prepareDuplicateSalesPayment();
+        const xml = statementWithIncomingDates('2026-01-23', '2026-01-29');
+        const preview = await controller.upload(xml, 'test.xml', null);
+
+        expect(preview).toMatchObject({ total: 2, autoMatched: 1, proposed: 1, unmatched: 0 });
+        expect(mockMatcher.loadCandidates).toHaveBeenCalledTimes(1);
+        expect(mockMatcher.loadCandidates).toHaveBeenCalledWith(new Set(['IN']));
+        expect(allocationRepo.insert).toHaveBeenCalledTimes(1);
+        expect(invoiceRepo.updatePayment).toHaveBeenCalledWith(
+            1, { paymentStatus: 'PAID', paidAmount: 553.50 }, expect.anything(),
+        );
+        expect(mockTransferRepo.updateMatchingStatus).toHaveBeenCalledWith(
+            2, 'PROPOSED', 60, candidates, expect.anything(),
+        );
     });
 });
 

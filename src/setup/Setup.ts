@@ -625,6 +625,15 @@ export default class Setup {
                 amountToleranceGrosze: Number(process.env.BANK_AMOUNT_TOLERANCE_GROSZE ?? 1),
             },
             dateWindowDays: Number(process.env.BANK_DATE_WINDOW_DAYS ?? 60),
+            paidInvoiceCandidatesFrom: '2025-01-01',
+            // Przelewy własne (nasze rachunki, rachunek VAT, US) - nie są wpłatami klientów. Ustalone odczytem z wyciągów 2026-11-22.
+            ownAccounts: (
+                process.env.BANK_OWN_ACCOUNTS ??
+                '48102036680000550206787115,03102036680000550206787149,90124016461111001100228813,68101000712222747191757500,22101000712222747119927500,76101000712222747156405900'
+            )
+                .split(',')
+                .map((a) => a.replace(/\s/g, ''))
+                .filter(Boolean),
         };
     }
 

@@ -9,6 +9,7 @@ import BankStatementRepository from './BankStatementRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
 import { TransferMatcher, MatchProposal } from './matching/TransferMatcher';
+import { matchesSalesAmount } from './matching/signals';
 import InvoiceRepository from '../invoices/InvoiceRepository';
 import CostInvoiceRepository from '../costInvoices/CostInvoiceRepository';
 import InvoiceValidator from '../invoices/InvoiceValidator';
@@ -108,33 +109,48 @@ export default class BankSyncController {
         }
 
         // Collect per-operation proposals before DB transaction
-        type OpWithProposal = { op: PkoBpOperation; proposal: MatchProposal | null; isFee: boolean; isForeign: boolean };
+        type OpWithProposal = { op: PkoBpOperation; proposal: MatchProposal | null; isManual: boolean };
         const ops: OpWithProposal[] = [];
 
-        for (const op of parsed.operations) {
+        const operations = [...parsed.operations].sort((a, b) =>
+            a.execDate.localeCompare(b.execDate) || a.operationHash.localeCompare(b.operationHash),
+        );
+        const directions = new Set(operations
+            .filter((op) => op.currency === 'PLN' && !FEE_TYPES.has(op.operationType))
+            .map((op) => op.direction));
+        const pool = await this.matcher.loadCandidates(directions);
+
+        for (const op of operations) {
             const isFee = FEE_TYPES.has(op.operationType);
             const isForeign = op.currency !== 'PLN';
 
             if (isFee || isForeign) {
                 if (isFee) fees++;
                 if (isForeign) foreignCurrency++;
-                ops.push({ op, proposal: null, isFee, isForeign });
+                ops.push({ op, proposal: null, isManual: true });
                 continue;
             }
 
-            const proposal = await this.matcher.propose({
-                direction: op.direction,
-                amount: op.amount,
-                currency: op.currency,
-                execDate: op.execDate,
-                counterpartyAccount: op.counterpartyAccount,
-                counterpartyName: op.counterpartyName,
-                counterpartyNip: op.counterpartyNip,
-                invoiceNumbers: op.invoiceNumbers,
-            });
+            const proposal = this.matcher.propose(
+                {
+                    direction: op.direction,
+                    amount: op.amount,
+                    currency: op.currency,
+                    execDate: op.execDate,
+                    counterpartyAccount: op.counterpartyAccount,
+                    counterpartyName: op.counterpartyName,
+                    counterpartyNip: op.counterpartyNip,
+                    invoiceNumbers: op.direction === 'IN'
+                        ? extractInvoiceNumbers(op.description, false)
+                        : op.invoiceNumbers,
+                },
+                pool,
+            );
 
-            ops.push({ op, proposal, isFee, isForeign });
+            const isManual = proposal.flags?.includes('OWN_TRANSFER') ?? false;
+            ops.push({ op, proposal, isManual });
 
+            if (isManual) continue;
             if (proposal.status === 'CONFIRMED') autoMatched++;
             else if (proposal.status === 'PROPOSED') proposed++;
             else unmatched++;
@@ -155,14 +171,12 @@ export default class BankSyncController {
             });
             statementId = await this.statementRepo.insert(statement, conn);
 
-            for (const { op, proposal, isFee, isForeign } of ops) {
+            for (const { op, proposal, isManual } of ops) {
                 let matchingStatus: BankTransfer['matchingStatus'] = 'UNMATCHED';
                 let matchingScore: number | null = null;
                 let matchingCandidates = null;
 
-                if (isFee) {
-                    matchingStatus = 'MANUAL';
-                } else if (isForeign) {
+                if (isManual) {
                     matchingStatus = 'MANUAL';
                 } else if (proposal) {
                     matchingStatus = proposal.status;
@@ -195,9 +209,15 @@ export default class BankSyncController {
 
                 transfer.id = transferId;
 
-                // Persist AUTO allocations within the same transaction
-                if (proposal?.status === 'CONFIRMED' && transferId) {
-                    await this.persistAutoAllocation(transfer, proposal, conn);
+                if (proposal?.status === 'CONFIRMED') {
+                    const allocated = await this.persistAutoAllocation(transfer, proposal, conn);
+                    if (!allocated) {
+                        await this.transferRepo.updateMatchingStatus(
+                            transferId, 'PROPOSED', matchingScore, proposal.candidates, conn,
+                        );
+                        autoMatched--;
+                        proposed++;
+                    }
                 }
             }
         });
@@ -354,7 +374,10 @@ export default class BankSyncController {
         if (invoiceId) {
             const inv = await this.invoiceRepo.findById(invoiceId);
             if (!inv) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
-            grossAmount = inv._totalGrossValue ?? inv._totalNetValue ?? 0;
+            if (inv.correctedInvoiceId) throw new BankSyncError(400, 'Wpłatę przypisz do faktury oryginalnej');
+            const due = await this.invoiceRepo.findDueAmount(invoiceId);
+            if (due === null) throw new BankSyncError(404, `Faktura #${invoiceId} nie istnieje`);
+            grossAmount = due;
             alreadyPaid = inv.paidAmount ?? 0;
         } else if (costInvoiceId) {
             const ci = await this.costInvoiceRepo.findById(costInvoiceId);
@@ -443,17 +466,28 @@ export default class BankSyncController {
         transfer: BankTransfer,
         proposal: MatchProposal,
         conn: mysql.PoolConnection,
-    ): Promise<void> {
-        if (!proposal.allocatedAmount) return;
-
+    ): Promise<boolean> {
+        let { allocatedAmount } = proposal;
+        if (!allocatedAmount) return false;
         const invoiceId = proposal.invoiceId ?? null;
         const costInvoiceId = proposal.costInvoiceId ?? null;
+
+        if (invoiceId) {
+            // Pula jest migawką sprzed zapisu, a wcześniejszy przelew mógł już pokryć należność.
+            if (!(await this.invoiceRepo.lockPaymentCandidate(invoiceId, conn))) return false;
+            const due = await this.invoiceRepo.findDueAmount(invoiceId, conn);
+            if (due === null) return false;
+            const paid = await this.allocationRepo.sumAllocatedForInvoice(invoiceId, conn);
+            const remaining = Math.round((due - paid) * 100) / 100;
+            if (!matchesSalesAmount(transfer.amount, remaining)) return false;
+            allocatedAmount = Math.min(transfer.amount, remaining);
+        }
 
         const alloc = new PaymentAllocation({
             bankTransferId: transfer.id!,
             invoiceId,
             costInvoiceId,
-            allocatedAmount: proposal.allocatedAmount,
+            allocatedAmount,
             allocatedPercentage: 100,
             source: 'AUTO',
             confidence: Math.round(proposal.score * 100),
@@ -462,6 +496,7 @@ export default class BankSyncController {
 
         if (invoiceId) await this.updateInvoicePaymentStatus(invoiceId, conn);
         if (costInvoiceId) await this.updateCostInvoicePaymentStatus(costInvoiceId, conn);
+        return true;
     }
 
     /** Recalculate Invoice payment status from allocations and update DB. */
@@ -469,15 +504,13 @@ export default class BankSyncController {
         invoiceId: number,
         conn: mysql.PoolConnection,
     ): Promise<{ paymentStatus: string; paidAmount: number }> {
-        const inv = await this.invoiceRepo.findById(invoiceId);
-        if (!inv) throw new Error(`Invoice #${invoiceId} not found`);
-
-        const grossAmount = inv._totalGrossValue ?? inv._totalNetValue ?? 0;
+        const grossAmount = await this.invoiceRepo.findDueAmount(invoiceId, conn);
+        if (grossAmount === null) throw new Error(`Invoice #${invoiceId} not found`);
         const paidAmount = await this.allocationRepo.sumAllocatedForInvoice(invoiceId, conn);
 
         let paymentStatus: string;
         if (paidAmount <= 0) paymentStatus = 'UNPAID';
-        else if (Math.abs(paidAmount - grossAmount) <= 0.01) paymentStatus = 'PAID';
+        else if (matchesSalesAmount(paidAmount, grossAmount)) paymentStatus = 'PAID';
         else paymentStatus = 'PARTIALLY_PAID';
 
         await this.invoiceRepo.updatePayment(invoiceId, { paymentStatus, paidAmount }, conn);

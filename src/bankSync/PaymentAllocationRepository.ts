@@ -71,7 +71,7 @@ export default class PaymentAllocationRepository {
     /** Sum of allocated amounts for a given Invoice */
     async sumAllocatedForInvoice(invoiceId: number, conn?: mysql.PoolConnection): Promise<number> {
         const sql = mysql.format(
-            'SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE InvoiceId = ?',
+            `SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE InvoiceId = ?${conn ? ' FOR UPDATE' : ''}`,
             [invoiceId],
         );
         const rows = conn

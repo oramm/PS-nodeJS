@@ -90,4 +90,9 @@ describe('PkoBpXmlParser', () => {
         const s2 = PkoBpXmlParser.parse(Buffer.from(SAMPLE_XML, 'utf8'));
         expect(s2.operations[0].operationHash).toBe(statement.operations[0].operationHash);
     });
+
+    test('does not save the recipient identifier as the counterparty NIP for an incoming transfer', () => {
+        const xml = SAMPLE_XML.replace('Identyfikator nadawcy : 5261040828', 'Identyfikator odbiorcy : 1234567890');
+        expect(PkoBpXmlParser.parse(Buffer.from(xml)).operations[2].counterpartyNip).toBeNull();
+    });
 });

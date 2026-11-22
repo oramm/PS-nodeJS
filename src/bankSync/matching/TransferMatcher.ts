@@ -1,6 +1,7 @@
 import ToolsDb from '../../tools/ToolsDb';
 import Setup from '../../setup/Setup';
 import { MatchingCandidate } from '../BankTransfer';
+import InvoiceRepository, { SalesPaymentCandidate } from '../../invoices/InvoiceRepository';
 import {
     invoiceNumberSignal,
     nipSignal,
@@ -8,6 +9,7 @@ import {
     nameSimilarity,
     amountSignal,
     dateWindowSignal,
+    matchesSalesAmount,
 } from './signals';
 
 export interface MatchInput {
@@ -31,6 +33,11 @@ export interface MatchProposal {
     costInvoiceId?: number;
     allocatedAmount?: number;
     flags?: string[];
+}
+
+export interface CandidatePool {
+    invoices: SalesPaymentCandidate[];
+    costInvoices: any[];
 }
 
 const TOP_N = 5;
@@ -73,7 +80,7 @@ function scoreInvoice(
     const flags: string[] = [];
 
     const s_invoiceNum = invoiceNumberSignal(input.invoiceNumbers, inv.invoiceNumber);
-    const s_nip = nipSignal(input.counterpartyNip, inv.entityTaxNumber);
+    const s_nip = input.direction === 'OUT' ? nipSignal(input.counterpartyNip, inv.entityTaxNumber) : 0;
     const s_account = accountSignal(input.counterpartyAccount, inv.entityBankAccount);
     const s_name = nameSimilarity(input.counterpartyName, inv.entityName);
     const s_amount = amountSignal(input.amount, remaining);
@@ -95,57 +102,12 @@ function scoreInvoice(
 }
 
 export class TransferMatcher {
-    /**
-     * Returns matching proposal for a single transfer.
-     * Does NOT write to DB — caller persists results.
-     */
-    async propose(input: MatchInput): Promise<MatchProposal> {
-        if (input.currency !== 'PLN') {
-            return { status: 'UNMATCHED', score: 0, candidates: [] };
-        }
+    private invoiceRepo = new InvoiceRepository();
 
-        if (input.direction === 'IN') {
-            return this.matchIncoming(input);
-        } else {
-            return this.matchOutgoing(input);
-        }
-    }
-
-    private async matchIncoming(input: MatchInput): Promise<MatchProposal> {
-        const rows = (await ToolsDb.getQueryCallbackAsync(`
-            SELECT
-                i.Id,
-                i.Number AS InvoiceNumber,
-                i.IssueDate,
-                i.PaymentDeadline,
-                i.PaymentStatus,
-                COALESCE(SUM(ii.Quantity * ii.UnitPrice), 0) AS GrossAmount,
-                COALESCE(i.PaidAmount, 0) AS PaidAmount,
-                e.TaxNumber AS EntityTaxNumber,
-                e.BankAccountNumber AS EntityBankAccount,
-                e.Name AS EntityName
-            FROM Invoices i
-            JOIN Entities e ON e.Id = i.EntityId
-            LEFT JOIN InvoiceItems ii ON ii.ParentId = i.Id
-            WHERE i.PaymentStatus IN ('UNPAID','PARTIALLY_PAID')
-            GROUP BY i.Id
-        `)) as any[];
-
-        return this.buildProposal(input, rows, WEIGHTS_IN, (row) => ({
-            invoiceId: row.Id,
-            invoiceNumber: row.InvoiceNumber,
-            grossAmount: Number(row.GrossAmount),
-            alreadyPaid: Number(row.PaidAmount),
-            entityTaxNumber: row.EntityTaxNumber,
-            entityBankAccount: row.EntityBankAccount,
-            entityName: row.EntityName,
-            issueDate: row.IssueDate ? String(row.IssueDate).slice(0, 10) : null,
-            paymentDeadline: row.PaymentDeadline ? String(row.PaymentDeadline).slice(0, 10) : null,
-        }), 'invoice');
-    }
-
-    private async matchOutgoing(input: MatchInput): Promise<MatchProposal> {
-        const rows = (await ToolsDb.getQueryCallbackAsync(`
+    async loadCandidates(directions: ReadonlySet<MatchInput['direction']>): Promise<CandidatePool> {
+        const [invoices, costInvoices] = await Promise.all([
+            directions.has('IN') ? this.invoiceRepo.findPaymentCandidates() : [],
+            directions.has('OUT') ? ToolsDb.getQueryCallbackAsync(`
             SELECT
                 ci.Id,
                 ci.InvoiceNumber,
@@ -159,8 +121,41 @@ export class TransferMatcher {
                 ci.SupplierName AS EntityName
             FROM CostInvoices ci
             WHERE ci.PaymentStatus IN ('UNPAID','PARTIALLY_PAID')
-        `)) as any[];
+            `) : [],
+        ]);
+        return { invoices, costInvoices: costInvoices as any[] };
+    }
 
+    propose(input: MatchInput, pool: CandidatePool): MatchProposal {
+        if (input.currency !== 'PLN') {
+            return { status: 'UNMATCHED', score: 0, candidates: [] };
+        }
+
+        const { ownAccounts } = Setup.Bank;
+        const account = input.counterpartyAccount?.replace(/\s/g, '');
+        if (account && ownAccounts.includes(account)) {
+            return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['OWN_TRANSFER'] };
+        }
+        return input.direction === 'IN'
+            ? this.matchIncoming(input, pool.invoices)
+            : this.matchOutgoing(input, pool.costInvoices);
+    }
+
+    private matchIncoming(input: MatchInput, rows: SalesPaymentCandidate[]): MatchProposal {
+        return this.buildProposal(input, rows, WEIGHTS_IN, (row) => ({
+            invoiceId: row.Id,
+            invoiceNumber: row.InvoiceNumber,
+            grossAmount: Number(row.DueAmount),
+            alreadyPaid: Number(row.AllocatedAmount),
+            entityTaxNumber: row.EntityTaxNumber,
+            entityBankAccount: row.EntityBankAccount,
+            entityName: row.EntityName,
+            issueDate: row.IssueDate,
+            paymentDeadline: row.PaymentDeadline,
+        }), 'invoice');
+    }
+
+    private matchOutgoing(input: MatchInput, rows: any[]): MatchProposal {
         return this.buildProposal(input, rows, WEIGHTS_OUT, (row) => ({
             costInvoiceId: row.Id,
             invoiceNumber: row.InvoiceNumber,
@@ -197,27 +192,34 @@ export class TransferMatcher {
 
         for (const row of rows) {
             const mapped = mapRow(row);
-            const { score, flags } = scoreInvoice(
-                input,
-                {
-                    invoiceNumber: mapped.invoiceNumber,
-                    entityTaxNumber: mapped.entityTaxNumber,
-                    entityBankAccount: mapped.entityBankAccount,
-                    entityName: mapped.entityName,
-                    issueDate: mapped.issueDate,
-                    paymentDeadline: mapped.paymentDeadline,
-                    grossAmount: mapped.grossAmount,
-                    alreadyPaid: mapped.alreadyPaid,
-                },
-                weights,
-            );
+            if (type === 'invoice' && mapped.grossAmount <= mapped.alreadyPaid) continue;
+            const { score, flags } = scoreInvoice(input, mapped, weights);
             scored.push({ mapped, score, flags });
         }
 
-        scored.sort((a, b) => b.score - a.score);
-        const top = scored.slice(0, TOP_N);
+        if (scored.length === 0) {
+            return { status: 'UNMATCHED', score: 0, candidates: [] };
+        }
 
-        const candidates: MatchingCandidate[] = top.map(({ mapped, score, flags }) => ({
+        scored.sort((a, b) => b.score - a.score
+            || (a.mapped.invoiceId ?? a.mapped.costInvoiceId ?? 0)
+                - (b.mapped.invoiceId ?? b.mapped.costInvoiceId ?? 0));
+        const best = scored[0];
+        // Numery faktur bywają powtórzone, więc automat wymaga jednej zgodnej pary numer–kwota.
+        const exactSales = type === 'invoice' ? scored.filter(({ mapped }) =>
+            invoiceNumberSignal(input.invoiceNumbers, mapped.invoiceNumber) === 1
+            && matchesSalesAmount(input.amount, mapped.grossAmount - mapped.alreadyPaid)
+        ) : [];
+        let auto = exactSales.length === 1 ? exactSales[0] : undefined;
+        if (type === 'costInvoice' && best.score >= cfg.autoThreshold && !best.flags.includes('OVERPAYMENT')) {
+            const hasInvoiceNum = invoiceNumberSignal(input.invoiceNumbers, best.mapped.invoiceNumber) === 1;
+            const hasNip = nipSignal(input.counterpartyNip, best.mapped.entityTaxNumber) === 1;
+            const hasAccount = accountSignal(input.counterpartyAccount, best.mapped.entityBankAccount) === 1;
+            if (hasInvoiceNum || (hasNip && hasAccount)) auto = best;
+        }
+
+        const ranked = auto ? [auto, ...scored.filter((candidate) => candidate !== auto)] : scored;
+        const candidates: MatchingCandidate[] = ranked.slice(0, TOP_N).map(({ mapped, score, flags }) => ({
             invoiceId: mapped.invoiceId,
             costInvoiceId: mapped.costInvoiceId,
             score: Math.round(score * 100) / 100,
@@ -227,37 +229,21 @@ export class TransferMatcher {
             flags,
         }));
 
-        if (top.length === 0) {
-            return { status: 'UNMATCHED', score: 0, candidates: [] };
-        }
-
-        const best = top[0];
-        const scoreInt = Math.round(best.score * 100);
-
-        // Hard condition for AUTO: must have invoice number OR (NIP + account)
-        const hasInvoiceNum = invoiceNumberSignal(input.invoiceNumbers, best.mapped.invoiceNumber) === 1;
-        const hasNip = nipSignal(input.counterpartyNip, best.mapped.entityTaxNumber) === 1;
-        const hasAccount = accountSignal(input.counterpartyAccount, best.mapped.entityBankAccount) === 1;
-        const hardSignal = hasInvoiceNum || (hasNip && hasAccount);
-
-        const isOverpayment = best.flags.includes('OVERPAYMENT');
-
-        if (best.score >= cfg.autoThreshold && hardSignal && !isOverpayment) {
-            const id = type === 'invoice' ? best.mapped.invoiceId : best.mapped.costInvoiceId;
-            const remaining = Math.max(0, best.mapped.grossAmount - best.mapped.alreadyPaid);
-            const alloc = Math.min(input.amount, remaining);
+        if (auto) {
+            const remaining = Math.max(0, auto.mapped.grossAmount - auto.mapped.alreadyPaid);
+            const alloc = Math.min(input.amount, type === 'invoice' ? Math.round(remaining * 100) / 100 : remaining);
             return {
                 status: 'CONFIRMED',
-                score: best.score,
+                score: auto.score,
                 candidates,
-                invoiceId: type === 'invoice' ? id : undefined,
-                costInvoiceId: type === 'costInvoice' ? id : undefined,
+                invoiceId: auto.mapped.invoiceId,
+                costInvoiceId: auto.mapped.costInvoiceId,
                 allocatedAmount: alloc,
-                flags: best.flags,
+                flags: auto.flags,
             };
         }
 
-        if (best.score >= cfg.proposeThreshold) {
+        if (exactSales.length > 1 || best.score >= cfg.proposeThreshold) {
             return { status: 'PROPOSED', score: best.score, candidates, flags: best.flags };
         }
 
