@@ -7,6 +7,7 @@ jest.mock('../../tools/ToolsDb', () => ({
     __esModule: true,
     default: {
         getQueryCallbackAsync: jest.fn().mockResolvedValue([]),
+        pool: { getConnection: jest.fn() },
         transaction: jest.fn().mockImplementation(async (cb: any) => {
             return cb({
                 query: jest.fn().mockResolvedValue([{ insertId: 1 }]),
@@ -27,7 +28,7 @@ jest.mock('../../invoices/InvoicesController');
 jest.mock('../../costInvoices/CostInvoiceRepository');
 
 import { setImmediate } from 'node:timers/promises';
-import type { Pool } from 'mysql2/promise';
+import type { PoolConnection } from 'mysql2/promise';
 import ToolsDb from '../../tools/ToolsDb';
 import BankSyncController, { BankSyncError } from '../BankSyncController';
 import BankStatementRepository from '../BankStatementRepository';
@@ -39,6 +40,7 @@ import InvoiceRepository from '../../invoices/InvoiceRepository';
 import InvoicesController from '../../invoices/InvoicesController';
 import BankTransfer from '../BankTransfer';
 import Setup from '../../setup/Setup';
+import { PkoBpXmlParser } from '../parsers/PkoBpXmlParser';
 
 const paymentStatuses = Setup.InvoicePaymentStatus;
 const recalculatePayment = jest.mocked(InvoicesController.recalculatePayment);
@@ -91,6 +93,11 @@ describe('BankSyncController.upload', () => {
             candidates: [],
         });
         mockTransferRepo.insert = jest.fn().mockResolvedValue(1);
+        mockTransferRepo.findImportOperations.mockResolvedValue([]);
+        mockStatementRepo.acquireImportLock.mockResolvedValue(true);
+        jest.mocked(ToolsDb.pool.getConnection).mockResolvedValue({
+            query: jest.fn(), beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(),
+        } as unknown as PoolConnection);
         mockStatementRepo.insert = jest.fn().mockResolvedValue(1);
         mockStatementRepo.findPeriods.mockResolvedValue([]);
     });
@@ -116,6 +123,19 @@ describe('BankSyncController.upload', () => {
             fees: 0,
         });
         expect(mockStatementRepo.insert).toHaveBeenCalledTimes(1);
+    });
+
+    test('retries the entire import once after a database deadlock', async () => {
+        const deadlock = Object.assign(new Error('deadlock'), { code: 'ER_LOCK_DEADLOCK' });
+        mockStatementRepo.findPeriods.mockRejectedValueOnce(deadlock);
+        const conn = await ToolsDb.pool.getConnection();
+
+        await expect(controller.upload(Buffer.from(SAMPLE_XML), 'test.xml')).resolves.toMatchObject({
+            total: 1, alreadyKnown: 0, needsReview: 0,
+        });
+        expect(conn.rollback).toHaveBeenCalledTimes(1);
+        expect(conn.commit).toHaveBeenCalledTimes(1);
+        expect(mockTransferRepo.insert).toHaveBeenCalledTimes(2);
     });
 
     test('background import returns the same result as synchronous import', async () => {
@@ -191,9 +211,9 @@ describe('BankSyncController.upload', () => {
     });
 
     test('logs sanitized database warnings with the original operation number and rolls back the whole import', async () => {
-        const { default: actualDb } = jest.requireActual<typeof import('../../tools/ToolsDb')>('../../tools/ToolsDb');
         const { default: ActualTransferRepository } = jest.requireActual<typeof import('../BankTransferRepository')>('../BankTransferRepository');
         const query = jest.fn()
+            .mockResolvedValueOnce([])
             .mockResolvedValueOnce([{ insertId: 1, warningStatus: 0 }])
             .mockResolvedValueOnce([{ insertId: 2, warningStatus: 2 }])
             .mockResolvedValueOnce([[
@@ -201,14 +221,11 @@ describe('BankSyncController.upload', () => {
                 { Code: 1292, Message: "Testowa dana osobowa, incorrect value for column 'NieznanePole' at row 1" },
             ]]);
         const conn = { beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(), query };
-        const pool = jest.spyOn(actualDb, 'pool', 'get').mockReturnValue({
-            getConnection: jest.fn().mockResolvedValue(conn),
-        } as unknown as Pool);
         const log = jest.spyOn(console, 'error').mockImplementation(() => {});
         const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
         try {
-            jest.mocked(ToolsDb.transaction).mockImplementationOnce(actualDb.transaction.bind(actualDb));
+            jest.mocked(ToolsDb.pool.getConnection).mockResolvedValueOnce(conn as unknown as PoolConnection);
             mockStatementRepo.findByChecksum.mockResolvedValue(null);
             const repo = new ActualTransferRepository();
             mockTransferRepo.insert.mockImplementationOnce(repo.insert.bind(repo)).mockImplementationOnce(repo.insert.bind(repo));
@@ -221,7 +238,8 @@ describe('BankSyncController.upload', () => {
             expect(mockTransferRepo.insert).toHaveBeenCalledTimes(2);
             expect(mockTransferRepo.insert).toHaveBeenNthCalledWith(1, expect.objectContaining({ execDate: '2026-04-28' }), conn, 3);
             expect(mockTransferRepo.insert).toHaveBeenNthCalledWith(2, expect.objectContaining({ execDate: '2026-04-29' }), conn, 1);
-            expect(query).toHaveBeenNthCalledWith(3, 'SHOW WARNINGS');
+            expect(query).toHaveBeenNthCalledWith(1, 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+            expect(query).toHaveBeenNthCalledWith(4, 'SHOW WARNINGS');
             expect(warn.mock.calls).toEqual([
                 [expect.any(String), { code: 1265, column: 'OperationType', fileOperationNumber: 1 }],
                 [expect.any(String), { code: 1292, column: null, fileOperationNumber: 1 }],
@@ -234,7 +252,6 @@ describe('BankSyncController.upload', () => {
             const retry = await controller.startUpload(file, 'test.xml');
             expect(await finishedJob(retry.jobId)).toMatchObject({ status: 'done' });
         } finally {
-            pool.mockRestore();
             log.mockRestore();
             warn.mockRestore();
         }
@@ -249,6 +266,253 @@ describe('BankSyncController.upload', () => {
 
         const preview = await controller.upload(Buffer.from(SAMPLE_XML, 'utf8'), 'test2.xml', null);
         expect(preview).toMatchObject({ total: 0, alreadyKnown: 1, autoMatched: 0, proposed: 0, unmatched: 0 });
+        expect((controller as any).allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    function exportWith(...operations: Array<{ order: string; exec: string; type?: string; description?: string }>) {
+        return Buffer.from(`<account-history><search><account>99990000000000000000000001</account>
+            <date since="2030-05-01" to="2030-05-31"/></search><operations>${operations.map(operation => `
+            <operation><order-date>${operation.order}</order-date><exec-date>${operation.exec}</exec-date>
+            <type>${operation.type ?? 'Przelew na konto'}</type>
+            <description>${operation.description ?? 'Rachunek nadawcy : 99990000000000000000000002 Tytuł : Przykład'}</description>
+            <amount curr="PLN">${operation.type ? '-' : ''}123.45</amount></operation>`).join('')}
+            </operations></account-history>`);
+    }
+
+    function withPeriod(file: Buffer, periodFrom: string, periodTo: string) {
+        return Buffer.from(file.toString('utf8').replace(/since="[^"]+" to="[^"]+"/, `since="${periodFrom}" to="${periodTo}"`));
+    }
+
+    function storedFrom(file: Buffer, firstId = 99) {
+        const { operations, periodFrom, periodTo } = PkoBpXmlParser.parse(file);
+        return operations.map((op, index) => ({ ...op, id: firstId + index, periodFrom, periodTo, confirmedThrough: periodTo }));
+    }
+
+    test('updates a shifted operation with the parser hash and keeps its existing allocation', async () => {
+        const early = exportWith({ order: '2030-05-10', exec: '2030-05-10' });
+        const oldFile = withPeriod(early, '2030-05-01', '2030-05-10');
+        const newFile = exportWith({ order: '2030-05-12', exec: '2030-05-12' });
+        let [existing] = storedFrom(oldFile);
+        const allocationRepo = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
+        const invoiceRepo = (controller as any).invoiceRepo as jest.Mocked<InvoiceRepository>;
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockImplementation(async () => [existing]);
+        mockTransferRepo.updateImportedOperation.mockImplementation(async (id, operation, period) => {
+            existing = { ...operation, ...period, id, confirmedThrough: period.periodTo };
+        });
+        allocationRepo.findSalesInvoiceIdsForTransfer.mockResolvedValue([73]);
+        invoiceRepo.lockPaymentInvoice.mockResolvedValue({
+            constructor: { name: 'RowDataPacket' },
+            Number: '1/2030', Status: Setup.InvoiceStatus.PAID, CorrectedInvoiceId: null,
+            PaidManually: 0, StatusBeforePayment: null,
+        });
+
+        await expect(controller.upload(newFile, 'later.xml')).resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        const expected = PkoBpXmlParser.parse(newFile).operations[0];
+        expect(mockTransferRepo.updateImportedOperation).toHaveBeenCalledWith(
+            99, expected, { periodFrom: '2030-05-01', periodTo: '2030-05-31' }, expect.anything(),
+        );
+        expect(allocationRepo.findSalesInvoiceIdsForTransfer).toHaveBeenCalledWith(99, expect.anything());
+        expect(recalculatePayment).toHaveBeenCalledWith(73, expect.anything());
+        expect(allocationRepo.insert).not.toHaveBeenCalled();
+        expect(allocationRepo.delete).not.toHaveBeenCalled();
+        expect(mockTransferRepo.updateMatchingStatus).not.toHaveBeenCalled();
+        await expect(controller.upload(Buffer.concat([newFile, Buffer.from('\n')]), 'reexport.xml'))
+            .resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        const intermediate = withPeriod(early, '2030-05-01', '2030-05-20');
+        await expect(controller.upload(intermediate, 'older-after-correction.xml'))
+            .resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        expect(mockTransferRepo.updateImportedOperation).toHaveBeenCalledTimes(1);
+        expect(recalculatePayment).toHaveBeenCalledTimes(1);
+        expect(mockTransferRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test.each(['2030-05-11', '2030-05-31'])('recognizes earlier data with period end %s without rewriting the posted transfer', async periodTo => {
+        const posted = exportWith({ order: '2030-05-12', exec: '2030-05-12' });
+        const early = withPeriod(exportWith({ order: '2030-05-10', exec: '2030-05-10' }), '2030-05-01', periodTo);
+        const allocationRepo = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(posted));
+
+        for (const file of [early, Buffer.concat([early, Buffer.from('\n')]), posted]) {
+            await expect(controller.upload(file, 'known.xml'))
+                .resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        }
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+        expect(mockTransferRepo.insert).not.toHaveBeenCalled();
+        expect(mockTransferRepo.confirmImportPeriod).not.toHaveBeenCalled();
+        expect(allocationRepo.findSalesInvoiceIdsForTransfer).not.toHaveBeenCalled();
+        expect(recalculatePayment).not.toHaveBeenCalled();
+    });
+
+    test('an exact match from a later period also protects the transfer against an intermediate export', async () => {
+        const confirmed = exportWith({ order: '2030-05-10', exec: '2030-05-10' });
+        const [existing] = storedFrom(withPeriod(confirmed, '2030-05-01', '2030-05-10'));
+        const intermediate = withPeriod(
+            exportWith({ order: '2030-05-11', exec: '2030-05-11' }), '2030-05-01', '2030-05-20',
+        );
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue([existing]);
+        mockTransferRepo.confirmImportPeriod.mockImplementation(async (_ids, periodTo) => {
+            existing.confirmedThrough = periodTo;
+        });
+
+        await expect(controller.upload(confirmed, 'confirmed.xml'))
+            .resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        expect(mockTransferRepo.confirmImportPeriod)
+            .toHaveBeenCalledWith([existing.id], '2030-05-31', expect.anything());
+        await expect(controller.upload(intermediate, 'intermediate.xml'))
+            .resolves.toMatchObject({ total: 0, alreadyKnown: 1, needsReview: 0 });
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+        expect(mockTransferRepo.insert).not.toHaveBeenCalled();
+        expect(recalculatePayment).not.toHaveBeenCalled();
+    });
+
+    test.each([null, '[]'])('keeps an exact-match MANUAL inflow restorable and out of duplicates with candidates %s', async candidates => {
+        const { default: Repository } = jest.requireActual<typeof import('../BankTransferRepository')>(
+            '../BankTransferRepository',
+        );
+        const repository = new Repository();
+        const file = exportWith({ order: '2030-05-10', exec: '2030-05-10' });
+        const [stored] = storedFrom(withPeriod(file, '2030-05-01', '2030-05-10'));
+        const row = {
+            constructor: { name: 'RowDataPacket' as const },
+            Id: stored.id, BankStatementId: 11, ExecDate: stored.execDate, OperationHash: stored.operationHash,
+            OperationType: stored.operationType, Direction: stored.direction, Amount: stored.amount, Currency: stored.currency,
+            CounterpartyAccount: stored.counterpartyAccount, MatchingStatus: 'MANUAL', MatchingCandidates: candidates,
+            ReviewAsPayment: 0, ImportNeedsReview: 0, HasAllocations: 0,
+        };
+        const query = jest.mocked(ToolsDb.getQueryCallbackAsync);
+        query.mockResolvedValueOnce([row])
+            .mockResolvedValueOnce([{ ...row, Id: 100, MatchingStatus: 'UNMATCHED' }])
+            .mockResolvedValueOnce([row]);
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue([stored]);
+        mockTransferRepo.confirmImportPeriod.mockImplementation(repository.confirmImportPeriod.bind(repository));
+        mockTransferRepo.findForDuplicateCheck.mockImplementation(repository.findForDuplicateCheck.bind(repository));
+        mockTransferRepo.findById.mockImplementation(repository.findById.bind(repository));
+        const allocationRepo = (controller as any).allocationRepo as jest.Mocked<PaymentAllocationRepository>;
+        allocationRepo.findByTransferId.mockResolvedValue([]);
+
+        await expect(controller.upload(file, 'later-confirmation.xml')).resolves.toMatchObject({ total: 0, alreadyKnown: 1 });
+        const [, , conn] = mockTransferRepo.confirmImportPeriod.mock.calls[0];
+        expect(conn.query).toHaveBeenCalledWith(
+            expect.stringMatching(/SET VersionConfirmedThrough = \?\s+WHERE Id IN/), ['2030-05-31', [stored.id]],
+        );
+        await expect(repository.find()).resolves.toMatchObject([{ canRestoreToQueue: true, matchingStatus: 'MANUAL' }]);
+        await expect(controller.getDuplicates()).resolves.toEqual([]);
+        expect(query.mock.calls[1][0]).toContain("MatchingStatus <> 'MANUAL' OR JSON_LENGTH(MatchingCandidates) > 0");
+        await expect(controller.restoreIncomingTransfer(stored.id)).resolves.toBeUndefined();
+        expect(mockTransferRepo.updateMatchingStatus).toHaveBeenCalledWith(
+            stored.id, 'UNMATCHED', null, null, expect.anything(), true,
+        );
+    });
+
+    test('keeps identical card payments on different order days as two operations', async () => {
+        const card = { type: 'Płatność kartą', description: 'Sklep testowy' };
+        const first = { ...card, order: '2030-05-11', exec: '2030-05-13' };
+        const second = { ...card, order: '2030-05-10', exec: '2030-05-12' };
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(exportWith(first), 19));
+
+        await expect(controller.upload(exportWith(second, first), 'cards.xml'))
+            .resolves.toMatchObject({ total: 1, alreadyKnown: 1, needsReview: 0 });
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+        expect(mockTransferRepo.insert).toHaveBeenCalledTimes(1);
+        expect(mockTransferRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ orderDate: second.order }), expect.anything(), 1);
+    });
+
+    test('keeps both same-day card payments booked across April and May in separate exports', async () => {
+        const card = { type: 'Płatność kartą', order: '2030-04-29', description: 'Sklep testowy Numer karty : 1111' };
+        const april = withPeriod(exportWith({ ...card, exec: '2030-04-30' }), '2030-04-01', '2030-04-30');
+        const may = exportWith({ ...card, exec: '2030-05-01' });
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(april));
+        mockMatcher.propose.mockReturnValue({
+            status: 'CONFIRMED', score: 1, candidates: [], costInvoiceId: 73, allocatedAmount: 123.45,
+        });
+
+        await expect(controller.upload(may, 'may.xml'))
+            .resolves.toMatchObject({ total: 1, alreadyKnown: 0, needsReview: 1, autoMatched: 0 });
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+        expect(mockTransferRepo.insert).toHaveBeenCalledWith(
+            expect.objectContaining({ direction: 'OUT', execDate: '2030-05-01', importNeedsReview: true }),
+            expect.anything(), 1,
+        );
+        expect((controller as any).allocationRepo.insert).not.toHaveBeenCalled();
+    });
+
+    test('keeps same-amount transfers with different invoice titles from one sender', async () => {
+        const prefix = 'Rachunek nadawcy : 99990000000000000000000002 Tytuł : FV ';
+        const first = exportWith({ order: '2030-05-10', exec: '2030-05-10', description: prefix + '1/2030' });
+        const second = exportWith({ order: '2030-05-12', exec: '2030-05-12', description: prefix + '2/2030' });
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(first));
+
+        await expect(controller.upload(second, 'another-payment.xml'))
+            .resolves.toMatchObject({ total: 1, alreadyKnown: 0, needsReview: 0 });
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+    });
+
+    test('reports a date-only match for review when its previous day is outside the file period', async () => {
+        const first = withPeriod(exportWith({ order: '2030-05-10', exec: '2030-05-10' }), '2030-05-01', '2030-05-10');
+        const second = exportWith({ order: '2030-05-12', exec: '2030-05-12' })
+            .toString('utf8').replace('since="2030-05-01"', 'since="2030-05-12"');
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(first));
+
+        await expect(controller.upload(Buffer.from(second), 'separate-day.xml'))
+            .resolves.toMatchObject({ total: 1, alreadyKnown: 0, needsReview: 1 });
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['Dane zaksięgowane Lokalizacja : Adres : Łąkowa 71 Miasto : Testowo Kraj : Polska', 1],
+        ['Dane zaksięgowane Lokalizacja : Adres : Polna 71 Miasto : Testowo Kraj : Polska', 0],
+        ['Dane zaksięgowane Lokalizacja : Adres : Łąkowa 7/1 Miasto : Testowo Kraj : Polska', 0],
+        ['Dane zaksięgowane Lokalizacja : Adres : Łąkowa 7 1 Miasto : Testowo Kraj : Polska', 0],
+        ['Dane zaksięgowane Lokalizacja : Adres : Łąkowa 7–1 Miasto : Testowo Kraj : Polska', 0],
+        ['Dane zaksięgowane Lokalizacja : Adres : Łąkowa 71 Miasto : Testowo Kraj : Polska Numer karty : 2222', 0],
+    ])('uses the card location and number when the description changes', async (description, known) => {
+        const card = { type: 'Płatność kartą', order: '2030-05-10' };
+        const storedFile = exportWith({
+            ...card,
+            exec: '2030-05-12',
+            description: 'Lokalizacja : Adres : LAKOWA 71 Miasto : TESTOWO Kraj : POLSKA Numer karty : 1111',
+        });
+        const file = exportWith({ ...card, exec: '2030-05-10', description });
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(storedFrom(storedFile, 23));
+
+        await expect(controller.upload(file, 'cards.xml'))
+            .resolves.toMatchObject({ total: 1 - known, alreadyKnown: known, needsReview: 0 });
+    });
+
+    test.each([
+        [['2030-05-10', '2030-05-12'], ['2030-05-11']],
+        [['2030-05-11'], ['2030-05-10', '2030-05-12']],
+        [['2030-05-10', '2030-05-12'], ['2030/05/11']],
+    ])('reports ambiguity with stored dates %j and file dates %j', async (storedDates, fileDates) => {
+        const transfers = (dates: string[]) => exportWith(...dates.map(date => ({ order: date, exec: date })));
+        mockStatementRepo.findByChecksum.mockResolvedValue(null);
+        mockTransferRepo.findImportOperations.mockResolvedValue(
+            storedFrom(transfers(storedDates), 1),
+        );
+        mockMatcher.propose.mockReturnValue({
+            status: 'CONFIRMED', score: 1, candidates: [{ invoiceId: 73, score: 1 }], invoiceId: 73, allocatedAmount: 123.45,
+        });
+
+        const result = await controller.upload(transfers(fileDates), 'ambiguous.xml');
+        expect(result).toMatchObject({
+            total: fileDates.length, alreadyKnown: 0, needsReview: fileDates.length, proposed: 0,
+        });
+        expect(result.reviewOperations.map(op => [op.fileOperationNumber, op.execDate]))
+            .toEqual(fileDates.map((date, index) => [index + 1, date.replace(/\//g, '-')]));
+        expect(mockTransferRepo.updateImportedOperation).not.toHaveBeenCalled();
+        expect(mockTransferRepo.insert).toHaveBeenCalledTimes(fileDates.length);
+        for (const [transfer] of mockTransferRepo.insert.mock.calls) {
+            expect(transfer).toMatchObject({ matchingStatus: 'UNMATCHED', importNeedsReview: true });
+        }
         expect((controller as any).allocationRepo.insert).not.toHaveBeenCalled();
     });
 

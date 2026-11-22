@@ -19,6 +19,7 @@ import { extractInvoiceNumbers } from './parsers/pkoBpDescriptionHelpers';
 import OfferBondRepository from '../offers/OfferBond/OfferBondRepository';
 import Setup from '../setup/Setup';
 import { statementCoverage } from './statementCoverage';
+import { reconcileOperations } from './operationReconciliation';
 
 const SAMPLE_SEED = 'bnk-b2-v1';
 const IMPORT_RESULT_TTL_MS = 60 * 60 * 1000;
@@ -43,6 +44,8 @@ export interface UploadPreview {
     statementId: number;
     total: number;
     alreadyKnown: number;
+    needsReview: number;
+    reviewOperations: Pick<PkoBpOperation, 'fileOperationNumber' | 'execDate' | 'amount' | 'currency' | 'direction'>[];
     autoMatched: number;
     proposed: number;
     unmatched: number;
@@ -231,13 +234,55 @@ export default class BankSyncController {
         }
     }
 
-    private async persistUpload({ rawChecksum, document }: PreparedUpload, fileName: string, userId?: number | null): Promise<UploadPreview> {
+    private async withImportTransaction(account: string, work: (conn: mysql.PoolConnection) => Promise<void>): Promise<void> {
+        const conn = await ToolsDb.pool.getConnection();
+        try {
+            // Serialize the candidate read and writes for this account, including the commit.
+            if (!await this.statementRepo.acquireImportLock(account, conn)) {
+                throw new BankSyncError(409, 'Trwa wgrywanie innego wyciągu dla tego rachunku. Spróbuj ponownie za chwilę.');
+            }
+            try {
+                // Read invoice balances after obtaining the invoice lock, even after earlier import reads.
+                await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+                await conn.beginTransaction();
+                try {
+                    await work(conn);
+                    await conn.commit();
+                } catch (error) {
+                    await conn.rollback();
+                    throw error;
+                }
+            } finally {
+                try {
+                    await this.statementRepo.releaseImportLock(account, conn);
+                } catch {
+                    // Closing the connection also releases its advisory lock.
+                    conn.destroy();
+                }
+            }
+        } finally {
+            conn.release();
+        }
+    }
+
+    private async persistUpload(prepared: PreparedUpload, fileName: string, userId?: number | null): Promise<UploadPreview> {
+        try {
+            return await this.persistUploadAttempt(prepared, fileName, userId);
+        } catch (error) {
+            if (!(error instanceof Error && 'code' in error && error.code === 'ER_LOCK_DEADLOCK')) throw error;
+            return this.persistUploadAttempt(prepared, fileName, userId);
+        }
+    }
+
+    private async persistUploadAttempt({ rawChecksum, document }: PreparedUpload, fileName: string, userId?: number | null): Promise<UploadPreview> {
         const parsed = PkoBpXmlParser.parseOperations(document);
 
         const preview: UploadPreview = {
             statementId: 0,
             total: 0,
             alreadyKnown: 0,
+            needsReview: 0,
+            reviewOperations: [],
             autoMatched: 0,
             proposed: 0,
             unmatched: 0,
@@ -272,8 +317,17 @@ export default class BankSyncController {
             ops.push({ op, proposal: this.proposeTransfer(op, pool) });
         }
 
-        await ToolsDb.transaction(async (conn) => {
-            // Insert BankStatement
+        await this.withImportTransaction(parsed.ourAccount, async (conn) => {
+            if (await this.statementRepo.findByChecksum(rawChecksum, conn)) {
+                throw new BankSyncError(409, 'Ten plik został już wgrany');
+            }
+            const existing = operations.length ? await this.transferRepo.findImportOperations(
+                parsed.ourAccount, operations[0].execDate, operations[operations.length - 1].execDate, conn,
+            ) : [];
+            const importMatches = reconcileOperations(operations, existing, parsed);
+            const affectedSalesInvoices = new Set<number>();
+            const confirmedTransfers: number[] = [];
+
             const statement = new BankStatement({
                 fileName,
                 ourAccountNumber: parsed.ourAccount,
@@ -286,7 +340,29 @@ export default class BankSyncController {
             preview.statementId = await this.statementRepo.insert(statement, conn);
 
             for (const { op, proposal } of ops) {
+                const match = importMatches.get(op.operationHash);
+                if (match?.kind === 'known') {
+                    if (parsed.periodTo > match.existing.confirmedThrough) confirmedTransfers.push(match.existing.id);
+                    preview.alreadyKnown++;
+                    continue;
+                }
+                if (match?.kind === 'shifted') {
+                    if (parsed.periodTo > match.existing.confirmedThrough) {
+                        await this.transferRepo.updateImportedOperation(match.existing.id, op, {
+                            periodFrom: parsed.periodFrom, periodTo: parsed.periodTo,
+                        }, conn);
+                        if (supportsInvoiceQueue(op)) {
+                            const ids = await this.allocationRepo.findSalesInvoiceIdsForTransfer(match.existing.id, conn);
+                            for (const id of ids) affectedSalesInvoices.add(id);
+                        }
+                    }
+                    preview.alreadyKnown++;
+                    continue;
+                }
+
                 const matching = this.matchingFields(proposal);
+                // Keep ambiguous operations out of bulk confirmation, with individual allocation still available.
+                if (match?.kind === 'ambiguous' && matching.status !== 'MANUAL') matching.status = 'UNMATCHED';
 
                 const transfer = new BankTransfer({
                     bankStatementId: preview.statementId,
@@ -305,6 +381,7 @@ export default class BankSyncController {
                     matchingStatus: matching.status,
                     matchingScore: matching.score,
                     matchingCandidates: matching.candidates,
+                    importNeedsReview: match?.kind === 'ambiguous',
                 });
 
                 const transferId = await this.transferRepo.insert(transfer, conn, op.fileOperationNumber);
@@ -315,6 +392,10 @@ export default class BankSyncController {
 
                 transfer.id = transferId;
                 preview.total++;
+                if (match?.kind === 'ambiguous') {
+                    const { fileOperationNumber, execDate, amount, currency, direction } = op;
+                    preview.reviewOperations.push({ fileOperationNumber, execDate, amount, currency, direction });
+                }
                 if (FEE_TYPES.has(op.operationType)) preview.fees++;
                 if (op.currency !== 'PLN') preview.foreignCurrency++;
                 let status = matching.status;
@@ -344,10 +425,17 @@ export default class BankSyncController {
                 else if (status === 'MANUAL') preview.otherIncoming++;
                 else preview.incomePending++;
             }
+            if (confirmedTransfers.length) await this.transferRepo.confirmImportPeriod(confirmedTransfers, parsed.periodTo, conn);
+            for (const id of [...affectedSalesInvoices].sort((a, b) => a - b)) {
+                const invoice = await this.invoiceRepo.lockPaymentInvoice(id, conn);
+                if (invoice && !invoice.CorrectedInvoiceId) await InvoicesController.recalculatePayment(id, conn);
+            }
             const periods = await this.statementRepo.findPeriods(conn, parsed.ourAccount);
             preview.gaps = statementCoverage(periods, this.today()).gaps;
         });
 
+        preview.needsReview = preview.reviewOperations.length;
+        preview.reviewOperations.sort((a, b) => a.fileOperationNumber - b.fileOperationNumber);
         return preview;
     }
 
@@ -587,6 +675,7 @@ export default class BankSyncController {
         if (!transfers.length) return [];
         const pool = await this.matcher.loadCandidates(new Set(['IN']));
         const prepare = (rows: typeof transfers) => rows.flatMap(transfer => {
+            if (transfer.importNeedsReview) return [{ ...transfer, matchingCandidates: [] }];
             const proposal = this.proposeTransfer({ ...transfer, amount: transfer.remainingAmount }, pool);
             if (!proposal || proposal.flags?.includes('OWN_TRANSFER')) return [];
             const [best] = proposal.candidates;
@@ -608,17 +697,25 @@ export default class BankSyncController {
         return result;
     }
 
-    async dismissIncomingTransfer(id: number, expectedRemaining: number) {
+    async dismissIncomingTransfer(id: number, expectedRemaining: number, expectedOperationHash?: string) {
         await ToolsDb.transaction(async conn => {
             const transfer = await this.transferRepo.findById(id, conn);
             if (!transfer) throw new BankSyncError(404, 'Nie znaleziono przelewu');
-            if (!supportsInvoiceQueue(transfer)) {
+            if ((expectedOperationHash !== undefined || transfer.importNeedsReview) &&
+                (!transfer.importNeedsReview || expectedOperationHash !== transfer.operationHash)) {
+                throw new BankSyncError(409, 'Status sprawdzania się zmienił. Odśwież kolejkę.');
+            }
+            if (!transfer.importNeedsReview && !supportsInvoiceQueue(transfer)) {
                 throw new BankSyncError(400, 'Przelew nie należy do kolejki decyzji');
             }
             const allocated = await this.allocationRepo.sumAllocatedForTransfer(id, conn);
-            if (transfer.matchingStatus === 'MANUAL' || expectedRemaining <= 0 ||
+            if ((!transfer.importNeedsReview && (transfer.matchingStatus === 'MANUAL' || expectedRemaining <= 0)) ||
                 Math.round((transfer.amount - allocated) * 100) !== Math.round(expectedRemaining * 100)) {
                 throw new BankSyncError(409, 'Przelew się zmienił. Odśwież kolejkę.');
+            }
+            if (transfer.importNeedsReview) {
+                await this.transferRepo.clearImportReview(id, conn);
+                return;
             }
             // Pusta lista odróżnia decyzję użytkownika od opłat i przelewów własnych.
             await this.transferRepo.updateMatchingStatus(id, 'MANUAL', null, [], conn);

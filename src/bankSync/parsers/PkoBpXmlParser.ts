@@ -53,6 +53,13 @@ function computeHash(payload: string): string {
     return createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
+function normalizeOperationDate(value: string): string {
+    const parts = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(value) ?? /^(\d{4})(\d{2})(\d{2})$/.exec(value);
+    if (!parts) return value;
+    const [, year, month, day] = parts;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
 export class PkoBpXmlParser {
     static parse(xmlBuffer: Buffer): PkoBpStatement {
         return this.parseOperations(this.readDocument(xmlBuffer));
@@ -125,8 +132,9 @@ export class PkoBpXmlParser {
 
             return [{
                 fileOperationNumber: index + 1,
-                orderDate: orderDateRaw || null,
-                execDate,
+                // Keep the source strings in the B6 hash, including for already imported files.
+                orderDate: normalizeOperationDate(orderDateRaw) || null,
+                execDate: normalizeOperationDate(execDate),
                 operationType,
                 description,
                 amount: absAmount,

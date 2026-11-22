@@ -1,7 +1,7 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import BankStatement from './BankStatement';
-import { pendingIncomingTransfersSql } from './BankTransferRepository';
+import { pendingTransfersSql } from './BankTransferRepository';
 
 export interface BankStatementListItem {
     id: number;
@@ -32,7 +32,7 @@ export default class BankStatementRepository {
             ) operations ON operations.BankStatementId = s.Id
             LEFT JOIN (
                 SELECT BankStatementId, COUNT(*) AS Total
-                FROM (${pendingIncomingTransfersSql}) queue GROUP BY BankStatementId
+                FROM (${pendingTransfersSql}) queue GROUP BY BankStatementId
             ) pending ON pending.BankStatementId = s.Id
             ORDER BY s.PeriodTo DESC, s.PeriodFrom DESC, s.Id DESC
         `) as BankStatementListItem[];
@@ -51,12 +51,26 @@ export default class BankStatementRepository {
         return rows.map(row => ({ periodFrom: row.periodFrom, periodTo: row.periodTo }));
     }
 
-    async findByChecksum(checksum: string): Promise<BankStatement | null> {
+    async acquireImportLock(account: string, conn: mysql.PoolConnection): Promise<boolean> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            "SELECT GET_LOCK(SHA2(CONCAT(DATABASE(), ':bank-import:', ?), 256), 5) AS acquired",
+            [account],
+        );
+        return Number(rows[0].acquired) === 1;
+    }
+
+    async releaseImportLock(account: string, conn: mysql.PoolConnection): Promise<void> {
+        await conn.query("SELECT RELEASE_LOCK(SHA2(CONCAT(DATABASE(), ':bank-import:', ?), 256))", [account]);
+    }
+
+    async findByChecksum(checksum: string, conn?: mysql.PoolConnection): Promise<BankStatement | null> {
         const sql = mysql.format(
             'SELECT * FROM BankStatements WHERE RawChecksum = ? LIMIT 1',
             [checksum],
         );
-        const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
+        const rows = conn
+            ? (await conn.query<mysql.RowDataPacket[]>(sql))[0]
+            : (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         if (!rows || rows.length === 0) return null;
         return this.mapRow(rows[0]);
     }

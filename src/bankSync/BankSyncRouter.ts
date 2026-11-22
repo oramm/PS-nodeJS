@@ -121,11 +121,15 @@ app.patch('/bank-transfers/:id/dismiss', async (req, res, next) => {
     try {
         const id = Number(req.params.id);
         const expectedRemaining = Number(req.body?.expectedRemaining);
-        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(expectedRemaining) || expectedRemaining <= 0) {
+        const expectedOperationHash = req.body?.expectedOperationHash;
+        const validHash = expectedOperationHash === undefined ||
+            (typeof expectedOperationHash === 'string' && /^[a-f0-9]{64}$/.test(expectedOperationHash));
+        const validAmount = expectedRemaining > 0 || (expectedOperationHash !== undefined && req.body?.expectedRemaining === 0);
+        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(expectedRemaining) || !validAmount || !validHash) {
             res.status(400).json({ error: 'Nieprawidłowy przelew lub kwota' });
             return;
         }
-        await controller.dismissIncomingTransfer(id, expectedRemaining);
+        await controller.dismissIncomingTransfer(id, expectedRemaining, expectedOperationHash);
         res.json({ dismissed: true });
     } catch (err) {
         handleBankSyncError(err, res, next);

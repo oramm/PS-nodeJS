@@ -1,3 +1,11 @@
+## 2026-11-22 – BNK B8, korekty dat operacji bankowych
+
+- Przed wdrożeniem zachować kopię bazy. Import może zmienić daty, odcisk i opis istniejącej operacji oraz przeliczyć datę wpłaty na fakturze. Rekord operacji i przypisania wpłaty zachowują identyfikatory.
+- Tylko wyciąg o późniejszej dacie końcowej może zmienić istniejącą operację. W kontroli po imporcie sprawdzić kolejność obu wersji, datę wpłaty i widoczność niejednoznacznych operacji w kolejce „Do decyzji”.
+- Migracja `src/bankSync/migrations/003_normalize_bank_transfer_import_state.sql` przenosi daty wersji i flagi sprawdzania do kolumn `BankTransfers`. Na czas wdrożenia włączyć tryb serwisowy i zatrzymać uruchamianie zaplanowanych oraz ręcznych zadań bankowych. Poczekać na koniec rozpoczętych importów i przeliczeń, potem zatrzymać instancje starego backendu i procesy robocze korzystające z tabel bankowych. Przy zatrzymanych procesach wykonać `yarn migrate:apply` i `yarn migrate:verify`. Wdrożyć i uruchomić nowy backend po zielonej bramce release Heroku. Po kontroli kolejki i przywracania wpływów wznowić ruch i zadania.
+- Lokalnie wykonano 003 na `development`, `localhost/envikons_local`. Runner potwierdził 110 migracji, 0 oczekujących, 0 rozbieżnych. Sprawdzono pięć kolumn i przeniesienie jednego starszego obiektu JSON. Liczby operacji oraz przypisań wpłat były takie same przed migracją i po niej.
+- W razie wycofania do wersji czytającej stan z JSON-a odtworzyć go z nowych kolumn przed ponownym uruchomieniem starego kodu. Zatwierdzone aktualizacje operacji odzyskać z kopii sprzed importu po ich identyfikatorach, a następnie przeliczyć wpłaty na powiązanych fakturach.
+
 ## 2026-11-22 - wydanie ENVI Podpis 1.4.6
 
 - Po przekroczeniu limitu czasu odpowiedzi serwer może dokończyć zapis. W 1.4.6 program po niejednoznacznej odpowiedzi odczytuje stan tego samego zlecenia przez maksymalnie 2 minuty. Jeśli PS w tym czasie nie potwierdzi wyniku, program kieruje użytkownika do wyniku zlecenia w PS.

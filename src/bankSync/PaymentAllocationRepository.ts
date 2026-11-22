@@ -35,6 +35,14 @@ export default class PaymentAllocationRepository {
         return (rows || []).map((r: any) => this.mapRow(r));
     }
 
+    async findSalesInvoiceIdsForTransfer(transferId: number, conn: mysql.PoolConnection): Promise<number[]> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            'SELECT InvoiceId FROM PaymentAllocations WHERE BankTransferId = ? AND InvoiceId IS NOT NULL FOR UPDATE',
+            [transferId],
+        );
+        return rows.map(row => Number(row.InvoiceId));
+    }
+
     async findByInvoiceId(invoiceId: number): Promise<PaymentAllocation[]> {
         const sql = mysql.format(
             'SELECT * FROM PaymentAllocations WHERE InvoiceId = ?',

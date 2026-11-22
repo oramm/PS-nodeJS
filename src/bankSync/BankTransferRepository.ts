@@ -1,25 +1,27 @@
 import ToolsDb from '../tools/ToolsDb';
 import mysql from 'mysql2/promise';
 import BankTransfer, { MatchingCandidate, MatchingStatus, supportsInvoiceQueue } from './BankTransfer';
+import { EXECUTION_DATE_WINDOW_DAYS, type StatementPeriod, type StoredOperation } from './operationReconciliation';
+import type { PkoBpOperation } from './parsers/PkoBpXmlParser';
 
-const reviewAsPaymentSql = "COALESCE(JSON_EXTRACT(MatchingCandidates, '$.reviewAsPayment'), 0) = 1";
 const transferInsertColumns = [
     'BankStatementId', 'OrderDate', 'ExecDate', 'OperationType', 'Direction', 'Amount', 'Currency',
     'CounterpartyAccount', 'CounterpartyName', 'CounterpartyNip', 'Title', 'Description',
-    'OperationHash', 'MatchingStatus', 'MatchingScore', 'MatchingCandidates',
+    'OperationHash', 'MatchingStatus', 'MatchingScore', 'MatchingCandidates', 'ReviewAsPayment', 'ImportNeedsReview',
 ];
 
 export class BankTransferInsertWarning extends Error {}
 
-export const pendingIncomingTransfersSql = `
+export const pendingTransfersSql = `
     SELECT bt.*, bt.Amount - COALESCE(allocated.Total, 0) AS RemainingAmount
     FROM BankTransfers bt
     LEFT JOIN (
         SELECT BankTransferId, SUM(AllocatedAmount) AS Total
         FROM PaymentAllocations GROUP BY BankTransferId
     ) allocated ON allocated.BankTransferId = bt.Id
-    WHERE bt.Direction = 'IN' AND bt.Currency = 'PLN' AND bt.MatchingStatus <> 'MANUAL'
-      AND bt.Amount > COALESCE(allocated.Total, 0)
+    WHERE (bt.Direction = 'IN' AND bt.Currency = 'PLN' AND bt.MatchingStatus <> 'MANUAL'
+      AND bt.Amount > COALESCE(allocated.Total, 0))
+      OR bt.ImportNeedsReview = 1
 `;
 
 export interface BankTransferFilters {
@@ -39,6 +41,46 @@ export default class BankTransferRepository {
         const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         if (!rows || rows.length === 0) return null;
         return this.mapRow(rows[0]);
+    }
+
+    async findImportOperations(account: string, firstDate: string, lastDate: string, conn: mysql.PoolConnection): Promise<StoredOperation[]> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            SELECT bt.Id AS id, DATE_FORMAT(bt.OrderDate, '%Y-%m-%d') AS orderDate,
+                DATE_FORMAT(bt.ExecDate, '%Y-%m-%d') AS execDate, bt.OperationType AS operationType,
+                bt.Direction AS direction, bt.Amount AS amount, bt.Currency AS currency,
+                bt.CounterpartyAccount AS counterpartyAccount, bt.Description AS description,
+                bt.OperationHash AS operationHash,
+                DATE_FORMAT(COALESCE(bt.VersionSourceFrom, bs.PeriodFrom), '%Y-%m-%d') AS periodFrom,
+                DATE_FORMAT(COALESCE(bt.VersionSourceTo, bs.PeriodTo), '%Y-%m-%d') AS periodTo,
+                DATE_FORMAT(COALESCE(bt.VersionConfirmedThrough, bt.VersionSourceTo, bs.PeriodTo), '%Y-%m-%d') AS confirmedThrough
+            FROM BankTransfers bt JOIN BankStatements bs ON bs.Id = bt.BankStatementId
+            WHERE bs.OurAccountNumber = ?
+              AND bt.ExecDate BETWEEN DATE_SUB(?, INTERVAL ? DAY) AND DATE_ADD(?, INTERVAL ? DAY)
+        `, [account, firstDate, EXECUTION_DATE_WINDOW_DAYS, lastDate, EXECUTION_DATE_WINDOW_DAYS]);
+        return rows.map(row => ({ ...row, amount: Number(row.amount) }) as StoredOperation);
+    }
+
+    async updateImportedOperation(id: number, operation: PkoBpOperation, period: StatementPeriod, conn: mysql.PoolConnection): Promise<void> {
+        // Record the accepted version's source without moving the transfer to a different statement.
+        const [result] = await conn.query<mysql.ResultSetHeader>(`
+            UPDATE BankTransfers SET OrderDate = ?, ExecDate = ?, Title = ?, Description = ?, OperationHash = ?,
+                CounterpartyName = ?, CounterpartyNip = ?,
+                VersionSourceFrom = ?, VersionSourceTo = ?, VersionConfirmedThrough = ?
+            WHERE Id = ?
+        `, [
+            operation.orderDate, operation.execDate, operation.title, operation.description, operation.operationHash,
+            operation.counterpartyName, operation.counterpartyNip, period.periodFrom, period.periodTo, period.periodTo, id,
+        ]);
+        if (result.affectedRows !== 1) throw new Error('Could not update the imported bank transfer');
+        await this.checkWriteWarnings(result, conn, operation.fileOperationNumber);
+    }
+
+    async confirmImportPeriod(ids: number[], periodTo: string, conn: mysql.PoolConnection): Promise<void> {
+        // Exact matches advance the version cutoff, but do not change the source used to check date coverage.
+        await conn.query(`
+            UPDATE BankTransfers SET VersionConfirmedThrough = ?
+            WHERE Id IN (?)
+        `, [periodTo, ids]);
     }
 
     async findById(id: number, conn?: mysql.PoolConnection): Promise<BankTransfer | null> {
@@ -93,7 +135,7 @@ export default class BankTransferRepository {
 
     async findForDuplicateCheck(): Promise<BankTransfer[]> {
         const sql = `SELECT * FROM BankTransfers
-            WHERE MatchingStatus <> 'MANUAL' OR MatchingCandidates IS NOT NULL
+            WHERE MatchingStatus <> 'MANUAL' OR JSON_LENGTH(MatchingCandidates) > 0
             ORDER BY Amount DESC, ExecDate ASC`;
         const rows = (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         return (rows || []).map((r: any) => this.mapRow(r));
@@ -119,7 +161,7 @@ export default class BankTransferRepository {
 
     async findPending(): Promise<Array<BankTransfer & { remainingAmount: number }>> {
         const rows = await ToolsDb.getQueryCallbackAsync(
-            `${pendingIncomingTransfersSql} ORDER BY bt.ExecDate DESC, bt.Id DESC`,
+            `${pendingTransfersSql} ORDER BY bt.ExecDate DESC, bt.Id DESC`,
         ) as mysql.RowDataPacket[];
         return rows.map(row => Object.assign(this.mapRow(row), {
             remainingAmount: Number(row.RemainingAmount),
@@ -130,7 +172,7 @@ export default class BankTransferRepository {
         const [rows] = await conn.query<mysql.RowDataPacket[]>(`
             SELECT bt.* FROM BankTransfers bt
             WHERE bt.Direction = 'IN' AND bt.MatchingStatus IN ('UNMATCHED','PROPOSED')
-              AND NOT (${reviewAsPaymentSql})
+              AND bt.ReviewAsPayment = 0 AND bt.ImportNeedsReview = 0
               AND NOT EXISTS (SELECT 1 FROM PaymentAllocations pa WHERE pa.BankTransferId = bt.Id)
             ORDER BY bt.ExecDate, bt.OperationHash
             FOR UPDATE
@@ -142,7 +184,7 @@ export default class BankTransferRepository {
         const sql = mysql.format(
             `INSERT INTO BankTransfers
                 (${transferInsertColumns.join(', ')})
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [
                 transfer.bankStatementId,
                 transfer.orderDate ?? null,
@@ -160,30 +202,35 @@ export default class BankTransferRepository {
                 transfer.matchingStatus,
                 transfer.matchingScore ?? null,
                 transfer.matchingCandidates ? JSON.stringify(transfer.matchingCandidates) : null,
+                transfer.reviewAsPayment ? 1 : 0,
+                transfer.importNeedsReview ? 1 : 0,
             ],
         );
         try {
             const [result] = await conn.query<mysql.ResultSetHeader>(sql);
-            if (result.warningStatus > 0) {
-                try {
-                    const [warnings] = await conn.query<mysql.RowDataPacket[]>('SHOW WARNINGS');
-                    for (const warning of warnings) {
-                        // Message może zawierać wartość pola. Z zapisu DB pobieramy wyłącznie znaną nazwę kolumny.
-                        const columnName = /\bcolumn ['\x60]([A-Za-z]+)['\x60] at row \d+\s*$/i.exec(warning.Message)?.[1];
-                        const column = transferInsertColumns.find(name => name.toLowerCase() === columnName?.toLowerCase());
-                        console.warn('[BankSync] Ostrzeżenie zapisu operacji wyciągu', {
-                            code: Number(warning.Code), column: column ?? null, fileOperationNumber,
-                        });
-                    }
-                } finally {
-                    throw new BankTransferInsertWarning();
-                }
-            }
+            await this.checkWriteWarnings(result, conn, fileOperationNumber);
             return result.insertId;
         } catch (error) {
             // Tylko istniejący odcisk jest do pominięcia. Inny błąd wycofuje cały import.
             if (error instanceof Error && 'code' in error && error.code === 'ER_DUP_ENTRY') return 0;
             throw error;
+        }
+    }
+
+    private async checkWriteWarnings(result: mysql.ResultSetHeader, conn: mysql.PoolConnection, fileOperationNumber: number): Promise<void> {
+        if (!(result.warningStatus > 0)) return;
+        try {
+            const [warnings] = await conn.query<mysql.RowDataPacket[]>('SHOW WARNINGS');
+            for (const warning of warnings) {
+                // Message może zawierać wartość pola. Z zapisu DB pobieramy wyłącznie znaną nazwę kolumny.
+                const columnName = /\bcolumn ['\x60]([A-Za-z]+)['\x60] at row \d+\s*$/i.exec(warning.Message)?.[1];
+                const column = transferInsertColumns.find(name => name.toLowerCase() === columnName?.toLowerCase());
+                console.warn('[BankSync] Ostrzeżenie zapisu operacji wyciągu', {
+                    code: Number(warning.Code), column: column ?? null, fileOperationNumber,
+                });
+            }
+        } finally {
+            throw new BankTransferInsertWarning();
         }
     }
 
@@ -196,20 +243,24 @@ export default class BankTransferRepository {
         reviewAsPayment = false,
     ): Promise<void> {
         const candidatesJson = candidates ? JSON.stringify(candidates) : null;
-        // Keep a restored transfer in manual review across assignments and their removal.
+        // Once restored as a payment, subsequent status changes keep that classification.
         const sql = mysql.format(
-            `UPDATE BankTransfers SET MatchingStatus=?, MatchingScore=?, MatchingCandidates=
-                CASE WHEN ? OR (${reviewAsPaymentSql})
-                    THEN JSON_OBJECT('reviewAsPayment', 1, 'candidates', JSON_EXTRACT(?, '$'))
-                    ELSE ?
-                END WHERE Id=?`,
-            [status, score ?? null, reviewAsPayment, candidatesJson, candidatesJson, id],
+            `UPDATE BankTransfers SET MatchingStatus=?, MatchingScore=?, MatchingCandidates=?,
+                ReviewAsPayment=GREATEST(ReviewAsPayment, ?), ImportNeedsReview=0 WHERE Id=?`,
+            [status, score ?? null, candidatesJson, reviewAsPayment ? 1 : 0, id],
         );
         if (conn) {
             await conn.query(sql);
         } else {
             await ToolsDb.getQueryCallbackAsync(sql);
         }
+    }
+
+    async clearImportReview(id: number, conn: mysql.PoolConnection): Promise<void> {
+        await conn.query(
+            'UPDATE BankTransfers SET ImportNeedsReview = 0 WHERE Id = ?',
+            [id],
+        );
     }
 
     private static dateToStr(val: any): string | null {
@@ -224,17 +275,12 @@ export default class BankTransferRepository {
 
     private mapRow(row: any): BankTransfer {
         let candidates: MatchingCandidate[] | null = null;
-        let reviewAsPayment: boolean | undefined;
         if (row.MatchingCandidates) {
             try {
                 const data = typeof row.MatchingCandidates === 'string'
                     ? JSON.parse(row.MatchingCandidates)
                     : row.MatchingCandidates;
                 if (Array.isArray(data)) candidates = data;
-                else if (data?.reviewAsPayment === 1) {
-                    reviewAsPayment = true;
-                    if (Array.isArray(data.candidates)) candidates = data.candidates;
-                }
             } catch {
                 candidates = null;
             }
@@ -257,7 +303,8 @@ export default class BankTransferRepository {
             matchingStatus: row.MatchingStatus,
             matchingScore: row.MatchingScore ?? null,
             matchingCandidates: candidates,
-            reviewAsPayment,
+            reviewAsPayment: Number(row.ReviewAsPayment) === 1 || undefined,
+            importNeedsReview: Number(row.ImportNeedsReview) === 1 || undefined,
         });
     }
 }

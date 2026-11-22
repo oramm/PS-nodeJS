@@ -44,6 +44,7 @@ export default class BankTransfer {
     matchingScore?: number | null;
     matchingCandidates?: MatchingCandidate[] | null;
     reviewAsPayment?: boolean;
+    importNeedsReview?: boolean;
 
     constructor(data: Partial<BankTransfer> & { bankStatementId: number; execDate: string; operationType: string; direction: 'IN' | 'OUT'; amount: number; currency: string; operationHash: string }) {
         this.id = data.id;
@@ -64,5 +65,6 @@ export default class BankTransfer {
         this.matchingScore = data.matchingScore ?? null;
         this.matchingCandidates = data.matchingCandidates ?? null;
         this.reviewAsPayment = data.reviewAsPayment;
+        this.importNeedsReview = data.importNeedsReview;
     }
 }
