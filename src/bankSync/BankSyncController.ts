@@ -9,7 +9,7 @@ import PaymentAllocation from './PaymentAllocation';
 import BankStatementRepository from './BankStatementRepository';
 import BankTransferRepository, { BankTransferInsertWarning } from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
-import { TransferMatcher, CandidatePool, MatchProposal } from './matching/TransferMatcher';
+import { TransferMatcher, CandidatePool, MatchProposal, confirmInstallments } from './matching/TransferMatcher';
 import { invoiceNumberSignal, matchesSalesAmount } from './matching/signals';
 import InvoiceRepository from '../invoices/InvoiceRepository';
 import InvoicesController from '../invoices/InvoicesController';
@@ -322,6 +322,7 @@ export default class BankSyncController {
             if (index > 0 && index % 25 === 0) await setImmediate();
             ops.push({ op, proposal: this.proposeTransfer(op, pool) });
         }
+        confirmInstallments(ops, ({ op }) => op.amount);
 
         await this.withImportTransaction(parsed.ourAccount, async (conn) => {
             if (await this.statementRepo.findByChecksum(rawChecksum, conn)) {
@@ -476,13 +477,15 @@ export default class BankSyncController {
             titleSource: 'title' | 'bank-reference' | null; amount: number; date: string;
         }> = [];
         let allocationsOutsidePool = 0;
+        const planned = transfers.map(transfer => ({ amount: transfer.amount, proposal: this.proposeTransfer(transfer, pool) }));
+        confirmInstallments(planned, ({ amount }) => amount);
 
-        for (const transfer of transfers) {
+        for (const [index, transfer] of transfers.entries()) {
             const statement = byStatement[transfer.bankStatementId] ??= {
                 analyzed: 0, automatic: 0, rejectedByAllocationGuard: 0,
             };
             statement.analyzed++;
-            const proposal = this.proposeTransfer(transfer, pool);
+            const { proposal } = planned[index];
             const matching = this.matchingFields(proposal);
             const result = proposal?.status === 'CONFIRMED'
                 ? await this.persistAutoAllocation(transfer, proposal, conn)
@@ -916,6 +919,7 @@ export default class BankSyncController {
                 amount: transfer.amount,
                 source: 'AUTO',
                 confidence: Math.round(proposal.score * 100),
+                installment: proposal.flags?.includes('INSTALLMENT'),
             }, conn);
             return result ? { sale: result } : null;
         }
@@ -944,6 +948,8 @@ export default class BankSyncController {
             createdBy?: number | null;
             confidence?: number;
             expectedRemaining?: number;
+            /** Rata z planu confirmInstallments: automat bez wymogu kwoty równej należności, ale nie ponad nią. */
+            installment?: boolean;
         },
         conn: mysql.PoolConnection,
     ): Promise<SalesAllocation | null> {
@@ -961,7 +967,9 @@ export default class BankSyncController {
             transferRemaining !== Math.round(request.expectedRemaining * 100)) {
             throw new BankSyncError(409, 'Kwota do przypisania się zmieniła. Odśwież przelew.');
         }
-        if (request.source === 'AUTO' && !matchesSalesAmount(transferRemaining / 100, invoiceRemaining / 100)) return null;
+        if (request.source === 'AUTO' && (request.installment
+            ? transferRemaining > invoiceRemaining + Setup.Bank.matching.amountToleranceGrosze
+            : !matchesSalesAmount(transferRemaining / 100, invoiceRemaining / 100))) return null;
 
         const allocatedCents = Math.min(Math.round(request.amount * 100), invoiceRemaining, transferRemaining);
         if (allocatedCents <= 0) return null;

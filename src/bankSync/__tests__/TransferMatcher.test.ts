@@ -8,7 +8,7 @@ jest.mock('../../tools/ToolsDb', () => ({
 }));
 jest.mock('../../invoices/InvoiceRepository');
 
-import { TransferMatcher, MatchInput, CandidatePool } from '../matching/TransferMatcher';
+import { TransferMatcher, MatchInput, CandidatePool, confirmInstallments } from '../matching/TransferMatcher';
 import InvoiceRepository from '../../invoices/InvoiceRepository';
 import { extractInvoiceNumbers } from '../parsers/pkoBpDescriptionHelpers';
 import Setup from '../../setup/Setup';
@@ -174,6 +174,22 @@ describe('TransferMatcher - wpływy na faktury sprzedaży', () => {
         const known = pool({ ...row(4, '10/2026', 35670), EntityName: 'ZWIK Nowa Ruda', KnownAccounts: '11102000000000000000000001' });
         expect(matcher.propose(incoming('10/2026', 10000, { counterpartyName: 'ZAKŁAD WODOCIĄGÓW I KANALIZACJI' }), known))
             .toMatchObject({ status: 'PROPOSED', candidates: [{ invoiceId: 4 }] });
+    });
+
+
+    test('raty jednej faktury od płatnika idą automatem tylko, gdy razem dają pozostałą należność', () => {
+        const candidates = pool({ ...row(1, '272/2026', 13530), EntityName: 'ZWIK PRUDNIK SPÓŁKA Z O.O.' });
+        const rate = (amount: number) => ({
+            amount, proposal: matcher.propose(incoming('272/2026 częściowa zapłata', amount, { counterpartyName: 'ZWIK PRUDNIK SP. Z O.O.' }), candidates),
+        });
+        const all = [3530, 2000, 2000, 2000, 4000].map(rate);
+        confirmInstallments(all, ({ amount }) => amount);
+        expect(all.map(({ proposal }) => [proposal?.status, proposal?.invoiceId, proposal?.allocatedAmount]))
+            .toEqual([3530, 2000, 2000, 2000, 4000].map(amount => ['CONFIRMED', 1, amount]));
+
+        const short = [3530, 2000, 2000].map(rate);
+        confirmInstallments(short, ({ amount }) => amount);
+        expect(short.map(({ proposal }) => proposal?.status)).toEqual(['PROPOSED', 'PROPOSED', 'PROPOSED']);
     });
 
 });

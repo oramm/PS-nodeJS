@@ -139,6 +139,38 @@ function scoreInvoice(
     return { score: total / weightSum, flags };
 }
 
+/**
+ * Raty jednej faktury: każda z numerem faktury od tego samego płatnika, a razem dokładnie pozostała należność.
+ * Wtedy każda rata idzie automatem ze swoją kwotą; w każdym innym razie zostaje propozycja.
+ */
+export function confirmInstallments<T extends { proposal: MatchProposal | null }>(
+    items: T[],
+    amountOf: (item: T) => number,
+    toleranceGrosze = Setup.Bank.matching.amountToleranceGrosze,
+): void {
+    const groups = new Map<number, { remaining: number; members: typeof items }>();
+    for (const item of items) {
+        if (item.proposal?.status !== 'PROPOSED') continue;
+        const hits = item.proposal.candidates.filter(({ invoiceId, flags }) => invoiceId
+            && flags?.includes('INVOICE_NUMBER') && flags.includes('SAME_PAYER') && !flags.includes('OVERPAYMENT'));
+        if (hits.length !== 1) continue;
+        const [{ invoiceId, remainingAmount }] = hits;
+        const group = groups.get(invoiceId!) ?? { remaining: remainingAmount ?? 0, members: [] };
+        group.members.push(item);
+        groups.set(invoiceId!, group);
+    }
+    for (const [invoiceId, { remaining, members }] of groups) {
+        const sum = members.reduce((total, member) => total + Math.round(amountOf(member) * 100), 0);
+        if (members.length < 2 || Math.abs(sum - Math.round(remaining * 100)) > toleranceGrosze) continue;
+        for (const member of members) {
+            member.proposal = {
+                ...member.proposal!, status: 'CONFIRMED', invoiceId, allocatedAmount: amountOf(member),
+                flags: [...(member.proposal!.flags ?? []), 'INSTALLMENT'],
+            };
+        }
+    }
+}
+
 export class TransferMatcher {
     private invoiceRepo = new InvoiceRepository();
 
