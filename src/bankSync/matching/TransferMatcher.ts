@@ -63,12 +63,38 @@ const WEIGHTS_OUT = {
 };
 
 type WeightMap = typeof WEIGHTS_IN;
+
+const nameTokens = (name: string | null | undefined) => new Set(name?.toLowerCase().match(/\p{L}{5,}/gu) ?? []);
+
+/** Ile różnych nabywców w puli ma dane słowo w nazwie; liczone raz na pulę. */
+const tokenOwners = new WeakMap<SalesPaymentCandidate[], Map<string, number>>();
+function tokenOwnerCounts(rows: SalesPaymentCandidate[]): Map<string, number> {
+    let counts = tokenOwners.get(rows);
+    if (!counts) {
+        counts = new Map();
+        for (const name of new Set(rows.map(row => row.EntityName))) {
+            for (const token of nameTokens(name)) counts.set(token, (counts.get(token) ?? 0) + 1);
+        }
+        tokenOwners.set(rows, counts);
+    }
+    return counts;
+}
+
+/** Ten sam płatnik: rachunek znany z wcześniejszych wpłat tego nabywcy albo słowo nazwy, które ma tylko jeden nabywca. */
+function isSamePayer(input: MatchInput, row: SalesPaymentCandidate, rows: SalesPaymentCandidate[]): boolean {
+    const account = input.counterpartyAccount?.replace(/\s/g, '');
+    if (account && row.KnownAccounts?.split(',').includes(account)) return true;
+    const owners = tokenOwnerCounts(rows);
+    const entityTokens = nameTokens(row.EntityName);
+    return [...nameTokens(input.counterpartyName)].some(token => entityTokens.has(token) && owners.get(token) === 1);
+}
 type BankSettings = typeof Setup.Bank;
 
 function scoreInvoice(
     input: MatchInput,
     inv: {
         invoiceNumber: string;
+        ksefNumber?: string | null;
         entityTaxNumber: string | null;
         entityBankAccount: string | null;
         entityName: string | null;
@@ -76,6 +102,7 @@ function scoreInvoice(
         paymentDeadline: string | null;
         grossAmount: number;
         alreadyPaid: number;
+        samePayer?: boolean;
     },
     weights: WeightMap,
     settings: BankSettings,
@@ -83,7 +110,10 @@ function scoreInvoice(
     const remaining = Math.max(0, inv.grossAmount - inv.alreadyPaid);
     const flags: string[] = [];
 
-    const s_invoiceNum = invoiceNumberSignal(input.invoiceNumbers, inv.invoiceNumber);
+    const s_invoiceNum = Math.max(
+        invoiceNumberSignal(input.invoiceNumbers, inv.invoiceNumber),
+        invoiceNumberSignal(input.invoiceNumbers, inv.ksefNumber),
+    );
     const s_nip = input.direction === 'OUT' ? nipSignal(input.counterpartyNip, inv.entityTaxNumber) : 0;
     const s_account = accountSignal(input.counterpartyAccount, inv.entityBankAccount);
     const s_name = nameSimilarity(input.counterpartyName, inv.entityName);
@@ -94,6 +124,7 @@ function scoreInvoice(
     if (s_invoiceNum === 1) flags.push('INVOICE_NUMBER');
     if (matchesSalesAmount(input.amount, remaining, toleranceGrosze)) flags.push('EQUAL_AMOUNT');
     if (input.amount > remaining + 0.01) flags.push('OVERPAYMENT');
+    if (inv.samePayer) flags.push('SAME_PAYER');
 
     const total =
         s_invoiceNum * weights.invoiceNumber +
@@ -152,6 +183,7 @@ export class TransferMatcher {
         return this.buildProposal(input, rows, WEIGHTS_IN, (row) => ({
             invoiceId: row.Id,
             invoiceNumber: row.InvoiceNumber,
+            ksefNumber: row.KsefNumber,
             grossAmount: Number(row.DueAmount),
             originalAmount: row.OriginalAmount === undefined ? undefined : Number(row.OriginalAmount),
             alreadyPaid: Number(row.AllocatedAmount),
@@ -161,6 +193,7 @@ export class TransferMatcher {
             issueDate: row.IssueDate,
             paymentDeadline: row.PaymentDeadline,
             contractNumber: row.ContractNumber,
+            samePayer: isSamePayer(input, row, rows),
         }), 'invoice', settings);
     }
 
@@ -186,6 +219,7 @@ export class TransferMatcher {
             invoiceId?: number;
             costInvoiceId?: number;
             invoiceNumber: string;
+            ksefNumber?: string | null;
             grossAmount: number;
             originalAmount?: number;
             alreadyPaid: number;
@@ -195,6 +229,7 @@ export class TransferMatcher {
             issueDate: string | null;
             paymentDeadline: string | null;
             contractNumber?: string | null;
+            samePayer?: boolean;
         },
         type: 'invoice' | 'costInvoice',
         settings: BankSettings,
@@ -229,8 +264,13 @@ export class TransferMatcher {
             if (hasInvoiceNum || (hasNip && hasAccount)) auto = best;
         }
 
+        // Ten sam płatnik z kwotą należności albo z numerem i częścią kwoty: propozycja do kliknięcia, nigdy automat (G5).
+        const payerSales = type === 'invoice' && exactSales.length === 0 ? scored.filter(({ flags }) =>
+            flags.includes('SAME_PAYER') && (flags.includes('EQUAL_AMOUNT')
+                || flags.includes('INVOICE_NUMBER') && !flags.includes('OVERPAYMENT')),
+        ) : [];
         const ranked = auto ? [auto, ...scored.filter((candidate) => candidate !== auto)] : scored;
-        const options = exactSales.length > 1 ? exactSales : ranked.filter((candidate, index) =>
+        const options = exactSales.length > 1 ? exactSales : payerSales.length ? payerSales.slice(0, TOP_N) : ranked.filter((candidate, index) =>
             index < TOP_N || Math.round(candidate.score * 100) === Math.round(best.score * 100) && best.score >= cfg.proposeThreshold,
         );
         const candidates: MatchingCandidate[] = options.map(({ mapped, score, flags }) => ({
@@ -261,6 +301,9 @@ export class TransferMatcher {
             };
         }
 
+        if (payerSales.length) {
+            return { status: 'PROPOSED', score: payerSales[0].score, candidates, flags: payerSales[0].flags };
+        }
         if (exactSales.length > 1 || best.score >= cfg.proposeThreshold) {
             return { status: 'PROPOSED', score: best.score, candidates, flags: best.flags };
         }

@@ -808,16 +808,29 @@ describe('BankSyncController manual sales allocations', () => {
         expect(matcher.propose).toHaveBeenCalledWith(expect.objectContaining({ amount: 50 }), undefined);
     });
 
-    test('keeps a tender deposit return out of the invoice queue unless the user restored it', async () => {
+    test.each([
+        'zwr.wadium -NP/321/13/2026',
+        'Zwrot mylnego przelewu',
+    ])('keeps %s out of the invoice queue unless the user restored it', async (title) => {
         const matcher = (controller as any).matcher as jest.Mocked<TransferMatcher>;
         matcher.propose.mockReturnValue({ status: 'PROPOSED', score: 0.6, candidates: [{ invoiceId: 11, score: 0.6 }] });
-        Object.assign(transfer, { title: 'zwr.wadium -NP/321/13/2026', matchingStatus: 'UNMATCHED', remainingAmount: 150 });
+        Object.assign(transfer, { title, matchingStatus: 'UNMATCHED', remainingAmount: 150 });
         transferRepo.findPending.mockResolvedValue([transfer as BankTransfer & { remainingAmount: number }]);
         await expect(controller.getPendingTransfers()).resolves.toEqual([]);
         expect(matcher.propose).not.toHaveBeenCalled();
 
         transfer.reviewAsPayment = true;
         await expect(controller.getPendingTransfers()).resolves.toMatchObject([{ id: 1, matchingStatus: 'PROPOSED' }]);
+    });
+
+    test('keeps cash-machine cancellations and a one-grosz rounding remainder out of the invoice queue', async () => {
+        const matcher = (controller as any).matcher as jest.Mocked<TransferMatcher>;
+        matcher.propose.mockReturnValue({ status: 'PROPOSED', score: 0.6, candidates: [{ invoiceId: 11, score: 0.6 }] });
+        const cancelled = Object.assign(new BankTransfer({ ...transfer, id: 2, operationType: 'Anulowanie wypłaty w bankomacie - kod mobilny' }),
+            { remainingAmount: 150 });
+        const rounding = Object.assign(new BankTransfer({ ...transfer, id: 3, amount: 40000 }), { remainingAmount: 0.01 });
+        transferRepo.findPending.mockResolvedValue([cancelled, rounding] as Array<BankTransfer & { remainingAmount: number }>);
+        await expect(controller.getPendingTransfers()).resolves.toEqual([]);
     });
 
     test.each([

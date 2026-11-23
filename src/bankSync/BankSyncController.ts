@@ -23,9 +23,11 @@ import { reconcileOperations } from './operationReconciliation';
 
 const SAMPLE_SEED = 'bnk-b2-v1';
 
-/** Przelew własny i wadium nie trafiają do kolejki faktur. */
-const isNonInvoiceTransfer = (proposal: MatchProposal) =>
-    !!proposal.flags?.some(flag => flag === 'OWN_TRANSFER' || flag === 'WADIUM');
+/** Przelew własny, wadium i zwrot nie trafiają do kolejki faktur. */
+const NON_INVOICE_FLAGS = new Set(['OWN_TRANSFER', 'WADIUM', 'REFUND', 'NOT_A_TRANSFER']);
+/** Wpływy, które nie są przelewem od klienta; w danych 2025-2026 żaden nie opłacił faktury. */
+const NON_TRANSFER_TYPES = new Set(['Anulowanie wypłaty w bankomacie - kod mobilny', 'Zwrot w terminalu', 'Korekta']);
+const isNonInvoiceTransfer = (proposal: MatchProposal) => !!proposal.flags?.some(flag => NON_INVOICE_FLAGS.has(flag));
 const IMPORT_RESULT_TTL_MS = 60 * 60 * 1000;
 const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -680,6 +682,9 @@ export default class BankSyncController {
         const pool = await this.matcher.loadCandidates(new Set(['IN']));
         const prepare = (rows: typeof transfers) => rows.flatMap(transfer => {
             if (transfer.importNeedsReview) return [{ ...transfer, matchingCandidates: [] }];
+            // Grosz zaokrąglenia po pełnej zapłacie (np. 40 000,00 na fakturę 39 999,99) nie jest do decyzji.
+            if (Math.round(transfer.remainingAmount * 100) <= Setup.Bank.matching.amountToleranceGrosze
+                && transfer.amount > transfer.remainingAmount) return [];
             const proposal = this.proposeTransfer({ ...transfer, amount: transfer.remainingAmount }, pool);
             if (!proposal || isNonInvoiceTransfer(proposal)) return [];
             const [best] = proposal.candidates;
@@ -861,9 +866,18 @@ export default class BankSyncController {
 
     private proposeTransfer(transfer: MatchableTransfer, pool: CandidatePool): MatchProposal | null {
         if (transfer.currency !== 'PLN' || FEE_TYPES.has(transfer.operationType)) return null;
-        // Wadium nigdy nie płaci faktury; ekran wadiów szuka tym samym słowem (findWadiumTransfers).
-        if (!transfer.reviewAsPayment && /wadium/i.test(`${transfer.title ?? ''} ${transfer.description ?? ''}`)) {
-            return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['WADIUM'] };
+        if (!transfer.reviewAsPayment) {
+            if (NON_TRANSFER_TYPES.has(transfer.operationType)) {
+                return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['NOT_A_TRANSFER'] };
+            }
+            // Wadium nigdy nie płaci faktury; ekran wadiów szuka tym samym słowem (findWadiumTransfers).
+            if (/wadium/i.test(`${transfer.title ?? ''} ${transfer.description ?? ''}`)) {
+                return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['WADIUM'] };
+            }
+            // Zwrot pomyłki, podwójnej zapłaty albo podatku; w danych 2025-2026 żaden "zwrot" w tytule nie płacił faktury.
+            if (/zwrot/i.test(transfer.title ?? '')) {
+                return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['REFUND'] };
+            }
         }
         return this.matcher.propose({
             direction: transfer.direction,

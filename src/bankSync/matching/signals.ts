@@ -15,6 +15,11 @@ function normalize(s: string): string {
     return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** "093/2026" i "93/2026" to ten sam numer faktury. */
+function normalizeInvoiceNumber(s: string): string {
+    return normalize(s).replace(/(^|[^\d])0+(?=\d)/g, '$1');
+}
+
 /** Levenshtein distance between two strings (simple DP). */
 function levenshtein(a: string, b: string): number {
     const m = a.length;
@@ -49,9 +54,9 @@ export function invoiceNumberSignal(
     invoiceNumber: string | null | undefined,
 ): number {
     if (!invoiceNumber || extractedNumbers.length === 0) return 0;
-    const norm = normalize(invoiceNumber);
+    const norm = normalizeInvoiceNumber(invoiceNumber);
     for (const n of extractedNumbers) {
-        if (normalize(n) === norm) return 1;
+        if (normalizeInvoiceNumber(n) === norm) return 1;
     }
     return 0;
 }

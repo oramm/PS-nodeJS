@@ -151,4 +151,29 @@ describe('TransferMatcher - wpływy na faktury sprzedaży', () => {
         expect(repo.findPaymentCandidates).toHaveBeenCalledTimes(1);
         expect(ToolsDb.getQueryCallbackAsync).not.toHaveBeenCalled();
     });
+
+    test('numer bez zera wiodącego i numer KSeF wskazują fakturę jak zwykły numer', () => {
+        expect(matcher.propose(incoming('93/2026', 1758.9), pool(row(1, '093/2026', 1758.9))))
+            .toMatchObject({ status: 'CONFIRMED', invoiceId: 1 });
+        const ksef = '7471917575-20260430-63ABDE800001-64';
+        expect(matcher.propose(incoming(ksef, 103566), pool({ ...row(2, '124/2026', 103566), KsefNumber: ksef })))
+            .toMatchObject({ status: 'CONFIRMED', invoiceId: 2 });
+    });
+
+    test('ten sam płatnik: część kwoty z numerem albo pełna kwota bez numeru to propozycja, obcy płatnik nie', () => {
+        const prudnik = { ...row(1, '272/2026', 13530), EntityName: 'ZWIK PRUDNIK SPÓŁKA Z O.O.' };
+        const other = { ...row(2, '26/2026', 19238.48), EntityName: 'Gmina Wądroże Wielkie' };
+        const candidates = pool(prudnik, other, { ...row(3, '1/2026', 500), EntityName: 'ZWIK Nowa Ruda' });
+        expect(matcher.propose(incoming('272/2026 częściowa', 2000, { counterpartyName: 'ZWIK PRUDNIK SP. Z O.O.' }), candidates))
+            .toMatchObject({ status: 'PROPOSED', candidates: [{ invoiceId: 1 }] });
+        expect(matcher.propose(incoming('', 19238.48, { counterpartyName: 'GMINA WĄDROŻE WIELKIE URZĄD GMINY' }), candidates))
+            .toMatchObject({ status: 'PROPOSED', candidates: [{ invoiceId: 2 }] });
+        expect(matcher.propose(incoming('FV NR 26/2026', 4920, { counterpartyName: 'MB-SANIT INŻYNIERIA SANITARNA' }), candidates).status)
+            .toBe('UNMATCHED');
+        // Rachunek, z którego nabywca już płacił, wskazuje płatnika mimo ogólnej nazwy.
+        const known = pool({ ...row(4, '10/2026', 35670), EntityName: 'ZWIK Nowa Ruda', KnownAccounts: '11102000000000000000000001' });
+        expect(matcher.propose(incoming('10/2026', 10000, { counterpartyName: 'ZAKŁAD WODOCIĄGÓW I KANALIZACJI' }), known))
+            .toMatchObject({ status: 'PROPOSED', candidates: [{ invoiceId: 4 }] });
+    });
+
 });

@@ -52,8 +52,12 @@ export function extractInvoiceNumbers(desc: string, allowDescriptionFallback = t
         /Numer\s+faktury\s+VAT[^:]*:\s{1,3}(.+?)(?:\s{2,}|$)/,
     );
     if (structuredMatch) {
-        const nums = parseInvoiceNumbersFromText(structuredMatch[1].trim());
+        const field = structuredMatch[1].trim();
+        const nums = parseInvoiceNumbersFromText(field);
         if (nums.length) return nums;
+        // Część gmin pisze w tym polu "349_2025" albo "53-2026" zamiast "53/2026".
+        const separated = [...field.matchAll(/(?<![\d-])(\d{1,5})[_-](20\d{2})(?![\d-])/g)].map(([, n, year]) => `${n}/${year}`);
+        if (separated.length) return separated;
     }
 
     // 2. "Tytuł" field
@@ -72,6 +76,7 @@ const INVOICE_NUMBER_PATTERNS = [
     /FS\s*[-\/]?\s*\d+(?:[\s\/\.-]\w+)*(?:\/\d{2,4})?/gi,
     /FA\s*[-\/]?\s*\d+(?:[\s\/\.-]\w+)*(?:\/\d{2,4})?/gi,
     /\d+\/\d{4}/g,
+    /\b\d{10}-\d{8}-[0-9A-F]{12}-[0-9A-F]{2}\b/g, // numer KSeF
 ];
 
 function parseInvoiceNumbersFromText(text: string): string[] {

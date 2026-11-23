@@ -41,6 +41,7 @@ interface PaymentInvoiceRow extends mysql.RowDataPacket {
 export interface SalesPaymentCandidate {
     Id: number;
     InvoiceNumber: string;
+    KsefNumber?: string | null;
     IssueDate: string | null;
     PaymentDeadline: string | null;
     DueAmount: string | number;
@@ -50,6 +51,8 @@ export interface SalesPaymentCandidate {
     EntityBankAccount: string | null;
     EntityName: string | null;
     ContractNumber?: string | null;
+    /** Rachunki, z których przyszły już przypisane wpłaty na faktury tego nabywcy (po przecinku). */
+    KnownAccounts?: string | null;
 }
 
 export interface InvoicesSearchParams {
@@ -847,13 +850,13 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
     async findPaymentCandidates(conn?: mysql.PoolConnection): Promise<SalesPaymentCandidate[]> {
         return ToolsDb.getQueryCallbackAsync(
             `${InvoiceRepository.familyDueSql()}
-                SELECT i.Id, i.Number AS InvoiceNumber,
+                SELECT i.Id, i.Number AS InvoiceNumber, i.KsefNumber,
                     DATE_FORMAT(i.IssueDate, '%Y-%m-%d') AS IssueDate,
                     DATE_FORMAT(i.PaymentDeadline, '%Y-%m-%d') AS PaymentDeadline,
                     d.Due AS DueAmount, original.Gross AS OriginalAmount,
                     COALESCE(pa.Paid, 0) AS AllocatedAmount,
                     e.TaxNumber AS EntityTaxNumber, e.BankAccountNumber AS EntityBankAccount, e.Name AS EntityName,
-                    c.OurId AS ContractNumber
+                    c.OurId AS ContractNumber, known.Accounts AS KnownAccounts
                 FROM family_due d
                 JOIN document_gross original ON original.RootId = d.RootId AND original.Id = d.RootId
                 JOIN Invoices i ON i.Id = d.RootId
@@ -863,6 +866,14 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
                     SELECT InvoiceId, SUM(AllocatedAmount) AS Paid FROM PaymentAllocations
                     WHERE InvoiceId IS NOT NULL GROUP BY InvoiceId
                 ) pa ON pa.InvoiceId = i.Id
+                LEFT JOIN (
+                    SELECT paid.EntityId, GROUP_CONCAT(DISTINCT bt.CounterpartyAccount) AS Accounts
+                    FROM PaymentAllocations a
+                    JOIN BankTransfers bt ON bt.Id = a.BankTransferId
+                    JOIN Invoices paid ON paid.Id = a.InvoiceId
+                    WHERE bt.CounterpartyAccount IS NOT NULL
+                    GROUP BY paid.EntityId
+                ) known ON known.EntityId = i.EntityId
                 WHERE d.Due > COALESCE(pa.Paid, 0)
                   AND ${PAYMENT_CANDIDATE_STATUS_SQL}
                 ORDER BY i.Id`,
