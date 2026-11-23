@@ -22,6 +22,10 @@ import { statementCoverage } from './statementCoverage';
 import { reconcileOperations } from './operationReconciliation';
 
 const SAMPLE_SEED = 'bnk-b2-v1';
+
+/** Przelew własny i wadium nie trafiają do kolejki faktur. */
+const isNonInvoiceTransfer = (proposal: MatchProposal) =>
+    !!proposal.flags?.some(flag => flag === 'OWN_TRANSFER' || flag === 'WADIUM');
 const IMPORT_RESULT_TTL_MS = 60 * 60 * 1000;
 const IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -677,7 +681,7 @@ export default class BankSyncController {
         const prepare = (rows: typeof transfers) => rows.flatMap(transfer => {
             if (transfer.importNeedsReview) return [{ ...transfer, matchingCandidates: [] }];
             const proposal = this.proposeTransfer({ ...transfer, amount: transfer.remainingAmount }, pool);
-            if (!proposal || proposal.flags?.includes('OWN_TRANSFER')) return [];
+            if (!proposal || isNonInvoiceTransfer(proposal)) return [];
             const [best] = proposal.candidates;
             const exact = proposal.candidates.filter(isExactInvoiceCandidate);
             const proposed = proposal.status !== 'UNMATCHED' && !!best;
@@ -857,6 +861,10 @@ export default class BankSyncController {
 
     private proposeTransfer(transfer: MatchableTransfer, pool: CandidatePool): MatchProposal | null {
         if (transfer.currency !== 'PLN' || FEE_TYPES.has(transfer.operationType)) return null;
+        // Wadium nigdy nie płaci faktury; ekran wadiów szuka tym samym słowem (findWadiumTransfers).
+        if (!transfer.reviewAsPayment && /wadium/i.test(`${transfer.title ?? ''} ${transfer.description ?? ''}`)) {
+            return { status: 'UNMATCHED', score: 0, candidates: [], flags: ['WADIUM'] };
+        }
         return this.matcher.propose({
             direction: transfer.direction,
             amount: transfer.amount,
@@ -873,7 +881,7 @@ export default class BankSyncController {
     private matchingFields(proposal: MatchProposal | null): {
         status: MatchingStatus; score: number | null; candidates: MatchingCandidate[] | null;
     } {
-        if (!proposal || proposal.flags?.includes('OWN_TRANSFER')) {
+        if (!proposal || isNonInvoiceTransfer(proposal)) {
             return { status: 'MANUAL', score: null, candidates: null };
         }
         return { status: proposal.status, score: Math.round(proposal.score * 100), candidates: proposal.candidates };

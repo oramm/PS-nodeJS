@@ -808,6 +808,18 @@ describe('BankSyncController manual sales allocations', () => {
         expect(matcher.propose).toHaveBeenCalledWith(expect.objectContaining({ amount: 50 }), undefined);
     });
 
+    test('keeps a tender deposit return out of the invoice queue unless the user restored it', async () => {
+        const matcher = (controller as any).matcher as jest.Mocked<TransferMatcher>;
+        matcher.propose.mockReturnValue({ status: 'PROPOSED', score: 0.6, candidates: [{ invoiceId: 11, score: 0.6 }] });
+        Object.assign(transfer, { title: 'zwr.wadium -NP/321/13/2026', matchingStatus: 'UNMATCHED', remainingAmount: 150 });
+        transferRepo.findPending.mockResolvedValue([transfer as BankTransfer & { remainingAmount: number }]);
+        await expect(controller.getPendingTransfers()).resolves.toEqual([]);
+        expect(matcher.propose).not.toHaveBeenCalled();
+
+        transfer.reviewAsPayment = true;
+        await expect(controller.getPendingTransfers()).resolves.toMatchObject([{ id: 1, matchingStatus: 'PROPOSED' }]);
+    });
+
     test.each([
         [60, 60],
         [150, 100],
