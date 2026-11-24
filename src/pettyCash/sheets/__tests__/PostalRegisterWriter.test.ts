@@ -304,8 +304,22 @@ describe('PostalRegisterWriter — formatowanie i scalenia', () => {
         expect(dateMerge(3)).toMatchObject({ startRowIndex: 10, endRowIndex: 13 });
     });
 
-    it('zapisuje wyłącznie wartości, więc formatowanie zostaje nietknięte', () => {
-        const update = requestsOf(2).find((r: any) => r.updateCells).updateCells;
+    it('zapisuje wartości i formatuje tylko daty oraz kwoty pozycji i sumy', () => {
+        const requests = requestsOf(2);
+        const update = requests.find((r: any) => r.updateCells).updateCells;
+        const formats = requests.filter(r => r.repeatCell).map(r => r.repeatCell);
+        expect(formats).toEqual([
+            {
+                range: { sheetId: SHEET_ID, startRowIndex: 10, endRowIndex: 12, startColumnIndex: POSTAL_COL.date, endColumnIndex: POSTAL_COL.date + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd-mm-yyyy' } } },
+                fields: 'userEnteredFormat.numberFormat',
+            },
+            {
+                range: { sheetId: SHEET_ID, startRowIndex: 10, endRowIndex: 13, startColumnIndex: POSTAL_COL.amount, endColumnIndex: POSTAL_COL.amount + 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '#,##0.00' } } },
+                fields: 'userEnteredFormat.numberFormat',
+            },
+        ]);
         expect(update.fields).toBe('userEnteredValue');
         expect(update.start).toEqual({ sheetId: SHEET_ID, rowIndex: 9, columnIndex: 0 });
         expect(update.rows).toHaveLength(4);

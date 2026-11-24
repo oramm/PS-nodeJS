@@ -3,11 +3,16 @@ import { sheets_v4, google } from 'googleapis';
 import Tools from './Tools';
 
 export default class ToolsSheets {
-    static async getSpreadSheet(auth: OAuth2Client, spreadsheetId: string) {
+    static async getSpreadSheet(
+        auth: OAuth2Client,
+        spreadsheetId: string,
+        options?: Pick<sheets_v4.Params$Resource$Spreadsheets$Get, 'ranges' | 'fields'>
+    ) {
         const sheets = google.sheets({ version: 'v4', auth });
         const res = await sheets.spreadsheets.get({
             spreadsheetId,
             auth,
+            ...options,
         });
         return res;
     }

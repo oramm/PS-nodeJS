@@ -88,12 +88,8 @@ export default class CashSheetStructure {
                 }
             },
             { updateCells: { start: { sheetId,rowIndex: row-1,columnIndex: 0 },rows: [{ values }],fields: 'userEnteredValue' } },
-            {
-                repeatCell: {
-                    range: { sheetId,startRowIndex: first-1,endRowIndex: last,startColumnIndex: 0,endColumnIndex: 1 },
-                    cell: { userEnteredFormat: { numberFormat: { type: 'DATE',pattern: 'yyyy-mm-dd' } } },fields: 'userEnteredFormat.numberFormat'
-                }
-            },
+            PettyCashWriter.buildDateFormatRequest(sheetId,row,row,'mmm yyyy'),
+            PettyCashWriter.buildDateFormatRequest(sheetId,first,last),
         ];
     }
 

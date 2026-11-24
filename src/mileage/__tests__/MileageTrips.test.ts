@@ -19,6 +19,7 @@ let rows: any[][]; let metadata: any[]; let batch: jest.Mock; let search: jest.M
 beforeAll(() => { require('../MileageRouters'); route = (app.post as jest.Mock).mock.calls.find(c => c[0] === '/mileage/trip')![1]; getRoute = (app.get as jest.Mock).mock.calls.find(c => c[0] === '/mileage/vehicles')![1]; });
 const previous = {...process.env};
 beforeEach(() => {
+    jest.useFakeTimers({now: new Date('2026-12-31T23:30:00Z')});
     Object.assign(process.env, { REFRESH_TOKEN:'test', MILEAGE_YEAR_FOLDER_ID:'folder', MILEAGE_SEED_YEAR:'2026', MILEAGE_SEED_SPREADSHEET_ID:'seed', MILEAGE_SEED_SERIES:'7' });
     rows=[]; metadata=[]; failAfterWrite=false;
     search=jest.fn(async (args:any)=>({data:{matchedDeveloperMetadata:metadata.filter(m=>m.developerMetadata.metadataKey===args.requestBody.dataFilters[0].developerMetadataLookup.metadataKey)}}));
@@ -37,7 +38,10 @@ beforeEach(() => {
     query=jest.fn(async(sql:string,args:any[])=>[sql.includes('FROM MileageYears')?(args[0]===2026?[{Year:2026,State:'READY',SpreadsheetId:'seed',FolderId:'folder',FileName:'07. Ewidencja przebiegu pojazdów 2026 ENVI SC'}]:[]):sql.includes('FROM MileageYearCars')?[{CarId:1,SheetGid:1}]:[]]);
     (ToolsDb.getPoolConnectionWithTimeout as jest.Mock).mockResolvedValue({query,release:jest.fn()});
 });
-afterEach(()=>jest.restoreAllMocks());
+afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+});
 afterAll(()=>{process.env=previous;});
 it('first trip is Lp1, atomic data/format/metadata, business date preserved',async()=>{
     const result=await MileageController.addTrip(dto,'Driver'); expect(result).toMatchObject({lp:1,km:10,year:2027,duplicate:false});
@@ -82,7 +86,30 @@ it('new car remains visible with null reading and link; inactive filters absent'
 it('invalid G is a visible error, never a guessed number',async()=>{
     const api=(google.sheets as jest.Mock)();api.spreadsheets.values.get.mockResolvedValue({data:{values:[['error 123']]}});await expect(new MileageTripSheet({} as any).reading({spreadsheetId:'seed',gid:1})).rejects.toMatchObject({code:'MILEAGE_STRUCTURE_CONFLICT'});
 });
-it('Warsaw default date crosses year at Polish midnight',()=>{jest.useFakeTimers().setSystemTime(new Date('2026-12-31T23:30:00Z'));expect(MileageValidator.businessDate()).toBe('2027-01-01');jest.useRealTimers();});
+it('returns HTTP 400 before provisioning a trip dated tomorrow in Warsaw', async () => {
+    expect(MileageValidator.businessDate()).toBe('2027-01-01');
+    const res = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    const next = jest.fn();
+    await route({
+        parsedBody: { ...dto, date: '2027-01-02' },
+        session: { userData: { enviId: 1, userName: 'Driver', systemRoleName: 'ADMIN' } },
+    }, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith({
+        code: 'INVALID_TRIP',
+        message: 'Data wyjazdu nie może być późniejsza niż dzisiaj.',
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(MileageYearController.withYear).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
+});
+
+it('accepts January 1 as soon as the date changes in Warsaw', () => {
+    jest.setSystemTime(new Date('2026-12-31T22:59:59Z'));
+    expect(() => MileageValidator.trip(dto, 'Driver')).toThrow('Data wyjazdu nie może być późniejsza niż dzisiaj.');
+    jest.setSystemTime(new Date('2026-12-31T23:00:00Z'));
+    expect(() => MileageValidator.trip(dto, 'Driver')).not.toThrow();
+});
 
 it('extends a full grid atomically and applies date formats on the new row',async()=>{
     const api=(google.sheets as jest.Mock)();api.spreadsheets.get.mockResolvedValue({data:{sheets:[{properties:{sheetId:1,title:'Test',gridProperties:{rowCount:2}}}]}});

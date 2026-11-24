@@ -30,7 +30,14 @@ const add = (e = entry()) => Controller.add(e, {} as any);
 beforeEach(() => {
     jest.resetAllMocks(); failure = ''; readsFail = false;
     files = { cash: [{ id: 10, title: 'zaliczki 2026', rows: cashRows(2026) }], postal: [{ id: 20, title: 'poczta wych. 2026', rows: postalRows() }] };
-    (Tools.getSpreadSheet as jest.Mock).mockImplementation(async (_a, id) => { if (readsFail) throw new Error('read failed'); return { data: { sheets: files[id].map(t => ({ properties: { title: t.title, sheetId: t.id, gridProperties: { rowCount: 1000 } } })) } }; });
+    (Tools.getSpreadSheet as jest.Mock).mockImplementation(async (_a, id, options) => {
+        if (readsFail) throw new Error('read failed');
+        if (options?.ranges) return { data: { sheets: [{
+            properties: { sheetId: 20 },
+            data: [{ columnMetadata: [45, 61, 321, 334, 324, 120, 100, 120].map(pixelSize => ({ pixelSize })) }],
+        }] } };
+        return { data: { sheets: files[id].map(t => ({ properties: { title: t.title, sheetId: t.id, gridProperties: { rowCount: 1000 } } })) } };
+    });
     (Tools.getValues as jest.Mock).mockImplementation(async (_a, p) => { if (readsFail) throw new Error('read failed'); if (p.valueRenderOption === 'UNFORMATTED_VALUE') return { values: [[500]] }; const title = p.rangeA1.match(/^'([^']+)'!/)[1]; return { values: files[p.spreadsheetId].find(t => t.title === title)!.rows }; });
     (Tools.batchUpdateSheet as jest.Mock).mockImplementation(async (_a, requests, id) => {
         const business = requests.some((r: any) => r.updateCells?.rows.some((row: any) => row.values.some((c: any) => String(c.userEnteredValue?.stringValue ?? '').startsWith('auto:'))));
@@ -43,6 +50,15 @@ beforeEach(() => {
 });
 it('first block one, second two, retry adds neither row; no old entries copied', async () => {
     const prior = JSON.stringify(files); const a = await add(); expect(a.register).toMatchObject({ action: 'write', blockNumber: 1, headerRow: 5 }); expect(a.cash.action).toBe('write');
+    const calls = (Tools.batchUpdateSheet as jest.Mock).mock.calls;
+    const provision = calls.find(([, requests, id]) => id === 'postal' && requests.some((request: any) => request.addSheet))![1];
+    const widths = provision.filter((request: any) => request.updateDimensionProperties?.fields === 'pixelSize');
+    expect(widths.map((request: any) => request.updateDimensionProperties.properties.pixelSize))
+        .toEqual([45, 61, 321, 334, 324, 120, 100, 120]);
+    expect(widths.map((request: any) => request.updateDimensionProperties.range.startIndex))
+        .toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(target('postal').rows[1][2]).toBe('https://example.invalid/cash');
+    expect(target('postal').rows[2][2]).toBe('https://example.invalid/app');
     const b = await add(entry('TEST/P2', 1)); expect(b.register).toMatchObject({ blockNumber: 2 });
     const before = JSON.stringify(files); const retry = await add(); expect(retry.register?.action).toBe('skip'); expect(retry.cash.action).toBe('skip'); expect(JSON.stringify(files)).toBe(before); expect(count('postal')).toBe(2); expect(count('cash')).toBe(2);
     expect(JSON.stringify(files.cash[0])).toBe(JSON.stringify(JSON.parse(prior).cash[0])); expect(JSON.stringify(files.postal[0])).toBe(JSON.stringify(JSON.parse(prior).postal[0]));

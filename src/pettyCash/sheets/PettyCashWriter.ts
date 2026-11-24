@@ -317,11 +317,29 @@ export default class PettyCashWriter {
             },
         });
 
+        requests.push(this.buildDateFormatRequest(sheetId, targetRow, targetRow));
+
         // Kolumna techniczna ma byc niewidoczna. Zadanie jest idempotentne, wiec dokladamy
         // je do kazdego zapisu - kolumna sama wraca do ukrycia, jesli ktos ja odslonil.
         requests.push(this.buildHideMarkerColumn(sheetId));
 
         return requests;
+    }
+
+    static buildDateFormatRequest(sheetId: number, firstRow: number, lastRow: number, pattern = 'yyyy-mm-dd') {
+        return {
+            repeatCell: {
+                range: {
+                    sheetId,
+                    startRowIndex: firstRow - 1,
+                    endRowIndex: lastRow,
+                    startColumnIndex: PETTY_CASH_COL.date,
+                    endColumnIndex: PETTY_CASH_COL.date + 1,
+                },
+                cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern } } },
+                fields: 'userEnteredFormat.numberFormat',
+            },
+        };
     }
 
     static buildHideMarkerColumn(sheetId: number) {

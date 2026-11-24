@@ -13,7 +13,8 @@ export default class MileageValidator {
     static trip(dto: any, driver: unknown): void {
         const fail = (message: string): never => { throw new MileageYearError('INVALID_TRIP', message); };
         if (!dto || typeof dto !== 'object' || Array.isArray(dto)) fail('Nieprawidłowy wpis kilometrówki.');
-        this.date(dto.date);
+        const tripDate = this.date(dto.date);
+        if (tripDate > this.businessDate()) fail('Data wyjazdu nie może być późniejsza niż dzisiaj.');
         if (!['string', 'number'].includes(typeof dto.vehicleId) || !/^\d+$/.test(String(dto.vehicleId)) || !Number.isSafeInteger(Number(dto.vehicleId)) || Number(dto.vehicleId) < 1) fail('Nieprawidłowy pojazd.');
         for (const key of ['startReading', 'endReading']) if (typeof dto[key] !== 'number' || !Number.isSafeInteger(dto[key]) || dto[key] < 0) fail('Stany licznika muszą być nieujemnymi liczbami całkowitymi.');
         if (dto.endReading < dto.startReading) fail('Stan końcowy nie może być mniejszy od początkowego.');

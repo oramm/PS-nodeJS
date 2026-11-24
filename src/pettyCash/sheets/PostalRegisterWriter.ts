@@ -311,6 +311,20 @@ export default class PostalRegisterWriter {
             },
         });
 
+        const formatColumn = (column: number, endRow: number, type: 'DATE' | 'NUMBER', pattern: string) => ({
+            repeatCell: {
+                range: {
+                    sheetId,
+                    startRowIndex: firstItemRow - 1,
+                    endRowIndex: endRow,
+                    startColumnIndex: column,
+                    endColumnIndex: column + 1,
+                },
+                cell: { userEnteredFormat: { numberFormat: { type, pattern } } },
+                fields: 'userEnteredFormat.numberFormat',
+            },
+        });
+
         return [
             // Blok robi sobie miejsce sam, zamiast wpisywac sie w istniejace puste wiersze.
             // Pod ostatnim blokiem bylo ich tylko 21, a nizej stoi ksiazka adresowa e-maili -
@@ -358,6 +372,8 @@ export default class PostalRegisterWriter {
                     },
                 },
             },
+            formatColumn(POSTAL_COL.date, lastItemRow, 'DATE', 'dd-mm-yyyy'),
+            formatColumn(POSTAL_COL.amount, sumRow, 'NUMBER', '#,##0.00'),
             {
                 mergeCells: {
                     mergeType: 'MERGE_ALL',
@@ -519,9 +535,27 @@ export default class PostalRegisterWriter {
                 this.cell(source.rows, sum, 6).replace(/\s|\$/g, '').toUpperCase() !== this.buildSumFormula(6, sum - 1) ||
                 labels.tracking.trim() !== 'nr listu' || labels.date.trim() !== 'data' || labels.amount.trim() !== 'kwota' ||
                 this.cell(source.rows, 2, 0) !== 'rozlicz zaliczkę' || this.cell(source.rows, 3, 0) !== 'ZMIEŃ status fv') fail('Nieprawidłowy wzór pierwszego bloku poczty. Sprawdź poprzedni rok.');
+            const layout = await ToolsSheets.getSpreadSheet(auth, spreadsheetId, {
+                ranges: ["'" + source.tab.title.replace(/'/g, "''") + "'!A1:H1"],
+                fields: 'sheets(properties(sheetId),data(startColumn,columnMetadata(pixelSize)))',
+            });
+            const dimensions = layout.data.sheets?.find(sheet => sheet.properties?.sheetId === source.tab.sheetId)?.data;
+            const columns = dimensions?.find(grid => (grid.startColumn ?? 0) === 0)?.columnMetadata ?? [];
             const sheetId = randomInt(1, 2147483647);
             const range = (id: number, first: number, last: number) => ({ sheetId: id, startRowIndex: first - 1, endRowIndex: last, startColumnIndex: 0, endColumnIndex: 8 });
             const requests: any[] = [{ addSheet: { properties: { sheetId, title: `poczta wych. ${year}`, gridProperties: { rowCount: 1000, columnCount: 9 } } } }];
+            // PASTE_FORMAT does not copy column dimensions. Keep the previous year's layout.
+            for (const [column, metadata] of columns.slice(0, POSTAL_VISIBLE_WIDTH).entries()) {
+                const pixelSize = metadata.pixelSize;
+                if (typeof pixelSize !== 'number' || !Number.isInteger(pixelSize) || pixelSize <= 0) continue;
+                requests.push({
+                    updateDimensionProperties: {
+                        range: { sheetId, dimension: 'COLUMNS', startIndex: column, endIndex: column + 1 },
+                        properties: { pixelSize },
+                        fields: 'pixelSize',
+                    },
+                });
+            }
             for (const [sourceRow, targetRow, span] of [[1, 1, 4], [5, 5, 1], [6, 6, 1], [sum!, 7, 1]]) requests.push({ copyPaste: {
                 source: range(source.tab.sheetId, sourceRow, sourceRow + span - 1), destination: range(sheetId, targetRow, targetRow + span - 1), pasteType: 'PASTE_FORMAT' } });
             requests.push({ unmergeCells: { range: range(sheetId, 1, 7) } });

@@ -68,6 +68,14 @@ describe('cash annual and monthly preparation',() => {
         expect((await write()).action).toBe('write');
         const target=tabs[1];
         expect(target.rows[1][7]).toBe("=B2-G2+'zaliczki 2026'!H35");
+        expect(target.rows[1][0]).toBe(String(PettyCashWriter.dateToSerial('2027-01-01')));
+        expect(batches[0]).toContainEqual({
+            repeatCell: {
+                range: { sheetId: target.id, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: 1 },
+                cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'mmm yyyy' } } },
+                fields: 'userEnteredFormat.numberFormat',
+            },
+        });
         expect(target.rows.filter(r => r?.[13])).toHaveLength(1);
         expect((await write()).action).toBe('skip');
         expect(tabs).toHaveLength(2);
@@ -75,7 +83,16 @@ describe('cash annual and monthly preparation',() => {
     it('opens an uninterrupted chain through April and later June without changing prior/manual rows',async () => {
         await write('2027-04-03');
         const target=tabs[1]; const before=JSON.stringify(target.rows);
+        const earlierBatchCount = batches.length;
         await write('2027-06-03','TEST/2');
+        const newMonthHeaders = batches[earlierBatchCount].flatMap(request => {
+            const format = request.repeatCell;
+            return format?.cell.userEnteredFormat.numberFormat.pattern === 'mmm yyyy'
+                ? [format.range.startRowIndex + 1]
+                : [];
+        });
+        expect(newMonthHeaders).toEqual(PettyCashWriter.parseMonthBlocks(target.rows)
+            .slice(4).map(block => block.aggregateRow));
         expect(PettyCashWriter.parseMonthBlocks(target.rows).map(b => b.monthKey)).toEqual(['2027-01','2027-02','2027-03','2027-04','2027-05','2027-06']);
         expect(JSON.stringify(target.rows.slice(0,JSON.parse(before).length))).toBe(before);
     });

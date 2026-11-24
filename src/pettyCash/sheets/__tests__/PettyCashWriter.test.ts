@@ -244,8 +244,15 @@ describe('PettyCashWriter - ksztalt zadan', () => {
         });
     });
 
-    it('zapisuje wylacznie wartosci, wiec formatowanie zostaje nietkniete', () => {
-        const update = requestsFor(cardEntry()).requests[1].updateCells;
+    it('zapisuje wartości i jawnie formatuje tylko komórkę z datą wpisu', () => {
+        const requests = requestsFor(cardEntry()).requests;
+        const update = requests[1].updateCells;
+        const formats = requests.filter(request => request.repeatCell).map(request => request.repeatCell);
+        expect(formats).toEqual([{
+            range: { sheetId: SHEET_ID, startRowIndex: 7, endRowIndex: 8, startColumnIndex: 0, endColumnIndex: 1 },
+            cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } },
+            fields: 'userEnteredFormat.numberFormat',
+        }]);
         expect(update.fields).toBe('userEnteredValue');
         expect(update.start).toEqual({ sheetId: SHEET_ID, rowIndex: 7, columnIndex: 0 });
         expect(update.rows[0].values).toHaveLength(PETTY_CASH_WIDTH);
