@@ -28,11 +28,12 @@ const HUMAN_SESSION = {
     systemRoleId: 3,
 };
 
-function run(method: string, userData?: any) {
+function run(method: string, userData?: any, path = '/letter/6163', headers: Record<string, string> = {}) {
     const req: any = {
         method,
-        path: '/letter/6163',
+        path,
         ip: '::1',
+        headers,
         session: { userData },
     };
     const res: any = {
@@ -87,6 +88,15 @@ describe('denyDestructiveForAgent', () => {
         }
     });
 
+    it('AGD-1: agenta rejestracyjnego właściciela tabela tras nie dotyczy - zamknięty ma tylko DELETE', () => {
+        for (const path of ['/autoApproveOurLetters', '/nieMaTakiejTrasy', '/sbAccess/140/levels']) {
+            const { res, next } = run('GET', AGENT_SESSION, path);
+
+            expect(next).toHaveBeenCalled();
+            expect(res.statusCode).toBeUndefined();
+        }
+    });
+
     it('nie daje się ominąć metodą zapisaną małymi literami', () => {
         const { res, next } = run('delete', AGENT_SESSION);
 
@@ -101,5 +111,15 @@ describe('denyDestructiveForAgent', () => {
 
         expect(res.statusCode).toBe(403);
         expect(next).not.toHaveBeenCalledWith(expect.any(Error));
+    });
+
+    it('narzędzie odczytu (x-envi-agent-read) nie zapisuje nawet przy poziomie rw; zwykłe żądanie bez zmian', () => {
+        const rwAgent = { enviId: 5, isPersonAgent: true, personAgentPsDb: 'rw' };
+        const read = { 'x-envi-agent-read': '1' };
+        const refused = run('POST', rwAgent, '/offer', read);
+        expect(refused.res.statusCode).toBe(403);
+        expect(refused.res.body.errorMessage).toContain('narzędzie odczytu nie zapisuje');
+        expect(run('POST', rwAgent, '/offers', read).next).toHaveBeenCalled();
+        expect(run('POST', rwAgent, '/offer').next).toHaveBeenCalled();
     });
 });

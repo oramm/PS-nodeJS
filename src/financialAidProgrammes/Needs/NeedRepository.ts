@@ -24,6 +24,13 @@ export default class NeedRepository extends BaseRepository<Need> {
         super('Needs');
     }
 
+    async findClientIdInConn(conn: mysql.PoolConnection, needId: number): Promise<number | undefined> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            'SELECT ClientId FROM Needs WHERE Id = ? FOR UPDATE', [needId]
+        );
+        return rows[0]?.ClientId;
+    }
+
     protected mapRowToModel(row: any): Need {
         const applicationCall: ApplicationCallData | undefined =
             row.ApplicationCallId

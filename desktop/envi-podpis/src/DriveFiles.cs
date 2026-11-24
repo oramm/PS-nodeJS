@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -16,6 +17,7 @@ namespace EnviPodpis
     internal sealed class DriveFile
     {
         public string Id, Name, MimeType, ParentId, DriveId;
+        internal DateTimeOffset? CreatedAt;
         internal bool IsFolder { get { return MimeType == "application/vnd.google-apps.folder"; } }
         public override string ToString() { return Name; }
     }
@@ -36,7 +38,7 @@ namespace EnviPodpis
     {
         internal const int MaxBytes = 32 * 1024 * 1024;
         private const string Api = "https://www.googleapis.com/drive/v3/";
-        private const string Fields = "id,name,mimeType,parents,driveId";
+        private const string Fields = "id,name,mimeType,parents,driveId,createdTime";
         private readonly HttpClient client;
         private readonly Func<CancellationToken, Task<string>> token;
 
@@ -103,7 +105,9 @@ namespace EnviPodpis
         private static DriveFile FileInfo(object data)
         {
             List<object> parents = Json.GetList(data, "parents");
-            return new DriveFile { Id = Json.GetString(data, "id"), Name = Json.GetString(data, "name"), MimeType = Json.GetString(data, "mimeType"), ParentId = parents.Count == 0 ? null : Convert.ToString(parents[0]), DriveId = Json.GetString(data, "driveId") };
+            DateTimeOffset created;
+            bool hasCreationTime = DateTimeOffset.TryParse(Json.GetString(data, "createdTime"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out created);
+            return new DriveFile { Id = Json.GetString(data, "id"), Name = Json.GetString(data, "name"), MimeType = Json.GetString(data, "mimeType"), ParentId = parents.Count == 0 ? null : Convert.ToString(parents[0]), DriveId = Json.GetString(data, "driveId"), CreatedAt = hasCreationTime ? created : (DateTimeOffset?)null };
         }
         internal async Task<string> AccountKey(CancellationToken ct)
         {
@@ -118,12 +122,14 @@ namespace EnviPodpis
             if (!result.IsFolder) throw new InvalidOperationException("Wybrane miejsce nie jest folderem.");
             return result;
         }
-        internal async Task<DriveFilePage> List(string search, string folderId, string driveId, string pageToken, CancellationToken ct)
+        internal async Task<DriveFilePage> List(string search, string folderId, string driveId, string pageToken, CancellationToken ct, bool? newestFirst = null)
         {
             string query = "trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.folder')";
             if (!string.IsNullOrEmpty(folderId)) query += " and " + Q(Id(folderId)) + " in parents";
             if (!string.IsNullOrWhiteSpace(search)) query += " and name contains " + Q(search.Trim());
-            string url = Api + "files?pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=" + E(string.IsNullOrEmpty(folderId) ? "modifiedTime desc" : "folder,name") + "&fields=" + E("nextPageToken,incompleteSearch,files(" + Fields + ")") + "&q=" + E(query);
+            string order = newestFirst.HasValue ? (newestFirst.Value ? "createdTime desc,name" : "createdTime,name") :
+                string.IsNullOrEmpty(folderId) ? "modifiedTime desc" : "folder,name";
+            string url = Api + "files?pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true&orderBy=" + E(order) + "&fields=" + E("nextPageToken,incompleteSearch,files(" + Fields + ")") + "&q=" + E(query);
             if (!string.IsNullOrEmpty(driveId)) url += "&corpora=drive&driveId=" + E(Id(driveId));
             else if (string.IsNullOrEmpty(folderId) && !string.IsNullOrWhiteSpace(search)) url += "&corpora=allDrives";
             if (!string.IsNullOrEmpty(pageToken)) url += "&pageToken=" + E(pageToken);

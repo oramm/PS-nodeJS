@@ -75,6 +75,7 @@ describe('PkoBpXmlParser', () => {
         test('operationType Opłata', () => expect(op.operationType).toBe('Opłata'));
         test('orderDate null (empty in XML)', () => expect(op.orderDate).toBeNull());
         test('direction OUT', () => expect(op.direction).toBe('OUT'));
+        test('reads the optional balance after the operation', () => expect(op.endingBalance).toBe(734861.66));
     });
 
     describe('incoming transfer (index 2)', () => {
@@ -89,5 +90,16 @@ describe('PkoBpXmlParser', () => {
     test('duplicate parse produces same hash for same operation', () => {
         const s2 = PkoBpXmlParser.parse(Buffer.from(SAMPLE_XML, 'utf8'));
         expect(s2.operations[0].operationHash).toBe(statement.operations[0].operationHash);
+    });
+
+    test('the same operation on a different account has a different hash', () => {
+        const xml = SAMPLE_XML.replace('48102036680000550206787115', '58102036680000550206787115');
+        const [op] = PkoBpXmlParser.parse(Buffer.from(xml)).operations;
+        expect(op.operationHash).not.toBe(statement.operations[0].operationHash);
+    });
+
+    test('does not save the recipient identifier as the counterparty NIP for an incoming transfer', () => {
+        const xml = SAMPLE_XML.replace('Identyfikator nadawcy : 5261040828', 'Identyfikator odbiorcy : 1234567890');
+        expect(PkoBpXmlParser.parse(Buffer.from(xml)).operations[2].counterpartyNip).toBeNull();
     });
 });

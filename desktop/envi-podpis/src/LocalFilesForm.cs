@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -11,7 +12,8 @@ namespace EnviPodpis
     {
         private readonly ComboBox favorites = new ComboBox();
         private readonly TextBox folder = new TextBox();
-        private readonly ListView list = new ListView();
+        private readonly FileListView list = new FileListView { CheckBoxes = true };
+        private readonly Button favoriteButton = new Button { AutoSize = true, MinimumSize = new Size(80, 34) };
         private readonly Label status = new Label();
         private string current;
         internal string[] SelectedPaths { get; private set; }
@@ -28,16 +30,18 @@ namespace EnviPodpis
             pins.Controls.Add(new Label { Text = "Ulubione:", AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
             favorites.Width = 340; favorites.DropDownStyle = ComboBoxStyle.DropDownList; favorites.AccessibleName = "Ulubione foldery lokalne";
             pins.Controls.Add(favorites);
-            Button pin = Button("Przypnij folder", delegate { Try(delegate { Pin(folder.Text, true); RefreshFavorites(); }); });
-            Button unpin = Button("Odepnij", delegate { Try(delegate { if (favorites.SelectedItem != null) { Pin((string)favorites.SelectedItem, false); RefreshFavorites(); } }); });
-            pins.Controls.Add(pin); pins.Controls.Add(unpin); root.Controls.Add(pins, 0, 1);
+            favoriteButton.Click += delegate { Try(delegate {
+                string selected = (string)favorites.SelectedItem;
+                Pin(selected ?? current, selected == null);
+                RefreshFavorites();
+            }); };
+            pins.Controls.Add(favoriteButton); root.Controls.Add(pins, 0, 1);
             TableLayoutPanel path = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3 };
             path.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); path.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); path.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             folder.Dock = DockStyle.Fill; folder.AccessibleName = "Ścieżka folderu lokalnego lub synchronizowanego";
             path.Controls.Add(folder, 0, 0); path.Controls.Add(Button("Otwórz folder", delegate { LoadFolder(folder.Text); }), 1, 0);
             path.Controls.Add(Button("Przeglądaj / szukaj…", Browse), 2, 0); root.Controls.Add(path, 0, 2);
-            list.Dock = DockStyle.Fill; list.View = View.Details; list.CheckBoxes = true; list.FullRowSelect = true; list.HideSelection = false;
-            list.Columns.Add("Nazwa", 580); list.Columns.Add("Rodzaj", 110); list.AccessibleName = "Foldery i pliki PDF — zaznacz pliki do podpisu";
+            list.AccessibleName = "Foldery i pliki PDF — zaznacz pliki do podpisu";
             root.Controls.Add(list, 0, 3);
             status.AutoSize = true; status.MaximumSize = new Size(680, 0); status.Padding = new Padding(0, 8, 0, 8); root.Controls.Add(status, 0, 4);
             FlowLayoutPanel actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
@@ -49,7 +53,15 @@ namespace EnviPodpis
             }));
             Button cancel = Button("Anuluj", delegate { DialogResult = DialogResult.Cancel; Close(); }); actions.Controls.Add(cancel); CancelButton = cancel;
             root.Controls.Add(actions, 0, 5); Controls.Add(root);
-            favorites.SelectedIndexChanged += delegate { if (favorites.SelectedItem != null) LoadFolder((string)favorites.SelectedItem); };
+            favorites.SelectionChangeCommitted += delegate {
+                if (favorites.SelectedItem != null) LoadFolder((string)favorites.SelectedItem);
+                UpdateFavoriteButton();
+            };
+            list.CreationColumnClick += delegate {
+                bool newestFirst = list.NewestFirst != true;
+                list.ListViewItemSorter = new CreationComparer(newestFirst);
+                list.NewestFirst = newestFirst;
+            };
             folder.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; LoadFolder(folder.Text); } };
             list.ItemActivate += delegate { if (list.SelectedItems.Count == 1 && Directory.Exists((string)list.SelectedItems[0].Tag)) LoadFolder((string)list.SelectedItems[0].Tag); };
             list.ItemCheck += delegate(object sender, ItemCheckEventArgs e) { if (Directory.Exists((string)list.Items[e.Index].Tag)) e.NewValue = CheckState.Unchecked; };
@@ -71,27 +83,68 @@ namespace EnviPodpis
         {
             string path = Path.GetFullPath(value.Trim());
             if (add && !Directory.Exists(path)) throw new IOException("Folder jest niedostępny. Sprawdź ścieżkę lub podłącz dysk.");
-            List<string> paths = FavoritePaths(); paths.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            List<string> paths = FavoritePaths(); paths.RemoveAll(p => SameFolder(p, path));
             if (add) paths.Add(path);
             WorkflowStore.Setting("local.favorites", Json.Serialize(new { paths = paths }));
         }
+        private static bool SameFolder(string left, string right)
+        {
+            return left != null && right != null &&
+                string.Equals(left.TrimEnd('\\', '/'), right.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+        }
         private void RefreshFavorites()
-        { favorites.Items.Clear(); foreach (string path in FavoritePaths()) favorites.Items.Add(path); }
+        {
+            favorites.Items.Clear();
+            foreach (string path in FavoritePaths()) favorites.Items.Add(path);
+            SelectCurrentFavorite();
+        }
+        private void SelectCurrentFavorite()
+        {
+            favorites.SelectedItem = favorites.Items.Cast<string>().FirstOrDefault(path => SameFolder(path, current));
+            UpdateFavoriteButton();
+        }
+        private void UpdateFavoriteButton()
+        {
+            bool pinned = favorites.SelectedItem != null;
+            favoriteButton.Enabled = pinned || current != null;
+            favoriteButton.Text = pinned ? "★ Usuń z ulubionych" : "☆ Dodaj do ulubionych";
+        }
         internal void LoadFolder(string path)
         {
             Try(delegate {
                 string full = Path.GetFullPath(path.Trim());
                 // List only this directory; Windows handles recursive searches in the native picker.
-                string[] directories = Directory.GetDirectories(full), pdfs = Directory.GetFiles(full, "*.pdf");
+                DirectoryInfo directory = new DirectoryInfo(full);
+                DirectoryInfo[] directories = directory.GetDirectories();
+                FileInfo[] pdfs = directory.GetFiles("*.pdf");
+                ListViewItem[] entries = directories.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).Select(p => Entry(p, true))
+                    .Concat(pdfs.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).Select(p => Entry(p, false))).ToArray();
                 list.Items.Clear(); current = folder.Text = full;
-                foreach (string entry in directories.OrderBy(p => p, StringComparer.CurrentCultureIgnoreCase)) AddEntry(entry, "Folder");
-                foreach (string entry in pdfs.OrderBy(p => p, StringComparer.CurrentCultureIgnoreCase)) AddEntry(entry, "PDF");
+                list.Items.AddRange(entries);
+                SelectCurrentFavorite();
                 WorkflowStore.Setting("local.lastFolder", full);
                 status.Text = "Zaznacz dowolne PDF. Dwuklik otwiera folder. „Przeglądaj / szukaj…” otwiera wyszukiwarkę Windows. Grafikę wybierzesz na liście przed podpisaniem. Kopie domyślnie trafią obok oryginałów.";
             });
         }
-        private void AddEntry(string path, string type)
-        { ListViewItem item = new ListViewItem(Path.GetFileName(path)); item.SubItems.Add(type); item.Tag = path; list.Items.Add(item); }
+        private static ListViewItem Entry(FileSystemInfo info, bool isFolder)
+        {
+            DateTime created = info.CreationTimeUtc;
+            return FileListView.Entry(info.Name, isFolder ? "Folder" : "PDF", isFolder,
+                created == DateTime.FromFileTimeUtc(0) ? (DateTimeOffset?)null : new DateTimeOffset(created), info.FullName);
+        }
+        private sealed class CreationComparer : IComparer
+        {
+            private readonly bool newestFirst;
+            internal CreationComparer(bool newestFirst) { this.newestFirst = newestFirst; }
+            public int Compare(object first, object second)
+            {
+                ListViewItem left = (ListViewItem)first, right = (ListViewItem)second;
+                DateTimeOffset? a = (DateTimeOffset?)left.SubItems[FileListView.CreatedColumn].Tag;
+                DateTimeOffset? b = (DateTimeOffset?)right.SubItems[FileListView.CreatedColumn].Tag;
+                int order = a.HasValue && b.HasValue ? a.Value.CompareTo(b.Value) * (newestFirst ? -1 : 1) : b.HasValue.CompareTo(a.HasValue);
+                return order == 0 ? StringComparer.CurrentCultureIgnoreCase.Compare(left.Text, right.Text) : order;
+            }
+        }
         private void Browse()
         {
             Try(delegate {
@@ -104,10 +157,10 @@ namespace EnviPodpis
                     foreach (string path in selected)
                     {
                         ListViewItem item = list.Items.Cast<ListViewItem>().FirstOrDefault(i => string.Equals((string)i.Tag, path, StringComparison.OrdinalIgnoreCase));
-                        if (item == null) { AddEntry(path, "PDF"); item = list.Items[list.Items.Count - 1]; }
+                        if (item == null) item = list.Items.Add(Entry(new FileInfo(path), false));
                         item.Checked = true;
                     }
-                    status.Text = "Zaznaczono " + selected.Length + " PDF. Możesz przypiąć ten folder, a następnie kliknąć Dodaj zaznaczone PDF.";
+                    status.Text = "Zaznaczono " + selected.Length + " PDF. Kliknij „Dodaj zaznaczone PDF”, aby przejść dalej.";
                 }
             });
         }

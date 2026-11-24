@@ -68,11 +68,12 @@ namespace EnviPodpis
             TableLayoutPanel root = new TableLayoutPanel();
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
-            root.RowCount = 4;
+            root.RowCount = 5;
             root.Padding = new Padding(20, 16, 20, 16);
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
@@ -149,6 +150,7 @@ namespace EnviPodpis
             root.Controls.Add(lblBody, 0, 1);
             root.Controls.Add(content, 0, 2);
             root.Controls.Add(buttons, 0, 3);
+            root.Controls.Add(new Label { Text = "Wersja " + Config.VersionText, AutoSize = true, Anchor = AnchorStyles.Right }, 0, 4);
             Controls.Add(root);
             AcceptButton = btnPrimary;
 
@@ -352,10 +354,10 @@ namespace EnviPodpis
         public void ShowSending()
         {
             Reset(Step.Sending, "Wysyłam podpisy do PS…",
-                "PS składa podpisane pliki i zapisuje je w folderze pisma. To może potrwać kilkanaście sekund. Nie zamykaj okna.");
+                "PS zapisuje podpisane pliki w folderze pisma. Przy większej partii może to potrwać kilka minut.");
             bar.Style = ProgressBarStyle.Marquee;
             bar.Visible = true;
-            SetNote("Co dalej: gdy skończę, zobaczysz tu „Gotowe”.");
+            SetNote("Poczekaj na potwierdzenie zapisu.");
         }
 
         public void ShowDone()
@@ -573,13 +575,12 @@ namespace EnviPodpis
             if (IsDisposed) return;
             if (sendErr != null) { Fail(Messages.SendFailed(sendErr), false); return; }
 
-            string s = (status ?? "").ToLowerInvariant();
-            if (s == "failed" || s == "cancelled" || s == "canceled" || s == "expired")
+            if (status != "done")
             {
                 ErrorInfo e = new ErrorInfo();
-                e.Title = "PS nie zapisał podpisów";
-                e.Message = "Podpisy zostały złożone, ale PS ich nie przyjął (status: " + s + ").";
-                e.NextStep = "Wróć do PS i kliknij „Podpisz” jeszcze raz.";
+                e.Title = "PS nie zakończył zapisu podpisów";
+                e.Message = "Podpisy zostały złożone, ale zlecenie w PS nie zakończyło się powodzeniem.";
+                e.NextStep = "Sprawdź komunikat przy zleceniu w PS.";
                 Fail(e, false);
                 return;
             }

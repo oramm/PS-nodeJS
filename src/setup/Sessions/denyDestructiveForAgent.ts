@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { AGENT_SYSTEM_EMAIL } from './agentTokenAuth';
+import { PersonAgentPsDb, agentRefusal, agentRefusalReason, findAgentRoute } from './agentRouteTable';
 
 /**
  * LIS-5 — the registration agent may create and edit, never destroy.
@@ -39,18 +40,23 @@ import { AGENT_SYSTEM_EMAIL } from './agentTokenAuth';
 const DENIED_METHODS_FOR_AGENT = new Set(['DELETE']);
 
 /**
- * SBZ-1 — agent pracownika (sesja osoby ze znakiem isPersonAgent, src/sbAccess/sbAgentKeyAuth.ts)
- * dostaje te same reguły i dodatkowo:
- * - nie zakłada kontraktów: założenie odpala arkusz Scrum, pokój Google Chat i kolejkę FIDman
- *   (domyślna odpowiedź na pytanie 3 planu SBZ, do potwierdzenia przez właściciela);
- *   edycja kontraktu (PUT /contract/:id) i rejestracja pism zostają otwarte,
- * - nie sięga /sbAccess: agent nie zmienia własnych kluczy, poziomów ani cudzych dostępów.
- * Ścieżki jak w Expressie: bez wielkości liter, końcowy ukośnik bez znaczenia.
+ * SBZ-1, AGD-1 — agent pracownika (sesja osoby ze znakiem isPersonAgent, src/sbAccess/sbAgentKeyAuth.ts)
+ * przechodzi tylko trasy, które tabela (agentRouteTable.ts) opisuje jako odczyt albo zapis zgodny z jego
+ * poziomem: lista dozwolonych w serwerze agenta rozjeżdżała się z PS i każde poszerzenie wymagało wydania
+ * rdzenia (decyzja AGD K1 z 2026-11-19; uchyla też zakaz zakładania kontraktów z SBZ).
  */
-function isDeniedForPersonAgent(method: string, path: string): boolean {
-    const normalized = path.toLowerCase().replace(/\/+$/, '');
-    if (normalized === '/sbaccess' || normalized.startsWith('/sbaccess/')) return true;
-    return method === 'POST' && normalized === '/contractreact';
+function personAgentRefusalReason(req: Request, level: PersonAgentPsDb, readTool = false): string | undefined {
+    const method = req.method.toUpperCase();
+    if (DENIED_METHODS_FOR_AGENT.has(method)) return 'agent nie kasuje danych, to decyzja człowieka w aplikacji';
+    const reason = agentRefusalReason(level, method, req.path);
+    if (reason) return readTool && level === 'ro' && findAgentRoute(method, req.path)?.access === 'zapis'
+        ? 'narzędzie odczytu nie zapisuje - użyj narzędzia zapisu'
+        : reason;
+    // Z nowymi plikami PUT /letter/:id kasuje poprzednie pliki pisma na Dysku (notatka AGD-0, sekcja 2).
+    const isMultipart = String(req.headers?.['content-type'] || '').toLowerCase().startsWith('multipart/');
+    if (isMultipart && method === 'PUT' && /^\/letter\/[^/]+\/?$/i.test(req.path))
+        return 'zmiana plików pisma kasuje poprzednie pliki na Dysku, więc agent zmienia pismo tylko bez plików';
+    return undefined;
 }
 
 export default function denyDestructiveForAgent(
@@ -59,22 +65,21 @@ export default function denyDestructiveForAgent(
     next: NextFunction,
 ): void {
     const userData = req.session?.userData;
-    const isPersonAgent = userData?.isPersonAgent === true;
-    const isAgentRequest = userData?.systemEmail === AGENT_SYSTEM_EMAIL || isPersonAgent;
-    if (!isAgentRequest) return next();
-
-    const method = req.method.toUpperCase();
-    if (isPersonAgent && isDeniedForPersonAgent(method, req.path)) {
+    if (userData?.isPersonAgent === true) {
+        // Brak poziomu w sesji = tylko odczyt: przy wątpliwości agent ma mniej, nie więcej.
+        // Narzędzie odczytu serwera agenta oznacza żądania nagłówkiem: zapis tą drogą liczy się jak poziom "ro".
+        const readTool = String(req.headers?.['x-envi-agent-read'] ?? '') === '1';
+        const reason = personAgentRefusalReason(req, userData.personAgentPsDb === 'rw' && !readTool ? 'rw' : 'ro', readTool);
+        if (!reason) return next();
         console.warn(
-            `[AgentPolicy] Request refused for a person's agent:: method: ${req.method} path: ${req.path} enviId: ${userData!.enviId}`,
+            `[AgentPolicy] Request refused for a person's agent:: method: ${req.method} path: ${req.path} enviId: ${userData.enviId}`,
         );
-        res.status(403).send({
-            errorMessage:
-                'Agent pracownika nie zakłada kontraktów i nie zmienia dostępów SB. Zrób to w aplikacji.',
-        });
+        res.status(403).send({ errorMessage: agentRefusal(reason) });
         return;
     }
+    if (userData?.systemEmail !== AGENT_SYSTEM_EMAIL) return next();
 
+    const method = req.method.toUpperCase();
     if (!DENIED_METHODS_FOR_AGENT.has(method)) return next();
 
     console.warn(

@@ -1,14 +1,59 @@
 import type { ContractScope } from '../persons/projectAssignments/projectMembership';
 import { makeContractScopeCondition } from '../tools/ProjectScope';
 import BaseRepository from '../repositories/BaseRepository';
-import Invoice from './Invoice';
+import Invoice, { InvoicePaymentStatus } from './Invoice';
 import Contract from '../contracts/Contract';
 import Project from '../projects/Project';
 import Person from '../persons/Person';
 import ToolsDb from '../tools/ToolsDb';
 import ContractOur from '../contracts/ContractOur';
 import mysql from 'mysql2/promise';
+import Setup from '../setup/Setup';
 import { CorrectionInvoiceSummary, InvoiceThirdPartyData } from '../types/types';
+
+const INVOICE_GROSS_SQL = 'ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2)';
+const PAYMENT_CANDIDATE_STATUS_SQL = mysql.format(
+    '(i.Status IN (?) OR (i.Status = ? AND i.IssueDate >= ?))',
+    [
+        Setup.InvoicePayableStatuses,
+        Setup.InvoiceStatus.PAID,
+        Setup.Bank.paidInvoiceCandidatesFrom,
+    ],
+);
+const ISSUED_CORRECTION_STATUS_SQL = mysql.format('i.Status IN (?)', [
+    [...Setup.InvoicePayableStatuses, Setup.InvoiceStatus.PAID],
+]);
+const INVOICE_ANCESTORS_SQL = `ancestors(Id, CorrectedInvoiceId) AS (
+            SELECT Id, CorrectedInvoiceId FROM Invoices WHERE Id = ?
+            UNION ALL
+            SELECT i.Id, i.CorrectedInvoiceId FROM Invoices i JOIN ancestors a ON i.Id = a.CorrectedInvoiceId
+        )`;
+
+type InvoicePaidMarker = (typeof Setup.InvoicePaidMarker)[keyof typeof Setup.InvoicePaidMarker];
+
+interface PaymentInvoiceRow extends mysql.RowDataPacket {
+    Status: string;
+    CorrectedInvoiceId: number | null;
+    PaidManually: InvoicePaidMarker;
+    StatusBeforePayment: string | null;
+}
+
+export interface SalesPaymentCandidate {
+    Id: number;
+    InvoiceNumber: string;
+    KsefNumber?: string | null;
+    IssueDate: string | null;
+    PaymentDeadline: string | null;
+    DueAmount: string | number;
+    OriginalAmount?: string | number;
+    AllocatedAmount: string | number;
+    EntityTaxNumber: string | null;
+    EntityBankAccount: string | null;
+    EntityName: string | null;
+    ContractNumber?: string | null;
+    /** Rachunki, z których przyszły już przypisane wpłaty na faktury tego nabywcy (po przecinku). */
+    KnownAccounts?: string | null;
+}
 
 export interface InvoicesSearchParams {
     id?: number;
@@ -284,9 +329,9 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Owners.Email AS OwnerEmail,
             Invoices.PaymentStatus,
             Invoices.PaidAmount,
-            Invoices.PaymentDate,
+            DATE_FORMAT(Invoices.PaymentDate, '%Y-%m-%d') AS PaymentDate,
             ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) as TotalNetValue,
-            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2) AS TotalGrossValue
+            ${INVOICE_GROSS_SQL} AS TotalGrossValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
         LEFT JOIN Entities AS ThirdPartyEntities ON ThirdPartyEntities.Id=Invoices.ThirdPartyEntityId
@@ -681,7 +726,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Invoices.ContractId,
             Invoices.PaymentStatus,
             Invoices.PaidAmount,
-            Invoices.PaymentDate,
+            DATE_FORMAT(Invoices.PaymentDate, '%Y-%m-%d') AS PaymentDate,
             Entities.Id AS EntityId,
             Entities.Name AS EntityName,
             Entities.Address AS EntityAddress,
@@ -713,7 +758,7 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
             Owners.Surname AS OwnerSurname,
             Owners.Email AS OwnerEmail,
             ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice), 2) AS TotalNetValue,
-            ROUND(SUM(InvoiceItems.Quantity * InvoiceItems.UnitPrice * (1 + COALESCE(InvoiceItems.VatTax, 0) / 100)), 2) AS TotalGrossValue
+            ${INVOICE_GROSS_SQL} AS TotalGrossValue
         FROM Invoices
         JOIN Entities ON Entities.Id=Invoices.EntityId
         LEFT JOIN Entities AS ThirdPartyEntities ON ThirdPartyEntities.Id=Invoices.ThirdPartyEntityId
@@ -733,23 +778,140 @@ export default class InvoiceRepository extends BaseRepository<Invoice> {
         return this.mapRowToModel(rows[0]);
     }
 
+    private static familyDueSql(singleInvoice = false): string {
+        return `WITH RECURSIVE
+        ${singleInvoice ? `${INVOICE_ANCESTORS_SQL},` : ''}
+        family(RootId, Id) AS (
+            SELECT Id, Id FROM Invoices WHERE CorrectedInvoiceId IS NULL
+            ${singleInvoice ? 'AND Id IN (SELECT Id FROM ancestors)' : ''}
+            UNION ALL
+            SELECT f.RootId, i.Id FROM Invoices i JOIN family f ON i.CorrectedInvoiceId = f.Id
+        ),
+        document_gross AS (
+            SELECT f.RootId, f.Id, ${INVOICE_GROSS_SQL} AS Gross
+            FROM family f
+            JOIN Invoices i ON i.Id = f.Id
+            LEFT JOIN InvoiceItems ON InvoiceItems.ParentId = f.Id
+            WHERE f.Id = f.RootId OR ${ISSUED_CORRECTION_STATUS_SQL}
+            GROUP BY f.RootId, f.Id
+        ),
+        family_due AS (
+            SELECT RootId, COALESCE(SUM(Gross), 0) AS Due FROM document_gross GROUP BY RootId
+        )`;
+    }
+
+    async findDueAmount(id: number, conn?: mysql.PoolConnection): Promise<number | null> {
+        const rows = await ToolsDb.getQueryCallbackAsync(
+            `${InvoiceRepository.familyDueSql(true)} SELECT Due FROM family_due`,
+            conn,
+            [id],
+        ) as { Due: string | number }[];
+        return rows.length ? Number(rows[0].Due) : null;
+    }
+
+    async findOriginalInvoiceId(id: number, conn: mysql.PoolConnection): Promise<number | null> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            `WITH RECURSIVE ${INVOICE_ANCESTORS_SQL}
+            SELECT Id FROM ancestors WHERE CorrectedInvoiceId IS NULL`,
+            [id],
+        );
+        return rows[0]?.Id ?? null;
+    }
+
+    async lockPaymentCandidate(id: number, conn: mysql.PoolConnection): Promise<{
+        Number: string | null;
+        Status: string;
+    } | null> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            `SELECT i.Number, i.Status FROM Invoices i
+             WHERE i.Id = ? AND i.CorrectedInvoiceId IS NULL AND ${PAYMENT_CANDIDATE_STATUS_SQL}
+             FOR UPDATE`,
+            [id],
+        );
+        return rows[0] ? { Number: rows[0].Number, Status: rows[0].Status } : null;
+    }
+
+    async lockPaymentInvoice(id: number, conn: mysql.PoolConnection): Promise<PaymentInvoiceRow | null> {
+        const [rows] = await conn.query<PaymentInvoiceRow[]>(
+            'SELECT Status, CorrectedInvoiceId, PaidManually, StatusBeforePayment FROM Invoices WHERE Id = ? FOR UPDATE',
+            [id],
+        );
+        return rows[0] ?? null;
+    }
+
+    async findPaymentMarker(id: number): Promise<InvoicePaidMarker | null> {
+        const rows = await ToolsDb.getQueryCallbackAsync(
+            'SELECT PaidManually FROM Invoices WHERE Id = ? AND CorrectedInvoiceId IS NULL',
+            undefined, [id],
+        ) as Pick<PaymentInvoiceRow, 'PaidManually'>[];
+        return rows[0]?.PaidManually ?? null;
+    }
+
+    async findPaymentCandidates(conn?: mysql.PoolConnection): Promise<SalesPaymentCandidate[]> {
+        return ToolsDb.getQueryCallbackAsync(
+            `${InvoiceRepository.familyDueSql()}
+                SELECT i.Id, i.Number AS InvoiceNumber, i.KsefNumber,
+                    DATE_FORMAT(i.IssueDate, '%Y-%m-%d') AS IssueDate,
+                    DATE_FORMAT(i.PaymentDeadline, '%Y-%m-%d') AS PaymentDeadline,
+                    d.Due AS DueAmount, original.Gross AS OriginalAmount,
+                    COALESCE(pa.Paid, 0) AS AllocatedAmount,
+                    e.TaxNumber AS EntityTaxNumber, e.BankAccountNumber AS EntityBankAccount, e.Name AS EntityName,
+                    c.OurId AS ContractNumber, known.Accounts AS KnownAccounts
+                FROM family_due d
+                JOIN document_gross original ON original.RootId = d.RootId AND original.Id = d.RootId
+                JOIN Invoices i ON i.Id = d.RootId
+                JOIN Entities e ON e.Id = i.EntityId
+                LEFT JOIN OurContractsData c ON c.Id = i.ContractId
+                LEFT JOIN (
+                    SELECT InvoiceId, SUM(AllocatedAmount) AS Paid FROM PaymentAllocations
+                    WHERE InvoiceId IS NOT NULL GROUP BY InvoiceId
+                ) pa ON pa.InvoiceId = i.Id
+                LEFT JOIN (
+                    SELECT paid.EntityId, GROUP_CONCAT(DISTINCT bt.CounterpartyAccount) AS Accounts
+                    FROM PaymentAllocations a
+                    JOIN BankTransfers bt ON bt.Id = a.BankTransferId
+                    JOIN Invoices paid ON paid.Id = a.InvoiceId
+                    WHERE bt.CounterpartyAccount IS NOT NULL
+                    GROUP BY paid.EntityId
+                ) known ON known.EntityId = i.EntityId
+                WHERE d.Due > COALESCE(pa.Paid, 0)
+                  AND ${PAYMENT_CANDIDATE_STATUS_SQL}
+                ORDER BY i.Id`,
+            conn,
+        ) as Promise<SalesPaymentCandidate[]>;
+    }
+
+    async countOverallocatedInvoices(conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            ${InvoiceRepository.familyDueSql()}
+            SELECT COUNT(*) AS Total FROM (
+                SELECT pa.InvoiceId FROM PaymentAllocations pa
+                LEFT JOIN family_due d ON d.RootId = pa.InvoiceId
+                WHERE pa.InvoiceId IS NOT NULL
+                GROUP BY pa.InvoiceId, d.Due
+                HAVING SUM(pa.AllocatedAmount) > COALESCE(d.Due, 0) + 0.01
+            ) overallocated
+        `);
+        return Number(rows[0].Total);
+    }
+
     async updatePayment(
         id: number,
         data: {
-            paymentStatus: string;
+            paymentStatus: InvoicePaymentStatus;
             paidAmount: number;
-            paymentDate?: string | null;
+            paymentDate: string | null;
+            status: string;
+            statusBeforePayment: string | null;
+            paidMarker: InvoicePaidMarker;
         },
-        conn?: mysql.PoolConnection,
+        conn: mysql.PoolConnection,
     ): Promise<void> {
-        const sql = mysql.format(
-            `UPDATE Invoices SET PaymentStatus=?, PaidAmount=?, PaymentDate=? WHERE Id=?`,
-            [data.paymentStatus, data.paidAmount, data.paymentDate ?? null, id],
+        await conn.query(
+            `UPDATE Invoices SET PaymentStatus = ?, PaidAmount = ?, PaymentDate = ?,
+                Status = ?, StatusBeforePayment = ?, PaidManually = ? WHERE Id = ?`,
+            [data.paymentStatus, data.paidAmount, data.paymentDate, data.status,
+                data.statusBeforePayment, data.paidMarker, id],
         );
-        if (conn) {
-            await conn.query(sql);
-        } else {
-            await this.executeQuery(sql);
-        }
     }
 }

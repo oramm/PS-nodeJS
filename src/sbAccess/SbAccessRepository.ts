@@ -182,6 +182,16 @@ export default class SbAccessRepository {
         return { ...agent, psDb: SbAccessValidator.levelsFromDb(levels).psDb };
     }
 
+    /** L2 (pułapka 12): czy skrót klucza należy do wpisu SB, który wciąż czeka na "To moje konto". */
+    async isInvitedAgentKeyHash(hash: string): Promise<boolean> {
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT 1 AS invited FROM SbAccess WHERE AgentKeyHash = ? AND StatusCode = 'INVITED'`,
+            undefined,
+            [hash],
+        )) as any[];
+        return rows.length === 1;
+    }
+
     async setPublicKey(
         conn: mysql.PoolConnection,
         personId: number,
@@ -308,6 +318,24 @@ export default class SbAccessRepository {
         )) as SbPersonAccount[];
         if (!rows.length) return null;
         return { ...rows[0], isActive: !!rows[0].isActive };
+    }
+
+    /** Osoby z aktywnym kontem w podanych rolach i ich znacznik zarządzania SB (mapa dostępów: "kogo poprosić"). */
+    async listActiveInRoles(roles: string[]): Promise<{ personId: number; name: string; surname: string; systemRoleName: string; canManageSb: boolean }[]> {
+        if (!roles.length) return [];
+        const rows = (await ToolsDb.getQueryCallbackAsync(
+            `SELECT p.Id AS personId, p.Name AS name, p.Surname AS surname, sr.Name AS systemRoleName,
+                COALESCE(sm.CanManageSbAccess, 0) AS canManageSb
+             FROM Persons p
+             JOIN PersonAccounts pa ON pa.PersonId = p.Id AND pa.IsActive = 1
+             JOIN SystemRoles sr ON sr.Id = pa.SystemRoleId
+             LEFT JOIN StaffMembers sm ON sm.PersonId = p.Id
+             WHERE sr.Name IN (${roles.map(() => '?').join(', ')})
+             ORDER BY p.Surname, p.Name, p.Id`,
+            undefined,
+            roles,
+        )) as { personId: number; name: string; surname: string; systemRoleName: string; canManageSb: number }[];
+        return rows.map((row) => ({ ...row, canManageSb: !!row.canManageSb }));
     }
 
     /** Osoby z aktywnym kontem w podanych rolach, bez wpisu albo z dostępem odebranym. */

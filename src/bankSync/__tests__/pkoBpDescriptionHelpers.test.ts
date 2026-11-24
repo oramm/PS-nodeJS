@@ -73,4 +73,14 @@ describe('pkoBpDescriptionHelpers', () => {
             expect(nums).toHaveLength(0);
         });
     });
+
+    test.each([
+        ['349_2025', ['349/2025']],
+        ['53-2026', ['53/2026']],
+        ['7471917575-20260430-63ABDE800001-64', ['7471917575-20260430-63ABDE800001-64']],
+    ])('pole numeru faktury VAT "%s"', (field, expected) => {
+        expect(extractInvoiceNumbers(`Numer faktury VAT lub okres płatności zbiorczej :  ${field} Identyfikator odbiorcy : 7471917575`, false))
+            .toEqual(expected);
+    });
+
 });

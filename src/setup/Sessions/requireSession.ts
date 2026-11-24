@@ -86,6 +86,8 @@ const SB_DEVICE_ROUTES: { method: string; path: string }[] = [
     // Raport zdrowia komputera (SBD-4a): wysyłka raz dziennie i lekkie pytanie o prośbę admina.
     { method: 'POST', path: '/sbaccess/me/health' },
     { method: 'GET', path: '/sbaccess/me/healthrequest' },
+    // Mapa dostępów agenta osoby (AGD-2): komputer wpisuje ją co godzinę do instrukcji agenta.
+    { method: 'GET', path: '/sbaccess/me/agentaccess' },
 ];
 
 /** Mirrors Express's default routing: case-insensitive, trailing slash ignored. */

@@ -4,8 +4,9 @@ import BankSyncController, { BankSyncError } from './BankSyncController';
 import { BankTransferFilters } from './BankTransferRepository';
 import BankTransferRepository from './BankTransferRepository';
 import PaymentAllocationRepository from './PaymentAllocationRepository';
-import StaffMemberRepository from '../staff/StaffMemberRepository';
-import { SystemRoleName } from '../types/sessionTypes';
+import { hasBankModuleAccess } from './bankAccess';
+import { salesInvoiceAccess } from '../invoices/salesInvoiceScope';
+import InvoicesController from '../invoices/InvoicesController';
 
 const controller = new BankSyncController();
 const transferRepo = new BankTransferRepository();
@@ -27,20 +28,9 @@ function requireAuth(req: Request, res: Response): boolean {
     return true;
 }
 
-/**
- * Dostęp do wyciągów bankowych wynika z flagi StaffMembers.HasBankAccess, nie z roli
- * systemowej. Seed migracji nadał ją rolom 1 i 2, więc dla dotychczasowych użytkowników
- * nic się nie zmienia; nadanie jej komuś spoza tych ról nie wymaga podnoszenia roli,
- * a odebranie - obniżania jej.
- *
- * ADMIN wchodzi zawsze, niezależnie od flagi: flagi ustawia się dziś wprost w bazie,
- * więc pomyłkowe wyzerowanie kolumny nie może odciąć wszystkim ścieżki naprawy.
- */
-async function hasModuleAccess(req: Request): Promise<boolean> {
-    const userData = req.session?.userData;
-    if (!userData?.enviId) return false;
-    if (userData.systemRoleName === SystemRoleName.ADMIN) return true;
-    return StaffMemberRepository.hasBankAccess(userData.enviId);
+// Reguła dostępu (flaga HasBankAccess, ADMIN zawsze) jest wspólna z ukrywaniem wpłat w fakturach.
+function hasModuleAccess(req: Request): Promise<boolean> {
+    return hasBankModuleAccess(req.session?.userData);
 }
 
 // Czy zalogowany widzi moduł (do warunkowego menu po stronie klienta).
@@ -88,28 +78,110 @@ async function moduleGuard(
 app.use('/bank-statements', moduleGuard);
 app.use('/bank-transfers', moduleGuard);
 
-/**
- * POST /bank-statements
- * Upload PKO XML file (multipart/form-data, field: file)
- * Returns upload preview: { statementId, total, autoMatched, proposed, unmatched, fees }
- */
+app.get('/bank-statements', async (_req, res, next) => {
+    try {
+        res.json(await controller.listStatements());
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.get('/bank-transfers/invoices/:id/payments', salesInvoiceAccess('invoice'), async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowa faktura' });
+            return;
+        }
+        res.json(await controller.getInvoicePayments(id));
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.delete('/bank-transfers/invoices/:id/payments/manual', salesInvoiceAccess('invoice'), async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowa faktura' });
+            return;
+        }
+        const invoice = await InvoicesController.undoManualPayment(id);
+        if (!invoice) {
+            res.status(409).json({ error: 'Faktura nie ma oznaczenia zapłaty przyciskiem' });
+            return;
+        }
+        res.json(invoice);
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.patch('/bank-transfers/:id/dismiss', async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        const expectedRemaining = Number(req.body?.expectedRemaining);
+        const expectedOperationHash = req.body?.expectedOperationHash;
+        const validHash = expectedOperationHash === undefined ||
+            (typeof expectedOperationHash === 'string' && /^[a-f0-9]{64}$/.test(expectedOperationHash));
+        const validAmount = expectedRemaining > 0 || (expectedOperationHash !== undefined && req.body?.expectedRemaining === 0);
+        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(expectedRemaining) || !validAmount || !validHash) {
+            res.status(400).json({ error: 'Nieprawidłowy przelew lub kwota' });
+            return;
+        }
+        await controller.dismissIncomingTransfer(id, expectedRemaining, expectedOperationHash);
+        res.json({ dismissed: true });
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
+app.patch('/bank-transfers/:id/restore', async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            res.status(400).json({ error: 'Nieprawidłowy przelew' });
+            return;
+        }
+        await controller.restoreIncomingTransfer(id);
+        res.json({ restored: true });
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
+
 app.post(
     '/bank-statements',
+    (_req: Request, res: Response, next: NextFunction) => {
+        try {
+            controller.assertImportAvailable();
+            next();
+        } catch (err) {
+            handleBankSyncError(err, res, next);
+        }
+    },
     upload.single('file') as any,
     async (req: Request, res: Response, next: NextFunction) => {
-        if (!requireAuth(req, res)) return;
         try {
             if (!req.file) {
-                return res.status(400).json({ error: 'Brak pliku (field: file)' });
+                return res.status(400).json({ error: 'Wybierz plik XML z PKO BP.' });
             }
-            const userId = (req.session as any)?.userData?.enviId ?? null;
-            const preview = await controller.upload(req.file.buffer, req.file.originalname, userId);
-            res.status(201).json(preview);
+            const job = await controller.startUpload(req.file.buffer, req.file.originalname, req.session.userData?.enviId);
+            res.status(202).location(`/bank-statements/imports/${job.jobId}`).json(job);
         } catch (err) {
             handleBankSyncError(err, res, next);
         }
     },
 );
+
+app.get('/bank-statements/imports/:jobId', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        res.json(controller.getImportStatus(req.params.jobId));
+    } catch (err) {
+        handleBankSyncError(err, res, next);
+    }
+});
 
 /**
  * POST /bank-statements/:id/commit
@@ -248,7 +320,7 @@ app.delete(
             const allocId = parseInt(req.params.allocId, 10);
             if (isNaN(allocId)) return res.status(400).json({ error: 'Nieprawidłowe ID alokacji' });
 
-            const result = await controller.deleteAllocation(allocId);
+            const result = await controller.deleteAllocation(allocId, Number(req.params.id));
             res.json(result);
         } catch (err) {
             handleBankSyncError(err, res, next);

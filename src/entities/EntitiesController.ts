@@ -5,6 +5,8 @@ import EntityRepository, { EntitiesSearchParams } from './EntityRepository';
 import ToolsDb from '../tools/ToolsDb';
 import {
     enqueueFidmanEntityPush,
+    enqueueFinEntityRefresh,
+    findFinClientIds,
     entityHasSyncedContract,
     tryDeliverAfterCommit as tryDeliverFidmanAfterCommit,
 } from '../contracts/fidmanSync/FidmanSync';
@@ -344,6 +346,7 @@ export default class EntitiesController extends BaseController<
         await ToolsDb.transaction(async (conn: mysql.PoolConnection) => {
             await instance.repository.applyGusValues(id, values, status, conn);
             if (!goesToFidman) return;
+            if ((await findFinClientIds(conn, id))?.length) await enqueueFinEntityRefresh(conn, id);
             if (!(await entityHasSyncedContract(id, conn))) return;
             // Do kolejki idzie podmiot JUŻ po przyjęciu — stąd przyjęte wartości
             // nałożone na odczytany rekord.
@@ -492,6 +495,9 @@ export default class EntitiesController extends BaseController<
                             'email',
                             'phone',
                         ]);
+                        if ((await findFinClientIds(conn, entity.id))?.length) {
+                            await enqueueFinEntityRefresh(conn, entity.id!);
+                        }
                         if (isSyncParty) {
                             fidmanOutboxId = await enqueueFidmanEntityPush(
                                 entity,

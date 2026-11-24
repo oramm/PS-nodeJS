@@ -3,6 +3,7 @@ import ToolsMail from '../tools/ToolsMail';
 import PersonRepository from '../persons/PersonRepository';
 import { enqueueFinUserRefresh, tryDeliverAfterCommit } from '../contracts/fidmanSync/FidmanSync';
 import StaffMemberRepository from '../staff/StaffMemberRepository';
+import { hasCostInvoiceModuleAccess } from '../costInvoices/costInvoiceAccess';
 import { AGENT_SYSTEM_EMAIL } from '../setup/Sessions/agentTokenAuth';
 import { UserData } from '../types/sessionTypes';
 import SbAccessRepository, { TOKEN_CLEARING_STATUSES } from './SbAccessRepository';
@@ -16,13 +17,17 @@ import SbDriveGateway from './SbDriveGateway';
 import SbAccessSecretRepository from './SbAccessSecretRepository';
 import MailboxRepository, { MailboxRecord } from '../mailboxes/MailboxRepository';
 import { MailboxAssigneeRow, PersonMailbox, personMailboxes } from '../mailboxes/mailboxAccessPolicy';
-import { healthReportFileName, parseHealthReport } from './sbHealthPolicy';
+import MailboxPasswordService from '../mailboxes/MailboxPasswordService';
+import { DRIVE_TOOL_NAME, healthReportFileName, parseHealthReport } from './sbHealthPolicy';
+import { AgentAccessMap, agentAccessMap, driveMembership } from './agentAccessMap';
+import { ADMIN_PANEL_ROLES } from '../Admin/adminPanelGuard';
 import {
     describeSecretName,
     deviceTokenHash,
     displayFingerprint,
     expectedSecretNames,
     keyThumbprint,
+    mailboxSecretName,
     newDeviceToken,
 } from './sbSecretsPolicy';
 import {
@@ -85,6 +90,9 @@ function isAlreadyMemberError(error: unknown): boolean {
 /** Szyfrogramu już pobranego nie da się cofnąć - jedyną ochroną jest zmiana hasła u źródła. */
 const CHANGE_SOURCE_PASSWORD =
     'Zmień hasło źródłowe: szyfrogram mógł już zostać pobrany na komputer pracownika.';
+/** Hasło skrzynki zarządzanej: odebranie szyfrogramu nie odbiera prawa, a hasło zmienia PS po utracie prawa (uzgodnienie). */
+const MANAGED_MAILBOX_TAKEN =
+    'PS wyda je ponownie przy następnym pobraniu, dopóki osoba ma prawo do skrzynki; gdy je straci (przypisanie, rola, blokada), PS sam zmieni hasło skrzynki.';
 
 function errorText(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -105,6 +113,12 @@ function sameText(a?: string | null, b?: string | null): boolean {
  *
  * Brak tokenu GitHub przerywa operację PRZED jakimkolwiek wywołaniem zewnętrznym i bez zapisu.
  */
+/** Te same poziomy niezależnie od kolejności skrzynek; Dysk tylko, gdy zapis go nadpisuje. */
+function sameLevels(a: SbAccessLevels, b: SbAccessLevels, withDrive: boolean): boolean {
+    return a.repos === b.repos && a.psDb === b.psDb && (!withDrive || a.drive === b.drive)
+        && JSON.stringify([...a.mail].sort()) === JSON.stringify([...b.mail].sort());
+}
+
 export default class SbAccessController {
     private static repository = new SbAccessRepository();
     private static events = new SbAccessEventRepository();
@@ -116,11 +130,16 @@ export default class SbAccessController {
         return this.mailboxes.find();
     }
 
-    /** Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina. */
-    static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: PersonMailbox[] }> {
+    /**
+     * Skrzynki osoby: z przypisań w PS + wyjątki ręczne (MBX-2). Osoba z sesji/tokenu albo wskazana przez admina.
+     * `managed` = hasło wydaje PS (SKO-2); komputer loguje się nim wprost, nie kontem technicznym.
+     */
+    static async listPersonMailboxes(record: SbAccessRecord): Promise<{ mailboxes: (PersonMailbox & { managed: boolean })[] }> {
         const rows = await this.mailboxes.findWithAssignees();
         const account = await this.repository.getPersonAccount(record.personId);
-        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail, account?.systemRoleName) };
+        const managed = new Set(rows.filter((row) => row.passwordVersion != null).map((row) => row.code));
+        return { mailboxes: personMailboxes(record.personId, rows, record.levels.mail, account?.systemRoleName)
+            .map((mailbox) => ({ ...mailbox, managed: managed.has(mailbox.code) })) };
     }
 
     static async listMailboxesOfPerson(personId: number): Promise<{ mailboxes: PersonMailbox[] }> {
@@ -129,12 +148,55 @@ export default class SbAccessController {
         return this.listPersonMailboxes(record);
     }
 
+    /** Mapa "co ma agent osoby" (AGD-2): osoba z sesji/tokenu albo wskazana przez admina Dostępów SB. */
+    static async agentAccess(record: SbAccessRecord): Promise<AgentAccessMap> {
+        const persons = new PersonRepository();
+        const accountPromise = this.repository.getPersonAccount(record.personId);
+        const [account, psAccount, agentKeyHash, hasCostInvoiceAccess, health, givers, { mailboxes }] = await Promise.all([
+            accountPromise,
+            persons.getPersonAccountV2(record.personId),
+            this.repository.getAgentKeyHash(record.personId),
+            // Ta sama reguła co bramka modułu faktur kosztowych (rola, opiekun kontraktu albo znacznik).
+            accountPromise.then((a) => hasCostInvoiceModuleAccess(record.personId, a?.isActive ? a.systemRoleName : null)),
+            this.repository.getHealth(record.personId),
+            this.repository.listActiveInRoles([...new Set([...SB_MANAGER_ROLES, ...ADMIN_PANEL_ROLES])]),
+            this.listPersonMailboxes(record),
+        ]);
+        // Osoba nie jest swoim własnym "kogo poprosić".
+        const names = (rows: typeof givers) => [...new Set(rows.filter((g) => g.personId !== record.personId).map((g) => `${g.name} ${g.surname}`))];
+        const sbManagerRoles = new Set<string>(SB_MANAGER_ROLES);
+        const driveTool = health?.report?.tools.find((tool) => tool.name === DRIVE_TOOL_NAME) ?? null;
+        const googleAccount = driveTool?.account ?? account?.systemEmail?.trim().toLowerCase() ?? null;
+        return agentAccessMap({
+            personId: record.personId,
+            person: account ? `${account.name} ${account.surname}` : '',
+            statusCode: record.statusCode,
+            levels: record.levels,
+            githubLinked: !!record.githubLogin,
+            hasAgentKey: agentKeyHash !== null,
+            hasCostInvoiceAccess,
+            finEnabled: !!psAccount?.finEnabled,
+            fidmanEnabled: !!psAccount?.fidmanEnabled,
+            mailboxes,
+            // Ta sama reguła co canManage: rola kierownicza i znacznik (role liczone z bazy, nie z sesji).
+            sbManagers: names(givers.filter((g) => g.canManageSb && sbManagerRoles.has(g.systemRoleName))),
+            accountManagers: names(givers.filter((g) => (ADMIN_PANEL_ROLES as string[]).includes(g.systemRoleName))),
+            driveTool,
+            googleAccount,
+            drive: googleAccount ? await driveMembership(googleAccount) : null,
+        });
+    }
+
+    static async agentAccessOfPerson(personId: number): Promise<AgentAccessMap> {
+        const record = await this.repository.getByPersonId(personId);
+        if (!record) throw new SbAccessError(404, 'Osoba nie ma wpisu w Dostępach SB.');
+        return this.agentAccess(record);
+    }
+
     private static async expectedSecrets(personId: number, levels: SbAccessLevels, rows?: MailboxAssigneeRow[], registry?: MailboxRecord[]): Promise<string[]> {
         const account = await this.repository.getPersonAccount(personId);
         const mailboxes = personMailboxes(personId, rows ?? await this.mailboxes.findWithAssignees(), levels.mail, account?.systemRoleName);
-        const ownedCodes = new Set((registry ?? (levels.mail.length ? await this.mailboxes.find() : []))
-            .filter(mailbox => mailbox.projectId != null || mailbox.contractId != null).map(mailbox => mailbox.code));
-        return expectedSecretNames(levels, mailboxes.some(mailbox => mailbox.source === 'assignment' || mailbox.source === 'both'), ownedCodes);
+        return expectedSecretNames(levels, mailboxes, registry ?? (levels.mail.length || mailboxes.length ? await this.mailboxes.find() : []));
     }
 
     static async recordTransition(
@@ -187,6 +249,15 @@ export default class SbAccessController {
             }
         });
         await this.deliverFinRefresh(finOutboxId);
+        this.reconcileMailboxPasswords();
+    }
+
+    /**
+     * SKO-2: zmiana haseł skrzynek po utracie dostępu, w tle poza ścieżką żądania (jedna wisząca skrzynka nie blokuje
+     * odpowiedzi ani kolejnych skrzynek); niepowodzenia skrzynek zgłasza reconcile, błąd całego przebiegu idzie do logu.
+     */
+    private static reconcileMailboxPasswords(): void {
+        void MailboxPasswordService.reconcile().catch((error) => console.error('[SKO] uzgodnienie haseł skrzynek:', error?.message));
     }
 
     private static enqueueFinRefresh(conn: Parameters<typeof enqueueFinUserRefresh>[0], personId: number) {
@@ -204,9 +275,8 @@ export default class SbAccessController {
     static describeLevels(levels: SbAccessLevels): string {
         const repos = { none: 'brak', read: 'odczyt', write: 'zapis' }[levels.repos];
         const psDb = { none: 'brak', ro: 'odczyt', rw: 'zapis' }[levels.psDb];
-        const drive = { none: 'brak', connector: 'konektor' }[levels.drive];
         const mail = levels.mail.length ? levels.mail.join(', ') : 'brak';
-        return `repozytoria: ${repos}; baza PS: ${psDb}; Dysk: ${drive}; poczta: ${mail}`;
+        return `repozytoria: ${repos}; baza PS: ${psDb}; poczta: ${mail}`;
     }
 
     /** Zmiana poziomów osoby z wpisem w rejestrze; poziomy i zdarzenie w jednej transakcji. */
@@ -214,6 +284,10 @@ export default class SbAccessController {
         personId: number,
         levels: SbAccessLevels,
         requestedByPersonId: number,
+        /** Żądanie bez pola `drive` (poziom wycofany z ekranu, AGD K2): zostaje zapisana wartość. */
+        keepDrive = false,
+        /** Poziomy, które widział ekran przed zmianą; inne niż w bazie = ktoś zmienił w międzyczasie (409). */
+        expectedLevels?: SbAccessLevels,
     ): Promise<SbAccessRecord> {
         if (levels.mail.length) {
             const known = new Set((await this.mailboxes.find()).map((mailbox) => mailbox.code));
@@ -225,8 +299,15 @@ export default class SbAccessController {
         // liczymy pod blokadą wiersza osoby (jak giveSecret), żeby równoległe udostępnienie
         // według starych poziomów nie zostawiło hasła spoza nowych uprawnień.
         await ToolsDb.transaction<void>(async (conn) => {
-            if (!(await this.repository.getByPersonId(personId, conn, true)))
+            const current = await this.repository.getByPersonId(personId, conn, true);
+            if (!current)
                 throw new SbAccessError(404, 'Osoba nie ma wpisu dostępu do Second Brain.');
+            if (expectedLevels && !sameLevels(expectedLevels, current.levels, !keepDrive))
+                throw new SbAccessError(
+                    409,
+                    `Ktoś zmienił te uprawnienia, gdy ekran był otwarty (teraz: ${this.describeLevels(current.levels)}). Nic nie zapisano. Wybierz osobę ponownie i ustaw uprawnienia jeszcze raz.`,
+                );
+            if (keepDrive && current.levels) levels = { ...levels, drive: current.levels.drive };
             const expected = await this.expectedSecrets(personId, levels);
             const stale = (await this.secrets.listByPersonId(personId, conn))
                 .map((secret) => secret.name)
@@ -250,6 +331,7 @@ export default class SbAccessController {
                     note: `Odebrane razem z uprawnieniem: ${removed.map(describeSecretName).join(', ')}. ${CHANGE_SOURCE_PASSWORD}`,
                 });
         });
+        this.reconcileMailboxPasswords();
         const record = (await this.repository.getByPersonId(personId))!;
         try {
             await this.syncProjectsTeam(record);
@@ -279,6 +361,7 @@ export default class SbAccessController {
 
     /** Rejestr z odciskiem klucza i stanem haseł (nazwy oczekiwane i udostępnione); bez szyfrogramów. */
     static async list(): Promise<SbAccessRecord[]> {
+        this.reconcileMailboxPasswords();
         const [records, names, rows, registry] = await Promise.all([
             this.repository.list(),
             this.secrets.listNames(),
@@ -390,6 +473,9 @@ export default class SbAccessController {
 
     /** Własne szyfrogramy (tylko te, które wynikają z bieżących uprawnień). */
     static async listOwnSecrets(record: SbAccessRecord) {
+        this.reconcileMailboxPasswords();
+        // Wydaje bieżącą wersję; hasło zmienione przez uzgodnienie w tle dojdzie przy następnym pobraniu.
+        await MailboxPasswordService.issue(record).catch((error) => console.error('[SKO] wydanie haseł skrzynek:', error?.message));
         const expected = await this.expectedSecrets(record.personId, record.levels);
         const secrets = record.publicKeyJwk
             ? (await this.secrets.listByPersonId(record.personId)).filter((secret) =>
@@ -428,6 +514,8 @@ export default class SbAccessController {
                 throw new SbAccessError(409, 'Klucz komputera pracownika zmienił się. Odśwież stronę i udostępnij hasło ponownie.');
             if (!(await this.expectedSecrets(record.personId, record.levels)).includes(name))
                 throw new SbAccessError(409, 'Uprawnienia tej osoby nie obejmują tego hasła.');
+            if (await this.isManagedMailboxSecret(name))
+                throw new SbAccessError(409, 'Hasło tej skrzynki PS wydaje komputerowi sam - nie udostępnia się go ręcznie.');
             await this.secrets.upsert(conn, personId, name, ciphertext, requestedByPersonId);
             await this.events.append(conn, {
                 personId,
@@ -445,6 +533,7 @@ export default class SbAccessController {
         name: string,
         requestedByPersonId: number,
     ): Promise<{ name: string; given: false }> {
+        const managed = await this.isManagedMailboxSecret(name);
         await ToolsDb.transaction<void>(async (conn) => {
             const removed = await this.secrets.remove(conn, personId, [name]);
             if (!removed.length)
@@ -454,10 +543,15 @@ export default class SbAccessController {
                 actionCode: 'TAKE_SECRET',
                 resultCode: 'OK',
                 requestedByPersonId,
-                note: `Hasło: ${describeSecretName(name)}. ${CHANGE_SOURCE_PASSWORD}`,
+                note: `Hasło: ${describeSecretName(name)}. ${managed ? MANAGED_MAILBOX_TAKEN : CHANGE_SOURCE_PASSWORD}`,
             });
         });
         return { name, given: false };
+    }
+
+    /** Hasło skrzynki, które PS wylicza i wydaje sam (SKO-2). */
+    private static async isManagedMailboxSecret(name: string): Promise<boolean> {
+        return (await this.mailboxes.find()).some((m) => m.passwordVersion != null && mailboxSecretName(m.code) === name);
     }
 
     // ------------------------------------------------ raport zdrowia komputera (SBD-4a)

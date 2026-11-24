@@ -41,9 +41,9 @@ namespace EnviPodpis
             Text = "ENVI Podpis"; Font = new Font("Segoe UI", 10);
             ClientSize = new Size(1000, 650); MinimumSize = new Size(780, 560);
             StartPosition = FormStartPosition.CenterScreen;
-            TableLayoutPanel root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 7 };
+            TableLayoutPanel root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 8 };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 7; i++) root.RowStyles.Add(new RowStyle(i == 2 ? SizeType.Percent : SizeType.AutoSize, i == 2 ? 100 : 0));
+            for (int i = 0; i < root.RowCount; i++) root.RowStyles.Add(new RowStyle(i == 2 ? SizeType.Percent : SizeType.AutoSize, i == 2 ? 100 : 0));
             Label title = new Label { Text = "Sprawdź dokument i podpisz", AutoSize = true, Font = new Font("Segoe UI Semibold", 17) };
             Label intro = new Label { Text = "Wybierz dokument z komputera, Dysku lub poczty. Sprawdź podgląd i wpisz PIN. Kopie zapiszą się automatycznie; oryginały pozostają bez zmian.", AutoSize = true, Padding = new Padding(0, 6, 0, 12) };
             files.Dock = DockStyle.Fill; files.AllowUserToAddRows = false; files.AllowUserToDeleteRows = false;
@@ -154,6 +154,7 @@ namespace EnviPodpis
             settings.Controls.Add(destination); settings.Controls.Add(progress);
             root.Controls.Add(title, 0, 0); root.Controls.Add(intro, 0, 1); root.Controls.Add(files, 0, 2);
             root.Controls.Add(actions, 0, 3); root.Controls.Add(settings, 0, 4); root.Controls.Add(footer, 0, 5); root.Controls.Add(note, 0, 6);
+            root.Controls.Add(new Label { Text = "Wersja " + Config.VersionText, AutoSize = true, Anchor = AnchorStyles.Right }, 0, 7);
             Controls.Add(root);
             SizeChanged += delegate { intro.MaximumSize = note.MaximumSize = destination.MaximumSize = new Size(Math.Max(300, ClientSize.Width - 40), 0); };
             intro.MaximumSize = note.MaximumSize = destination.MaximumSize = new Size(ClientSize.Width - 40, 0);

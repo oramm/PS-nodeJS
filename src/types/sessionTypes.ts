@@ -21,6 +21,8 @@ export interface UserData {
     systemRoleId: number;
     /** Sesję założył agent tej osoby jej kluczem (SBZ-1, src/sbAccess/sbAgentKeyAuth.ts). */
     isPersonAgent?: boolean;
+    /** Poziom "baza PS" agenta osoby (Dostępy SB): 'ro' przechodzi tylko trasy odczytu (AGD-1). */
+    personAgentPsDb?: 'ro' | 'rw';
 }
 
 export enum SystemRoleName {

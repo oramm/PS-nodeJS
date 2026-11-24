@@ -5,16 +5,19 @@ jest.mock('../KSeF', () => ({ KsefController: {} }));
 jest.mock('../summarySheet/InvoiceSummarySheetController', () => ({ __esModule: true, default: { generate: jest.fn() } }));
 jest.mock('../../tools/ToolsDb', () => ({ __esModule: true, default: { getQueryCallbackAsync: jest.fn() } }));
 jest.mock('../../persons/projectAssignments/ProjectAssignmentRepository', () => ({ __esModule: true, default: { findMembership: jest.fn() } }));
+jest.mock('../../staff/StaffMemberRepository', () => ({ __esModule: true, default: { hasBankAccess: jest.fn() } }));
 
 import { app } from '../../index';
 import ToolsDb from '../../tools/ToolsDb';
 import ProjectAssignmentRepository from '../../persons/projectAssignments/ProjectAssignmentRepository';
+import StaffMemberRepository from '../../staff/StaffMemberRepository';
 import { SystemRoleName } from '../../types/sessionTypes';
 import InvoicesController from '../InvoicesController';
 import { salesInvoiceAccess, salesInvoicesScopedForRole } from '../salesInvoiceScope';
 
 const db = ToolsDb.getQueryCallbackAsync as jest.Mock;
 const membership = ProjectAssignmentRepository.findMembership as jest.Mock;
+const bankAccess = StaffMemberRepository.hasBankAccess as jest.Mock;
 const originalFlag = process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES;
 const routes = new Map<string, any[]>();
 
@@ -33,6 +36,7 @@ afterAll(() => {
 beforeEach(() => {
     process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES = 'true';
     membership.mockResolvedValue([]);
+    bankAccess.mockResolvedValue(true);
     db.mockResolvedValue([]);
 });
 const req = (body: any = {}, role = SystemRoleName.ENVI_EMPLOYEE): any => ({
@@ -40,7 +44,8 @@ const req = (body: any = {}, role = SystemRoleName.ENVI_EMPLOYEE): any => ({
     session: { userData: { enviId: 7, systemRoleName: role } },
 });
 async function run(guard: any, request = req()) {
-    const res: any = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+    const sent: any[] = [];
+    const res: any = { status: jest.fn().mockReturnThis(), send: jest.fn(), json: jest.fn((body: any) => sent.push(body)), sent };
     const next = jest.fn();
     await guard(request, res, next);
     return { request, res, next };
@@ -147,4 +152,39 @@ it.each([
     const { res, next } = await run(routes.get(route as string)![0], req({ orConditions: [condition] }));
     expect(res.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
+});
+
+const paidInvoice = () => ({
+    id: 10, status: 'Zapłacona', paymentStatus: 'PAID', paidAmount: 6150, paymentDate: '2026-11-20',
+    _corrections: [{ id: 11, paidAmount: 0, paymentDate: null }],
+});
+it.each(['post /invoices', 'put /setAsPaidInvoice/:id', 'patch /invoices/:id/payment', 'post /invoice/:id/correction', 'put /issueInvoice/:id'])(
+    '%s: bez dostępu do banku odpowiedź nie niesie kwoty ani daty wpłat', async (route) => {
+        process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES = 'false';
+        bankAccess.mockResolvedValue(false);
+        const handlers = routes.get(route)!;
+        const { res, next } = await run(handlers[handlers.length - 2]); // bramka stoi tuż przed obsługą, po ew. multerze
+        expect(next).toHaveBeenCalledWith();
+        expect(bankAccess).toHaveBeenCalledWith(7);
+        res.json([paidInvoice()]);
+        expect(res.sent[0]).toEqual([{ id: 10, status: 'Zapłacona', _corrections: [{ id: 11 }] }]);
+    });
+it('z dostępem do banku odpowiedź zostaje bez zmian', async () => {
+    process.env.SALES_INVOICES_SCOPED_FOR_EMPLOYEES = 'false';
+    const { res } = await run(routes.get('post /invoices')![0]);
+    res.json([paidInvoice()]);
+    expect(res.sent[0]).toEqual([paidInvoice()]);
+});
+it('ADMIN widzi wpłaty bez flagi', async () => {
+    bankAccess.mockResolvedValue(false);
+    const { res } = await run(salesInvoiceAccess('invoice'), req({}, SystemRoleName.ADMIN));
+    res.json(paidInvoice());
+    expect(res.sent[0]).toEqual(paidInvoice());
+    expect(bankAccess).not.toHaveBeenCalled();
+});
+it('błąd odczytu flagi trafia do obsługi błędów', async () => {
+    const error = new Error('Awaria bazy');
+    bankAccess.mockRejectedValueOnce(error);
+    const { next } = await run(salesInvoiceAccess('list'));
+    expect(next).toHaveBeenCalledWith(error);
 });

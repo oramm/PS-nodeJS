@@ -182,6 +182,7 @@ describe('requireSession', () => {
                 ['GET', '/sbAccess/me/secrets'],
                 ['POST', '/sbAccess/me/health'],
                 ['GET', '/sbAccess/me/healthRequest'],
+                ['GET', '/sbAccess/me/agentAccess'],
             ]) {
                 const { res, next } = run(method, path);
                 expect(next).toHaveBeenCalled();
@@ -194,6 +195,7 @@ describe('requireSession', () => {
                 ['GET', '/sbAccess/me/publicKey'],
                 ['POST', '/sbAccess/me/secrets'],
                 ['GET', '/sbAccess/entries'],
+                ['GET', '/sbAccess/152/agentAccess'],
                 ['PUT', '/sbAccess/5/secrets/baza-ps'],
                 ['DELETE', '/sbAccess/5/secrets/baza-ps'],
                 ['POST', '/sbAccess/me/githubAccount'],

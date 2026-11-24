@@ -1,3 +1,40 @@
+## 2026-11-22 – BNK B8, korekty dat operacji bankowych
+
+- Przed wdrożeniem zachować kopię bazy. Import może zmienić daty, odcisk i opis istniejącej operacji oraz przeliczyć datę wpłaty na fakturze. Rekord operacji i przypisania wpłaty zachowują identyfikatory.
+- Tylko wyciąg o późniejszej dacie końcowej może zmienić istniejącą operację. W kontroli po imporcie sprawdzić kolejność obu wersji, datę wpłaty i widoczność niejednoznacznych operacji w kolejce „Do decyzji”.
+- Migracja `src/bankSync/migrations/003_normalize_bank_transfer_import_state.sql` przenosi daty wersji i flagi sprawdzania do kolumn `BankTransfers`. Na czas wdrożenia włączyć tryb serwisowy i zatrzymać uruchamianie zaplanowanych oraz ręcznych zadań bankowych. Poczekać na koniec rozpoczętych importów i przeliczeń, potem zatrzymać instancje starego backendu i procesy robocze korzystające z tabel bankowych. Przy zatrzymanych procesach wykonać `yarn migrate:apply` i `yarn migrate:verify`. Wdrożyć i uruchomić nowy backend po zielonej bramce release Heroku. Po kontroli kolejki i przywracania wpływów wznowić ruch i zadania.
+- Lokalnie wykonano 003 na `development`, `localhost/envikons_local`. Runner potwierdził 110 migracji, 0 oczekujących, 0 rozbieżnych. Sprawdzono pięć kolumn i przeniesienie jednego starszego obiektu JSON. Liczby operacji oraz przypisań wpłat były takie same przed migracją i po niej.
+- W razie wycofania do wersji czytającej stan z JSON-a odtworzyć go z nowych kolumn przed ponownym uruchomieniem starego kodu. Zatwierdzone aktualizacje operacji odzyskać z kopii sprzed importu po ich identyfikatorach, a następnie przeliczyć wpłaty na powiązanych fakturach.
+
+## 2026-11-22 - wydanie ENVI Podpis 1.4.6
+
+- Po przekroczeniu limitu czasu odpowiedzi serwer może dokończyć zapis. W 1.4.6 program po niejednoznacznej odpowiedzi odczytuje stan tego samego zlecenia przez maksymalnie 2 minuty. Jeśli PS w tym czasie nie potwierdzi wyniku, program kieruje użytkownika do wyniku zlecenia w PS.
+- Instalator `assets/signing/EnviPodpis.exe`, SHA-256 `6F0F6C0A9910CA5822BDEBB6F629775575A58C5A5804C40861A3E27A0024AD9B`. Użytkownicy aktualizują go z Narzędzi PS ENVI. Cofnięcie dystrybucji przez ponowne wydanie poprzedniego instalatora 1.4.5. Instalator zachowuje dotychczasową wersję lokalną do cofnięcia.
+- Push na `main` uruchamia Heroku i `migrate verify`. Porównanie odczytowe z rejestrem produkcyjnym potwierdziło zgodność nazw i sum 109 migracji. Wydanie wykorzystuje obecne ustawienia Heroku, schemat bazy, minimalną wersję klienta i wersję frontendu.
+
+## 2026-11-22 - wydanie ENVI Podpis 1.4.5
+
+- Instalator w `assets/signing/EnviPodpis.exe`, SHA-256 `84974A679166F2CBC35BD9B14A97E88D3CBDAD73BD2C18FDC7605E83E6117D85`. Odczyt osadzonej paczki potwierdził 3552 pliki oraz wersję 1.4.5 aplikacji. Aktualizacja użytkownika odbywa się przez instalator z Narzędzi PS ENVI.
+- Push `main` uruchamia wdrożenie Heroku i `migrate verify`. Porównanie odczytowe z bazą produkcyjną potwierdziło zgodność nazw i sum wszystkich 107 migracji. Wydanie nie wymaga zmian schematu, ustawień Heroku, zmiennych środowiskowych, minimalnej wersji klienta ani publikacji frontendu.
+- Cofnięcie dystrybucji: przywrócenie poprzedniego commita lub zweryfikowanego instalatora 1.4.4 w kolejnym wydaniu. Test aneksu wykonano lokalnie kluczem programowym, z zachowaniem obu wcześniejszych podpisów i bajtów źródła.
+
+## 2026-11-22 – BNK B1, rozliczenie faktur sprzedaży
+
+- Migracja `src/invoices/migrations/012_derive_sales_invoice_payment.sql` (kolumny `PaidManually` 0/1/2 i `StatusBeforePayment`, znacznik 1 dla oryginałów „Zapłacona”). Lokalnie na odświeżonej `envikons_local`: 2945 oryginałów „Zapłacona” = 2945 znaczników = 2945 `PAID`, `verify` przeszło.
+- Migracja nie ma skryptu cofającego: przed zastosowaniem na produkcji kopia tabel `Invoices`, `BankTransfers`, `PaymentAllocations`; cofnięcie = odtworzenie kopii. Kolejność: kopia -> `migrate apply` -> push kodu.
+
+## 2026-11-22 – BNK B0
+
+- Opcjonalne `BANK_OWN_ACCOUNTS` zastępuje listę domyślną. Przy zmianie wartości porównaj ją z rachunkami z wyciągu.
+- Weryfikacja lokalna obejmuje testy bankSync i faktur oraz odczyt `envikons_local`. Zmiana nie wymaga migracji.
+
+## 2026-11-18 - ENVI Podpis 1.4.4 w PS ENVI
+
+- W Narzędziach PS ENVI udostępniono kompletny instalator w `assets/signing/EnviPodpis.exe`. SHA-256 `982D4B6F4A0FAF37DD96FE000454B4E2C29B0FE44726017141ECE3B3579BC69E`. Wydanie obejmuje lokalnie odebraną poprawkę kontroli wcześniejszych podpisów z 1.4.3.
+- Konfiguracja Heroku, schemat bazy i minimalna wersja klienta pozostają bez zmian. Przed wydaniem porównano 106 migracji z produkcyjnym rejestrem, bez rozbieżności. Push na aktualne `main` uruchamia wdrożenie Heroku wraz z kontrolą `migrate verify`.
+- Pakiet zawiera 3552 zweryfikowane pliki. Sprawdzono lokalną aktualizację 1.4.3 → 1.4.4 i zachowanie kopii 1.4.3. Cofnięcie dystrybucji w PS wymaga przywrócenia poprzedniego instalatora w odrębnym wydaniu.
+
+
 ## 2026-11-17 — PS-MC: scalenie kamieni, przygotowanie wydania
 
 - Kod wprowadza współdzielenie i łączenie kamieni wraz z historią operacji. Zakres schematu: migracje 002–010 w katalogu kamieni milowych.
@@ -18,6 +55,12 @@ Keep only recent entries here. Move older entries to quarterly archive files und
 - Dependency refresh: registry download unavailable; copied existing local node_modules into isolated worktrees after exact package.json/yarn.lock hash comparison, no junctions or source mutation. Builds used the isolated frontend for the help snapshot. No server, DB/Google write, live UI smoke or migration was run in this integration.
 - Prior verified feature snapshots: backend502b4b3/frontend060a4b5b. Config and operational-history conflicts retain both sides; current mileage access policy must remain intact.
 - No migration or external write executed. Existing YR-6 production gates remain pending. Integration verified: 608 backend tests (including current access policy and six new mileage access regressions),16 frontend tests and both builds PASS (128.18s/190.99s). Bounded fallback integration review APPROVE,1 pass; no new P0/P1. Feature-only diff checks PASS,26 backend and8 frontend feature files hash-match the pre-merge commits; current role policy and both config/history groups retained.
+
+## 2026-11-17 - ENVI Podpis 1.4.3, aktualizacja lokalna
+
+- Instalator `desktop/envi-podpis/bin/installer-pm53Qv/EnviPodpisSetup.exe`, SHA256 `1C3CE88A412BDFC050C7245DCAED1BA96C4E0E9F9329731F6763F3294CCECE9E`. Aktywna wersja 1.4.3.0. Wersja 1.4.2.0 zachowana w `%LOCALAPPDATA%/ENVI/Podpis.previous`. Porównano po 3552 pozycje manifestu, bez rozbieżności. Skrót i protokół PS wskazują nowy EXE.
+- Przegląd ograniczonego diffu APPROVE, jedna iteracja. Weryfikacja PASS: 91 testów podpisu, test paczki PDF, 11 kontroli obiegu Windows, 3 kontroli ekstrakcji i 33 kontrole instalatora. Zainstalowany silnik dodał trzeci podpis testowy do protokołu z Nowego Targu, zachował oba wcześniejsze podpisy i odrzucił celowo zmienione dane przed podpisaniem.
+- Cofnięcie lokalne przez `EnviPodpisSetup.exe /rollback`. Test kluczem programowym. Publikacja i próba kartą poza tą aktualizacją lokalną.
 
 ## 2026-09-24 - YR-6 controlled office-year release checklist (NOT executed)
 

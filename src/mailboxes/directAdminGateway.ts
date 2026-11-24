@@ -50,6 +50,26 @@ export default class DirectAdminGateway {
     }
 
     static async setAgentCopy(address: string): Promise<void> {
+        const { copy, user, existing, recipients } = await this.forwarders(address);
+        if (recipients.some(recipient => recipient.trim().toLowerCase() === copy)) return;
+        // Przekierowanie o nazwie skrzynki nie zabiera jej poczty (test na serwerze 2026-11-14), więc bez własnego adresu.
+        const email = existing === null ? copy : `${existing},${copy}`;
+        await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({
+            action: existing === null ? 'create' : 'modify', domain: 'envi.com.pl', user, email,
+        }));
+    }
+
+    /** Zdjęcie kopii (SKO-2): zostają obce adresy przekierowania; bez innych adresów przekierowanie znika. */
+    static async removeAgentCopy(address: string): Promise<void> {
+        const { copy, user, recipients } = await this.forwarders(address);
+        const others = recipients.filter(recipient => recipient.trim().toLowerCase() !== copy);
+        if (others.length === recipients.length) return;
+        await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams(others.length
+            ? { action: 'modify', domain: 'envi.com.pl', user, email: others.join(',') }
+            : { action: 'delete', domain: 'envi.com.pl', select0: user }));
+    }
+
+    private static async forwarders(address: string) {
         const copy = process.env.DIRECTADMIN_AGENT_COPY_ADDRESS?.trim().toLowerCase();
         if (!copy || !/^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?@envi\.com\.pl$/.test(copy) || copy.includes('..'))
             throw new Error('Kopia poczty dla agenta nie jest skonfigurowana');
@@ -58,13 +78,7 @@ export default class DirectAdminGateway {
         const user = address.split('@')[0];
         const list = await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({ action: 'list', domain: 'envi.com.pl' }), true);
         const existing = list.get(user);
-        const recipients = existing === null ? [] : existing.split(',');
-        if (recipients.some(recipient => recipient.trim().toLowerCase() === copy)) return;
-        // Przekierowanie o nazwie skrzynki nie zabiera jej poczty (test na serwerze 2026-11-14), więc bez własnego adresu.
-        const email = existing === null ? copy : `${existing},${copy}`;
-        await this.send('CMD_API_EMAIL_FORWARDERS', new URLSearchParams({
-            action: existing === null ? 'create' : 'modify', domain: 'envi.com.pl', user, email,
-        }));
+        return { copy, user, existing, recipients: existing === null ? [] : existing.split(',') };
     }
 
     private static async send(command: string, body: URLSearchParams, listing = false): Promise<URLSearchParams> {

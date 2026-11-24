@@ -3,15 +3,44 @@ import mysql from 'mysql2/promise';
 import PaymentAllocation from './PaymentAllocation';
 
 export default class PaymentAllocationRepository {
+    async findInvoicePayments(invoiceId: number) {
+        const rows = await ToolsDb.getQueryCallbackAsync(`
+            SELECT pa.Id AS id, pa.BankTransferId AS bankTransferId, pa.AllocatedAmount AS amount,
+                DATE_FORMAT(bt.ExecDate, '%Y-%m-%d') AS date, bt.Currency AS currency,
+                bt.CounterpartyName AS sender, bt.Title AS title
+            FROM PaymentAllocations pa
+            JOIN BankTransfers bt ON bt.Id = pa.BankTransferId
+            WHERE pa.InvoiceId = ?
+            ORDER BY bt.ExecDate, pa.Id
+        `, undefined, [invoiceId]) as mysql.RowDataPacket[];
+        return rows.map(row => ({
+            id: Number(row.id), bankTransferId: Number(row.bankTransferId), amount: Number(row.amount),
+            date: row.date as string, currency: row.currency as string,
+            sender: row.sender as string | null, title: row.title as string | null,
+        }));
+    }
+
     async findByTransferId(transferId: number, conn?: mysql.PoolConnection): Promise<PaymentAllocation[]> {
         const sql = mysql.format(
-            'SELECT * FROM PaymentAllocations WHERE BankTransferId = ? ORDER BY Id',
+            `SELECT pa.*, COALESCE(i.Number, ci.InvoiceNumber) AS InvoiceNumber
+                FROM PaymentAllocations pa
+                LEFT JOIN Invoices i ON i.Id = pa.InvoiceId
+                LEFT JOIN CostInvoices ci ON ci.Id = pa.CostInvoiceId
+                WHERE pa.BankTransferId = ? ORDER BY pa.Id`,
             [transferId],
         );
         const rows = conn
             ? (await conn.query(sql))[0] as any[]
             : (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
         return (rows || []).map((r: any) => this.mapRow(r));
+    }
+
+    async findSalesInvoiceIdsForTransfer(transferId: number, conn: mysql.PoolConnection): Promise<number[]> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            'SELECT InvoiceId FROM PaymentAllocations WHERE BankTransferId = ? AND InvoiceId IS NOT NULL FOR UPDATE',
+            [transferId],
+        );
+        return rows.map(row => Number(row.InvoiceId));
     }
 
     async findByInvoiceId(invoiceId: number): Promise<PaymentAllocation[]> {
@@ -68,16 +97,38 @@ export default class PaymentAllocationRepository {
         }
     }
 
-    /** Sum of allocated amounts for a given Invoice */
-    async sumAllocatedForInvoice(invoiceId: number, conn?: mysql.PoolConnection): Promise<number> {
-        const sql = mysql.format(
-            'SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE InvoiceId = ?',
+    async getInvoicePayment(invoiceId: number, conn: mysql.PoolConnection): Promise<{
+        paidAmount: number;
+        paymentDate: string | null;
+    }> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            `SELECT COALESCE(SUM(pa.AllocatedAmount), 0) AS PaidAmount,
+                    DATE_FORMAT(MAX(bt.ExecDate), '%Y-%m-%d') AS PaymentDate
+             FROM PaymentAllocations pa
+             JOIN BankTransfers bt ON bt.Id = pa.BankTransferId
+             WHERE pa.InvoiceId = ? FOR UPDATE`,
             [invoiceId],
         );
-        const rows = conn
-            ? (await conn.query(sql))[0] as any[]
-            : (await ToolsDb.getQueryCallbackAsync(sql)) as any[];
-        return Number((rows as any)[0]?.Total ?? 0);
+        return { paidAmount: Number(rows[0].PaidAmount), paymentDate: rows[0].PaymentDate };
+    }
+
+    async sumAllocatedForTransfer(transferId: number, conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(
+            'SELECT COALESCE(SUM(AllocatedAmount), 0) AS Total FROM PaymentAllocations WHERE BankTransferId = ? FOR UPDATE',
+            [transferId],
+        );
+        return Number(rows[0].Total);
+    }
+
+    async countOverallocatedTransfers(conn: mysql.PoolConnection): Promise<number> {
+        const [rows] = await conn.query<mysql.RowDataPacket[]>(`
+            SELECT COUNT(*) AS Total FROM (
+                SELECT bt.Id FROM BankTransfers bt
+                JOIN PaymentAllocations pa ON pa.BankTransferId = bt.Id
+                GROUP BY bt.Id, bt.Amount HAVING SUM(pa.AllocatedAmount) > bt.Amount
+            ) overallocated
+        `);
+        return Number(rows[0].Total);
     }
 
     /** Sum of allocated amounts for a given CostInvoice */
@@ -104,6 +155,7 @@ export default class PaymentAllocationRepository {
             confidence: row.Confidence ?? null,
             createdBy: row.CreatedBy ?? null,
             createdAt: row.CreatedAt,
+            invoiceNumber: row.InvoiceNumber,
         });
     }
 }

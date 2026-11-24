@@ -263,6 +263,25 @@ export default class Setup {
         CORRECTED: 'Skorygowana',
     };
 
+    static readonly InvoicePaymentStatus = {
+        UNPAID: 'UNPAID',
+        PARTIALLY_PAID: 'PARTIALLY_PAID',
+        PAID: 'PAID',
+        NOT_APPLICABLE: 'NOT_APPLICABLE',
+    } as const;
+
+    static readonly InvoicePaidMarker = {
+        NONE: 0,
+        BEFORE_SYSTEM: 1,
+        BUTTON: 2,
+    } as const;
+
+    static readonly InvoicePayableStatuses = [
+        Setup.InvoiceStatus.SENT,
+        Setup.InvoiceStatus.SENT_TO_KSEF,
+        Setup.InvoiceStatus.CORRECTED,
+    ];
+
     /**
      * Kanoniczne grupy statusów faktur używane do liczenia wartości
      * rozliczenia kontraktu. Jedno źródło prawdy dla:
@@ -625,6 +644,15 @@ export default class Setup {
                 amountToleranceGrosze: Number(process.env.BANK_AMOUNT_TOLERANCE_GROSZE ?? 1),
             },
             dateWindowDays: Number(process.env.BANK_DATE_WINDOW_DAYS ?? 60),
+            paidInvoiceCandidatesFrom: '2025-01-01',
+            // Przelewy własne (nasze rachunki, rachunek VAT, US) - nie są wpłatami klientów. Ustalone odczytem z wyciągów 2026-11-22.
+            ownAccounts: (
+                process.env.BANK_OWN_ACCOUNTS ??
+                '48102036680000550206787115,03102036680000550206787149,90124016461111001100228813,68101000712222747191757500,22101000712222747119927500,76101000712222747156405900'
+            )
+                .split(',')
+                .map((a) => a.replace(/\s/g, ''))
+                .filter(Boolean),
         };
     }
 

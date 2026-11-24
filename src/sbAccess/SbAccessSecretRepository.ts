@@ -40,13 +40,13 @@ export default class SbAccessSecretRepository {
         )) as { personId: number; name: string }[];
     }
 
-    /** Udostępnienie albo podmiana hasła o tej nazwie. */
+    /** Udostępnienie albo podmiana hasła o tej nazwie; `sharedByPersonId` null = wydał PS (SKO-2). */
     async upsert(
         conn: mysql.PoolConnection,
         personId: number,
         name: string,
         ciphertext: string,
-        sharedByPersonId: number,
+        sharedByPersonId: number | null,
     ): Promise<void> {
         if (!conn) throw new Error('Zapis hasła SB wymaga połączenia transakcji');
         await quiet(() =>
@@ -59,6 +59,12 @@ export default class SbAccessSecretRepository {
                 [personId, name, ciphertext, sharedByPersonId],
             ),
         );
+    }
+
+    /** Usuwa hasło o tej nazwie u wszystkich osób (zmiana hasła skrzynki zarządzanej). */
+    async removeByName(conn: mysql.PoolConnection, name: string): Promise<void> {
+        if (!conn) throw new Error('Usunięcie hasła SB wymaga połączenia transakcji');
+        await quiet(() => ToolsDb.getQueryCallbackAsync('DELETE FROM SbAccessSecrets WHERE Name = ?', conn, [name]));
     }
 
     /** Usuwa wskazane nazwy (albo wszystkie, gdy `names` nie podano); zwraca usunięte nazwy. */

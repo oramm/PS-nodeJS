@@ -36,6 +36,8 @@ describe('ContractsController.add() — WS10 AQM outbox', () => {
         jest.clearAllMocks();
 
         mockConn = {
+            // Employer writes also enqueue FIN; these assertions cover the separate AQM outbox.
+            execute: jest.fn<any>().mockResolvedValue([{ insertId: 1 }]),
             beginTransaction: jest.fn(),
             commit: jest.fn(),
             rollback: jest.fn(),

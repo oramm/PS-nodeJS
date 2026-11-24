@@ -28,7 +28,7 @@ export default class SbAccessValidator {
         return login;
     }
 
-    /** Poziomy z ciała żądania: wszystkie pola wymagane, poczta może być pominięta. */
+    /** Poziomy z ciała żądania: repos i psDb wymagane; poczta i `drive` (poziom wycofany z ekranu, AGD K2) mogą być pominięte - brak `drive` = 'none'. */
     static parseLevels(raw: unknown): SbAccessLevels {
         const body = raw as any;
         if (!body || typeof body !== 'object' || Array.isArray(body))
@@ -53,7 +53,7 @@ export default class SbAccessValidator {
         return {
             repos: pick(body.repos, SB_REPO_LEVELS, 'repozytoria'),
             psDb: pick(body.psDb, SB_PS_DB_LEVELS, 'baza PS'),
-            drive: pick(body.drive, SB_DRIVE_LEVELS, 'Dysk'),
+            drive: body.drive === undefined ? 'none' : pick(body.drive, SB_DRIVE_LEVELS, 'Dysk'),
             mail: [...mail],
         };
     }

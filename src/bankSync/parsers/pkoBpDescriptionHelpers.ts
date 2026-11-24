@@ -23,8 +23,9 @@ export function extractCounterpartyName(desc: string): string | null {
     return m ? m[1].trim() : null;
 }
 
-export function extractNip(desc: string): string | null {
-    const m = desc.match(/Identyfikator\s+(?:odbiorcy|nadawcy)\s*:\s*(\d{10})/);
+export function extractNip(desc: string, party?: 'nadawcy'): string | null {
+    const identifier = party ?? '(?:odbiorcy|nadawcy)';
+    const m = desc.match(new RegExp(`Identyfikator\\s+${identifier}\\s*:\\s*(\\d{10})`));
     return m ? m[1] : null;
 }
 
@@ -45,14 +46,18 @@ export function extractVatAmount(desc: string): number | null {
  * Priority: "Numer faktury VAT..." field > "Tytuł" field > regex in raw text.
  * Returns array because one transfer may cover multiple invoices.
  */
-export function extractInvoiceNumbers(desc: string): string[] {
+export function extractInvoiceNumbers(desc: string, allowDescriptionFallback = true): string[] {
     // 1. Structured field: "Numer faktury VAT lub okres płatności zbiorczej :  {number}"
     const structuredMatch = desc.match(
         /Numer\s+faktury\s+VAT[^:]*:\s{1,3}(.+?)(?:\s{2,}|$)/,
     );
     if (structuredMatch) {
-        const nums = parseInvoiceNumbersFromText(structuredMatch[1].trim());
+        const field = structuredMatch[1].trim();
+        const nums = parseInvoiceNumbersFromText(field);
         if (nums.length) return nums;
+        // Część gmin pisze w tym polu "349_2025" albo "53-2026" zamiast "53/2026".
+        const separated = [...field.matchAll(/(?<![\d-])(\d{1,5})[_-](20\d{2})(?![\d-])/g)].map(([, n, year]) => `${n}/${year}`);
+        if (separated.length) return separated;
     }
 
     // 2. "Tytuł" field
@@ -63,7 +68,7 @@ export function extractInvoiceNumbers(desc: string): string[] {
     }
 
     // 3. Whole description fallback
-    return parseInvoiceNumbersFromText(desc);
+    return allowDescriptionFallback ? parseInvoiceNumbersFromText(desc) : [];
 }
 
 const INVOICE_NUMBER_PATTERNS = [
@@ -71,6 +76,7 @@ const INVOICE_NUMBER_PATTERNS = [
     /FS\s*[-\/]?\s*\d+(?:[\s\/\.-]\w+)*(?:\/\d{2,4})?/gi,
     /FA\s*[-\/]?\s*\d+(?:[\s\/\.-]\w+)*(?:\/\d{2,4})?/gi,
     /\d+\/\d{4}/g,
+    /\b\d{10}-\d{8}-[0-9A-F]{12}-[0-9A-F]{2}\b/g, // numer KSeF
 ];
 
 function parseInvoiceNumbersFromText(text: string): string[] {

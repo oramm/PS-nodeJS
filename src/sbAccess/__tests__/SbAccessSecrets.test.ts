@@ -86,10 +86,18 @@ describe('Hasła SB - reguły (bez bazy)', () => {
         expect(expectedSecretNames({ ...LEVELS, psDb: 'rw', mail: [] })).toEqual(['baza-ps']);
     });
 
-    it('konto techniczne tylko dla przypisań; ręczne wyjątki zachowują swoje sekrety', () => {
+    const REGISTRY = [
+        { code: 'projekt', projectId: 1, contractId: null, passwordVersion: null },
+        { code: 'kontrakt', projectId: null, contractId: 2, passwordVersion: null },
+        { code: 'zarzadzana', projectId: 3, contractId: null, passwordVersion: 2 },
+        { code: 'faktury', projectId: null, contractId: null, passwordVersion: null },
+        { code: 'biuro', projectId: null, contractId: null, passwordVersion: 1 },
+    ];
+
+    it('konto techniczne tylko dla skrzynek projektu i kontraktu bez hasła od PS; ręczne wyjątki zachowują swoje sekrety', () => {
         const levels = { ...LEVELS, psDb: 'none', mail: ['faktury'] } as any;
-        expect(expectedSecretNames(levels, false)).toEqual(['poczta-faktury']);
-        expect(expectedSecretNames(levels, true)).toEqual(['poczta-faktury', SB_SECRET_AGENT_MAIL]);
+        expect(expectedSecretNames(levels, [], REGISTRY)).toEqual(['poczta-faktury']);
+        expect(expectedSecretNames(levels, [{ code: 'projekt' }], REGISTRY)).toEqual(['poczta-faktury', SB_SECRET_AGENT_MAIL]);
         expect(describeSecretName(SB_SECRET_AGENT_MAIL)).toBe('konto techniczne poczty (agent)');
     });
 
@@ -98,8 +106,15 @@ describe('Hasła SB - reguły (bez bazy)', () => {
         [['faktury'], ['poczta-faktury']],
         [['kontrakt', 'projekt', 'faktury', 'nieznany'], ['poczta-faktury', 'poczta-nieznany', SB_SECRET_AGENT_MAIL]],
     ])('ręczny wyjątek %j wybiera hasła według właściciela skrzynki', (mail, expected) => {
-        expect(expectedSecretNames({ ...LEVELS, psDb: 'none', mail } as any, false, new Set(['kontrakt', 'projekt'])))
-            .toEqual(expected);
+        expect(expectedSecretNames({ ...LEVELS, psDb: 'none', mail } as any, [], REGISTRY)).toEqual(expected);
+    });
+
+    it('SKO-2: skrzynka z hasłem od PS (projektu albo ogólnofirmowa) = własne poczta-<kod>, bez konta technicznego', () => {
+        const levels = { ...LEVELS, psDb: 'none', mail: [] } as any;
+        expect(expectedSecretNames(levels, [{ code: 'zarzadzana' }, { code: 'biuro' }], REGISTRY)).toEqual(['poczta-zarzadzana', 'poczta-biuro']);
+        expect(expectedSecretNames(levels, [{ code: 'zarzadzana' }, { code: 'kontrakt' }], REGISTRY)).toEqual(['poczta-zarzadzana', SB_SECRET_AGENT_MAIL]);
+        // wyjątek ręczny i ta sama skrzynka z reguły dają jedno hasło
+        expect(expectedSecretNames({ ...levels, mail: ['zarzadzana'] }, [{ code: 'zarzadzana' }], REGISTRY)).toEqual(['poczta-zarzadzana']);
     });
 
     it('odcisk klucza = RFC 7638 (wektor z RFC 7638 rozdz. 3.1), na ekranie 8 znaków hex w dwóch grupach', () => {
@@ -174,7 +189,10 @@ describe('Hasła SB - kontroler', () => {
         upsert = jest.spyOn(SbAccessSecretRepository.prototype, 'upsert').mockResolvedValue(undefined);
         jest.spyOn(SbAccessRepository.prototype, 'getPersonAccount').mockResolvedValue({ personId: 131, isActive: true } as any);
         jest.spyOn(MailboxRepository.prototype, 'findWithAssignees').mockResolvedValue([]);
-        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue(['faktury', 'chocianow-ik'].map((code) => ({ code })) as any);
+        jest.spyOn(MailboxRepository.prototype, 'find').mockResolvedValue([
+            { code: 'faktury', projectId: null, contractId: null }, { code: 'chocianow-ik', projectId: null, contractId: 21 },
+            { code: 'projekt', projectId: 10, contractId: null },
+        ] as any);
     });
 
     it('ten sam klucz ponownie: bez zapisu, bez zdarzenia, szyfrogramy zostają', async () => {
@@ -334,7 +352,7 @@ describe('Hasła SB - kontroler', () => {
         // Skrzynka projektu ma przypisanie przez kierownika jednego z jego kontraktów.
         rows[0].personId = 131;
         expect((await SbAccessController.listPersonMailboxes(person)).mailboxes)
-            .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment' }]);
+            .toEqual([{ code: 'projekt', address: 'projekt@envi.com.pl', source: 'assignment', managed: false }]);
         assignees.mockClear();
         const listed = await SbAccessController.list();
         expect(assignees).toHaveBeenCalledTimes(1); // wszystkie osoby, bez N zapytań

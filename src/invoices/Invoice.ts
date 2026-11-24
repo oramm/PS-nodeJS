@@ -13,6 +13,8 @@ import {
     ProjectData,
 } from '../types/types';
 
+export type InvoicePaymentStatus = (typeof Setup.InvoicePaymentStatus)[keyof typeof Setup.InvoicePaymentStatus];
+
 export default class Invoice extends BusinessObject implements InvoiceData {
     id?: number;
     number?: string | null;
@@ -57,7 +59,7 @@ export default class Invoice extends BusinessObject implements InvoiceData {
     _corrections?: CorrectionInvoiceSummary[];
 
     // Pola statusu płatności (dodane przez bank sync)
-    paymentStatus?: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'NOT_APPLICABLE';
+    paymentStatus?: InvoicePaymentStatus;
     paidAmount?: number;
     paymentDate?: string | null;
 
@@ -172,9 +174,9 @@ export default class Invoice extends BusinessObject implements InvoiceData {
         this.correctedInvoiceId = (initParamObject as any).correctedInvoiceId;
         this.correctionReason = (initParamObject as any).correctionReason;
 
-        const rawPaymentStatus = (initParamObject as any).paymentStatus;
-        const validStatuses = ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'NOT_APPLICABLE'];
-        this.paymentStatus = validStatuses.includes(rawPaymentStatus) ? rawPaymentStatus : 'UNPAID';
+        const rawPaymentStatus = initParamObject.paymentStatus;
+        this.paymentStatus = rawPaymentStatus && Object.values(Setup.InvoicePaymentStatus).includes(rawPaymentStatus)
+            ? rawPaymentStatus : Setup.InvoicePaymentStatus.UNPAID;
         const rawPaidAmount = Number((initParamObject as any).paidAmount ?? 0);
         this.paidAmount = Number.isFinite(rawPaidAmount) ? rawPaidAmount : 0;
         this.paymentDate = (initParamObject as any).paymentDate ?? null;

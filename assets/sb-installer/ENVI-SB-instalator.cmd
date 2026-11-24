@@ -1,11 +1,11 @@
 @echo off
-REM ENVI Second Brain - instalator, wersja 0.21.0. Dwuklik: wypakowuje instalator do
+REM ENVI Second Brain - instalator, wersja 0.25.0. Dwuklik: wypakowuje instalator do
 REM %USERPROFILE%\.envi\instalator i uruchamia go. Log: tam, bootstrap.log.
 setlocal
 set "SB_INSTALATOR=%~f0"
 set "SB_INSTALATOR_DIR=%USERPROFILE%\.envi\instalator"
 set "SB_INSTALATOR_KONIEC=%SB_INSTALATOR_DIR%\bootstrap.koniec"
-set "SB_INSTALATOR_WERSJA=0.21.0"
+set "SB_INSTALATOR_WERSJA=0.25.0"
 set "PSModulePath="
 set "SB_TU=%~dp0"
 if defined CODEX_THREAD_ID goto :agent
@@ -67,7 +67,7 @@ echo  3. Jesli to sie powtorzy, sprawdz Kwarantanne antywirusa i wyslij wlascici
 pause
 exit /b 1
 :SB-LADUNEK
-#SB-PLIK bootstrap.ps1 177766
+#SB-PLIK bootstrap.ps1 184777
 #Requires -Version 5.1
 <#
   ENVI.SB canon bootstrap - two roles, resolved from server state, never asked as a
@@ -375,7 +375,9 @@ function Invoke-StepN1 {
       Log "[N1] installing $target ..."
       # R2 (poz. 11): okna zgody nie da sie sfotografowac (Windows je zaciemnia), wiec mowimy z gory.
       Log "[N1]   Windows moze teraz zapytac 'Czy chcesz zezwolic tej aplikacji na wprowadzanie zmian na urzadzeniu?' - to instalacja $($tool.Name), kliknij Tak. $script:PoradaOknoZgody"
-      winget install --id $tool.Id --exact --silent --accept-package-agreements --accept-source-agreements
+      $straznik = Start-StraznikZgody -Nazwa $tool.Name
+      try { winget install --id $tool.Id --exact --silent --accept-package-agreements --accept-source-agreements }
+      finally { Stop-StraznikZgody $straznik }
       if ($LASTEXITCODE -ne 0) {
         Log "[N1] WARNING: winget install for $target exited $LASTEXITCODE - check manually"
       } else {
@@ -808,6 +810,83 @@ function Test-KlonBezHistorii {
   return -not ((Test-Path -LiteralPath $packed -PathType Leaf) -and ([IO.File]::ReadAllText($packed) -match ('(?m) ' + [regex]::Escape($ref) + '\r?$')))
 }
 
+function Start-StraznikZgody {
+  # L3 (pulapka 17, Dorota 13-16.11): winget czeka na okienko zgody Windows, a ono chowa sie za oknami.
+  # Wyciagnac go na wierzch sie nie da (chroniony pulpit - slepa uliczka w planie), wiec po progu
+  # osobny ukryty proces pokazuje komunikat na wierzchu i miga oknem instalatora na pasku zadan,
+  # z powtorka; Stop-StraznikZgody konczy go razem z instalacja (decyzja D3 = A).
+  param([string]$Nazwa, [int]$PoSekundach = 45, [int]$CoSekund = 120, [string]$Znacznik = '')
+  $hwnd = 0
+  try {
+    if (-not ('SbL3.Konsola' -as [type])) { Add-Type -Namespace SbL3 -Name Konsola -MemberDefinition '[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();' -ErrorAction Stop }
+    $hwnd = [SbL3.Konsola]::GetConsoleWindow().ToInt64()
+  } catch { }
+  $tekst = "Instalacja programu $Nazwa czeka na Twoja zgode.`n`nNa pasku zadan na dole ekranu miga ikonka z tarcza (okno zgody Windows). Kliknij ja i wybierz 'Tak'. Jesli jej nie widac, zminimalizuj inne okna.`n`nNie zamykaj okna instalatora - po zgodzie pojdzie dalej samo."
+  $q = { param($s) "'" + ([string]$s).Replace("'", "''") + "'" }
+  $skrypt = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+Start-Sleep -Seconds $PoSekundach
+Add-Type -Namespace SbL3 -Name Okno -MemberDefinition @'
+[StructLayout(LayoutKind.Sequential)] public struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
+[DllImport("user32.dll")] public static extern bool FlashWindowEx(ref FLASHWINFO f);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int MessageBoxW(IntPtr h, string t, string c, uint typ);
+public static void Mig(long h) { if (h == 0) return; var f = new FLASHWINFO(); f.cbSize = (uint)Marshal.SizeOf(f); f.hwnd = new IntPtr(h); f.dwFlags = 3 | 12; FlashWindowEx(ref f); }
+'@
+while (`$true) {
+  if ($(& $q $Znacznik)) { Add-Content -LiteralPath $(& $q $Znacznik) -Value (Get-Date -Format s) }
+  [SbL3.Okno]::Mig($hwnd)
+  # MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
+  [void][SbL3.Okno]::MessageBoxW([IntPtr]::Zero, $(& $q $tekst), 'Second Brain - instalator czeka na Twoja zgode', 0x30 -bor 0x10000 -bor 0x40000)
+  Start-Sleep -Seconds $CoSekund
+}
+"@
+  $ps51 = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+  try {
+    return Start-Process -FilePath $ps51 -WindowStyle Hidden -PassThru -ErrorAction Stop -ArgumentList @(
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($skrypt)))
+  } catch { Log "Straznik okna zgody nie wystartowal ($($_.Exception.Message)) - instalacja idzie dalej bez niego."; return $null }
+}
+
+function Stop-StraznikZgody($Proces) {
+  if ($Proces -and -not $Proces.HasExited) { try { $Proces.Kill() } catch { } }
+}
+
+function Invoke-PobierzKanon {
+  # L1 (pulapka 19, Dorota 16.11): jedno pobranie kanonu dla kroku N2 i zadania ENVI-Kanon-Pull
+  # (Write-N3PullLauncher wkleja te funkcje do kanon-pull.ps1, wiec tylko ASCII). Plik zapisany
+  # w repo z CRLF (commit 3fadfa8) i zapisany potem przez edytor z LF wyglada na zmieniony, a
+  # przewiniecie odmawia. Decyzja D1 = A: przywracamy WYLACZNIE pliki z pusta roznica po
+  # pominieciu CR na koncu linii; prawdziwa zmiana osoby zostaje i daje "kanon stoi".
+  # "Stoi" = po pobraniu HEAD dalej za origin - ta sama regula w New-RaportZdrowia (poczta-lib.ps1).
+  param([string]$Vault)
+  $ErrorActionPreference = 'Continue'   # PS 5.1: stderr gita przy 'Stop' staje sie wyjatkiem
+  $linie = New-Object Collections.ArrayList
+  $pull = { [void]$linie.AddRange(@(git -C $Vault pull --ff-only 2>&1 | ForEach-Object { "$_" })); $LASTEXITCODE }
+  $kod = & $pull
+  $przywrocone = @()
+  if ($kod -ne 0) {
+    foreach ($p in @(git -C $Vault -c core.quotepath=false diff --name-only HEAD 2>$null)) {
+      if (-not $p -or @(git -C $Vault diff --ignore-cr-at-eol HEAD -- $p 2>$null).Count) { continue }
+      git -C $Vault checkout HEAD -- $p 2>$null
+      if ($LASTEXITCODE -eq 0) { $przywrocone += $p }
+    }
+    if ($przywrocone) {
+      [void]$linie.Add('przywrocone pliki rozniace sie tylko koncami linii: ' + ($przywrocone -join ', '))
+      $kod = & $pull
+    }
+  }
+  $za = 0
+  [void][int]::TryParse([string](@(git -C $Vault rev-list --count 'HEAD..@{u}' 2>$null) | Select-Object -First 1), [ref]$za)
+  $opis = $null
+  if ($za -gt 0) {
+    $zmienione = @(git -C $Vault -c core.quotepath=false status --porcelain --untracked-files=no 2>$null | Where-Object { $_ } | ForEach-Object { $_.Substring(3) })
+    $opis = if ($zmienione) { 'kanon stoi: zmienionych lokalnie plikow: {0} ({1})' -f $zmienione.Count, (@($zmienione | Select-Object -First 3) -join ', ') }
+            else { 'kanon stoi: git nie moze przewinac do wersji z GitHuba (' + $(if ($linie.Count) { $linie[$linie.Count - 1] } else { "kod $kod" }) + ')' }
+    [void]$linie.Add($opis)
+  }
+  return [pscustomobject]@{ Kod = $kod; Stoi = ($za -gt 0); Opis = $opis; Przywrocone = $przywrocone; Linie = $linie }
+}
+
 function Invoke-KlonKanonu {
   # Klon kanonu do $VaultPath; folder bez .git najpierw przenosi (Move-FolderBezGit). Pusty
   # katalog zostaje - git klonuje do pustego bez bledu. Zwraca $true tylko przy udanym klonie.
@@ -882,10 +961,10 @@ function Invoke-StepN2 {
     $action = "git -C $VaultPath pull --ff-only"
     if ($PSCmdlet.ShouldProcess($target, $action)) {
       Log "[N2] existing clone found at $VaultPath - pull --ff-only"
-      git -C $VaultPath pull --ff-only
-      if ($LASTEXITCODE -ne 0) {
-        Log "[N2] WARNING: pull --ff-only failed (exit $LASTEXITCODE) - clone left untouched (dirty/diverged?)"
-      }
+      $pobranie = Invoke-PobierzKanon -Vault $VaultPath
+      foreach ($l in $pobranie.Linie) { Log "[N2]   $l" }
+      if ($pobranie.Stoi) { $script:KanonStoi = $pobranie.Opis; Log "[N2] WARNING: $($pobranie.Opis)" }
+      elseif ($pobranie.Kod -ne 0) { Log "[N2] WARNING: pull --ff-only failed (exit $($pobranie.Kod)) - clone left untouched" }
     }
   } else {
     # -WhatIf: Invoke-KlonKanonu tylko opisuje klon i zwraca $false - przebieg na sucho idzie dalej.
@@ -1078,7 +1157,8 @@ function Write-N3PullLauncher {
     "`$env:GCM_INTERACTIVE = 'never'"
     "if (-not (Test-Path -LiteralPath (Join-Path `$paths.vault '.git'))) { return }"
     "New-Item -ItemType Directory -Force -Path (Join-Path `$paths.vault '.envi') | Out-Null"
-    "git -C `$paths.vault pull --ff-only *>> `$paths.log"
+    "function Invoke-PobierzKanon {${function:Invoke-PobierzKanon}}"
+    "(Invoke-PobierzKanon -Vault `$paths.vault).Linie *>> `$paths.log"
   ) -join "`n"
   $dir = Split-Path $Path -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -1667,7 +1747,7 @@ function Install-RdzenZDysku {
   # skrzynek poczty (menu ikony z M3) - ta sama lista, co $PlikiRdzenia/$RdzenPliki,
   # zeby swiezy install mial poczte OD RAZU, a nie dopiero po pierwszej samoaktualizacji.
   $enviDir = Split-Path $SyncEnginePath -Parent
-  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-usun-skrzynke.ps1', 'sb-konflikty-okno.ps1')) {
+  foreach ($plik in @('project-sync.ps1', 'sb-tray.ps1', 'poczta-lib.ps1', 'poczta-dodaj-skrzynke.ps1', 'poczta-haslo.ps1', 'poczta-haslo-do-schowka.ps1', 'poczta-usun-skrzynke.ps1', 'sb-konflikty-okno.ps1')) {
     $zrodlo = Join-Path $rozpakowane $plik
     if (-not (Test-Path -LiteralPath $zrodlo)) {
       Log "[N3b] ERROR: paczka $($manifest.paczka) nie zawiera pliku $plik - rdzen jest niekompletny, zglos to wlascicielowi"
@@ -2219,7 +2299,8 @@ function Invoke-N5Runtime {
     Log "[N5]   Windows moze teraz zapytac 'Czy zezwolic na wprowadzanie zmian?' - to instalacja lub aktualizacja $Name, kliknij Tak. $script:PoradaOknoZgody"
     # Instalator Claude w osobnym zakresie: jego $Target nie nadpisuje lokalnych zmiennych.
     $global:LASTEXITCODE = 0
-    & ([scriptblock]::Create($action))
+    $straznik = if ($tool -eq 'winget') { Start-StraznikZgody -Nazwa $Name }
+    try { & ([scriptblock]::Create($action)) } finally { Stop-StraznikZgody $straznik }
     $code = $LASTEXITCODE
     # winget: UPDATE_NOT_APPLICABLE (0x8A15002B), PACKAGE_ALREADY_INSTALLED (0x8A150061).
     if ($code -ne 0 -and -not (
@@ -2280,7 +2361,8 @@ function Invoke-N5DesktopInstalls {
       if (-not $PSCmdlet.ShouldProcess($app.Name, $app.Cmd)) { continue }
       Log "[N5]   Windows moze teraz zapytac o zgode (takze w Sklepie Microsoft) - to instalacja $($app.Name), zaakceptuj ja. $script:PoradaOknoZgody"
       $global:LASTEXITCODE = 0
-      & ([scriptblock]::Create($app.Cmd))
+      $straznik = Start-StraznikZgody -Nazwa $app.Name
+      try { & ([scriptblock]::Create($app.Cmd)) } finally { Stop-StraznikZgody $straznik }
       if ($LASTEXITCODE -ne 0) { throw "winget zglosil blad (kod $LASTEXITCODE)" }
       Log "[N5] $($app.Name) zainstalowana"
       $script:N5AplikacjeJest[$app.Id] = $true
@@ -2322,18 +2404,15 @@ Dyski wspoldzielone wymagaja supportsAllDrives; skrypt dodaje ten parametr.
 Po kazdej zmianie potwierdz wynik ponownym odczytem (api); po wgraniu odczytaj drive/v3/files/<id>.
 <!-- SB-GOOGLE:END -->
 '@
+  # Zapis bloku mieszka w poczta-lib.ps1 rdzenia (wola go tez zadanie raportu zdrowia dla SB-DOSTEPY).
+  $lib = Join-Path (Split-Path $SyncEnginePath -Parent) 'poczta-lib.ps1'
+  if (-not (Test-Path -LiteralPath $lib -PathType Leaf)) { Add-N5Todo 'Instrukcje Google' 'brak rdzenia SB z Dysku Google (poczta-lib.ps1) - instrukcji nie ma jak zapisac'; return }
+  . $lib
   foreach ($relative in @('.claude\CLAUDE.md', '.codex\AGENTS.md')) {
     $file = Join-Path $env:USERPROFILE $relative
     try {
       if (-not $PSCmdlet.ShouldProcess($file, 'odswiez instrukcje Google miedzy znacznikami SB-GOOGLE')) { continue }
-      $text = if (Test-Path -LiteralPath $file) { [IO.File]::ReadAllText($file) } else { '' }
-      $pattern = '(?s)<!-- SB-GOOGLE:START -->.*?<!-- SB-GOOGLE:END -->'
-      if ($text -match $pattern) {
-        # MatchEvaluator zachowuje doslowne $env:USERPROFILE i tresci poza blokiem.
-        $text = [regex]::Replace($text, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $block })
-      } else { $text += $(if ($text -and -not $text.EndsWith("`n")) { "`n" }) + "`n" + $block + "`n" }
-      $null = New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) -ErrorAction Stop
-      [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($false)))
+      Set-BlokWPliku -Plik $file -Znacznik 'SB-GOOGLE' -Blok $block
     } catch { Add-N5Todo "Instrukcje Google ($relative)" $_.Exception.Message }
   }
 }
@@ -2723,7 +2802,17 @@ function Invoke-N5Sekrety {
     } else { Log "[SBD] klucz komputera jest juz zarejestrowany w PS: $znak" }
     # SBZ-2: klucz agenta po rejestracji klucza komputera (PS juz zna ten komputer); osobno od hasel -
     # jego blad nie zatrzymuje pobrania hasel i odwrotnie.
-    try { $script:KluczAgentaStan = Register-KluczAgenta $token }
+    try {
+      $script:KluczAgentaStan = Register-KluczAgenta $token
+      # L2 (pulapka 12): klucz zarejestrowany, ale dostep czeka na "To moje konto" - ponowny instalator
+      # tego nie zalatwi, wiec mowimy, co kliknac. Sprawdza ten sam serwer envi-ps co raport zdrowia.
+      $startPs = Join-Path $env:LOCALAPPDATA 'ENVI\mcp\envi-ps\start.py'
+      $pyPs = Get-PyLauncher
+      if ($pyPs -and (Test-Path -LiteralPath $startPs -PathType Leaf) -and (Test-SerweraAgenta -StartPy $startPs -Py $pyPs) -eq 'NIEPOWIAZANY') {
+        $script:KluczAgentaStan += ' - PS czeka na "To moje konto"'
+        $script:SekretyTodo += "Dostep do PS czeka na Ciebie: otworz $(Get-UrlToMojeKonto), zaloguj sie kontem Google i kliknij 'To moje konto'. Ponowne uruchomienie instalatora tego nie zalatwi."
+      }
+    }
     catch {
       $script:KluczAgentaStan = 'nie zarejestrowany - ' + $_.Exception.Message
       Add-N5Todo 'Klucz agenta do zapisu w PS' $_.Exception.Message
@@ -2747,9 +2836,14 @@ function Invoke-N5Sekrety {
     $hasloAgentaLokalnie = $false
     try { $hasloAgentaLokalnie = (Test-Path -LiteralPath $cfgAgenta -PathType Leaf) -and (Test-Path -LiteralPath ([string](Get-Content -LiteralPath $cfgAgenta -Raw -Encoding UTF8 | ConvertFrom-Json).secret_file) -PathType Leaf) } catch { }
     if (-not $hasloAgentaLokalnie -and -not @(@($lista.secrets) | Where-Object { [string]$_.name -eq 'poczta-sb-agent' }).Count) {
-      $skrzynkiPs = @()
-      try { $skrzynkiPs = @((Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/mailboxes' -Token $token).mailboxes | Where-Object { $_ }) }
-      catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
+      $skrzynkiPs = @($sekrety.skrzynki | Where-Object { $_ })
+      if ($null -eq $sekrety.skrzynki) {
+        try { $skrzynkiPs = @((Invoke-PsUrzadzenie -Metoda 'GET' -Sciezka '/sbAccess/me/mailboxes' -Token $token).mailboxes | Where-Object { $_ }) }
+        catch { Log "[SBD] spisu skrzynek projektow z PS nie udalo sie odczytac ($($_.Exception.Message)) - nie sprawdzam hasla konta technicznego" }
+      }
+      # Konto techniczne czyta tylko skrzynki bez hasla od PS (managed) i bez wlasnego hasla na komputerze (SKO-2).
+      $wlasne = @(@($lista.secrets) | Where-Object { $_ } | ForEach-Object { [string]$_.name })
+      $skrzynkiPs = @($skrzynkiPs | Where-Object { $_.managed -ne $true -and $wlasne -notcontains "poczta-$($_.code)" -and -not (Test-Path -LiteralPath (Get-SciezkaKonfigu ([string]$_.code)) -PathType Leaf) })
       if ($skrzynkiPs.Count) {
         Log "[SBD] PS przypisal tej osobie skrzynki projektow ($($skrzynkiPs.Count)), a hasla konta technicznego sb-agent nie udostepniono temu komputerowi"
         $script:SekretyTodo += "Poczta projektow ($($skrzynkiPs.Count) w PS): administrator jeszcze nie udostepnil temu komputerowi hasla konta technicznego sb-agent, wiec agent nie przeczyta tych skrzynek. Popros administratora SB o udostepnienie go na ekranie Dostepy SB (znak klucza tego komputera: $znak); dojedzie samo w ciagu godziny albo po Synchronizuj teraz."
@@ -3032,6 +3126,7 @@ foreach ($zad in @($TaskName, $SyncTaskName, $ZdrowieTaskName)) {
   try { $wynik = (Get-ScheduledTaskInfo -TaskName $zad -ErrorAction Stop).LastTaskResult } catch { }
   $opisWyniku = if ($null -eq $wynik) { 'nieznany (zadania nie ma?)' }
     elseif ($wynik -eq 267011) { 'zalozone, pierwsze uruchomienie w ciagu kilku godzin' }
+    elseif ($wynik -eq 0 -and $zad -eq $TaskName -and $script:KanonStoi) { 'uruchamia sie, ale kanon nie pobiera zmian (patrz DO ZROBIENIA)' }
     elseif ($wynik -eq 0) { 'dziala (ostatnie pobranie OK)' }
     else { "ostatnie uruchomienie zakonczone kodem $wynik - jesli sie powtarza, wyslij bootstrap.log" }
   Log ("Zadanie '{0}': {1}" -f $zad, $opisWyniku)
@@ -3054,6 +3149,7 @@ if (-not $sumObsidian) { $todo += "Obsidian nie ma zarejestrowanego vaultu. Zamk
 if ($sumRole -eq 'team' -and -not $sumTray) { $todo += "Ikona Second Brain przy zegarze nie dziala. Wyloguj sie i zaloguj ponownie (skrot w Autostarcie podniesie ja sam) albo uruchom ENVI-SB-instalator.cmd jeszcze raz." }
 if ($sumRole -ne 'team' -and -not $sumPrzebieg) { $todo += "Pierwsze pobranie wiedzy firmowej sie nie odbylo. Uruchom ENVI-SB-instalator.cmd jeszcze raz po zalogowaniu do GitHub; jesli wroci, wyslij plik $InstallLogFile wlascicielowi." }
 if ($sumRole -eq 'team' -and -not $sumPrzebieg) { $todo += "Pierwsza synchronizacja sie nie odbyla. Kliknij skrot 'Synchronizuj teraz (Second Brain)' na pulpicie; jesli nic sie nie stanie, wyslij plik $InstallLogFile wlascicielowi." }
+if ($script:KanonStoi) { $todo += "Wiedza firmowa (kanon) nie pobiera zmian - $script:KanonStoi. Ponowne uruchomienie instalatora tego nie naprawi; nie kasuj tych plikow sam - wyslij plik $InstallLogFile wlascicielowi SB." }
 $todo += $todoZadania
 $todo += $script:SkrotyTodo
 $todo += $todoAgenci
@@ -3165,7 +3261,7 @@ W obu przypadkach instalator wyświetli, co dokładnie zrobić. Dokończ brakuj�
 
 Jeśli prosimy Cię o zapis przebiegu instalacji: to plik `bootstrap.log` w folderze `%USERPROFILE%\.envi\instalator` (wklej tę ścieżkę w pasek adresu Eksploratora). Instalator podaje pełną ścieżkę na końcu każdego przebiegu.
 
-#SB-PLIK sb-google.py 12794
+#SB-PLIK sb-google.py 13028
 """Google Drive, Docs i Sheets dla agenta pracownika (token szyfrowany DPAPI).
 
 login [--force] - zgoda Google w przegladarce; dzialajacy token pomija login
@@ -3271,6 +3367,9 @@ def api_url(path, method="GET"):
             query.append(("supportsAllDrives", "true"))
         if parts.path.rstrip("/") == "/drive/v3/files" and method.upper() == "GET" and "includeItemsFromAllDrives" not in keys:
             query.append(("includeItemsFromAllDrives", "true"))
+            # Bez corpora Drive szuka tylko w "Moim dysku"; dyski wspolne (tresc pism i ofert) wymagaja allDrives.
+            if "corpora" not in keys and "driveId" not in keys:
+                query.append(("corpora", "allDrives"))
         url = urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
     return url
 

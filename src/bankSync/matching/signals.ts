@@ -4,9 +4,20 @@
 
 import Setup from '../../setup/Setup';
 
+export function matchesSalesAmount(amount: number, remaining: number, toleranceGrosze = Setup.Bank.matching.amountToleranceGrosze): boolean {
+    return amount > 0 && remaining > 0
+        && Math.abs(Math.round(amount * 100) - Math.round(remaining * 100))
+            <= toleranceGrosze;
+}
+
 /** Normalizes a string for fuzzy comparison: lowercase, collapse whitespace. */
 function normalize(s: string): string {
     return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** "093/2026" i "93/2026" to ten sam numer faktury. */
+function normalizeInvoiceNumber(s: string): string {
+    return normalize(s).replace(/(^|[^\d])0+(?=\d)/g, '$1');
 }
 
 /** Levenshtein distance between two strings (simple DP). */
@@ -43,9 +54,9 @@ export function invoiceNumberSignal(
     invoiceNumber: string | null | undefined,
 ): number {
     if (!invoiceNumber || extractedNumbers.length === 0) return 0;
-    const norm = normalize(invoiceNumber);
+    const norm = normalizeInvoiceNumber(invoiceNumber);
     for (const n of extractedNumbers) {
-        if (normalize(n) === norm) return 1;
+        if (normalizeInvoiceNumber(n) === norm) return 1;
     }
     return 0;
 }
@@ -77,9 +88,10 @@ export function accountSignal(
 export function amountSignal(
     transferAmount: number,
     remainingAmount: number,
+    toleranceGrosze = Setup.Bank.matching.amountToleranceGrosze,
 ): number {
     if (remainingAmount <= 0) return 0;
-    const tolerancePLN = Setup.Bank.matching.amountToleranceGrosze / 100;
+    const tolerancePLN = toleranceGrosze / 100;
     const diff = Math.abs(transferAmount - remainingAmount);
     if (diff <= tolerancePLN) return 1;
     if (transferAmount < remainingAmount) {
@@ -98,6 +110,7 @@ export function dateWindowSignal(
     execDate: string,
     issueDate: string | null | undefined,
     dueDate: string | null | undefined,
+    dateWindowDays = Setup.Bank.dateWindowDays,
 ): number {
     if (!issueDate) return 0;
     const exec = new Date(execDate).getTime();
@@ -105,6 +118,6 @@ export function dateWindowSignal(
     if (exec < issue) return 0;
     if (!dueDate) return 0.5;
     const due = new Date(dueDate).getTime();
-    const windowMs = Setup.Bank.dateWindowDays * 24 * 60 * 60 * 1000;
+    const windowMs = dateWindowDays * 24 * 60 * 60 * 1000;
     return exec <= due + windowMs ? 1 : 0.5;
 }

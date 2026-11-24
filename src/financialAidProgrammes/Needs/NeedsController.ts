@@ -3,6 +3,8 @@ import { NeedData } from '../../types/types';
 import BaseController from '../../controllers/BaseController';
 import NeedRepository from './NeedRepository';
 import { NeedSearchParams } from './NeedRepository';
+import ToolsDb from '../../tools/ToolsDb';
+import { enqueueFinEntityRefresh } from '../../contracts/fidmanSync/FidmanSync';
 
 export type { NeedSearchParams };
 
@@ -33,7 +35,10 @@ export default class NeedsController extends BaseController<
         const instance = this.getInstance();
         const item = new Need(needData);
         
-        await instance.create(item);
+        await ToolsDb.transaction(async (conn) => {
+            await instance.repository.addInDb(item, conn, true);
+            await enqueueFinEntityRefresh(conn, item.clientId);
+        });
         console.log(`Need "${item.name}" added`);
         return item;
     };
@@ -41,7 +46,14 @@ export default class NeedsController extends BaseController<
     static async updateNeed(needData: NeedData, fieldsToUpdate: string[]): Promise<Need> {
         const instance = this.getInstance();
         const item = new Need(needData);
-        await instance.edit(item, undefined, undefined, fieldsToUpdate);
+        await ToolsDb.transaction(async (conn) => {
+            const oldClientId = await instance.repository.findClientIdInConn(conn, item.id!);
+            await instance.repository.editInDb(item, conn, true, fieldsToUpdate);
+            const newClientId = await instance.repository.findClientIdInConn(conn, item.id!);
+            for (const clientId of new Set([oldClientId, newClientId])) {
+                if (clientId != null) await enqueueFinEntityRefresh(conn, clientId);
+            }
+        });
         console.log(`Need with id ${item.id} updated`);
         return item;
     }
@@ -49,7 +61,11 @@ export default class NeedsController extends BaseController<
     static async deleteNeed(needData: NeedData): Promise<void> {
         const instance = this.getInstance();
         const item = new Need(needData);
-        await instance.delete(item);
+        await ToolsDb.transaction(async (conn) => {
+            const clientId = await instance.repository.findClientIdInConn(conn, item.id!);
+            await instance.repository.deleteFromDb(item, conn, true);
+            if (clientId != null) await enqueueFinEntityRefresh(conn, clientId);
+        });
         console.log(`Need with id ${item.id} deleted`);
     }
 }

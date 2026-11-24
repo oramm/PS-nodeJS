@@ -147,6 +147,19 @@ app.post('/sbAccess/me/health', async (req, res, next) => {
     }
 });
 
+/**
+ * Mapa dostępów agenta osoby (AGD-2): co agent ma, czego nie ma i kogo poprosić. Działa też bez
+ * żadnego poziomu (wpis aktywny, poziomy puste) - z niej komputer wpisuje blok SB-DOSTEPY (AGD-3).
+ */
+app.get('/sbAccess/me/agentAccess', async (req, res, next) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(await SbAccessController.agentAccess(await self(req)));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
 /** Lekkie pytanie, które instalator może zadawać często: czy admin prosi o świeży raport. */
 app.get('/sbAccess/me/healthRequest', async (req, res, next) => {
     try {
@@ -231,6 +244,17 @@ app.get('/sbAccess/:personId/mailboxes', async (req, res, next) => {
     }
 });
 
+/** "Co może agent" wskazanej osoby na ekranie Dostępy SB: ta sama funkcja co trasa "moje". */
+app.get('/sbAccess/:personId/agentAccess', async (req, res, next) => {
+    try {
+        const personId = SbAccessValidator.requirePersonId(req.params.personId);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(await SbAccessController.agentAccessOfPerson(personId));
+    } catch (error) {
+        handleError(error, res, next);
+    }
+});
+
 app.get('/sbAccess/:personId/events', async (req, res, next) => {
     try {
         const personId = SbAccessValidator.requirePersonId(req.params.personId);
@@ -273,12 +297,15 @@ app.put('/sbAccess/:personId/githubAccount', async (req, res, next) => {
     }
 });
 
-/** Admin zmienia poziomy dostępu (repozytoria, poczta, baza PS, Dysk) wybranej osoby. */
+/** Admin zmienia poziomy dostępu (repozytoria, poczta, baza PS) wybranej osoby. */
 app.put('/sbAccess/:personId/levels', async (req, res, next) => {
     try {
         const personId = SbAccessValidator.requirePersonId(req.params.personId);
         const levels = SbAccessValidator.parseLevels(req.parsedBody);
-        res.send(await SbAccessController.setLevels(personId, levels, requesterId(req)));
+        const body = req.parsedBody as any;
+        // `expected` = poziomy, które widział ekran; bez pola (agent, stary ekran) zapis jak dotąd.
+        const expected = body?.expected === undefined ? undefined : SbAccessValidator.parseLevels(body.expected);
+        res.send(await SbAccessController.setLevels(personId, levels, requesterId(req), body?.drive === undefined, expected));
     } catch (error) {
         handleError(error, res, next);
     }

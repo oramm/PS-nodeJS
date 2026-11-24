@@ -14,7 +14,23 @@ export interface NeedsFocusAreasSearchParams {
 
 export default class NeedFocusAreaRepository extends BaseRepository<NeedsFocusArea> {
     constructor() {
-        super('NeedsFocusAreas');
+        super('Needs_FocusAreas');
+    }
+
+    // Ta tabela ma klucz (NeedId, FocusAreaId); id w modelu służy tylko interfejsowi.
+    async editInDb(item: NeedsFocusArea, conn?: mysql.PoolConnection, isTransaction = false, fields?: string[]): Promise<any> {
+        if (fields && !fields.includes('comment')) return item;
+        return ToolsDb.executePreparedStmt(
+            'UPDATE Needs_FocusAreas SET Comment = ? WHERE NeedId = ? AND FocusAreaId = ?',
+            [item.comment, item.needId, item.focusAreaId], item, conn, isTransaction
+        );
+    }
+
+    async deleteFromDb(item: NeedsFocusArea, conn?: mysql.PoolConnection, isTransaction?: boolean): Promise<any> {
+        return ToolsDb.executePreparedStmt(
+            'DELETE FROM Needs_FocusAreas WHERE NeedId = ? AND FocusAreaId = ?',
+            [item.needId, item.focusAreaId], item, conn, isTransaction
+        );
     }
 
     protected mapRowToModel(row: any): NeedsFocusArea {
