@@ -127,6 +127,16 @@ describe('isFidmanSyncEligible (typ + znacznik)', () => {
 
 describe('buildContractPayload (contract.upsert)', () => {
     it.each([
+        [3, null, 'LUMP_SUM'],
+        [4, null, null],
+        [4, 'MEASUREMENT', 'MEASUREMENT'],
+        [3, 'MEASUREMENT', 'MEASUREMENT'],
+    ])('SRM: typ %s z metoda %s wysyla settlementMethod=%s', (typeId, settlementMethod, expected) => {
+        const env = buildContractPayload(baseContract({ typeId, settlementMethod }) as any);
+        expect((env.payload as any).settlementMethod).toBe(expected);
+    });
+
+    it.each([
         ['1_project-folder_123', '1_project-folder_123'],
         [null, null],
         [undefined, null],

@@ -78,6 +78,8 @@ export type FidmanContractPayload = {
     name: string | null;
     startDate: string | null;
     endDate: string | null;
+    /** SRM: null = FIDman nie założy umowy (NEEDS_DATA); patrz contractSettlementMethodForFidman. */
+    settlementMethod: string | null;
     project?: FidmanProjectPayload;
     entities: FidmanEntityPayload[];
 };
@@ -509,6 +511,14 @@ function buildProjectRef(sourceProject: any): FidmanProjectPayload | undefined {
     };
 }
 
+/** SRM (FID.APP.01 decyzja 2026-11-25): metoda rozliczenia dla FIDmana. Bez wpisu w PS żółty
+ *  (TypeId 3, projektuj i buduj) jest ryczałtem; każdy inny typ dostaje null, a FIDman nie zakłada
+ *  takiej umowy (NEEDS_DATA), dopóki ktoś nie wpisze metody w PS. FIDman czyta ją tylko przy zakładaniu. */
+const YELLOW_CONTRACT_TYPE_ID = 3;
+export function contractSettlementMethodForFidman(c: { settlementMethod?: string | null; typeId?: number }): string | null {
+    return c.settlementMethod ?? (c.typeId === YELLOW_CONTRACT_TYPE_ID ? 'LUMP_SUM' : null);
+}
+
 /**
  * Build the FIDman `contract.upsert` envelope: the contract + inline project ref
  * + entities-with-roles. Source-owned fields only (FIDman owns its own fields).
@@ -525,6 +535,7 @@ export function buildContractPayload(contract: AnyContract, sourceProject = (con
             name: c.name ?? null,
             startDate: c.startDate ?? null,
             endDate: c.endDate ?? null,
+            settlementMethod: contractSettlementMethodForFidman(c),
             ...(project ? { project } : {}),
             entities: collectContractEntities(c),
         },
@@ -1168,7 +1179,7 @@ export function fidmanSkipReasonLabel(reason: string | null): string | null {
         case 'SUPERSEDED':
             return 'Wpis zastąpiony nowszą migawką folderów kontraktu.';
         case 'NEEDS_DATA':
-            return 'FIDman potrzebuje uzupełnienia danych kontrahenta, aby zaktualizować rekord.';
+            return 'FIDman potrzebuje uzupełnienia danych umowy: daty rozpoczęcia i zakończenia, a dla nowej umowy innej niż Żółta także metody rozliczenia (ryczałt albo obmiar).';
         case 'NO_NIP':
             return 'Brak numeru NIP kontrahenta — FIDman nie może dopasować/utworzyć rekordu bez NIP.';
         // GLO-P1: powody pominięcia użytkownika (D-GLO-4 + GOOGLE_EMAIL_TAKEN z GLO-F3).
@@ -1460,7 +1471,8 @@ export async function getFidmanNipGapReport(): Promise<FidmanNipGapReport> {
         `SELECT Id AS contractId, Number AS number, Name AS name
          FROM Contracts
          WHERE TypeId IN (${clause}) AND Status <> 'Archiwalny'
-           AND (StartDate IS NULL OR EndDate IS NULL)`,
+           AND (StartDate IS NULL OR EndDate IS NULL
+                OR (SettlementMethod IS NULL AND TypeId <> ${YELLOW_CONTRACT_TYPE_ID} AND FidmanContractId IS NULL))`,
         undefined,
         ids
     )) as { contractId: number; number: string | null; name: string | null }[];
